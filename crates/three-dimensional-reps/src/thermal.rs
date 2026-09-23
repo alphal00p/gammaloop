@@ -367,7 +367,7 @@ mod tests {
         assert_eq!((orientation.to_atom() - before).expand(), Atom::Zero);
         assert!(orientation.variants.iter().any(|variant| {
             variant.thermal_weight == original.thermal_weight
-                && variant.prefactor == &original.prefactor * 2
+                && variant.prefactor == &original.prefactor + &original.prefactor
         }));
         assert!(orientation.variants.iter().any(|variant| {
             variant.thermal_weight == distinct.thermal_weight

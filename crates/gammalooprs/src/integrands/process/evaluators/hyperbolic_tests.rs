@@ -213,7 +213,7 @@ fn cases() -> Vec<(&'static str, Mpc)> {
 fn to_mpc<T: FloatLike>(value: Complex<F<T>>) -> Mpc {
     let parts = [value.re, value.im].map(|component| {
         let symbolic: SymbolicaFloat = component.into();
-        symbolic.into_inner()
+        symbolic.into_raw()
     });
     Mpc::with_val(REFERENCE_PRECISION, (&parts[0], &parts[1]))
 }

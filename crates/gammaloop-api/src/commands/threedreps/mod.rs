@@ -6,8 +6,8 @@ use std::{
 
 use clap::{Args, Subcommand, ValueEnum};
 use color_eyre::{
+    eyre::{eyre, Context},
     Result,
-    eyre::{Context, eyre},
 };
 use gammalooprs::{
     graph::Graph,
@@ -19,16 +19,16 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::AtomCore;
 use three_dimensional_reps::{
+    generate_3d_expression, graph_info, render_expression_summary, validate_parsed_graph,
     DisplayOptions, GenerationError, GraphInfo, GraphValidation, NumeratorDisplay,
     NumeratorSamplingScaleMode, OrientationID, RepresentationMode, ThreeDExpression,
-    ThreeDGraphSource, generate_3d_expression, graph_info, render_expression_summary,
-    validate_parsed_graph,
+    ThreeDGraphSource,
 };
 
 use crate::{
-    CLISettings,
     completion::CompletionArgExt,
     state::{ProcessRef, State},
+    CLISettings,
 };
 
 #[derive(Debug, Subcommand, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]

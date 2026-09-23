@@ -1888,7 +1888,7 @@ mod tests {
         graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
         momentum::sample::{BareMomentumSample, LoopMomenta},
-        utils::{PrecisionUpgradable, load_generic_model},
+        utils::load_generic_model,
         uv::uv_graph::UVE,
     };
 

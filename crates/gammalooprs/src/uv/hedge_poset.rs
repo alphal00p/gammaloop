@@ -3062,14 +3062,7 @@ mod tests {
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&spectacles);
-        let f = Wood::new(
-            cut_structure,
-            &spectacles,
-            &GenerationSettings {
-                uv: settings.clone(),
-                ..Default::default()
-            },
-        );
+        let f = Wood::new(cut_structure, &spectacles, &settings);
         println!("{}", f);
         let mut f = f.unfold();
         println!("{}", f);
