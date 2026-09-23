@@ -74,6 +74,12 @@ the underlying Rust boundary.
   Correct those structural issues before metric, Dirac, or color simplification.
 ])
 
+Bracketed products with explicit indices participate directly in metric, Dirac,
+epsilon, and color simplification. The rules see contractions across the bracket's
+arguments; scalar results and zero lose their wrappers. Unresolved contracted
+products retain a bracket when needed to keep powers and denominators atomic.
+This normalization preserves unrelated scalar sums and their factorization.
+
 == Metric and epsilon operations
 
 Metric contraction raises, lowers, or identifies compatible Lorentz indices according to the

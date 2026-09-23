@@ -25,6 +25,7 @@ use crate::{
     W_, color_f, color_t,
     representations::{ColorAdjoint, ColorFundamental, ColorSextet},
     shorthands::{
+        bracket::BracketNormalizer,
         chain::Chain,
         metric::MetricSimplifier,
         schoonschip::{Schoonschip, SchoonschipSettings},
@@ -48,11 +49,10 @@ pub(crate) struct ColorAlgebraSimplifier {
 
 impl ColorAlgebraSimplifier {
     pub(crate) fn run(&self, expression: AtomView<'_>) -> Atom {
-        let mut current = if self.settings.simplify_non_color {
-            expression.simplify_metrics()
-        } else {
-            expression.to_owned()
-        };
+        let mut current = BracketNormalizer::normalize(expression);
+        if self.settings.simplify_non_color {
+            current = current.simplify_metrics();
+        }
         if self.settings.substitute_cof_dimension_invariants {
             current = current.to_cof_dimension_invariants();
         }
@@ -103,6 +103,7 @@ impl ColorAlgebraSimplifier {
         } else {
             simplified
         };
+        let simplified = BracketNormalizer::normalize(simplified.as_view());
         if self.settings.substitute_cof_dimension_invariants {
             simplified.to_cof_dimension_invariants()
         } else {

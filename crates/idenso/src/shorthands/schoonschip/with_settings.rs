@@ -12,7 +12,10 @@ use symbolica::{
 };
 use symbolica_utils::PatternReplacement;
 
-use crate::{W_, shorthands::metric::not_slot};
+use crate::{
+    W_,
+    shorthands::{bracket::BracketNormalizer, metric::not_slot},
+};
 
 use super::{api::Schoonschip, settings::SchoonschipSettings};
 
@@ -391,7 +394,7 @@ impl SchoonschipWithSettings<'_> {
     }
 
     fn apply_once(&self, view: AtomView<'_>) -> Atom {
-        let metric_simplified = view
+        let metric_simplified = BracketNormalizer::normalize(view)
             .normalize_dots()
             .to_owned()
             .replace_multiple_repeat(&*METRIC_FUNCTION_CONTRACTIONS);
@@ -410,7 +413,7 @@ impl SchoonschipWithSettings<'_> {
             simplified
         };
 
-        simplified.normalize_dots()
+        BracketNormalizer::normalize(simplified.normalize_dots().as_view())
     }
 
     fn apply_chain_like_rules(&self, expression: Atom) -> Atom {

@@ -23,8 +23,11 @@ use symbolica::{
 };
 
 use crate::{
-    IndexTooling, bis, dirac::simplify::DiracSimplifier, gamma, gamma0, rep_symbols::RS,
-    shorthands::chain::Chain,
+    IndexTooling, bis,
+    dirac::simplify::DiracSimplifier,
+    gamma, gamma0,
+    rep_symbols::RS,
+    shorthands::{bracket::BracketNormalizer, chain::Chain},
 };
 use eyre::Result;
 
@@ -540,8 +543,7 @@ impl GammaSimplifier for Atom {
     }
 
     fn collect_gamma_chains(&self) -> Atom {
-        let rep: LibraryRep = Bispinor {}.into();
-        self.chainify(rep).collect_chains(rep)
+        self.as_view().collect_gamma_chains()
     }
 
     fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
@@ -563,7 +565,10 @@ impl GammaSimplifier for AtomView<'_> {
     }
     fn collect_gamma_chains(&self) -> Atom {
         let rep: LibraryRep = Bispinor {}.into();
-        self.chainify(rep).collect_chains(rep)
+        let collected = BracketNormalizer::normalize(*self)
+            .chainify(rep)
+            .collect_chains(rep);
+        BracketNormalizer::normalize(collected.as_view())
     }
     fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
         DiracSimplifier::new(&settings).simplify(*self)
@@ -595,13 +600,15 @@ impl GammaSimplifier for AtomView<'_> {
             * gamma0_bj)
             .to_pattern();
 
-        self.replace(gmg)
+        let simplified = BracketNormalizer::normalize(*self)
+            .replace(gmg)
             .with(gmgrhs)
             .replace(gmgn)
             .with(gmgnrhs)
             .replace(repeated_gamma0)
             .repeat()
-            .with(metric!(bis!(RS.a__), bis!(RS.c__)))
+            .with(metric!(bis!(RS.a__), bis!(RS.c__)));
+        BracketNormalizer::normalize(simplified.as_view())
     }
 
     fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> Result<Atom> {
