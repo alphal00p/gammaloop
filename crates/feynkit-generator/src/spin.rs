@@ -6,6 +6,7 @@ use idenso::{dirac::AGS, representations::Bispinor};
 use spenso::network::library::symbolic::ETS;
 use spenso::structure::{
     abstract_index::AbstractIndex,
+    dimension::{Dimension, DimensionError},
     representation::{Minkowski, RepName},
     slot::{DummyAind, ParseableAind},
 };
@@ -31,6 +32,12 @@ pub enum SpinSumError {
     SpinVectorRequiresMassiveFermion,
     #[error("a selected spin state cannot also be spin averaged")]
     PolarizedAverage,
+    #[error(transparent)]
+    Dimension(#[from] DimensionError),
+    #[error("Lorentz dimension {dimension} is below the minimum {minimum} for this particle")]
+    InvalidDimension { dimension: usize, minimum: usize },
+    #[error("a selected Dirac spin vector requires four Lorentz dimensions")]
+    PolarizedDimension,
 }
 
 /// An axial-gauge reference contracted with the two open Lorentz slots.
@@ -57,6 +64,7 @@ pub struct SpinSum {
     antiparticle: bool,
     average: bool,
     covariant: bool,
+    dimension: Dimension,
 }
 
 impl SpinSum {
@@ -75,10 +83,32 @@ impl SpinSum {
             antiparticle: particle.is_antiparticle(),
             average: false,
             covariant: false,
+            dimension: Dimension::Concrete(4),
         })
     }
 
-    /// Divide by the number of physical spin states in four dimensions.
+    /// Choose an integer or symbolic Lorentz dimension using Spenso's dimension type.
+    ///
+    /// Dirac spinor slots retain dimension four. Vector state counts become
+    /// `D - 2` for massless particles and `D - 1` for massive particles.
+    pub fn with_dimension(mut self, dimension: &Atom) -> Result<Self, SpinSumError> {
+        let dimension = Dimension::try_from(dimension.as_view())?;
+        let minimum = match (self.spin, self.massless) {
+            (3, true) => 3,
+            (3, false) => 2,
+            _ => 1,
+        };
+        if let Dimension::Concrete(dimension) = dimension
+            && dimension < minimum
+        {
+            return Err(SpinSumError::InvalidDimension { dimension, minimum });
+        }
+        self.dimension = dimension;
+        Ok(self)
+    }
+
+    /// Divide by the number of physical states in the chosen dimension.
+    /// Dirac fermions retain two states and scalars one.
     pub fn averaged(mut self, average: bool) -> Self {
         self.average = average;
         self
@@ -90,15 +120,16 @@ impl SpinSum {
         self
     }
 
-    /// Build a four-dimensional completeness tensor from unindexed momenta.
+    /// Build a completeness tensor in the chosen Lorentz dimension from unindexed momenta.
     ///
     /// The two indices are bare Symbolica indices, not Spenso slots. Fermions
-    /// use `bis(4, index)` and vectors use `mink(4, index)`. A momentum may be
+    /// use `bis(4, index)` and vectors use `mink(D, index)`. A momentum may be
     /// a symbol (`p`) or a labeled function (`Q(1)`). For massless vectors,
     /// omitting the reference selects the covariant sum. A massive Dirac spin
     /// vector selects one physical state, with `p.s = 0` and `s.s = -1` imposed
     /// by the caller. It uses `(slash(p) +/- m)(1 + gamma5 slash(s))/2` for
-    /// particles and antiparticles alike and cannot be combined with averaging.
+    /// particles and antiparticles alike, requires four Lorentz dimensions, and
+    /// cannot be combined with averaging.
     pub fn expression(
         &self,
         momentum: &Atom,
@@ -122,8 +153,11 @@ impl SpinSum {
             if self.average {
                 return Err(SpinSumError::PolarizedAverage);
             }
+            if self.dimension != Dimension::Concrete(4) {
+                return Err(SpinSumError::PolarizedDimension);
+            }
         }
-        let lorentz = Minkowski {}.new_rep(4);
+        let lorentz = Minkowski {}.new_rep(self.dimension);
         match self.spin {
             1 => Ok(Atom::one()),
             2 => {
@@ -180,11 +214,12 @@ impl SpinSum {
 
     pub fn averaging_factor(&self) -> Atom {
         let states = match (self.average, self.spin, self.massless) {
-            (false, _, _) | (_, 1, _) => 1,
-            (_, 2, _) | (_, 3, true) => 2,
-            _ => 3,
+            (false, _, _) | (_, 1, _) => Atom::one(),
+            (_, 2, _) => Atom::num(2),
+            (_, 3, true) => self.dimension.to_symbolic() - Atom::num(2),
+            _ => self.dimension.to_symbolic() - Atom::one(),
         };
-        Atom::one() / Atom::num(states)
+        Atom::one() / states
     }
 
     /// Sum this particle's paired wavefunctions on one labeled edge.
@@ -206,7 +241,7 @@ impl SpinSum {
         let tensor = self.expression(momentum, indices.clone(), reference, spin_vector)?;
         let slots = indices.map(|index| match self.spin {
             2 => Bispinor {}.new_rep(4).pattern(index),
-            _ => Minkowski {}.new_rep(4).pattern(index),
+            _ => Minkowski {}.new_rep(self.dimension).pattern(index),
         });
         Ok(match self.replacement(edge, slots, tensor) {
             Some(replacement) => expression.replace_multiple(&[replacement]),
@@ -532,6 +567,120 @@ mod tests {
                 .together();
             assert_eq!(trace, Atom::num(-states));
         }
+    }
+
+    #[test]
+    fn dimensional_vector_sums_count_states_and_sew_matching_slots() {
+        let model =
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        let p = parse!("dimension_spin::p");
+        let n = parse!("dimension_spin::n");
+        let mu = parse!("mu");
+        let nu = parse!("nu");
+        for dimension in [Atom::num(4), Atom::num(6), parse!("dimension_spin::D")] {
+            let rep = Minkowski {}.new_rep(Dimension::try_from(dimension.as_view()).unwrap());
+            let p2 = rep.inner_product(&p, &p);
+            for (pdg, reference, missing) in [(22, Some(&n), 2), (23, None, 1)] {
+                let particle = model
+                    .particle_by_id(model.particle_id_by_pdg(pdg).unwrap())
+                    .unwrap();
+                let mass_squared = if pdg == 22 {
+                    Atom::Zero
+                } else {
+                    particle.symbolic_mass(&model).pow(2)
+                };
+                for average in [false, true] {
+                    let sum = SpinSum::new(particle, &model)
+                        .unwrap()
+                        .with_dimension(&dimension)
+                        .unwrap()
+                        .averaged(average);
+                    let projector = sum
+                        .expression(&p, [mu.clone(), nu.clone()], reference, None)
+                        .unwrap();
+                    let trace = (projector.clone() * rep.id(&mu, &nu))
+                        .expand()
+                        .to_dots()
+                        .replace(p2.to_pattern())
+                        .with(mass_squared.to_pattern())
+                        .together();
+                    let expected = if average {
+                        -Atom::one()
+                    } else {
+                        Atom::num(missing) - &dimension
+                    };
+                    assert!((trace - expected).together().is_zero());
+                    let longitudinal = (projector.clone() * rep.vector(p.as_view(), [mu.clone()]))
+                        .expand()
+                        .to_dots()
+                        .replace(p2.to_pattern())
+                        .with(mass_squared.to_pattern())
+                        .together();
+                    assert!(longitudinal.is_zero());
+                    if let Some(reference) = reference {
+                        let axial = (projector.clone()
+                            * rep.vector(reference.as_view(), [mu.clone()]))
+                        .expand()
+                        .to_dots()
+                        .together();
+                        assert!(axial.is_zero());
+                    }
+                    let pair = function!(symbols::epsilon(), 7, rep.pattern(&mu))
+                        * function!(symbols::epsilonbar(), 7, rep.pattern(&nu));
+                    let other_edge = function!(symbols::epsilon(), 8, rep.pattern(&mu));
+                    let sewn = sum
+                        .apply(&(&pair + &other_edge), &p, 7, reference, None)
+                        .unwrap();
+                    assert!((sewn - projector - other_edge).expand().is_zero());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dimensional_spin_sums_reject_invalid_dimensions_and_polarized_dirac_states() {
+        let model =
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        let photon = model
+            .particle_by_id(model.particle_id_by_pdg(22).unwrap())
+            .unwrap();
+        for dimension in [
+            parse!("0"),
+            parse!("2"),
+            parse!("-1"),
+            parse!("3/2"),
+            parse!("D-2"),
+        ] {
+            assert!(
+                SpinSum::new(photon, &model)
+                    .unwrap()
+                    .with_dimension(&dimension)
+                    .is_err()
+            );
+        }
+        let tau = model
+            .particle_by_id(model.particle_id_by_pdg(15).unwrap())
+            .unwrap();
+        let sum = SpinSum::new(tau, &model)
+            .unwrap()
+            .with_dimension(&parse!("D"))
+            .unwrap();
+        assert!(matches!(
+            sum.expression(
+                &parse!("p"),
+                [parse!("i"), parse!("j")],
+                None,
+                Some(&parse!("s"))
+            ),
+            Err(SpinSumError::PolarizedDimension)
+        ));
+        let unpolarized = sum
+            .expression(&parse!("p"), [parse!("i"), parse!("i")], None, None)
+            .unwrap();
+        assert_eq!(
+            unpolarized.simplify_gamma().expand(),
+            4 * tau.symbolic_mass(&model)
+        );
     }
 
     #[test]

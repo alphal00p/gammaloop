@@ -120,7 +120,13 @@ The inventory recognizes bracketed, prefix and postfix Mathematica calls.
 `Particle.spin_sum(momentum, left, right)` returns an ordinary Symbolica
 expression. Supply bare index symbols and an unindexed momentum name. The
 fermion result uses Spenso bispinor slots; the vector result uses Minkowski
-slots. `average=True` divides by the physical four-dimensional spin count.
+slots. Both methods accept `dimension=D` for an integer or symbolic Lorentz
+dimension, defaulting to four. Dirac spinor slots retain dimension four.
+`average=True` divides by two for Dirac fermions, $D-2$ for massless vectors,
+or $D-1$ for massive vectors; scalars have one state. For a fixed two-state
+vector average at symbolic $D$, use `average=False` and divide by two.
+`installed_dimensional_spin_sums.py` verifies transverse projectors, their
+physical state counts and edge-specific sewing at $D$, four and six dimensions.
 The antiparticle record selects the negative mass term in the Dirac
 completeness relation.
 
@@ -132,7 +138,7 @@ Here $s$ is the dimensionless boosted rest-frame spin direction, with
 $p dot s=0$ and $s^2=-1$; the caller supplies these on-shell constraints to
 `Kinematics`. Particle and antiparticle use the same physical spin direction,
 as in the #link("https://sites.ualberta.ca/~gingrich/courses/phys512/node61.html")[covariant spin-projector convention].
-A selected state cannot also be spin averaged. The model must declare a
+A selected state requires four Lorentz dimensions and cannot also be spin averaged. The model must declare a
 nonzero mass: a zero-valued mass parameter is treated as massless even when
 its symbolic parameter name exists. This does not implement massless helicity
 projectors or dimension-generic gamma-five schemes.
@@ -167,7 +173,11 @@ The generator retains provenance annotations for graph signs and multiplicities.
 `diagram.overall_factor_expression(evaluate=True)` evaluates these annotations
 through the shared graph implementation. It preserves arbitrary symbolic
 factors. Include this weight once when assembling a squared matrix element;
-`diagram.symmetry_factor` alone omits fermion signs and grouping weights.
+`diagram.symmetry_factor` alone omits fermion signs and grouping weights. For amputated Grassmann two-point kernels,
+remove only the named `ExternalFermionOrderingSign` factor, for ghosts as well
+as Dirac fermions. Keep internal closed-loop signs and all multiplicities.
+The QCD renormalization and ghost-vertex regressions compare kernels in this
+canonical field order; counterterm amplitudes use the same normalization.
 
 Idenso's `to_dots` handles explicit vector slots even when the momentum head
 was created as an ordinary Symbolica symbol without tensor tags. GammaLoop
