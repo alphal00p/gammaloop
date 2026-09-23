@@ -225,25 +225,25 @@ cut fermion numerators already contain the final-state completeness factors.
 The test excludes cut denominators from the squared amplitude and retains the
 uncut photon denominators and complete graph weight. Its massless result is
 integrated with the two-body phase-space measure and Symbolica polynomial
-integration, reproducing the unpolarized total cross section.
+integration. Both the polar cosine and Mandelstam-t coordinates give the
+reference differential rates and the same unpolarized total cross section.
 
-The live `symbolica-community/examples/hep_showcase.py` notebook also constructs
+The live `symbolica-community/examples/hep/qed_cross_section.py` notebook also constructs
 chiral-projected production directly from the generated vertices and propagators.
 Its massive and massless results agree with the reference. Physical final-state
-charges come from `cut.particles`: the finalized left side is the conjugate
-amplitude, so the stored species of a cut edge need not be the outgoing species.
+charges come from `cut.particles`; the stored species of a cut edge need not
+be the outgoing species.
 `cut.orientations` supplies the sign relating a selected loop coordinate to the
 positive-energy outgoing momentum. Apply that sign when assigning physical
 Mandelstam labels. These conventions leave native graph momentum routing intact;
 changing which cut edge carries the loop coordinate must not interchange the
 physical angular invariants.
 
-The older `installed_feyncalc_polarized_qed.py` fixture still imports the former
-`community.feynkit` namespace and assumes a positive cut orientation for either
-loop coordinate. It does not pass unchanged in the current host. A scratch
-correction using `community.hep` and the physical momentum sign passes both
-massive and massless reference assertions for both coordinates; the repository
-fixture update remains subject to maintainer approval.
+The `installed_feyncalc_polarized_qed.py` regression uses `community.hep`,
+physical cut charges and momentum orientations. It passes the massive and
+massless chiral-projected reference assertions with either final-state particle
+as the loop coordinate. Together these installed regressions cover the full
+annihilation example, including both differential-rate integration coordinates.
 
 Idenso now evaluates four-dimensional traces containing Spenso's `projp` and
 `projm` by reducing them through its existing gamma-five trace identities. Use

@@ -134,6 +134,16 @@ total = (
 )
 assert (total - 4 * pi * alpha**2 / (3 * s_physical)).together() == E("0")
 
+# Independently use t as the polar coordinate: d(cos(theta))/dt = 2/s.
+differential_t = (
+    2 * differential.replace(costheta, 1 + 2 * t / s_physical) / s_physical
+).expand()
+expected_t = alpha**2 * (s_physical**2 + 2 * s_physical * t + 2 * t**2) / s_physical**4
+assert (differential_t - expected_t).together() == 0
+primitive_t = differential_t.to_polynomial().integrate(t).to_expression()
+total_t = 2 * pi * (primitive_t.replace(t, 0) - primitive_t.replace(t, -s_physical))
+assert (total_t - total).together() == 0
+
 # The same normalization gives the isotropic scalar two-body rest-frame width.
 parent, daughter1, daughter2 = S("parent", "daughter1", "daughter2")
 mass = S("parent_mass", is_positive=True)
