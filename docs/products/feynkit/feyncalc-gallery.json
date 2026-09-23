@@ -5058,7 +5058,30 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated two-loop scalar four-point and counterterm diagrams, native UV expansion and IBP, finite mass-insertion contribution, exact two-loop coupling renormalization and beta function",
+      "validated_components": [
+        {
+          "scope": "twelve generated bare four-point diagrams, twelve one-loop counterterm insertions and one local two-loop counterterm; native bare UV expansion, Laporta vacuum reduction, verified family mappings, full zeroth-order counterterm integrands, parametric tadpole recurrence, generated matching equation and two-loop beta function",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_ibp_phi4.py",
+          "components": [
+            "Model.phi4",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "FeynmanDiagram.uv_expansion",
+            "FeynmanDiagram.denominator_expression",
+            "IntegralFamily.rewrite_numerator",
+            "IntegralFamily.mapping_to",
+            "IBPFamily.reduce_laporta",
+            "IBPFamily.solve_parametric",
+            "IBPSolution.reduce",
+            "Matrix.solve",
+            "Symbolica.series",
+            "Symbolica.derivative"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/phi4_two_loop_vertex.py, composed from ibp_phi4.py. The shared self-energy calculation supplies the computed two-loop field constant. Analytic vacuum Laurent coefficients and first-order renormalization constants remain explicit reference inputs. UV-finite mass-insertion integrals are retained because their coefficients contain poles. Exact bare and counterterm poles, coupling constant, complete cancellation and beta function pass. Finite Laporta residuals are identified by verified momentum maps, not certified as a minimal master basis. Installed regression, strict Marimo checks, HTML export and all three live diagram views pass."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/Phi4/OneLoop/PhiPhi-PhiPhi",
