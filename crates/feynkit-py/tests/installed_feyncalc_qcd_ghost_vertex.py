@@ -101,6 +101,17 @@ for pdg in (9000005, -9000005):
                 diagram.overall_factor_expression(evaluate=True)
                 * diagram.numerator_prefactor_expression()
             )
+            # Compare amputated ghost kernels in canonical field order.
+            # Preserve all internal-loop and graph symmetry factors.
+            _ordering, _value = S(
+                "feynkit_generator_factor::ExternalFermionOrderingSign",
+                "ordering_value_",
+            )
+            _raw = diagram.overall_factor_expression()
+            _external_ordering = (_raw / _raw.replace(_ordering(_value), one)).replace(
+                _ordering(_value), _value
+            )
+            weight /= _external_ordering
             assert weight == one
             # Keep every external Lorentz/color slot open; no polarization or
             # contraction with external momentum can hide an unwanted tensor.

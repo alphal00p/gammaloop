@@ -234,14 +234,16 @@ for kind, incoming, outgoing, loops, vertices, count in [
             diagram.overall_factor_expression(evaluate=True)
             * diagram.numerator_prefactor_expression()
         )
-        if kind == "quark":
-            # An amputated two-point kernel omits only external fermion ordering.
+        if kind in ("quark", "ghost"):
+            # Amputated Grassmann two-point kernels omit external ordering.
+            # Closed-loop signs and all other graph factors remain included.
             raw = diagram.overall_factor_expression()
             removed = (raw / raw.replace(ordering(value), one)).replace(
                 ordering(value), value
             )
             assert removed == -one
             factor /= removed
+        if kind == "quark":
             probes = [
                 (
                     "quark_p",
@@ -508,7 +510,9 @@ for kind, incoming, outgoing, count, qcd_order in [
             diagram.overall_factor_expression(evaluate=True)
             * diagram.numerator_prefactor_expression()
         )
-        assert factor == (external_ordering if kind in ("quark", "vertex") else one)
+        assert factor == (
+            external_ordering if kind in ("quark", "ghost", "vertex") else one
+        )
         ports = {}
         if kind != "ghost":
             for edge in diagram.external_edges:
@@ -612,6 +616,8 @@ for kind, incoming, outgoing, count, qcd_order in [
                 )
             probes = [(kind, one)]
             normalization = Symbol.I * a4
+            if kind == "ghost":
+                normalization *= external_ordering
         for label, projector in probes:
             trace = (
                 TensorExpression((numerator * projector).expand())
