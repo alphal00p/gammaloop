@@ -382,6 +382,40 @@ quark-pair threshold, square the complex amplitude with its conjugate. The
 checks this single-flavor leading-order calculation; additional flavors must be
 summed coherently before forming a rate.
 
+== Generate local counterterm insertions
+
+The
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/qed_renormalization.py")[QED renormalization notebook]
+derives one-loop counterterm couplings by expanding the bare factors
+$Z_psi$, $Z_psi Z_m$, $Z_A$, $Z_A/Z_xi$ and $Z_psi Z_e sqrt(Z_A)$ with
+$Z_j=1+a_4 delta Z_j$. The local operator basis remains a model input.
+Add these normalized rules with a bookkeeping coupling order `CT`, then use
+the existing typed generation interface:
+
+// docs-example: compile
+```python
+counterterms = ct_model.generate_diagrams(
+    [ct_electron], [ct_electron], loops=0, max_vertices=1,
+    vertex_allow=ct_vertices, coupling_orders={"QED": 2, "CT": 1},
+    maximum_bridges=None, self_energy=None, tadpoles=None, zero_snails=None,
+    numerator_grouping=None,
+)
+```
+
+The loop count describes topology; the `CT` order describes perturbative
+bookkeeping. A two-point insertion adds no topological loop, so choose an
+explicit vertex bound. Trace the generated numerators with the same
+projectors and native factors as the loop diagrams, extract coefficients
+linear in the unknown counterterms, and let Symbolica solve the matching
+system. The auxiliary mass rule derives from $M(Z_(A m)^2-1)$, which
+supplies $2 delta Z_(A m)$ at first order.
+
+The notebook compares the massive full UV expansion with the massless
+reference's direct massification prescription and verifies the MS/MSbar
+measure conversion against shared OneLOop masters. No separate generator,
+Dirac algebra, IBP solver or master evaluator is introduced for counterterms.
+Automatic import of NLO-UFO counterterm metadata remains separate.
+
 == Keep finite terms in an off-shell self-energy
 
 The host notebook
@@ -407,8 +441,8 @@ and evaluates the symbolic zero-momentum limit separately from the generic
 $1/p^2$ projector. The
 #source-link("crates/feynkit-py/tests/installed_feyncalc_electron_self_energy.py", label: "companion regression")
 checks exact-dimensional identities, limits and sixty numerical points.
-The finite answer is unrenormalized; matching all counterterm diagrams remains
-separate from the scalar-integral reduction.
+The finite answer is unrenormalized. The QED notebook above demonstrates
+generated counterterm matching separately from scalar-integral reduction.
 
 == Use finalized output
 
