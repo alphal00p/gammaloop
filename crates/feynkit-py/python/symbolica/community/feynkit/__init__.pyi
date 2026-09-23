@@ -5357,14 +5357,16 @@ class Particle:
         ValueError
             If the particle's UFO color representation is unsupported.
         """
-    def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None) -> Expression:
+    def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None, dimension: typing.Optional[Expression] = None) -> Expression:
         r"""
         Construct this particle's external-state spin or polarization sum.
 
         Return an ordinary Symbolica expression using Spenso gamma matrices
         and metrics. Indices are bare symbols; momentum and reference are
         unindexed symbols or labeled calls such as ``Q(1)``. The calculation
-        uses four-dimensional external states. Massive vectors use the Proca
+        defaults to four-dimensional external states. ``dimension`` changes the
+        Lorentz dimension while Dirac spinor slots retain dimension four.
+        Massive vectors use the Proca
         projector. For massless vectors, supply a reference for a physical
         axial sum, or omit it for the covariant sum of a gauge-invariant
         amplitude. Subsequent kinematic substitutions must enforce on-shell
@@ -5375,14 +5377,14 @@ class Particle:
         satisfying ``p.s = 0`` and ``s.s = -1``: the rest-frame spin direction,
         boosted with the particle. The same projector sign applies to fermions
         and antifermions; do not reverse this vector for an antiparticle.
-        This option requires ``average=False``.
+        This option requires ``average=False`` and four Lorentz dimensions.
 
         Examples
         --------
         >>> from symbolica import S
         >>> p, i, j = S("p", "i", "j")
-        >>> projector = model.particle_by_pdg(11).spin_sum(p, i, j, average=True)
-        >>> polarized = model.particle_by_pdg(15).spin_sum(p, i, j, spin_vector=S("s"))
+        >>> projector = model.particle("e-").spin_sum(p, i, j, average=True)
+        >>> polarized = model.particle("ta-").spin_sum(p, i, j, spin_vector=S("s"))
 
         Parameters
         ----------
@@ -5393,7 +5395,13 @@ class Particle:
         right : Expression
             Open index on the conjugate amplitude.
         average : bool
-            Divide by the number of physical spin states.
+            Divide by two for Dirac fermions, D-2 for massless vectors, or D-1
+            for massive vectors. Scalars have one state.
+        dimension : Expression | None
+            Integer or symbolic Lorentz dimension; defaults to four. Dirac
+            spinor slots and their trace dimension stay four. To use a fixed
+            two-state vector average at symbolic D, leave average=False and
+            divide the result by two.
         reference : Expression | None
             Axial reference momentum for a massless vector; need not be null.
         covariant : bool
@@ -5408,7 +5416,7 @@ class Particle:
             If ``spin_vector`` is used with averaging, a massless particle, or
             a particle other than a Dirac fermion, or is not an unindexed name.
         """
-    def sum_spins(self, expression: Expression, momentum: Expression, *, edge: builtins.int, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None) -> Expression:
+    def sum_spins(self, expression: Expression, momentum: Expression, *, edge: builtins.int, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None, dimension: typing.Optional[Expression] = None) -> Expression:
         r"""
         Sum paired generated external wavefunctions for one edge.
 
@@ -5417,7 +5425,7 @@ class Particle:
         diagram's ``projector_expression()`` or a squared amplitude. Only pairs
         with the supplied edge label are replaced; unpaired wavefunctions stay
         unchanged. Scalar particles have no external wavefunction factors.
-        External states are four-dimensional; reference and gauge conventions
+        External states default to four dimensions; reference and gauge conventions
         are those of ``spin_sum``. For a massive Dirac particle, ``spin_vector``
         selects the same physical spin state as in ``spin_sum``, including for
         antiparticles. This does not sum color, conjugate amplitudes, or apply
@@ -5428,7 +5436,7 @@ class Particle:
         >>> from symbolica import S
         >>> p = S("p")
         >>> projector = diagram.projector_expression()
-        >>> summed = model.particle_by_pdg(11).sum_spins(projector, p, edge=0, average=True)
+        >>> summed = model.particle("e-").sum_spins(projector, p, edge=0, average=True)
 
         Parameters
         ----------
@@ -5439,7 +5447,13 @@ class Particle:
         edge : int
             Generated edge label of the pair to replace.
         average : bool
-            Divide by the number of physical spin states.
+            Divide by two for Dirac fermions, D-2 for massless vectors, or D-1
+            for massive vectors. Scalars have one state.
+        dimension : Expression | None
+            Integer or symbolic Lorentz dimension; defaults to four. Dirac
+            spinor slots and their trace dimension stay four. To use a fixed
+            two-state vector average at symbolic D, leave average=False and
+            divide the result by two.
         reference : Expression | None
             Axial reference for a massless vector; need not be null.
         covariant : bool

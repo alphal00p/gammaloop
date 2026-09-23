@@ -1013,20 +1013,10 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
 
 fn lower_tensor_powers(value: AtomView<'_>) -> PyResult<Atom> {
     match value {
-        AtomView::Add(sum) => {
-            let mut result = Atom::Zero;
-            for term in sum.iter() {
-                result += lower_tensor_powers(term)?;
-            }
-            Ok(result)
-        }
-        AtomView::Mul(product) => {
-            let mut result = Atom::num(1);
-            for factor in product.iter() {
-                result *= lower_tensor_powers(factor)?;
-            }
-            Ok(result)
-        }
+        // Symbolica's n-way operations normalize once, avoiding repeated merges
+        // of growing expressions when importing expanded tensor amplitudes.
+        AtomView::Add(sum) => sum.iter().map(lower_tensor_powers).sum(),
+        AtomView::Mul(product) => product.iter().map(lower_tensor_powers).product(),
         AtomView::Pow(power) => {
             let (base, exponent) = power.get_base_exp();
             let base = lower_tensor_powers(base)?;

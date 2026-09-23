@@ -127,6 +127,8 @@ or $D-1$ for massive vectors; scalars have one state. For a fixed two-state
 vector average at symbolic $D$, use `average=False` and divide by two.
 `installed_dimensional_spin_sums.py` verifies transverse projectors, their
 physical state counts and edge-specific sewing at $D$, four and six dimensions.
+`hep/polarization_sums.py` exposes these checks for photons, gluons and the
+massive Z with three normalization choices, using particle-name queries.
 The antiparticle record selects the negative mass term in the Dirac
 completeness relation.
 
