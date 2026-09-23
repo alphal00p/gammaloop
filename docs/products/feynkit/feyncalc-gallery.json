@@ -3467,7 +3467,30 @@
         "TimeUsed",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) squared amplitude, exact interference and massless reference; additional massive angular-cut event rates with native flux and phase space",
+      "validated_components": [
+        {
+          "scope": "same-flavor quark-antiquark scattering: generated diagrams and their relative signs, shared spin/color averages, exact massive SU(N) and massless results, separated interference and massive angular-cut event rates",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_quark_scattering.py",
+          "components": [
+            "Model.standard_model",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_color",
+            "TensorExpression.to_cof_dimension_invariants",
+            "TensorExpression.simplify_gamma",
+            "Kinematics.mandelstam",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.integrate"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/quark_scattering.py. The four-channel regression checks massive SU(N) expressions, their interference terms and massless limits exactly, plus 216 independent phase-space quadratures. The notebook passes all 108 control combinations, strict Marimo checks and HTML export. Identical-quark event rates include the final-state 1/2!; a forward-hemisphere identity independently checks that counting. Angular cuts exclude massless-exchange poles. No uncut finite total cross section is claimed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQibar-QjQjbar",
@@ -3567,7 +3590,30 @@
         "TimeUsed",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) squared amplitude, exact interference and massless reference; additional massive angular-cut event rates with native flux and phase space",
+      "validated_components": [
+        {
+          "scope": "identical quarks: generated diagrams and their relative signs, shared spin/color averages, exact massive SU(N) and massless results, separated interference and massive angular-cut event rates",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_quark_scattering.py",
+          "components": [
+            "Model.standard_model",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_color",
+            "TensorExpression.to_cof_dimension_invariants",
+            "TensorExpression.simplify_gamma",
+            "Kinematics.mandelstam",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.integrate"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/quark_scattering.py. The four-channel regression checks massive SU(N) expressions, their interference terms and massless limits exactly, plus 216 independent phase-space quadratures. The notebook passes all 108 control combinations, strict Marimo checks and HTML export. Identical-quark event rates include the final-state 1/2!; a forward-hemisphere identity independently checks that counting. Angular cuts exclude massless-exchange poles. No uncut finite total cross section is claimed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQjbar-QiQjbar",
@@ -3607,7 +3653,30 @@
         "TimeUsed",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) squared amplitude, exact interference and massless reference; additional massive angular-cut event rates with native flux and phase space",
+      "validated_components": [
+        {
+          "scope": "distinct-flavor quark-antiquark scattering: generated diagrams and their relative signs, shared spin/color averages, exact massive SU(N) and massless results, separated interference and massive angular-cut event rates",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_quark_scattering.py",
+          "components": [
+            "Model.standard_model",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_color",
+            "TensorExpression.to_cof_dimension_invariants",
+            "TensorExpression.simplify_gamma",
+            "Kinematics.mandelstam",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.integrate"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/quark_scattering.py. The four-channel regression checks massive SU(N) expressions, their interference terms and massless limits exactly, plus 216 independent phase-space quadratures. The notebook passes all 108 control combinations, strict Marimo checks and HTML export. Identical-quark event rates include the final-state 1/2!; a forward-hemisphere identity independently checks that counting. Angular cuts exclude massless-exchange poles. No uncut finite total cross section is claimed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQj-QiQj",
@@ -3647,7 +3716,30 @@
         "TimeUsed",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) squared amplitude, exact interference and massless reference; additional massive angular-cut event rates with native flux and phase space",
+      "validated_components": [
+        {
+          "scope": "distinct quarks: generated diagrams and their relative signs, shared spin/color averages, exact massive SU(N) and massless results, separated interference and massive angular-cut event rates",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_quark_scattering.py",
+          "components": [
+            "Model.standard_model",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_color",
+            "TensorExpression.to_cof_dimension_invariants",
+            "TensorExpression.simplify_gamma",
+            "Kinematics.mandelstam",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.integrate"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/quark_scattering.py. The four-channel regression checks massive SU(N) expressions, their interference terms and massless limits exactly, plus 216 independent phase-space quadratures. The notebook passes all 108 control combinations, strict Marimo checks and HTML export. Identical-quark event rates include the final-state 1/2!; a forward-hemisphere identity independently checks that counting. Angular cuts exclude massless-exchange poles. No uncut finite total cross section is claimed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-ElAel",
