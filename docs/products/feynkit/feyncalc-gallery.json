@@ -5952,7 +5952,24 @@
         "ToString",
         "Union"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "partial: all 251 input integrals pass exact partial-fraction reconstruction; all 677 independent sectors pass preferred-propagator completion and scalar-product reconstruction, with 112 verified scaling certificates; global topology minimization and 131 singular quadratic sectors remain open",
+      "validated_components": [
+        {
+          "scope": "Full pinned mathematical input: 251 integrals, 248 distinct input families and 89 propagators; exact partial fractions, independent sector support, scoped light-cone kinematics and preferred basis completion",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_etac_topologies.py",
+          "components": [
+            "Kinematics.scalar_product",
+            "IntegralFamily.partial_fraction",
+            "IntegralFamily.sector",
+            "IntegralFamily.symanzik",
+            "IntegralFamily.scaleless_scaling",
+            "IntegralFamily.complete",
+            "IntegralFamily.scalar_product_rules"
+          ],
+          "result": "passed",
+          "note": "Notebook: hep/topology_preparation.py. Source commit and SHA-256 are recorded in the fixture. All 677 sectors complete using the source pool alone; original propagator order and idempotence are checked. All seven scalar products reconstruct exactly in every completed family. The 112 scaling certificates are differentiated explicitly. 434 sectors are not detected as scaleless by the criterion; 131 singular quadratic forms are retained without classification. These intermediate counts depend on partial-fraction ordering and do not claim the reference final topology minimization. Rust tests, Clippy, installed API regression, 28 live notebook control combinations, strict Marimo validation, Ruff and HTML export passed."
+        }
+      ]
     }
   ]
 }

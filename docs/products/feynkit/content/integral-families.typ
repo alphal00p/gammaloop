@@ -114,6 +114,16 @@ a basis. Existing entries retain their positions. For the four denominators
 The returned family includes this auxiliary inverse propagator; nonpositive
 powers represent irreducible numerator factors in an IBP integral list.
 
+To reuse inverse propagators from another family, pass them in priority order:
+`family.complete(candidates=other_family.denominators)`. Express them in the
+current family's momentum coordinates first. The same scoped kinematics are
+applied before testing independence. For the example above,
+`family.complete(candidates=[kin.scalar_product(k-q, k-q)])` appends `(k-q)^2`
+instead of `k.q`. Existing denominators keep their positions; dependent
+candidates are skipped, and scalar products fill any directions the pool does
+not span. Every supplied candidate is validated as affine, even if an earlier
+entry already completed the basis. Repeating completion preserves the result.
+
 Completeness and independence are different. The pair `k^2` and `k^2-m^2`
 spans the one-dimensional scalar-product space, but its two entries are
 dependent. Completion and numerator solving reject this family until it has

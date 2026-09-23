@@ -1,7 +1,7 @@
 """Loop-family completion and exact numerator mappings in the installed host."""
 
 from symbolica import E, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hep as fk
 
 D, k, q, p, s, m1, m2, d1, d2 = S(
     "family::D", "family::k", "family::q", "family::p", "s", "m1sq", "m2sq", "d1", "d2"
@@ -27,6 +27,21 @@ completed = family.complete()
 assert completed.rank == 5 and completed.is_complete
 assert completed.denominators[:4] == family.denominators
 assert completed.denominators[4] == kin.scalar_product(k, q)
+preferred = kin.scalar_product(k - q, k - q)
+selected = family.complete(candidates=[family.denominators[0], preferred])
+assert selected.denominators == [*family.denominators, preferred]
+assert selected.complete(candidates=[preferred]).denominators == selected.denominators
+assert (
+    family.complete(candidates=[family.denominators[0]]).denominators
+    == completed.denominators
+)
+for candidate_family in (family, selected):
+    try:
+        candidate_family.complete(candidates=[preferred, kk**2])
+    except fk.IntegralFamilyError:
+        pass
+    else:
+        raise AssertionError("nonlinear completion candidate was silently accepted")
 
 dependent = fk.IntegralFamily([k], [], [kk, kk - m1], kinematics=kin)
 assert dependent.is_complete and not dependent.is_independent

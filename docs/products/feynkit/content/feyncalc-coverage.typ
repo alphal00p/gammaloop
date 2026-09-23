@@ -1884,6 +1884,43 @@ inserted.
 `hep/qcd_ghosts.py` displays the generated gluon and ghost diagrams, both ghost
 contributions and the subtraction in its own notebook on the same server.
 
+== Two-loop mixed quadratic-eikonal topology preparation
+
+The #link("https://feyncalc.github.io/FeynCalcExamples/TopologyIdentification/TwoLoops/B-EtaC")[B to eta-c topology example]
+supplies 251 integrals in 248 distinct families. The pinned mathematical fixture
+`crates/feynkit-py/tests/fixtures/feyncalc_etac_topologies.json` preserves every
+input power using a pool of 89 inverse propagators. It records the upstream
+commit and SHA-256 of the original input. The translation uses
+`SFAD`'s quadratic-plus-linear-minus-mass convention, with
+$n^2=bar(n)^2=0$ and $n dot bar(n)=2$. The common positive imaginary
+prescription is omitted for algebraic family operations; no contour identity
+is inferred from that omission.
+
+`installed_feyncalc_etac_topologies.py` reconstructs all 251 rational inputs
+exactly after native partial fractioning. This decomposition produces 677
+distinct sectors, all with independent denominators. Their Symanzik forms
+give 112 scaling certificates, each checked by differentiating $U+F$.
+Another 434 sectors are not detected as scaleless by this criterion. The
+remaining 131 have singular quadratic forms and are retained, since a
+degenerate Symanzik polynomial does not establish scalelessness.
+
+The shared `IntegralFamily.complete(candidates=pool)` now tries an ordered
+pool of inverse propagators before bare scalar products. It preserves original
+positions, skips dependencies, and rejects non-affine candidates. All 677
+sectors obtain complete independent seven-dimensional bases using only the
+source pool, with idempotence and exact reconstruction of every scalar product
+checked. The Rust implementation belongs to `feynkit-graph`; Python only
+forwards the candidate list. No GammaLoop-specific completion is introduced.
+
+`hep/topology_preparation.py` displays the source integrals, partial-fraction
+powers, sector classification, and original/completed families. This remains
+*partial* gallery coverage: global topology minimization, momentum mappings
+between all surviving families, and classification of the singular sectors
+are still required. Intermediate counts depend on the decomposition order and
+are not compared to FeynCalc's final minimized topology count.
+Rust tests, Clippy, installed-host regressions, all 28 live control combinations,
+strict Marimo checks, Ruff and HTML export pass.
+
 == Validation standard
 
 The #link("guides/integral-families/")[integral-family guide] describes the shared
