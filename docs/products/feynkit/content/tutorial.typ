@@ -427,6 +427,13 @@ coefficient $delta Z_(c m)$, whereas the identical gluons give
 $2 delta Z_(A m)$. The generated coefficients determine the linear system
 and verify both MS and MSbar subtraction. The notebook exposes the gauge,
 flavor count, color count and subtraction scheme as live controls.
+Its direct massive infrared-rearrangement path adds an auxiliary mass only to
+massless denominators and keeps each longitudinal gluon's extra propagator
+power explicit. After the external Taylor expansion and vacuum tensor
+reduction, use Symbolica partial fractions to separate tadpoles at the physical
+and auxiliary masses. Reconstructing the scalar integrand before native IBP
+guards against dropping either contribution. The physical pole constants agree
+between the two prescriptions, while the auxiliary gluon mass constant changes.
 
 == Keep finite terms in an off-shell self-energy
 
