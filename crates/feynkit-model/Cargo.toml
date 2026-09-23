@@ -9,6 +9,7 @@ keywords = ["feynman", "hep", "physics", "ufo"]
 categories = ["science"]
 
 [dependencies]
+miniz_oxide = { version = "0.8", default-features = false, features = ["with-alloc"] }
 bincode = { workspace = true, features = ["serde"] }
 bincode-trait-derive = { workspace = true }
 blake3 = "1.8.3"
