@@ -3138,7 +3138,32 @@
         "SubscriptBox",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) photon-gluon fusion with arbitrary photon virtuality, physical gluon gauges, Ward identities and massless spacelike continuation",
+      "validated_components": [
+        {
+          "scope": "generated massive SU(N) photon-gluon fusion with arbitrary photon virtuality, physical gluon gauges, Ward identities and massless spacelike continuation; independently generated crossed channels and real-photon angular rates",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_photon_gluon.py",
+          "components": [
+            "Model.standard_model",
+            "Model.particle",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_color",
+            "TensorExpression.expand_mink",
+            "Kinematics.mandelstam",
+            "Kinematics.apply",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.evaluate"
+          ],
+          "result": "passed",
+          "note": "Notebook: hep/photon_gluon.py. All three channels are generated independently with both diagrams and their interference. Exact crossing includes the fermion sign and changed incoming spin/color averages. The off-shell photon current uses -g without a photon spin average, matching the references; no virtual-photon observable without a lepton tensor is claimed. Real-photon rates include the additional incoming photon average and native flux/phase space. Checks cover 54 off-shell points, 81 real-photon angular/energy-scaling combinations, and 27 live control combinations with converged angular-cut quadrature. Strict Marimo validation, Ruff and HTML export pass."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/Ga-QQbar",
@@ -3451,7 +3476,32 @@
         "SubscriptBox",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) QCD Compton current with arbitrary photon virtuality, physical gluon gauges, Ward identities and massless spacelike continuation",
+      "validated_components": [
+        {
+          "scope": "generated massive SU(N) QCD Compton current with arbitrary photon virtuality, physical gluon gauges, Ward identities and massless spacelike continuation; independently generated crossed channels and real-photon angular rates",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_photon_gluon.py",
+          "components": [
+            "Model.standard_model",
+            "Model.particle",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_color",
+            "TensorExpression.expand_mink",
+            "Kinematics.mandelstam",
+            "Kinematics.apply",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.evaluate"
+          ],
+          "result": "passed",
+          "note": "Notebook: hep/photon_gluon.py. All three channels are generated independently with both diagrams and their interference. Exact crossing includes the fermion sign and changed incoming spin/color averages. The off-shell photon current uses -g without a photon spin average, matching the references; no virtual-photon observable without a lepton tensor is claimed. Real-photon rates include the additional incoming photon average and native flux/phase space. Checks cover 54 off-shell points, 81 real-photon angular/energy-scaling combinations, and 27 live control combinations with converged angular-cut quadrature. Strict Marimo validation, Ruff and HTML export pass."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QGl-QGl",
@@ -4018,7 +4068,32 @@
         "SubscriptBox",
         "TrickMandelstam"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated massive SU(N) quark annihilation into a virtual photon and gluon, physical gluon gauges, Ward identities and the massless limit",
+      "validated_components": [
+        {
+          "scope": "generated massive SU(N) quark annihilation into a virtual photon and gluon, physical gluon gauges, Ward identities and the massless limit; independently generated crossed channels and real-photon angular rates",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_photon_gluon.py",
+          "components": [
+            "Model.standard_model",
+            "Model.particle",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Particle.spin_sum",
+            "Particle.color_sum",
+            "TensorExpression.dirac_adjoint",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_color",
+            "TensorExpression.expand_mink",
+            "Kinematics.mandelstam",
+            "Kinematics.apply",
+            "Kinematics.flux",
+            "Kinematics.two_body_phase_space",
+            "Symbolica.evaluate"
+          ],
+          "result": "passed",
+          "note": "Notebook: hep/photon_gluon.py. All three channels are generated independently with both diagrams and their interference. Exact crossing includes the fermion sign and changed incoming spin/color averages. The off-shell photon current uses -g without a photon spin average, matching the references; no virtual-photon observable without a lepton tensor is claimed. Real-photon rates include the additional incoming photon average and native flux/phase space. Checks cover 54 off-shell points, 81 real-photon angular/energy-scaling combinations, and 27 live control combinations with converged angular-cut quadrature. Strict Marimo validation, Ruff and HTML export pass."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-GlGl",
