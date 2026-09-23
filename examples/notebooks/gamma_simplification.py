@@ -68,7 +68,8 @@ def _(mo):
     | Slashed momenta and chain joining | Registered Spenso tensor notation |
     | Chisholm, gamma5, chiral projectors, charge conjugation | Four dimensions |
     | Canonical chain ordering | Opt-in; may produce more terms |
-    | Three-gamma epsilon expansion | Opt-in; four dimensions |
+    | Three-gamma epsilon expansion | Opt-in for open chains; automatic in short 4D trace kernels |
+    | Short trace kernels | Ordinary and gamma5 traces, 1–14 ordinary gammas |
 
     This is a partial algebraic normal form. It does not impose on-shell
     kinematics, external Dirac equations or a dimensional-regularization
@@ -599,10 +600,16 @@ def _(mo):
     mo.md(r"""
     ## 8. Trace growth: measure a small example
 
-    An ordinary trace of $2n$ distinct Lorentz indices has $(2n-1)!!$
-    pairings before dimension-specific or kinematic relations. Trace recursion
-    is useful at moderate length, but this combinatorial growth still matters.
-    Repeated indices and momenta can simplify much earlier.
+    Generic-dimensional pairing recursion produces $(2n-1)!!$ terms for
+    $2n$ distinct Lorentz indices. Four-dimensional traces now use generated
+    kernels through length 14, derived from the three-gamma epsilon identity.
+    At lengths 10, 12 and 14 they give **693, 4,383 and 26,931** metric terms,
+    matching FORM 5.0.0 `trace4` for these inputs. Repeated indices and momenta
+    can simplify earlier through the shared chain contractions.
+
+    Each even arity has a lazily generated ordinary and gamma5 table; odd
+    traces return zero. The first call includes initialization if this table
+    has not already been used in the session. Warm timing excludes that cost.
 
     Change the length to time the installed simplifier. The measurement excludes
     rendering and counts expanded terms only for this small diagnostic. It is
@@ -615,7 +622,7 @@ def _(mo):
 def _(mo):
     trace_length = mo.ui.slider(
         start=2,
-        stop=8,
+        stop=10,
         step=2,
         value=6,
         label="Distinct gamma factors",
@@ -638,13 +645,20 @@ def _(AUTO, S, gamma, lorentz, mo, perf_counter, prod, tr, trace_length):
     _result = _input.simplify_gamma()
     trace_seconds = perf_counter() - _start
     trace_terms = len(list(_result.to_expression().expand().terms()))
-    assert trace_terms == prod(range(1, _length, 2))
+    assert trace_terms == (1, 3, 15, 105, 693, 4383, 26931)[_length // 2 - 1]
+    _samples = []
+    for _ in range(3):
+        _start = perf_counter()
+        _input.simplify_gamma()
+        _samples.append(perf_counter() - _start)
     mo.ui.table(
         [
             {
                 "gamma factors": _length,
                 "expanded metric terms": trace_terms,
-                "simplification time (s)": round(trace_seconds, 6),
+                "generic pairing terms": prod(range(1, _length, 2)),
+                "first call (ms)": round(1000 * trace_seconds, 3),
+                "warm median (ms)": round(1000 * sorted(_samples)[1], 3),
             }
         ],
         selection=None,
@@ -836,7 +850,10 @@ def _(
     metric_pairings = len(
         list(bare_trace.simplify_gamma().to_expression().expand().terms())
     )
-    assert metric_pairings == prod(range(1, slash_length.value, 2))
+    assert (
+        metric_pairings
+        == (1, 3, 15, 105, 693, 4383, 26931)[slash_length.value // 2 - 1]
+    )
     mo.vstack(
         [
             mo.ui.table(
@@ -872,35 +889,75 @@ def _(mo):
     mo.md(r"""
     ## 10. Are we at FORM `trace4` parity?
 
-    **Not at algorithmic parity.** Compact slash notation is supported and
-    the scalar examples above agree with independent identities, but that is
-    narrower than matching FORM's complete `trace4` implementation.
+    **The core short-trace reduction now matches FORM's term counts; full
+    correctness and performance parity remain separate questions.**
 
-    Idenso's ordinary closed-trace branch uses the generic signed pairing
-    recursion. Its four-dimensional Chisholm and optional three-gamma epsilon
-    rules are in the **open-chain** branch; enabling
-    `expand_three_gamma_epsilon` does not select a separate ordinary `trace4`
-    algorithm. FORM additionally scans traces for repeated indices/vectors
-    and uses a four-dimensional reduction when all remaining arguments differ.
-    Its documented options also include cross-trace Chisholm contraction and
-    symmetrization. See the
-    [FORM Dirac-algebra manual](https://github.com/form-dev/form/blob/master/doc/manual/gamma.tex)
-    and this checkout's `crates/idenso/src/dirac/simplify.rs`.
+    Closed traces reuse the open-chain adjacent contractions and 4D Chisholm
+    identities, including cyclic repeated pairs. A macro dispatches lengths
+    1–14 to short kernels. The even kernels cache integer recipes generated
+    from the same three-gamma identity as the open-chain epsilon expansion;
+    separate tables handle a single gamma5. Unsupported dimensions keep their
+    dimension-aware path, and gamma5 remains strictly four-dimensional.
 
-    A concrete distinction appears at **ten distinct Lorentz indices**:
-    generic pairing produces 945 metric terms, whereas FORM 5.0.0 `trace4`
-    produced 693 in our local probe (`tracen`: 945). Different four-dimensional
-    representations need not cancel by treating every metric as independent.
-    The optional native check uses **fourteen** free indices to make the
-    `trace4`/`tracen` timing difference easier to measure. It verifies the results after
-    contraction with the same paired momenta, in addition to comparing the
-    selected compact scalar example exactly.
+    For ten, twelve and fourteen distinct Lorentz arguments the ordinary
+    kernels produce **693, 4,383 and 26,931** terms, respectively. Generic
+    pairing gives 945, 10,395 and 135,135. FORM 5.0.0 `trace4` has the same
+    smaller counts. Its source uses a general 4D reduction; the generated
+    arity-specific cache here is our implementation choice. FORM also has
+    cross-trace Chisholm and symmetrization options beyond these kernels.
+    See the [FORM Dirac-algebra manual](https://github.com/form-dev/form/blob/master/doc/manual/gamma.tex)
+    and [FORM 5.0.0 trace implementation](https://github.com/form-dev/form/blob/v5.0.0/sources/opera.c).
 
-    This notebook does not establish full correctness or performance parity.
-    In particular, timings of a development Python extension and a release
-    FORM executable are not a controlled comparison of the two engines.
+    The optional native comparison checks the selected compact scalar and
+    fourteen free indices with FORM `trace4` and `tracen`. It also times the
+    installed Idenso fourteen-index trace when explicitly enabled, with its
+    first and warm calls reported separately. Rebuilding Python tensor metadata
+    for 26,931 terms can be slow, even when the Rust trace kernel is fast. FORM process timings include startup, parsing,
+    tracing, sorting and scalar verification; Idenso runs in process. These
+    boundaries and potentially different build profiles preclude claiming
+    engine parity from one timing ratio.
+
+    For an optimized Rust comparison across all even lengths 2–14, with
+    exact scalar checks in both engines and saved FORM programs/logs, run:
+
+    ```sh
+    cargo run -p idenso --profile dev-optim --example trace_form -- /path/to/form
+    ```
+    A recorded native run (2026-09-23, AMD EPYC 9754, Rust 1.98.1,
+    Symbolica 3.0.0, `dev-optim`, FORM 5.0.0) measured:
+
+    | Input | Previous Idenso | Current Idenso, warm | FORM `trace4` process | FORM `tracen` process |
+    |:--|--:|--:|--:|--:|
+    | 10 free indices | 168.05 ms | 1.12 ms | 10.81 ms | 10.63 ms |
+    | 12 free indices | Not measured | 8.00 ms | 16.54 ms | 22.57 ms |
+    | 14 free indices | Not measured | 63.61 ms | 54.42 ms | 190.45 ms |
+    | 14 paired slashes | Not measured | 0.75 ms | 9.12 ms | 8.74 ms |
+    | 14 alternating slashes | Not measured | 9.52 ms | 9.58 ms | 9.50 ms |
+
+    **About 150× faster at ten free indices** than the previous Idenso
+    implementation in the matching optimized build. The first fourteen-index
+    call took 73.12 ms. All native scalar polynomial checks passed. Raw records
+    and provenance are in `examples/notebooks/gamma_trace_measurements.json`.
+    These are recorded observations on a shared host; the tables below rerun
+    the installed software. Similar fourteen-index elapsed times do not prove
+    engine parity, given FORM's additional process overhead and wider feature set.
+
+    Its CSV distinguishes first-call Idenso time, warm Idenso time, FORM
+    `trace4` process time and FORM `tracen` process time. First calls in a
+    fresh process expose the lazy table cost; repeated notebook runs may
+    already have populated those tables.
     """)
     return
+
+
+@app.cell
+def _(mo):
+    time_large_python_trace = mo.ui.checkbox(
+        value=False,
+        label="Also time fourteen free indices in Python (metadata inference can take minutes)",
+    )
+    time_large_python_trace
+    return (time_large_python_trace,)
 
 
 @app.cell
@@ -946,13 +1003,25 @@ Local Check = F - 4*p.p*(q.q)^6;
 
 
 @app.cell
-def _(compact_form_source, generic_form_source, median, perf_counter):
+def _(
+    AUTO,
+    S,
+    compact_form_source,
+    gamma,
+    generic_form_source,
+    lorentz,
+    median,
+    perf_counter,
+    tr,
+    time_large_python_trace,
+):
     import os
     import shutil
     import sys
 
     form_records = []
     form_version = None
+    idenso_native_record = None
     # Browser notebooks cannot launch native subprocesses. Native users can
     # select an installed binary explicitly without changing the notebook.
     form_executable = (
@@ -1020,11 +1089,41 @@ def _(compact_form_source, generic_form_source, median, perf_counter):
                         "stdout": _run.stdout,
                     }
                 )
-    return form_executable, form_records, form_version
+        if time_large_python_trace.value:
+            _idenso_input = tr(
+                *(
+                    gamma(AUTO, AUTO, lorentz(S(f"gamma_form::mu{i}")))
+                    for i in range(14)
+                )
+            )
+            _start = perf_counter()
+            _idenso_result = _idenso_input.simplify_gamma()
+            _first = perf_counter() - _start
+            _samples = []
+            for _ in range(3):
+                _start = perf_counter()
+                _idenso_result = _idenso_input.simplify_gamma()
+                _samples.append(perf_counter() - _start)
+            _count = len(list(_idenso_result.to_expression().expand().terms()))
+            assert _count == 26931
+            idenso_native_record = {
+                "case": "Idenso / fourteen free indices",
+                "terms": _count,
+                "first call (ms)": round(1000 * _first, 3),
+                "warm in-process median (ms)": round(1000 * median(_samples), 3),
+            }
+    return form_executable, form_records, form_version, idenso_native_record
 
 
 @app.cell(hide_code=True)
-def _(compact_form_source, form_executable, form_records, form_version, mo):
+def _(
+    compact_form_source,
+    form_executable,
+    form_records,
+    form_version,
+    idenso_native_record,
+    mo,
+):
     if form_executable:
         mo.output.append(
             mo.md(
@@ -1046,6 +1145,15 @@ def _(compact_form_source, form_executable, form_records, form_version, mo):
                 show_download=False,
             )
         )
+        if idenso_native_record is not None:
+            mo.output.append(
+                mo.ui.table(
+                    [idenso_native_record],
+                    selection=None,
+                    pagination=False,
+                    show_download=False,
+                )
+            )
         _native_times = {
             record["case"]: record["process median (ms)"] for record in form_records
         }

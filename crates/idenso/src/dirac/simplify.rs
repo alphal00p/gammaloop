@@ -5,7 +5,11 @@ use spenso::{
     network::tags::SPENSO_TAG as T,
     rep_,
     shadowing::{self, IntoAtom},
-    structure::representation::{LibraryRep, Minkowski, RepName},
+    structure::{
+        abstract_index::AbstractIndex,
+        representation::{LibraryRep, Minkowski, RepName},
+        slot::{DummyAind, ParseableAind},
+    },
     trace,
 };
 use symbolica::{
@@ -24,6 +28,35 @@ use crate::{
 };
 
 use super::{AGS, id_atom};
+
+mod trace_kernel;
+
+// gamma(a) gamma(b) gamma(c): the metric part of the 4D decomposition.
+// The remaining term is -epsilon(a,b,c,d) gamma(d) gamma5.
+const THREE_GAMMA_METRIC_TERMS: [(i32, [usize; 2], usize); 3] =
+    [(1, [0, 1], 2), (-1, [0, 2], 1), (1, [1, 2], 0)];
+
+#[derive(Clone, Copy)]
+enum DiracWord<'a> {
+    Chain(AtomView<'a>, AtomView<'a>),
+    Trace(AtomView<'a>),
+}
+
+impl DiracWord<'_> {
+    fn build(self, factors: Vec<Atom>) -> Atom {
+        match self {
+            Self::Chain(start, end) => chain!(start, end; factors),
+            Self::Trace(rep) => DiracSimplifier::trace_or_terminal(rep, factors),
+        }
+    }
+
+    fn is_four_dimensional(self) -> bool {
+        match self {
+            Self::Chain(start, end) => has_four_dimensional_spin_endpoints(start, end),
+            Self::Trace(rep) => has_four_dimensional_trace_rep(rep),
+        }
+    }
+}
 
 static MINKOWSKI_SYMBOL: LazyLock<Symbol> =
     LazyLock::new(|| LibraryRep::from(Minkowski {}).symbol());
@@ -373,6 +406,11 @@ impl<'settings> DiracSimplifier<'settings> {
     }
 
     pub(crate) fn simplify(self, expr: AtomView) -> Atom {
+        if self.settings.evaluate_traces
+            && let Some(result) = Self::evaluate_short_free_trace(expr)
+        {
+            return result;
+        }
         let mut expr = expr.to_owned();
 
         loop {
@@ -391,6 +429,34 @@ impl<'settings> DiracSimplifier<'settings> {
 
             expr = next;
         }
+    }
+
+    /// A standalone trace with distinct explicit indices has no contractions
+    /// left after kernel evaluation: each output monomial uses each index once.
+    /// Avoid running the full tensor fixed point over thousands of terminal
+    /// metric products. Products with spectators still use the complete pass.
+    fn evaluate_short_free_trace(expr: AtomView<'_>) -> Option<Atom> {
+        let AtomView::Fun(f) = expr else {
+            return None;
+        };
+        let (rep, factors) = shadowing::trace_parts(f)?;
+        if !has_four_dimensional_trace_rep(rep) || factors.len() > 14 {
+            return None;
+        }
+        let factors = factors
+            .iter()
+            .copied()
+            .map(DiracFactor::parse)
+            .collect::<Vec<_>>();
+        let indices = Self::gamma_mink_index_sequence_for(FOUR_DIM_CHISHOLM, &factors)?;
+        if indices
+            .iter()
+            .enumerate()
+            .any(|(i, &index)| !is_minkowski_slot(index) || indices[..i].contains(&index))
+        {
+            return None;
+        }
+        trace_kernel::evaluate(&indices, false)
     }
 
     fn simplify_chain_node(self, f: FunView) -> Option<Atom> {
@@ -413,7 +479,7 @@ impl<'settings> DiracSimplifier<'settings> {
             return Some(id_atom(*start, *end));
         }
 
-        Self::contract_adjacent_gamma_pair(*start, *end, &factors)
+        Self::contract_adjacent_gamma_pair(DiracWord::Chain(*start, *end), &factors)
             .or_else(|| {
                 factor_kinds
                     .has_non_pure_gamma()
@@ -427,11 +493,18 @@ impl<'settings> DiracSimplifier<'settings> {
                 .flatten()
                 .map(|(sign, factors)| Atom::num(sign) * chain!(*start, *end; factors))
             })
-            .or_else(|| Self::four_dim_chisholm_contraction(*start, *end, &factors))
+            .or_else(|| {
+                Self::four_dim_chisholm_contraction(DiracWord::Chain(*start, *end), &factors)
+            })
             .or_else(|| {
                 self.settings
                     .expand_three_gamma_epsilon
-                    .then(|| Self::four_dim_three_gamma_epsilon_expansion(*start, *end, &factors))
+                    .then(|| {
+                        Self::four_dim_three_gamma_epsilon_expansion(
+                            DiracWord::Chain(*start, *end),
+                            &factors,
+                        )
+                    })
                     .flatten()
             })
             .or_else(|| {
@@ -448,10 +521,13 @@ impl<'settings> DiracSimplifier<'settings> {
             })
             .or_else(|| match self.settings.chain_ordering {
                 GammaChainOrdering::RepeatedPairs => {
-                    Self::bubble_repeated_gamma_towards_contraction(*start, *end, &factors)
+                    Self::bubble_repeated_gamma_towards_contraction(
+                        DiracWord::Chain(*start, *end),
+                        &factors,
+                    )
                 }
                 GammaChainOrdering::Canonical => {
-                    Self::canonicalize_gamma_chain_order(*start, *end, &factors)
+                    Self::canonicalize_gamma_chain_order(DiracWord::Chain(*start, *end), &factors)
                 }
             })
     }
@@ -461,8 +537,7 @@ impl DiracSimplifier<'_> {
     /// Contracts adjacent equal-index gammas:
     /// `...[gamma(mu), gamma(mu)]... -> g(mu, mu) * ...[...]...`.
     fn contract_adjacent_gamma_pair(
-        start: AtomView<'_>,
-        end: AtomView<'_>,
+        word: DiracWord<'_>,
         factors: &[DiracFactor<'_>],
     ) -> Option<Atom> {
         for (i, pair) in factors.windows(2).enumerate() {
@@ -482,7 +557,7 @@ impl DiracSimplifier<'_> {
             Self::extend_factors(&mut rest, &factors[..i]);
             Self::extend_factors(&mut rest, &factors[i + 2..]);
 
-            return Some(g!(mu, nu) * chain!(start, end; rest));
+            return Some(g!(mu, nu) * word.build(rest));
         }
 
         None
@@ -636,8 +711,7 @@ impl DiracSimplifier<'_> {
     /// Repeated-pair mode only pays the anticommutation cost when it exposes a
     /// contraction in the next fixed-point step.
     fn bubble_repeated_gamma_towards_contraction(
-        start: AtomView<'_>,
-        end: AtomView<'_>,
+        word: DiracWord<'_>,
         factors: &[DiracFactor<'_>],
     ) -> Option<Atom> {
         let (_i, j) = Self::shortest_repeated_gamma_pair(factors)?;
@@ -645,15 +719,14 @@ impl DiracSimplifier<'_> {
             return None;
         }
 
-        Self::anticommute_adjacent_gamma_pair(start, end, factors, j - 1)
+        Self::anticommute_adjacent_gamma_pair(word, factors, j - 1)
     }
 
-    /// Applies short 4D Chisholm contractions around repeated endpoint gammas:
-    /// `gamma(mu) A gamma(mu)` is replaced directly for interiors of length
-    /// one through four.
+    /// Applies the 4D Chisholm contractions around repeated endpoint gammas:
+    /// odd interiors reverse with factor -2; even interiors give two words.
+    /// The two-gamma interior has the shorter metric terminal.
     fn four_dim_chisholm_contraction(
-        start: AtomView<'_>,
-        end: AtomView<'_>,
+        word: DiracWord<'_>,
         factors: &[DiracFactor<'_>],
     ) -> Option<Atom> {
         let (left, right) = Self::shortest_repeated_four_dim_gamma_pair(factors)?;
@@ -662,79 +735,48 @@ impl DiracSimplifier<'_> {
             Self::gamma_mink_index_sequence_for(FOUR_DIM_CHISHOLM, parsed_interior)?;
 
         match parsed_interior.len() {
-            1 => Some(
-                Atom::num(-2)
-                    * chain!(start, end; Self::chain_factors(
+            0 => None,
+            2 => Some(
+                Atom::num(4)
+                    * g!(interior_mink_indices[0], interior_mink_indices[1])
+                    * word.build(Self::chain_factors(
                         factors,
                         left,
                         right,
-                        parsed_interior.iter().copied().map(DiracFactor::as_view),
+                        std::iter::empty::<Atom>(),
                     )),
             ),
-            2 => {
-                let mu = interior_mink_indices[0];
-                let nu = interior_mink_indices[1];
-
-                Some(
-                    Atom::num(4)
-                        * g!(mu, nu)
-                        * chain!(start, end; Self::chain_factors(
-                            factors,
-                            left,
-                            right,
-                            std::iter::empty::<Atom>(),
-                        )),
-                )
-            }
-            3 => {
-                let reversed = parsed_interior
+            n if n % 2 == 1 => Some(
+                Atom::num(-2)
+                    * word.build(Self::chain_factors(
+                        factors,
+                        left,
+                        right,
+                        parsed_interior
+                            .iter()
+                            .rev()
+                            .copied()
+                            .map(DiracFactor::as_view),
+                    )),
+            ),
+            n => {
+                let last = parsed_interior[n - 1].as_view();
+                let rest = &parsed_interior[..n - 1];
+                let first = rest
                     .iter()
                     .rev()
                     .copied()
                     .map(DiracFactor::as_view)
-                    .collect::<Vec<_>>();
+                    .chain([last]);
+                let second = [last]
+                    .into_iter()
+                    .chain(rest.iter().copied().map(DiracFactor::as_view));
                 Some(
-                    Atom::num(-2)
-                        * chain!(start, end; Self::chain_factors(
-                            factors,
-                            left,
-                            right,
-                            reversed,
-                        )),
-                )
-            }
-            4 => {
-                let term_1 = [
-                    parsed_interior[2].as_view(),
-                    parsed_interior[1].as_view(),
-                    parsed_interior[0].as_view(),
-                    parsed_interior[3].as_view(),
-                ];
-                let term_2 = [
-                    parsed_interior[3].as_view(),
-                    parsed_interior[0].as_view(),
-                    parsed_interior[1].as_view(),
-                    parsed_interior[2].as_view(),
-                ];
-
-                Some(
-                    Atom::num(2)
-                        * chain!(start, end; Self::chain_factors(
-                            factors,
-                            left,
-                            right,
-                            term_1,
-                        ))
+                    Atom::num(2) * word.build(Self::chain_factors(factors, left, right, first))
                         + Atom::num(2)
-                            * chain!(start, end; Self::chain_factors(
-                                factors,
-                                left,
-                                right,
-                                term_2,
-                            )),
+                            * word.build(Self::chain_factors(factors, left, right, second)),
                 )
             }
-            _ => None,
         }
     }
 
@@ -743,35 +785,40 @@ impl DiracSimplifier<'_> {
     /// - g(mu,rho) gamma(nu) + g(nu,rho) gamma(mu)
     /// - epsilon(mu,nu,rho,sigma) gamma(sigma) gamma5`.
     fn four_dim_three_gamma_epsilon_expansion(
-        start: AtomView<'_>,
-        end: AtomView<'_>,
+        word: DiracWord<'_>,
         factors: &[DiracFactor<'_>],
     ) -> Option<Atom> {
-        if !has_four_dimensional_spin_endpoints(start, end) {
+        if !word.is_four_dimensional() {
             return None;
         }
 
         for (i, triple) in factors.windows(3).enumerate() {
-            let [first, second, third] = triple else {
-                unreachable!("windows(3) always yields triples")
-            };
             let Some(mink_indices) =
                 Self::gamma_mink_index_sequence_for(FOUR_DIM_THREE_GAMMA_EPSILON, triple)
             else {
                 continue;
             };
-            if !mink_indices.iter().copied().all(is_minkowski_slot) {
+            if matches!(word, DiracWord::Chain(..))
+                && !mink_indices.iter().copied().all(is_minkowski_slot)
+            {
                 continue;
             }
 
             let [mu, nu, rho] = mink_indices.as_slice() else {
                 unreachable!("the window always contains three gamma factors")
             };
-            let sigma = epsilon_dummy_minkowski_slot();
+            let sigma = match word {
+                DiracWord::Chain(..) => epsilon_dummy_minkowski_slot(),
+                // A longer axial trace may need several reductions before
+                // its epsilon tensors contract; each needs its own dummy.
+                DiracWord::Trace(_) => Minkowski {}
+                    .new_rep(4)
+                    .pattern(AbstractIndex::new_dummy().to_atom()),
+            };
 
             // The chain normal form keeps gamma5 to the right of ordinary gammas.
             let epsilon_term = Atom::num(-1)
-                * chain!(start, end; Self::chain_factors(
+                * word.build(Self::chain_factors(
                     factors,
                     i,
                     i + 2,
@@ -779,29 +826,16 @@ impl DiracSimplifier<'_> {
                 ))
                 * epsilon4(*mu, *nu, *rho, &sigma);
 
-            let metric_mu_nu = Self::generated_metric_chain_term(
-                start,
-                end,
-                *mu,
-                *nu,
-                Self::chain_factors(factors, i, i + 2, [(*third).as_view()]),
-            );
-            let metric_mu_rho = Self::generated_metric_chain_term(
-                start,
-                end,
-                *mu,
-                *rho,
-                Self::chain_factors(factors, i, i + 2, [(*second).as_view()]),
-            );
-            let metric_nu_rho = Self::generated_metric_chain_term(
-                start,
-                end,
-                *nu,
-                *rho,
-                Self::chain_factors(factors, i, i + 2, [(*first).as_view()]),
-            );
-
-            return Some(epsilon_term + metric_mu_nu - metric_mu_rho + metric_nu_rho);
+            let metric_terms = THREE_GAMMA_METRIC_TERMS.map(|(coefficient, [a, b], remaining)| {
+                Atom::num(coefficient)
+                    * Self::generated_metric_word_term(
+                        word,
+                        mink_indices[a],
+                        mink_indices[b],
+                        Self::chain_factors(factors, i, i + 2, [triple[remaining].as_view()]),
+                    )
+            });
+            return Some(epsilon_term + Atom::add_many(metric_terms));
         }
 
         None
@@ -839,8 +873,7 @@ impl DiracSimplifier<'_> {
     /// Canonicalizes adjacent gamma order using the Clifford anticommutator:
     /// `gamma(mu) gamma(nu) -> 2 g(mu,nu) - gamma(nu) gamma(mu)`.
     fn canonicalize_gamma_chain_order(
-        start: AtomView<'_>,
-        end: AtomView<'_>,
+        word: DiracWord<'_>,
         factors: &[DiracFactor<'_>],
     ) -> Option<Atom> {
         for (i, pair) in factors.windows(2).enumerate() {
@@ -852,7 +885,7 @@ impl DiracSimplifier<'_> {
             };
 
             if mu > nu {
-                return Self::anticommute_adjacent_gamma_pair(start, end, factors, i);
+                return Self::anticommute_adjacent_gamma_pair(word, factors, i);
             }
         }
 
@@ -930,8 +963,7 @@ impl DiracSimplifier<'_> {
     }
 
     fn anticommute_adjacent_gamma_pair(
-        start: AtomView<'_>,
-        end: AtomView<'_>,
+        word: DiracWord<'_>,
         factors: &[DiracFactor<'_>],
         swap_at: usize,
     ) -> Option<Atom> {
@@ -948,22 +980,21 @@ impl DiracSimplifier<'_> {
         // Run the local metric term through chain-aware Schoonschip before it can
         // swell the Clifford expansion.
         let metric_term =
-            Atom::num(2) * Self::generated_metric_chain_term(start, end, mu, nu, metric_rest);
+            Atom::num(2) * Self::generated_metric_word_term(word, mu, nu, metric_rest);
 
         let mut swapped = Self::owned_factors(factors);
         swapped.swap(swap_at, swap_at + 1);
 
-        Some(metric_term - chain!(start, end; swapped))
+        Some(metric_term - word.build(swapped))
     }
 
-    fn generated_metric_chain_term(
-        start: AtomView<'_>,
-        end: AtomView<'_>,
+    fn generated_metric_word_term(
+        word: DiracWord<'_>,
         mu: AtomView<'_>,
         nu: AtomView<'_>,
         factors: Vec<Atom>,
     ) -> Atom {
-        (g!(mu, nu) * chain!(start, end; factors)).schoonschip_with_settings(
+        (g!(mu, nu) * word.build(factors)).schoonschip_with_settings(
             &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
         )
     }
@@ -1178,9 +1209,9 @@ impl DiracSimplifier<'_> {
     /// Evaluates a Dirac trace.
     ///
     /// The pass first handles four-dimensional special factors (`gamma0`,
-    /// `gamma5`, chiral projectors, charge conjugation), then falls back to ordinary gamma traces:
-    /// odd traces vanish and even traces recurse by contracting the first gamma
-    /// with each later gamma.
+    /// `gamma5`, chiral projectors, charge conjugation), then reduces repeated ordinary gammas using the shared chain identities.
+    /// Four-dimensional words of length at most fourteen use generated kernels;
+    /// generic dimensions and longer words recurse to shorter traces.
     fn simplify_trace_node(self, f: FunView) -> Option<Atom> {
         let (rep, factors) = shadowing::trace_parts(f)?;
 
@@ -1251,6 +1282,23 @@ impl DiracSimplifier<'_> {
             return Some(Atom::Zero);
         }
 
+        // Cyclicity lets the shortest repeated pair cross the stored boundary.
+        // Rotate once, then apply exactly the same reductions as open chains.
+        let rotated = Self::rotate_trace_to_repeated_pair(&factors);
+        let word = DiracWord::Trace(rep);
+        if let Some(reduced) = Self::contract_adjacent_gamma_pair(word, &rotated)
+            .or_else(|| Self::four_dim_chisholm_contraction(word, &rotated))
+            .or_else(|| Self::bubble_repeated_gamma_towards_contraction(word, &rotated))
+        {
+            return Some(reduced);
+        }
+        if has_four_dimensional_trace_rep(rep)
+            && Self::gamma_mink_index_sequence_for(FOUR_DIM_CHISHOLM, &factors).is_some()
+            && let Some(result) = trace_kernel::evaluate(&trace_mink_indices, false)
+        {
+            return Some(result);
+        }
+
         let first = trace_mink_indices[0];
         let mut sum = Atom::Zero;
 
@@ -1281,6 +1329,26 @@ impl DiracSimplifier<'_> {
         }
 
         Some(sum)
+    }
+
+    fn rotate_trace_to_repeated_pair<'a>(factors: &[DiracFactor<'a>]) -> Vec<DiracFactor<'a>> {
+        let mut best = (0, factors.len());
+        for (i, left) in factors.iter().enumerate() {
+            for (j, right) in factors.iter().enumerate().skip(i + 1) {
+                if Self::mink_index_pair(GAMMA_ANTICOMMUTATION, left, right)
+                    .is_some_and(|(a, b)| a == b)
+                {
+                    let distance = j - i;
+                    if distance < best.1 {
+                        best = (i, distance);
+                    }
+                    if factors.len() - distance < best.1 {
+                        best = (j, factors.len() - distance);
+                    }
+                }
+            }
+        }
+        Self::cyclic_from_position(factors, best.0)
     }
 
     fn simplify_special_trace_pair(rep: AtomView<'_>, factors: &[DiracFactor<'_>]) -> Option<Atom> {
@@ -1355,41 +1423,20 @@ impl DiracSimplifier<'_> {
             return Some(Atom::Zero);
         }
 
-        if mink_indices.len() == 4 {
-            // Tr(gamma5 gamma(mu) gamma(nu) gamma(rho) gamma(sigma))
-            //   -> 4 epsilon(mu,nu,rho,sigma).
-            return Some(
-                Atom::num(4)
-                    * epsilon4(
-                        mink_indices[0],
-                        mink_indices[1],
-                        mink_indices[2],
-                        mink_indices[3],
-                    ),
-            );
+        let word = DiracWord::Trace(rep);
+        if let Some(reduced) = Self::contract_adjacent_gamma_pair(word, factors)
+            .or_else(|| Self::four_dim_chisholm_contraction(word, factors))
+            .or_else(|| Self::bubble_repeated_gamma_towards_contraction(word, factors))
+        {
+            return Some(reduced);
+        }
+        if let Some(result) = trace_kernel::evaluate(&mink_indices, true) {
+            return Some(result);
         }
 
-        let first = mink_indices[0];
-        let mut sum = Atom::Zero;
-
-        for i in 1..parsed_after_gamma5.len() {
-            let mut rest = Vec::with_capacity(parsed_after_gamma5.len() - 1);
-            rest.push(gamma5_factor());
-            Self::extend_factors(&mut rest, &parsed_after_gamma5[1..i]);
-            Self::extend_factors(&mut rest, &parsed_after_gamma5[i + 1..]);
-
-            let term = g!(first, mink_indices[i]) * Self::trace_or_terminal(rep, rest);
-
-            // Longer gamma5 traces recurse by contracting the first ordinary
-            // gamma, leaving gamma5 in the reduced trace.
-            if i % 2 == 1 {
-                sum += term;
-            } else {
-                sum -= term;
-            }
-        }
-
-        Some(sum)
+        // The ordinary pairing recurrence does not apply with one gamma5.
+        // Reduce a triple using the same 4D identity as the short kernels.
+        Self::four_dim_three_gamma_epsilon_expansion(word, factors)
     }
 
     fn reduce_gamma5_trace_pair(
