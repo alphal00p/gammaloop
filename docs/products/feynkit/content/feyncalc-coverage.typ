@@ -892,9 +892,18 @@ $ frac(xi(C_F-C_A/2),epsilon) quad "and" quad
 Their sum fixes the coupling counterterm together with the quark and gluon
 field counterterms.
 
-An eight-by-eight Symbolica solve matches the generated local structures to
-Lagrangian counterterm operators, using $Z_j=1+a_4 delta Z_j$. The six
-physical renormalization constants are compared with
+Eight generated counterterm diagrams supply an eight-by-eight Symbolica
+matching system. Local Lagrangian operators remain explicit model inputs;
+their couplings follow by expanding the bare factors with
+$Z_j=1+a_4 delta Z_j$. Typed particle and vertex selections generate two quark,
+three gluon, two ghost and one quark-gluon insertions at zero topological loops
+and bookkeeping order `CT=1`. The vertex copies every color/Lorentz slot of
+the model's quark-gluon rule. Shared particle color sums and the same trace
+projectors extract the matching coefficients from the generated numerators,
+retaining the distinct native quark and ghost ordering factors. Derivatives
+of these coefficients supply the matrix entries; exact reconstruction checks
+that no nonlinear or unmatched tensor terms remain. The six physical
+renormalization constants are compared with
 $ delta Z_q=-frac(C_F xi,epsilon), quad
   delta Z_m=-frac(3C_F,epsilon), $
 $ delta Z_A=delta Z_xi=frac(C_A(13-3xi)-4N_f,6epsilon), quad
@@ -907,21 +916,36 @@ the mass and coupling results are independent of $xi$.
 The two auxiliary mass coefficients are $delta Z_(A m)=delta Z_(c m)=0$ in
 this complete UV expansion. Terms correcting the auxiliary mass are retained
 through logarithmic order; even the expanded massless tadpole has cancelling
-UV poles. FeynCalc's nonzero auxiliary gluon mass counterterm belongs to its
-selective infrared rearrangement and is a different prescription. The physical
-renormalization constants agree between the two prescriptions. Analytic master
-values and Lagrangian counterterm structures remain explicit inputs; this
-workflow does not generate counterterm diagrams or subtraction forests.
+UV poles. FeynCalc's auxiliary gluon mass counterterm
+$delta Z_(A m)=-C_A(1+3xi)/(8epsilon)$ belongs to its selective infrared
+rearrangement, which remains unvalidated here. The physical renormalization
+constants agree between the two prescriptions. The generated auxiliary rules
+follow $M(Z_(A m)^2-1)A^2/2$ and $M(Z_(c m)^2-1)bar(c)c/2$: identical gluons
+produce the matrix entry 2, while distinct ghost fields produce 1. Analytic
+master values and the local operator basis remain explicit inputs;
+automatic NLO-UFO import and subtraction forests are not covered.
+
+The
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/Renormalization2")[MS/MSbar QCD reference]
+discards finite form factors and compares the local UV renormalization
+constants. Its displayed results pass with generated counterterms. As in the
+QED workflow, the shared OneLOop measure supplies
+$c_Delta=log(4pi)-gamma_E$. MS subtracts the pole; MSbar subtracts the pole
+and its associated $c_Delta$ term. Substituting both sets of constants into
+the actual generated coefficients cancels every required tensor structure.
+With one common loop measure, the MS result retains $c_Delta$ times the pole
+residue. This comparison does not claim the complete finite amplitudes.
 
 The installed regression passes the symbolic-gauge pole comparisons, all eight
 counterterm equations and the exact linear-system residual. It checks that
 scalar-family coefficients contain no hidden loop momentum, the projected UV
 coefficients contain neither physical nor auxiliary mass dependence, and no
 double poles remain. Ruff, strict Marimo validation and a headless HTML export
-pass. The notebook also passes in the existing live instance for its default
-state and 27 combinations of gauge parameter, quark-flavor count and SU(N)
-color group. Its interactive counterterm table checks the vertex cancellation
-and the gauge-independent one-loop coefficient $beta_0=(11C_A-2N_f)/3$.
+pass, as does the separate ghost/antighost vertex regression. The notebook
+passes 314 live combinations of gauge parameter, quark-flavor count, SU(N)
+color group and subtraction scheme, including a vanishing beta function.
+Its interactive counterterm table checks the vertex cancellation and the
+gauge-independent one-loop coefficient $beta_0=(11C_A-2N_f)/3$.
 
 == Generated ghost-gluon vertex and crossing
 
