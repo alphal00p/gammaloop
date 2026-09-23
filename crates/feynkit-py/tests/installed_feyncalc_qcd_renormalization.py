@@ -1,8 +1,14 @@
-"""Generated one-loop QCD UV poles and MSbar counterterms in symbolic gauge.
+"""Generated one-loop QCD UV poles and MS/MSbar counterterms in symbolic gauge.
 
 Reference: https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/Renormalization
 The shared graph expansion retains auxiliary mass corrections. Counterterm
-operators and the analytic tadpole pole are stated inputs, not generated data.
+operators and the analytic tadpole pole are explicit inputs. Bare-factor
+expansion and the ordinary generator supply actual CT diagrams; their projected
+numerators determine every entry of the matching matrix.
+Reference MS/MSbar scope:
+https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/Renormalization2
+The separate n=0 IRR reference's nonzero auxiliary mass is not inferred from
+this full UV expansion.
 """
 
 import json
@@ -76,19 +82,42 @@ reducer = hep.TensorReducer(D).with_integrated_vector(K(0, mink(D)))
 gmunu = metric(mink(D, mu), mink(D, nu))
 ppmunu = P(0, mink(D, mu)) * P(0, mink(D, nu))
 zero, one = E("0"), E("1")
+quark, gluon, ghost = (model.particle_by_pdg(pdg) for pdg in (5, 21, 9000005))
+interaction_rules = {}
+for label, particles in [
+    ("qqg", [quark.antiname, quark.name, gluon.name]),
+    ("ccg", [ghost.antiname, ghost.name, gluon.name]),
+    ("ggg", [gluon.name] * 3),
+    ("gggg", [gluon.name] * 4),
+]:
+    interaction_rules[label] = [
+        vertex
+        for vertex in model.vertex_rules
+        if sorted(vertex.particles) == sorted(particles)
+    ]
+    assert len(interaction_rules[label]) == 1
 parts, diagrams = {}, {}
 for kind, incoming, outgoing, loops, vertices, count in [
-    ("tree", [5], [21, 5], 0, ["V_76"], 1),
-    ("quark", [5], [5], 1, ["V_76"], 1),
-    ("ghost", [9000005], [9000005], 1, ["V_35"], 1),
-    ("gluon_loop", [21], [21], 1, ["V_36"], 1),
-    ("ghost_loop", [21], [21], 1, ["V_35"], 1),
-    ("quark_loop", [21], [21], 1, ["V_76"], 1),
-    ("tadpole", [21], [21], 1, ["V_37"], 1),
-    ("vertex", [5], [21, 5], 1, ["V_76", "V_36"], 2),
+    ("tree", [quark], [gluon, quark], 0, interaction_rules["qqg"], 1),
+    ("quark", [quark], [quark], 1, interaction_rules["qqg"], 1),
+    ("ghost", [ghost], [ghost], 1, interaction_rules["ccg"], 1),
+    ("gluon_loop", [gluon], [gluon], 1, interaction_rules["ggg"], 1),
+    ("ghost_loop", [gluon], [gluon], 1, interaction_rules["ccg"], 1),
+    ("quark_loop", [gluon], [gluon], 1, interaction_rules["qqg"], 1),
+    ("tadpole", [gluon], [gluon], 1, interaction_rules["gggg"], 1),
+    (
+        "vertex",
+        [quark],
+        [gluon, quark],
+        1,
+        interaction_rules["qqg"] + interaction_rules["ggg"],
+        2,
+    ),
 ]:
-    generated = hep.Generator(model).generate(
-        hep.Process.amplitude(incoming, outgoing).with_loop_count(loops, loops),
+    generated = model.generate_diagrams(
+        incoming,
+        outgoing,
+        loops=loops,
         max_vertices=len(incoming) + len(outgoing) - 2 + 2 * loops,
         maximum_bridges=0,
         vertex_allow=vertices,
@@ -104,7 +133,7 @@ for kind, incoming, outgoing, loops, vertices, count in [
         ports = {}
         if kind != "ghost":
             for edge in diagram.external_edges:
-                is_gluon = incoming == [21] or (
+                is_gluon = incoming == [gluon] or (
                     kind in ("tree", "vertex") and edge.external_index == 1
                 )
                 rep = mink if is_gluon else bis
@@ -133,7 +162,7 @@ for kind, incoming, outgoing, loops, vertices, count in [
             )
             settings = ColorCasimirSettings(rewrite_fundamental_dimension=False)
         else:
-            particle = model.particle_by_pdg(incoming[0])
+            particle = incoming[0]
             rep, numeric_dim, symbolic_dim = (
                 (cof, 3, Nc) if kind == "quark" else (coad, 8, dA)
             )
@@ -185,7 +214,7 @@ for kind, incoming, outgoing, loops, vertices, count in [
             .replace(mink(dim), mink(D))
             .replace(mUV**2, M)
         )
-        if incoming == [21]:
+        if incoming == [gluon]:
             numerator = numerator.replace(mink(D, ports[0]), mink(D, mu)).replace(
                 mink(D, ports[1]), mink(D, nu)
             )
@@ -304,80 +333,313 @@ for label, reference in zip(
     assert (uv_poles[label] - reference).together() == zero
 
 # Local counterterm operators, with Z=1+a4*deltaZ, a4=gs²/(16*pi²).
-# Unknowns: Zq, Zm, ZA, Zxi, Zc, Zg, ZAm, Zcm. Auxiliary mass operators are
-# (ZAm-1)*M*A²/2 and (Zcm-1)*M*cbar*c. No CT diagrams are generated here.
+# Unknowns: Zq, Zm, ZA, Zxi, Zc, Zg, ZAm, Zcm. The local operator basis
+# is an explicit model input; all matching entries come from generated graphs.
+qqg = interaction_rules["qqg"]
+spec = json.loads(model.to_json())
+vertex_definition = next(v for v in spec["vertex_rules"] if v["name"] == qqg[0].name)
+# Auxiliary operators follow the reference model:
+# M*(ZAm²-1)*A²/2 and M*(Zcm²-1)*cbar*c/2. Identical gluons supply
+# the factor two in their local rule; the distinct ghost fields do not.
+a4 = S("qcd_ct::a4")
+unknowns = list(
+    S(
+        "qcd_ct::deltaZq",
+        "qcd_ct::deltaZm",
+        "qcd_ct::deltaZA",
+        "qcd_ct::deltaZxi",
+        "qcd_ct::deltaZc",
+        "qcd_ct::deltaZg",
+        "qcd_ct::deltaZAm",
+        "qcd_ct::deltaZcm",
+    )
+)
+Zq, Zm, ZA, Zxi, Zc, Zg, ZAm, Zcm = (one + a4 * delta for delta in unknowns)
+spec["orders"].append({"name": "CT", "expansion_order": 1, "hierarchy": 1})
+for label, particles, spins, color, lorentz, coupling in [
+    (
+        "qq_kinetic",
+        [quark.antiname, quark.name],
+        [2, 2],
+        "Identity(1,2)",
+        "Gamma(dummy(1),idx(1,1),idx(1,2))*P(dummy(1),2)",
+        Symbol.I * (Zq - one),
+    ),
+    (
+        "qq_mass",
+        [quark.antiname, quark.name],
+        [2, 2],
+        "Identity(1,2)",
+        "Identity(idx(1,1),idx(1,2))",
+        -Symbol.I * mass * (Zq * Zm - one),
+    ),
+    (
+        "gg_kinetic",
+        [gluon.name] * 2,
+        [3, 3],
+        "Identity(1,2)",
+        "Metric(idx(1,1),idx(1,2))*P(dummy(1),1)*P(dummy(1),1)-P(idx(1,1),1)*P(idx(1,2),1)",
+        -Symbol.I * (ZA - one),
+    ),
+    (
+        "gg_gauge",
+        [gluon.name] * 2,
+        [3, 3],
+        "Identity(1,2)",
+        "P(idx(1,1),1)*P(idx(1,2),1)",
+        -Symbol.I * (ZA / Zxi - one) / xi,
+    ),
+    (
+        "gg_auxmass",
+        [gluon.name] * 2,
+        [3, 3],
+        "Identity(1,2)",
+        "Metric(idx(1,1),idx(1,2))",
+        Symbol.I * M * (ZAm**2 - one),
+    ),
+    (
+        "ghost_kinetic",
+        [ghost.antiname, ghost.name],
+        [-1, -1],
+        "Identity(1,2)",
+        "P(dummy(1),2)*P(dummy(1),2)",
+        Symbol.I * (Zc - one),
+    ),
+    (
+        "ghost_auxmass",
+        [ghost.antiname, ghost.name],
+        [-1, -1],
+        "Identity(1,2)",
+        "1",
+        Symbol.I * M * (Zcm**2 - one) / 2,
+    ),
+]:
+    spec["lorentz_structures"].append(
+        {"name": "CT_L_" + label, "spins": spins, "structure": lorentz}
+    )
+    spec["couplings"].append(
+        {
+            "name": "CT_GC_" + label,
+            "expression": repr(coupling.series(a4, 0, 1).to_expression()),
+            "orders": [["QCD", 2], ["CT", 1]],
+            "value": None,
+        }
+    )
+    spec["vertex_rules"].append(
+        {
+            "name": "CT_" + label,
+            "particles": particles,
+            "color_structures": [color],
+            "lorentz_structures": ["CT_L_" + label],
+            "couplings": [["CT_GC_" + label]],
+        }
+    )
+# Copy every color/Lorentz slot of the actual model rule and dress its coupling.
+ct_vertex = json.loads(json.dumps(vertex_definition))
+ct_vertex["name"] = "CT_qqg"
+for row, couplings in enumerate(ct_vertex["couplings"]):
+    for col, coupling in enumerate(couplings):
+        if coupling is None:
+            continue
+        dressed = model.expand_couplings(S("UFO::" + coupling)) * (
+            Zq * Zg * ZA.sqrt() - one
+        )
+        name = f"CT_qqg_{row}_{col}"
+        spec["couplings"].append(
+            {
+                "name": name,
+                "expression": repr(dressed.series(a4, 0, 1).to_expression()),
+                "orders": [["QCD", 3], ["CT", 1]],
+                "value": None,
+            }
+        )
+        couplings[col] = name
+spec["vertex_rules"].append(ct_vertex)
+ct_model = hep.Model.from_json(json.dumps(spec))
+ct_quark, ct_gluon, ct_ghost = (
+    ct_model.particle_by_pdg(pdg) for pdg in (5, 21, 9000005)
+)
+ct_vertices = [v for v in ct_model.vertex_rules if v.name.startswith("CT_")]
+ct_diagrams, ct_coefficients = {}, {}
+external_ordering = diagrams["tree"][0].overall_factor_expression(evaluate=True)
+for kind, incoming, outgoing, count, qcd_order in [
+    ("quark", [ct_quark], [ct_quark], 2, 2),
+    ("gluon", [ct_gluon], [ct_gluon], 3, 2),
+    ("ghost", [ct_ghost], [ct_ghost], 2, 2),
+    ("vertex", [ct_quark], [ct_gluon, ct_quark], 1, 3),
+]:
+    # CT order is perturbative bookkeeping; two-point insertions have no loops.
+    # Bound vertices explicitly to exclude arbitrarily long insertion chains.
+    options = {
+        "loops": 0,
+        "max_vertices": 1,
+        "maximum_bridges": None,
+        "vertex_allow": ct_vertices,
+        "self_energy": None,
+        "tadpoles": None,
+        "zero_snails": None,
+        "numerator_grouping": None,
+        "progress": None,
+    }
+    generated = ct_model.generate_diagrams(
+        incoming, outgoing, coupling_orders={"QCD": qcd_order, "CT": 1}, **options
+    )
+    assert len(generated.diagrams) == count
+    assert not ct_model.generate_diagrams(
+        incoming, outgoing, coupling_orders={"CT": 0}, **options
+    ).diagrams
+    ct_diagrams[kind] = generated.diagrams
+    for diagram in generated.diagrams:
+        assert len(diagram.internal_edges) == 0
+        assert diagram.symmetry_factor == one
+        factor = (
+            diagram.overall_factor_expression(evaluate=True)
+            * diagram.numerator_prefactor_expression()
+        )
+        assert factor == (external_ordering if kind in ("quark", "vertex") else one)
+        ports = {}
+        if kind != "ghost":
+            for edge in diagram.external_edges:
+                rep = (
+                    mink
+                    if kind == "gluon"
+                    or (kind == "vertex" and edge.external_index == 1)
+                    else bis
+                )
+                ports[edge.external_index] = dict(
+                    next(
+                        diagram.projector_expression().match(
+                            wave(edge.id, rep(4, index)), max_level=0
+                        )
+                    )
+                )[index]
+        numerator = ct_model.expand_couplings(
+            diagram.numerator_expression(in_lmb=True).to_expression()
+        )
+        if kind == "vertex":
+            color_projector = (
+                TensorExpression.t(dA, Nc)(ports[1], ports[0], ports[2])
+                .spenso_conjugate()
+                .to_expression()
+            )
+            numerator = (
+                numerator.replace(cof(3, index), cof(Nc, index)).replace(
+                    coad(8, index), coad(dA, index)
+                )
+                * color_projector
+            )
+            settings = ColorCasimirSettings(rewrite_fundamental_dimension=False)
+        else:
+            particle = incoming[0]
+            rep, numeric_dim, symbolic_dim = (
+                (cof, 3, Nc) if kind == "quark" else (coad, 8, dA)
+            )
+            color_slots = [
+                slot.dual().to_expression()
+                for slot in TensorExpression(numerator).interface
+                if slot.to_expression().matches(rep(numeric_dim, index))
+            ]
+            assert len(color_slots) == 2, (kind, numerator)
+            color_indices = dict(
+                next(
+                    metric(*color_slots).match(
+                        particle.color_sum(left, right), max_level=0
+                    )
+                )
+            )
+            color_projector = particle.color_sum(
+                color_indices[left], color_indices[right]
+            )
+            numerator = (
+                (numerator * color_projector / symbolic_dim)
+                .replace(cof(3, index), cof(Nc, index))
+                .replace(coad(8, index), coad(dA, index))
+            )
+            settings = ColorCasimirSettings()
+        numerator = (
+            TensorExpression(numerator)
+            .simplify_color()
+            .to_color_casimir(
+                fundamental=Representation.cof(Nc),
+                adjoint=Representation.coad(dA),
+                settings=settings,
+            )
+            .to_expression()
+        )
+        numerator = (
+            numerator.replace(cas(2, cof(Nc)), CF)
+            .replace(cas(2, coad(dA)), CA)
+            .replace(trace_index(2, cof(Nc)), one / 2)
+            .replace(mink(dim, index), mink(D, index))
+            .replace(mink(dim), mink(D))
+        )
+        if kind == "quark":
+            probes = [
+                (
+                    "quark_p",
+                    gamma(bis(4, ports[0]), bis(4, ports[1]), mink(D, mu))
+                    * P(0, mink(D, mu))
+                    / (4 * s),
+                ),
+                ("quark_m", metric(bis(4, ports[0]), bis(4, ports[1])) / (4 * mass)),
+            ]
+            normalization = Symbol.I * a4 * external_ordering
+        elif kind == "vertex":
+            probes = [
+                (
+                    kind,
+                    gamma(bis(4, ports[0]), bis(4, ports[2]), mink(D, ports[1]))
+                    / (4 * D),
+                )
+            ]
+            normalization = tree * a4
+        else:
+            if kind == "gluon":
+                numerator = numerator.replace(mink(D, ports[0]), mink(D, mu)).replace(
+                    mink(D, ports[1]), mink(D, nu)
+                )
+            probes = [(kind, one)]
+            normalization = Symbol.I * a4
+        for label, projector in probes:
+            trace = (
+                TensorExpression((numerator * projector).expand())
+                .simplify_gamma()
+                .expand()
+                .simplify_metrics()
+                .to_dots()
+                .to_expression()
+            )
+            coefficient = (
+                (kinematics.apply(trace) * factor / normalization).together().expand()
+            )
+            ct_coefficients[label] = ct_coefficients.get(label, zero) + coefficient
+ct_g = ct_coefficients["gluon"].coefficient(gmunu)
+ct_pp = ct_coefficients["gluon"].coefficient(ppmunu)
+ct_rows = [
+    ct_coefficients["quark_p"],
+    ct_coefficients["quark_m"],
+    ct_g.coefficient(s),
+    xi * ct_pp,
+    ct_coefficients["ghost"].coefficient(s),
+    ct_coefficients["vertex"],
+    ct_g.replace(s, zero) / M,
+    ct_coefficients["ghost"].replace(s, zero) / M,
+]
+entries = [r.derivative(z).together() for r in ct_rows for z in unknowns]
+assert all(e.derivative(z) == zero for e in entries for z in unknowns)
+for i, row in enumerate(ct_rows):
+    assert (
+        row - sum((entries[8 * i + j] * z for j, z in enumerate(unknowns)), zero)
+    ).together() == zero
+ct_matrix = Matrix.from_linear(8, 8, entries)
+assert ct_matrix[6, 6].to_expression() == 2
+assert ct_matrix[7, 7].to_expression() == 1
+assert (ct_coefficients["gluon"] - ct_g * gmunu - ct_pp * ppmunu).together() == zero
+assert ct_g.derivative(s).derivative(s) == zero
+assert ct_coefficients["ghost"].derivative(s).derivative(s) == zero
+
 gluon_g = uv_poles["gluon"].coefficient(gmunu)
 gluon_pp = uv_poles["gluon"].coefficient(ppmunu)
-ct_matrix = Matrix.from_linear(
-    8,
-    8,
-    [
-        1,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        -1,
-        -1,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        -1,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        xi - 1,
-        1,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-        0,
-        0,
-        1,
-        0,
-        E("1/2"),
-        0,
-        0,
-        1,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        1,
-    ],
-)
 rhs = Matrix.vec(
     [
         -uv_poles["quark_p"],
@@ -408,6 +670,36 @@ assert all(residual[row, 0].to_expression().together() == zero for row in range(
 assert deltas[1, 0].to_expression().derivative(xi).expand() == zero
 assert deltas[5, 0].to_expression().derivative(xi).expand() == zero
 print(
-    "Generated QCD one-loop: symbolic gauge, four IBP targets, eight local counterterms passed",
+    "Generated QCD one-loop: symbolic gauge, four IBP targets, eight generated counterterms passed",
     solution.stats,
 )
+
+# The completed MS/MSbar reference only needs the local UV poles. Use the
+# OneLOop measure conversion (4*pi)^eps*rGamma=1+cDelta*eps+O(eps²), where
+# cDelta=log(4*pi)-EulerGamma, with D=4-2eps. Keep it symbolic in exact checks.
+cDelta = S("qcd_ct::cDelta")
+assert (-2 / (D - 4)).replace(D, 4 - 2 * epsilon) == 1 / epsilon
+counterterms_by_scheme = {
+    "MS": [deltas[row, 0].to_expression().together() for row in range(8)],
+    "MSbar": [
+        (epsilon * deltas[row, 0].to_expression() * (1 / epsilon + cDelta)).together()
+        for row in range(8)
+    ],
+}
+for scheme, constants in counterterms_by_scheme.items():
+    for label, generated_ct in ct_coefficients.items():
+        for delta, constant in zip(unknowns, constants, strict=True):
+            generated_ct = generated_ct.replace(delta, constant)
+        subtraction_part = uv_poles[label] * (
+            one + epsilon * cDelta if scheme == "MSbar" else one
+        )
+        assert (generated_ct + subtraction_part).together() == zero
+        # In one common conventional measure MS retains the finite cDelta*P.
+        remainder = (
+            uv_poles[label] * (one + epsilon * cDelta) + generated_ct
+        ).together()
+        expected_remainder = (
+            epsilon * cDelta * uv_poles[label] if scheme == "MS" else zero
+        )
+        assert (remainder - expected_remainder).together() == zero
+print("Generated QCD CT amplitudes: complete MS/MSbar tensor cancellation passed")

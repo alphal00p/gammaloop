@@ -416,6 +416,18 @@ measure conversion against shared OneLOop masters. No separate generator,
 Dirac algebra, IBP solver or master evaluator is introduced for counterterms.
 Automatic import of NLO-UFO counterterm metadata remains separate.
 
+The
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/qcd_renormalization.py")[QCD renormalization notebook]
+extends this construction to eight quark, gluon and ghost insertions. Use
+`Particle.color_sum` to close two-point color slots and preserve the generated
+external ordering factors separately for fermions and ghosts. Copy the
+original quark-gluon rule's full color/Lorentz coupling matrix before dressing
+it with $Z_q Z_g sqrt(Z_A)-1$. The distinct ghost fields give an auxiliary-mass
+coefficient $delta Z_(c m)$, whereas the identical gluons give
+$2 delta Z_(A m)$. The generated coefficients determine the linear system
+and verify both MS and MSbar subtraction. The notebook exposes the gauge,
+flavor count, color count and subtraction scheme as live controls.
+
 == Keep finite terms in an off-shell self-energy
 
 The host notebook
