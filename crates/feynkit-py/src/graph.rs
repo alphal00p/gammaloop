@@ -1546,7 +1546,7 @@ impl PyFeynmanDiagram {
         })
     }
 
-    fn require_complete(&self) -> PyResult<()> {
+    pub(crate) fn require_complete(&self) -> PyResult<()> {
         if !self.is_complete() {
             return Err(error::DiagramError::new_err(
                 "this operation needs an independent diagram; call subgraph.excise() first",
@@ -2112,7 +2112,35 @@ impl PyFeynmanDiagram {
         TensorExpression::from_atom_interface(py, denominator, None)
     }
 
-    /// Build a scalar integral family using the diagram's stored momentum routing.
+    /// Build a complete integral family with preferred or automatic ISPs.
+    ///
+    /// Physical propagators retain their edge order and model masses. Preferred
+    /// independent dot products are appended when they increase the rank;
+    /// automatic scalar products fill any remaining directions. Auxiliary
+    /// entries have zero powers in the original scalar integral.
+    /// Equivalent to ``IntegralFamily.from_diagram(self, independent_dot_products,
+    /// kinematics=kinematics)``. Tree diagrams and dependent propagators raise
+    /// DiagramError. Use ``propagator_family()`` to extract dependent propagators
+    /// for partial fractioning before completing their families.
+    ///
+    /// Parameters
+    /// ----------
+    /// independent_dot_products : list[Expression] or None, optional
+    ///     Preferred auxiliary inverse propagators in the routed momenta.
+    ///     None selects a suitable basis automatically.
+    /// kinematics : Kinematics or None, optional
+    ///     External assumptions and dimension; defaults to the diagram's
+    ///     symbolic dimension with no on-shell assumptions.
+    #[pyo3(signature = (independent_dot_products=None, *, kinematics=None))]
+    fn integral_family(
+        &self,
+        independent_dot_products: Option<Vec<PythonExpression>>,
+        kinematics: Option<&PyKinematics>,
+    ) -> PyResult<PyIntegralFamily> {
+        PyIntegralFamily::from_diagram(self, independent_dot_products, kinematics)
+    }
+
+    /// Extract the physical propagators using the diagram's stored momentum routing.
     ///
     /// Reuses the shared propagator builder and model masses. Denominators follow
     /// ascending internal edge IDs, as in ``internal_edges``, retaining bridges
@@ -2120,13 +2148,15 @@ impl PyFeynmanDiagram {
     /// external carriers and dummy edges are excluded. Widths, prescriptions and
     /// custom UFO denominator formulas are not inferred. Tree diagrams raise
     /// DiagramError because they contain no loop integral.
+    /// Use ``diagram.integral_family()`` to also complete the basis
+    /// with automatic or explicitly chosen auxiliary scalar products.
     ///
     /// Examples
     /// --------
-    /// >>> family = diagram.integral_family()
+    /// >>> family = diagram.propagator_family()
     /// >>> p = family.external_momenta[0]
     /// >>> kin = family.kinematics.with_scalar_product(p, p, s)
-    /// >>> family = diagram.integral_family(kinematics=kin)
+    /// >>> family = diagram.propagator_family(kinematics=kin)
     /// >>> U, F = family.symanzik(parameters)
     ///
     /// Parameters
@@ -2135,7 +2165,7 @@ impl PyFeynmanDiagram {
     ///     Assumptions on routed momentum names and the Lorentz dimension.
     ///     None uses the shared symbolic dimension with no on-shell assumptions.
     #[pyo3(signature = (*, kinematics=None))]
-    fn integral_family(&self, kinematics: Option<&PyKinematics>) -> PyResult<PyIntegralFamily> {
+    fn propagator_family(&self, kinematics: Option<&PyKinematics>) -> PyResult<PyIntegralFamily> {
         self.require_complete()?;
         let default;
         let kinematics = match kinematics {
@@ -2151,7 +2181,7 @@ impl PyFeynmanDiagram {
         Ok(PyIntegralFamily {
             inner: self
                 .inner
-                .integral_family(kinematics)
+                .propagator_family(kinematics)
                 .map_err(error::diagram)?,
         })
     }

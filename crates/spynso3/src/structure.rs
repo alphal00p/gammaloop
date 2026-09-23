@@ -35,9 +35,7 @@ use spenso::{
 };
 use symbolica::{
     api::python::{PythonNormalization, PythonUserData},
-    atom::{
-        Atom, AtomView, DefaultNamespace, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder,
-    },
+    atom::{Atom, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder},
     symbol,
 };
 
@@ -393,13 +391,6 @@ impl SpensoName {
         }
 
         let print = Self::prepare_print(py, print, &mut tags)?;
-        let namespace = DefaultNamespace {
-            namespace: "spenso_python".into(),
-            data: "",
-            file: "".into(),
-            line: 0,
-        };
-        let name = namespace.attach_namespace(&name).symbol.to_string();
         let names = PyTuple::new(py, [name])?;
         let expression_type = PythonExpression::type_object(py);
 

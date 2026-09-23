@@ -48,7 +48,7 @@ use crate::{
     structure::{
         HasStructure, OrderedStructure, ScalarStructure, TensorShell, TensorStructure,
         representation::{LibraryRep, Representation},
-        slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot},
+        slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotMatcher},
     },
 };
 use eyre::eyre;
@@ -375,6 +375,7 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         product: MulView<'_>,
     ) -> Option<(usize, Representation<LibraryRep>)> {
         let mut compact_vector = None;
+        let mut matcher = SlotMatcher::default();
 
         for (position, factor) in product.iter().enumerate() {
             if let Some(representation) = Self::compact_vector_rep(factor) {
@@ -382,9 +383,12 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
                     return None;
                 }
                 compact_vector = Some((position, representation));
-            } else if !OrderedStructure::<LibraryRep, Aind>::syntactic_structure_from_atom(factor)
-                .ok()?
-                .is_scalar()
+            } else if !OrderedStructure::<LibraryRep, Aind>::syntactic_structure_from_atom(
+                factor,
+                &mut matcher,
+            )
+            .ok()?
+            .is_scalar()
             {
                 return None;
             }

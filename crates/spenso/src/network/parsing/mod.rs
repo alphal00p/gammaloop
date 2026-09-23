@@ -11,7 +11,7 @@ use crate::network::tags::SPENSO_TAG;
 use crate::shadowing::Concretize;
 use crate::structure::abstract_index::AbstractIndex;
 use crate::structure::representation::Representation;
-use crate::structure::slot::{DummyAind, ParseableAind, Slot};
+use crate::structure::slot::{DummyAind, ParseableAind, Slot, SlotMatcher};
 use crate::structure::{
     Canonicalized, NamedStructure, ScalarStructure, StructureError, TensorShell,
 };
@@ -36,6 +36,7 @@ use crate::structure::representation::LibraryRep;
 
 pub type ShadowedStructure<Aind> = NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>;
 
+mod indices;
 pub(crate) mod structure_inference;
 pub use structure_inference::{
     AtomStructureExt, ChainNestingError, StructureFromAtom, StructureInferenceMode,
@@ -375,8 +376,9 @@ where
         // variants differ. Reserve written names once across all parser clones.
         {
             let mut reserved = state.reserved_indices.borrow_mut();
+            let mut matcher = SlotMatcher::default();
             value.visitor(&mut |atom| {
-                if let Ok(slot) = Slot::<LibraryRep, Aind>::try_from(atom) {
+                if let Ok(slot) = matcher.parse::<LibraryRep, Aind>(atom) {
                     reserved.insert(slot.aind().to_atom());
                 }
                 true

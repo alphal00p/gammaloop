@@ -66,7 +66,7 @@ assert tree_amplitude == -Symbol.I * coupling
 channel_coefficients, channel_reductions = {}, {}
 for diagram in diagrams["vertex"]:
     basis = diagram.momentum_basis()
-    family = diagram.integral_family(kinematics=kinematics)
+    family = diagram.propagator_family(kinematics=kinematics)
     shifts = []
     for edge, denominator in zip(
         diagram.internal_edges, family.denominators, strict=True
@@ -121,7 +121,7 @@ self_numerator = (
     * self_diagram.numerator_prefactor_expression()
 )
 assert self_numerator == coupling / 2
-self_family = self_diagram.integral_family()
+self_family = self_diagram.propagator_family()
 assert len(self_family.denominators) == 1
 self_reduction = oneloop.IntegralFamily([oneloop.Propagator(M)], []).reduce()
 self_master = self_reduction.terms[0][1].to_oneloopmaster(mu2)

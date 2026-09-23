@@ -114,7 +114,7 @@ for diagram in generated.diagrams:
         diagram.overall_factor_expression(evaluate=True)
         * diagram.numerator_prefactor_expression()
     )
-    raw_family = diagram.integral_family(kinematics=hep.Kinematics(d))
+    raw_family = diagram.propagator_family(kinematics=hep.Kinematics(d))
     raw = factor * numerator / (Symbol.I * model_coupling**2)
     for propagator in raw_family.denominators:
         raw /= propagator

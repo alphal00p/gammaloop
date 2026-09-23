@@ -5,7 +5,7 @@ use symbolica::api::python::PythonExpression;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
-use crate::{error, kinematics::PyKinematics};
+use crate::{error, graph::PyFeynmanDiagram, kinematics::PyKinematics};
 
 /// An ordered family of affine inverse propagators in loop scalar products.
 ///
@@ -38,6 +38,50 @@ pub struct PyIntegralFamily {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyIntegralFamily {
+    /// Build a complete family from the diagram's routed internal propagators.
+    ///
+    /// Graph propagators retain their edge order and model masses. Preferred
+    /// independent dot products are appended in order when they increase the
+    /// rank; automatic scalar products fill any remaining directions. Auxiliary
+    /// denominators have nonpositive powers when representing the original
+    /// integral. Tree diagrams and dependent graph propagators raise DiagramError.
+    /// Use ``diagram.propagator_family()`` to extract dependent propagators for
+    /// partial fractioning before completing the resulting families.
+    ///
+    /// Parameters
+    /// ----------
+    /// diagram : FeynmanDiagram
+    ///     A complete diagram with its chosen loop-momentum routing.
+    /// independent_dot_products : list[Expression] or None, optional
+    ///     Preferred auxiliary inverse propagators in the routed momenta.
+    ///     None selects a suitable basis automatically.
+    /// kinematics : Kinematics or None, optional
+    ///     External assumptions and dimension; defaults to the diagram's
+    ///     symbolic dimension with no on-shell assumptions.
+    #[staticmethod]
+    #[pyo3(signature = (diagram, independent_dot_products=None, *, kinematics=None))]
+    pub(crate) fn from_diagram(
+        diagram: &PyFeynmanDiagram,
+        independent_dot_products: Option<Vec<PythonExpression>>,
+        kinematics: Option<&PyKinematics>,
+    ) -> PyResult<Self> {
+        diagram.require_complete()?;
+        let default = feynkit_kinematics::Kinematics::in_dimension(&symbolica::atom::Atom::var(
+            feynkit_graph::symbols::dimension(),
+        ))
+        .expect("the shared dimension is a Symbolica symbol");
+        let kinematics = kinematics.map(|kin| &kin.inner).unwrap_or(&default);
+        let candidates = independent_dot_products
+            .unwrap_or_default()
+            .into_iter()
+            .map(|product| product.expr)
+            .collect::<Vec<_>>();
+        Ok(Self {
+            inner: IntegralFamily::from_diagram(&diagram.inner, kinematics, &candidates)
+                .map_err(error::diagram)?,
+        })
+    }
+
     /// Compute the independent loop scalar products and denominator rank.
     ///
     /// Examples

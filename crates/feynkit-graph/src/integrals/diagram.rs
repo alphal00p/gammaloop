@@ -2,12 +2,46 @@ use std::collections::BTreeMap;
 
 use feynkit_kinematics::Kinematics;
 use spenso::structure::representation::{Minkowski, RepName};
-use symbolica::atom::{AtomCore, AtomView};
+use symbolica::atom::{Atom, AtomCore, AtomView};
 
 use super::{IntegralFamily, IntegralFamilyError};
 use crate::{DiagramError, FeynmanDiagram, symbols};
 
+impl IntegralFamily {
+    /// Complete the diagram's internal propagators with auxiliary scalar products.
+    ///
+    /// Propagators retain their edge order and stored momentum routing, as in
+    /// [`FeynmanDiagram::integral_family`]. Preferred independent dot products
+    /// are tried in order; redundant entries are skipped and automatic scalar
+    /// products fill any remaining directions. Pass an empty slice to choose
+    /// the completion automatically. Dependent propagators must be extracted
+    /// and partial-fractioned separately before completing their families.
+    pub fn from_diagram(
+        diagram: &FeynmanDiagram,
+        kinematics: &Kinematics,
+        independent_dot_products: &[Atom],
+    ) -> Result<Self, DiagramError> {
+        diagram.integral_family(kinematics, independent_dot_products)
+    }
+}
+
 impl FeynmanDiagram {
+    /// Complete the graph propagators with preferred or automatic scalar products.
+    ///
+    /// Physical propagators retain their edge order. Candidates are tried in
+    /// order, skipping redundant entries; automatic products fill any remaining
+    /// directions. Pass an empty slice for automatic completion. Dependent
+    /// propagators must be extracted with [`Self::propagator_family`] and
+    /// partial-fractioned before completing the resulting families.
+    pub fn integral_family(
+        &self,
+        kinematics: &Kinematics,
+        independent_dot_products: &[Atom],
+    ) -> Result<IntegralFamily, DiagramError> {
+        let family = self.propagator_family(kinematics)?;
+        Ok(family.complete(independent_dot_products)?)
+    }
+
     /// Build an integral family from the diagram's internal quadratic propagators.
     ///
     /// Denominators follow ascending internal edge IDs, retaining repeated
@@ -17,7 +51,12 @@ impl FeynmanDiagram {
     /// builder. Symbolic masses follow its conventions, including UFO ZERO.
     /// Widths, prescriptions and custom UFO denominator formulas are not inferred.
     /// Tree diagrams have no loop-integral family and return an error.
-    pub fn integral_family(&self, kinematics: &Kinematics) -> Result<IntegralFamily, DiagramError> {
+    /// Use [`IntegralFamily::from_diagram`] to append auxiliary scalar products
+    /// and obtain a complete independent denominator basis.
+    pub fn propagator_family(
+        &self,
+        kinematics: &Kinematics,
+    ) -> Result<IntegralFamily, DiagramError> {
         let basis = self.loop_momentum_basis();
         if basis.loop_edges.is_empty() {
             return Err(IntegralFamilyError::NoLoops.into());
@@ -85,5 +124,90 @@ impl FeynmanDiagram {
             denominators.into_values().collect(),
             &kin,
         )?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use feynkit_model::Model;
+
+    #[test]
+    fn dependent_graph_propagators_remain_available_for_partial_fractioning() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi4(),
+            r#"digraph tadpole_insertion {
+                ext [style=invis];
+                ext -> a [particle="phi"];
+                a -> ext [particle="phi"];
+                a -> b [particle="phi"];
+                a -> b [particle="phi"];
+                b -> b [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let kin = Kinematics::new();
+        let raw = diagram.propagator_family(&kin).unwrap();
+        assert_eq!(raw.denominators().len(), 3);
+        assert!(!raw.is_independent());
+        assert!(matches!(
+            diagram.integral_family(&kin, &[]),
+            Err(DiagramError::IntegralFamily(
+                IntegralFamilyError::Dependent { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    fn diagram_family_completes_sunrise_with_preferred_products() {
+        let diagram = FeynmanDiagram::from_dot(
+            Model::phi4(),
+            r#"digraph sunrise {
+                ext [style=invis];
+                ext -> a [particle="phi"];
+                a -> b [particle="phi", lmb_id=0];
+                a -> b [particle="phi", lmb_id=1];
+                a -> b [particle="phi"];
+                b -> ext [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let kin = Kinematics::new();
+        let raw = diagram.propagator_family(&kin).unwrap();
+        assert_eq!(raw.denominators().len(), 3);
+        assert_eq!(raw.scalar_products().len(), 5);
+        assert!(!raw.is_complete());
+        let automatic = diagram.integral_family(&kin, &[]).unwrap();
+        assert!(automatic.is_complete() && automatic.is_independent());
+        assert_eq!(&automatic.denominators()[..3], raw.denominators());
+
+        let products = raw
+            .loop_momenta()
+            .iter()
+            .map(|k| {
+                raw.kinematics()
+                    .scalar_product(k, &raw.external_momenta()[0])
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let preferred = diagram.integral_family(&kin, &products).unwrap();
+        let constructed = IntegralFamily::from_diagram(&diagram, &kin, &products).unwrap();
+        assert_eq!(preferred.denominators(), constructed.denominators());
+        assert_eq!(&preferred.denominators()[..3], raw.denominators());
+        assert_eq!(&preferred.denominators()[3..], products);
+        assert!(preferred.is_complete() && preferred.is_independent());
+        let partial = IntegralFamily::from_diagram(
+            &diagram,
+            &kin,
+            &[raw.denominators()[0].clone(), products[1].clone()],
+        )
+        .unwrap();
+        assert_eq!(partial.denominators()[3], products[1]);
+        assert!(partial.is_complete() && partial.is_independent());
+
+        // Validate even candidates after the basis is already complete.
+        let mut invalid = products;
+        invalid.push(invalid[0].pow(2));
+        assert!(IntegralFamily::from_diagram(&diagram, &kin, &invalid).is_err());
     }
 }

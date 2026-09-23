@@ -39,6 +39,48 @@ assert onshell.scaleless_scaling([x, y]) is not None
 four_dimensional = diagram.integral_family(kinematics=fk.Kinematics())
 assert four_dimensional.kinematics.dimension == E("4")
 
+sunrise = fk.FeynmanDiagram.from_dot(
+    fk.Model.phi4(),
+    """digraph sunrise {
+        ext [style=invis];
+        ext -> a [particle="phi"];
+        a -> b [particle="phi", lmb_id=0];
+        a -> b [particle="phi", lmb_id=1];
+        a -> b [particle="phi"];
+        b -> ext [particle="phi"];
+    }""",
+)
+raw = sunrise.propagator_family()
+automatic = sunrise.integral_family()
+assert len(raw.denominators) == 3
+assert not raw.is_complete
+assert automatic.is_complete and automatic.is_independent
+assert automatic.denominators[:3] == raw.denominators
+assert len(automatic.denominators) == 5
+products = [
+    raw.kinematics.scalar_product(k, raw.external_momenta[0]) for k in raw.loop_momenta
+]
+preferred = sunrise.integral_family(products)
+assert (
+    preferred.denominators
+    == fk.IntegralFamily.from_diagram(sunrise, products).denominators
+)
+assert preferred.denominators == raw.denominators + products
+partial = sunrise.integral_family(
+    independent_dot_products=[raw.denominators[0], products[1]]
+)
+assert partial.denominators[3] == products[1]
+assert partial.is_complete and partial.is_independent
+assert fk.IntegralFamily.from_diagram(
+    sunrise, kinematics=fk.Kinematics()
+).kinematics.dimension == E("4")
+try:
+    fk.IntegralFamily.from_diagram(sunrise, products + [products[0] ** 2])
+except fk.DiagramError:
+    pass
+else:
+    raise AssertionError("nonlinear auxiliary product was accepted")
+
 contact = model.generate_diagrams(
     ["scalar_0"],
     ["scalar_0", "scalar_0"],
@@ -46,10 +88,15 @@ contact = model.generate_diagrams(
     max_vertices=1,
     vertex_allow=["V_3_SCALAR_000"],
 ).diagrams[0]
-try:
-    contact.integral_family()
-except fk.DiagramError:
-    pass
-else:
-    raise AssertionError("tree diagram was accepted as a loop-integral family")
+for construct in (
+    lambda: contact.integral_family(),
+    lambda: contact.propagator_family(),
+    lambda: fk.IntegralFamily.from_diagram(contact),
+):
+    try:
+        construct()
+    except fk.DiagramError:
+        pass
+    else:
+        raise AssertionError("tree diagram was accepted as a loop-integral family")
 print("Generated diagram families, routing invariance and scaleless limits passed")
