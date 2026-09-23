@@ -3792,18 +3792,36 @@ class Kinematics:
         second : Expression
             Second outgoing unindexed momentum or declared linear combination.
         """
-    def apply(self, expression: Expression) -> Expression:
+    @typing.overload
+    def apply(self, expression: TensorExpression) -> TensorExpression:
+        r"""
+        Substitute scalar products while preserving the ordered tensor interface.
+
+        Tensor zeros retain their original ports.
+
+        Examples
+        --------
+        >>> result = kin.apply(contracted_tensor)
+        >>> assert result.interface == contracted_tensor.interface
+
+        Parameters
+        ----------
+        expression : TensorExpression
+            Tensor expression with compact scalar products.
+        """
+    @typing.overload
+    def apply(self, expression: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> Expression:
         r"""
         Substitute scalar products without mutating global assumptions.
 
         Examples
         --------
-        >>> invariant_expression = kin.apply(contracted_squared_amplitude)
+        >>> result = kin.apply(contracted_expression)
 
         Parameters
         ----------
         expression : Expression
-            Expression after tensor contractions have been simplified.
+            Expression with compact scalar products.
         """
 
 class KinematicsError(FeynkitError):

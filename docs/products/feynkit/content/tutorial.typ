@@ -257,6 +257,12 @@ propagator powers are applied before routing. Both methods return `TensorExpress
 their ordered interfaces, including when routing cancels the tensor to zero.
 Plain Symbolica expressions and scalar constants return a plain `Expression`.
 
+`kinematics.apply(expression)` follows the same convention: scalar-product
+substitution preserves a tensor's ordered ports, even when an on-shell relation
+makes it zero. Tensor methods can therefore be chained directly on the result.
+Contraction and momentum-conservation rewrites remain explicit operations;
+`apply` only substitutes the scalar products declared in the kinematics context.
+
 For the local massive Taylor expansion, `diagram.uv_expansion(mUV, edge_powers=powers)`
 and `region.uv_counterterm(mUV, edge_powers=powers)` accept the same signed power map.
 Omitted internal edges have power one; entries outside the selected internal edges are ignored.
