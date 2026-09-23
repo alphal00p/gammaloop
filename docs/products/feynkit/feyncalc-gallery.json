@@ -4157,7 +4157,34 @@
         "ToLightConeComponents",
         "Total"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated symbolic-D light-cone soft emission with open spinor/photon indices, collinear projectors, SU(N) color and arbitrary-reference polarization sums",
+      "validated_components": [
+        {
+          "scope": "One generated Born diagram and both massless quark/antiquark gluon-emission diagrams. Independent collinear hard scales, lambda^-2 Laurent coefficients, open-current factorization, transverse/projector identities, Ward identity, symbolic SU(N), and the reference soft-function prefactor.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_soft_function.py",
+          "components": [
+            "Model.standard_model",
+            "Model.particle",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "Kinematics.with_scalar_product",
+            "Kinematics.apply",
+            "TensorName.vector",
+            "TensorExpression.with_lorentz_dimension",
+            "TensorExpression.schoonschip",
+            "GammaSimplifySettings",
+            "TensorExpression.simplify_gamma",
+            "TensorExpression.simplify_metrics",
+            "TensorExpression.to_dots",
+            "TensorExpression.simplify_color",
+            "TensorExpression.to_cof_dimension_invariants",
+            "Particle.spin_sum",
+            "Symbolica.series"
+          ],
+          "result": "passed",
+          "note": "Notebook: hep/soft_function.py. Both spinor ports and the virtual-photon Lorentz port remain open when the generated amplitudes factorize; only the emitted gluon polarization and color factors are summed. Covariant, n, nbar and arbitrary non-null reference projectors agree. The result is CF alpha_s/(2 pi kplus kminus) using the reference explicit 1/(32 pi^2) prefactor. This does not claim an integrated or dimensionally regulated phase-space soft function. Independent checks cover light-cone basis rescaling, energy scaling and 27 numerical points. All 36 live notebook control combinations, strict Marimo validation, Ruff and HTML export passed."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/EW/Tree/QQbar-ZZ",

@@ -27,6 +27,11 @@ not treat the presence of a primitive as an end-to-end validation.
    Symbolica expression interface; do not implement a second algebra in FeynKit.
    Generated massive one-, three- and five-photon amplitudes validate Furry
    cancellation with symbolic dimension and generic off-shell momenta.],
+  [Light-cone soft radiation], [Kinematics, Spenso, Idenso and Symbolica],
+  [Generated Born and real-emission amplitudes with collinear spinor projectors,
+   symbolic Lorentz dimension, open-current factorization and arbitrary-reference
+   gluon polarization sums. The leading unintegrated soft function matches the
+   reference; integrated SCET soft functions are not covered.],
   [External spin sums], [`feynkit-generator::SpinSum`],
   [Scalar, Dirac and vector completeness tensors and external wavefunction-pair
    replacements. GammaLoop delegates both formulas and replacement construction
@@ -1518,6 +1523,47 @@ Symbolica's antiderivative passes exact differentiation and boundary checks;
 nine independent Gaussian quadratures check $N_c=2,3,5$ at three cuts.
 The controls expose both spin-average conventions, symbolic or concrete Lorentz
 dimensions, color groups and angular cuts without repeating diagram generation.
+
+== Generated light-cone soft radiation
+
+`hep/soft_function.py` and `installed_feyncalc_soft_function.py` cover the
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/Ga-QQbar-SoftFunction")[SCET soft-function example].
+The shared generator produces one virtual-photon Born diagram and both gluon
+emissions from a massless quark pair. The example uses the model's bottom
+field with zero mass; its electric charge cancels from the Born-normalized
+result. Particle and vertex selection use model names.
+
+Declare light-cone momenta with `TensorName.vector`, retaining Spenso's
+rank-one metadata for slashes and contractions. Scoped `Kinematics` assumptions
+set $n^2=bar(n)^2=k^2=0$, $n dot bar(n)=2$, $n dot k=k^+$ and
+$bar(n) dot k=k^-$. The two quark momenta have independent large components.
+Symbolica extracts the leading Laurent coefficient under $k -> lambda^2 k$;
+no soft emission rule is inserted into the generated amplitudes.
+
+Idenso checks the collinear projector, its orthogonal complement, its trace
+and Dirac annihilation identities in symbolic Lorentz dimension. The spinor
+representation remains four-dimensional. The transverse metric is idempotent,
+annihilates both light-cone directions and has trace $D-2$. Canonical gamma
+ordering and chain-aware Schoonschip contraction prove that each generated
+emission amplitude factors onto the same projected Born current. Both spinor
+ports and the virtual-photon Lorentz port remain open.
+
+The extracted eikonal current satisfies its Ward identity and loses all
+dependence on the hard collinear scales. Spenso evaluates the Born and emitted
+color norms as $N_c$ and $(N_c^2-1)/2$. The shared `Particle.spin_sum` gives
+the same squared current $4/(k^+ k^-)$ for covariant, either null light-cone
+reference, and a generic reference of arbitrary norm. The common open Born
+current cancels without averaging or summing the quark spin states.
+
+With $g_s^2=4 pi alpha_s$ and the reference's explicit $1/(32 pi^2)$ prefactor,
+the result is $C_F alpha_s/(2 pi k^+ k^-)$.
+This is an unintegrated leading soft kernel, not a dimensionally regulated
+phase-space integral. The notebook exposes the color group, polarization
+choice, coupling, gluon energy and emission angle. Independent checks verify
+light-cone basis rescaling, inverse-energy-squared scaling and 27 numerical
+points. All 36 live control combinations, strict Marimo checks and the HTML
+export pass. All physics operations reuse the existing shared owners; no
+separate light-cone algebra is introduced in Python or GammaLoop.
 
 == Generated quark-gluon scattering
 
