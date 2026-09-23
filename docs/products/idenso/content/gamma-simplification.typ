@@ -166,6 +166,40 @@ separate from this reproducible API comparison.
 cargo run -p idenso --profile dev-optim --example trace_scaling -- /path/to/form
 ```
 
+== Replacement passes and terminal expressions
+
+The ordinary standalone trace bypasses the fixed-point pipeline. Other inputs can
+spend much more time traversing output that is already simplified. In a diagnostic
+copy of the current implementation, a ten-gamma trace takes about 1.10 ms alone
+but 150 ms with a scalar prefactor, which prevents that narrow shortcut. Most of
+the additional time is in Schoonschip, chain collection and dot normalization.
+
+A twelve-gamma axial trace takes about 2.56 s, with 2.36 s (92 percent) in epsilon
+simplification. In each of two outer passes, the epsilon pass visits 44,248 nodes,
+runs `term.schoonschip()` at each node, and applies zero epsilon identities.
+Every nested Schoonschip call also leaves its argument unchanged. Those nested
+calls consume about 1.96 s altogether; the actual epsilon-rule checks take only
+about 7.4 ms. The second outer pass runs because the first replaced the trace with
+a polynomial; equality is tested only after every stage runs again.
+
+Bypassing epsilon processing in an isolated diagnostic reduces that case to about
+0.21 s with exactly the production result. This does not justify skipping epsilon
+contractions on general inputs. The first gamma rewrite alone takes 2.33 ms
+and already equals the final production polynomial in this case. A single
+fourteen-index scalar-prefactor probe takes 8.92 s, compared with a three-sample
+median of 59 ms for the bare trace. Repeated processing of terminal expressions
+is the first optimization target. A fourteen-factor alternating slash
+trace is different again: eleven outer passes take 9.66 ms, including 3.76 ms in
+Schoonschip, 2.02 ms in collection and 2.50 ms in gamma rewriting.
+
+For the standalone ordinary kernel, borrowed factor views remove avoidable copies:
+a separate five-sample experiment changes length fourteen from 54.3 to 48.3 ms,
+about eleven percent. Symbolica still normalizes each product and merges the sum.
+Sampling highlights product normalization, byte comparisons and heap operations.
+The #source-link("examples/notebooks/gamma_trace_profile.json", label: "detailed profile record")
+preserves raw timings, source hashes, diagnostic variants and their limits.
+Production algebra was unchanged during this investigation.
+
 == HEP tensor-component validation
 
 Four-dimensional identities allow different symbolic expressions for the same tensor.

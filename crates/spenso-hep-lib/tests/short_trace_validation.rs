@@ -198,7 +198,7 @@ impl TraceEvaluation {
                     );
                 }
             }
-            if length % 2 == 0 && (!axial || length >= 4) {
+            if length.is_multiple_of(2) && (!axial || length >= 4) {
                 assert!(
                     nonzero_samples > 0,
                     "all samples were trivial at length {length}, gamma5 {axial}"
