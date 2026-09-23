@@ -1,0 +1,929 @@
+{
+  "date": "2026-09-23",
+  "platform": "shared AMD EPYC 9754, Linux x86_64, no CPU pinning",
+  "profile": "dev-optim: workspace opt-level 2, dependencies opt-level 3; Symbolica 3.0.0",
+  "source_sha256": {
+    "crates/idenso/src/dirac/simplify.rs": "76adb67a6061a4b1293f55ea73a5ae774bd775016de5740977ecb9ab8468acad",
+    "crates/idenso/src/dirac/simplify/trace_kernel.rs": "bf1df312af6e6adc238e30c878270ef790007b96fde6f31510d68f0038ac4b5c",
+    "crates/idenso/src/epsilon.rs": "162a59b8027cb5a2e8aa9abe8278c3f6df90e49c84c9e63d46991f283e2c0468"
+  },
+  "scope": "Diagnostic copies and sampling only; production algebra unchanged. Hardware/build match gamma_trace_scaling.json; do not compare absolute times across separate runs as controlled speedups.",
+  "construction": {
+    "method": "Instrumented copy of current kernel, same optimized dependency artifacts. Five warm samples with variant order rotated, each averaging 50 calls at n10 or 15 at n14. Calls include destruction. Timers split metrics, product construction and sum assembly. Every variant is checked for exact equality with production; flat-symbol surrogate checked after untimed restoration of original metrics.",
+    "interpretation": "Borrowed factors isolate unnecessary owned Vec/Atom copies. Chunked sums change heap merge shape and locality, with no uniform speedup at smaller arities. Flat symbols are a representation diagnostic, not a deployable optimization: restoration is excluded from timing.",
+    "measurements": [
+      {
+        "length": 10,
+        "variant": "owned factors (current construction)",
+        "repetitions_per_sample": 50,
+        "terms": 693,
+        "full_metric_result_bytes": 155933,
+        "median_ms": {
+          "total": 0.890233,
+          "metrics": 0.072394,
+          "products": 0.59612,
+          "sum": 0.217886
+        },
+        "samples_ms": [
+          {
+            "total": 0.909927,
+            "metrics": 0.072394,
+            "products": 0.613196,
+            "sum": 0.222073
+          },
+          {
+            "total": 0.885095,
+            "metrics": 0.071834,
+            "products": 0.593075,
+            "sum": 0.217886
+          },
+          {
+            "total": 0.883469,
+            "metrics": 0.072141,
+            "products": 0.591324,
+            "sum": 0.217781
+          },
+          {
+            "total": 0.892783,
+            "metrics": 0.072854,
+            "products": 0.59786,
+            "sum": 0.219888
+          },
+          {
+            "total": 0.890233,
+            "metrics": 0.074062,
+            "products": 0.59612,
+            "sum": 0.217791
+          }
+        ]
+      },
+      {
+        "length": 10,
+        "variant": "borrowed factors",
+        "repetitions_per_sample": 50,
+        "terms": 693,
+        "full_metric_result_bytes": 155933,
+        "median_ms": {
+          "total": 0.849081,
+          "metrics": 0.071903,
+          "products": 0.559821,
+          "sum": 0.216259
+        },
+        "samples_ms": [
+          {
+            "total": 0.85817,
+            "metrics": 0.072013,
+            "products": 0.564125,
+            "sum": 0.219849
+          },
+          {
+            "total": 0.855819,
+            "metrics": 0.073887,
+            "products": 0.560359,
+            "sum": 0.219369
+          },
+          {
+            "total": 0.849081,
+            "metrics": 0.071414,
+            "products": 0.559821,
+            "sum": 0.215745
+          },
+          {
+            "total": 0.841132,
+            "metrics": 0.071903,
+            "products": 0.550868,
+            "sum": 0.216259
+          },
+          {
+            "total": 0.834872,
+            "metrics": 0.0715,
+            "products": 0.54516,
+            "sum": 0.216084
+          }
+        ]
+      },
+      {
+        "length": 10,
+        "variant": "borrowed factors with flat metric-symbol surrogates",
+        "repetitions_per_sample": 50,
+        "terms": 693,
+        "full_metric_result_bytes": 155933,
+        "median_ms": {
+          "total": 0.663558,
+          "metrics": 0.058126,
+          "products": 0.443887,
+          "sum": 0.153997
+        },
+        "samples_ms": [
+          {
+            "total": 0.663558,
+            "metrics": 0.058716,
+            "products": 0.443887,
+            "sum": 0.15283
+          },
+          {
+            "total": 0.660531,
+            "metrics": 0.058126,
+            "products": 0.441032,
+            "sum": 0.153722
+          },
+          {
+            "total": 0.661243,
+            "metrics": 0.057193,
+            "products": 0.441144,
+            "sum": 0.154752
+          },
+          {
+            "total": 0.665606,
+            "metrics": 0.056753,
+            "products": 0.4462,
+            "sum": 0.154025
+          },
+          {
+            "total": 0.670011,
+            "metrics": 0.05853,
+            "products": 0.448769,
+            "sum": 0.153997
+          }
+        ]
+      },
+      {
+        "length": 10,
+        "variant": "borrowed factors and sums grouped in chunks of 32",
+        "repetitions_per_sample": 50,
+        "terms": 693,
+        "full_metric_result_bytes": 155933,
+        "median_ms": {
+          "total": 0.900182,
+          "metrics": 0.073067,
+          "products": 0.559781,
+          "sum": 0.25609
+        },
+        "samples_ms": [
+          {
+            "total": 0.906294,
+            "metrics": 0.073396,
+            "products": 0.560707,
+            "sum": 0.25869
+          },
+          {
+            "total": 0.907455,
+            "metrics": 0.073069,
+            "products": 0.56098,
+            "sum": 0.260201
+          },
+          {
+            "total": 0.885362,
+            "metrics": 0.073067,
+            "products": 0.542693,
+            "sum": 0.25609
+          },
+          {
+            "total": 0.900182,
+            "metrics": 0.072558,
+            "products": 0.559781,
+            "sum": 0.254479
+          },
+          {
+            "total": 0.896369,
+            "metrics": 0.072291,
+            "products": 0.555703,
+            "sum": 0.255182
+          }
+        ]
+      },
+      {
+        "length": 14,
+        "variant": "owned factors (current construction)",
+        "repetitions_per_sample": 15,
+        "terms": 26931,
+        "full_metric_result_bytes": 8483273,
+        "median_ms": {
+          "total": 54.296285,
+          "metrics": 0.165459,
+          "products": 30.867143,
+          "sum": 22.592616
+        },
+        "samples_ms": [
+          {
+            "total": 54.048975,
+            "metrics": 0.170288,
+            "products": 30.635433,
+            "sum": 23.225256
+          },
+          {
+            "total": 54.616601,
+            "metrics": 0.172153,
+            "products": 33.43303,
+            "sum": 20.997597
+          },
+          {
+            "total": 54.296285,
+            "metrics": 0.163445,
+            "products": 30.867143,
+            "sum": 23.252366
+          },
+          {
+            "total": 54.852014,
+            "metrics": 0.165459,
+            "products": 32.079667,
+            "sum": 22.592616
+          },
+          {
+            "total": 53.186739,
+            "metrics": 0.157116,
+            "products": 30.588996,
+            "sum": 22.425455
+          }
+        ]
+      },
+      {
+        "length": 14,
+        "variant": "borrowed factors",
+        "repetitions_per_sample": 15,
+        "terms": 26931,
+        "full_metric_result_bytes": 8483273,
+        "median_ms": {
+          "total": 48.279506,
+          "metrics": 0.164668,
+          "products": 27.869452,
+          "sum": 20.501627
+        },
+        "samples_ms": [
+          {
+            "total": 48.279506,
+            "metrics": 0.164668,
+            "products": 28.407212,
+            "sum": 19.691166
+          },
+          {
+            "total": 48.178405,
+            "metrics": 0.154469,
+            "products": 27.508557,
+            "sum": 20.501627
+          },
+          {
+            "total": 49.445839,
+            "metrics": 0.16556,
+            "products": 27.667705,
+            "sum": 21.598452
+          },
+          {
+            "total": 45.918108,
+            "metrics": 0.159156,
+            "products": 27.869452,
+            "sum": 17.875433
+          },
+          {
+            "total": 63.787692,
+            "metrics": 0.16612,
+            "products": 28.829884,
+            "sum": 34.77177
+          }
+        ]
+      },
+      {
+        "length": 14,
+        "variant": "borrowed factors with flat metric-symbol surrogates",
+        "repetitions_per_sample": 15,
+        "terms": 26931,
+        "full_metric_result_bytes": 8483273,
+        "median_ms": {
+          "total": 35.461047,
+          "metrics": 0.14917,
+          "products": 23.812505,
+          "sum": 10.890541
+        },
+        "samples_ms": [
+          {
+            "total": 33.80965,
+            "metrics": 0.132832,
+            "products": 23.812505,
+            "sum": 9.856616
+          },
+          {
+            "total": 35.461047,
+            "metrics": 0.14917,
+            "products": 24.411892,
+            "sum": 10.890541
+          },
+          {
+            "total": 33.792165,
+            "metrics": 0.137663,
+            "products": 23.489733,
+            "sum": 10.155253
+          },
+          {
+            "total": 36.341157,
+            "metrics": 0.155815,
+            "products": 23.896563,
+            "sum": 12.277283
+          },
+          {
+            "total": 38.023155,
+            "metrics": 0.157028,
+            "products": 23.696843,
+            "sum": 14.158308
+          }
+        ]
+      },
+      {
+        "length": 14,
+        "variant": "borrowed factors and sums grouped in chunks of 32",
+        "repetitions_per_sample": 15,
+        "terms": 26931,
+        "full_metric_result_bytes": 8483273,
+        "median_ms": {
+          "total": 45.386729,
+          "metrics": 0.158897,
+          "products": 27.918639,
+          "sum": 16.64677
+        },
+        "samples_ms": [
+          {
+            "total": 49.659185,
+            "metrics": 0.158897,
+            "products": 29.702057,
+            "sum": 18.664006
+          },
+          {
+            "total": 45.386729,
+            "metrics": 0.152754,
+            "products": 27.918639,
+            "sum": 16.488013
+          },
+          {
+            "total": 49.550427,
+            "metrics": 0.164402,
+            "products": 30.421988,
+            "sum": 17.884094
+          },
+          {
+            "total": 44.578926,
+            "metrics": 0.159711,
+            "products": 27.339172,
+            "sum": 16.218675
+          },
+          {
+            "total": 45.290193,
+            "metrics": 0.155811,
+            "products": 27.665541,
+            "sum": 16.64677
+          }
+        ]
+      }
+    ],
+    "artifacts_directory": "/tmp/gamma-trace-construction"
+  },
+  "sampling": {
+    "command": "perf record -F 199 -g --call-graph dwarf,16384 -o kernel-perf.data -- /tmp/gamma-trace-scaling/profile",
+    "workload": "Combined ordinary free-index lengths8,10,12,14, both production API and instrumented kernel loops. Samples therefore emphasize large traces; these percentages are not exclusive n14 measurements.",
+    "samples": 3129,
+    "lost_samples": 0,
+    "self_percent": {
+      "AtomView::normalize": 17.91,
+      "memcmp": 15.6,
+      "AtomOrView::as_atom_view": 8.14,
+      "BinaryHeap::pop (two compiled copies)": 9.62,
+      "BinaryHeap::sift_up": 2.17,
+      "realloc": 3.14,
+      "memmove": 3.01,
+      "Mul::extend": 2.44,
+      "malloc": 1.87
+    },
+    "limitations": "Sampling attribution includes inlining and incomplete call-chain unwinding; use self time only, alongside direct phase timers.",
+    "artifacts_directory": "/tmp/gamma-trace-scaling"
+  },
+  "replacement_passes": {
+    "date": "2026-09-23",
+    "profile": "Copied production module compiled rustc opt-level=2, debuginfo=2 against exact dependencies from dev-optim benchmark; shared AMD EPYC9754 host, no pinning",
+    "source_sha256": {
+      "crates/idenso/src/dirac/simplify.rs": "76adb67a6061a4b1293f55ea73a5ae774bd775016de5740977ecb9ab8468acad",
+      "crates/idenso/src/dirac/simplify/trace_kernel.rs": "bf1df312af6e6adc238e30c878270ef790007b96fde6f31510d68f0038ac4b5c",
+      "crates/idenso/src/epsilon.rs": "162a59b8027cb5a2e8aa9abe8278c3f6df90e49c84c9e63d46991f283e2c0468"
+    },
+    "artifact_directory": "/tmp/gamma-replacement-profile",
+    "method": "Warmup followed by three samples, except expensive spectator14 and axial14 probes use one sample. Phase clocks surround the existing outer simplify stages; output equality asserted against production after samples. Detailed epsilon instrumentation adds per-node timers. Axial14 initial three-sample run hit90s total timeout during finalproduction comparison; complete single-sample rerun is used.",
+    "stages": "Exact outer order is schoonschip -> collect_gamma_chains -> rewrite_expression -> simplify_epsilon -> normalize_dots. There is no separate contract_metric or simplify_color stage here; metric work is inside Schoonschip. Terminal ordinary distinct-index trace returns before the loop.",
+    "cases": "free and axial use distinct explicit Minkowski indices; paired is p,p,q,...; alternating is p,q,p,q,...; axial_slashes uses distinct symbolic four-vector names; spectator multiplies a free-index ordinary trace by one commuting scalar symbol and preserves factorization.",
+    "measurements": [
+      {
+        "case": "free",
+        "length": 10,
+        "samples": 3,
+        "median_total_ms": 1.100393,
+        "median_stage_ms": {
+          "schoonschip_ms": 0.0,
+          "collect_ms": 0.0,
+          "rewrite_ms": 0.0,
+          "epsilon_ms": 0.0,
+          "dots_ms": 0.0
+        },
+        "source": "/tmp/gamma-replacement-profile/free-10.csv",
+        "passes": [
+          0
+        ],
+        "total_ms_samples": [
+          1.159253,
+          1.100393,
+          1.081873
+        ]
+      },
+      {
+        "case": "free",
+        "length": 12,
+        "samples": 3,
+        "median_total_ms": 7.761833,
+        "median_stage_ms": {
+          "schoonschip_ms": 0.0,
+          "collect_ms": 0.0,
+          "rewrite_ms": 0.0,
+          "epsilon_ms": 0.0,
+          "dots_ms": 0.0
+        },
+        "source": "/tmp/gamma-replacement-profile/free-12.csv",
+        "passes": [
+          0
+        ],
+        "total_ms_samples": [
+          8.072863,
+          7.478582,
+          7.761833
+        ]
+      },
+      {
+        "case": "free",
+        "length": 14,
+        "samples": 3,
+        "median_total_ms": 59.143729,
+        "median_stage_ms": {
+          "schoonschip_ms": 0.0,
+          "collect_ms": 0.0,
+          "rewrite_ms": 0.0,
+          "epsilon_ms": 0.0,
+          "dots_ms": 0.0
+        },
+        "source": "/tmp/gamma-replacement-profile/free-14.csv",
+        "passes": [
+          0
+        ],
+        "total_ms_samples": [
+          61.716876,
+          59.143729,
+          58.391087
+        ]
+      },
+      {
+        "case": "paired",
+        "length": 10,
+        "samples": 3,
+        "median_total_ms": 0.518071,
+        "median_stage_ms": {
+          "schoonschip_ms": 0.28173,
+          "collect_ms": 0.096242,
+          "rewrite_ms": 0.035261,
+          "epsilon_ms": 0.005239,
+          "dots_ms": 0.075179
+        },
+        "source": "/tmp/gamma-replacement-profile/paired-10.csv",
+        "passes": [
+          6
+        ],
+        "total_ms_samples": [
+          0.522501,
+          0.518071,
+          0.486132
+        ]
+      },
+      {
+        "case": "paired",
+        "length": 12,
+        "samples": 3,
+        "median_total_ms": 0.638192,
+        "median_stage_ms": {
+          "schoonschip_ms": 0.355532,
+          "collect_ms": 0.12085000000000001,
+          "rewrite_ms": 0.046471,
+          "epsilon_ms": 0.007892,
+          "dots_ms": 0.095179
+        },
+        "source": "/tmp/gamma-replacement-profile/paired-12.csv",
+        "passes": [
+          7
+        ],
+        "total_ms_samples": [
+          0.688842,
+          0.638192,
+          0.621862
+        ]
+      },
+      {
+        "case": "paired",
+        "length": 14,
+        "samples": 3,
+        "median_total_ms": 0.775812,
+        "median_stage_ms": {
+          "schoonschip_ms": 0.446482,
+          "collect_ms": 0.143242,
+          "rewrite_ms": 0.054359000000000005,
+          "epsilon_ms": 0.00886,
+          "dots_ms": 0.11745
+        },
+        "source": "/tmp/gamma-replacement-profile/paired-14.csv",
+        "passes": [
+          8
+        ],
+        "total_ms_samples": [
+          0.781502,
+          0.775812,
+          0.764432
+        ]
+      },
+      {
+        "case": "alternating",
+        "length": 10,
+        "samples": 3,
+        "median_total_ms": 3.115169,
+        "median_stage_ms": {
+          "schoonschip_ms": 1.229134,
+          "collect_ms": 0.6044120000000001,
+          "rewrite_ms": 0.804412,
+          "epsilon_ms": 0.035619,
+          "dots_ms": 0.40986300000000003
+        },
+        "source": "/tmp/gamma-replacement-profile/alternating-10.csv",
+        "passes": [
+          8
+        ],
+        "total_ms_samples": [
+          3.115169,
+          3.156638,
+          3.065099
+        ]
+      },
+      {
+        "case": "alternating",
+        "length": 12,
+        "samples": 3,
+        "median_total_ms": 5.955227,
+        "median_stage_ms": {
+          "schoonschip_ms": 2.417546,
+          "collect_ms": 1.225404,
+          "rewrite_ms": 1.431225,
+          "epsilon_ms": 0.07350999999999999,
+          "dots_ms": 0.797401
+        },
+        "source": "/tmp/gamma-replacement-profile/alternating-12.csv",
+        "passes": [
+          10
+        ],
+        "total_ms_samples": [
+          5.955227,
+          5.934547,
+          5.963197
+        ]
+      },
+      {
+        "case": "alternating",
+        "length": 14,
+        "samples": 3,
+        "median_total_ms": 9.661808,
+        "median_stage_ms": {
+          "schoonschip_ms": 3.764732,
+          "collect_ms": 2.019767,
+          "rewrite_ms": 2.496439,
+          "epsilon_ms": 0.11033,
+          "dots_ms": 1.249986
+        },
+        "source": "/tmp/gamma-replacement-profile/alternating-14.csv",
+        "passes": [
+          11
+        ],
+        "total_ms_samples": [
+          9.622338,
+          9.661808,
+          9.695958
+        ]
+      },
+      {
+        "case": "axial",
+        "length": 10,
+        "samples": 3,
+        "median_total_ms": 350.000439,
+        "median_stage_ms": {
+          "schoonschip_ms": 13.577098000000001,
+          "collect_ms": 3.64514,
+          "rewrite_ms": 0.716862,
+          "epsilon_ms": 324.462486,
+          "dots_ms": 7.5538810000000005
+        },
+        "source": "/tmp/gamma-replacement-profile/axial-10.csv",
+        "passes": [
+          2
+        ],
+        "total_ms_samples": [
+          347.784324,
+          351.236343,
+          350.000439
+        ]
+      },
+      {
+        "case": "axial",
+        "length": 12,
+        "samples": 3,
+        "median_total_ms": 2555.571569,
+        "median_stage_ms": {
+          "schoonschip_ms": 110.022056,
+          "collect_ms": 23.678158,
+          "rewrite_ms": 3.902521,
+          "epsilon_ms": 2361.689286,
+          "dots_ms": 55.156647
+        },
+        "source": "/tmp/gamma-replacement-profile/axial-12.csv",
+        "passes": [
+          2
+        ],
+        "total_ms_samples": [
+          2555.571569,
+          2579.98421,
+          2549.829716
+        ]
+      },
+      {
+        "case": "axial",
+        "length": 14,
+        "samples": 1,
+        "median_total_ms": 18953.756887,
+        "median_stage_ms": {
+          "schoonschip_ms": 906.256475,
+          "collect_ms": 165.998151,
+          "rewrite_ms": 25.309903,
+          "epsilon_ms": 17421.967969999998,
+          "dots_ms": 433.253836
+        },
+        "source": "/tmp/gamma-replacement-profile/profile-axial-14.csv",
+        "passes": [
+          2
+        ],
+        "total_ms_samples": [
+          18953.756887
+        ]
+      },
+      {
+        "case": "axial_slashes",
+        "length": 10,
+        "samples": 3,
+        "median_total_ms": 255.599565,
+        "median_stage_ms": {
+          "schoonschip_ms": 4.804954,
+          "collect_ms": 4.510573,
+          "rewrite_ms": 0.787472,
+          "epsilon_ms": 242.748348,
+          "dots_ms": 2.742107
+        },
+        "source": "/tmp/gamma-replacement-profile/axial_slashes-10.csv",
+        "passes": [
+          2
+        ],
+        "total_ms_samples": [
+          253.920289,
+          255.599565,
+          260.89884
+        ]
+      },
+      {
+        "case": "axial_slashes",
+        "length": 12,
+        "samples": 3,
+        "median_total_ms": 1765.909717,
+        "median_stage_ms": {
+          "schoonschip_ms": 33.036205,
+          "collect_ms": 31.307021000000002,
+          "rewrite_ms": 4.499293,
+          "epsilon_ms": 1677.665214,
+          "dots_ms": 19.034734999999998
+        },
+        "source": "/tmp/gamma-replacement-profile/axial_slashes-12.csv",
+        "passes": [
+          2
+        ],
+        "total_ms_samples": [
+          1724.916048,
+          1766.91338,
+          1765.909717
+        ]
+      },
+      {
+        "case": "axial_slashes",
+        "length": 14,
+        "samples": 3,
+        "median_total_ms": 12054.693181,
+        "median_stage_ms": {
+          "schoonschip_ms": 228.92296,
+          "collect_ms": 209.553484,
+          "rewrite_ms": 28.851194,
+          "epsilon_ms": 11447.676922999999,
+          "dots_ms": 132.685943
+        },
+        "source": "/tmp/gamma-replacement-profile/axial_slashes-14.csv",
+        "passes": [
+          2
+        ],
+        "total_ms_samples": [
+          12054.693181,
+          11821.322221,
+          12089.427545
+        ]
+      },
+      {
+        "case": "spectator",
+        "length": 10,
+        "samples": 3,
+        "median_total_ms": 150.075124,
+        "median_stage_ms": {
+          "schoonschip_ms": 86.60898999999999,
+          "collect_ms": 14.319370999999999,
+          "rewrite_ms": 2.053766,
+          "epsilon_ms": 0.899052,
+          "dots_ms": 45.043260000000004
+        },
+        "source": "/tmp/gamma-replacement-profile/profile-spectator-10.csv",
+        "passes": [
+          2
+        ],
+        "total_ms_samples": [
+          151.316927,
+          150.075124,
+          148.335478
+        ]
+      },
+      {
+        "case": "spectator",
+        "length": 12,
+        "samples": 3,
+        "median_total_ms": 1180.605171,
+        "median_stage_ms": {
+          "schoonschip_ms": 709.415821,
+          "collect_ms": 102.638686,
+          "rewrite_ms": 13.386199,
+          "epsilon_ms": 5.686036,
+          "dots_ms": 349.34508900000003
+        },
+        "source": "/tmp/gamma-replacement-profile/profile-spectator-12.csv",
+        "passes": [
+          2
+        ],
+        "total_ms_samples": [
+          1180.605171,
+          1186.201387,
+          1173.648151
+        ]
+      },
+      {
+        "case": "spectator",
+        "length": 14,
+        "samples": 1,
+        "median_total_ms": 8915.42492,
+        "median_stage_ms": {
+          "schoonschip_ms": 5615.623837,
+          "collect_ms": 727.8685439999999,
+          "rewrite_ms": 100.279649,
+          "epsilon_ms": 39.502134,
+          "dots_ms": 2427.235949
+        },
+        "source": "/tmp/gamma-replacement-profile/profile-spectator-14.csv",
+        "passes": [
+          2
+        ],
+        "total_ms_samples": [
+          8915.42492
+        ]
+      }
+    ],
+    "epsilon_detail_12": [
+      {
+        "sample": 0,
+        "pass": 0,
+        "initial_chip_ns": 118434612,
+        "subtree_chip_ns": 980634086,
+        "matching_ns": 3699204,
+        "replace_ns": 990586188,
+        "final_chip_ns": 119453025,
+        "nodes": 44248,
+        "hits": 0,
+        "unchanged": 1,
+        "subtree_chip_changes": 0
+      },
+      {
+        "sample": 0,
+        "pass": 1,
+        "initial_chip_ns": 116904607,
+        "subtree_chip_ns": 982445090,
+        "matching_ns": 3696174,
+        "replace_ns": 992280843,
+        "final_chip_ns": 120453797,
+        "nodes": 44248,
+        "hits": 0,
+        "unchanged": 1,
+        "subtree_chip_changes": 0
+      }
+    ],
+    "epsilon_bypass": {
+      "method": "Only in copied module, replace rewritten.simplify_epsilon() by rewritten.clone(). All completed cases assert exact equality with unmodified production; this is a diagnostic for these terminal inputs, not a generally valid optimization.",
+      "measurements": [
+        {
+          "case": "axial",
+          "length": 10,
+          "samples": 3,
+          "median_total_ms": 26.034595,
+          "median_stage_ms": {
+            "schoonschip_ms": 14.11718,
+            "collect_ms": 3.5609900000000003,
+            "rewrite_ms": 0.687812,
+            "epsilon_ms": 0.0022500000000000003,
+            "dots_ms": 7.653152
+          },
+          "source": "/tmp/gamma-replacement-profile/profile_bypass-axial-10.csv",
+          "passes": [
+            2
+          ],
+          "total_ms_samples": [
+            26.034595,
+            26.119466,
+            26.032415
+          ]
+        },
+        {
+          "case": "axial",
+          "length": 12,
+          "samples": 3,
+          "median_total_ms": 212.704084,
+          "median_stage_ms": {
+            "schoonschip_ms": 125.63180200000001,
+            "collect_ms": 23.99876,
+            "rewrite_ms": 3.9014109999999995,
+            "epsilon_ms": 0.01466,
+            "dots_ms": 59.591292
+          },
+          "source": "/tmp/gamma-replacement-profile/profile_bypass-axial-12.csv",
+          "passes": [
+            2
+          ],
+          "total_ms_samples": [
+            206.240975,
+            212.704084,
+            239.193231
+          ]
+        },
+        {
+          "case": "axial",
+          "length": 14,
+          "samples": 1,
+          "median_total_ms": 1566.344861,
+          "median_stage_ms": {
+            "schoonschip_ms": 941.214557,
+            "collect_ms": 169.445919,
+            "rewrite_ms": 26.445286000000003,
+            "epsilon_ms": 0.13326,
+            "dots_ms": 428.918488
+          },
+          "source": "/tmp/gamma-replacement-profile/profile_bypass-axial-14.csv",
+          "passes": [
+            2
+          ],
+          "total_ms_samples": [
+            1566.344861
+          ]
+        }
+      ]
+    },
+    "first_rewrite_only": {
+      "length": 12,
+      "kind": "distinct-index axial",
+      "samples_ms": [
+        2.435247,
+        2.330487,
+        2.331447
+      ],
+      "exact_equal_to_full_production": true,
+      "explanation": "Expose rewrite_expression only in copied module and call it once. Its result is already exactly the terminal production polynomial."
+    },
+    "findings": [
+      "At axial length 12, each epsilon pass visits 44,248 nodes and makes 44,248 subtree Schoonschip calls, changing zero subtrees and applying zero epsilon rules. This repeats twice per simplify_gamma call.",
+      "The first outer pass replaces a trace with a terminal polynomial; next != expr triggers a second complete pass to establish a fixed point. The ordinary free trace has a shortcut; gamma5 and scalar spectators miss it.",
+      "Paired and alternating slashes remain small but use 6\u201311 global passes. Schoonschip, collection and dot normalization materially contribute.",
+      "A scalar spectator at length 14 preserves factorization but forces about 8.9 seconds of broad terminal-expression traversals, compared with a median of 59 ms for the bare free trace.",
+      "No production algebra changes. Bypasses diagnose particular inputs; any implementation needs structural guards preserving general contractions."
+    ],
+    "reproduce": {
+      "build_command": "/tmp/gamma-replacement-profile/build-command.json",
+      "runner": "/tmp/gamma-replacement-profile/run.py",
+      "followup": "/tmp/gamma-replacement-profile/followup.py",
+      "epsilon_source": "/tmp/gamma-replacement-profile/epsilon.rs",
+      "simplifier_source": "/tmp/gamma-replacement-profile/simplify.rs",
+      "bypass_source": "/tmp/gamma-replacement-profile/simplify_bypass.rs"
+    },
+    "raw_results_json": "/tmp/gamma-replacement-profile/replacement_profile.json",
+    "provenance_note": "Final single-sample axial14 rerun completed; exact production comparison passed (19.645s uninstrumented)."
+  }
+}

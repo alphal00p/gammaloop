@@ -976,6 +976,39 @@ def _(mo):
     cargo run -p idenso --profile dev-optim --example trace_scaling -- /path/to/form
     ```
 
+    **Where do replacement passes cost us?** The fast ordinary case above is
+    only one route. Instrumenting the complete pipeline found these additional
+    costs in the same optimized build (three warm samples unless noted):
+
+    | Input | Full simplification | Main measured cost |
+    |:--|--:|:--|
+    | 10 ordinary gammas, distinct indices | 1.10 ms | Short kernel; no fixed-point passes |
+    | Scalar × that same trace | 150 ms | Schoonschip and normalization traverse the terminal output |
+    | 12 gammas with gamma5, distinct indices | 2.56 s | Epsilon stage: 2.36 s (92%) |
+    | 14 alternating slashes | 9.66 ms | 11 passes; Schoonschip 3.76 ms, collection 2.02 ms, gamma rewrite 2.50 ms |
+
+    For the axial twelve-factor trace, the epsilon stage visits **44,248 nodes
+    per outer pass, twice**. Every nested `term.schoonschip()` call leaves its
+    input unchanged, and **zero epsilon identities fire**. About 1.96 s goes
+    into those nested calls; actual epsilon-rule checks take about 7.4 ms.
+    The first outer pass replaces the trace with a polynomial; the second
+    reruns all stages before detecting that the result is unchanged.
+    An isolated epsilon-bypass experiment takes about **0.21 s** and produces
+    exactly the production result on this input. This is a diagnostic, not a
+    valid global instruction to disable epsilon contractions. The first gamma
+    rewrite alone takes **2.33 ms** and already equals the final production
+    polynomial in this case. A length-14 scalar-prefactor probe takes **8.92 s**,
+    compared with **59 ms** for the bare trace (one prefactor sample versus
+    three bare-trace samples). Its overhead is again broad traversal.
+
+    Thus the priority is to avoid repeated traversal of terminal outputs and
+    nested Schoonschip calls. Pattern matching itself is a small part of this
+    axial cost. For ordinary free traces, output construction remains the
+    bottleneck: borrowed factor views improve an isolated length-14 kernel
+    from **54.3 to 48.3 ms** (about 11%), while generic product normalization
+    and sum merging remain. These separate experiments and their limitations
+    are recorded in `examples/notebooks/gamma_trace_profile.json`.
+
     Its CSV distinguishes first-call Idenso time, warm Idenso time, FORM
     `trace4` process time and FORM `tracen` process time. First calls in a
     fresh process expose the lazy table cost; repeated notebook runs may
