@@ -19,18 +19,14 @@ app = marimo.App(width="medium", app_title="FeynKit DOT rendering")
 @app.cell
 def _():
     import html
-    from pathlib import Path
 
     import linnet as lp
     import marimo as mo
     import symbolica.community.feynkit as fk
 
-    # The documentation exporter bundles this Standard Model fixture.
-    # Native sessions resolve the same model from this checkout.
-    model = fk.Model(
-        Path(__file__).resolve().parents[3]
-        / "crates/feynkit-model/tests/fixtures/sm.json"
-    )
+    # The Standard Model is embedded, so native and browser runs need no model file.
+    # Native sessions and browser exports load identical model definitions.
+    model = fk.Model.standard_model()
     return fk, html, lp, mo, model
 
 

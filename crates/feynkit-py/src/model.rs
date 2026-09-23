@@ -1681,6 +1681,116 @@ impl From<Arc<Model>> for PyModel {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyModel {
+    /// Load the embedded, unrestricted Standard Model with default parameters.
+    /// No model files or UFO installation are required.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = fk.Model.standard_model()
+    #[staticmethod]
+    fn standard_model() -> Self {
+        Model::standard_model().into()
+    }
+
+    /// Load QCD with six quark flavors, gluons, and gluon ghosts, filtered from
+    /// the Standard Model. Preserves its parameters and their default values.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = fk.Model.qcd()
+    #[staticmethod]
+    fn qcd() -> Self {
+        Model::qcd().into()
+    }
+
+    /// Load QED with photons and all charged fermions (including quarks), filtered
+    /// from the Standard Model. Preserves its parameters and their default values.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = fk.Model.qed()
+    #[staticmethod]
+    fn qed() -> Self {
+        Model::qed().into()
+    }
+
+    /// Load the electroweak Standard Model, retaining quarks, Higgs, Goldstones,
+    /// and electroweak ghosts, and removing gluons and gluon ghosts.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = fk.Model.electroweak()
+    #[staticmethod]
+    fn electroweak() -> Self {
+        Model::electroweak().into()
+    }
+
+    /// Load strong and electromagnetic interactions of all quarks and charged
+    /// leptons, including gluon ghosts, with Standard Model parameters.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = fk.Model.qcd_qed()
+    #[staticmethod]
+    fn qcd_qed() -> Self {
+        Model::qcd_qed().into()
+    }
+
+    /// Load pure SU(3) Yang-Mills theory: gluons and gluon ghosts without quarks.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = fk.Model.yang_mills()
+    #[staticmethod]
+    fn yang_mills() -> Self {
+        Model::yang_mills().into()
+    }
+
+    /// Load a real scalar phi with L_int = -g phi^3 / 3!.
+    /// The external parameters mass and g default to one; the width is zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = fk.Model.phi3()
+    #[staticmethod]
+    fn phi3() -> Self {
+        Model::phi3().into()
+    }
+
+    /// Load a real scalar phi with L_int = -lam phi^4 / 4!.
+    /// The external parameters mass and lam default to one; the width is zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = fk.Model.phi4()
+    #[staticmethod]
+    fn phi4() -> Self {
+        Model::phi4().into()
+    }
+
+    /// Load a real scalar phi with L_int = -g phi^3 / 3! - lam phi^4 / 4!.
+    /// Independent parameters mass, g, and lam default to one; the width is zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = fk.Model.phi_3_4()
+    #[staticmethod]
+    fn phi_3_4() -> Self {
+        Model::phi_3_4().into()
+    }
+
+    /// Load scalar QED in Feynman gauge with a, phi+, and phi-.
+    /// Parameters mass=e=1 and lam=0; the scalar potential is
+    /// mass^2 |phi|^2 + lam |phi|^4 / 4, and all widths vanish.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = fk.Model.scalar_qed()
+    #[staticmethod]
+    fn scalar_qed() -> Self {
+        Model::scalar_qed().into()
+    }
+
     /// Load a model from a normalized FeynKit JSON file.
     ///
     /// Examples
