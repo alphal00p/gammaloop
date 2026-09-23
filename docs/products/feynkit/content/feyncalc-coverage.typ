@@ -918,8 +918,20 @@ this complete UV expansion. Terms correcting the auxiliary mass are retained
 through logarithmic order; even the expanded massless tadpole has cancelling
 UV poles. FeynCalc's auxiliary gluon mass counterterm
 $delta Z_(A m)=-C_A(1+3xi)/(8epsilon)$ belongs to its selective infrared
-rearrangement, which remains unvalidated here. The physical renormalization
-constants agree between the two prescriptions. The generated auxiliary rules
+rearrangement. The notebook now calculates this prescription independently:
+it adds $M$ only to massless propagators, retains the physical quark mass,
+and Taylor-expands external momenta to the superficial divergence degree.
+Every gluon's primitive longitudinal denominator is isolated before
+massification, including diagrams with two internal gluons. Recombining these
+pieces reconstructs the generated numerator. Symbolica partial fractions
+separate tadpoles at $M$ and $m_q^2$, with exact reconstruction of each rational
+integrand before native IBP. Five powers reduce to the tadpole at each mass.
+The resulting physical poles agree with the full UV expansion, while the
+extra gluon pole is $C_A(1+3xi)M g^(mu nu)/(4epsilon)$. Solving the same
+generated matrix reproduces all eight reference constants and cancels the
+complete projected tensor coefficients. Initially massless quarks require a
+separate calculation and are not covered by this massive prescription.
+The generated auxiliary rules
 follow $M(Z_(A m)^2-1)A^2/2$ and $M(Z_(c m)^2-1)bar(c)c/2$: identical gluons
 produce the matrix entry 2, while distinct ghost fields produce 1. Analytic
 master values and the local operator basis remain explicit inputs;
@@ -936,7 +948,7 @@ the actual generated coefficients cancels every required tensor structure.
 With one common loop measure, the MS result retains $c_Delta$ times the pole
 residue. This comparison does not claim the complete finite amplitudes.
 
-The installed regression passes the symbolic-gauge pole comparisons, all eight
+The full UV regression checks the symbolic-gauge pole comparisons, all eight
 counterterm equations and the exact linear-system residual. It checks that
 scalar-family coefficients contain no hidden loop momentum, the projected UV
 coefficients contain neither physical nor auxiliary mass dependence, and no
@@ -946,6 +958,11 @@ passes 314 live combinations of gauge parameter, quark-flavor count, SU(N)
 color group and subtraction scheme, including a vanishing beta function.
 Its interactive counterterm table checks the vertex cancellation and the
 gauge-independent one-loop coefficient $beta_0=(11C_A-2N_f)/3$.
+The direct massive IRR addition passes the installed regression and notebook
+export with all eight generated counterterm equations. All 628 live combinations
+of gauge, flavor count, color count, subtraction scheme and rearrangement pass;
+controls are restored to their defaults afterward. The rearrangement control
+exposes the nonzero auxiliary-mass result.
 
 == Generated ghost-gluon vertex and crossing
 

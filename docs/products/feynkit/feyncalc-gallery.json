@@ -1643,7 +1643,7 @@
         "ToString",
         "Total"
       ],
-      "end_to_end_validation": "partial: generated quark, gluon and ghost self-energies plus quark-gluon and ghost-gluon UV vertices pass in symbolic gauge; eight generated counterterm diagrams determine the physical constants, while the reference-specific selective infrared rearrangement and its nonzero auxiliary gluon mass counterterm remain pending",
+      "end_to_end_validation": "passed: displayed massive one-loop UV-renormalization results from direct selective infrared rearrangement, including the nonzero auxiliary gluon mass and all eight generated counterterm equations; native IBP replaces external Kira",
       "validated_components": [
         {
           "scope": "generated massive one-loop quark, gluon and ghost self-energies and both quark-gluon vertex topologies; native tadpole IBP, eight generated counterterm diagrams, matrix extraction and gauge-independent mass and coupling renormalization",
@@ -1684,6 +1684,23 @@
           ],
           "result": "passed",
           "note": "Live notebook: hep/qcd_ghost_vertex.py. This additional reference is not one of the 86 gallery links captured by this inventory. I(2), I(3) reduce to I(1); its M/eps pole and the gluon field counterterm from the separate QCD calculation are explicit inputs. Canonical shared SM UUV1 and signed-momentum finalization are used. No finite vertex or automatic counterterm generation is claimed."
+        },
+        {
+          "scope": "direct massive n=0 infrared rearrangement of generated QCD diagrams; primitive longitudinal gluon powers, physical and auxiliary tadpole masses, exact partial-fraction reconstruction, five native IBP targets and eight generated counterterm equations",
+          "example": "symbolica-community/examples/hep/qcd_renormalization.py",
+          "components": [
+            "Model.generate_diagrams",
+            "FeynmanDiagram.denominator_expression",
+            "Expression.series",
+            "Expression.apart",
+            "TensorReducer.reduce",
+            "IBPFamily.reduce_laporta",
+            "IBPSolution.reduce",
+            "Matrix.solve"
+          ],
+          "result": "passed",
+          "note": "Massless propagators receive the auxiliary mass while massive quark propagators retain their physical mass. Physical UV constants agree with the full UV expansion; deltaZAm=-CA*(1+3*xi)/(8*eps) and deltaZcm=0 cancel the auxiliary poles. The installed regression, notebook export and 628 live parameter states pass. Initially massless quarks and complete finite amplitudes remain outside this validation.",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_qcd_renormalization.py"
         }
       ]
     },

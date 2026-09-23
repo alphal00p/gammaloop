@@ -7,14 +7,14 @@ expansion and the ordinary generator supply actual CT diagrams; their projected
 numerators determine every entry of the matching matrix.
 Reference MS/MSbar scope:
 https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/Renormalization2
-The separate n=0 IRR reference's nonzero auxiliary mass is not inferred from
-this full UV expansion.
+The separate n=0 IRR calculation directly massifies only massless propagators
+and reproduces the reference's nonzero auxiliary gluon mass counterterm.
 """
 
 import json
 from pathlib import Path
 
-from symbolica import E, Matrix, S, Symbol
+from symbolica import E, Matrix, Replacement, S, Symbol
 from symbolica.community import hep
 from symbolica.community.hep import oneloop
 from symbolica.community.spenso import (
@@ -96,7 +96,7 @@ for label, particles in [
         if sorted(vertex.particles) == sorted(particles)
     ]
     assert len(interaction_rules[label]) == 1
-parts, diagrams = {}, {}
+parts, diagrams, irr_inputs = {}, {}, {}
 for kind, incoming, outgoing, loops, vertices, count in [
     ("tree", [quark], [gluon, quark], 0, interaction_rules["qqg"], 1),
     ("quark", [quark], [quark], 1, interaction_rules["qqg"], 1),
@@ -205,6 +205,8 @@ for kind, incoming, outgoing, loops, vertices, count in [
             .replace(cas(2, coad(dA)), CA)
             .replace(trace_index(2, cof(Nc)), one / 2)
         )
+        # Keep the unexpanded graph numerator for the independent direct IRR path.
+        raw_numerator = numerator
         if loops:
             numerator = diagram.momentum_basis().route_expression(
                 diagram.uv_expansion(mUV, numerator=numerator).to_expression()
@@ -257,6 +259,14 @@ for kind, incoming, outgoing, loops, vertices, count in [
             ]
         else:
             probes = [(kind, one)]
+        if loops:
+            irr_inputs[kind, number] = (
+                diagram,
+                raw_numerator,
+                ports.copy(),
+                probes,
+                factor,
+            )
         for label, projector in probes:
             traced = (
                 TensorExpression((numerator * projector).expand())
@@ -703,3 +713,229 @@ for scheme, constants in counterterms_by_scheme.items():
         )
         assert (remainder - expected_remainder).together() == zero
 print("Generated QCD CT amplitudes: complete MS/MSbar tensor cancellation passed")
+
+
+# Direct n=0 infrared rearrangement: massify only massless propagators, then
+# Taylor-expand external momenta to the superficial divergence degree. This
+# follows the original massive reference independently of graph.uv_expansion.
+Q, dot, x, t, a, b = S(
+    "gammalooprs::Q",
+    "spenso::dot",
+    "qcd_irr::x",
+    "qcd_irr::t",
+    "qcd_irr::a_",
+    "qcd_irr::b_",
+)
+irr_kin = hep.Kinematics(D, momenta=[K(0), P(0), P(1)]).with_scalar_product(
+    P(0), P(0), s
+)
+irr_scalars = {}
+for (kind, number), (diagram, raw, ports, probes, factor) in irr_inputs.items():
+    # Separate every primitive longitudinal 1/q² before changing propagators.
+    # A common squared denominator would spuriously massify the Feynman term.
+    tags = {
+        edge.id: S(f"qcd_irr::gluon_{edge.id}")
+        for edge in diagram.internal_edges
+        if edge.particle_name == gluon.name
+    }
+    tagged = raw
+    for edge_id, tag in tags.items():
+        tagged = tagged.replace(dot(Q(edge_id, mink(4)), Q(edge_id, mink(4))), tag)
+    components = (
+        tagged.expand().coefficient_list(*tags.values()) if tags else [(one, tagged)]
+    )
+    reconstructed = zero
+    for monomial, numerator in components:
+        powers = {}
+        for edge_id, tag in tags.items():
+            exponent = int((monomial.derivative(tag) * tag / monomial).together())
+            assert exponent in (0, -1), (kind, exponent, monomial)
+            powers[edge_id] = 1 - exponent
+            monomial = monomial.replace(
+                tag, dot(Q(edge_id, mink(4)), Q(edge_id, mink(4)))
+            )
+        reconstructed += monomial * numerator
+        if any(power == 2 for power in powers.values()):
+            assert numerator.replace(xi, one).expand() == zero
+        denominator = (
+            diagram.denominator_expression(in_lmb=True, edge_powers=powers)
+            .to_expression()
+            .replace(mink(dim, index), mink(D, index))
+            .replace(mink(dim), mink(D))
+        )
+        # Keep massive quark denominators intact; only massless ones get M.
+        for match in list(denominator.match(den(edge_, mom_, mass_, quad_))):
+            vals = dict(match)
+            denominator = denominator.replace(
+                den(vals[edge_], vals[mom_], vals[mass_], vals[quad_]),
+                vals[quad_] - (M if vals[mass_] == zero else zero),
+            )
+        numerator = (
+            diagram.momentum_basis()
+            .route_expression(numerator)
+            .replace(mink(dim, index), mink(D, index))
+            .replace(mink(dim), mink(D))
+        )
+        if kind in ("gluon_loop", "ghost_loop", "quark_loop", "tadpole"):
+            numerator = numerator.replace(mink(D, ports[0]), mink(D, mu)).replace(
+                mink(D, ports[1]), mink(D, nu)
+            )
+        for label, projector in probes:
+            traced = (
+                TensorExpression((numerator * projector).expand())
+                .simplify_gamma()
+                .expand()
+                .simplify_metrics()
+                .to_dots()
+                .to_expression()
+            )
+            direct = irr_kin.apply(traced / denominator).replace(
+                vacuum.scalar_product(K(0), K(0)), x
+            )
+            direct = direct.replace_multiple(
+                [
+                    Replacement(
+                        dot(K(0, mink(D)), P(a, mink(D))),
+                        t * dot(K(0, mink(D)), P(a, mink(D))),
+                    ),
+                    Replacement(
+                        dot(P(a, mink(D)), K(0, mink(D))),
+                        t * dot(P(a, mink(D)), K(0, mink(D))),
+                    ),
+                    Replacement(
+                        dot(P(a, mink(D)), P(b, mink(D))),
+                        t**2 * dot(P(a, mink(D)), P(b, mink(D))),
+                    ),
+                    Replacement(P(a, mink(D, index)), t * P(a, mink(D, index))),
+                    Replacement(s, t**2 * s),
+                ]
+            )
+            # The pslash projector lowers the quark external degree by one.
+            # Two-point gluon/ghost tensors need degree two; the vertex needs zero.
+            direct = (
+                direct.series(
+                    t,
+                    0,
+                    2
+                    if kind
+                    in ("gluon_loop", "ghost_loop", "quark_loop", "tadpole", "ghost")
+                    else 0,
+                )
+                .to_expression()
+                .replace(t, one)
+            )
+            scalar = irr_kin.apply(reducer.reduce(direct)).replace(
+                vacuum.scalar_product(K(0), K(0)), x
+            )
+            scalar = (
+                (
+                    scalar
+                    * factor
+                    / gs**2
+                    * (Symbol.I / tree if kind == "vertex" else one)
+                    * (Nf if kind == "quark_loop" else one)
+                )
+                .together()
+                .expand()
+            )
+            irr_scalars[label] = (irr_scalars.get(label, zero) + scalar).together()
+    assert (reconstructed - raw).together() == zero
+irr_terms, irr_targets = {}, set()
+for label, scalar in irr_scalars.items():
+    # Symbolica partial fractions separate the physical and auxiliary tadpoles.
+    # Their principal parts must reconstruct the complete projected integrand.
+    apart = scalar.apart(x)
+    assert (apart - scalar).together() == zero
+    reconstructed = zero
+    terms = []
+    for squared_mass in (M, mass**2):
+        principal = (
+            apart.replace(x, coordinate + squared_mass)
+            .series(coordinate, 0, -1)
+            .to_expression()
+            .expand()
+        )
+        reconstructed += principal.replace(coordinate, x - squared_mass)
+        for monomial, coefficient in principal.coefficient_list(coordinate):
+            if coefficient == zero:
+                continue
+            power = -int(
+                (monomial.derivative(coordinate) * coordinate / monomial).together()
+            )
+            assert monomial == coordinate ** (-power) and power > 0
+            terms.append((squared_mass, power, coefficient))
+            irr_targets.add((power,))
+    assert (scalar - reconstructed).together() == zero, label
+    irr_terms[label] = terms
+irr_solution = hep.IBPFamily(family, name="qcd_direct_irr").reduce_laporta(
+    [list(p) for p in sorted(irr_targets)], max_depth=2
+)
+assert irr_solution.residuals == [[1]]
+irr_poles = {}
+for label, terms in irr_terms.items():
+    expression = sum(
+        (
+            coefficient
+            * irr_solution.reduce([power], integral=integral)
+            .replace(M, squared_mass)
+            .replace(integral(1), squared_mass / epsilon)
+            for squared_mass, power, coefficient in terms
+        ),
+        zero,
+    ).together()
+    pole = (
+        expression.replace(D, 4 - 2 * epsilon)
+        .series(epsilon, 0, -1)
+        .to_expression()
+        .expand()
+        .replace(mink(4, index), mink(D, index))
+    )
+    irr_poles[label] = pole.together().expand()
+    assert pole.coefficient(epsilon**-2) == zero
+    assert pole.derivative(mass).together() == zero
+irr_poles["gluon"] = sum(
+    (irr_poles[k] for k in ("gluon_loop", "ghost_loop", "quark_loop", "tadpole")), zero
+).expand()
+irr_poles["vertex"] = (irr_poles["vertex_0"] + irr_poles["vertex_1"]).expand()
+
+# Physical UV constants agree, but the auxiliary mass does depend on the
+# rearrangement prescription. The reference's quark loop retains its true mass.
+for label in ("quark_p", "quark_m", "ghost", "vertex"):
+    assert (irr_poles[label] - uv_poles[label]).together() == zero
+irr_auxiliary_pole = CA * (1 + 3 * xi) * M * gmunu / (4 * epsilon)
+assert (irr_poles["gluon"] - uv_poles["gluon"] - irr_auxiliary_pole).together() == zero
+assert irr_poles["quark_loop"].derivative(M) == zero
+irr_gluon_g = irr_poles["gluon"].coefficient(gmunu)
+irr_gluon_pp = irr_poles["gluon"].coefficient(ppmunu)
+irr_rhs = Matrix.vec(
+    [
+        -irr_poles["quark_p"],
+        -irr_poles["quark_m"],
+        -irr_gluon_g.coefficient(s),
+        -xi * irr_gluon_pp,
+        -irr_poles["ghost"].coefficient(s),
+        -irr_poles["vertex"],
+        -irr_gluon_g.replace(s, zero) / M,
+        -irr_poles["ghost"].replace(s, zero) / M,
+    ]
+)
+irr_deltas = ct_matrix.solve(irr_rhs)
+for row in range(8):
+    reference = (
+        -CA * (1 + 3 * xi) / (8 * epsilon)
+        if row == 6
+        else deltas[row, 0].to_expression()
+    )
+    assert (irr_deltas[row, 0].to_expression() - reference).together() == zero
+irr_ct_rules = [
+    Replacement(delta, irr_deltas[row, 0].to_expression())
+    for row, delta in enumerate(unknowns)
+]
+for label, generated_ct in ct_coefficients.items():
+    assert (
+        irr_poles[label] + generated_ct.replace_multiple(irr_ct_rules)
+    ).together() == zero
+print(
+    "Direct massive QCD IRR: two tadpole masses, five IBP targets, eight generated CT equations passed",
+    irr_solution.stats,
+)
