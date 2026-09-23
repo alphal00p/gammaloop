@@ -866,7 +866,7 @@
             "Particle.sum_spins",
             "FeynmanDiagram.overall_factor_expression",
             "FeynmanDiagram.denominator_expression",
-            "LoopMomentumBasis.route_expression",
+            "LoopLoopMomentumBasis.route_expression",
             "Idenso.simplify_gamma",
             "Idenso.to_dots",
             "Kinematics.mandelstam",
@@ -887,7 +887,7 @@
             "FeynmanDiagram.denominator_expression",
             "DiagramCut.particles",
             "DiagramCut.orientations",
-            "LoopMomentumBasis.route_expression",
+            "LoopLoopMomentumBasis.route_expression",
             "TensorExpression.projp",
             "TensorExpression.simplify_gamma",
             "TensorExpression.simplify_epsilon",
@@ -1360,7 +1360,7 @@
             "Model.generate_diagrams",
             "Model.expand_couplings",
             "Idenso.simplify_gamma",
-            "LoopMomentumBasis.route_expression",
+            "LoopLoopMomentumBasis.route_expression",
             "FeynmanDiagram.integral_family",
             "IntegralFamily.mapping_to",
             "TensorReducer.reduce",
@@ -1408,7 +1408,7 @@
             "Model.generate_diagrams",
             "Model.expand_couplings",
             "Idenso.simplify_gamma",
-            "LoopMomentumBasis.route_expression",
+            "LoopLoopMomentumBasis.route_expression",
             "FeynmanDiagram.integral_family",
             "IntegralFamily.find_mapping",
             "IntegralMapping.apply",
@@ -1450,7 +1450,7 @@
             "Model.generate_diagrams",
             "Model.expand_couplings",
             "Idenso.simplify_gamma",
-            "LoopMomentumBasis.route_expression",
+            "LoopLoopMomentumBasis.route_expression",
             "FeynmanDiagram.integral_family",
             "IntegralFamily.find_mapping",
             "IntegralMapping.apply",
@@ -4840,7 +4840,27 @@
         "TimeUsed",
         "ToPaVe"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: generated tadpole, three vertex channels and three local counterterms; native scalar masters and generated matrix solve reproduce all MS/MSbar constants and the common-measure scheme difference",
+      "validated_components": [
+        {
+          "scope": "generated massive one-loop self-energy and four-point UV coefficients; local counterterms from bare-factor expansions; field, mass-squared and coupling constants in MS and MSbar",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_phi4_one_loop.py",
+          "components": [
+            "Model.phi4",
+            "Model.generate_diagrams",
+            "Model.expand_couplings",
+            "FeynmanDiagram.integral_family",
+            "LoopMomentumBasis.route_expression",
+            "Kinematics.mandelstam",
+            "OneLOop.IntegralFamily.reduce",
+            "OneLOop.get_expression",
+            "OneLOop.select_branch",
+            "Matrix.solve"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/phi4_renormalization.py. Generated propagators are reconstructed before master conversion. No renormalization constants are supplied as inputs. Pole cancellation and the finite scheme difference are checked symbolically; both live scheme selections, strict Marimo checks and HTML export pass."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/Phi4/TwoLoops/Renormalization-SS",
@@ -5080,7 +5100,26 @@
         "TimeUsed",
         "ToPaVe"
       ],
-      "end_to_end_validation": "pending"
+      "end_to_end_validation": "passed: all three generated scattering channels, generated subtraction, exact physical massless expression and leading high-energy logarithm; additional massive and threshold finite checks",
+      "validated_components": [
+        {
+          "scope": "massive and massless finite one-loop correction; eighteen independent bubble checks across six scattering points; exact massless physical branch and fixed-t high-energy logarithm",
+          "test": "crates/feynkit-py/tests/installed_feyncalc_phi4_one_loop.py",
+          "components": [
+            "Model.generate_diagrams",
+            "Kinematics.mandelstam",
+            "OneLOop.IntegralFamily.reduce",
+            "OneLOop.reduction_coefficients",
+            "OneLOop.compile_native",
+            "OneLOop.get_expression",
+            "OneLOop.select_branch",
+            "Symbolica.derivative",
+            "Symbolica.series"
+          ],
+          "result": "passed",
+          "note": "Live notebook: hep/phi4_scattering.py, composed from phi4_renormalization.py. Feynman-parameter quadrature and analytic integration of logarithmic roots independently check finite values and the two-particle cut. The massless formula is obtained from OneLOop branch selection; all 36 kinematics/scheme/coupling control states, strict Marimo checks and HTML export pass. The massless scaleless zero-invariant point is excluded."
+        }
+      ]
     },
     {
       "url": "https://feyncalc.github.io/FeynCalcExamples/YukawaS/OneLoop/Renormalization",

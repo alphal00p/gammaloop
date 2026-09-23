@@ -216,7 +216,7 @@ unknowns = [delta_field, delta_mass, delta_vertex]
 ct_matrix = Matrix.from_linear(
     3, 3, [row.coefficient(x) for row in rows for x in unknowns]
 )
-rhs = Matrix.vec([zero, -self_pole / M, -vertex_pole])
+rhs = Matrix.vec([zero, -loop_poles["self_energy"] / M, -loop_poles["vertex"]])
 solved = ct_matrix.solve(rhs)
 residues = [solved[i, 0].to_expression() for i in range(3)]
 assert residues == [zero, E("1/2"), E("3/2")]
@@ -295,7 +295,7 @@ for invariant, sign in [(s, 1), (t, -1), (u, -1)]:
     physical_finite += channel_coefficients[invariant] / coupling**2 * branch
 physical_finite = physical_finite.replace(u, -s - t)
 expected_massless = (
-    6 - log(s / mu2) - log(-t / mu2) - log((s + t) / mu2) + Symbol.I * pi
+    6 - log(s / mu2) - log(-t / mu2) - log(((s + t) / mu2).expand()) + Symbol.I * pi
 ) / 2
 assert (physical_finite - expected_massless).expand() == zero
 asymptotic_parameter = S("phi4_one::inverse_s")
