@@ -328,6 +328,47 @@ coordinates first; use a verified momentum mapping to transform a general
 contracted numerator. Sector discovery and subtopology minimization remain
 separate work.
 
+== Family collections
+
+`IntegralFamily.find_mappings(families)` groups a collection and returns one
+`(target_index, mapping)` per input family, in input order. Target indices refer
+to the original collection. A retained representative maps to itself; every
+other map goes directly to a representative, so there are no mapping chains.
+Earlier entries are preferred. Apply `mapping.map_powers` to retain signed
+propagator powers, and `mapping.apply` for scalar numerator substitutions.
+
+The shared implementation canonizes each Symanzik pair once with Symbolica and
+compares affine momentum shifts only inside matching groups. Every merge still
+requires a real shift with unit absolute Jacobian and exact denominator
+identities. Equal Symanzik polynomials without a verified momentum map remain
+separate. All inputs need compatible external kinematics and nonsingular
+quadratic forms; unsupported shift searches and per-pair candidate-budget
+exhaustion raise errors rather than certifying inequivalence.
+
+Select positive-power sectors and remove certified scaleless contributions
+before grouping. Complete the retained families afterwards, preserving their
+original denominator order and adding zero auxiliary powers. Different
+propagator counts remain separate in this operation. Subtopology embeddings
+remain available through `source.find_mapping(target)`; external-momentum
+exchanges and integration prescriptions are not inferred.
+
+// docs-example: compile feynkit-integral-family-grouping
+```python
+from symbolica import E, S
+import symbolica.community.feynkit as fk
+
+k, l, p, s = S("group_docs::k", "group_docs::l", "group_docs::p", "s")
+kin = fk.Kinematics(momenta=[k, l, p]).with_scalar_product(p, p, s)
+square = lambda v: kin.scalar_product(v, v)
+families = [
+    fk.IntegralFamily([k], [p], [square(k)-1, square(k+p/2)-2], kinematics=kin),
+    fk.IntegralFamily([l], [p], [square(l)-2, square(l-p/2)-1], kinematics=kin),
+]
+mappings = fk.IntegralFamily.find_mappings(families)
+assert [target for target, mapping in mappings] == [0, 0]
+assert mappings[1][1].map_powers([2, -1]) == [-1, 2]
+```
+
 == Sector support and scalelessness
 
 `family.sector(powers)` retains the positive-power propagators in their original

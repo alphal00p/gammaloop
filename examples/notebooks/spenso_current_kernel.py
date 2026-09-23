@@ -387,16 +387,8 @@ def _():
     network = current.to_network(library=library)
     network.execute(library=library)
     kernel = network.result_tensor(library=library)
-    bar_components, components = Jbar.components(), J.components()
-    kernel  # Components in the order mu = 0, 1, 2, 3.
-    return (
-        Representation,
-        TensorExpression,
-        bar_components,
-        components,
-        kernel,
-        network,
-    )
+    kernel# Components in the order mu = 0, 1, 2, 3.
+    return Representation, TensorExpression, kernel, network
 
 
 @app.cell(hide_code=True)

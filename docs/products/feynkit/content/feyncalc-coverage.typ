@@ -1921,14 +1921,31 @@ source pool, with idempotence and exact reconstruction of every scalar product
 checked. The Rust implementation belongs to `feynkit-graph`; Python only
 forwards the candidate list. No GammaLoop-specific completion is introduced.
 
-`hep/topology_preparation.py` displays the source integrals, partial-fraction
-powers, sector classification, and original/completed families. This remains
-*partial* gallery coverage: global topology minimization and momentum mappings
-between all surviving families are still required. Intermediate counts depend
-on the decomposition order and are not compared to FeynCalc's final minimized
-topology count.
-Rust tests, Clippy, installed-host regressions, all 28 live control combinations,
-strict Marimo checks, Ruff and HTML export pass.
+`IntegralFamily.find_mappings` canonizes each Symanzik pair once with Symbolica,
+then searches for verified affine loop maps within matching groups. It maps
+434 surviving families directly into 223 retained representatives. Every
+propagator identity is checked exactly, as is each returned two-loop Jacobian
+and a scalar numerator substitution. Grouping the representatives again leaves
+them unchanged. Polynomial-only equivalences without a verified loop map are
+kept separate; Rust regressions exercise this boundary, incompatible kinematics,
+internal-label collisions, and candidate-budget errors.
+
+Every nonzero partial-fraction term from all 251 original integrals is aligned
+to its source-family ordering, mapped into its representative, and padded with
+zero auxiliary powers. Combining equal target terms leaves 551 terms, with 59
+input integrals vanishing. The full pinned-input regression locks these counts.
+`hep/topology_preparation.py` displays the source inputs, both scalelessness
+certificates, completed families, momentum maps and final representative powers.
+The shared implementation lives in `feynkit-graph`; Python only binds it.
+
+This remains *partial* gallery coverage: collection grouping currently keeps
+different propagator counts separate. Cross-size subtopology minimization
+remains to be integrated into this workflow; pairwise embeddings are already
+available through `find_mapping`. Counts depend on partial-fraction ordering,
+so 223 verified representatives are not claimed to reproduce FeynCalc's 241
+from its different decomposition. External-momentum exchanges are not enabled.
+Rust tests, Clippy, installed-host regressions, 28 input/sector and nine mapping
+control selections, strict Marimo checks, Ruff and HTML export pass.
 
 == Validation standard
 

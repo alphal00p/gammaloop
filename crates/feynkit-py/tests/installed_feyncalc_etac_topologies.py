@@ -1,6 +1,6 @@
 """Full B -> eta_c topology input: algebraic partial fractions and completion.
 
-Global topology minimization remains a separate check.
+Verified collection mappings precede completion of representative families.
 The input fixture records the pinned FeynCalc source and its digest.
 """
 
@@ -160,7 +160,83 @@ print(
     "PASS: 251 exact partial fractions, 677 independent sectors, 112 parametric and 131 transverse certificates, 434 automatic self-mappings, and 677 preferred completions",
     flush=True,
 )
+
+# Group physical sectors before adding auxiliary denominators. Complete only
+# the retained representatives when constructing final integral coordinates.
+surviving_rows = [row for row in completed_rows if row[2] == "not detected"]
+surviving = [row[0] for row in surviving_rows]
+mappings = hep.IntegralFamily.find_mappings(surviving)
+representatives = sorted({target for target, _ in mappings})
+for source, (target, mapping) in enumerate(mappings):
+    assert mappings[target][0] == target
+    for i, j in enumerate(mapping.denominator_map):
+        assert (
+            mapping.apply(surviving[source].denominators[i])
+            - surviving[target].denominators[j]
+        ).together() == E("0")
+    # Independently check the two-loop Jacobian in the returned coordinates.
+    images = [image for _, image in mapping.momentum_rules]
+    coefficients = [dict(image.coefficient_list(k1, k2)) for image in images]
+    determinant = (
+        coefficients[0].get(k1, E("0")) * coefficients[1].get(k2, E("0"))
+        - coefficients[0].get(k2, E("0")) * coefficients[1].get(k1, E("0"))
+    ).together()
+    assert determinant in (E("1"), E("-1"))
+    assert (
+        mapping.apply(kin.scalar_product(k1, k2)) - kin.scalar_product(*images)
+    ).together() == E("0")
+assert [
+    target
+    for target, _ in hep.IntegralFamily.find_mappings(
+        [surviving[i] for i in representatives]
+    )
+] == list(range(len(representatives)))
+
+# Map every nonzero partial-fraction term from every original input to the
+# completed representative. Preserve coefficients and propagator powers.
+survivor_indices = {
+    tuple(sorted(d.to_canonical_string() for d in family.denominators)): i
+    for i, family in enumerate(surviving)
+}
+final_integrals = []
+for family, fractions in input_rows:
+    terms = {}
+    for coefficient, powers in fractions:
+        assert all(power >= 0 for power in powers)
+        sector = family.sector(powers)
+        key = tuple(sorted(d.to_canonical_string() for d in sector.denominators))
+        if key not in survivor_indices:
+            continue  # Removed only by one of the independently checked certificates.
+        source = survivor_indices[key]
+        alignment = sector.mapping_to(surviving[source], [k1, k2])
+        assert alignment is not None
+        source_powers = alignment.map_powers([power for power in powers if power > 0])
+        target, mapping = mappings[source]
+        mapped_powers = mapping.map_powers(source_powers)
+        completed = surviving_rows[target][1]
+        mapped_powers += [0] * (len(completed.denominators) - len(mapped_powers))
+        term = (target, tuple(mapped_powers))
+        terms[term] = terms.get(term, E("0")) + coefficient
+    final_integrals.append(
+        {
+            term: coefficient.together()
+            for term, coefficient in terms.items()
+            if coefficient.together() != E("0")
+        }
+    )
+assert len(final_integrals) == 251
+assert len(representatives) == 223
+assert sum(len(terms) for terms in final_integrals) == 551
+assert sum(not terms for terms in final_integrals) == 59
 print(
-    "Pending: global topology minimization",
+    "GROUPING",
+    len(surviving),
+    "families ->",
+    len(representatives),
+    "representatives;",
+    sum(len(terms) for terms in final_integrals),
+    "mapped terms;",
+    sum(not terms for terms in final_integrals),
+    "zero inputs",
     flush=True,
 )
