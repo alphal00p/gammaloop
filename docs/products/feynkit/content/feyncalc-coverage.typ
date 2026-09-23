@@ -1169,6 +1169,26 @@ $-i g^2 ln(s/mu^2)/(16 pi^2)$ while preserving the physical imaginary part.
 numerical calculation. Generic massless channels exclude the scaleless
 zero-invariant point, where a separate UV/IR pole separation is required.
 
+== Generated cubic scalar renormalization
+
+`hep/phi3_renormalization.py` generates the bubble, triangle and three local
+counterterms from `Model.phi3()`. The actual routed propagators become doubled
+and tripled massive tadpoles at zero external momenta. Native parametric and
+Laporta reductions agree. OneLOop supplies the tadpole master, and expanding
+the dimension-dependent coefficients retains the finite triangle
+$-i g^3/(32 pi^2 m^2)$. The generic-momentum bubble verifies that its UV pole
+has no momentum dependence.
+
+The generated counterterm matrix gives $Z_phi=Z_g=1$ and
+$Z_m=1+g^2 Delta/(32 pi^2 m^2)$, matching the
+#link("https://feyncalc.github.io/FeynCalcExamples/Phi3/OneLoop/Renormalization")[cubic scalar reference].
+Here $Z_m$ renormalizes the mass squared and $g$ is dimensionful. Both MS and
+MSbar cancellation and their finite difference are checked. Four massive
+kinematic points compare the finite self-energy with independent parameter
+integrals. The installed regression and all eight live scheme/kinematics
+combinations pass. This covers the reference's two- and three-point functions
+in four dimensions; a one-point tadpole or a vacuum condition is separate.
+
 == Generated electron anomalous magnetic moment
 
 `hep/gminus2.py` and `installed_feyncalc_gminus2.py` generate the tree and
