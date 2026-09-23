@@ -475,6 +475,27 @@
 
 #let _render-tensor(ctx, settings) = {
   let node = ctx.node
+  if node.arguments.len() > 0 {
+    let component = node.arguments.last()
+    if _is-function(component) and _name(component) == "spenso::cind" and (
+      component.arguments.all(index => _natural-index(index) != none)
+    ) {
+      let base = _head(ctx, node)
+      let labels = node.arguments.slice(0, -1).map(argument => _visual(ctx, argument))
+      if labels.len() > 0 {
+        base = if settings.symbol-scripts {
+          _row-attachment(base, labels.map(source => (source: source, row: "bottom")), settings)
+        } else {
+          let separator = if settings.commas { $,$ } else { h(0.15em) }
+          _tight((base, _parentheses(labels.join(separator))))
+        }
+      }
+      if component.arguments.len() == 0 { return base }
+      let coordinates = component.arguments.map(index => _visual(ctx, index)).join($,$)
+      let body = math.attach(base, t: coordinates)
+      return if ctx.power-base { _parentheses(body) } else { body }
+    }
+  }
   if _has-tag(node, "rank1") {
     let compact = _compact-vector(node, ctx, settings)
     if compact != none { return compact.label }

@@ -14,6 +14,7 @@ use symbolica::{
         SymbolAttribute, SymbolBuilder,
     },
     coefficient::CoefficientView,
+    domains::SelfRing,
     printer::{PrintOptions, PrintState},
     symbol, tag,
 };
@@ -616,6 +617,84 @@ fn qualified_typst_index(
     ))
 }
 
+/// Component coordinates belong to the tensor head, not to its scalar arguments.
+/// Keep the `cind` payload intact and change only its presentation.
+fn tensor_component_print(
+    atom: AtomView<'_>,
+    options: &PrintOptions,
+    state: &PrintState,
+) -> Option<String> {
+    let resolved = SpensoPrintSettings::resolve(options)?;
+    let mut print_modes = options.custom_print_mode.clone();
+    print_modes.extend(ahash::HashMap::from(resolved.presentation));
+    let options = PrintOptions {
+        custom_print_mode: print_modes,
+        ..options.clone()
+    };
+    let options = &options;
+    let AtomView::Fun(function) = atom else {
+        return None;
+    };
+    let arguments = function.iter().collect::<Vec<_>>();
+    let (component, labels) = arguments.split_last()?;
+    let AtomView::Fun(component) = component else {
+        return None;
+    };
+    if component.get_symbol() != AIND_SYMBOLS.cind {
+        return None;
+    }
+    let indices = component
+        .iter()
+        .map(natural_index)
+        .collect::<Option<Vec<_>>>()?;
+    let head = function.get_symbol();
+    let base = if labels.is_empty() {
+        if resolved.backend == SpensoPrintBackend::Typst {
+            typst_tensor_head(head)
+        } else if let Some(label) = head
+            .get_tags()
+            .iter()
+            .find_map(|tag| tag.strip_prefix("spenso::tensor-label:"))
+        {
+            label.to_owned()
+        } else {
+            Atom::var(head).format_string(options, PrintState::new())
+        }
+    } else {
+        FunctionBuilder::new(head)
+            .add_args(labels.iter().copied())
+            .finish()
+            .format_string(options, PrintState::new())
+    };
+    if indices.is_empty() {
+        return Some(base);
+    }
+    let separator = if resolved.backend == SpensoPrintBackend::Typst {
+        " \",\" "
+    } else {
+        ","
+    };
+    let indices = indices
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(separator);
+    let rendered = match resolved.backend {
+        SpensoPrintBackend::Plain => format!("{base}^({indices})"),
+        SpensoPrintBackend::Latex => format!("{base}^{{{indices}}}"),
+        SpensoPrintBackend::Typst => format!("attach({base},t:{indices})"),
+    };
+    Some(if state.in_exp_base {
+        match resolved.backend {
+            SpensoPrintBackend::Plain => format!("({rendered})"),
+            SpensoPrintBackend::Latex => format!(r"\left({rendered}\right)"),
+            SpensoPrintBackend::Typst => format!("lr(({rendered}))"),
+        }
+    } else {
+        rendered
+    })
+}
+
 /// Print a tagged tensor using native Typst attachments in Spenso's Typst mode.
 ///
 /// Every script occupies the same horizontal column in the top and bottom
@@ -628,7 +707,7 @@ fn qualified_typst_index(
 pub fn tensor_print(
     atom: AtomView<'_>,
     options: &PrintOptions,
-    _state: &PrintState,
+    state: &PrintState,
 ) -> Option<String> {
     let resolved = SpensoPrintSettings::resolve(options)?;
     let settings = resolved.presentation;
@@ -678,6 +757,11 @@ pub fn tensor_print(
         });
     }
     let symbol = function.get_symbol();
+    if symbol.has_tag(&SPENSO_TAG.tensor)
+        && let Some(component) = tensor_component_print(atom, options, state)
+    {
+        return Some(component);
+    }
     if symbol.has_tag(&SPENSO_TAG.tensor)
         && symbol.has_tag(&SPENSO_TAG.rank1)
         && let Some(label) = symbol
@@ -881,6 +965,7 @@ pub fn register_tensor_symbol(
     SymbolBuilder::new(name)
         .with_attributes(attributes)
         .with_tags(tags)
+        .with_print_function(tensor_print)
         .build()
         .map_err(|error| error.to_string())
 }
@@ -1529,11 +1614,12 @@ impl SpensoTags {
                     if wrapper.get_nargs() != 1 {
                         return None;
                     }
-                    tensor_print(
-                        unwrap_tensor_display(wrapper.iter().next()?),
-                        options,
-                        state,
-                    )
+                    let tensor = unwrap_tensor_display(wrapper.iter().next()?);
+                    tensor_print(tensor, options, state).or_else(|| {
+                        let mut output = String::new();
+                        tensor.format(&mut output, options, *state).ok()?;
+                        Some(output)
+                    })
                 }
             ),
             i_: symbol!("i_", tag = &index),
@@ -1894,6 +1980,82 @@ mod tests {
 
         assert_eq!(bracket.printer(compact).to_string(), "z·a");
         assert_eq!(bracket.printer(PrintOptions::typst()).to_string(), "z a");
+    }
+
+    #[test]
+    fn tensor_components_print_coordinates_without_changing_atoms() {
+        let head =
+            register_tensor_symbol(wrap_symbol!("component_print_test::A"), vec![], false).unwrap();
+        let component =
+            crate::shadowing::symbolica_utils::atomic_expanded_label_id(&[0, 12], head, &[]);
+        let original = component.to_string();
+        let mut plain = SpensoPrintSettings::compact().nice_symbolica();
+        plain.color_builtin_symbols = false;
+        let latex = PrintOptions {
+            custom_print_mode: SpensoPrintSettings::compact().into(),
+            ..PrintOptions::latex()
+        };
+        assert_eq!(component.printer(plain).to_string(), "A^(0,12)");
+        assert_eq!(component.printer(latex).to_string(), "A^{0,12}");
+        assert_eq!(
+            component.printer(PrintOptions::typst()).to_string(),
+            r#"attach(A,t:0 "," 12)"#
+        );
+        assert_eq!(component.to_string(), original);
+        assert_eq!(
+            component,
+            function!(
+                head,
+                function!(crate::structure::abstract_index::AIND_SYMBOLS.cind, 0, 12)
+            )
+        );
+
+        let scalar = crate::shadowing::symbolica_utils::atomic_expanded_label_id(&[], head, &[]);
+        assert_eq!(scalar.printer(PrintOptions::typst()).to_string(), "A");
+    }
+
+    #[test]
+    fn tensor_component_printing_preserves_labels_and_groups_powers() {
+        let head = SymbolBuilder::new(wrap_symbol!("component_print_test::Momentum"))
+            .with_tags([
+                SPENSO_TAG.tensor.as_str(),
+                SPENSO_TAG.rank1.as_str(),
+                "spenso::tensor-label:q",
+            ])
+            .with_print_function(super::tensor_print)
+            .build()
+            .unwrap();
+        let component = crate::shadowing::symbolica_utils::atomic_expanded_label_id(
+            &[0],
+            head,
+            &[Atom::num(7)],
+        );
+        assert_eq!(
+            component
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            "attach(q_7,t:0)"
+        );
+        let latex = PrintOptions {
+            custom_print_mode: SpensoPrintSettings::typst().into(),
+            ..PrintOptions::latex()
+        };
+        assert_eq!(component.printer(latex.clone()).to_string(), "q_{7}^{0}");
+        assert!(
+            component
+                .clone()
+                .pow(2)
+                .printer(latex)
+                .to_string()
+                .contains(r"\left(q_{7}^{0}\right)")
+        );
+        assert!(
+            component
+                .pow(2)
+                .printer(PrintOptions::typst())
+                .to_string()
+                .contains("lr((attach(q_7,t:0)))")
+        );
     }
 
     #[test]
