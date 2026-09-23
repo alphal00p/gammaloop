@@ -21,6 +21,22 @@
   assert.eq(actual, notation.render(tree(component()), notation: notation.notation(tensor-layout: layout)))
 }
 
+// Ordinary parameters stay in parentheses before the coordinate superscript.
+#let x = (kind: "variable", symbol: (name: "x",), source: "x")
+#let parameterized = call("A", (x, number(7), coordinates), tags: ("spenso::tensor",))
+#let parameters = (notation.render(x), [7]).join($,$)
+#let parameterized-expected = math.attach(
+  ([A], math.lr($ (#parameters) $)).join(),
+  t: ([0], [12]).join($,$),
+)
+#for layout in ("ports", "schoonschip", "call") {
+  for scripts in (false, true) {
+    assert.eq(parameterized-expected, notation.render(tree(parameterized), notation: notation.notation(
+      tensor-layout: layout, symbol-scripts: scripts,
+    )))
+  }
+}
+
 // A power must not merge with the component superscript.
 #let squared = notation.render(tree((kind: "power", base: component(), exponent: number(2))))
 #assert.eq(squared, math.attach(math.lr($ (#actual) $), t: notation.render(number(2))))
@@ -38,4 +54,4 @@
 #let unrelated = call("A", (call("other::cind", (number(0), number(12))),), tags: ("spenso::tensor",))
 #assert.ne(actual, notation.render(tree(unrelated)))
 
-$ #actual $
+$ #actual quad #parameterized-expected $
