@@ -97,7 +97,7 @@ for count in (1, 3, 5):
         assert trace != E("0")
         traces.append(trace)
         weights.append(weight)
-        raw = diagram.integral_family(kinematics=kinematics)
+        raw = diagram.propagator_family(kinematics=kinematics)
         # Include independent polarization probes among the external vectors so
         # the verified scalar map transports K.e_i as well as K.p_i. No added
         # denominator or kinematic constraint is needed for an affine mapping.

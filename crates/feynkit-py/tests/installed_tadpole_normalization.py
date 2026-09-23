@@ -106,7 +106,7 @@ for label, vertices, outgoing, mass, expected_trace, wick_weight in [
         # The Lorentz dimension is D while the Dirac identity has trace four.
         assert (trace / (m * y * Nc)).cancel() == E("4")
     kin = hep.Kinematics(D, momenta=[K(0)])
-    family = diagram.integral_family(kinematics=kin)
+    family = diagram.propagator_family(kinematics=kin)
     if label != "scalar_quartic":
         # The one-point families need no external scalar products or extra ISPs.
         assert family.rewrite_numerator(trace, [S("tadpole::d0")]) == trace

@@ -22,7 +22,7 @@ use crate::structure::{
     TensorStructure,
     abstract_index::AIND_SYMBOLS,
     representation::{BaseRepName, LibraryRep, Minkowski},
-    slot::{AbsInd, DummyAind, ParseableAind, Slot, SlotError},
+    slot::{AbsInd, DummyAind, ParseableAind, Slot, SlotError, SlotMatcher},
 };
 use crate::{network::tags::SPENSO_TAG, shadowing};
 
@@ -53,6 +53,8 @@ pub trait StructureFromAtom: Sized {
     ///
     /// Implementations should treat `Fast` as a non-semantic syntax pass and
     /// reserve graph construction or dummy materialization for `Expanded`.
+    /// Implementations reject nested chain/trace placeholder scopes; delegating
+    /// wrappers must not repeat that whole-expression validation.
     fn structure_from_atom(
         value: AtomView<'_>,
         mode: StructureInferenceMode,
@@ -65,6 +67,16 @@ pub trait StructureFromAtom: Sized {
 }
 
 pub trait AtomStructureExt {
+    /// Whether an explicit index payload repeats in a multiplicative scope.
+    ///
+    /// Scans arbitrary function heads in the normalized Atom tree without
+    /// constructing tensor structures; known slot payloads remain opaque.
+    /// Summands are alternatives; integer powers with magnitude greater than
+    /// one repeat the base's indices. Compact representations carry no explicit
+    /// index. Equality ignores dimension and duality: this is a syntactic
+    /// candidate check, not a certificate of a valid contraction.
+    fn has_repeated_explicit_indices(&self) -> bool;
+
     /// Replace four-dimensional Minkowski representations and slots by `dimension`.
     /// This must precede Lorentz contractions; scalar factors and other spaces are unchanged.
     fn with_lorentz_dimension(&self, dimension: AtomView<'_>) -> Atom;
@@ -90,6 +102,10 @@ pub trait AtomStructureExt {
 }
 
 impl AtomStructureExt for Atom {
+    fn has_repeated_explicit_indices(&self) -> bool {
+        self.as_view().has_repeated_explicit_indices()
+    }
+
     fn with_lorentz_dimension(&self, dimension: AtomView<'_>) -> Atom {
         self.as_view().with_lorentz_dimension(dimension)
     }
@@ -111,6 +127,10 @@ impl AtomStructureExt for Atom {
 }
 
 impl AtomStructureExt for AtomView<'_> {
+    fn has_repeated_explicit_indices(&self) -> bool {
+        super::indices::RepeatedIndices::contains(*self)
+    }
+
     fn with_lorentz_dimension(&self, dimension: AtomView<'_>) -> Atom {
         self.replace_map(|value, _, output| {
             if let AtomView::Fun(fun) = value
@@ -134,8 +154,7 @@ impl AtomStructureExt for AtomView<'_> {
         &self,
         mode: StructureInferenceMode,
     ) -> Result<Canonicalized<S>, StructureError> {
-        self.validate_chain_like_nesting()
-            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
+        // StructureFromAtom owns validation, including callers that bypass this wrapper.
         S::structure_from_atom(*self, mode)
     }
 
@@ -291,7 +310,9 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom
         TensorialSyntax::validate_chain_like_nesting(value, None)
             .map_err(|error| StructureError::ParsingError(error.to_string()))?;
         match mode {
-            StructureInferenceMode::Fast => Self::leaf_structure_from_atom(value),
+            StructureInferenceMode::Fast => {
+                Self::leaf_structure_from_atom(value, &mut SlotMatcher::default())
+            }
             StructureInferenceMode::Expanded => Self::expanded_shorthand_structure_from_atom(value),
         }
     }
@@ -306,15 +327,16 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// syntactic tensor parsing.
     fn leaf_structure_from_atom(
         value: AtomView<'_>,
+        matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
         match value {
             AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.chain => {
-                Self::chain_structure_from_fun(fun)
+                Self::chain_structure_from_fun(fun, matcher)
             }
             AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.trace => {
-                Self::trace_structure_from_fun(fun)
+                Self::trace_structure_from_fun(fun, matcher)
             }
-            _ => Self::from_syntactic_atom(value).map(Canonicalized::identity),
+            _ => Self::from_syntactic_atom(value, matcher).map(Canonicalized::identity),
         }
     }
 
@@ -324,8 +346,11 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// functions each have their own convention below. Scalar syntax is carried
     /// internally as `OrderedStructure::empty()` and converted to
     /// `EmptyStructure` only at this leaf boundary.
-    fn from_syntactic_atom(value: AtomView<'_>) -> Result<Self, StructureError> {
-        let structure = Self::syntactic_structure_from_atom(value)?;
+    fn from_syntactic_atom(
+        value: AtomView<'_>,
+        matcher: &mut SlotMatcher,
+    ) -> Result<Self, StructureError> {
+        let structure = Self::syntactic_structure_from_atom(value, matcher)?;
         if structure.is_scalar() {
             Err(StructureError::EmptyStructure(SlotError::EmptyStructure))
         } else {
@@ -335,17 +360,18 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
 
     pub(super) fn syntactic_structure_from_atom(
         value: AtomView<'_>,
+        matcher: &mut SlotMatcher,
     ) -> Result<Self, StructureError> {
         match value {
             AtomView::Add(add) => {
                 let Some(first) = add.iter().next() else {
                     return Ok(OrderedStructure::empty());
                 };
-                Self::syntactic_structure_from_atom(first)
+                Self::syntactic_structure_from_atom(first, matcher)
             }
-            AtomView::Pow(pow) => Self::from_power_atom(pow),
-            AtomView::Mul(mul) => Self::from_product_atom(mul),
-            AtomView::Fun(fun) => Self::from_function_atom(fun),
+            AtomView::Pow(pow) => Self::from_power_atom(pow, matcher),
+            AtomView::Mul(mul) => Self::from_product_atom(mul, matcher),
+            AtomView::Fun(fun) => Self::from_function_atom(fun, matcher),
             _ => Ok(OrderedStructure::empty()),
         }
     }
@@ -356,9 +382,12 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// has no external structure, while an odd integer power keeps the base
     /// structure. Fractional powers and powers of non-self-dual tensors are
     /// rejected because their external structure is not well-defined here.
-    fn from_power_atom(pow: PowView<'_>) -> Result<Self, StructureError> {
+    fn from_power_atom(
+        pow: PowView<'_>,
+        matcher: &mut SlotMatcher,
+    ) -> Result<Self, StructureError> {
         let (base, exp) = pow.get_base_exp();
-        let base_structure = Self::syntactic_structure_from_atom(base)?;
+        let base_structure = Self::syntactic_structure_from_atom(base, matcher)?;
 
         if base_structure.is_scalar() {
             Ok(base_structure)
@@ -387,12 +416,15 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     ///
     /// Scalar factors are empty structures, so merging them is a no-op. If no
     /// factor exposes a slot, the product remains an empty scalar structure.
-    fn from_product_atom(product: MulView<'_>) -> Result<Self, StructureError> {
+    fn from_product_atom(
+        product: MulView<'_>,
+        matcher: &mut SlotMatcher,
+    ) -> Result<Self, StructureError> {
         let mut structure = OrderedStructure::empty();
 
         for factor in product {
             structure = structure
-                .merge(&Self::syntactic_structure_from_atom(factor)?)?
+                .merge(&Self::syntactic_structure_from_atom(factor, matcher)?)?
                 .0;
         }
 
@@ -406,14 +438,17 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// metadata for the eventual named leaf and do not erase slots already seen.
     /// Chain projectors without direct structural arguments expose the combined
     /// slots of their factor sequence.
-    fn from_function_atom(fun: FunView<'_>) -> Result<Self, StructureError> {
+    fn from_function_atom(
+        fun: FunView<'_>,
+        matcher: &mut SlotMatcher,
+    ) -> Result<Self, StructureError> {
         if fun.get_symbol().is_scalar() {
             return Ok(OrderedStructure::empty());
         }
         if fun.get_symbol() == AIND_SYMBOLS.aind {
             let mut slots = Vec::new();
             for arg in fun.iter() {
-                slots.push(arg.try_into()?);
+                slots.push(matcher.parse::<LibraryRep, Aind>(arg)?);
             }
             return Ok(OrderedStructure::new(slots).into_canonical());
         }
@@ -421,7 +456,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         let mut slots = Vec::new();
 
         for arg in fun.iter() {
-            match Slot::<LibraryRep, Aind>::try_from(arg) {
+            match matcher.parse::<LibraryRep, Aind>(arg) {
                 Ok(slot) => {
                     slots.push(slot);
                 }
@@ -429,7 +464,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
                     if let AtomView::Fun(fun) = arg
                         && fun.get_symbol() == AIND_SYMBOLS.aind
                     {
-                        let internal = Self::from_function_atom(fun)?;
+                        let internal = Self::from_function_atom(fun, matcher)?;
                         slots.extend(internal.structure);
                     }
                 }
@@ -443,7 +478,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
             let mut structure = OrderedStructure::empty();
             for factor in fun.iter() {
                 structure = structure
-                    .merge(&Self::syntactic_structure_from_atom(factor)?)?
+                    .merge(&Self::syntactic_structure_from_atom(factor, matcher)?)?
                     .0;
             }
             return Ok(structure);
@@ -479,18 +514,21 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// may contain other external slots, so they are scanned recursively. The
     /// symbolic placeholders `in` and `out` are just wiring labels and are not
     /// materialized as dummies in this mode.
-    fn chain_structure_from_fun(fun: FunView<'_>) -> Result<Canonicalized<Self>, StructureError> {
+    fn chain_structure_from_fun(
+        fun: FunView<'_>,
+        matcher: &mut SlotMatcher,
+    ) -> Result<Canonicalized<Self>, StructureError> {
         let args = fun.iter().collect::<Vec<_>>();
         if args.len() < 2 {
             return Err(StructureError::WrongNumberOfArguments(args.len(), 2));
         }
 
         let mut slots = vec![
-            Slot::<LibraryRep, Aind>::try_from(args[0])?,
-            Slot::<LibraryRep, Aind>::try_from(args[1])?,
+            matcher.parse::<LibraryRep, Aind>(args[0])?,
+            matcher.parse::<LibraryRep, Aind>(args[1])?,
         ];
         for factor in &args[2..] {
-            Self::append_syntactic_slots(*factor, &mut slots)?;
+            Self::append_syntactic_slots(*factor, &mut slots, matcher)?;
         }
 
         Self::from_slots(slots)
@@ -501,7 +539,10 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// `args[0]` is the traced representation, not an exposed slot. The factors
     /// are scanned for any non-placeholder slots that remain external to the
     /// trace shorthand.
-    fn trace_structure_from_fun(fun: FunView<'_>) -> Result<Canonicalized<Self>, StructureError> {
+    fn trace_structure_from_fun(
+        fun: FunView<'_>,
+        matcher: &mut SlotMatcher,
+    ) -> Result<Canonicalized<Self>, StructureError> {
         let args = fun.iter().collect::<Vec<_>>();
         if args.is_empty() {
             return Err(StructureError::WrongNumberOfArguments(0, 1));
@@ -509,7 +550,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
 
         let mut slots = Vec::new();
         for factor in shadowing::trace_factor_views(&args[1..]) {
-            Self::append_syntactic_slots(factor, &mut slots)?;
+            Self::append_syntactic_slots(factor, &mut slots, matcher)?;
         }
 
         Self::from_slots(slots)
@@ -536,8 +577,9 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     fn append_syntactic_slots(
         value: AtomView<'_>,
         slots: &mut Vec<Slot<LibraryRep, Aind>>,
+        matcher: &mut SlotMatcher,
     ) -> Result<(), StructureError> {
-        slots.extend(Self::syntactic_structure_from_atom(value)?.structure);
+        slots.extend(Self::syntactic_structure_from_atom(value, matcher)?.structure);
         Ok(())
     }
 }
@@ -547,10 +589,12 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom for ShadowedStr
         value: AtomView<'_>,
         mode: StructureInferenceMode,
     ) -> Result<Canonicalized<Self>, StructureError> {
-        TensorialSyntax::validate_chain_like_nesting(value, None)
-            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
         match mode {
-            StructureInferenceMode::Fast => Self::from_fast_atom(value),
+            StructureInferenceMode::Fast => {
+                TensorialSyntax::validate_chain_like_nesting(value, None)
+                    .map_err(|error| StructureError::ParsingError(error.to_string()))?;
+                Self::from_fast_atom(value, &mut SlotMatcher::default())
+            }
             StructureInferenceMode::Expanded => {
                 OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, mode)
                     .map(|structure| Self::from_ordered_atom(value, structure))
@@ -561,17 +605,20 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom for ShadowedStr
 
 impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind> {
     /// Infer a named structure with the fast syntactic conventions.
-    fn from_fast_atom(value: AtomView<'_>) -> Result<Canonicalized<Self>, StructureError> {
+    fn from_fast_atom(
+        value: AtomView<'_>,
+        matcher: &mut SlotMatcher,
+    ) -> Result<Canonicalized<Self>, StructureError> {
         match value {
             AtomView::Fun(fun)
                 if fun.get_symbol() != SPENSO_TAG.chain && fun.get_symbol() != SPENSO_TAG.trace =>
             {
                 if !fun.get_symbol().has_tag(&SPENSO_TAG.tensor) {
-                    OrderedStructure::<LibraryRep, Aind>::from_syntactic_atom(value)?;
+                    OrderedStructure::<LibraryRep, Aind>::from_syntactic_atom(value, matcher)?;
                 }
-                Self::from_fast_function(fun)
+                Self::from_fast_function(fun, matcher)
             }
-            _ => OrderedStructure::<LibraryRep, Aind>::leaf_structure_from_atom(value)
+            _ => OrderedStructure::<LibraryRep, Aind>::leaf_structure_from_atom(value, matcher)
                 .map(|structure| Self::from_ordered_atom(value, structure)),
         }
     }
@@ -582,12 +629,15 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
     /// bundles are flattened and malformed bundles return their slot parsing
     /// error, while non-structural arguments are retained as metadata on the
     /// named leaf.
-    fn from_fast_function(value: FunView<'_>) -> Result<Canonicalized<Self>, StructureError> {
+    fn from_fast_function(
+        value: FunView<'_>,
+        matcher: &mut SlotMatcher,
+    ) -> Result<Canonicalized<Self>, StructureError> {
         match value.get_symbol() {
             s if s == AIND_SYMBOLS.aind => {
                 let mut structure = Vec::new();
                 for arg in value.iter() {
-                    structure.push(arg.try_into()?);
+                    structure.push(matcher.parse::<LibraryRep, Aind>(arg)?);
                 }
 
                 Ok(OrderedStructure::new(structure).map_canonical(Into::into))
@@ -599,7 +649,7 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
                     Some(SlotError::EmptyStructure.into());
 
                 for arg in value.iter() {
-                    match Slot::<LibraryRep, Aind>::try_from(arg) {
+                    match matcher.parse::<LibraryRep, Aind>(arg) {
                         Ok(slot) => {
                             is_structure = None;
                             slots.push(slot);
@@ -608,7 +658,7 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
                             if let AtomView::Fun(fun) = arg
                                 && fun.get_symbol() == AIND_SYMBOLS.aind
                             {
-                                let structure = Self::from_fast_function(fun)?;
+                                let structure = Self::from_fast_function(fun, matcher)?;
                                 let internal_slots = structure.layout().canonical_to_logical(
                                     &structure.canonical().external_structure(),
                                 );
@@ -665,6 +715,7 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
     /// Direct slot arguments are represented by the structure; chain endpoints
     /// are also structural and therefore not duplicated as metadata.
     fn leaf_additional_args(fun: FunView<'_>) -> Vec<Atom> {
+        let mut matcher = SlotMatcher::default();
         let args = fun.iter().collect::<Vec<_>>();
         if fun.get_symbol() == SPENSO_TAG.chain {
             return args[2..].iter().map(|arg| arg.to_owned()).collect();
@@ -674,14 +725,14 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
         }
 
         args.into_iter()
-            .filter(|arg| !Self::is_direct_structure_arg(*arg))
+            .filter(|arg| !Self::is_direct_structure_arg(*arg, &mut matcher))
             .map(|arg| arg.to_owned())
             .collect()
     }
 
     /// Return true for arguments that are represented by the inferred structure.
-    fn is_direct_structure_arg(arg: AtomView<'_>) -> bool {
-        Slot::<LibraryRep, Aind>::try_from(arg).is_ok()
+    fn is_direct_structure_arg(arg: AtomView<'_>, matcher: &mut SlotMatcher) -> bool {
+        matcher.parse::<LibraryRep, Aind>(arg).is_ok()
             || matches!(arg, AtomView::Fun(fun) if fun.get_symbol() == AIND_SYMBOLS.aind)
     }
 }
@@ -815,6 +866,7 @@ mod tests {
         OrderedStructure::<LibraryRep, AbstractIndex>::append_syntactic_slots(
             expr.as_view(),
             &mut slots,
+            &mut SlotMatcher::default(),
         )
         .unwrap();
 

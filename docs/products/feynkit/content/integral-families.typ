@@ -34,10 +34,10 @@ expressions.
 == Start from a generated diagram
 
 `diagram.integral_family()` uses the diagram's stored loop routing, internal
-propagators and model masses. Denominators follow `diagram.internal_edges` in
-ascending edge-ID order. Repeated propagators and bridges remain present;
-external carriers and dummy edges do not. No new propagator convention is
-introduced: the same annotated denominator builder is used by GammaLoop.
+propagators and model masses, then completes the basis with auxiliary scalar
+products. Physical denominators come first, following `diagram.internal_edges`
+in ascending edge-ID order. External carriers and dummy edges are excluded.
+The shared annotated denominator builder preserves model mass conventions.
 
 The family exposes its loop momenta, independent external momenta and scoped
 `kinematics`. Use those returned names when setting external invariants, then
@@ -71,10 +71,36 @@ assert (F + s*x*y).expand() == E("0")
 
 Tree diagrams raise `DiagramError`, since `IntegralFamily` requires at least one
 loop. Widths, imaginary prescriptions and custom UFO denominator formulas are
-excluded, matching the existing diagram denominator API. Family completeness
-and dependence checks remain explicit; construction does not silently complete
-or partial-fraction the graph's propagators. To use another routing, apply
+excluded, matching the existing diagram denominator API. For just the physical
+propagators, use `diagram.propagator_family()`: it preserves repeated propagators
+and bridges without completing or partial-fractioning them. To use another routing, apply
 `diagram.with_loop_momentum_edges(...)` before extracting the family.
+
+For a complete basis, use `diagram.integral_family()` or the equivalent
+`fk.IntegralFamily.from_diagram(diagram)`. Both retain
+the graph propagators first, then append independent scalar products until the
+basis spans every loop-loop and loop-external product. Auxiliary denominators
+have zero powers in the original scalar integral, or negative powers for
+numerator factors.
+
+Pass `independent_dot_products=[...]` to prefer particular
+auxiliary denominators, expressed in the diagram's routed momentum names.
+Candidates are tried in order; redundant entries are skipped and automatic
+choices fill any remaining directions. The optional `kinematics` keyword has
+the same meaning as for `diagram.propagator_family()`. For example, a two-loop
+sunrise can use the two loop-external products:
+
+```python
+raw = sunrise.propagator_family()
+p = raw.external_momenta[0]
+products = [raw.kinematics.scalar_product(k, p) for k in raw.loop_momenta]
+family = sunrise.integral_family(independent_dot_products=products)
+assert family.is_complete and family.is_independent
+```
+
+Dependent graph propagators raise `DiagramError` in this constructor. Extract
+them with `diagram.propagator_family()`, partial-fraction them, then call
+`complete()` on each resulting independent family.
 
 == A massive one-loop bubble
 

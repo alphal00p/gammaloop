@@ -1,0 +1,502 @@
+{
+  "description": "Borrowed Spenso slot matching: repeated explicit-index detection, Fast inference, inference of each top-level term, and opaque partial network parsing.",
+  "provenance": {
+    "cpu": 2,
+    "process_rounds": 3,
+    "samples_per_process": 3,
+    "target_batch_ms": 15,
+    "timing_scope": "warm calls including result destruction, excluding input construction and snapshots",
+    "compiler": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "optimization": "standalone rustc -C opt-level=2, shared dev-optim dependencies",
+    "baseline_repeated_check": "previous isolated hand-written scanner, not a prior production API",
+    "comparison": "byte-identical inputs and exact canonical slot/layout or error snapshots across all runs",
+    "measured_at_utc": "2026-09-23T21:49:45.284521+00:00",
+    "cpu_model": "AMD EPYC 9754 128-Core Processor",
+    "source": "crates/idenso/examples/structure_matching_benchmark.rs",
+    "source_sha256": {
+      "crates/spenso/src/structure/slot.rs": "b74cac5d2e00e1352591edd397b6d92f8da36e286fc81b1cbf51177896bf3b98",
+      "crates/spenso/src/network/parsing/materialization.rs": "bf3ab55ab92393fd7fe8d56d7d0a7534dfbb30d4b2982a87d3ed189e0860781a",
+      "crates/spenso/src/network/parsing/mod.rs": "0192768ef42dd654feb450387b39ac81b6f14565cdd99715217e2650a1c0781d",
+      "crates/spenso/src/network/parsing/indices.rs": "da0f5dd9e6821bf2ae3be817d02964fd178ec314b24615bb962fe9b5f4808d6a",
+      "crates/spenso/src/network/parsing/structure_inference.rs": "dc131ab51aab7beb6328acbc32691c96e77caf81d10dc049ce4c55dee1d4ba82",
+      "crates/idenso/examples/structure_matching_benchmark.rs": "b4df61819dbb0f32cb0a9406d003890f24e4c0787a873df0746cdaa14961f2ca"
+    },
+    "example_command": "taskset -c 2 cargo run -p idenso --profile dev-optim --example structure_matching_benchmark -- /tmp/structure-matching 7 20",
+    "comparison_protocol": "Three randomized before/after process pairs; each process uses 3 samples and 15 ms target batches; medians aggregate 9 samples.",
+    "baseline_libraries": [
+      "libspenso-43f6d5a1452bb1de.rlib",
+      "libidenso-4e984ef598e83cf1.rlib"
+    ],
+    "after_libraries": [
+      "libspenso-da3d95e2ffafddb8.rlib",
+      "libidenso-69adb7c9fba33d9e.rlib"
+    ]
+  },
+  "semantics": {
+    "repeated_explicit_indices": "Scans only explicit index repetitions; sums preserve independent branches; compact notation alone returns false.",
+    "infer_fast": "Validates nested chain scopes and infers structure from the first summand.",
+    "infer_all_terms": "Calls Fast inference once per top-level term; nested sums retain first-summand semantics.",
+    "partial_parse_all_terms": "Parses all terms with opaque shorthand; does not execute contractions.",
+    "empty_structure_cases": [
+      "compact_inner_product",
+      "tensor_power"
+    ]
+  },
+  "validation": {
+    "identical_input_and_structure_snapshots": 36,
+    "compared_processes": 6,
+    "structure_comparison": "Exact canonical slot atoms, canonicalization layouts, and inference errors at the root and for every top-level term. All partial parses succeed."
+  },
+  "cases": [
+    {
+      "case": "open_metric",
+      "terms": 1,
+      "repeated": false,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 0.125796,
+          "after": 0.154696
+        },
+        "infer_fast": {
+          "before": 0.968071,
+          "after": 0.966863
+        },
+        "infer_all_terms": {
+          "before": 0.958961,
+          "after": 0.965911
+        },
+        "partial_parse_all_terms": {
+          "before": 5.363809,
+          "after": 5.399795
+        }
+      }
+    },
+    {
+      "case": "contracted_metrics",
+      "terms": 1,
+      "repeated": true,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 0.180892,
+          "after": 0.195188
+        },
+        "infer_fast": {
+          "before": 2.354139,
+          "after": 2.183251
+        },
+        "infer_all_terms": {
+          "before": 2.289121,
+          "after": 2.179981
+        },
+        "partial_parse_all_terms": {
+          "before": 14.105269,
+          "after": 14.070409
+        }
+      }
+    },
+    {
+      "case": "dual_slots",
+      "terms": 1,
+      "repeated": true,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 0.231321,
+          "after": 0.326095
+        },
+        "infer_fast": {
+          "before": 2.594986,
+          "after": 2.522046
+        },
+        "infer_all_terms": {
+          "before": 2.577707,
+          "after": 2.529841
+        },
+        "partial_parse_all_terms": {
+          "before": 14.435606,
+          "after": 15.265439
+        }
+      }
+    },
+    {
+      "case": "independent_sum",
+      "terms": 2,
+      "repeated": false,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 0.177162,
+          "after": 0.237061
+        },
+        "infer_fast": {
+          "before": 0.865322,
+          "after": 0.8118
+        },
+        "infer_all_terms": {
+          "before": 1.389172,
+          "after": 1.391598
+        },
+        "partial_parse_all_terms": {
+          "before": 12.21203,
+          "after": 12.072782
+        }
+      }
+    },
+    {
+      "case": "factored_open_sum",
+      "terms": 1,
+      "repeated": false,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 0.333503,
+          "after": 0.399402
+        },
+        "infer_fast": {
+          "before": 2.20652,
+          "after": 2.079733
+        },
+        "infer_all_terms": {
+          "before": 2.224956,
+          "after": 2.075896
+        },
+        "partial_parse_all_terms": {
+          "before": 30.243729,
+          "after": 30.606669
+        }
+      }
+    },
+    {
+      "case": "factored_contracted_sum",
+      "terms": 1,
+      "repeated": true,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 0.33017,
+          "after": 0.39939
+        },
+        "infer_fast": {
+          "before": 2.562573,
+          "after": 2.307107
+        },
+        "infer_all_terms": {
+          "before": 2.480441,
+          "after": 2.31011
+        },
+        "partial_parse_all_terms": {
+          "before": 32.999824,
+          "after": 32.188882
+        }
+      }
+    },
+    {
+      "case": "compact_inner_product",
+      "terms": 1,
+      "repeated": false,
+      "inference_ok": false,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 0.165519,
+          "after": 0.276137
+        },
+        "infer_fast": {
+          "before": 0.834973,
+          "after": 0.542404
+        },
+        "infer_all_terms": {
+          "before": 0.829766,
+          "after": 0.544892
+        },
+        "partial_parse_all_terms": {
+          "before": 4.837552,
+          "after": 4.498705
+        }
+      }
+    },
+    {
+      "case": "compact_open_vector",
+      "terms": 1,
+      "repeated": false,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 0.146775,
+          "after": 0.218138
+        },
+        "infer_fast": {
+          "before": 0.942943,
+          "after": 0.898636
+        },
+        "infer_all_terms": {
+          "before": 0.942336,
+          "after": 0.908864
+        },
+        "partial_parse_all_terms": {
+          "before": 5.591397,
+          "after": 5.439815
+        }
+      }
+    },
+    {
+      "case": "tensor_power",
+      "terms": 1,
+      "repeated": true,
+      "inference_ok": false,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 0.170183,
+          "after": 0.198299
+        },
+        "infer_fast": {
+          "before": 1.006654,
+          "after": 0.931288
+        },
+        "infer_all_terms": {
+          "before": 1.014254,
+          "after": 0.930097
+        },
+        "partial_parse_all_terms": {
+          "before": 12.673863,
+          "after": 12.648451
+        }
+      }
+    },
+    {
+      "case": "scalar_heavy",
+      "terms": 1,
+      "repeated": false,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 4.699895,
+          "after": 5.602025
+        },
+        "infer_fast": {
+          "before": 22.620093,
+          "after": 20.298224
+        },
+        "infer_all_terms": {
+          "before": 22.607814,
+          "after": 20.193863
+        },
+        "partial_parse_all_terms": {
+          "before": 285.197059,
+          "after": 286.332712
+        }
+      }
+    },
+    {
+      "case": "scalar_heavy_256",
+      "terms": 1,
+      "repeated": false,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 35.8884,
+          "after": 21.392935
+        },
+        "infer_fast": {
+          "before": 83.154192,
+          "after": 75.257485
+        },
+        "infer_all_terms": {
+          "before": 84.081473,
+          "after": 74.8215
+        },
+        "partial_parse_all_terms": {
+          "before": 3515.2122,
+          "after": 3475.912
+        }
+      }
+    },
+    {
+      "case": "scalar_heavy_1024",
+      "terms": 1,
+      "repeated": false,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 399.154,
+          "after": 84.299676
+        },
+        "infer_fast": {
+          "before": 332.217745,
+          "after": 295.78122
+        },
+        "infer_all_terms": {
+          "before": 323.519426,
+          "after": 295.56302
+        },
+        "partial_parse_all_terms": {
+          "before": 50622.085,
+          "after": 50884.726
+        }
+      }
+    },
+    {
+      "case": "long_open_product",
+      "terms": 1,
+      "repeated": false,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 6.777674,
+          "after": 6.368128
+        },
+        "infer_fast": {
+          "before": 163.632122,
+          "after": 161.544215
+        },
+        "infer_all_terms": {
+          "before": 163.706725,
+          "after": 161.058301
+        },
+        "partial_parse_all_terms": {
+          "before": 663.127478,
+          "after": 672.001913
+        }
+      }
+    },
+    {
+      "case": "long_contracted_product",
+      "terms": 1,
+      "repeated": true,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 7.206242,
+          "after": 6.450742
+        },
+        "infer_fast": {
+          "before": 168.666202,
+          "after": 165.909815
+        },
+        "infer_all_terms": {
+          "before": 168.205067,
+          "after": 166.201697
+        },
+        "partial_parse_all_terms": {
+          "before": 678.979304,
+          "after": 698.2115
+        }
+      }
+    },
+    {
+      "case": "axial_6",
+      "terms": 6,
+      "repeated": false,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 1.275373,
+          "after": 1.304666
+        },
+        "infer_fast": {
+          "before": 7.474407,
+          "after": 5.105115
+        },
+        "infer_all_terms": {
+          "before": 19.72672,
+          "after": 18.026608
+        },
+        "partial_parse_all_terms": {
+          "before": 151.915939,
+          "after": 152.937604
+        }
+      }
+    },
+    {
+      "case": "axial_8",
+      "terms": 33,
+      "repeated": false,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 8.715764,
+          "after": 8.558886
+        },
+        "infer_fast": {
+          "before": 40.936973,
+          "after": 21.217659
+        },
+        "infer_all_terms": {
+          "before": 164.360902,
+          "after": 145.696248
+        },
+        "partial_parse_all_terms": {
+          "before": 1157.190429,
+          "after": 1115.081
+        }
+      }
+    },
+    {
+      "case": "axial_10",
+      "terms": 180,
+      "repeated": false,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 59.250129,
+          "after": 56.708591
+        },
+        "infer_fast": {
+          "before": 259.17022,
+          "after": 124.305058
+        },
+        "infer_all_terms": {
+          "before": 1176.814077,
+          "after": 1067.388333
+        },
+        "partial_parse_all_terms": {
+          "before": 8365.179,
+          "after": 8338.254
+        }
+      }
+    },
+    {
+      "case": "axial_12",
+      "terms": 1029,
+      "repeated": false,
+      "inference_ok": true,
+      "partial_parse_ok": true,
+      "timings_us": {
+        "repeated_explicit_indices": {
+          "before": 417.772556,
+          "after": 406.544543
+        },
+        "infer_fast": {
+          "before": 1749.828222,
+          "after": 831.370789
+        },
+        "infer_all_terms": {
+          "before": 8452.9345,
+          "after": 7757.282
+        },
+        "partial_parse_all_terms": {
+          "before": 60172.058,
+          "after": 61762.153
+        }
+      }
+    }
+  ]
+}

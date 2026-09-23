@@ -1686,9 +1686,31 @@ class FeynmanDiagram:
             Basis from this diagram instance. Supplying it enables routing and
             takes precedence over ``in_lmb``, including for a selected region.
         """
-    def integral_family(self, *, kinematics: typing.Optional[Kinematics] = None) -> IntegralFamily:
+    def integral_family(self, independent_dot_products: typing.Optional[typing.Sequence[Expression]] = None, *, kinematics: typing.Optional[Kinematics] = None) -> IntegralFamily:
         r"""
-        Build a scalar integral family using the diagram's stored momentum routing.
+        Build a complete integral family with preferred or automatic ISPs.
+
+        Physical propagators retain their edge order and model masses. Preferred
+        independent dot products are appended when they increase the rank;
+        automatic scalar products fill any remaining directions. Auxiliary
+        entries have zero powers in the original scalar integral.
+        Equivalent to ``IntegralFamily.from_diagram(self, independent_dot_products,
+        kinematics=kinematics)``. Tree diagrams and dependent propagators raise
+        DiagramError. Use ``propagator_family()`` to extract dependent propagators
+        for partial fractioning before completing their families.
+
+        Parameters
+        ----------
+        independent_dot_products : list[Expression] or None, optional
+            Preferred auxiliary inverse propagators in the routed momenta.
+            None selects a suitable basis automatically.
+        kinematics : Kinematics or None, optional
+            External assumptions and dimension; defaults to the diagram's
+            symbolic dimension with no on-shell assumptions.
+        """
+    def propagator_family(self, *, kinematics: typing.Optional[Kinematics] = None) -> IntegralFamily:
+        r"""
+        Extract the physical propagators using the diagram's stored momentum routing.
 
         Reuses the shared propagator builder and model masses. Denominators follow
         ascending internal edge IDs, as in ``internal_edges``, retaining bridges
@@ -1696,13 +1718,15 @@ class FeynmanDiagram:
         external carriers and dummy edges are excluded. Widths, prescriptions and
         custom UFO denominator formulas are not inferred. Tree diagrams raise
         DiagramError because they contain no loop integral.
+        Use ``diagram.integral_family()`` to also complete the basis
+        with automatic or explicitly chosen auxiliary scalar products.
 
         Examples
         --------
-        >>> family = diagram.integral_family()
+        >>> family = diagram.propagator_family()
         >>> p = family.external_momenta[0]
         >>> kin = family.kinematics.with_scalar_product(p, p, s)
-        >>> family = diagram.integral_family(kinematics=kin)
+        >>> family = diagram.propagator_family(kinematics=kin)
         >>> U, F = family.symanzik(parameters)
 
         Parameters
@@ -3107,6 +3131,30 @@ class IntegralFamily:
     def is_independent(self) -> builtins.bool:
         r"""
         Whether no denominator can be eliminated by an affine relation.
+        """
+    @staticmethod
+    def from_diagram(diagram: FeynmanDiagram, independent_dot_products: typing.Optional[typing.Sequence[Expression]] = None, *, kinematics: typing.Optional[Kinematics] = None) -> IntegralFamily:
+        r"""
+        Build a complete family from the diagram's routed internal propagators.
+
+        Graph propagators retain their edge order and model masses. Preferred
+        independent dot products are appended in order when they increase the
+        rank; automatic scalar products fill any remaining directions. Auxiliary
+        denominators have nonpositive powers when representing the original
+        integral. Tree diagrams and dependent graph propagators raise DiagramError.
+        Use ``diagram.propagator_family()`` to extract dependent propagators for
+        partial fractioning before completing the resulting families.
+
+        Parameters
+        ----------
+        diagram : FeynmanDiagram
+            A complete diagram with its chosen loop-momentum routing.
+        independent_dot_products : list[Expression] or None, optional
+            Preferred auxiliary inverse propagators in the routed momenta.
+            None selects a suitable basis automatically.
+        kinematics : Kinematics or None, optional
+            External assumptions and dimension; defaults to the diagram's
+            symbolic dimension with no on-shell assumptions.
         """
     def __new__(cls, loop_momenta: typing.Sequence[Expression], external_momenta: typing.Sequence[Expression], denominators: typing.Sequence[Expression], *, kinematics: typing.Optional[Kinematics] = None) -> IntegralFamily:
         r"""

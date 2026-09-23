@@ -71,7 +71,7 @@ for label, incoming, outgoing, loops in [
         continue
     # Zero external momenta in the actual routed denominators. A nonzero mass
     # makes this Taylor coefficient infrared safe, including the finite triangle.
-    generated_family = diagram.integral_family(kinematics=hep.Kinematics(d))
+    generated_family = diagram.propagator_family(kinematics=hep.Kinematics(d))
     denominators = [
         den.replace(P(external, index), zero)
         .replace(K(0, index), k(index))

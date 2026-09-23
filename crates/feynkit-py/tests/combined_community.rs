@@ -185,7 +185,41 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
             locals.set_item("spenso", spenso)?;
             let assertions = CString::new(
                 r#"
+core.set_namespace("community_namespace_test")
+assert spenso.TensorName.vector("namespace_vector").to_expression() == core.S(
+    "community_namespace_test::namespace_vector"
+)
+assert spenso.TensorName("explicit_namespace::tensor").to_expression() == core.S(
+    "explicit_namespace::tensor"
+)
+core.set_namespace("python")
 feynkit_expression = diagram.overall_factor_expression()
+sunrise = feynkit.FeynmanDiagram.from_dot(feynkit.Model.phi4(), '''digraph sunrise {
+    ext [style=invis];
+    ext -> a [particle="phi"];
+    a -> b [particle="phi", lmb_id=0];
+    a -> b [particle="phi", lmb_id=1];
+    a -> b [particle="phi"];
+    b -> ext [particle="phi"];
+}''')
+family = sunrise.integral_family()
+assert family.is_complete and family.is_independent
+assert len(family.denominators) == 5
+products = [family.kinematics.scalar_product(k, family.external_momenta[0])
+            for k in family.loop_momenta]
+preferred = sunrise.integral_family(products)
+assert preferred.denominators == feynkit.IntegralFamily.from_diagram(sunrise, products).denominators
+assert preferred.denominators[:3] == sunrise.propagator_family().denominators
+assert preferred.denominators[3:] == products
+assert sunrise.integral_family(
+    independent_dot_products=products[:1], kinematics=family.kinematics
+).is_complete
+try:
+    feynkit.IntegralFamily.from_diagram(sunrise, products + [products[0]**2])
+except feynkit.DiagramError:
+    pass
+else:
+    raise AssertionError("nonlinear auxiliary product was accepted")
 spenso_expression = spenso.TensorName("T").to_expression()
 named_coupling = core.S("UFO::SCALAR_COUPLING")
 expanded_coupling = model.expand_couplings(named_coupling)

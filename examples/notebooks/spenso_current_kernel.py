@@ -375,9 +375,10 @@ def _():
         TensorLibrary,
         TensorName,
     )
+    from symbolica import PrintMode
 
     spinor = Representation.bis(4)
-    Jbar = TensorName("Jbar")(spinor)
+    Jbar = TensorName("Jbarrr", print={"typst":"macron(J)"})(spinor)
     J = TensorName("J")(spinor)
     gamma = TensorExpression.gamma(4)
 
