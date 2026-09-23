@@ -964,6 +964,42 @@ of gauge, flavor count, color count, subtraction scheme and rearrangement pass;
 controls are restored to their defaults afterward. The rearrangement control
 exposes the nonzero auxiliary-mass result.
 
+== Generated massless one-loop QCD renormalization
+
+`hep/qcd_massless_renormalization.py` covers the displayed UV results of the
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/RenormalizationMassless")[massless infrared-rearrangement reference]
+and the
+#link("https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/RenormalizationMassless2")[massless MS/MSbar reference].
+It composes the QCD notebook above through Marimo's `app.embed()` and consumes
+its symbolic results, so generation, tensor reduction, IBP and counterterm
+matching have one implementation across the two notebooks.
+
+The generated raw numerators and denominator masses are evaluated at $m_q=0$
+before adding $M$ to massless propagators. Primitive longitudinal gluon powers
+remain explicit. The same Taylor, vacuum tensor-reduction and partial-fraction
+workflow now yields tadpoles at only the auxiliary mass; all five target powers
+reduce to $A_0(M)$. A symbolic marker multiplies the first Taylor term beyond
+the superficial divergence degree. Every UV pole is independent of that marker,
+matching the reference's higher-order check.
+
+The massless quark loop contributes an additional
+$2N_f M g^(mu nu)/epsilon$. Removing the quark mass equation and its unknown
+from the generated matrix gives seven equations, with
+$ delta Z_(A m)=-frac(C_A(1+3xi)+8N_f,8epsilon), quad delta Z_(c m)=0. $
+The five physical constants agree with the massive calculation; the auxiliary
+gluon residue shifts by $-N_f$. Substituting the solutions into the generated
+coefficients cancels the complete projected tensor poles. Both MS and MSbar
+subtractions are checked, including the finite measure term retained in MS.
+The local operator basis and analytic tadpole pole remain explicit inputs;
+complete finite amplitudes and general subtraction forests are outside this
+validation.
+
+The installed regression and composed notebook HTML export pass. All 314 live
+gauge/flavor/color/scheme states pass, including a zero beta function, and the
+controls return to their defaults. The existing massive notebook also passes
+a focused 52-state sweep after sharing this workflow. The massless notebook
+checks the auxiliary residue shift and quark-gluon coupling relation interactively.
+
 == Generated ghost-gluon vertex and crossing
 
 `hep/qcd_ghost_vertex.py` and `installed_feyncalc_qcd_ghost_vertex.py` generate

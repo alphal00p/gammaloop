@@ -434,6 +434,12 @@ reduction, use Symbolica partial fractions to separate tadpoles at the physical
 and auxiliary masses. Reconstructing the scalar integrand before native IBP
 guards against dropping either contribution. The physical pole constants agree
 between the two prescriptions, while the auxiliary gluon mass constant changes.
+The separate
+#link("https://github.com/symbolica-dev/symbolica-community/blob/main/examples/hep/qcd_massless_renormalization.py")[massless QCD notebook]
+sets the quark mass to zero before this massification step. It uses Marimo's
+`app.embed()` to access the shared calculation and exposes the seven remaining
+counterterms in its own controls. This composition keeps the symbolic workflow
+in one notebook while giving each physical case a focused presentation.
 
 == Keep finite terms in an off-shell self-energy
 
