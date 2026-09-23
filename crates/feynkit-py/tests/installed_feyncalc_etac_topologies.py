@@ -1,6 +1,6 @@
 """Full B -> eta_c topology input: algebraic partial fractions and completion.
 
-Topology minimization and singular-sector scalelessness remain separate checks.
+Global topology minimization remains a separate check.
 The input fixture records the pinned FeynCalc source and its digest.
 """
 
@@ -8,7 +8,7 @@ import json
 from functools import reduce
 from pathlib import Path
 
-from symbolica import E, S
+from symbolica import E, Replacement, S
 from symbolica.community import hep
 
 fixture = json.loads(
@@ -84,15 +84,37 @@ assert len(sectors) == 677
 statistics = {
     "scaleless certificate": 0,
     "not detected": 0,
-    "singular quadratic form": 0,
+    "transverse certificate": 0,
 }
 completed_rows = []
 for family in sectors.values():
     parameters = [S(f"etac::x{i}") for i in range(len(family.denominators))]
     U, F = family.symanzik(parameters)
     if U == E("0"):
-        # Degenerate U/F do not prove scalelessness; never discard these sectors.
-        status = "singular quadratic form"
+        direction = family.scaleless_transverse_direction()
+        assert direction is not None and any(w != E("0") for w in direction)
+        assert all(w.is_real() is True for w in direction)
+        # Independently shift each loop by w_i*r_perp. External products stay
+        # fixed; z_i=r_perp.k_i and z2=r_perp^2 are independent formal symbols.
+        loops = [k1, k2]
+        z = S("etac_shift::z1", "etac_shift::z2")
+        z_squared = S("etac_shift::squared")
+        shifts = [
+            Replacement(
+                kin.scalar_product(ki, kj),
+                kin.scalar_product(ki, kj)
+                + direction[i] * z[j]
+                + direction[j] * z[i]
+                + direction[i] * direction[j] * z_squared,
+            )
+            for i, ki in enumerate(loops)
+            for j, kj in enumerate(loops[i:], i)
+        ]
+        for denominator in family.denominators:
+            assert (denominator.replace_multiple(shifts) - denominator).together() == E(
+                "0"
+            )
+        status = "transverse certificate"
     else:
         weights = family.scaleless_scaling(parameters)
         status = "not detected" if weights is None else "scaleless certificate"
@@ -122,13 +144,13 @@ for family in sectors.values():
 assert statistics == {
     "scaleless certificate": 112,
     "not detected": 434,
-    "singular quadratic form": 131,
+    "transverse certificate": 131,
 }
 print(
-    "PASS: 251 exact partial fractions, 677 independent sectors, 112 verified scaling certificates and 677 preferred completions",
+    "PASS: 251 exact partial fractions, 677 independent sectors, 112 parametric and 131 transverse certificates, and 677 preferred completions",
     flush=True,
 )
 print(
-    "Pending: global topology minimization and classification of 131 singular sectors",
+    "Pending: global topology minimization",
     flush=True,
 )

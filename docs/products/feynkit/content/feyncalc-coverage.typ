@@ -1900,9 +1900,14 @@ is inferred from that omission.
 exactly after native partial fractioning. This decomposition produces 677
 distinct sectors, all with independent denominators. Their Symanzik forms
 give 112 scaling certificates, each checked by differentiating $U+F$.
-Another 434 sectors are not detected as scaleless by this criterion. The
-remaining 131 have singular quadratic forms and are retained, since a
-degenerate Symanzik polynomial does not establish scalelessness.
+For all 131 singular quadratic forms, the shared
+`scaleless_transverse_direction()` finds a real common null direction of every
+denominator's quadratic loop matrix. An independent simultaneous substitution
+checks that shifting the loops along this transverse direction leaves every
+denominator unchanged. The external light-cone Gram matrix is nonsingular,
+so the unconstrained polynomial transverse integral vanishes in dimensional
+regularization. A degenerate Symanzik polynomial alone is not used as proof.
+Another 434 sectors remain unclassified by either criterion.
 
 The shared `IntegralFamily.complete(candidates=pool)` now tries an ordered
 pool of inverse propagators before bare scalar products. It preserves original
@@ -1914,10 +1919,10 @@ forwards the candidate list. No GammaLoop-specific completion is introduced.
 
 `hep/topology_preparation.py` displays the source integrals, partial-fraction
 powers, sector classification, and original/completed families. This remains
-*partial* gallery coverage: global topology minimization, momentum mappings
-between all surviving families, and classification of the singular sectors
-are still required. Intermediate counts depend on the decomposition order and
-are not compared to FeynCalc's final minimized topology count.
+*partial* gallery coverage: global topology minimization and momentum mappings
+between all surviving families are still required. Intermediate counts depend
+on the decomposition order and are not compared to FeynCalc's final minimized
+topology count.
 Rust tests, Clippy, installed-host regressions, all 28 live control combinations,
 strict Marimo checks, Ruff and HTML export pass.
 
