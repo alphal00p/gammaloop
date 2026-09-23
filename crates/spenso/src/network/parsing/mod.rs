@@ -888,8 +888,14 @@ where
                 )));
             }
 
-            let out = if n > 1 && state.next_dummy.get() != next_dummy {
+            let out = if n > 1
+                && (state.next_dummy.get() != next_dummy
+                    || (n == 2 && base.state == NetworkState::SelfDualTensor))
+            {
                 // Each lowered shorthand copy needs independent internal indices.
+                // A tensor square also needs the selected product-contraction
+                // strategy: scalar power execution uses the tensor's default
+                // contraction, which can leave symbolic sums uncontracted.
                 let rest = (1..n)
                     .map(|_| {
                         Self::try_from_view_impl(

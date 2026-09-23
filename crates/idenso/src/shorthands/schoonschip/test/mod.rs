@@ -51,6 +51,25 @@ fn is_slot_view(atom: AtomView<'_>) -> bool {
 }
 
 #[test]
+fn tensor_sum_square_uses_local_contractions() {
+    test_initialize();
+    let p = p!(1, mink!(4, 1));
+    let q = q!(2, mink!(4, 1));
+    let x = Atom::var(symbol!("square_spectator_x"));
+    let y = Atom::var(symbol!("square_spectator_y"));
+    let spectator = (x + y).pow(12);
+    let square = &p * &p + Atom::num(2) * &p * &q + &q * &q;
+    let expression = &spectator * ((p + q).pow(2) - square + Atom::num(1));
+    let result = expression
+        .schoonschip_with_net::<true, AbstractIndex>(
+            &SchoonschipSettings::new(None).with_expanded_contracted_sums(),
+        )
+        .unwrap()
+        .to_dots();
+    assert_eq!(result, spectator);
+}
+
+#[test]
 fn simple_dot() {
     test_initialize();
     let dim = symbol!("D");
