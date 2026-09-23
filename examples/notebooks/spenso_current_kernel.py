@@ -184,15 +184,25 @@ def _():
     paper_section_draft = (
         _cleandoc(r"""
     ## Deriving current kernels with Spenso
-    UFO Lorentz rules specify indexed tensor expressions. To turn such a rule
-    into a current kernel, pyAmpliCol chooses the input currents and result field
-    according to the section on general contact decomposition.
-    Spenso [@SpensoSoftware] contracts the input indices and derives
-    component expressions for the remaining open indices. Symbolica then
-    simplifies these expressions, which are used to construct numerical kernels.
-    Related automatic derivations of component rules are implemented in
-    ALOHA [@deAquino:2011ub] and the UFO extension of
-    Comix [@Hoeche:2014kca].
+    To turn a UFO Lorentz rule into a current kernel, pyAmpliCol selects an
+    output leg and supplies currents for the remaining legs. Spenso contracts
+    their indices, leaving the output leg’s indices open.
+
+    For each component of the output current, Spenso produces a scalar symbolic
+    expression in the components of the input currents and any momenta or model
+    parameters. For a vector current, these are the expressions for
+    $K^0$, $K^1$, $K^2$ and $K^3$ in a chosen basis. The contracted indices
+    have been summed over; each expression corresponds to a fixed value of the
+    remaining index. Symbolica simplifies these expressions before they are
+    turned into numerical kernels.
+
+    This construction is similar in purpose to ALOHA [@deAquino:2011ub]
+    and the UFO extension of Comix [@Hoeche:2014kca]. Spenso [@SpensoSoftware] provides a
+    generic tensor-contraction framework in which index spaces and tensor
+    component data are specified independently of the contraction algorithm.
+    Different explicit tensor representations, such as a different basis for
+    the Dirac matrices, can therefore be used by supplying the corresponding
+    tensor and current components, without rewriting the contraction code.
 
     Spenso assigns a representation to each tensor index: a four-dimensional
     Minkowski-vector space for Lorentz indices, a four-component bispinor space
@@ -209,7 +219,7 @@ def _():
 
     For example, the Standard Model UFO expression `Gamma(3,1,2)` denotes
     $(\gamma^{\mu_3})_{s_1s_2}$.  With an antifermion current $\bar J_1$ and a
-    fermion current $J_2$, choosing the vector as the result field and omitting
+    fermion current $J_2$, choosing the vector as the output leg and omitting
     the coupling gives
 
     $$
@@ -281,7 +291,7 @@ def _():
     This division also makes the limits of model support explicit.  Unresolved
     UFO tensor functions are rejected.  For momentum-independent four-point
     rules, the open-component ordering, zeros and exact sign relations are
-    recorded for every inequivalent result field.  Supported coloured contact
+    recorded for every inequivalent output leg.  Supported coloured contact
     rules additionally have to match one of the explicitly reconstructed colour
     classes described in the section on general contact decomposition.  New
     Lorentz structures can be added by defining their components and contraction
@@ -378,7 +388,7 @@ def _():
     network.execute(library=library)
     kernel = network.result_tensor(library=library)
     bar_components, components = Jbar.components(), J.components()
-    print(kernel)  # Components in the order mu = 0, 1, 2, 3.
+    kernel  # Components in the order mu = 0, 1, 2, 3.
     return (
         Representation,
         TensorExpression,
