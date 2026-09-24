@@ -78,10 +78,29 @@ impl IntegralMapping {
     }
 }
 
-struct QuadraticMomentum {
+/// Exact decomposition of an inverse denominator into `scale * momentum² + remainder`.
+///
+/// The remainder is independent of every loop momentum. For an ordinary
+/// massive propagator its squared mass is `-remainder / scale`.
+#[derive(Clone, Debug)]
+pub struct QuadraticMomentum {
     momentum: Atom,
     scale: Atom,
     remainder: Atom,
+}
+
+impl QuadraticMomentum {
+    pub fn momentum(&self) -> &Atom {
+        &self.momentum
+    }
+
+    pub fn scale(&self) -> &Atom {
+        &self.scale
+    }
+
+    pub fn remainder(&self) -> &Atom {
+        &self.remainder
+    }
 }
 
 impl IntegralFamily {
@@ -322,42 +341,58 @@ impl IntegralFamily {
     }
 
     fn quadratic_momenta(&self) -> Result<Vec<QuadraticMomentum>, IntegralFamilyError> {
+        (0..self.denominators.len())
+            .filter_map(|index| self.quadratic_denominator(index).transpose())
+            .collect()
+    }
+
+    /// Decompose one ordered inverse denominator as a squared momentum plus a remainder.
+    ///
+    /// The normalization and external momentum shifts are retained exactly.
+    /// Returns `None` for linear denominators or quadratic forms that are not
+    /// the square of a single momentum. An out-of-range index is an error.
+    /// This is the same decomposition used by the affine momentum-map search.
+    pub fn quadratic_denominator(
+        &self,
+        index: usize,
+    ) -> Result<Option<QuadraticMomentum>, IntegralFamilyError> {
         let rep = Minkowski {}.new_rep(self.kinematics.dimension());
-        let mut result = Vec::new();
-        for denominator in &self.denominators {
-            let coefficients = denominator
-                .coefficient_list::<i32>(&self.scalar_products)
-                .into_iter()
-                .collect::<BTreeMap<_, _>>();
-            let Some((pivot, scale)) = self.loop_momenta.iter().find_map(|p| {
-                coefficients
-                    .get(&rep.inner_product(p, p))
-                    .filter(|c| !c.is_zero())
-                    .map(|c| (p, c))
-            }) else {
+        let denominator = self.denominators.get(index).ok_or_else(|| {
+            IntegralFamilyError::InvalidBasis(format!("denominator index {index} is out of range"))
+        })?;
+        let coefficients = denominator
+            .coefficient_list::<i32>(&self.scalar_products)
+            .into_iter()
+            .collect::<BTreeMap<_, _>>();
+        let Some((pivot, scale)) = self.loop_momenta.iter().find_map(|p| {
+            coefficients
+                .get(&rep.inner_product(p, p))
+                .filter(|c| !c.is_zero())
+                .map(|c| (p, c))
+        }) else {
+            return Ok(None);
+        };
+        let mut momentum = pivot.clone();
+        for other in self.loop_momenta.iter().chain(&self.external_momenta) {
+            if other == pivot {
                 continue;
-            };
-            let mut momentum = pivot.clone();
-            for other in self.loop_momenta.iter().chain(&self.external_momenta) {
-                if other == pivot {
-                    continue;
-                }
-                if let Some(coefficient) = coefficients.get(&rep.inner_product(pivot, other)) {
-                    momentum += coefficient / (Atom::num(2) * scale) * other;
-                }
             }
-            let remainder = (denominator
-                - scale * self.kinematics.scalar_product(&momentum, &momentum)?)
-            .together();
-            if self.rank_of(std::slice::from_ref(&remainder))? == 0 {
-                result.push(QuadraticMomentum {
-                    momentum,
-                    scale: scale.clone(),
-                    remainder,
-                });
+            if let Some(coefficient) = coefficients.get(&rep.inner_product(pivot, other)) {
+                momentum += coefficient / (Atom::num(2) * scale) * other;
             }
         }
-        Ok(result)
+        let remainder = (denominator
+            - scale * self.kinematics.scalar_product(&momentum, &momentum)?)
+        .together();
+        if self.rank_of(std::slice::from_ref(&remainder))? == 0 {
+            Ok(Some(QuadraticMomentum {
+                momentum,
+                scale: scale.clone(),
+                remainder,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -366,6 +401,52 @@ mod tests {
     use super::*;
     use feynkit_kinematics::Kinematics;
     use symbolica::parse;
+
+    #[test]
+    fn quadratic_denominators_retain_order_shifts_and_normalization() {
+        let [k, p, mass, s] = ["quad::k", "quad::p", "quad::m2", "quad::s"]
+            .map(|name| symbolica::symbol!(name).to_atom());
+        let kin = Kinematics::new()
+            .with_momenta([k.clone(), p.clone()])
+            .unwrap()
+            .with_mass_squared(&p, s)
+            .unwrap();
+        let momentum = &k + Atom::num(3) / 2 * &p;
+        let denominator =
+            Atom::num(2) * (kin.scalar_product(&momentum, &momentum).unwrap() - &mass);
+        let family = IntegralFamily::new(
+            vec![k.clone()],
+            vec![p.clone()],
+            vec![
+                kin.scalar_product(&k, &p).unwrap(),
+                denominator.clone(),
+                mass.clone(),
+            ],
+            &kin,
+        )
+        .unwrap();
+        assert!(family.quadratic_denominator(0).unwrap().is_none());
+        let quadratic = family.quadratic_denominator(1).unwrap().unwrap();
+        assert_eq!(quadratic.momentum(), &momentum);
+        assert_eq!(quadratic.scale(), &Atom::num(2));
+        assert!(
+            (quadratic.remainder() + Atom::num(2) * &mass)
+                .expand()
+                .is_zero()
+        );
+        assert!(
+            (quadratic.scale()
+                * kin
+                    .scalar_product(quadratic.momentum(), quadratic.momentum())
+                    .unwrap()
+                + quadratic.remainder()
+                - denominator)
+                .expand()
+                .is_zero()
+        );
+        assert!(family.quadratic_denominator(2).unwrap().is_none());
+        assert!(family.quadratic_denominator(3).is_err());
+    }
 
     #[test]
     fn light_cone_shift_basis_maps_to_itself() {

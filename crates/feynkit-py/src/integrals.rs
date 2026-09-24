@@ -35,6 +35,13 @@ pub struct PyIntegralFamily {
     pub(crate) inner: IntegralFamily,
 }
 
+impl PyIntegralFamily {
+    /// Borrow the shared native family when calling a reduction backend.
+    pub fn as_family(&self) -> &IntegralFamily {
+        &self.inner
+    }
+}
+
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyIntegralFamily {

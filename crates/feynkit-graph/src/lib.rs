@@ -19,7 +19,9 @@ pub mod symbols;
 pub mod thresholds;
 mod uv;
 
-pub use integrals::{IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping};
+pub use integrals::{
+    IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping, QuadraticMomentum,
+};
 pub use power_counting::DOD;
 
 // Symbolica does not permit adding tags after a bare symbol with the same name
