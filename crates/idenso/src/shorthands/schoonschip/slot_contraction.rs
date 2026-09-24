@@ -527,6 +527,50 @@ mod tests {
     }
 
     #[test]
+    fn metric_components_transport_boundaries_and_close_loops() {
+        crate::representations::initialize();
+        for (input, expected) in [
+            (
+                "g(mink(D,a),mink(D,b))*g(mink(D,b),mink(D,c))*g(mink(D,c),mink(D,d))*g(mink(D,d),mink(D,e))*T(mink(D,e))",
+                "T(mink(D,a))",
+            ),
+            (
+                "g(mink(D,a),mink(D,b))*g(mink(D,b),mink(D,c))*g(mink(D,c),mink(D,d))*g(mink(D,d),mink(D,a))",
+                "D",
+            ),
+            (
+                "g(lor(D,a),dind(lor(D,b)))*g(lor(D,b),dind(lor(D,c)))*g(lor(D,c),dind(lor(D,d)))*g(lor(D,d),dind(lor(D,e)))*T(lor(D,e))",
+                "T(lor(D,a))",
+            ),
+            (
+                "g(dind(lor(D,a)),lor(D,b))*g(dind(lor(D,b)),lor(D,c))*g(dind(lor(D,c)),lor(D,d))*g(dind(lor(D,d)),lor(D,a))",
+                "D",
+            ),
+            (
+                "g(mink(4,a),mink(4,b))*g(mink(4,b),mink(4,c))*g(mink(5,a),mink(5,b))*g(mink(5,b),mink(5,c))",
+                "g(mink(4,a),mink(4,c))*g(mink(5,a),mink(5,c))",
+            ),
+        ] {
+            let result = SlotContraction::run(parse(input).as_view(), false, false);
+            assert_eq!(result, parse(expected), "{input}");
+            assert_eq!(SlotContraction::run(result.as_view(), false, false), result);
+        }
+    }
+
+    #[test]
+    fn ambiguous_metric_incidence_keeps_ordered_substitution() {
+        crate::representations::initialize();
+        let expression = parse("g(mink(4,a),mink(4,b))*g(mink(4,a),mink(4,c))*g(mink(4,a),mink(4,d))*g(mink(4,x),mink(4,y))");
+        let AtomView::Mul(product) = expression.as_view() else {
+            panic!("expected product");
+        };
+        assert!(
+            SlotContraction::contract_metric_components(product, &mut SlotMatcher::default())
+                .is_none()
+        );
+    }
+
+    #[test]
     fn contraction_probe_prunes_root_slot_payloads() {
         crate::representations::initialize();
         for input in [
