@@ -1,5 +1,6 @@
 use super::*;
 use insta::assert_snapshot;
+use symbolica::atom::AtomView;
 
 #[test]
 fn two_gamma_trace() {
@@ -177,12 +178,18 @@ fn chisholm_trace_reduction_is_cyclic_and_preserves_coefficients() {
     ];
     let mut factors = [vec![mu.clone()], middle.to_vec(), vec![mu], tail.to_vec()].concat();
     let coefficient = parse_lit!((x + y) ^ 8);
-    let expected = -2
-        * &coefficient
+    let expected = Atom::num(-2)
         * trace!(r.bis4.to_symbolic([]); middle.iter().rev().chain(tail.iter())).simplify_gamma();
+    let expected = expected.expand();
     for _ in 0..factors.len() {
         let expr = &coefficient * trace!(r.bis4.to_symbolic([]); &factors);
-        assert_eq!(expr.simplify_gamma(), expected);
+        let result = expr.simplify_gamma();
+        // The metric polynomial may be factored differently after rotation.
+        // Compare trace bodies while requiring the spectator to stay intact.
+        assert!(matches!(result.as_view(), AtomView::Mul(product)
+            if product.iter().any(|factor| factor == coefficient.as_view())));
+        assert_eq!((&result / &coefficient).expand(), expected);
+        assert_eq!(result.simplify_gamma(), result);
         factors.rotate_left(1);
     }
 }
@@ -240,10 +247,15 @@ fn short_trace_terminal_shortcut_preserves_surrounding_contractions() {
         .collect::<Vec<_>>();
     let expr = trace!(r.bis4.to_symbolic([]); factors);
     let coefficient = parse_lit!((x + y) ^ 8);
+    let result = (&coefficient * &expr).simplify_gamma();
+    assert!(matches!(result.as_view(), AtomView::Mul(product)
+        if product.iter().any(|factor| factor == coefficient.as_view())));
+    // Expand only the trace body; the scalar spectator remains factored.
     assert_eq!(
-        (&coefficient * &expr).simplify_gamma(),
-        &coefficient * expr.simplify_gamma().expand()
+        (&result / &coefficient).expand(),
+        expr.simplify_gamma().expand()
     );
+    assert_eq!(result.simplify_gamma(), result);
 
     let mu = r.mink4.pattern(s!(mu));
     let nu = r.mink4.pattern(s!(nu));

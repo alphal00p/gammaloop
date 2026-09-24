@@ -212,13 +212,15 @@ matrix = Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0])
 
 assert len(matrix) == 4
 assert matrix[0, 0] == 1.0
-matrix.to_sparse()
+matrix = matrix.to_sparse()
 assert matrix[1, 1] == 1.0
 ```
 
 `Tensor.dense` requires row-major data whose length is the product of the structure dimensions.
 `Tensor.sparse` instead needs the element type and starts empty. `to_dense()` and `to_sparse()`
-mutate the storage representation; they do not change slots or re-index the tensor. See the
+return independent tensors with the requested storage representation. Assign the result to
+keep it; the original tensor retains its storage and values. They do not change slots or
+re-index the tensor. See the
 #link("reference/python/spynso3/Tensor/#exports-tensor-dense-associatedfunction")[dense constructor] and
 #link("reference/python/spynso3/Tensor/#exports-tensor-to-sparse-method")[conversion contract].
 
@@ -228,6 +230,100 @@ mutate the storage representation; they do not change slots or re-index the tens
   slots before changing dense/sparse storage, because a storage conversion cannot repair a
   structural mismatch.
 ])
+
+== Transforming expressions and axes
+
+`replace`, `replace_multiple`, `map`, and `derivative` return a `TensorExpression` after
+validating its external interface. Scalar changes inside a tensor's ordinary arguments
+also update its data identity, so replacing `x` in `A(x, mu)` makes library lookup use
+`A(y, mu)`. A transformation that removes or changes a non-scalar interface raises an
+error. A zero result retains its rank and slots. Explicitly named composite expressions
+retain their assigned metadata.
+
+`derivative` handles scalar coefficients. A formal derivative of an unknown tensor
+function such as `A(x, mu)` is rejected because the network executor does not support
+that notation. Supply a tensor-name derivative callback or differentiate the scalar
+component expressions with `Tensor.map_components` instead.
+
+All three tensor forms expose `structure`, `rank`, `shape`, and `is_scalar`.
+`index(...)` (also `obj(...)`) fills only unresolved ports. `reindex(...)` assigns every
+external port and permits intentional contractions; `AUTO` leaves a port unchanged.
+`rename_indices({...})` performs simultaneous substitutions on external indices and
+rejects contractions or capture of internal dummy indices. Use immutable `Slot` keys
+when the same label occurs in multiple representations. Tensor and network operations
+keep their actual stored values; they do not resolve a fresh copy from a library.
+
+`permute_axes([2, 0, 1])` reorders the public axes. On a concrete tensor it transposes
+the data; on an expression or network it changes the external interface consistently.
+Unresolved expression/network ports acquire fresh labels to keep their occurrences
+distinct. Use `reindex(...)` afterwards to choose displayed labels. The immutable
+`TensorStructure.permute_axes(...)` method changes metadata alone.
+
+Nested index payloads use `cook_indices=CookSettings.indices()` consistently on
+constructors, calls, `index`, `reindex`, and `rename_indices`. Pass custom `CookSettings`
+for reversible encoding or filters; this parameter no longer accepts a boolean.
+
+== Component operations
+
+`tensor.dtype` is the actual component class: `float`, `complex`, or Symbolica's
+`Expression`. `tensor.storage` is `"dense"` or `"sparse"`. `copy()` and Python's
+`copy.copy()` duplicate concrete storage or network state.
+
+Integer access uses flat logical row-major order, including negative indices.
+Coordinate tuples follow `structure.slots`. A flat slice returns a flat list;
+coordinate slices such as `tensor[:, -1]` or `tensor[::-1, :]` return nested lists
+for the selected axes. Assignment accepts an integer or full integer coordinates,
+including negative indices. Slice assignment and ellipsis indexing are not supported.
+
+`map_components(callback, dtype=None)` returns a new tensor. By default the output
+keeps the input component type; specify `dtype=Expression`, `float`, or `complex`
+to convert it. A sparse tensor's implicit zero is mapped once. If that result is
+nonzero, storage becomes dense so subsequent contractions include those entries.
+Callbacks should depend only on the component value; traversal order is unspecified.
+
+`Tensor.from_numpy(expression, array)` checks the complete logical shape and copies
+real numeric data into float64 storage or complex data into complex128 storage.
+`tensor.to_numpy()` returns an independent array in logical axis order, including
+for noncontiguous input arrays or permuted tensors. NumPy is imported only when these
+methods are called. Symbolic components require evaluation before NumPy export.
+
+== Execution and simplification
+
+`expression.to_tensor(library=...)` parses, executes, and returns concrete component
+storage in one call. `network.to_tensor(...)` executes a copy, preserving the source
+network's current progress. Both accept a `function_library` for broadcast callbacks.
+Use the existing mutating `execute(...)` and `result_tensor(...)` methods when progress
+should remain in the network.
+
+`network.status` returns an immutable `ExecutionStatus`: remaining nodes, operation
+nodes, internal contraction edges, currently ready operation labels, and `complete`.
+These are graph counts, not cost estimates. `network.step(...)` returns a copy after
+one native Single step, including the executor's normal preprocessing. Self traces
+can therefore run before a reported ready operation. Repeat `step`, inspect or display
+the returned network, or execute it to completion.
+
+`expression.simplify()` contracts metrics without selecting a dimensional scheme or
+expanding scalar polynomials. `SimplifySettings.hep()` enables the existing gamma,
+color, and epsilon passes as well. A custom `SimplifySettings` selects these passes,
+their `GammaSimplifySettings` and `ColorSimplifySettings`, optional full polynomial
+expansion, and a positive `max_passes` bound. The chosen passes repeat until stable;
+failure to stabilize raises an error rather than returning a partial result. Each
+pass keeps Idenso's own dimension and gamma5 rules. Individual algebra identities can
+introduce sums even when full polynomial expansion is disabled.
+
+== Numerical evaluation
+
+Interpreted and compiled tensor evaluators share `parameters`, `input_size`,
+`output_shape`, `supports_real`, `evaluate`, and `evaluate_complex`. Parameters are
+reported in the original order. Both evaluators reject any batch row with the wrong
+length before entering a native evaluation kernel. An empty batch produces no tensors;
+a constant tensor takes one empty row per requested evaluation.
+
+Compilation generates a complex kernel and, when the exact coefficients permit it,
+a separate real kernel. Real evaluation rejects complex coefficients; use
+`evaluate_complex` to retain them. Every result keeps the original logical axes and
+tensor identity. Compilation creates the requested source/library files plus real
+companions when applicable.
 
 == Typed tensor factories and patterns
 

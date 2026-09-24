@@ -73,6 +73,18 @@ def example_specification():
             "network",
         ),
         (
+            "ExecutionStatus",
+            "Immutable progress snapshot: pending graph operations, contractions and ready operations. step() returns an independent intermediate network.",
+            "status = network.status\nnext_network = network.step()",
+            "status",
+        ),
+        (
+            "SimplifySettings",
+            "Choose metric, gamma, color and epsilon passes. The HEP preset retains native dimension rules and leaves full polynomial expansion off.",
+            "simplify_settings = sp.SimplifySettings.hep()\nsimplified = indexed.simplify(simplify_settings)",
+            "simplify_settings",
+        ),
+        (
             "TensorEvaluator",
             "Optimizes symbolic components for repeated numerical evaluation. Each input row follows the params order; each output is a Tensor with the original interface.",
             "evaluator = tensor.evaluator({}, {}, [x], iterations=1, n_cores=1)\nevaluated = evaluator.evaluate([[2.0]])[0]",
@@ -80,7 +92,7 @@ def example_specification():
         ),
         (
             "CompiledTensorEvaluator",
-            "The same component evaluator compiled to a C++ shared library. Complex evaluation is available for both real and complex inputs.",
+            "The same component evaluator compiled to a C++ shared library. Both real and complex evaluation use the same batch contract as TensorEvaluator.",
             'compiled = evaluator.compile("spenso_api_demo", str(build_directory / "tensor.cpp"), str(build_directory / "tensor.so"), inline_asm="none", optimization_level=0)\ncompiled_result = compiled.evaluate_complex([[2.0 + 0j]])[0]',
             "compiled",
         ),

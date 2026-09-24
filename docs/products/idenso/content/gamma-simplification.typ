@@ -38,6 +38,13 @@ strictly four-dimensional: the simplifier does not choose a dimensional-regulari
 prescription. Mixed dimensions and unsupported transposed words can remain unevaluated.
 The notebook checks these boundaries as well as successful reductions.
 
+`GammaSimplifySettings(expand_traces=True)` requests expanded evaluated trace
+bodies in Python; Rust uses `with_expanded_traces()`. The default remains factored.
+Surrounding scalar factors and independent trace boundaries are preserved, so
+`S * trace` becomes `S * expanded_body` without distributing S. Disabling trace
+evaluation also disables trace expansion. The ordinary-trace example checks the
+result by expanding only the standalone body and then verifies an unchanged rerun.
+
 See #product-link("idenso", page: "reference/form-color-dirac/", label: "Shipped color and Dirac rules")
 for the conventions and #product-link("idenso", page: "guides/showcase/", label: "the tensor display showcase")
 for additional notation controls.
@@ -1105,9 +1112,304 @@ order-sensitive twelve-gamma public call takes 0.993 ms with factored output,
 lifecycles take 6.276, 1.570 and 1.099 ms respectively. Shared nodes reduce
 instructions to 9.56 million and allocations to 3,026. All 52 trace cases and
 87 boundary/callback files match the validated sparse-list trial exactly.
-These are scratch-library measurements; production remains unchanged. FORM
+These are scratch-library measurements; production was unchanged at that checkpoint. FORM
 was not rerun for this follow-up, and the earlier FORM CPU timing is not a
 matched wall-clock comparison.
+
+The retained scalar-power admission fix removes another unnecessary cleanup
+pass. A power requests dot normalization only when its base is a metric function;
+rank-one vector bases are already detected by the existing function observer.
+The scan still visits bases and exponents, and opaque metadata retains its
+conservative fallback. Scalar factors such as `(x+y)^8` no longer force
+Schoonschip to walk an otherwise simplified trace polynomial.
+
+The matched copied-production checkpoint below uses the default factored API,
+with `S=(x+y)^8` kept intact. Times are warm milliseconds, including returned
+output destruction, from three alternating processes with five samples each.
+
+#table(
+  columns: 5,
+  [Input], [Before], [After], [Rerun before], [Rerun after],
+  [S × free trace 8], [0.3758], [0.2837], [0.1452], [0.0520],
+  [S × free trace 10], [2.4488], [1.6274], [1.2786], [0.4716],
+  [S × free trace 12], [23.3361], [14.6916], [14.4584], [5.2234],
+)
+
+For the twelve-gamma case, instructions fall from 299.24 to 192.20 million;
+the unnecessary outer Schoonschip walk disappears. Small controls remain mixed:
+a scalar variable changes from 0.296 to 0.325 microseconds, while a scalar sum
+changes from 0.362 to 0.347. The order-sensitive twelve-gamma source changes
+from 152.6 to 158.0 ms, with its rerun changing from 3.382 to 3.360 ms.
+These are workload-specific gains, not a FORM-parity result.
+
+All 122 power cases agree across dot normalization, Schoonschip, default gamma
+and experimental expanded gamma: 488 exact outputs. Eleven production inputs
+and their reruns also agree. The experimental API compatibility suite passes
+52 trace cases, 64 boundary/callback/scope cases, 87 unchanged default-output
+files and four integration tests. Its explicit expanded-trace API was
+unintegrated at that checkpoint: expanding a trace inside a larger expression still changed the
+cost of later cleanup. The retained power correction is independent of that API.
+The retained change passes all 40 targeted repository tests and Clippy. The unit
+tests explicitly register their parsed vector namespace and check a productive power identity; the initial namespace-only
+fixture failure is retained in the record. The `retained_scalar_power_admission`
+entry preserves sources, samples, instruction profiles and validation logs.
+
+The next retained change inspects the whole rebuilt expression before the
+remaining cleanup passes. A complete observation with no contraction,
+normalization or Dirac/epsilon work can return immediately. Otherwise cleanup
+runs as before; its observation is reused on the next iteration only while every
+cleanup result is exactly unchanged. This includes outer factors and callback
+results, and does not assume that an unchanged spectator cannot contract with
+new trace metrics.
+
+After the scalar-power fix, a five-round comparison of the final concise
+production source gives the following default-call times in milliseconds:
+
+#table(
+  columns: 3,
+  [Input], [Before], [After],
+  [S × free trace 8], [0.2844], [0.2064],
+  [S × free trace 10], [1.6479], [0.9773],
+  [S × free trace 12], [14.3991], [7.2032],
+  [S × order-sensitive trace 12], [154.4985], [154.2121],
+)
+
+The twelve-free-gamma source drops from 188.59 to 96.58 million instructions.
+Its rerun is nearly unchanged at 5.379 to 5.179 ms. An earlier variant added a
+full scan when the certificate failed; carrying an unchanged observation
+removes that duplication. All 29 final default/disabled/compute fixture modes
+and 87 boundary/callback outputs match their baselines. A separate regression
+checks a cleanup callback that introduces a new trace after the observation.
+All 29 targeted repository Dirac simplification tests and Clippy pass; this
+Clippy command does not enable warnings-as-errors.
+
+The remaining small costs are reported explicitly: disabled-trace free-eight
+and free-twelve controls increase by 1.8% and 3.6%. An untouched Symbolica scalar
+expansion control changes by 1.7%, with identical instruction counts and an
+unchanged rerun. These results establish a large free-trace cleanup gain,
+without claiming zero overhead in every mode or FORM parity.
+
+The expanded-trace API was unintegrated at that checkpoint. With the preceding carryover
+variant on both routes, the same complete expanded free-twelve output takes
+about 50.9 ms by simplifying first and expanding only the trace body, versus
+62.7 ms when expansion happens inside the experimental API. Scalar spectators
+remain factored in both. The `retained_post_rewrite_completion` record keeps
+all three candidate stages, the final untouched-control comparison and the
+callback regression separately from that experimental API.
+
+=== Traces with exact scalar spectators
+
+The first retained scalar-context dispatch reused the existing terminal evaluator for
+one ordinary trace multiplied by exact function-free scalar factors. It keeps
+$S=(x+y)^8$ intact. Matched default-call times, including output destruction,
+are milliseconds:
+
+#table(
+  columns: 3,
+  [Input], [Before], [Retained],
+  [S × order-sensitive trace 12, D], [159.596], [2.878],
+  [S × alternating slashes 12, D], [1.636], [0.0569],
+  [S × paired slashes 12, D], [0.1717], [0.0163],
+  [S × free trace 12, 4D], [10.995], [5.493],
+  [S × free trace 12, D], [7.487], [7.243],
+  [S × free trace 10, D], [0.9855], [1.0198],
+)
+
+The order-sensitive source improves 55.5 times; its rerun improves from 3.372
+to 1.807 ms. This does not establish FORM parity. A separate matched-output
+lifecycle simplifies the product, expands only the trace body and restores S:
+
+#table(
+  columns: 4,
+  [Trace body], [Before, ms], [Retained, ms], [FORM CPU, ms],
+  [Order-sensitive 12, D], [165.193], [8.104], [0.7433],
+  [Free 12, D], [55.822], [53.940], [3.9333],
+)
+
+These Rust measurements use three alternating process rounds and five samples
+per process on CPU 9, with native opt-level 2 libraries and debug assertions.
+FORM 5.0.0 measures internal `tracen` plus sorting CPU time after setup; Rust
+measures wall time. The expanded bodies still take about 11 and 14 times the
+FORM reference. Factored default results and expanded FORM output are distinct
+amounts of work.
+
+Admission is deliberately restrictive: canonical ordinary words, at most two
+occurrences per explicit index, exact scalar metadata and callback-free compact
+vectors. Axial words, external tensor factors, compound metadata, custom vector
+normalizers and numeric domains outside exact rational/complex-rational
+coefficients retain the established route. This matters: a rounded trace-unit control exposed coefficient
+reassociation, and an indexed-vector callback exposed a different rewrite order.
+The guards preserve both original first-call and rerun results exactly.
+
+At this checkpoint, the initial shared scan gated one-shot product admission.
+The whole rebuilt product then had to pass the existing completion certificate;
+otherwise that observation entered outer cleanup. The following refinement
+removes this redundant output scan under the same strict admission. Neither
+the experimental expanded-trace API nor the isolated Symbolica patches were
+integrated by this change.
+
+Small costs remain visible. Generic-D free-ten is 3.5% slower, while an untouched
+scalar-expansion control is 1.7% slower; free-ten instructions decrease 0.73%.
+The remaining wall shift has no established cause. The earlier 9.5% instruction
+regression on a 128-metric product is removed by the scan gate; its final public
+time changes from 28.36 to 27.77 microseconds. Heavy failed admission is unchanged
+at about 2.53 ms.
+
+Validation passes 20 public cases, 84 boundary cases, 82 exact trace-body
+polynomial comparisons, 81 default/disabled/compute modes and eight exact
+numeric-dimension status checks. Fifteen admitted raw products equal their
+cleaned results exactly. Independent HEP networks pass 24 case/sample rows,
+providing 48 comparisons against the original gamma products. The combined
+retained source passes all 149 selected repository Dirac/Schoonschip tests and
+scoped Clippy, without warnings-as-errors. Two older assertions were updated to
+compare exact trace-body polynomials while explicitly preserving the spectator;
+no production change was needed for those test corrections.
+The `retained_scalar_context_trace_dispatch` entry stores source/build identities,
+raw samples, independent reviews and superseded rounded/admission variants.
+
+=== Closed terminal products and compact vectors
+
+The strict scalar-context terminal evaluator now returns its rebuilt product
+directly. Its trace recurrence emits each free explicit slot once per monomial,
+and the admitted exact scalar spectators cannot add a contraction partner.
+Wildcard metadata can leave a diagonal metric unevaluated, but that eliminated
+dummy has no distinct partner and the diagonal is inert under existing cleanup.
+The admission rules, callback exclusions and shared recurrence are unchanged.
+
+A matched comparison of both retained changes measures these default calls
+in milliseconds, against the same build before either change:
+
+#table(
+  columns: 3,
+  [Input], [Before], [Combined],
+  [S × order-sensitive trace 12, D], [2.907], [0.964],
+  [S × free trace 10, D], [0.970], [0.569],
+  [S × free trace 12, D], [7.438], [2.373],
+  [S × free trace 12, 4D], [5.151], [2.974],
+)
+
+Including expansion of only the trace body gives 8.160 → 6.186 ms for the
+order-sensitive word and 52.138 → 46.590 ms for free twelve. FORM references
+remain 0.7433 and 3.9333 ms CPU respectively; these are not parity results.
+The Rust measurements use the same native opt-level 2/debug-assertions setup,
+three alternating rounds, five samples per process on CPU 8 and output destruction.
+The isolated closure trial reduces contextual free-twelve instructions by 61.2%.
+Its bare control moved 7.1% slower despite 1.3% fewer instructions; the combined
+run instead moves about 1% slower. No cause for those wall shifts is established.
+The order-sensitive rerun improves 1.819 → 0.918 ms; generic free-twelve stays
+near 5.1 ms. First-call closure itself does not accelerate reruns, because the
+result no longer contains the admitted trace.
+
+The shared candidate scan also stops requesting dot normalization for canonical
+compact vectors. It uses the existing strict `SlotMatcher` grammar and retains
+head observation and conservative treatment of malformed or opaque shapes.
+In the combined matrix, a product of 64 compact vectors takes
+22.35 → 17.02 microseconds through Schoonschip and 33.49 → 18.13 microseconds
+through gamma simplification. Malformed-vector fallback grows
+0.435 → 0.547 microseconds; wrapped compact fallback grows 0.896 → 1.194.
+A trial shape prefilter recovers those costs
+but repeats decoding on successful vectors and slows those paths; it is not
+retained. Paired-slash reruns grow 2.465 → 2.858 microseconds and disabled
+free-twelve calls grow 8.408 → 9.191. The untouched scalar expansion control
+moves 2.5% slower. This is not a uniform improvement across every input.
+Three-vertex network times remain about 9.6 ms for smallest-degree order and
+9.2 ms for minimum-product-terms order.
+
+Closure validation adds 392 metadata/symbol cases and 557 wildcard cases, with
+exact raw, cleaned, contextual and rerun agreement. Independent HEP networks
+again pass 48 comparisons with original gamma products per build. Compact-vector
+validation preserves 294 first/rerun mode records, callback counts and 42 public
+benchmark outputs. The `retained_terminal_product_closure` and
+`retained_compact_vector_candidates` records preserve both candidates, controls,
+instruction counts and raw timings. Combined validation passes all 152 selected
+repository tests, scoped Clippy, 42 compact/gamma/gluon output pairs and 23
+trace lifecycle controls. The `retained_closure_compact_combination` entry
+records the combined build and measurements separately from isolated trials.
+
+=== Expanded trace output: integrated API and measured checkpoints
+
+The source now includes the Rust and Python expanded-trace setting. It emits
+polynomial output from the shared trace recurrence and existing factored recipe;
+scalar spectators never enter the polynomial backend. The default remains
+factored. Unsupported sparse shapes keep the established arithmetic followed by
+trace-local expansion, preserving callback and metadata handling. Independent
+traces keep independent expansion boundaries.
+
+The initial matched trial, before strict bare admission and literal-four folding,
+measured these complete calls with $S=(x+y)^8$ kept factored, in milliseconds:
+
+#table(
+  columns: 4,
+  [Trace body], [Simplify then expand body], [Prototype], [FORM CPU],
+  [Order-sensitive 12, D], [6.248], [0.851], [0.7533],
+  [Free 10, D], [3.475], [1.345], [0.3433],
+  [Free 12, D], [47.868], [17.153], [3.9667],
+  [Free 14, D], [871.254], [418.609], [53.0],
+)
+
+This narrows the order-sensitive gap substantially, but does not establish
+general FORM parity. Rust reports wall time with output destruction; FORM
+reports internal trace-plus-sort CPU time with the spectator excluded. The
+matched Rust matrix covers eight fixtures, bare and scalar contexts, three
+alternating process rounds and five samples per mode on CPU 10. Bare free-fourteen
+takes 886.7 → 369.1 ms. Expanded free-twelve reruns with S take
+18.29 → 11.40 ms; faster first-call emission does not make large reruns free.
+
+Exact comparisons pass for defaults, expanded bodies, preserved spectators,
+rounded boundaries, nested callbacks and metadata, including 392 strict leaf
+and 557 wildcard cases. Nine refreshed FORM references retain exact sorted-word
+and archived-output checks across 27 processes. Existing HEP certificates are
+referenced as prior independent evidence, not presented as fresh evaluations.
+
+The initial prototype's broad standalone mixed-six route grows
+25.27 → 34.87 microseconds because it completes possible callback output before
+expansion; the strict scalar-context route avoids that work. Default scalar
+free-ten also shows a noisy 24% median increase. A separate default-only probe
+finds 5.082 → 5.007 million instructions, but 523 → 556 microseconds in wall
+medians, with paired ratios spanning 0.978–1.222. This does not show an instruction
+increase of that size; it neither explains nor eliminates the wall-time concern.
+A bounded follow-up tries the same strict certificate first for bare traces
+only when expanded output is requested. Mixed-six improves 34.68 → 24.53
+microseconds; the order-sensitive D case stays near 0.84 ms. Exact checks still
+pass, with 72 additional timed processes. Rejected metadata pays another
+0.534 microseconds and callback/axial controls grow about 4%. This follow-up
+is now integrated; the default wall-time concern remains recorded. The
+`expanded_trace_closure_rebase_trial` entry preserves the initial full matrix
+and subsequent bounded trials separately.
+
+The integrated sparse backend also folds literal exact dimension four into its
+integer coefficients, using the existing four-dimensional predicate. Rounded,
+wildcard and unsupported dimensions retain their previous routes. The matched
+copied-library comparison isolates this change; values below are microseconds:
+
+#table(
+  columns: 4,
+  [Expanded trace body], [Before], [Exact-four path], [FORM CPU],
+  [Order-sensitive 12, 4D], [432.27], [163.82], [53.33],
+  [Five interior gammas, 4D], [4,086.94], [1,177.43], [—],
+  [Repeated compact 8, 4D], [17.42], [13.83], [1.40],
+  [Branching 8, 4D], [23.35], [21.22], [2.00],
+  [Alternating 14, 4D], [20.97], [20.89], [10.20],
+  [Mixed branching 8, 4D], [24.38], [24.42], [—],
+)
+
+With S preserved, order-sensitive twelve takes 443.60 → 172.34 microseconds
+and the five-interior case 4.145 → 1.441 ms. The generic-D control stays
+827.18 → 827.70 microseconds bare and 843.37 → 847.19 with S. Rust uses
+three alternating process pairs and five samples per mode on CPU 10, timing
+public evaluation, final emission and output destruction. FORM measures internal
+`trace4` plus sorting CPU after setup, with S excluded; a dash means no matching
+reference in this checkpoint. FORM remains faster, and mixed cases and reruns
+do not uniformly improve. These measurements do not establish general parity.
+
+All 84 timed processes, the reused trace/callback/wildcard matrix, 29 additional
+numeric-domain cases and five public Rust tests pass against the frozen
+candidate. The integrated build passes 158 selected Idenso tests, four installed
+Python expansion tests, the pipeline check, scoped Clippy and the generated-stub
+check. Notebook algebra assertions pass, but rich rendering still fails at the
+Symbolica export-version boundary described above.
+The checks preserve exact trace-body equality, reruns and scalar factorization;
+this trial adds no fresh HEP component evaluation.
 
 Late external metrics also contract through factored trace sums. A compatible
 tensor can pass through a sum when every branch can absorb it, including metrics
@@ -1116,12 +1418,12 @@ when vector contraction is enabled; scalar spectators retain their factorization
 Independent HEP checks cover ordinary, axial and symbolic-D traces simplified
 before an external metric is attached.
 
-The broader trace/scan validation covers 363 passing Idenso tests and 46 passing HEP integration
-tests. Three Idenso processes initially hit the host's open-file limit; the
-targeted retry passed. The existing tensor-display snapshot failure remains,
-with 23 tests skipped across the two suites. Both final scoped Clippy checks
-pass with warnings denied. The Spenso follow-up passes 19 relevant tests; its
-remaining dual-wrapper filter test fails identically with the matcher change
+An earlier broad trace/scan validation checkpoint recorded 363 passing Idenso
+tests and 46 passing HEP integration tests. Three Idenso processes initially hit
+the host's open-file limit; the targeted retry passed. The existing tensor-display snapshot failure remains,
+with 23 tests skipped across the two suites. Both scoped Clippy checks at that
+earlier checkpoint passed with warnings denied. The Spenso follow-up passes
+19 relevant tests; its remaining dual-wrapper filter test fails identically with the matcher change
 removed. All final measured trace outputs match the independent certificate.
 
 The #source-link("examples/notebooks/tensor_contraction_parity.json", label: "contraction parity progress record")
@@ -1151,8 +1453,9 @@ are excluded from these route timings.
 An instruction profile identifies repeated scalar recursion as the largest
 measured cost. The smallest-degree route executes 209.2 million instructions,
 of which 103.8 million are inside scalar-leaf simplification. A separate trace
-counts 487 network parse/merge passes but only 16 contraction entries. All 53
-captured scalar leaves have no explicit slots; dot normalization changes none,
+counts 487 network parse/merge passes and 16 contraction entries: four consume
+ports and twelve rebuild plain products. All 53 captured scalar leaves have no
+explicit slots; dot normalization changes none,
 but numeric-coefficient distribution changes 25, so skipping all scalar cleanup
 would change the output. The minimum-product-terms route similarly spends
 119.5 of 230.1 million instructions inside scalar-leaf simplification. These
@@ -1173,8 +1476,9 @@ the existing parser with their original expression. Brackets, trace and chain
 heads, broadcasts and malformed compact slots therefore keep their existing
 scope and error behavior.
 
-Matched copied-library measurements, with five alternating process pairs and
-eleven samples per process, give the following smallest-degree timings:
+At the scalar-shortcut-only checkpoint, before residual-query deduplication,
+matched copied-library measurements with five alternating process pairs and
+eleven samples per process give the following smallest-degree timings:
 
 #table(
   columns: 3,
@@ -1188,8 +1492,9 @@ eleven samples per process, give the following smallest-degree timings:
 The three-vertex minimum-product-terms route improves from 26.631 to 14.076 ms;
 the expand-first control remains 5.50–5.53 ms. Thus the network route still
 has substantial overhead. Instructions decrease by 42.5–42.7%. Parse/merge
-passes fall from 487 to 77 and from 607 to 117 respectively, with 16 contraction
-entries in both versions. Direct sum contraction now accounts for 34.5% of the
+passes fall from 487 to 77 and from 607 to 117 respectively, with the same four
+port-consuming contractions and twelve plain-product entries. Direct sum
+contraction now accounts for 34.5% of the
 smallest-degree instruction profile. These clocks include result destruction
 but exclude initial normalization and final polynomial emission. The copied
 libraries share compiler flags and dependencies, without reproducing Cargo's
@@ -1202,6 +1507,78 @@ tests pass under process-isolated nextest, including new coefficient, scope,
 malformed-input and factored-spectator cases. The scalar checkpoint and raw
 measurements are retained alongside the contraction profile in the parity record.
 
+A subsequent retained change deduplicates identical residual-index queries before
+running the existing matcher, preserving its grammar and search scope. In the
+three-vertex case, median residual-scan instructions fall from 12.53 to 6.33
+million with smallest-degree ordering and from 12.18 to 6.18 million with
+minimum-product-terms ordering, about 49% in each case. Whole-route instruction
+medians fall by 4.9% and 2.9%, respectively. All 3,712 exact output/error
+comparisons agree. The paired wall run is invalid for a speedup claim because
+unchanged controls became strongly bimodal under concurrent host load. The
+scalar-only timings above therefore remain a separate checkpoint; no additional
+wall-time improvement is claimed for query deduplication.
+
+The next retained change reuses the same certificate at depth-one network entry,
+after top-level sums have been split. It skips network reconstruction for a
+certified scalar term only when dot normalization is unchanged; the existing
+coefficient cleanup still runs. The matched checkpoint below starts from the
+retained scalar-leaf, unique-query and scalar-power changes. It uses the same
+five-process-pair protocol, with smallest-degree ordering:
+
+#table(
+  columns: 3,
+  [Input], [Before entry shortcut], [After entry shortcut],
+  [One closed vertex], [0.698 ms], [0.440 ms],
+  [Two closed vertices], [2.986 ms], [2.793 ms],
+  [Three closed vertices], [13.432 ms], [10.403 ms],
+  [Two contracted sums], [0.188 ms], [0.129 ms],
+)
+
+For three vertices, minimum-product-terms ordering improves from 13.695 to
+9.895 ms. The unchanged expand-first medians stay within 2%; individual outliers
+remain in the raw samples. Instructions decrease by 19.9% and 23.9% for the two
+orders. These route clocks include result destruction and exclude input parsing,
+shared initial normalization and final polynomial emission. They are a separate
+matched checkpoint, not additive to earlier timings or to the initialization-gate
+experiment.
+
+The parser counts explain the gain. The earlier counts decompose as
+`77 = 1 + 4*6 + 2*26` and `117 = 1 + 6 + 6 + 6 + 26 + 2*36`: one initial
+network, intermediate result recursion, and final scalar-term passes. The new
+route needs `19 = 1 + 3*6` passes for either order. All four port-consuming
+contractions and twelve plain-product entries remain, as do the factored
+outputs. The matrix has 16,960 matching output/error records plus 192 matching
+caught-panic statuses for an invalid nonuniform sum boundary at deeper parsing.
+It covers both expansion modes, parser depths, SinglePass, compact roots,
+callbacks and scalar spectators. All 41 repository Schoonschip tests and the
+scoped Clippy check pass.
+
+The retained follow-up removes one duplicate dot-normalization pass. After a
+scalar term is certified unchanged, the same `apply` owner now sends that
+normalized result directly to coefficient cleanup. Parser-bound inputs still
+receive both their original pre-parse normalization and final cleanup. The
+matched five-process-pair checkpoint starts after the entry shortcut:
+
+#table(
+  columns: 3,
+  [Input and order], [Before], [After],
+  [Three vertices, smallest degree], [10.212 ms], [10.022 ms],
+  [Three vertices, minimum product terms], [10.033 ms], [9.485 ms],
+  [16 compact dots], [18.60 µs], [16.35 µs],
+  [64 compact dots], [68.62 µs], [59.51 µs],
+)
+
+The smallest-degree wall gain is modest. One contracted-sum control is 1.8%
+slower with overlapping process ranges; its instruction median still decreases.
+Unchanged expand-first controls remain within 0.7%. Three-vertex instruction
+medians decrease by 4.0% and 6.5%; compact-dot controls, including a factored
+scalar spectator, decrease by 10–22%. All 20,032 output/error records and 192
+caught-panic statuses agree across modes, depths and callback boundaries.
+All 149 selected Dirac and Schoonschip tests and the scoped Clippy check pass.
+These timings keep the previous route boundary and frozen dependency family;
+they exclude final polynomial emission and the separate initialization-gate
+experiment and do not establish FORM parity.
+
 A sum boundary also needs a clear invariant. Fast inference uses the first
 branch; the depth-limited parser does not certify matching later branches.
 Generated tensor rules can validate their common boundary once. Substitution
@@ -1210,6 +1587,16 @@ restricted slot contractor, and update the affected boundary. A repeated-index
 scan remains a cheap candidate check, not a boundary certificate or contraction
 order. Outer slots establish available contractions; estimated branch growth
 and copying costs guide their order without proving global optimality.
+
+For example, an exterior metric multiplying a sum can rename its contracted
+slot in every branch while the rest of the product remains factored. When the
+metric is inside a three-gluon vertex sum, exposing one vertex branch reveals
+which other factor can absorb that metric. The planner can distribute that
+vertex alone, substitute into the selected neighbour, and update the affected
+interfaces. It need not expand every opaque factor in the product. A useful
+cost estimate includes the exposed branch count, the size of the neighbour to
+copy, and how many contractions become available immediately. Hidden
+cancellations prevent outer structure alone from certifying an optimal order.
 
 All 72 exact HEP component comparisons pass across four inputs, three integer
 assignments and six routes. Nine FORM programs also match the final scalar
@@ -1221,6 +1608,226 @@ from opaque vertices; the Rust wall measurements start from normalized
 six-term rules. These different timing boundaries do not establish a matched
 speedup ratio. The fixtures and validation are retained under
 `gluon_network_planning_followup` in the contraction parity record.
+
+=== Residual searches and Python result construction
+
+Literal residual slots now use exact containment instead of entering the pattern
+matcher. Genuine wildcard patterns retain matching semantics. In a fresh complete
+scalar-output measurement, the three-vertex minimum-product-terms route improves
+9.735 → 9.301 ms; smallest-degree improves 10.095 → 9.902 ms. The unchanged
+expand-first control stays near 5.42 ms. Fresh FORM CPU measurements for one,
+two and three ordered vertices are 5, 32.5 and 325 microseconds, with 6, 34 and
+64 final terms. Rust starts from substituted normalized rules and measures wall
+time including final scalar emission; FORM includes vertex substitution and
+sorting. The gap remains substantial and these are different timing boundaries.
+
+The installed Python API has a separate result-construction cost. Reusing an
+unchanged normalized sum avoids repeatedly merging its growing prefixes while
+preserving the previous grouping whenever a child changes. Three interleaved
+process pairs, each with five samples and $S=(x+y)^8$ kept factored, measure
+complete expanded-trace calls in milliseconds:
+
+#table(
+  columns: 4,
+  [Trace body], [Before], [Unchanged-sum reuse], [Speedup],
+  [Free 6, D], [0.827], [0.842], [0.98×],
+  [Free 10, D], [117.687], [98.915], [1.19×],
+  [Free 12, D], [4,203.895], [1,438.199], [2.92×],
+  [Free 8, 4D], [8.204], [7.957], [1.03×],
+  [Repeated 8, 4D], [0.199], [0.200], [1.00×],
+  [Repeated 8, D], [1.528], [1.529], [1.00×],
+)
+
+These are release Python-host wall times, separate from the native Rust and FORM
+tables. Construction of inputs, reference results and rendering are excluded;
+result disposal is included. Ambient builds use other CPUs. The unconditional
+n-way sum alternative was rejected because it changed established grouping.
+All exact output and spectator checks pass; 43 composition/settings tests pass.
+
+After this change, instruction profiles of free 6, 10 and 12 still attribute
+95.0%, 99.0% and 99.2% of complete calls to result wrapping. Explicit multiplicity
+validation accounts for 39.2%, 52.0% and 56.1%; interface reinference is another
+48.0%, 40.6% and 37.2%. These are instruction shares, not additive wall-time
+phases. They identify repeated validation and inference as the next boundary to
+improve; speeding initial partial parsing alone cannot remove this work.
+
+For a transformation returning the identical Atom, the Python wrapper now
+allocates a fresh result with the existing interface and metadata. Changed
+results retain full validation. A separate three-process-pair comparison measures
+complete reruns after the sum improvement, in milliseconds:
+
+#table(
+  columns: 4,
+  [Expanded body], [Revalidate unchanged result], [Reuse metadata], [Speedup],
+  [Free 6, D], [0.786], [0.00738], [106×],
+  [Free 10, D], [95.504], [0.676], [141×],
+  [Free 12, D], [1,374.800], [9.222], [149×],
+  [Free 8, 4D], [7.594], [0.0594], [128×],
+  [Repeated 8, 4D], [0.165], [0.00229], [72×],
+  [Repeated 8, D], [1.393], [0.0126], [111×],
+)
+
+The tensor algebra still executes on each rerun; this change removes repeated
+result validation after exact equality is established. It preserves names,
+scalar key arguments, unresolved ports, tensor-zero interfaces and logical port
+permutations. Installed tests cover these cases and fresh object identity.
+This is a rerun improvement, not a first-call speedup or a comparison with FORM.
+
+A subsequent change shares the existing slot matcher across candidate collection
+and multiplicity counting. It preserves typed index and dimension parsing,
+duality, additive branch scopes and opaque metadata. Complete first-call medians
+improve 0.826 → 0.711 ms for free six, 95.508 → 71.342 ms for free ten and
+1,440.647 → 1,014.794 ms for free twelve in symbolic D. Free eight in 4D improves
+8.461 → 5.876 ms; repeated eight improves 0.207 → 0.165 ms in 4D and
+1.474 → 1.186 ms in D. All six unchanged-rerun controls stay within 1.3%.
+The same three-pair/five-sample wall protocol applies; one baseline process was
+slower than the others, so instruction counts provide an independent check.
+
+At that checkpoint, complete free-six/ten/twelve instruction counts decrease by
+20.6%, 27.4% and 28.0%. Multiplicity validation decreases by about half. Interface
+reinference accounts for 53–61% of those calls, and validation still scans
+separately for each candidate index. The change passes 44 selected
+composition/settings Rust tests, six installed Python checks and scoped Clippy.
+
+The next change collects multiplicities for all explicit indices together.
+Products add counts; sums take the maximum for each index across alternatives,
+without distributing the expression. Counts stop at three, the first invalid
+Einstein multiplicity. The existing typed slot matcher still determines which
+occurrences are structural, and opaque scalar metadata contributes no counts.
+This removes the separate traversal for each candidate index.
+
+Syntax validation and interface inference also reuse fully explicit built-in
+tensor leaves within one call. The bounded cache keeps complete, unmerged
+interfaces, including repeated ports and their logical order. Compact ports,
+generic tensor functions and fresh-index materialization remain outside this
+cache. Enclosing sums, products, powers and placeholder scopes still receive
+their existing validation.
+
+Three fresh interleaved process pairs measure these two changes together. The
+baseline already includes the shared matcher and unchanged-result improvements;
+all entries below are complete Python first-call wall times in milliseconds:
+
+#table(
+  columns: 4,
+  [Expanded body], [Before], [After], [Speedup],
+  [Free 2, D], [0.0272], [0.0262], [1.04×],
+  [Free 4, D], [0.1069], [0.1023], [1.04×],
+  [Free 6, D], [0.662], [0.437], [1.51×],
+  [Free 10, D], [70.408], [30.332], [2.32×],
+  [Free 12, D], [987.202], [401.789], [2.46×],
+  [Free 8, 4D], [5.824], [2.765], [2.11×],
+  [Repeated 8, 4D], [0.163], [0.133], [1.23×],
+  [Repeated 8, D], [1.179], [0.700], [1.68×],
+)
+
+Each process uses five samples, retains $S=(x+y)^8$ and includes result disposal.
+All eight unchanged-rerun controls remain within 2%; free twelve takes 9.07 ms.
+Exact output, rerun and spectator checks pass. The count summary agrees with the
+old traversal on 445,868 target queries across 2,322 fixtures, with another
+36,864 representation-key comparisons. Six installed Python checks and scoped
+Clippy pass. Of 90 selected Rust tests, 89 pass; the remaining wrapped-index test
+also fails on the frozen baseline because its equal-index metric has already
+normalized to a scalar. Its expectation is unchanged.
+
+Instruction counts independently decrease by 35.0%, 55.3% and 59.5% for free
+six, ten and twelve. In the twelve-gamma call, interface inference still takes
+39.8% of instructions and tensor-power lowering takes another 18.3%. Explicit
+multiplicity validation is down to 10.6%. Product normalization consumes 16.7%
+across two construction sites, overlapping the constructor costs; these owner
+shares must not all be added. The remaining overhead is repeated traversal and
+construction around the algebra, rather than the initial network parse.
+
+The explicit-vector candidate-scan refinement was rejected: avoiding dot walks
+introduced enough additional classification work to leave the large gluon
+instruction totals essentially unchanged. Source-factor parse caching likewise
+has only a 0.24–0.30% measured ceiling. Normalizing newly formed nested vectors
+within scoped substitution is a more promising follow-up, but cannot remove
+cleanup for new repeated indices, powers or callback-produced work.
+
+The `retained_literal_residual_index_search`, `retained_unchanged_sum_construction`,
+`retained_unchanged_python_result`, `retained_shared_python_slot_matcher` and
+`retained_explicit_multiplicity_and_interface_reuse`
+archive entries retain validation, raw timings, profiles, controls and build
+identities, including the rejected candidate.
+
+=== Remaining complete-call gap
+
+The following inventory combines the latest available matched-output native
+checkpoints; it is not a uniform rerun of every case. Rust measures warm wall
+time through output construction and disposal. FORM measures internal algebra
+and sorting CPU time. Setup, parsing and process startup are excluded, and
+factored scalar spectators remain outside polynomial expansion. Values are
+milliseconds; the ratios describe these stated timing boundaries.
+
+#table(
+  columns: 4,
+  [Native workload], [Our wall], [FORM CPU], [Observed ratio],
+  [Axial 12, 4D (older checkpoint)], [0.621], [0.627], [0.99×],
+  [Contracted 12, 4D, expanded], [0.164], [0.0533], [3.07×],
+  [Contracted 12, D, expanded], [0.828], [0.753], [1.10×],
+  [Free 10, D, expanded], [1.255], [0.343], [3.66×],
+  [Free 12, D, expanded], [16.707], [3.967], [4.21×],
+  [Free 14, D, expanded], [369.061], [53.000], [6.96×],
+  [64-metric chain], [0.0234], [0.0032], [7.33×],
+  [Metric over 128 terms], [0.1241], [0.0667], [1.86×],
+  [Vector over 128 terms], [0.1651], [0.0667], [2.48×],
+  [Three gluon vertices, network, complete], [9.221], [0.325], [28.4×],
+  [Three gluon vertices, expand-first], [5.255], [0.325], [16.2×],
+)
+
+The gluon rows are fresh live-source measurements. FORM includes ordered vertex
+substitution from opaque functions; Rust starts from substituted normalized
+rules. The isolated scoped-substitution/dot-fusion candidate lowers the complete
+network call to 8.734 ms, a 5.3% improvement. It agrees on 2,192 public
+output/error/rerun records but is not integrated. Full cleanup remains necessary
+for newly formed powers and repeated indices. No general FORM parity follows
+from the nearly equal older axial-twelve checkpoint.
+
+Fresh installed-Python measurements have a substantially larger gap:
+
+#table(
+  columns: 4,
+  [Expanded body], [Complete Python wall], [FORM body CPU], [Observed ratio],
+  [Free 2, D], [0.0262], [0.000640], [41×],
+  [Free 4, D], [0.1023], [0.001350], [76×],
+  [Free 6, D], [0.4369], [0.005400], [81×],
+  [Free 10, D], [30.332], [0.353333], [86×],
+  [Free 12, D], [401.789], [3.966667], [101×],
+  [Free 8, 4D], [2.765], [0.048000], [58×],
+  [Repeated 8, 4D], [0.1327], [0.002000], [66×],
+  [Repeated 8, D], [0.7000], [0.014000], [50×],
+)
+
+All 24 fresh FORM processes pass exact polynomial/reference checks. Python
+includes the wrapper, interface inference and handling of $S=(x+y)^8$; FORM
+excludes S. These are user-visible boundary comparisons, not equal-stage backend
+speedups. Python result construction owns 97.25% of the gated free-twelve
+instruction profile. The native free-twelve expanded profile instead attributes
+80.8% to polynomial-to-Atom emission and only 2.3% to the Clifford recurrence.
+This identifies distinct targets: eliminate redundant validation and rebuilding
+in Spynso, and improve expression emission in Symbolica.
+
+The full eight-vertex ladder was also refreshed through the notebook's actual
+Python/TensorExpression route. One complete ordered reduction takes *46.474 s*;
+FORM's three-process warm wall median is *0.742 s* (0.71 s internal CPU), an
+observed wall ratio of *62.7×*. All intermediate counts and every coefficient
+of the 9,652-term final polynomial agree. The last two vertex stages take
+13.311 and 25.147 s. This is a full-route measurement, separate from the
+three-vertex network experiment; the earlier 54.970 s figure is historical.
+Input construction, term counting and validation are outside the Python clock,
+while FORM process wall includes startup and input parsing. The single Python
+run is not a multi-run median.
+
+Measured, unintegrated Symbolica candidates include an initialization-completion
+query, normalized polynomial emission, compact-heap sum merging, and lazy scratch
+allocation during expansion. They have separate correctness and performance
+records; their gains cannot be multiplied together. The initialization gate
+improved an earlier complete gluon call by about 10–11%. Polynomial emission
+improved 8.823 → 3.628 ms for twelve and 198.950 → 104.140 ms for fourteen;
+those are isolated emission times. The updated
+#source-link("examples/reproducers/symbolica-expansion/performance.typ", label: "Symbolica primitive experiments")
+and `end_to_end_gap_checkpoint` archive entry retain the full inventory,
+counterexamples, measured regressions and timing limits.
 
 == Run locally
 

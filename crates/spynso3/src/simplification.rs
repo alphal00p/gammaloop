@@ -1,8 +1,14 @@
-use pyo3::{Bound, PyResult, types::PyModule};
+use pyo3::{
+    Bound, PyResult,
+    types::{PyModule, PyModuleMethods},
+};
 
 mod algebra;
 pub(crate) mod expansion;
+mod pipeline;
 mod tooling;
+
+pub(crate) use pipeline::PySimplifySettings;
 
 pub(crate) use algebra::{
     GammaConjugationError, PyColorCasimirSettings, PyColorSimplifySettings, PyGammaSimplifySettings,
@@ -13,6 +19,7 @@ pub(crate) use tooling::{
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<PySimplifySettings>()?;
     algebra::register(module)?;
     tooling::register(module)
 }
@@ -53,6 +60,7 @@ mod tests {
         "SchoonschipMode",
         "SchoonschipSettings",
         "SchoonschipTraversal",
+        "SimplifySettings",
         "alias_subtensors",
         "canonize",
         "chainify",
@@ -79,6 +87,7 @@ mod tests {
         "schoonschip",
         "schoonschip_net",
         "simplify_color",
+        "simplify",
         "simplify_epsilon",
         "simplify_gamma",
         "simplify_gamma0",

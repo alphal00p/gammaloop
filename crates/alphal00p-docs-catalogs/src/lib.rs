@@ -1472,7 +1472,7 @@ mod tests {
     #[test]
     fn spynso_supported_surface_covers_the_documented_workflow_types() {
         let required = python_required_exports("spynso3").unwrap();
-        assert_eq!(required.len(), 44);
+        assert_eq!(required.len(), 46);
         for entry in [
             "CompiledTensorEvaluator",
             "TensorExpression",

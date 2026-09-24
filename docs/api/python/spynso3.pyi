@@ -4,19 +4,26 @@
 import builtins
 import decimal
 import linnet
+import numpy
+import numpy.typing
 import symbolica.core
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction
+from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction, Replacement, Transformer
 
 AUTO: _AutoIndex
 _: _AutoIndex
+_Components: typing.TypeAlias = "Expression | float | complex | list[_Components]"
+_IndexInput: typing.TypeAlias = "int | str | Expression | Slot | _AutoIndex"
+_RealInput: typing.TypeAlias = "Float | int | float | str | decimal.Decimal"
+_ReplacementInput: typing.TypeAlias = "_ScalarInput | HeldExpression | typing.Callable[[dict[Expression, Expression]], Expression]"
+_ScalarInput: typing.TypeAlias = "Expression | int | float | complex | str | decimal.Decimal | Float | ComplexFloat | tuple[_RealInput, _RealInput]"
 @typing.final
 class BroadcastFunction:
     r"""
     A unary Symbolica function whose action is broadcast over tensor entries.
     """
-    def __new__(cls, name: builtins.str, *, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, print: typing.Optional[typing.Any] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | str | dict | list | bytes] = None) -> BroadcastFunction:
+    def __new__(cls, name: builtins.str, *, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, print: typing.Optional[typing.Any] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[_ScalarInput | str | dict | list | bytes] = None) -> BroadcastFunction:
         r"""
         Register a Symbolica function for elementwise application to tensor entries.
 
@@ -54,7 +61,7 @@ class BroadcastFunction:
         Apply this unary function elementwise, preserving a structured interface.
         """
     @typing.overload
-    def __call__(self, arg: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> Expression:
+    def __call__(self, arg: _ScalarInput) -> Expression:
         r"""
         Apply this unary function to an ordinary scalar expression.
         """
@@ -117,15 +124,8 @@ class CompiledTensorEvaluator:
     r"""
     A compiled and optimized evaluator for maximum performance tensor evaluation.
 
-    This class wraps a compiled C++ shared library for extremely fast numerical
-    evaluation of tensor expressions. It only supports complex-valued evaluation
-    as this is the most general case.
-
-    A compiled and optimized evaluator for maximum performance tensor evaluation.
-
-    This class wraps a compiled C++ shared library for extremely fast numerical
-    evaluation of tensor expressions. It only supports complex-valued evaluation
-    as this is the most general case.
+    Real coefficients produce both real and complex kernels. Complex coefficients
+    produce only a complex kernel, with the same contract as TensorEvaluator.
 
     Create instances using the `TensorEvaluator.compile()` method.
 
@@ -134,6 +134,30 @@ class CompiledTensorEvaluator:
     >>> compiled = evaluator.compile("eval_func", "code.cpp", "lib")
     >>> results = compiled.evaluate_complex(large_input_batch)
     """
+    @property
+    def parameters(self) -> builtins.list[Expression]:
+        r"""
+        Parameters in the exact order expected by each evaluation input row.
+        """
+    @property
+    def input_size(self) -> builtins.int:
+        r"""
+        Number of parameter values required in each input row.
+        """
+    @property
+    def output_shape(self) -> tuple[int, ...]:
+        r"""
+        Shape of each returned tensor in logical axis order.
+        """
+    @property
+    def supports_real(self) -> builtins.bool:
+        r"""
+        Whether a real-valued native kernel was compiled.
+        """
+    def evaluate(self, inputs: typing.Sequence[typing.Sequence[builtins.float]]) -> builtins.list[Tensor]:
+        r"""
+        Evaluate batches with the native real kernel; reject complex coefficients.
+        """
     def __repr__(self) -> builtins.str: ...
     def evaluate_complex(self, inputs: typing.Sequence[typing.Sequence[builtins.complex]]) -> builtins.list[Tensor]:
         r"""
@@ -310,13 +334,13 @@ class DisplaySettings:
     ``tensor_view="matrix"`` selects the static mathematical display instead.
     """
     @property
-    def tensor_layout(self) -> builtins.str: ...
+    def tensor_layout(self) -> typing.Literal['ports', 'schoonschip', 'call']: ...
     @property
-    def index_style(self) -> builtins.str: ...
+    def index_style(self) -> typing.Literal['alphabet', 'graph', 'raw']: ...
     @property
-    def component_style(self) -> builtins.str: ...
+    def component_style(self) -> typing.Literal['superscript', 'array']: ...
     @property
-    def tensor_view(self) -> builtins.str: ...
+    def tensor_view(self) -> typing.Literal['interactive', 'matrix']: ...
     @property
     def show_dimensions(self) -> builtins.bool: ...
     @property
@@ -329,7 +353,7 @@ class DisplaySettings:
     def index_gap(self) -> builtins.str: ...
     @property
     def factor_gap(self) -> builtins.str: ...
-    def __new__(cls, tensor_layout: builtins.str = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em', index_style: builtins.str = 'alphabet', component_style: builtins.str = 'superscript', tensor_view: builtins.str = 'interactive') -> DisplaySettings: ...
+    def __new__(cls, tensor_layout: typing.Literal['ports', 'schoonschip', 'call'] = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em', index_style: typing.Literal['alphabet', 'graph', 'raw'] = 'alphabet', component_style: typing.Literal['superscript', 'array'] = 'superscript', tensor_view: typing.Literal['interactive', 'matrix'] = 'interactive') -> DisplaySettings: ...
     @staticmethod
     def ports() -> DisplaySettings: ...
     @staticmethod
@@ -364,6 +388,40 @@ class ExecutionMode:
         r"""
         Return the underlying integer discriminant.
         """
+
+@typing.final
+class ExecutionStatus:
+    r"""
+    Immutable snapshot of the current graph, independent of its source expression.
+    Counts describe remaining graph structure, not estimated FLOPs or memory costs.
+    """
+    @property
+    def nodes(self) -> builtins.int:
+        r"""
+        Number of remaining graph nodes, including leaves and operations.
+        """
+    @property
+    def operations(self) -> builtins.int:
+        r"""
+        Number of remaining operation nodes.
+        """
+    @property
+    def contractions(self) -> builtins.int:
+        r"""
+        Number of internal slot edges, including self traces.
+        """
+    @property
+    def complete(self) -> builtins.bool:
+        r"""
+        True when one leaf remains, without pending operations or contractions.
+        """
+    @property
+    def ready_operations(self) -> tuple[str, ...]:
+        r"""
+        Operations whose children are leaves, in the native scheduler's traversal order.
+        Preprocessing (including self traces) can run before these operations.
+        """
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class GammaChainOrdering:
@@ -408,14 +466,20 @@ class GammaSimplifySettings:
         Whether closed gamma chains are evaluated as traces.
         """
     @property
+    def expand_traces(self) -> builtins.bool:
+        r"""
+        Whether each evaluated trace body is expanded, preserving surrounding factors.
+        Ignored when `evaluate_traces` is false.
+        """
+    @property
     def expand_three_gamma_epsilon(self) -> builtins.bool:
         r"""
         Whether three four-dimensional gammas expand into a gamma5-epsilon basis.
         """
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, chain_ordering: typing.Optional[GammaChainOrdering] = None, evaluate_traces: builtins.bool = True, expand_three_gamma_epsilon: builtins.bool = False) -> GammaSimplifySettings:
+    def __new__(cls, *, chain_ordering: typing.Optional[GammaChainOrdering] = None, evaluate_traces: builtins.bool = True, expand_traces: builtins.bool = False, expand_three_gamma_epsilon: builtins.bool = False) -> GammaSimplifySettings:
         r"""
-        Configure gamma-chain ordering, trace evaluation, and the optional 4D three-gamma identity.
+        Configure gamma-chain ordering, trace evaluation and expansion, and the optional 4D identity.
 
         `chain_ordering=None` selects `GammaChainOrdering.RepeatedPairs`.
         """
@@ -455,12 +519,12 @@ class PortPattern(Expression):
     >>> stripped = PortPattern.dualizable("C_", D_)
     """
     @staticmethod
-    def exact(rep: Representation, index: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> PortPattern:
+    def exact(rep: Representation, index: typing.Optional[_ScalarInput] = None) -> PortPattern:
         r"""
         Match one exact representation, optionally carrying `index`.
         """
     @staticmethod
-    def any(name: builtins.str, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], index: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> PortPattern:
+    def any(name: builtins.str, dimension: _ScalarInput, index: typing.Optional[_ScalarInput] = None) -> PortPattern:
         r"""
         Match any Spenso representation head.
 
@@ -468,12 +532,12 @@ class PortPattern(Expression):
         underscore, for example `"R_"`.
         """
     @staticmethod
-    def self_dual(name: builtins.str, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], index: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> PortPattern:
+    def self_dual(name: builtins.str, dimension: _ScalarInput, index: typing.Optional[_ScalarInput] = None) -> PortPattern:
         r"""
         Match a self-dual representation head.
         """
     @staticmethod
-    def dualizable(name: builtins.str, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], index: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, *, dual: builtins.bool = False) -> PortPattern:
+    def dualizable(name: builtins.str, dimension: _ScalarInput, index: typing.Optional[_ScalarInput] = None, *, dual: builtins.bool = False) -> PortPattern:
         r"""
         Match a dualizable representation in its base or dual orientation.
         """
@@ -612,15 +676,15 @@ class Representation:
         r"""
         Return the representation paired with this one under index contraction.
         """
-    def casimir(self, degree: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] = 2) -> Expression:
+    def casimir(self, degree: _ScalarInput = 2) -> Expression:
         r"""
         Build the degree-k Casimir eigenvalue for this representation.
         """
-    def dynkin_index(self, degree: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] = 2) -> Expression:
+    def dynkin_index(self, degree: _ScalarInput = 2) -> Expression:
         r"""
         Build the degree-k Dynkin index for this representation.
         """
-    def gram(self, degree: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], other: typing.Optional[Representation] = None) -> Expression:
+    def gram(self, degree: _ScalarInput, other: typing.Optional[Representation] = None) -> Expression:
         r"""
         Build a degree-k Gram invariant with another representation.
 
@@ -923,6 +987,38 @@ class SchoonschipTraversal:
         """
 
 @typing.final
+class SimplifySettings:
+    r"""
+    Immutable choice of algebra passes for TensorExpression.simplify().
+    Dimensions come from tensor slots. No dimensional substitution or gamma5
+    prescription is chosen by this settings object. Individual algebra identities
+    can introduce sums; expand controls additional full polynomial expansion.
+    """
+    @property
+    def metrics(self) -> builtins.bool: ...
+    @property
+    def gamma(self) -> typing.Optional[GammaSimplifySettings]: ...
+    @property
+    def color(self) -> typing.Optional[ColorSimplifySettings]: ...
+    @property
+    def epsilon(self) -> builtins.bool: ...
+    @property
+    def expand(self) -> builtins.bool: ...
+    @property
+    def max_passes(self) -> builtins.int: ...
+    def __new__(cls, *, metrics: builtins.bool = True, gamma: typing.Optional[GammaSimplifySettings] = None, color: typing.Optional[ColorSimplifySettings] = None, epsilon: builtins.bool = False, expand: builtins.bool = False, max_passes: builtins.int = 16) -> SimplifySettings:
+        r"""
+        Select passes explicitly. Defaults contract metrics without expanding scalar algebra.
+        """
+    @staticmethod
+    def hep() -> SimplifySettings:
+        r"""
+        Enable metric, gamma, color, and epsilon passes with their native defaults.
+        Full polynomial expansion and the optional three-gamma epsilon identity stay off.
+        """
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class Slot:
     r"""
     A tensor index slot combining a representation with an abstract index.
@@ -961,6 +1057,10 @@ class Slot:
         The representation carried by this slot, including its dimension and duality.
         """
     def __eq__(self, other: builtins.object) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int:
+        r"""
+        Slots are immutable typed index values and can be dictionary keys.
+        """
     def _repr_html_(self) -> builtins.str: ...
     def to_html(self, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
         r"""
@@ -1051,9 +1151,58 @@ class Tensor:
     >>> sparse_tensor = Tensor.sparse(structure, float)
     """
     @property
+    def dtype(self) -> type[float] | type[complex] | type[Expression]:
+        r"""
+        Python component type: float, complex, or Expression.
+        """
+    @property
+    def storage(self) -> typing.Literal['dense', 'sparse']:
+        r"""
+        Component storage format, independent of tensor rank or expression type.
+        """
+    @property
+    def rank(self) -> builtins.int:
+        r"""
+        Number of external axes.
+        """
+    @property
+    def is_scalar(self) -> builtins.bool:
+        r"""
+        Whether the tensor has no external axes.
+        """
+    @property
+    def shape(self) -> tuple[int, ...]:
+        r"""
+        Dimensions in logical axis order.
+        """
+    @property
     def structure(self) -> TensorStructure:
         r"""
         Tensor identity, scalar arguments, and external ports in logical order.
+        """
+    def copy(self) -> Tensor:
+        r"""
+        Independent copy of component storage and metadata.
+        """
+    def map_components(self, callback: typing.Callable[[Expression | float | complex], Expression | float | complex], *, dtype: type[float] | type[complex] | type[Expression] | None = None) -> Tensor:
+        r"""
+        Apply a scalar callback to components, preserving sparse storage and logical axes.
+
+        The default dtype is unchanged; select float, complex, or Expression explicitly
+        to convert it. Sparse defaults are mapped once; if zero maps to nonzero,
+        the result becomes dense so later contractions include every component.
+        Callback traversal order is unspecified. The input tensor is never modified.
+        """
+    def to_numpy(self) -> numpy.typing.NDArray[numpy.float64] | numpy.typing.NDArray[numpy.complex128]:
+        r"""
+        Copy numeric components into a NumPy array in logical axis order.
+        Imports NumPy only when called. Symbolic tensors must first be evaluated.
+        """
+    @staticmethod
+    def from_numpy(structure: TensorExpression, array: numpy.typing.ArrayLike) -> Tensor:
+        r"""
+        Copy a numeric NumPy array into a named tensor, checking the full logical shape.
+        Real numeric arrays become float64 storage; complex arrays become complex128.
         """
     def expression(self) -> TensorExpression:
         r"""
@@ -1121,13 +1270,13 @@ class Tensor:
         >>> sym_data = [x, y, x * y, x + y]
         >>> sym_tensor = Tensor.dense(structure, sym_data)
         """
-    def to_dense(self) -> None:
+    def to_dense(self) -> Tensor:
         r"""
         Convert this tensor to dense storage format.
 
         Convert this tensor to dense storage format.
 
-        Converts sparse tensors to dense format in-place. Dense tensors are unchanged.
+        Returns an independent dense tensor; the original storage is unchanged.
         This allocates memory for all tensor elements.
 
         Examples
@@ -1137,15 +1286,15 @@ class Tensor:
         >>> structure = TensorName.vector("v")(rep("mu"))
         >>> tensor = Tensor.sparse(structure, float)
         >>> tensor[0] = 1.0
-        >>> tensor.to_dense()
+        >>> tensor = tensor.to_dense()
         """
-    def to_sparse(self) -> None:
+    def to_sparse(self) -> Tensor:
         r"""
         Convert this tensor to sparse storage format.
 
         Convert this tensor to sparse storage format.
 
-        Converts dense tensors to sparse format in-place, only storing non-zero elements.
+        Returns an independent sparse tensor, only storing non-zero elements.
         This can save memory for tensors with many zero elements.
 
         Examples
@@ -1155,7 +1304,7 @@ class Tensor:
         >>> structure = TensorName("T")(rep("mu"), rep("nu"))
         >>> data = [1.0, 0.0, 0.0, 2.0]
         >>> tensor = Tensor.dense(structure, data)
-        >>> tensor.to_sparse()
+        >>> tensor = tensor.to_sparse()
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -1258,36 +1407,52 @@ class Tensor:
         >>> scalar_tensor = Tensor.dense(structure, [1.0])
         >>> value = scalar_tensor.scalar()
         """
-    def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:
+    def index(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
         r"""
         Reference this tensor with new abstract indices and return a lazy network.
         """
-    def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:
+    def reindex(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
+        r"""
+        Assign all external indices, producing a network if any contractions are requested.
+        """
+    def rename_indices(self, mapping: dict[int | str | Expression | Slot, _IndexInput], *, cook_indices: typing.Optional[CookSettings] = None) -> Tensor:
+        r"""
+        Rename external indices without changing component values or rank.
+        """
+    def permute_axes(self, axes: typing.Sequence[builtins.int]) -> Tensor:
+        r"""
+        Return an independent tensor with permuted logical axes, preserving sparse storage.
+        """
+    def __copy__(self) -> Tensor:
+        r"""
+        Copy component storage and metadata independently.
+        """
+    def __call__(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
         r"""
         Reference this tensor with new abstract indices and return a lazy network.
         """
     def __neg__(self) -> TensorNetwork: ...
-    def __add__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __radd__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __sub__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __rsub__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __mul__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __rmul__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __truediv__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __rtruediv__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def outer(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __add__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __radd__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __sub__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __rsub__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __mul__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __rmul__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __truediv__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __rtruediv__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def outer(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Form a lazy outer product without contracting compatible ports.
         """
-    def contract(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
+    def contract(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
         r"""
         Contract one selected pair of ordered interface positions.
         """
-    def compose(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
+    def compose(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
         r"""
         Compose two selected `(input, output)` matrix channels.
         """
-    def dot(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def dot(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Contract two rank-one operands into the canonical dot form.
         """
@@ -1335,6 +1500,11 @@ class Tensor:
         float, complex, or Expression
             The tensor element at the specified index
         """
+    @typing.overload
+    def __getitem__(self, item: tuple[int | slice, ...]) -> _Components:
+        r"""
+        Select components by logical coordinates, returning nested lists for sliced axes.
+        """
     def __setitem__(self, item: builtins.int | typing.Sequence[builtins.int], value: Expression | builtins.complex | float) -> None:
         r"""
         Set tensor element at the specified index.
@@ -1377,6 +1547,26 @@ class TensorEvaluator:
     >>> evaluator = my_tensor.evaluator(constants={}, funs={}, params=[x, y])
     >>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]])
     """
+    @property
+    def parameters(self) -> builtins.list[Expression]:
+        r"""
+        Parameters in the exact order expected by each evaluation input row.
+        """
+    @property
+    def input_size(self) -> builtins.int:
+        r"""
+        Number of parameter values required in each input row.
+        """
+    @property
+    def output_shape(self) -> tuple[int, ...]:
+        r"""
+        Shape of each returned tensor in logical axis order.
+        """
+    @property
+    def supports_real(self) -> builtins.bool:
+        r"""
+        Whether the exact coefficients admit a real-valued evaluator.
+        """
     def __repr__(self) -> builtins.str: ...
     def evaluate(self, inputs: typing.Sequence[typing.Sequence[builtins.float]]) -> builtins.list[Tensor]:
         r"""
@@ -1481,6 +1671,11 @@ class TensorExpression(Expression):
     def is_scalar(self) -> builtins.bool:
         r"""
         Whether the expression has no external tensor ports.
+        """
+    @property
+    def shape(self) -> tuple[int | Expression, ...]:
+        r"""
+        Tensor identity, scalar arguments, and external ports in logical order.
         """
     @property
     def structure(self) -> TensorStructure:
@@ -1588,11 +1783,34 @@ class TensorExpression(Expression):
         r"""
         Re-parse the underlying symbolic expression and rebuild its ordered tensor interface.
         """
-    def expand(self, var: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, via_poly: typing.Optional[builtins.bool] = None) -> TensorExpression:
+    def replace(self, pattern: _ScalarInput, rhs: _ReplacementInput, cond: typing.Optional[PatternRestriction | Condition] = None, non_greedy_wildcards: typing.Optional[typing.Sequence[Expression]] = None, min_level: builtins.int = 0, max_level: typing.Optional[builtins.int] = None, level_is_tree_depth: builtins.bool = False, partial: builtins.bool = True, allow_new_wildcards_on_rhs: builtins.bool = False, rhs_cache_size: typing.Optional[builtins.int] = None, repeat: builtins.bool = False, once: builtins.bool = False, bottom_up: builtins.bool = False, nested: builtins.bool = False) -> TensorExpression:
+        r"""
+        Replace scalar coefficients or tensor factors and validate the external interface.
+
+        Supports Symbolica's patterns, callbacks, conditions and traversal options.
+        Index-changing rewrites must use reindex/rename_indices, or explicitly drop
+        the tensor interface with to_expression() before rebuilding it.
+        """
+    def replace_multiple(self, replacements: typing.Sequence[Replacement], repeat: builtins.bool = False, once: builtins.bool = False, bottom_up: builtins.bool = False, nested: builtins.bool = False) -> TensorExpression:
+        r"""
+        Apply simultaneous Symbolica replacements and validate the resulting tensor.
+        """
+    def map(self, op: Transformer, n_cores: typing.Optional[builtins.int] = None, stats_to_file: typing.Optional[builtins.str] = None) -> TensorExpression:
+        r"""
+        Apply a Symbolica Transformer and retain the validated tensor interface.
+        """
+    def derivative(self, x: _ScalarInput) -> TensorExpression:
+        r"""
+        Differentiate scalar coefficients, preserving tensor zeros and ports.
+        Formal derivatives of unknown tensor functions are not supported by the
+        network executor. Differentiate their component expressions with
+        Tensor.map_components() instead, or supply a TensorName derivative callback.
+        """
+    def expand(self, var: typing.Optional[_ScalarInput] = None, via_poly: typing.Optional[builtins.bool] = None) -> TensorExpression:
         r"""
         Expand scalar algebra while preserving and validating the tensor interface.
         """
-    def factor(self, complex: builtins.bool = False, extension: typing.Optional[typing.Sequence[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]]] = None) -> TensorExpression:
+    def factor(self, complex: builtins.bool = False, extension: typing.Optional[typing.Sequence[_ScalarInput]] = None) -> TensorExpression:
         r"""
         Factor scalar algebra while preserving and validating the tensor interface.
         """
@@ -1650,10 +1868,20 @@ class TensorExpression(Expression):
         Spinor and color dimensions, scalar coefficients, and other Lorentz dimensions
         are unchanged. Apply this before contracting four-dimensional Lorentz indices.
         """
-    def simplify_gamma(self, settings: typing.Optional[GammaSimplifySettings] = None) -> TensorExpression:
+    def simplify(self, settings: typing.Optional[SimplifySettings] = None) -> TensorExpression:
         r"""
         Apply Idenso's gamma-algebra simplifier and re-infer the tensor interface.
 
+        Apply selected algebra passes to a fixed point and return a tensor expression.
+
+        The default contracts metrics only. Use SimplifySettings.hep() for gamma,
+        color, and epsilon algebra too, or construct explicit settings. Dimensions
+        are taken from slots; dimension changes remain an explicit operation.
+        No full polynomial expansion occurs unless settings.expand is true.
+        Raises ValueError if the selected passes have not stabilized by max_passes.
+        """
+    def simplify_gamma(self, settings: typing.Optional[GammaSimplifySettings] = None) -> TensorExpression:
+        r"""
         Simplify registered Spenso gamma chains and traces with Idenso's default rules.
 
         The dimension-generic part applies compatible Clifford anticommutation, adjacent
@@ -2445,6 +2673,13 @@ class TensorExpression(Expression):
 
         When `library` is omitted, use the built-in four-dimensional HEP and SU(3) library.
         """
+    def to_tensor(self, library: typing.Optional[TensorLibrary] = None, *, function_library: typing.Optional[TensorFunctionLibrary] = None) -> Tensor:
+        r"""
+        Execute the expression and return its component Tensor in logical axis order.
+
+        Unregistered names acquire symbolic components. This uses the same execution
+        path as to_network().execute() and does not mutate the expression or library.
+        """
     def components(self, library: typing.Optional[TensorLibrary] = None) -> builtins.list[Expression | builtins.complex | builtins.float]:
         r"""
         Return component values in logical row-major interface order.
@@ -2461,15 +2696,31 @@ class TensorExpression(Expression):
         `TensorLibrary.hep_lib_atom()` to select its atom-valued variant.
         Values retain the Python types returned by `TensorNetwork.result_tensor()`.
         """
-    def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:
+    def index(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:
         r"""
         Fill the unresolved external ports with `indices` in interface order.
 
-        Pass `AUTO` to leave a port unresolved. Set `cook_indices=True` to flatten nested
+        Pass `AUTO` to leave a port unresolved. Pass `cook_indices=CookSettings.indices()` to flatten nested
         symbolic index payloads before insertion. Repeated compatible indices contract their
         ports, in which case the result no longer carries the original stored-data identity.
         """
-    def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:  # type: ignore[override]  # ty: ignore[invalid-method-override]
+    def reindex(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:
+        r"""
+        Assign all external ports in logical order, including already indexed ports.
+        AUTO keeps the current port. Repeated compatible indices contract.
+        """
+    def rename_indices(self, mapping: dict[int | str | Expression | Slot, _IndexInput], *, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:
+        r"""
+        Rename external indices simultaneously without changing rank or capturing dummy indices.
+        Keys are index labels or typed Slots; typed keys disambiguate representations.
+        """
+    def permute_axes(self, axes: typing.Sequence[builtins.int]) -> TensorExpression:
+        r"""
+        Return a tensor with external axes in the specified logical order.
+        Unresolved ports acquire fresh indices so identical representations remain distinct.
+        Use reindex() to assign preferred labels after permutation.
+        """
+    def __call__(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Fill the unresolved external ports with `indices` in interface order.
         """
@@ -2520,35 +2771,35 @@ class TensorExpression(Expression):
     @typing.overload
     def __add__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
     @typing.overload
-    def __add__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorExpression: ...
+    def __add__(self, rhs: _ScalarInput) -> TensorExpression: ...
     @typing.overload
     def __radd__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
     @typing.overload
-    def __radd__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorExpression: ...
+    def __radd__(self, lhs: _ScalarInput) -> TensorExpression: ...
     @typing.overload
     def __sub__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
     @typing.overload
-    def __sub__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorExpression: ...
+    def __sub__(self, rhs: _ScalarInput) -> TensorExpression: ...
     @typing.overload
     def __rsub__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
     @typing.overload
-    def __rsub__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorExpression: ...
+    def __rsub__(self, lhs: _ScalarInput) -> TensorExpression: ...
     @typing.overload
     def __mul__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
     @typing.overload
-    def __mul__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorExpression: ...
+    def __mul__(self, rhs: _ScalarInput) -> TensorExpression: ...
     @typing.overload
     def __rmul__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
     @typing.overload
-    def __rmul__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorExpression: ...
+    def __rmul__(self, lhs: _ScalarInput) -> TensorExpression: ...
     @typing.overload
     def __truediv__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
     @typing.overload
-    def __truediv__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorExpression: ...
+    def __truediv__(self, rhs: _ScalarInput) -> TensorExpression: ...
     @typing.overload
     def __rtruediv__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
     @typing.overload
-    def __rtruediv__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorExpression: ...
+    def __rtruediv__(self, lhs: _ScalarInput) -> TensorExpression: ...
     @typing.overload
     def outer(self, rhs: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork:
         r"""
@@ -2832,7 +3083,7 @@ class TensorName:
     """
     def _repr_html_(self) -> typing.Optional[builtins.str]: ...
     def _repr_latex_(self) -> builtins.str: ...
-    def __new__(cls, name: builtins.str, *, rank: typing.Optional[builtins.int] = None, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, print: typing.Optional[dict[str, str] | typing.Callable[..., str | None]] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | str | dict | list | bytes] = None) -> TensorName:
+    def __new__(cls, name: builtins.str, *, rank: typing.Optional[builtins.int] = None, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, print: typing.Optional[dict[str, str] | typing.Callable[..., str | None]] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[_ScalarInput | str | dict | list | bytes] = None) -> TensorName:
         r"""
         Create a new tensor name with optional mathematical properties.
         With only a name, reuse an existing tensor symbol and its attributes,
@@ -2879,7 +3130,7 @@ class TensorName:
         >>> D = TensorName("D", is_linear=True)
         """
     @staticmethod
-    def vector(name: builtins.str, *, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, print: typing.Optional[dict[str, str] | typing.Callable[..., str | None]] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | str | dict | list | bytes] = None) -> TensorName:
+    def vector(name: builtins.str, *, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, print: typing.Optional[dict[str, str] | typing.Callable[..., str | None]] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[_ScalarInput | str | dict | list | bytes] = None) -> TensorName:
         r"""
         Create a rank-one tensor name; ``print`` accepts the same mappings and callbacks as ``TensorName``.
         """
@@ -2955,7 +3206,7 @@ class TensorName:
         r"""
         Predefined color generator name.
         """
-    def __call__(self, *args: Slot | Representation | Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorExpression:
+    def __call__(self, *args: Slot | Representation | _ScalarInput) -> TensorExpression:
         r"""
         Call the tensor name with arguments to create a tensor expression.
 
@@ -3028,6 +3279,26 @@ class TensorNetwork:
         r"""
         Source tensor identity and ordered external ports, independent of execution.
         """
+    @property
+    def rank(self) -> builtins.int:
+        r"""
+        Number of external axes in the semantic source interface.
+        """
+    @property
+    def is_scalar(self) -> builtins.bool:
+        r"""
+        Whether the network's result has no external axes.
+        """
+    @property
+    def shape(self) -> tuple[int | Expression, ...]:
+        r"""
+        Dimensions in logical axis order; symbolic dimensions remain symbolic.
+        """
+    @property
+    def status(self) -> ExecutionStatus:
+        r"""
+        Snapshot of remaining operations and contractions; does not execute the graph.
+        """
     def __new__(cls, expr: typing.Any, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:
         r"""
         Create a tensor network by parsing an arithmetic expression.
@@ -3090,7 +3361,7 @@ class TensorNetwork:
         >>> zero_net = TensorNetwork.zero()
         >>> result = zero_net.result_scalar()
         """
-    def replace(self, pattern: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | HeldExpression | typing.Callable[[dict[Expression, Expression]], Expression] | int | float | complex | Float | ComplexFloat | decimal.Decimal, cond: typing.Optional[PatternRestriction | Condition] = None, non_greedy_wildcards: typing.Optional[typing.Sequence[Expression]] = None, level_range: typing.Optional[tuple[builtins.int, typing.Optional[builtins.int]]] = None, level_is_tree_depth: typing.Optional[builtins.bool] = None, allow_new_wildcards_on_rhs: typing.Optional[builtins.bool] = None, rhs_cache_size: typing.Optional[builtins.int] = None, repeat: typing.Optional[builtins.bool] = None) -> TensorNetwork:
+    def replace(self, pattern: _ScalarInput, rhs: _ReplacementInput, cond: typing.Optional[PatternRestriction | Condition] = None, non_greedy_wildcards: typing.Optional[typing.Sequence[Expression]] = None, level_range: typing.Optional[tuple[builtins.int, typing.Optional[builtins.int]]] = None, level_is_tree_depth: typing.Optional[builtins.bool] = None, allow_new_wildcards_on_rhs: typing.Optional[builtins.bool] = None, rhs_cache_size: typing.Optional[builtins.int] = None, repeat: typing.Optional[builtins.bool] = None) -> TensorNetwork:
         r"""
         Replace patterns in stored symbolic network values.
 
@@ -3284,19 +3555,36 @@ class TensorNetwork:
         `replace()`, `evaluate()`, and `execute()` leave it unchanged. Use
         `result_scalar()` or `result_tensor()` to inspect the current computed value.
         """
-    def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:
+    def index(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
         r"""
         Fill the unresolved external ports with `indices` in interface order.
 
-        Pass `AUTO` to leave a port unresolved. Set `cook_indices=True` to flatten nested
+        Pass `AUTO` to leave a port unresolved. Pass `cook_indices=CookSettings.indices()` to flatten nested
         symbolic index payloads before insertion.
         """
-    def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:
+    def reindex(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
+        r"""
+        Assign all external ports, retaining data and execution progress. AUTO leaves a port unchanged.
+        """
+    def rename_indices(self, mapping: dict[int | str | Expression | Slot, _IndexInput], *, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
+        r"""
+        Rename external indices simultaneously without changing rank or capturing dummy indices.
+        """
+    def permute_axes(self, axes: typing.Sequence[builtins.int]) -> TensorNetwork:
+        r"""
+        Return a copy with reordered external axes and the same execution progress.
+        Unresolved ports acquire fresh identities; reindex() can assign preferred labels.
+        """
+    def __copy__(self) -> TensorNetwork:
+        r"""
+        Copy the graph, values, and execution progress independently.
+        """
+    def __call__(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
         r"""
         Fill the unresolved external ports with `indices` in interface order.
         """
     def __neg__(self) -> TensorNetwork: ...
-    def __add__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __add__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Add two tensor networks element-wise.
 
@@ -3316,11 +3604,11 @@ class TensorNetwork:
         >>> net2 = TensorNetwork(expr2)
         >>> sum_net = net1 + net2
         """
-    def __radd__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __radd__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Add two tensor networks element-wise (right-hand addition).
         """
-    def __sub__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __sub__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Subtract one tensor network from another element-wise.
 
@@ -3340,11 +3628,11 @@ class TensorNetwork:
         >>> net2 = TensorNetwork(expr2)
         >>> diff_net = net1 - net2
         """
-    def __rsub__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __rsub__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Subtract one tensor network from another (right-hand subtraction).
         """
-    def __mul__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __mul__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Multiply two tensor networks.
 
@@ -3364,31 +3652,44 @@ class TensorNetwork:
         >>> net2 = TensorNetwork(expr2)
         >>> product_net = net1 * net2
         """
-    def __rmul__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __rmul__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Multiply two tensor networks (right-hand multiplication).
         """
-    def __truediv__(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def __rtruediv__(self, lhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
-    def outer(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __truediv__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def __rtruediv__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+    def outer(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Form an outer tensor product without contracting compatible ports.
         """
-    def contract(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
+    def contract(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
         r"""
         Contract one selected pair of public interface positions.
         """
-    def compose(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
+    def compose(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
         r"""
         Compose two explicitly selected matrix channels.
         """
-    def dot(self, rhs: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def dot(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
         r"""
         Contract two rank-one operands into the canonical dot form.
         """
     def trace(self, *, channel: typing.Optional[tuple[builtins.int, builtins.int]] = None) -> TensorNetwork:
         r"""
         Close a selected or uniquely inferred propagation channel.
+        """
+    def copy(self) -> TensorNetwork:
+        r"""
+        Copy the graph, its component values, and execution progress.
+        """
+    def step(self, library: typing.Optional[TensorLibrary] = None, *, function_library: typing.Optional[TensorFunctionLibrary] = None) -> TensorNetwork:
+        r"""
+        Return the next intermediate graph, leaving this network unchanged.
+        Runs one native Single step, including the executor's usual preprocessing.
+        """
+    def to_tensor(self, library: typing.Optional[TensorLibrary] = None, *, function_library: typing.Optional[TensorFunctionLibrary] = None) -> Tensor:
+        r"""
+        Execute an independent copy to completion and return its component tensor.
         """
 
 @typing.final
@@ -3421,21 +3722,21 @@ class TensorPattern(Expression):
     >>> target.replace(rule, 0)
     0
     """
-    def __new__(cls, head: TensorName, *, args: typing.Sequence[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = [], ports: typing.Sequence[Slot | Representation | Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = []) -> TensorPattern:
+    def __new__(cls, head: TensorName, *, args: typing.Sequence[_ScalarInput] = [], ports: typing.Sequence[Slot | Representation | _ScalarInput] = []) -> TensorPattern:
         r"""
         Create a pattern for the fixed tensor `head`.
 
         Scalar `args` are always emitted before structural `ports`.
         """
     @staticmethod
-    def any(name: builtins.str, *, args: typing.Sequence[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = [], ports: typing.Sequence[Slot | Representation | Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = []) -> TensorPattern:
+    def any(name: builtins.str, *, args: typing.Sequence[_ScalarInput] = [], ports: typing.Sequence[Slot | Representation | _ScalarInput] = []) -> TensorPattern:
         r"""
         Match any tensor-tagged head.
 
         `name` must end in one underscore, for example `"T_"`.
         """
     @staticmethod
-    def vector(name: builtins.str, *, args: typing.Sequence[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = [], ports: typing.Sequence[Slot | Representation | Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = []) -> TensorPattern:
+    def vector(name: builtins.str, *, args: typing.Sequence[_ScalarInput] = [], ports: typing.Sequence[Slot | Representation | _ScalarInput] = []) -> TensorPattern:
         r"""
         Match any rank-one tensor head.
 
@@ -3443,47 +3744,47 @@ class TensorPattern(Expression):
         a sequence wildcard may describe the scalar arguments or structural port.
         """
     @staticmethod
-    def g(rep_pattern: Representation | Expression, i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+    def g(rep_pattern: Representation | Expression, i: _ScalarInput, j: _ScalarInput) -> TensorPattern:
         r"""
         Match a metric tensor in logical index order.
         """
     @staticmethod
-    def flat(rep_pattern: Representation | Expression, i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+    def flat(rep_pattern: Representation | Expression, i: _ScalarInput, j: _ScalarInput) -> TensorPattern:
         r"""
         Match a musical-isomorphism tensor in logical index order.
         """
     @staticmethod
-    def gamma(minkowski_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], mu: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:  # type: ignore[override]  # ty: ignore[invalid-method-override]
+    def gamma(minkowski_dimension: _ScalarInput, i: _ScalarInput, j: _ScalarInput, mu: _ScalarInput) -> TensorPattern:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Match a gamma matrix in storage `(i, j, mu)` order.
         """
     @staticmethod
-    def gamma5(spinor_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+    def gamma5(spinor_dimension: _ScalarInput, i: _ScalarInput, j: _ScalarInput) -> TensorPattern:
         r"""
         Match a gamma-five matrix in logical `(i, j)` order.
         """
     @staticmethod
-    def projm(spinor_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+    def projm(spinor_dimension: _ScalarInput, i: _ScalarInput, j: _ScalarInput) -> TensorPattern:
         r"""
         Match a left-chiral projector in logical `(i, j)` order.
         """
     @staticmethod
-    def projp(spinor_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+    def projp(spinor_dimension: _ScalarInput, i: _ScalarInput, j: _ScalarInput) -> TensorPattern:
         r"""
         Match a right-chiral projector in logical `(i, j)` order.
         """
     @staticmethod
-    def sigma(minkowski_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], mu: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], nu: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+    def sigma(minkowski_dimension: _ScalarInput, mu: _ScalarInput, nu: _ScalarInput, i: _ScalarInput, j: _ScalarInput) -> TensorPattern:
         r"""
         Match a sigma matrix. Arguments use logical `(mu, nu, i, j)` order.
         """
     @staticmethod
-    def f(adjoint_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], a: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], b: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], c: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+    def f(adjoint_dimension: _ScalarInput, a: _ScalarInput, b: _ScalarInput, c: _ScalarInput) -> TensorPattern:
         r"""
         Match a color structure constant in logical `(a, b, c)` order.
         """
     @staticmethod
-    def t(adjoint_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], fundamental_dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], a: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], i: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], j: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> TensorPattern:
+    def t(adjoint_dimension: _ScalarInput, fundamental_dimension: _ScalarInput, a: _ScalarInput, i: _ScalarInput, j: _ScalarInput) -> TensorPattern:
         r"""
         Match a color generator in logical `(a, i, j)` order.
         """
@@ -3522,8 +3823,17 @@ class TensorStructure:
         r"""
         Dimensions in logical order; symbolic dimensions remain symbolic.
         """
+    @property
+    def is_scalar(self) -> builtins.bool:
+        r"""
+        Whether there are no external axes.
+        """
     def __eq__(self, other: builtins.object) -> builtins.bool: ...
-    def __new__(cls, slots: typing.Sequence[Slot | Representation], *, name: typing.Optional[TensorName] = None, arguments: typing.Optional[typing.Sequence[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]]] = None) -> TensorStructure: ...
+    def __new__(cls, slots: typing.Sequence[Slot | Representation], *, name: typing.Optional[TensorName] = None, arguments: typing.Optional[typing.Sequence[_ScalarInput]] = None) -> TensorStructure: ...
+    def permute_axes(self, axes: typing.Sequence[builtins.int]) -> TensorStructure:
+        r"""
+        Reorder metadata axes without changing their labels, dimensions, or identity.
+        """
     def __repr__(self) -> builtins.str: ...
     def to_html(self, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
         r"""
@@ -3544,10 +3854,10 @@ def as_tensor(expression: typing.Any) -> TensorExpression:
     """
 
 @typing.overload
-def chain(start_slot: Slot, end_slot: Slot, factor: typing.Union[Tensor, TensorNetwork], /, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+def chain(start_slot: Slot, end_slot: Slot, factor: typing.Union[Tensor, TensorNetwork], /, *factors: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
 
 @typing.overload
-def chain(start_slot: Slot, end_slot: Slot, first: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, second: typing.Union[Tensor, TensorNetwork], /, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+def chain(start_slot: Slot, end_slot: Slot, first: _ScalarInput | TensorExpression | TensorNetwork | Tensor, second: typing.Union[Tensor, TensorNetwork], /, *factors: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
 
 @typing.overload
 def chain(start_slot: Slot, end_slot: Slot, *factors: Expression) -> TensorExpression:
@@ -3556,16 +3866,16 @@ def chain(start_slot: Slot, end_slot: Slot, *factors: Expression) -> TensorExpre
     """
 
 @typing.overload
-def chain(start_slot: Slot, end_slot: Slot, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork: ...
+def chain(start_slot: Slot, end_slot: Slot, *factors: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork: ...
 
 @typing.overload
-def dot(left: typing.Union[Tensor, TensorNetwork], right: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+def dot(left: typing.Union[Tensor, TensorNetwork], right: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
     r"""
     Contract two rank-one tensors into the canonical dot form.
     """
 
 @typing.overload
-def dot(left: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, right: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
+def dot(left: _ScalarInput | TensorExpression | TensorNetwork | Tensor, right: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork: ...
 
 @typing.overload
 def dot(left: Expression, right: Expression) -> TensorExpression: ...
@@ -3607,10 +3917,10 @@ def to_typst(expression: Expression, show_dimensions: typing.Optional[builtins.b
     """
 
 @typing.overload
-def trace(representation: Representation, factor: typing.Union[Tensor, TensorNetwork], /, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+def trace(representation: Representation, factor: typing.Union[Tensor, TensorNetwork], /, *factors: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
 
 @typing.overload
-def trace(representation: Representation, first: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor, second: typing.Union[Tensor, TensorNetwork], /, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
+def trace(representation: Representation, first: _ScalarInput | TensorExpression | TensorNetwork | Tensor, second: typing.Union[Tensor, TensorNetwork], /, *factors: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork: ...
 
 @typing.overload
 def trace(representation: Representation, *factors: Expression) -> TensorExpression:
@@ -3619,4 +3929,4 @@ def trace(representation: Representation, *factors: Expression) -> TensorExpress
     """
 
 @typing.overload
-def trace(representation: Representation, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork: ...
+def trace(representation: Representation, *factors: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork: ...

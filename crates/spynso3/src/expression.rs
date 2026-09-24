@@ -18,7 +18,7 @@ use idenso::{
 use pyo3::{
     exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PySlice, PyTuple},
+    types::{PyAny, PyDict, PySlice, PyTuple},
 };
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
@@ -44,7 +44,10 @@ use spenso::{
     },
 };
 use symbolica::{
-    api::python::{ConvertibleToExpression, PythonExpression, PythonFormattedOutput},
+    api::python::{
+        ConvertibleToExpression, ConvertibleToPatternRestriction, ConvertibleToReplaceWith,
+        PythonExpression, PythonFormattedOutput, PythonReplacement, PythonTransformer,
+    },
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     domains::rational::Rational,
 };
@@ -193,11 +196,15 @@ impl TensorExpression {
         )
     }
 
-    fn from_transformed_atom(
+    pub(crate) fn from_transformed_atom(
         self_: &PyRef<'_, TensorExpression>,
         py: Python<'_>,
         atom: Atom,
     ) -> PyResult<Py<TensorExpression>> {
+        if atom == self_.as_super().expr {
+            // A no-op preserves occurrence-local ports and the stored data identity.
+            return Py::new(py, (Self::clone(self_), PythonExpression { expr: atom }));
+        }
         let interface = if atom.as_view().is_zero() {
             self_.interface.clone()
         } else if has_structured_syntax(atom.as_view()) {
@@ -209,13 +216,18 @@ impl TensorExpression {
                 "Tensor transformation removed the tensor syntax of a non-scalar expression",
             ));
         };
-        TensorExpression::from_atom_interface_descriptor(
-            py,
-            atom,
-            interface,
-            self_.name,
-            self_.name_args.clone(),
-        )
+        let (name, args) = Self::transformed_descriptor(self_, &atom);
+        TensorExpression::from_atom_interface_descriptor(py, atom, interface, name, args)
+    }
+
+    fn transformed_descriptor(self_: &PyRef<'_, Self>, atom: &Atom) -> (Option<Symbol>, Vec<Atom>) {
+        let original = inferred_descriptor(self_.as_super().expr.as_view());
+        if original == (self_.name, self_.name_args.clone()) {
+            inferred_descriptor(atom.as_view())
+        } else {
+            // Explicit names assigned to composite expressions are metadata.
+            (self_.name, self_.name_args.clone())
+        }
     }
 
     /// Wrap a transformed atom after validating that it retains this tensor's
@@ -237,13 +249,8 @@ impl TensorExpression {
                 "transformed expression does not preserve a compatible tensor interface",
             ));
         }
-        Self::from_atom_interface_descriptor(
-            py,
-            atom,
-            self_.interface.clone(),
-            self_.name,
-            self_.name_args.clone(),
-        )
+        let (name, args) = Self::transformed_descriptor(self_, &atom);
+        Self::from_atom_interface_descriptor(py, atom, self_.interface.clone(), name, args)
     }
 
     pub(crate) fn from_structured(py: Python<'_>, value: StructuredAtom) -> PyResult<Py<Self>> {
@@ -268,20 +275,29 @@ impl TensorExpression {
     pub(crate) fn index_replacements(
         interface: &PartialStructure,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: bool,
+        cook_indices: Option<&crate::simplification::PyCookSettings>,
     ) -> PyResult<HashMap<usize, AbstractIndex>> {
         let open_positions = interface.open_positions();
-        if indices.len() != open_positions.len() {
+        Self::port_replacements(interface, &open_positions, indices, cook_indices)
+    }
+
+    pub(crate) fn port_replacements(
+        interface: &PartialStructure,
+        positions: &[usize],
+        indices: &Bound<'_, PyTuple>,
+        cook_indices: Option<&PyCookSettings>,
+    ) -> PyResult<HashMap<usize, AbstractIndex>> {
+        if indices.len() != positions.len() {
             return Err(PyValueError::new_err(format!(
-                "expected {} indices for unresolved ports, got {}",
-                open_positions.len(),
+                "expected {} indices for selected ports, got {}",
+                positions.len(),
                 indices.len()
             )));
         }
 
         let logical = interface.logical_slots();
         let mut replacements = HashMap::new();
-        for (argument, position) in indices.iter().zip(open_positions) {
+        for (argument, &position) in indices.iter().zip(positions) {
             if argument.is_instance_of::<AutoIndex>() {
                 continue;
             }
@@ -298,6 +314,75 @@ impl TensorExpression {
             replacements.insert(position, index);
         }
         Ok(replacements)
+    }
+
+    pub(crate) fn named_replacements(
+        interface: &PartialStructure,
+        mapping: &Bound<'_, PyDict>,
+        cook_indices: Option<&PyCookSettings>,
+    ) -> PyResult<HashMap<usize, AbstractIndex>> {
+        let slots = interface.logical_slots();
+        let mut result = HashMap::new();
+        for (key, value) in mapping.iter() {
+            let typed = key.extract::<SpensoSlot>().ok();
+            let index = if let Some(slot) = &typed {
+                slot.slot.aind()
+            } else {
+                index_value(key.extract()?, cook_indices)?
+            };
+            let positions = slots
+                .iter()
+                .enumerate()
+                .filter_map(|(position, slot)| {
+                    (slot.aind == PartialIndex::Explicit(index)
+                        && typed
+                            .as_ref()
+                            .is_none_or(|typed| typed.slot.rep() == slot.rep()))
+                    .then_some(position)
+                })
+                .collect::<Vec<_>>();
+            if positions.is_empty() {
+                return Err(pyo3::exceptions::PyKeyError::new_err(format!(
+                    "no external index matches {key}"
+                )));
+            }
+            let arguments = PyTuple::new(mapping.py(), positions.iter().map(|_| value.clone()))?;
+            for (position, index) in
+                Self::port_replacements(interface, &positions, &arguments, cook_indices)?
+            {
+                if result.insert(position, index).is_some() {
+                    return Err(PyValueError::new_err(format!(
+                        "external port {position} is renamed more than once"
+                    )));
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    pub(crate) fn permuted_structure(
+        value: &StructuredAtom,
+        axes: &[usize],
+    ) -> PyResult<StructuredAtom> {
+        crate::metadata::validate_axis_permutation(value.rank(), axes)?;
+        // Unresolved occurrences need identities before changing their positional order.
+        let replacements = value
+            .interface
+            .open_positions()
+            .into_iter()
+            .map(|position| {
+                (
+                    position,
+                    composition::fresh_dummy_index([&value.atom], [&value.interface]),
+                )
+            })
+            .collect();
+        let mut value = composition::reindex_interface_ports(value, &replacements)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let slots = value.interface.logical_slots();
+        value.interface =
+            PartialStructure::from_logical_slots(axes.iter().map(|&axis| slots[axis]));
+        Ok(value)
     }
 
     pub(crate) fn descriptor_name(self_: &PyRef<'_, Self>) -> Option<Symbol> {
@@ -749,20 +834,26 @@ pub(crate) fn value_to_structured_atom(
     Ok(StructuredAtom::new(atom, interface))
 }
 
-fn index_value(value: ConvertibleToAbstractIndex, cook: bool) -> PyResult<AbstractIndex> {
+pub(crate) fn index_value(
+    value: ConvertibleToAbstractIndex,
+    cook: Option<&PyCookSettings>,
+) -> PyResult<AbstractIndex> {
     match value {
         ConvertibleToAbstractIndex::Aind(index) => Ok(index),
         ConvertibleToAbstractIndex::Atom(expression) => {
-            let atom = if cook {
-                expression.expr.cook_indices()
-            } else {
-                expression.expr
+            let atom = match (cook, expression.expr.as_view()) {
+                (Some(settings), AtomView::Fun(fun)) => {
+                    settings.rust().cook_function(fun).map_err(|error| {
+                        CookingError::new_err(format!("cannot cook index: {error:?}"))
+                    })?
+                }
+                _ => expression.expr,
             };
             atom.as_view().try_into().map_err(|error| {
-                let hint = if cook {
+                let hint = if cook.is_some() {
                     ""
                 } else {
-                    " Try setting cook_indices=True."
+                    " Try passing cook_indices=CookSettings.indices()."
                 };
                 PyValueError::new_err(format!(
                     "cannot convert `{atom}` to an abstract index: {error}.{hint}"
@@ -891,6 +982,7 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
     validate_placeholder_scope(atom.as_view(), false).map_err(PyValueError::new_err)?;
 
     let mut syntax_error = None;
+    let mut checked_functions = HashSet::new();
     atom.visitor(&mut |value| {
         if syntax_error.is_some() {
             return false;
@@ -904,6 +996,11 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                 ));
             }
             AtomView::Fun(function) => {
+                if value.get_byte_size() <= InterfaceInference::CACHE_KEY_BYTES
+                    && checked_functions.contains(&value)
+                {
+                    return false;
+                }
                 let symbol = function.get_symbol();
                 // Explicit scalar functions own their metadata, which may itself
                 // contain tensor syntax without exposing any tensor ports.
@@ -999,6 +1096,20 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                         "rank-one tensor function `{symbol}` requires exactly one final structural port"
                     ));
                 }
+                // Explicit built-in leaves cannot materialize fresh ports or run
+                // normalization callbacks during validation. The first visit
+                // still checks their children before a later occurrence is skipped.
+                if syntax_error.is_none()
+                    && builtin.is_some()
+                    && checked_functions.len() < InterfaceInference::CACHE_ENTRIES
+                    && value.get_byte_size() <= InterfaceInference::CACHE_KEY_BYTES
+                    && arguments.iter().all(|argument| {
+                        Slot::<LibraryRep, AbstractIndex>::try_from(*argument)
+                            .is_ok_and(|slot| !matches!(slot.aind(), AbstractIndex::Open { .. }))
+                    })
+                {
+                    checked_functions.insert(value);
+                }
             }
             _ => {}
         }
@@ -1008,7 +1119,7 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
         return Err(PyValueError::new_err(error));
     }
 
-    infer_validated_interface(atom)
+    InterfaceInference::default().infer(atom)
 }
 
 fn lower_tensor_powers(value: AtomView<'_>) -> PyResult<Atom> {
@@ -1028,7 +1139,7 @@ fn lower_tensor_powers(value: AtomView<'_>) -> PyResult<Atom> {
             // Validate multiplicity and exponent constraints against the
             // unexpanded spelling before lowering it through tensor-aware
             // multiplication.
-            infer_validated_interface(&base.as_ref().pow(exponent.as_ref()))?;
+            InterfaceInference::default().infer(&base.as_ref().pow(exponent.as_ref()))?;
             let raw_interface = infer_interface(&base)?;
             let interface = merge_explicit_interface_sequence(&[raw_interface])?;
             if interface.canonical().is_scalar() {
@@ -1083,388 +1194,412 @@ fn reinfer_structured(atom: Atom) -> PyResult<StructuredAtom> {
     Ok(StructuredAtom::new(atom, interface))
 }
 
-fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
-    if let AtomView::Add(sum) = atom.as_view() {
-        let mut expected = None;
-        let mut has_scalar_term = false;
-        for term in sum.iter() {
-            if !has_structured_syntax(term) {
-                has_scalar_term = true;
-                continue;
+#[derive(Default)]
+struct InterfaceInference {
+    explicit_leaves: HashMap<Atom, PartialStructure>,
+}
+
+impl InterfaceInference {
+    const CACHE_ENTRIES: usize = 256;
+    const CACHE_KEY_BYTES: usize = 256;
+
+    fn infer(&mut self, atom: &Atom) -> PyResult<PartialStructure> {
+        if matches!(atom.as_view(), AtomView::Fun(_))
+            && atom.as_view().get_byte_size() <= Self::CACHE_KEY_BYTES
+            && let Some(interface) = self.explicit_leaves.get(atom)
+        {
+            return Ok(interface.clone());
+        }
+
+        if let AtomView::Add(sum) = atom.as_view() {
+            let mut expected = None;
+            let mut has_scalar_term = false;
+            for term in sum.iter() {
+                if !has_structured_syntax(term) {
+                    has_scalar_term = true;
+                    continue;
+                }
+                let actual = merge_explicit_interface_sequence(&[self.infer(&term.to_owned())?])?;
+                let Some(current) = &expected else {
+                    expected = Some(actual);
+                    continue;
+                };
+                if !additive_interfaces_match(current, &actual) {
+                    return Err(PyValueError::new_err(
+                        "tensor summands do not have compatible tensor interfaces",
+                    ));
+                }
             }
-            let actual =
-                merge_explicit_interface_sequence(&[infer_validated_interface(&term.to_owned())?])?;
-            let Some(current) = &expected else {
-                expected = Some(actual);
-                continue;
-            };
-            if !additive_interfaces_match(current, &actual) {
+            let Some(expected) = expected else {
                 return Err(PyValueError::new_err(
-                    "tensor summands do not have compatible tensor interfaces",
+                    "expression does not contain valid tagged Spenso tensor syntax",
+                ));
+            };
+            if has_scalar_term && !expected.canonical().is_scalar() {
+                return Err(PyValueError::new_err(
+                    "cannot add a scalar expression to a non-scalar tensor",
                 ));
             }
+            return Ok(expected);
         }
-        let Some(expected) = expected else {
-            return Err(PyValueError::new_err(
-                "expression does not contain valid tagged Spenso tensor syntax",
-            ));
-        };
-        if has_scalar_term && !expected.canonical().is_scalar() {
-            return Err(PyValueError::new_err(
-                "cannot add a scalar expression to a non-scalar tensor",
-            ));
-        }
-        return Ok(expected);
-    }
 
-    if let AtomView::Mul(product) = atom.as_view() {
-        let mut interfaces = Vec::new();
-        for factor in product.iter() {
-            if !has_structured_syntax(factor) {
-                continue;
+        if let AtomView::Mul(product) = atom.as_view() {
+            let mut interfaces = Vec::new();
+            for factor in product.iter() {
+                if !has_structured_syntax(factor) {
+                    continue;
+                }
+                interfaces.push(self.infer(&factor.to_owned())?);
             }
-            interfaces.push(infer_validated_interface(&factor.to_owned())?);
+            if interfaces.is_empty() {
+                return Err(PyValueError::new_err(
+                    "expression does not contain valid tagged Spenso tensor syntax",
+                ));
+            }
+            return merge_explicit_interface_sequence(&interfaces);
         }
-        if interfaces.is_empty() {
-            return Err(PyValueError::new_err(
-                "expression does not contain valid tagged Spenso tensor syntax",
-            ));
-        }
-        return merge_explicit_interface_sequence(&interfaces);
-    }
 
-    if let AtomView::Pow(power) = atom.as_view() {
-        let (base, exponent) = power.get_base_exp();
-        if !has_structured_syntax(base) {
-            return Err(PyValueError::new_err(
-                "expression does not contain valid tagged Spenso tensor syntax",
-            ));
-        }
-        let interface = infer_validated_interface(&base.to_owned())?;
-        if has_structured_syntax(exponent)
-            && !infer_validated_interface(&exponent.to_owned())?
-                .canonical()
-                .is_scalar()
-        {
-            return Err(PyValueError::new_err("a tensor exponent must be scalar"));
-        }
-        if interface.canonical().is_scalar() {
-            return Ok(interface);
-        }
-        if !interface
-            .logical_slots()
-            .iter()
-            .all(|slot| slot.rep().rep.is_self_dual())
-        {
-            return Err(PyValueError::new_err(format!(
-                "invalid power of non-self-dual tensor `{atom}`"
-            )));
-        }
-        let exponent = Rational::try_from(exponent)
-            .map_err(|_| PyValueError::new_err(format!("invalid tensor power `{atom}`")))?;
-        if exponent.denominator() != 1 {
-            return Err(PyValueError::new_err(format!(
-                "fractional tensor power `{atom}` has no well-defined interface"
-            )));
-        }
-        let repetitions = exponent.numerator().abs();
-        let slots = interface.logical_slots();
-        for slot in &slots {
-            let PartialIndex::Explicit(index) = slot.aind else {
-                continue;
-            };
-            let compatible = slots
+        if let AtomView::Pow(power) = atom.as_view() {
+            let (base, exponent) = power.get_base_exp();
+            if !has_structured_syntax(base) {
+                return Err(PyValueError::new_err(
+                    "expression does not contain valid tagged Spenso tensor syntax",
+                ));
+            }
+            let interface = self.infer(&base.to_owned())?;
+            if has_structured_syntax(exponent)
+                && !self.infer(&exponent.to_owned())?.canonical().is_scalar()
+            {
+                return Err(PyValueError::new_err("a tensor exponent must be scalar"));
+            }
+            if interface.canonical().is_scalar() {
+                return Ok(interface);
+            }
+            if !interface
+                .logical_slots()
+                .iter()
+                .all(|slot| slot.rep().rep.is_self_dual())
+            {
+                return Err(PyValueError::new_err(format!(
+                    "invalid power of non-self-dual tensor `{atom}`"
+                )));
+            }
+            let exponent = Rational::try_from(exponent)
+                .map_err(|_| PyValueError::new_err(format!("invalid tensor power `{atom}`")))?;
+            if exponent.denominator() != 1 {
+                return Err(PyValueError::new_err(format!(
+                    "fractional tensor power `{atom}` has no well-defined interface"
+                )));
+            }
+            let repetitions = exponent.numerator().abs();
+            let slots = interface.logical_slots();
+            for slot in &slots {
+                let PartialIndex::Explicit(index) = slot.aind else {
+                    continue;
+                };
+                let compatible = slots
                 .iter()
                 .filter(|candidate| {
                     matches!(candidate.aind, PartialIndex::Explicit(candidate_index) if candidate_index == index)
                         && slot.rep().matches(&candidate.rep())
                 })
                 .count();
-            let exceeds_einstein_multiplicity = match repetitions.to_i64() {
-                Some(0) => false,
-                Some(1) => compatible > 2,
-                Some(2) => compatible > 1,
-                _ => compatible > 0,
-            };
-            if exceeds_einstein_multiplicity {
-                return Err(PyValueError::new_err(format!(
-                    "explicit index `{index}` occurs on more than two compatible ports in `{atom}`"
-                )));
-            }
-        }
-        if exponent.numerator() % 2 == 0 {
-            return Ok(PartialStructure::from_logical_slots([]));
-        }
-        return Ok(interface);
-    }
-
-    if let AtomView::Fun(function) = atom.as_view() {
-        let symbol = function.get_symbol();
-        let arguments = function.iter().collect::<Vec<_>>();
-        let unmaterialized_tensor_leaf = is_unmaterialized_tensor_leaf(atom.as_view());
-        if symbol == *shadowing::SYM
-            || symbol == *shadowing::ANTISYM
-            || symbol == *shadowing::CYCLIC
-        {
-            let mut interfaces = Vec::new();
-            for argument in arguments {
-                if !has_structured_syntax(argument) {
-                    continue;
-                }
-                interfaces.push(infer_validated_interface(&argument.to_owned())?);
-            }
-            if interfaces.is_empty() {
-                return Err(PyValueError::new_err(
-                    "tensor projectors require at least one tensor operand",
-                ));
-            }
-            return merge_explicit_interface_sequence(&interfaces);
-        }
-
-        if symbol == SPENSO_TAG.bracket {
-            let mut interfaces = Vec::new();
-            for argument in arguments {
-                if !has_structured_syntax(argument) {
-                    continue;
-                }
-                interfaces.push(infer_validated_interface(&argument.to_owned())?);
-            }
-            if interfaces.is_empty() {
-                return Err(PyValueError::new_err(
-                    "ordered tensor products require at least one tensor operand",
-                ));
-            }
-            return merge_explicit_interface_sequence(&interfaces);
-        }
-
-        let compact_metric = symbol == ETS.metric
-            && arguments.len() == 2
-            && arguments.iter().all(|argument| {
-                Slot::<LibraryRep, AbstractIndex>::try_from(*argument).is_err()
-                    && Representation::<LibraryRep>::try_from(*argument).is_err()
-                    && !is_chain_placeholder(*argument)
-                    && has_structured_syntax(*argument)
-            });
-        if symbol == SPENSO_TAG.dot || compact_metric {
-            let [left, right] = arguments.as_slice() else {
-                return Err(PyValueError::new_err(
-                    "inner products require exactly two operands",
-                ));
-            };
-            if !has_structured_syntax(*left) || !has_structured_syntax(*right) {
-                return Err(PyValueError::new_err(
-                    "inner products require rank-one tensor operands",
-                ));
-            }
-            let left = infer_validated_interface(&left.to_owned())?;
-            let right = infer_validated_interface(&right.to_owned())?;
-            if left.canonical().order() != 1 || right.canonical().order() != 1 {
-                return Err(PyValueError::new_err(format!(
-                    "inner products require rank-one operands, got ranks {} and {}",
-                    left.canonical().order(),
-                    right.canonical().order()
-                )));
-            }
-            let left = left.logical_slots()[0];
-            let right = right.logical_slots()[0];
-            if !left.rep().matches(&right.rep()) {
-                return Err(PyValueError::new_err(
-                    "inner-product operands carry incompatible representations",
-                ));
-            }
-            if matches!(
-                (left.aind, right.aind),
-                (PartialIndex::Explicit(left), PartialIndex::Explicit(right)) if left != right
-            ) {
-                return Err(PyValueError::new_err(
-                    "inner-product operands carry unequal explicit indices",
-                ));
-            }
-            return Ok(PartialStructure::from_logical_slots([]));
-        }
-
-        if symbol.has_tag(&SPENSO_TAG.broadcast) {
-            let argument = arguments[0];
-            if !has_structured_syntax(argument) {
-                return Err(PyValueError::new_err(format!(
-                    "broadcast function `{symbol}` does not contain a structured tensor argument"
-                )));
-            }
-            return infer_validated_interface(&argument.to_owned());
-        }
-
-        if let Some(structure) = builtin_tensor_structure(symbol, &arguments)? {
-            let canonical_ports = arguments
-                .iter()
-                .enumerate()
-                .map(|(position, argument)| {
-                    if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(*argument) {
-                        let index = match slot.aind() {
-                            AbstractIndex::Open { axis, .. } => PartialIndex::open(axis),
-                            index => PartialIndex::Explicit(index),
-                        };
-                        Some(slot.rep().slot(index))
-                    } else {
-                        Representation::<LibraryRep>::try_from(*argument)
-                            .ok()
-                            .map(|representation| representation.slot(PartialIndex::open(position)))
-                    }
-                })
-                .collect::<Vec<_>>();
-            // Compact arguments are contracted vectors, and chain placeholders
-            // are wiring labels. Neither exposes an external tensor port.
-            return Ok(PartialStructure::from_logical_slots(
-                structure
-                    .layout()
-                    .canonical_to_logical(&canonical_ports)
-                    .into_iter()
-                    .flatten(),
-            ));
-        }
-
-        if symbol == SPENSO_TAG.chain {
-            let endpoints = arguments[..2]
-                .iter()
-                .map(|argument| {
-                    if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(*argument) {
-                        Ok(slot.rep().slot(PartialIndex::Explicit(slot.aind())))
-                    } else if let Ok(representation) =
-                        Representation::<LibraryRep>::try_from(*argument)
-                    {
-                        Ok(representation.slot(PartialIndex::open(0)))
-                    } else {
-                        Err(PyValueError::new_err(
-                            "chain endpoints must be Spenso slots or representations",
-                        ))
-                    }
-                })
-                .collect::<PyResult<Vec<_>>>()?;
-            let input = endpoints[0].rep();
-            let output = endpoints[1].rep();
-            if !input.matches(&output)
-                || !(input.rep.is_self_dual() || (input.rep.is_base() && output.rep.is_dual()))
-            {
-                return Err(PyValueError::new_err(
-                    "chain endpoints do not form a compatible input-to-output channel",
-                ));
-            }
-            let mut interfaces = Vec::new();
-            for factor in &arguments[2..] {
-                if !has_structured_syntax(*factor) {
-                    return Err(PyValueError::new_err(
-                        "chain factors must contain structured tensors",
-                    ));
-                }
-                validate_builtin_placeholder_channels(*factor, input, output)?;
-                interfaces.push(infer_validated_interface(&factor.to_owned())?);
-            }
-            let spectators = merge_explicit_interface_sequence(&interfaces)?;
-            return Ok(PartialStructure::from_logical_slots(
-                endpoints.into_iter().chain(spectators.logical_slots()),
-            ));
-        } else if symbol == SPENSO_TAG.trace {
-            let representation =
-                Representation::<LibraryRep>::try_from(arguments[0]).map_err(|_| {
-                    PyValueError::new_err("trace metadata is not a Spenso representation")
-                })?;
-            let dual = representation.dual();
-            let mut interfaces = Vec::new();
-            for factor in shadowing::trace_factor_views(&arguments[1..]) {
-                if !has_structured_syntax(factor) {
-                    return Err(PyValueError::new_err(
-                        "trace factors must contain structured tensors",
-                    ));
-                }
-                validate_builtin_placeholder_channels(factor, representation, dual)?;
-                interfaces.push(infer_validated_interface(&factor.to_owned())?);
-            }
-            return merge_explicit_interface_sequence(&interfaces);
-        } else if symbol.has_tag(&SPENSO_TAG.tensor) {
-            for argument in arguments {
-                if Slot::<LibraryRep, AbstractIndex>::try_from(argument).is_ok()
-                    || Representation::<LibraryRep>::try_from(argument).is_ok()
-                    || matches!(
-                        argument,
-                        AtomView::Var(variable)
-                            if variable.get_symbol() == SPENSO_TAG.chain_in
-                                || variable.get_symbol() == SPENSO_TAG.chain_out
-                    )
-                    || !has_structured_syntax(argument)
-                {
-                    continue;
-                }
-                if !infer_validated_interface(&argument.to_owned())?
-                    .canonical()
-                    .is_scalar()
-                {
+                let exceeds_einstein_multiplicity = match repetitions.to_i64() {
+                    Some(0) => false,
+                    Some(1) => compatible > 2,
+                    Some(2) => compatible > 1,
+                    _ => compatible > 0,
+                };
+                if exceeds_einstein_multiplicity {
                     return Err(PyValueError::new_err(format!(
-                        "tensor metadata for `{symbol}` must be scalar"
+                        "explicit index `{index}` occurs on more than two compatible ports in `{atom}`"
                     )));
                 }
             }
-            if unmaterialized_tensor_leaf {
+            if exponent.numerator() % 2 == 0 {
                 return Ok(PartialStructure::from_logical_slots([]));
             }
+            return Ok(interface);
         }
-    }
 
-    if !has_structured_syntax(atom.as_view()) {
-        return Err(PyValueError::new_err(
-            "expression does not contain valid tagged Spenso tensor syntax",
-        ));
-    }
-
-    let mut open_markers = HashSet::new();
-    let materialized = atom.replace_map(|value, _, output| {
-        if Slot::<LibraryRep, AbstractIndex>::try_from(value).is_ok() {
-            return;
-        }
-        if let Ok(representation) = Representation::<LibraryRep>::try_from(value) {
-            let marker = loop {
-                let marker = composition::fresh_dummy_index([atom], std::iter::empty());
-                if open_markers.insert(marker) {
-                    break marker;
+        if let AtomView::Fun(function) = atom.as_view() {
+            let symbol = function.get_symbol();
+            let arguments = function.iter().collect::<Vec<_>>();
+            let unmaterialized_tensor_leaf = is_unmaterialized_tensor_leaf(atom.as_view());
+            if symbol == *shadowing::SYM
+                || symbol == *shadowing::ANTISYM
+                || symbol == *shadowing::CYCLIC
+            {
+                let mut interfaces = Vec::new();
+                for argument in arguments {
+                    if !has_structured_syntax(argument) {
+                        continue;
+                    }
+                    interfaces.push(self.infer(&argument.to_owned())?);
                 }
-            };
-            **output = representation.slot::<AbstractIndex, _>(marker).to_atom();
+                if interfaces.is_empty() {
+                    return Err(PyValueError::new_err(
+                        "tensor projectors require at least one tensor operand",
+                    ));
+                }
+                return merge_explicit_interface_sequence(&interfaces);
+            }
+
+            if symbol == SPENSO_TAG.bracket {
+                let mut interfaces = Vec::new();
+                for argument in arguments {
+                    if !has_structured_syntax(argument) {
+                        continue;
+                    }
+                    interfaces.push(self.infer(&argument.to_owned())?);
+                }
+                if interfaces.is_empty() {
+                    return Err(PyValueError::new_err(
+                        "ordered tensor products require at least one tensor operand",
+                    ));
+                }
+                return merge_explicit_interface_sequence(&interfaces);
+            }
+
+            let compact_metric = symbol == ETS.metric
+                && arguments.len() == 2
+                && arguments.iter().all(|argument| {
+                    Slot::<LibraryRep, AbstractIndex>::try_from(*argument).is_err()
+                        && Representation::<LibraryRep>::try_from(*argument).is_err()
+                        && !is_chain_placeholder(*argument)
+                        && has_structured_syntax(*argument)
+                });
+            if symbol == SPENSO_TAG.dot || compact_metric {
+                let [left, right] = arguments.as_slice() else {
+                    return Err(PyValueError::new_err(
+                        "inner products require exactly two operands",
+                    ));
+                };
+                if !has_structured_syntax(*left) || !has_structured_syntax(*right) {
+                    return Err(PyValueError::new_err(
+                        "inner products require rank-one tensor operands",
+                    ));
+                }
+                let left = self.infer(&left.to_owned())?;
+                let right = self.infer(&right.to_owned())?;
+                if left.canonical().order() != 1 || right.canonical().order() != 1 {
+                    return Err(PyValueError::new_err(format!(
+                        "inner products require rank-one operands, got ranks {} and {}",
+                        left.canonical().order(),
+                        right.canonical().order()
+                    )));
+                }
+                let left = left.logical_slots()[0];
+                let right = right.logical_slots()[0];
+                if !left.rep().matches(&right.rep()) {
+                    return Err(PyValueError::new_err(
+                        "inner-product operands carry incompatible representations",
+                    ));
+                }
+                if matches!(
+                    (left.aind, right.aind),
+                    (PartialIndex::Explicit(left), PartialIndex::Explicit(right)) if left != right
+                ) {
+                    return Err(PyValueError::new_err(
+                        "inner-product operands carry unequal explicit indices",
+                    ));
+                }
+                return Ok(PartialStructure::from_logical_slots([]));
+            }
+
+            if symbol.has_tag(&SPENSO_TAG.broadcast) {
+                let argument = arguments[0];
+                if !has_structured_syntax(argument) {
+                    return Err(PyValueError::new_err(format!(
+                        "broadcast function `{symbol}` does not contain a structured tensor argument"
+                    )));
+                }
+                return self.infer(&argument.to_owned());
+            }
+
+            if let Some(structure) = builtin_tensor_structure(symbol, &arguments)? {
+                let canonical_ports = arguments
+                    .iter()
+                    .enumerate()
+                    .map(|(position, argument)| {
+                        if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(*argument) {
+                            let index = match slot.aind() {
+                                AbstractIndex::Open { axis, .. } => PartialIndex::open(axis),
+                                index => PartialIndex::Explicit(index),
+                            };
+                            Some(slot.rep().slot(index))
+                        } else {
+                            Representation::<LibraryRep>::try_from(*argument).ok().map(
+                                |representation| representation.slot(PartialIndex::open(position)),
+                            )
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                // Only fully explicit built-in leaves are independent of fresh
+                // port materialization and normalization callbacks.
+                let reusable = self.explicit_leaves.len() < Self::CACHE_ENTRIES
+                && atom.as_view().get_byte_size() <= Self::CACHE_KEY_BYTES
+                && canonical_ports.iter().all(|port| {
+                    matches!(port, Some(slot) if matches!(slot.aind, PartialIndex::Explicit(_)))
+                });
+                // Compact arguments are contracted vectors, and chain placeholders
+                // are wiring labels. Neither exposes an external tensor port.
+                let interface = PartialStructure::from_logical_slots(
+                    structure
+                        .layout()
+                        .canonical_to_logical(&canonical_ports)
+                        .into_iter()
+                        .flatten(),
+                );
+                if reusable {
+                    // Keep repeated indices and logical ordering intact: enclosing
+                    // products still own contraction and multiplicity validation.
+                    self.explicit_leaves.insert(atom.clone(), interface.clone());
+                }
+                return Ok(interface);
+            }
+
+            if symbol == SPENSO_TAG.chain {
+                let endpoints = arguments[..2]
+                    .iter()
+                    .map(|argument| {
+                        if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(*argument) {
+                            Ok(slot.rep().slot(PartialIndex::Explicit(slot.aind())))
+                        } else if let Ok(representation) =
+                            Representation::<LibraryRep>::try_from(*argument)
+                        {
+                            Ok(representation.slot(PartialIndex::open(0)))
+                        } else {
+                            Err(PyValueError::new_err(
+                                "chain endpoints must be Spenso slots or representations",
+                            ))
+                        }
+                    })
+                    .collect::<PyResult<Vec<_>>>()?;
+                let input = endpoints[0].rep();
+                let output = endpoints[1].rep();
+                if !input.matches(&output)
+                    || !(input.rep.is_self_dual() || (input.rep.is_base() && output.rep.is_dual()))
+                {
+                    return Err(PyValueError::new_err(
+                        "chain endpoints do not form a compatible input-to-output channel",
+                    ));
+                }
+                let mut interfaces = Vec::new();
+                for factor in &arguments[2..] {
+                    if !has_structured_syntax(*factor) {
+                        return Err(PyValueError::new_err(
+                            "chain factors must contain structured tensors",
+                        ));
+                    }
+                    validate_builtin_placeholder_channels(*factor, input, output)?;
+                    interfaces.push(self.infer(&factor.to_owned())?);
+                }
+                let spectators = merge_explicit_interface_sequence(&interfaces)?;
+                return Ok(PartialStructure::from_logical_slots(
+                    endpoints.into_iter().chain(spectators.logical_slots()),
+                ));
+            } else if symbol == SPENSO_TAG.trace {
+                let representation =
+                    Representation::<LibraryRep>::try_from(arguments[0]).map_err(|_| {
+                        PyValueError::new_err("trace metadata is not a Spenso representation")
+                    })?;
+                let dual = representation.dual();
+                let mut interfaces = Vec::new();
+                for factor in shadowing::trace_factor_views(&arguments[1..]) {
+                    if !has_structured_syntax(factor) {
+                        return Err(PyValueError::new_err(
+                            "trace factors must contain structured tensors",
+                        ));
+                    }
+                    validate_builtin_placeholder_channels(factor, representation, dual)?;
+                    interfaces.push(self.infer(&factor.to_owned())?);
+                }
+                return merge_explicit_interface_sequence(&interfaces);
+            } else if symbol.has_tag(&SPENSO_TAG.tensor) {
+                for argument in arguments {
+                    if Slot::<LibraryRep, AbstractIndex>::try_from(argument).is_ok()
+                        || Representation::<LibraryRep>::try_from(argument).is_ok()
+                        || matches!(
+                            argument,
+                            AtomView::Var(variable)
+                                if variable.get_symbol() == SPENSO_TAG.chain_in
+                                    || variable.get_symbol() == SPENSO_TAG.chain_out
+                        )
+                        || !has_structured_syntax(argument)
+                    {
+                        continue;
+                    }
+                    if !self.infer(&argument.to_owned())?.canonical().is_scalar() {
+                        return Err(PyValueError::new_err(format!(
+                            "tensor metadata for `{symbol}` must be scalar"
+                        )));
+                    }
+                }
+                if unmaterialized_tensor_leaf {
+                    return Ok(PartialStructure::from_logical_slots([]));
+                }
+            }
         }
-    });
-    let inferred = match materialized
-        .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
-            StructureInferenceMode::Fast,
-        ) {
-        Ok(inferred) => inferred,
-        Err(StructureError::EmptyStructure(_)) => {
-            return Ok(PartialStructure::from_logical_slots([]));
+
+        if !has_structured_syntax(atom.as_view()) {
+            return Err(PyValueError::new_err(
+                "expression does not contain valid tagged Spenso tensor syntax",
+            ));
         }
-        Err(error) => {
+
+        let mut open_markers = HashSet::new();
+        let materialized = atom.replace_map(|value, _, output| {
+            if Slot::<LibraryRep, AbstractIndex>::try_from(value).is_ok() {
+                return;
+            }
+            if let Ok(representation) = Representation::<LibraryRep>::try_from(value) {
+                let marker = loop {
+                    let marker = composition::fresh_dummy_index([atom], std::iter::empty());
+                    if open_markers.insert(marker) {
+                        break marker;
+                    }
+                };
+                **output = representation.slot::<AbstractIndex, _>(marker).to_atom();
+            }
+        });
+        let inferred = match materialized
+            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
+                StructureInferenceMode::Fast,
+            ) {
+            Ok(inferred) => inferred,
+            Err(StructureError::EmptyStructure(_)) => {
+                return Ok(PartialStructure::from_logical_slots([]));
+            }
+            Err(error) => {
+                return Err(PyValueError::new_err(format!(
+                    "invalid Spenso expression: {error}"
+                )));
+            }
+        };
+        // `OrderedStructure` canonicalizes slots and its fast function inference
+        // does not retain that permutation. Read the direct structural arguments
+        // back from the atom so ordinary non-built-in leaves follow their encoded
+        // syntax order.
+        let logical = syntactic_leaf_slots(materialized.as_view());
+        if logical.len() != inferred.canonical().order() {
             return Err(PyValueError::new_err(format!(
-                "invalid Spenso expression: {error}"
+                "invalid Spenso expression: inferred {} ports but found {} direct structural arguments",
+                inferred.canonical().order(),
+                logical.len()
             )));
         }
-    };
-    // `OrderedStructure` canonicalizes slots and its fast function inference
-    // does not retain that permutation. Read the direct structural arguments
-    // back from the atom so ordinary non-built-in leaves follow their encoded
-    // syntax order.
-    let logical = syntactic_leaf_slots(materialized.as_view());
-    if logical.len() != inferred.canonical().order() {
-        return Err(PyValueError::new_err(format!(
-            "invalid Spenso expression: inferred {} ports but found {} direct structural arguments",
-            inferred.canonical().order(),
-            logical.len()
-        )));
+        Ok(PartialStructure::from_logical_slots(
+            logical.into_iter().map(|slot| {
+                let index = match slot.aind() {
+                    AbstractIndex::Open { axis, .. } => PartialIndex::open(axis),
+                    index if open_markers.contains(&index) => PartialIndex::open(0),
+                    index => PartialIndex::Explicit(index),
+                };
+                slot.rep().slot(index)
+            }),
+        ))
     }
-    Ok(PartialStructure::from_logical_slots(
-        logical.into_iter().map(|slot| {
-            let index = match slot.aind() {
-                AbstractIndex::Open { axis, .. } => PartialIndex::open(axis),
-                index if open_markers.contains(&index) => PartialIndex::open(0),
-                index => PartialIndex::Explicit(index),
-            };
-            slot.rep().slot(index)
-        }),
-    ))
 }
 
 fn syntactic_leaf_slots(value: AtomView<'_>) -> Vec<Slot<LibraryRep, AbstractIndex>> {
@@ -1786,6 +1921,13 @@ impl TensorExpression {
 
     /// Tensor identity, scalar arguments, and external ports in logical order.
     #[getter]
+    #[gen_stub(override_return_type(type_repr = "tuple[int | Expression, ...]"))]
+    fn shape(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        self.structure().shape(py)
+    }
+
+    /// Tensor identity, scalar arguments, and external ports in logical order.
+    #[getter]
     fn structure(&self) -> crate::metadata::SpensoTensorStructure {
         crate::metadata::SpensoTensorStructure {
             interface: self.interface.clone(),
@@ -1824,6 +1966,9 @@ impl TensorExpression {
     fn __getitem__(&self, py: Python<'_>, item: SliceOrIntOrExpanded) -> PyResult<Py<PyAny>> {
         let dimensions = logical_dimensions(&self.interface)?;
         match item {
+            SliceOrIntOrExpanded::Selection(_) => Err(PyTypeError::new_err(
+                "coordinate conversion accepts nonnegative integers, integer coordinates, or a flat slice",
+            )),
             SliceOrIntOrExpanded::Int(index) => expanded_index(&dimensions, index)?
                 .into_pyobject(py)
                 .map(|value| value.unbind().into_any()),
@@ -1856,6 +2001,110 @@ impl TensorExpression {
     /// Re-parse the underlying symbolic expression and rebuild its ordered tensor interface.
     fn reinfer(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         Self::from_atom_interface(py, self_.as_super().expr.clone(), None)
+    }
+
+    /// Replace scalar coefficients or tensor factors and validate the external interface.
+    ///
+    /// Supports Symbolica's patterns, callbacks, conditions and traversal options.
+    /// Index-changing rewrites must use reindex/rename_indices, or explicitly drop
+    /// the tensor interface with to_expression() before rebuilding it.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (pattern, rhs, cond=None, non_greedy_wildcards=None, min_level=0, max_level=None, level_is_tree_depth=false, partial=true, allow_new_wildcards_on_rhs=false, rhs_cache_size=None, repeat=false, once=false, bottom_up=false, nested=false))]
+    fn replace(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        pattern: ConvertibleToExpression,
+        rhs: ConvertibleToReplaceWith,
+        cond: Option<ConvertibleToPatternRestriction>,
+        non_greedy_wildcards: Option<Vec<PythonExpression>>,
+        min_level: usize,
+        max_level: Option<usize>,
+        level_is_tree_depth: bool,
+        partial: bool,
+        allow_new_wildcards_on_rhs: bool,
+        rhs_cache_size: Option<usize>,
+        repeat: bool,
+        once: bool,
+        bottom_up: bool,
+        nested: bool,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().replace(
+            pattern,
+            rhs,
+            cond,
+            non_greedy_wildcards,
+            min_level,
+            max_level,
+            level_is_tree_depth,
+            partial,
+            allow_new_wildcards_on_rhs,
+            rhs_cache_size,
+            repeat,
+            once,
+            bottom_up,
+            nested,
+        )?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Apply simultaneous Symbolica replacements and validate the resulting tensor.
+    #[pyo3(signature = (replacements, repeat=false, once=false, bottom_up=false, nested=false))]
+    fn replace_multiple(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        replacements: Vec<PythonReplacement>,
+        repeat: bool,
+        once: bool,
+        bottom_up: bool,
+        nested: bool,
+    ) -> PyResult<Py<Self>> {
+        let result =
+            self_
+                .as_super()
+                .replace_multiple(replacements, repeat, once, bottom_up, nested)?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Apply a Symbolica Transformer and retain the validated tensor interface.
+    #[pyo3(signature = (op, n_cores=None, stats_to_file=None))]
+    fn map(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        op: PythonTransformer,
+        n_cores: Option<usize>,
+        stats_to_file: Option<String>,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().map(op, py, n_cores, stats_to_file)?;
+        Self::preserving_interface(&self_, py, result.expr)
+    }
+
+    /// Differentiate scalar coefficients, preserving tensor zeros and ports.
+    /// Formal derivatives of unknown tensor functions are not supported by the
+    /// network executor. Differentiate their component expressions with
+    /// Tensor.map_components() instead, or supply a TensorName derivative callback.
+    fn derivative(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        x: ConvertibleToExpression,
+    ) -> PyResult<Py<Self>> {
+        let result = self_.as_super().derivative(x)?;
+        let mut formal_tensor_derivative = false;
+        result.expr.visitor(&mut |value| {
+            if let AtomView::Fun(function) = value
+                && function.get_symbol() == Symbol::DERIVATIVE
+                && function.get_nargs() % 2 == 1
+                && matches!(function.iter().nth(function.get_nargs() / 2), Some(AtomView::Var(head)) if head.get_symbol().has_tag(&SPENSO_TAG.tensor))
+            {
+                formal_tensor_derivative = true;
+            }
+            !formal_tensor_derivative
+        });
+        if formal_tensor_derivative {
+            return Err(PyValueError::new_err(
+                "formal tensor derivatives are not supported; differentiate component expressions with Tensor.map_components()",
+            ));
+        }
+        Self::preserving_interface(&self_, py, result.expr)
     }
 
     /// Expand scalar algebra while preserving and validating the tensor interface.
@@ -2046,6 +2295,48 @@ impl TensorExpression {
 
     /// Apply Idenso's gamma-algebra simplifier and re-infer the tensor interface.
     ///
+    /// Apply selected algebra passes to a fixed point and return a tensor expression.
+    ///
+    /// The default contracts metrics only. Use SimplifySettings.hep() for gamma,
+    /// color, and epsilon algebra too, or construct explicit settings. Dimensions
+    /// are taken from slots; dimension changes remain an explicit operation.
+    /// No full polynomial expansion occurs unless settings.expand is true.
+    /// Raises ValueError if the selected passes have not stabilized by max_passes.
+    #[pyo3(signature=(settings=None))]
+    fn simplify(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        settings: Option<&crate::simplification::PySimplifySettings>,
+    ) -> PyResult<Py<Self>> {
+        let settings = settings.copied().unwrap_or_default();
+        let mut atom = self_.as_super().expr.clone();
+        for _ in 0..settings.max_passes {
+            let before = atom.clone();
+            if settings.metrics {
+                atom = atom.simplify_metrics();
+            }
+            if let Some(gamma) = settings.gamma {
+                atom = atom.simplify_gamma_with(gamma.rust());
+            }
+            if let Some(color) = settings.color {
+                atom = atom.simplify_color_with(color.rust());
+            }
+            if settings.epsilon {
+                atom = atom.simplify_epsilon();
+            }
+            if settings.expand {
+                atom = atom.expand();
+            }
+            if atom == before {
+                return Self::from_transformed_atom(&self_, py, atom);
+            }
+        }
+        Err(PyValueError::new_err(format!(
+            "simplification did not stabilize within {} passes",
+            settings.max_passes
+        )))
+    }
+
     /// Simplify registered Spenso gamma chains and traces with Idenso's default rules.
     ///
     /// The dimension-generic part applies compatible Clifford anticommutation, adjacent
@@ -3110,6 +3401,22 @@ impl TensorExpression {
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))
     }
 
+    /// Execute the expression and return its component Tensor in logical axis order.
+    ///
+    /// Unregistered names acquire symbolic components. This uses the same execution
+    /// path as to_network().execute() and does not mutate the expression or library.
+    #[pyo3(signature = (library=None, *, function_library=None))]
+    fn to_tensor(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        library: Option<&SpensorLibrary>,
+        function_library: Option<&crate::library::SpensorFunctionLibrary>,
+    ) -> PyResult<Spensor> {
+        let mut network = Self::to_network(self_, py, library)?;
+        network.execute(library, function_library, None, ExecutionMode::All)?;
+        network.result_tensor(library)
+    }
+
     /// Return component values in logical row-major interface order.
     ///
     /// Parse and execute through the same path as `to_network()`. Tensors absent
@@ -3132,24 +3439,21 @@ impl TensorExpression {
         py: Python<'_>,
         library: Option<&SpensorLibrary>,
     ) -> PyResult<Py<PyAny>> {
-        let mut network = Self::to_network(self_, py, library)?;
-        network.execute(library, None, None, ExecutionMode::All)?;
-        network
-            .result_tensor(library)?
+        Self::to_tensor(self_, py, library, None)?
             .__getitem__(SliceOrIntOrExpanded::Slice(PySlice::full(py)))
     }
 
     /// Fill the unresolved external ports with `indices` in interface order.
     ///
-    /// Pass `AUTO` to leave a port unresolved. Set `cook_indices=True` to flatten nested
+    /// Pass `AUTO` to leave a port unresolved. Pass `cook_indices=CookSettings.indices()` to flatten nested
     /// symbolic index payloads before insertion. Repeated compatible indices contract their
     /// ports, in which case the result no longer carries the original stored-data identity.
-    #[pyo3(signature = (*indices, cook_indices = false))]
+    #[pyo3(signature = (*indices, cook_indices = None))]
     fn index(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: bool,
+        cook_indices: Option<&crate::simplification::PyCookSettings>,
     ) -> PyResult<Py<Self>> {
         let replacements = Self::index_replacements(&self_.interface, indices, cook_indices)?;
         let mut logical = self_.interface.logical_slots();
@@ -3168,15 +3472,83 @@ impl TensorExpression {
         )
     }
 
+    /// Assign all external ports in logical order, including already indexed ports.
+    /// AUTO keeps the current port. Repeated compatible indices contract.
+    #[pyo3(signature = (*indices, cook_indices=None))]
+    fn reindex(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        indices: &Bound<'_, PyTuple>,
+        cook_indices: Option<&PyCookSettings>,
+    ) -> PyResult<Py<Self>> {
+        let positions = (0..self_.interface.canonical().order()).collect::<Vec<_>>();
+        let replacements =
+            Self::port_replacements(&self_.interface, &positions, indices, cook_indices)?;
+        let value = composition::reindex_interface_ports(&Self::structured(&self_), &replacements)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Self::from_atom_interface_descriptor(
+            py,
+            value.atom,
+            value.interface,
+            self_.name,
+            self_.name_args.clone(),
+        )
+    }
+
+    /// Rename external indices simultaneously without changing rank or capturing dummy indices.
+    /// Keys are index labels or typed Slots; typed keys disambiguate representations.
+    #[pyo3(signature = (mapping, *, cook_indices=None))]
+    fn rename_indices(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        mapping: &Bound<'_, PyDict>,
+        cook_indices: Option<&PyCookSettings>,
+    ) -> PyResult<Py<Self>> {
+        let replacements = Self::named_replacements(&self_.interface, mapping, cook_indices)?;
+        let value = composition::reindex_interface_ports(&Self::structured(&self_), &replacements)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let result = Self::from_atom_interface_descriptor(
+            py,
+            value.atom,
+            value.interface,
+            self_.name,
+            self_.name_args.clone(),
+        )?;
+        if result.borrow(py).interface.canonical().order() != self_.interface.canonical().order() {
+            return Err(PyValueError::new_err(
+                "renaming would contract external ports; use reindex() to request a contraction",
+            ));
+        }
+        Ok(result)
+    }
+
+    /// Return a tensor with external axes in the specified logical order.
+    /// Unresolved ports acquire fresh indices so identical representations remain distinct.
+    /// Use reindex() to assign preferred labels after permutation.
+    fn permute_axes(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        axes: Vec<usize>,
+    ) -> PyResult<Py<Self>> {
+        let value = Self::permuted_structure(&Self::structured(&self_), &axes)?;
+        Self::from_atom_interface_descriptor(
+            py,
+            value.atom,
+            value.interface,
+            self_.name,
+            self_.name_args.clone(),
+        )
+    }
+
     /// Fill the unresolved external ports with `indices` in interface order.
-    #[pyo3(signature = (*indices, cook_indices = false))]
+    #[pyo3(signature = (*indices, cook_indices = None))]
     // Tensor semantics intentionally specialize the inherited Expression API.
     #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
     fn __call__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: bool,
+        cook_indices: Option<&crate::simplification::PyCookSettings>,
     ) -> PyResult<Py<Self>> {
         Self::index(self_, py, indices, cook_indices)
     }
@@ -5548,6 +5920,89 @@ mod tests {
     }
 
     #[test]
+    fn reused_explicit_leaves_preserve_interface_and_multiplicity_validation() {
+        Python::initialize();
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
+        let [a, b, c] = [71, 73, 79].map(|index| {
+            representation
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let metric = |left: &Atom, right: &Atom| {
+            FunctionBuilder::new(ETS.metric)
+                .add_arg(left)
+                .add_arg(right)
+                .finish()
+        };
+        let ab = metric(&a, &b);
+        let ac = metric(&a, &c);
+        let mut inference = InterfaceInference::default();
+        let expected = inference.infer(&ab).unwrap();
+        assert_eq!(
+            inference.infer(&ab).unwrap().logical_slots(),
+            expected.logical_slots()
+        );
+        assert!(inference.explicit_leaves.contains_key(&ab));
+
+        let contracted = inference.infer(&(ab.as_ref() * ac.as_ref())).unwrap();
+        assert_eq!(contracted.canonical().order(), 2);
+        for invalid in [
+            ab.as_ref() + ac.as_ref(),
+            ab.as_ref() + Atom::num(1),
+            ab.as_ref().pow(Atom::num(3)),
+        ] {
+            assert!(inference.infer(&invalid).is_err());
+        }
+
+        // A leaf's own repeated slots must remain visible to enclosing products.
+        let diagonal = FunctionBuilder::new(ETS.flat)
+            .add_arg(&a)
+            .add_arg(&a)
+            .finish();
+        assert_eq!(inference.infer(&diagonal).unwrap().canonical().order(), 2);
+        let vector = FunctionBuilder::new(spenso::vector_symbol!("inference_reuse_vector"))
+            .add_arg(&a)
+            .finish();
+        assert!(inference.infer(&(diagonal * vector)).is_err());
+
+        let flat = FunctionBuilder::new(ETS.flat)
+            .add_arg(&a)
+            .add_arg(&b)
+            .finish();
+        let sum = ab.as_ref() * ac.as_ref() + flat * ac.as_ref();
+        let actual = infer_interface(&sum).unwrap();
+        assert!(additive_interfaces_match(&contracted, &actual));
+    }
+
+    #[test]
+    fn interface_reuse_excludes_unresolved_builtin_ports() {
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
+        let compact = representation.to_symbolic([]);
+        let implicit = FunctionBuilder::new(ETS.metric)
+            .add_arg(&compact)
+            .add_arg(&compact)
+            .finish();
+        let materialized = FunctionBuilder::new(ETS.metric)
+            .add_args((0..2).map(|axis| {
+                representation
+                    .slot::<AbstractIndex, _>(AbstractIndex::Open { owner: 81, axis })
+                    .to_atom()
+            }))
+            .finish();
+        let generic = FunctionBuilder::new(spenso::tensor_symbol!("inference_reuse_open"))
+            .add_arg(compact)
+            .finish();
+        let mut inference = InterfaceInference::default();
+        for (atom, rank) in [(implicit, 2), (materialized, 2), (generic, 1)] {
+            for _ in 0..2 {
+                let interface = inference.infer(&atom).unwrap();
+                assert_eq!(interface.open_positions(), (0..rank).collect::<Vec<_>>());
+                assert!(inference.explicit_leaves.is_empty());
+            }
+        }
+    }
+
+    #[test]
     fn recursive_merging_rejects_three_compatible_explicit_ports() {
         let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
         let index = AbstractIndex::Normal(11);
@@ -5614,13 +6069,15 @@ mod tests {
         let right = diagonal("additive_scalar_right", AbstractIndex::Normal(23));
 
         assert!(
-            infer_validated_interface(&(left.as_ref() + Atom::num(1)))
+            InterfaceInference::default()
+                .infer(&(left.as_ref() + Atom::num(1)))
                 .unwrap()
                 .canonical()
                 .is_scalar()
         );
         assert!(
-            infer_validated_interface(&(left + right))
+            InterfaceInference::default()
+                .infer(&(left + right))
                 .unwrap()
                 .canonical()
                 .is_scalar()
@@ -5680,12 +6137,13 @@ mod tests {
         let open_sum = open_tensor("canonical_open_addition_left")
             + open_tensor("canonical_open_addition_right");
         assert_eq!(
-            infer_validated_interface(&open_sum)
+            InterfaceInference::default()
+                .infer(&open_sum)
                 .unwrap()
                 .logical_slots(),
             open_interface.logical_slots()
         );
-        let inferred = infer_validated_interface(&expected_sum).unwrap();
+        let inferred = InterfaceInference::default().infer(&expected_sum).unwrap();
         assert!(additive_interfaces_match(&left.interface, &inferred));
 
         let standalone = StructuredAtom::new(left.atom.clone(), right.interface.clone());
@@ -5942,12 +6400,17 @@ mod tests {
             .finish();
 
         assert!(
-            infer_validated_interface(&tensor.as_ref().pow(Atom::num(2)))
+            InterfaceInference::default()
+                .infer(&tensor.as_ref().pow(Atom::num(2)))
                 .unwrap()
                 .canonical()
                 .is_scalar()
         );
-        assert!(infer_validated_interface(&tensor.as_ref().pow(Atom::num(3))).is_err());
+        assert!(
+            InterfaceInference::default()
+                .infer(&tensor.as_ref().pow(Atom::num(3)))
+                .is_err()
+        );
     }
 
     #[test]
@@ -5960,7 +6423,11 @@ mod tests {
             .add_arg(&slot)
             .finish();
 
-        assert!(infer_validated_interface(&tensor.as_ref().pow(Atom::num(2))).is_err());
+        assert!(
+            InterfaceInference::default()
+                .infer(&tensor.as_ref().pow(Atom::num(2)))
+                .is_err()
+        );
     }
 
     #[test]
@@ -5971,13 +6438,15 @@ mod tests {
             .finish();
 
         assert!(
-            infer_validated_interface(&tensor.as_ref().pow(Atom::num(2)))
+            InterfaceInference::default()
+                .infer(&tensor.as_ref().pow(Atom::num(2)))
                 .unwrap()
                 .canonical()
                 .is_scalar()
         );
         assert_eq!(
-            infer_validated_interface(&tensor.as_ref().pow(Atom::num(3)))
+            InterfaceInference::default()
+                .infer(&tensor.as_ref().pow(Atom::num(3)))
                 .unwrap()
                 .canonical()
                 .order(),

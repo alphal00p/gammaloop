@@ -1,7 +1,7 @@
 = Symbolica expansion performance reproducer
 
-This standalone program isolates the expanded-output cost of an ordinary
-generic-dimensional gamma trace. It depends only on Symbolica main `06906976`
+This standalone package isolates expansion and polynomial-to-expression
+conversion. It depends only on Symbolica main `06906976`
 and the Rust standard library. No Idenso rewrite rules, Spenso slot parsing,
 tensor networks or pattern matching execute in the timed operation.
 
@@ -35,6 +35,65 @@ Destruction is recorded separately in `drop_ns`. The output must equal the
 ordinary expansion and contain $(n-1)!!$ terms. This checks the two expansion APIs
 against each other; independent Clifford and FORM validation belongs to the
 full trace benchmark. It is not a proof based solely on counting terms.
+
+== Conversion only
+
+Use `polynomial_emission` to isolate the current sparse trace emitter's slow
+Symbolica operation. The existing `expansion ... poly` command times
+`expand_via_poly`, which also constructs the polynomial. The focused binary
+constructs a signed perfect-matching polynomial with integer coefficients and
+byte exponents before timing, then calls only `to_expression()` in the
+non-inlined `profile_run` function. It uses the same polynomial domain and
+conversion API as Idenso's sparse emitter, with no Idenso or Spenso dependency.
+
+From this directory:
+
+```sh
+cargo build --release --locked --bin polynomial_emission
+./target/release/polynomial_emission 12 tensor 5
+./target/release/polynomial_emission 14 tensor 5
+./target/release/polynomial_emission 12 variables 5
+```
+
+Arguments are even length 2–14, payload (`tensor`, `shallow`, `variables`), and
+sample count; defaults are `12 tensor 5`. An optional fourth argument,
+`roundtrip`, forces inverse-conversion validation for larger inputs.
+Twelve produces 10,395 monomials;
+fourteen produces 135,135. The tensor-shaped payload is
+`g(mink(4,idx(mu_i,0)),mink(4,idx(mu_j,0)))`. These are inert Symbolica functions,
+representative of the current nested slot spelling; they have no Spenso tags or
+custom tensor callbacks. The shallow and variable modes retain the polynomial
+while reducing its atoms' payload.
+
+Each JSON line reports `emission_ns` and `drop_ns`. Polynomial construction,
+warmup and validation are outside both clocks. `emission_and_drop_ns` sums the
+two measured intervals; validation lies between them, so it is not a contiguous
+full-lifecycle measurement. `exact_equal` compares a timed result with the warmup
+output from the same library. It is not an independent correctness certificate
+for a modified Symbolica implementation.
+
+For lengths up to ten, an exact inverse polynomial roundtrip also compares every
+coefficient with the input using the same variable ordering. Larger runs skip
+that separate expensive operation and report `roundtrip_checked: false` and
+`roundtrip_equal: null`. Pass `roundtrip` to enable it explicitly. The initial
+unconditional inverse check passed through twelve but timed out at fourteen
+after 120 seconds before any timing record; it is not part of the conversion
+measurement being optimized here.
+
+For an instruction profile of conversion alone:
+
+```sh
+valgrind --tool=callgrind --collect-atstart=no \
+  --toggle-collect='*polynomial_emission::profile_run*' \
+  ./target/release/polynomial_emission 12 tensor 1
+```
+
+To work on a local Symbolica checkout, replace this standalone manifest's
+`git` and `rev` dependency keys with `path = "/path/to/symbolica"`, retaining
+the listed features. This package has its own workspace and lockfile; the main
+FeynKit workspace dependency remains separate. Build both revisions with the
+same release settings and compare several sizes and payloads. The earlier
+isolated patches in `patches/` are not applied to the default pinned build.
 
 == Measured bottleneck
 
@@ -243,10 +302,50 @@ reruns; seven real fixtures agree across ordinary and polynomial routes.
 Input construction and parsing are excluded, with destruction recorded
 separately. These remain shared-host measurements of an isolated dependency.
 
-This version is not integrated: simple function-times-sum controls regress by
-about 9–11%. The later-factor loop allocates scratch storage even when every
-summand is a variable, so the insertion routine immediately declines it.
-Instruction profiles confirm 268–369 extra instructions in those controls.
-A proposed lazy allocation avoids that work but remains unmeasured. The trial,
-raw timings, source and identities are stored under
-`atomic_product_insertion_trial` in `primitive_measurements.json`.
+The first version allocates scratch storage even when every summand is a
+variable, so the insertion routine immediately declines it. Simple
+function-times-sum controls regress by about 9–11%, with 268–369 extra
+instructions. Allocating scratch only when a normalized product needs it
+reduces those excess instructions to 13–89. The final isolated version passes
+225 exact expansion comparisons, including changed flags and reruns, plus the
+existing header-width test. Its three-process median of process medians is:
+
+#table(
+  columns: (auto, auto, auto),
+  [Fixture], [Baseline expansion], [Insertion with lazy scratch],
+  [Free eight], [0.163 ms], [0.115 ms],
+  [Free twelve], [34.51 ms], [25.54 ms],
+  [Free fourteen], [647.87 ms], [453.52 ms],
+  [Interior pair, five], [17.36 ms], [11.76 ms],
+  [Power control, twenty], [3.23 ms], [3.22 ms],
+)
+
+The twelve-gamma instruction count is 268.9 million, compared with the same
+386.8-million baseline. Small wall controls remain mixed: for example, the
+positive function-times-sum case takes 1.000 to 1.025 µs and the rational-prefix
+case 1.247 to 1.335 µs. Thus this is not a universal no-regression result, and
+the dependency remains unchanged in production. The `full_fn_cmp` feature
+configuration has not been built. The source patch is
+`patches/atomic-product-insertion.patch`; validation, raw timings, source and
+identities are stored under `atomic_product_insertion_trial` in
+`primitive_measurements.json`, with the final results in
+`lazy_scratch_validated_trial`.
+
+A historical explicit trace-expansion API trial kept default factorization
+unchanged and used the shared-node emitter when expansion was requested. Its
+standalone order-sensitive twelve-gamma result improved from 5.96 to 0.83 ms,
+and fourteen free gammas from 805 to 356 ms. That prototype was not integrated:
+with the untouched scalar spectator `(x+y)^8`, the free-twelve comparison
+regressed from 68.49 to 99.84 ms.
+The reference completes the factored expression before expanding its extracted
+trace body; the proposed API expands inside the trace rewrite, exposing the
+larger output to outer cleanup. Profiles show essentially unchanged trace-kernel
+and expansion costs, with the increase in subsequent scans and cleanup.
+The candidate, validation and these explicit timing boundaries are archived
+under `explicit_expanded_trace_api_trial` in the contraction parity record.
+
+The later integrated opt-in API addresses that outer-cleanup boundary. See the
+#link("../../../docs/products/idenso/content/gamma-simplification.typ")[gamma
+simplification documentation] and `expanded_trace_live_integration` in the
+contraction parity record for its implementation and validation. The historical
+measurements above do not describe the current API's performance.

@@ -1,5 +1,9 @@
 //! Python views of tensor metadata, independent of expressions and component data.
-use pyo3::{exceptions::PyTypeError, prelude::*, types::PyTuple};
+use pyo3::{
+    exceptions::{PyTypeError, PyValueError},
+    prelude::*,
+    types::PyTuple,
+};
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::*;
 #[cfg(not(feature = "python_stubgen"))]
@@ -128,6 +132,17 @@ pub struct SpensoTensorStructure {
 
 impl ModuleInit for SpensoTensorStructure {}
 
+pub(crate) fn validate_axis_permutation(rank: usize, axes: &[usize]) -> PyResult<()> {
+    let mut sorted = axes.to_vec();
+    sorted.sort_unstable();
+    if sorted != (0..rank).collect::<Vec<_>>() {
+        return Err(PyValueError::new_err(format!(
+            "axes must be a permutation of 0..{rank}"
+        )));
+    }
+    Ok(())
+}
+
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
@@ -213,14 +228,14 @@ impl SpensoTensorStructure {
 
     /// Number of external slots, including unresolved ports.
     #[getter]
-    fn rank(&self) -> usize {
+    pub(crate) fn rank(&self) -> usize {
         self.interface.canonical().order()
     }
 
     /// Dimensions in logical order; symbolic dimensions remain symbolic.
     #[getter]
     #[gen_stub(override_return_type(type_repr = "tuple[int | Expression, ...]"))]
-    fn shape(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn shape(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         let shape = self
             .interface
             .logical_slots()
@@ -234,6 +249,23 @@ impl SpensoTensorStructure {
             })
             .collect::<PyResult<Vec<_>>>()?;
         Ok(PyTuple::new(py, shape)?.unbind())
+    }
+
+    /// Whether there are no external axes.
+    #[getter]
+    fn is_scalar(&self) -> bool {
+        self.rank() == 0
+    }
+
+    /// Reorder metadata axes without changing their labels, dimensions, or identity.
+    fn permute_axes(&self, axes: Vec<usize>) -> PyResult<Self> {
+        validate_axis_permutation(self.rank(), &axes)?;
+        let slots = self.interface.logical_slots();
+        Ok(Self {
+            interface: PartialStructure::from_logical_slots(axes.iter().map(|&axis| slots[axis])),
+            name: self.name,
+            arguments: self.arguments.clone(),
+        })
     }
 
     fn __repr__(&self) -> String {

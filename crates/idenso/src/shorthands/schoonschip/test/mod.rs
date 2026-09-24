@@ -598,3 +598,78 @@ fn network_scalar_leaves_retain_parser_errors_and_opaque_compact_forms() {
         }
     }
 }
+
+#[test]
+fn network_scalar_roots_preserve_compact_forms_and_parser_scope() {
+    test_initialize();
+    let parse = |source: &str| {
+        Atom::parse(
+            source,
+            "scalar_root_test",
+            symbolica::parser::ParseSettings::symbolica(),
+        )
+        .unwrap()
+    };
+    T.rank_one_tensor_symbol("scalar_root_test::v");
+    for settings in [
+        SchoonschipSettings::partial(),
+        SchoonschipSettings::partial().with_expanded_contracted_sums(),
+        SchoonschipSettings::single_pass(Some(1)),
+        SchoonschipSettings::breadth_first(Some(2)),
+    ] {
+        for source in [
+            "v(0,spenso::mink(4))",
+            "v(0,spenso::mink(4))^2",
+            "v(0,spenso::mink(4))*v(1,spenso::mink(4))",
+            "spenso::mink(4)",
+            "spenso::dind(spenso::lor(4))",
+            "(x+y)^8*(u+v)",
+        ] {
+            let input = parse(source);
+            for result in [
+                input.schoonschip_with_net::<false, AbstractIndex>(&settings),
+                input.schoonschip_with_net::<true, AbstractIndex>(&settings),
+            ] {
+                assert_eq!(result.unwrap(), input, "{source}");
+            }
+        }
+        for (source, factored, expanded) in [
+            ("-2*(x+y)", "-2*(x+y)", "-2*x-2*y"),
+            ("x+spenso::bracket(y)", "x+y", "x+y"),
+            (
+                "x+f(spenso::bracket(y))",
+                "x+f(spenso::bracket(y))",
+                "x+f(spenso::bracket(y))",
+            ),
+        ] {
+            let input = parse(source);
+            let expected = if settings.expand_contracted_sums {
+                expanded
+            } else {
+                factored
+            };
+            assert_eq!(
+                input
+                    .schoonschip_with_net::<false, AbstractIndex>(&settings)
+                    .unwrap(),
+                parse(expected),
+                "{source}"
+            );
+            assert_eq!(
+                input
+                    .schoonschip_with_net::<true, AbstractIndex>(&settings)
+                    .unwrap(),
+                parse(expanded),
+                "{source}, EXPANDSUMS=true"
+            );
+        }
+        let input = parse("x+spenso::bracket()");
+        for result in [
+            input.schoonschip_with_net::<false, AbstractIndex>(&settings),
+            input.schoonschip_with_net::<true, AbstractIndex>(&settings),
+        ] {
+            let error = result.unwrap_err().to_string();
+            assert!(error.contains("empty bracket expression"), "{error}");
+        }
+    }
+}

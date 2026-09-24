@@ -10,13 +10,15 @@ use std::{
 
 use itertools::Itertools;
 use spenso::g;
-use symbolica::atom::{Atom, AtomView};
+use symbolica::atom::{Atom, AtomCore, AtomView};
 
-use super::{THREE_GAMMA_METRIC_TERMS, is_minkowski_slot};
+use super::{THREE_GAMMA_METRIC_TERMS, is_four_dimension, is_minkowski_slot};
 use crate::epsilon::epsilon4;
 
 mod factored;
+mod sparse;
 
+#[derive(Clone, Copy)]
 pub(super) enum TraceOutput {
     Expanded,
     Factored,
@@ -182,17 +184,94 @@ impl<const N: usize> TraceKernel<N> {
 
 /// Build the ordinary pairing polynomial without intermediate trace nodes.
 /// Repeated subwords share their result for this evaluation only.
-struct PairingTrace<'a> {
+struct PairingTrace<'a, Output: TraceAlgebra = FactoredOutput> {
     width: usize,
     arguments: Vec<AtomView<'a>>,
     metrics: Vec<Option<Atom>>,
     trace_unit: AtomView<'a>,
-    subwords: HashMap<Vec<usize>, Atom>,
+    subwords: HashMap<Vec<usize>, Output::Value>,
+    output: Output,
     canonical_arguments: bool,
     summed_indices: Vec<usize>,
 }
 
-impl PairingTrace<'_> {
+/// Scalar output operations shared by both representations. The word evaluator
+/// below owns contraction order and identities, independently of Atom assembly.
+trait TraceAlgebra {
+    type Value: Clone;
+    fn unit(&mut self, trace_unit: AtomView<'_>) -> Self::Value;
+    fn scale(&mut self, coefficient: i32, value: Self::Value) -> Self::Value;
+    fn metric_product(
+        &mut self,
+        metric: AtomView<'_>,
+        coefficient: i32,
+        value: Self::Value,
+    ) -> Self::Value;
+    fn dimension_product(
+        &mut self,
+        dimension: AtomView<'_>,
+        constant: i32,
+        linear: i32,
+        value: Self::Value,
+    ) -> Self::Value;
+    fn add(&mut self, left: Self::Value, right: Self::Value) -> Self::Value;
+    fn subtract(&mut self, left: Self::Value, right: Self::Value) -> Self::Value;
+    fn sum(&mut self, values: Vec<Self::Value>) -> Self::Value;
+    fn finish(self, value: Self::Value) -> Atom;
+}
+
+struct FactoredOutput;
+
+impl TraceAlgebra for FactoredOutput {
+    type Value = Atom;
+    fn unit(&mut self, trace_unit: AtomView<'_>) -> Atom {
+        trace_unit.to_owned()
+    }
+    fn scale(&mut self, coefficient: i32, value: Atom) -> Atom {
+        match coefficient {
+            1 => value,
+            -1 => -value,
+            _ => Atom::num(coefficient) * value,
+        }
+    }
+    fn metric_product(&mut self, metric: AtomView<'_>, coefficient: i32, value: Atom) -> Atom {
+        if coefficient == 1 {
+            metric * value.as_view()
+        } else {
+            Atom::num(coefficient) * metric * value
+        }
+    }
+    fn dimension_product(
+        &mut self,
+        dimension: AtomView<'_>,
+        constant: i32,
+        linear: i32,
+        value: Atom,
+    ) -> Atom {
+        // Preserve the current factored grouping, including rounded domains.
+        let coefficient = match (constant, linear) {
+            (0, 1) => dimension.to_owned(),
+            (_, 1) => dimension - Atom::num(-constant).as_view(),
+            (_, -1) => Atom::num(constant) - dimension,
+            _ => unreachable!(),
+        };
+        coefficient * value
+    }
+    fn add(&mut self, left: Atom, right: Atom) -> Atom {
+        left + right
+    }
+    fn subtract(&mut self, left: Atom, right: Atom) -> Atom {
+        left - right
+    }
+    fn sum(&mut self, values: Vec<Atom>) -> Atom {
+        Atom::add_many(values)
+    }
+    fn finish(self, value: Atom) -> Atom {
+        value
+    }
+}
+
+impl<'a, Output: TraceAlgebra> PairingTrace<'a, Output> {
     fn metric(&mut self, left: usize, right: usize) -> AtomView<'_> {
         // Summed endpoints often disappear before any metric involving them is
         // needed. In particular, do not construct indexed vector components for
@@ -203,9 +282,67 @@ impl PairingTrace<'_> {
             .as_view()
     }
 
-    fn evaluate(&mut self, remaining: &[usize]) -> Atom {
+    fn supports_sparse_output(&mut self, word: &[usize]) -> bool {
+        if !self.canonical_arguments || word.len() > 14 || i64::try_from(self.trace_unit).is_err() {
+            return false;
+        }
+        // Mixed free slots and compact vectors can normalize an indexed vector
+        // through arbitrary callbacks. The factored trace-local fallback owns
+        // that domain; homogeneous pairs retain normalized metric functions.
+        let mut free_explicit = false;
+        let mut compact = false;
+        for (index, &argument) in self.arguments.iter().enumerate() {
+            if self.summed_indices.contains(&index) {
+                continue;
+            }
+            if is_minkowski_slot(argument) {
+                free_explicit = true;
+            } else {
+                compact = true;
+            }
+        }
+        if free_explicit && compact {
+            return false;
+        }
+        // Symbolic dimensions become polynomial variables; literal four folds
+        // into the integer coefficient. Other dimensions retain Atom arithmetic.
+        self.summed_indices.first().copied().is_none_or(|index| {
+            let dimension = self.metric(index, index);
+            matches!(dimension, AtomView::Var(_)) || is_four_dimension(dimension)
+        })
+    }
+
+    fn metric_product(
+        &mut self,
+        left: usize,
+        right: usize,
+        coefficient: i32,
+        value: Output::Value,
+    ) -> Output::Value {
+        let (left, right) = (left.min(right), left.max(right));
+        let metric = self.metrics[left * self.width + right]
+            .get_or_insert_with(|| g!(self.arguments[left], self.arguments[right]));
+        self.output
+            .metric_product(metric.as_view(), coefficient, value)
+    }
+
+    fn with_output<Other: TraceAlgebra>(self, output: Other) -> PairingTrace<'a, Other> {
+        debug_assert!(self.subwords.is_empty());
+        PairingTrace {
+            width: self.width,
+            arguments: self.arguments,
+            metrics: self.metrics,
+            trace_unit: self.trace_unit,
+            subwords: HashMap::new(),
+            output,
+            canonical_arguments: self.canonical_arguments,
+            summed_indices: self.summed_indices,
+        }
+    }
+
+    fn evaluate(&mut self, remaining: &[usize]) -> Output::Value {
         let Some(&first) = remaining.first() else {
-            return self.trace_unit.to_owned();
+            return self.output.unit(self.trace_unit);
         };
         if let Some(result) = self.subwords.get(remaining) {
             return result.clone();
@@ -226,7 +363,7 @@ impl PairingTrace<'_> {
     /// polynomial. Reordering the interior keeps every other summed index in
     /// its word, so each branch can contract independently without an external
     /// tensor metric or a new symbolic trace node.
-    fn contract_word(&mut self, word: &[usize]) -> Option<Atom> {
+    fn contract_word(&mut self, word: &[usize]) -> Option<Output::Value> {
         if self.summed_indices.is_empty() {
             return None;
         }
@@ -270,33 +407,42 @@ impl PairingTrace<'_> {
         // those children so free subwords skip the repeated-pair scan entirely.
         // Memo keys remain valid: the removed ID is absent from every child.
         let result = match interior.len() {
-            0 => Some(dimension * self.evaluate(outside)),
-            1 => Some(
-                (Atom::num(2) - dimension)
-                    * self.evaluate(
-                        &rotated[1..distance]
-                            .iter()
-                            .chain(outside)
-                            .copied()
-                            .collect::<Vec<_>>(),
-                    ),
-            ),
+            0 => {
+                let trace = self.evaluate(outside);
+                Some(
+                    self.output
+                        .dimension_product(dimension.as_view(), 0, 1, trace),
+                )
+            }
+            1 => {
+                let reduced: Vec<_> = interior.iter().chain(outside).copied().collect();
+                let trace = self.evaluate(&reduced);
+                Some(
+                    self.output
+                        .dimension_product(dimension.as_view(), 2, -1, trace),
+                )
+            }
             n if n % 2 == 1 && i64::try_from(dimension.as_view()) == Ok(4) => {
                 let reduced: Vec<_> = interior.iter().rev().chain(outside).copied().collect();
-                Some(Atom::num(-2) * self.evaluate(&reduced))
+                let trace = self.evaluate(&reduced);
+                Some(self.output.scale(-2, trace))
             }
             2 if interior.iter().all(|i| !self.summed_indices.contains(i)) => {
                 // gamma(mu) a/ b/ gamma(mu) = 4(a.b) + (D-4)a/b/.
                 // A metric with another summed index must stay in the word;
                 // the general permutation recurrence below owns that case.
                 let outside_trace = self.evaluate(outside);
-                let first = Atom::num(4) * self.metric(interior[0], interior[1]) * outside_trace;
-                let coefficient = dimension - Atom::num(4);
+                let first = self.metric_product(interior[0], interior[1], 4, outside_trace);
+                let coefficient = dimension.as_view() - Atom::num(4).as_view();
                 if coefficient.is_zero() {
                     Some(first)
                 } else {
                     let reduced: Vec<_> = interior.iter().chain(outside).copied().collect();
-                    Some(first + coefficient * self.evaluate(&reduced))
+                    let trace = self.evaluate(&reduced);
+                    let second = self
+                        .output
+                        .dimension_product(dimension.as_view(), -4, 1, trace);
+                    Some(self.output.add(first, second))
                 }
             }
             n => {
@@ -306,13 +452,20 @@ impl PairingTrace<'_> {
                 // The final i=n-1 term is included in the D-2 coefficient.
                 let unchanged: Vec<_> = interior.iter().chain(outside).copied().collect();
                 let coefficient = if n % 2 == 0 {
-                    dimension - Atom::num(2)
+                    dimension.as_view() - Atom::num(2).as_view()
                 } else {
-                    Atom::num(2) - dimension
+                    Atom::num(2) - dimension.as_view()
                 };
                 let mut terms = Vec::with_capacity(n);
                 if !coefficient.is_zero() {
-                    terms.push(coefficient * self.evaluate(&unchanged));
+                    let trace = self.evaluate(&unchanged);
+                    let (constant, linear) = if n % 2 == 0 { (-2, 1) } else { (2, -1) };
+                    terms.push(self.output.dimension_product(
+                        dimension.as_view(),
+                        constant,
+                        linear,
+                        trace,
+                    ));
                 }
                 for moved in 0..n - 1 {
                     let reduced: Vec<_> = interior[..moved]
@@ -323,9 +476,12 @@ impl PairingTrace<'_> {
                         .copied()
                         .collect();
                     let trace = self.evaluate(&reduced);
-                    terms.push(Atom::num(if moved % 2 == 0 { 2 } else { -2 }) * trace);
+                    terms.push(
+                        self.output
+                            .scale(if moved % 2 == 0 { 2 } else { -2 }, trace),
+                    );
                 }
-                Some(Atom::add_many(terms))
+                Some(self.output.sum(terms))
             }
         };
         self.summed_indices.push(contracted);
@@ -334,7 +490,7 @@ impl PairingTrace<'_> {
 
     /// Compact slashes square to scalar norms. Keeping these identities inside
     /// the word recurrence avoids constructing and revisiting shorter traces.
-    fn reduce_scalar_word(&mut self, word: &[usize]) -> Option<Atom> {
+    fn reduce_scalar_word(&mut self, word: &[usize]) -> Option<Output::Value> {
         if !self.canonical_arguments {
             return None;
         }
@@ -348,7 +504,7 @@ impl PairingTrace<'_> {
                     .copied()
                     .collect();
                 let trace = self.evaluate(&rest);
-                return Some(self.metric(word[start], word[start]) * trace.as_view());
+                return Some(self.metric_product(word[start], word[start], 1, trace));
             }
         }
         if word.len() >= 4 {
@@ -373,15 +529,15 @@ impl PairingTrace<'_> {
                 let first = self.evaluate(&rest);
                 rest[0] = q;
                 let second = self.evaluate(&rest);
-                return Some(
-                    Atom::num(2) * self.metric(p, q) * first - self.metric(p, p) * second.as_view(),
-                );
+                let first = self.metric_product(p, q, 2, first);
+                let second = self.metric_product(p, p, 1, second);
+                return Some(self.output.subtract(first, second));
             }
         }
         None
     }
 
-    fn pair(&mut self, remaining: &[usize], first: usize) -> Atom {
+    fn pair(&mut self, remaining: &[usize], first: usize) -> Output::Value {
         let mut terms = Vec::with_capacity(remaining.len() - 1);
         for partner in 1..remaining.len() {
             let rest: Vec<_> = remaining[1..partner]
@@ -390,10 +546,13 @@ impl PairingTrace<'_> {
                 .copied()
                 .collect();
             let subword = self.evaluate(&rest);
-            let product = self.metric(first, remaining[partner]) * subword.as_view();
-            terms.push(if partner % 2 == 1 { product } else { -product });
+            let product = self.metric_product(first, remaining[partner], 1, subword);
+            terms.push(
+                self.output
+                    .scale(if partner % 2 == 1 { 1 } else { -1 }, product),
+            );
         }
-        Atom::add_many(terms)
+        self.output.sum(terms)
     }
 }
 
@@ -404,6 +563,7 @@ pub(super) fn evaluate_generic(
     indices: &[AtomView<'_>],
     trace_unit: AtomView<'_>,
     canonical_arguments: bool,
+    output: TraceOutput,
 ) -> Atom {
     if indices.len() % 2 == 1 {
         return Atom::Zero;
@@ -436,16 +596,27 @@ pub(super) fn evaluate_generic(
     } else {
         Vec::new()
     };
-    PairingTrace {
+    let mut trace = PairingTrace {
         width,
         arguments,
         metrics: vec![None; width * width],
         trace_unit,
         subwords: HashMap::new(),
+        output: FactoredOutput,
         canonical_arguments,
         summed_indices,
+    };
+    if matches!(output, TraceOutput::Expanded) && trace.supports_sparse_output(&word) {
+        let mut trace = trace.with_output(sparse::SparseOutput::default());
+        let result = trace.evaluate(&word);
+        trace.output.finish(result)
+    } else {
+        let result = trace.evaluate(&word);
+        match output {
+            TraceOutput::Factored => result,
+            TraceOutput::Expanded => result.expand(),
+        }
     }
-    .evaluate(&word)
 }
 
 impl Monomial {
@@ -748,6 +919,7 @@ mod tests {
                     .collect(),
                 trace_unit: unit.as_view(),
                 subwords: HashMap::new(),
+                output: FactoredOutput,
                 canonical_arguments: false,
                 summed_indices: Vec::new(),
             };
@@ -811,6 +983,7 @@ mod tests {
                     metrics: metrics.iter().cloned().map(Some).collect(),
                     trace_unit: unit.as_view(),
                     subwords: HashMap::new(),
+                    output: FactoredOutput,
                     canonical_arguments: true,
                     summed_indices: Vec::new(),
                 };
@@ -881,7 +1054,8 @@ mod tests {
             });
             for word in &words {
                 let input = trace!(&spin; word.iter().map(|&i| gamma!(&arguments[i])));
-                let reduced = DiracSimplifier::evaluate_terminal_trace(input.as_view())
+                let reduced = DiracSimplifier::new(&crate::dirac::GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<false>(input.as_view())
                     .expect("scalar word contractions must finish within the terminal evaluator");
                 reduced.visitor(&mut |node| {
                     assert!(

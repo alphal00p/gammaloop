@@ -14,6 +14,7 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
+    coefficient::CoefficientView,
     id::{Context, Replacement},
     utils::Settable,
 };
@@ -90,6 +91,9 @@ pub struct GammaSimplifySettings {
     pub chain_ordering: GammaChainOrdering,
     /// Whether closed chains should be evaluated as traces.
     pub evaluate_traces: bool,
+    /// Fully expand each evaluated trace body, preserving surrounding factors.
+    /// Has no effect when `evaluate_traces` is false.
+    pub expand_traces: bool,
     /// Whether three 4D gammas may be expanded into the gamma5-epsilon basis.
     pub expand_three_gamma_epsilon: bool,
 }
@@ -99,6 +103,7 @@ impl Default for GammaSimplifySettings {
         Self {
             chain_ordering: GammaChainOrdering::RepeatedPairs,
             evaluate_traces: true,
+            expand_traces: false,
             expand_three_gamma_epsilon: false,
         }
     }
@@ -121,6 +126,12 @@ impl GammaSimplifySettings {
     /// Leaves `trace(...)` nodes inert after chain collection and normalization.
     pub fn without_trace_evaluation(mut self) -> Self {
         self.evaluate_traces = false;
+        self
+    }
+
+    /// Request a fully expanded result for each evaluated trace body.
+    pub fn with_expanded_traces(mut self) -> Self {
+        self.expand_traces = true;
         self
     }
 
@@ -165,7 +176,16 @@ impl GammaSimplifySettings {
             && f.get_symbol() == T.trace
             && let Some(rewritten) = simplifier.simplify_trace_node(f)
         {
-            **out = rewritten;
+            // Complete the original trace body, including coefficient factors,
+            // before expanding it. Nested callback-created traces retain the
+            // same expansion setting; surrounding spectators stay outside.
+            **out = if self.expand_traces && rewritten.as_view() != arg {
+                simplifier
+                    .simplify_complete::<false>(rewritten.as_view())
+                    .expand()
+            } else {
+                rewritten
+            };
         }
     }
 }
@@ -422,8 +442,22 @@ impl<'settings> DiracSimplifier<'settings> {
     }
 
     pub(crate) fn simplify(self, expr: AtomView) -> Atom {
-        if self.settings.evaluate_traces
-            && let Some(result) = Self::evaluate_terminal_trace(expr)
+        self.simplify_complete::<true>(expr)
+    }
+
+    // Local trace-body completion must not grant terminal admission to a
+    // subtrace whose explicit slots can still meet its surrounding factors.
+    fn simplify_complete<const TERMINAL_CONTEXT: bool>(self, expr: AtomView<'_>) -> Atom {
+        if TERMINAL_CONTEXT
+            && self.settings.evaluate_traces
+            && let Some(result) = if self.settings.expand_traces {
+                // Exact callback-free words already satisfy terminal closure,
+                // including mixed free slots and compact vector components.
+                self.evaluate_terminal_trace::<true>(expr)
+                    .or_else(|| self.evaluate_terminal_trace::<false>(expr))
+            } else {
+                self.evaluate_terminal_trace::<false>(expr)
+            }
         {
             return result;
         }
@@ -440,12 +474,48 @@ impl<'settings> DiracSimplifier<'settings> {
             *crate::epsilon::EPSILON_SYMBOL,
         ];
         let [bispinor, chain, bracket, trace, epsilon_head] = heads.map(|head| head.get_id());
+        let mut observed = Some(SimplificationCandidates::scan(expr.as_view(), heads));
+        if TERMINAL_CONTEXT
+            && self.settings.evaluate_traces
+            && observed.as_ref().is_some_and(|candidates| candidates.symbols[3])
+            && let AtomView::Mul(product) = expr.as_view()
+            && let Some(trace) = product.iter().find(
+                |factor| matches!(factor, AtomView::Fun(function) if function.get_symbol_id() == trace),
+            )
+            && product.iter().all(|factor| {
+                if factor == trace {
+                    return true;
+                }
+                // Exact function-free scalars have no tensor slots or callbacks.
+                // Approximate coefficients retain the original evaluation order.
+                let mut scalar = true;
+                factor.visitor(&mut |node| {
+                    scalar &= match node {
+                        AtomView::Fun(_) => false,
+                        AtomView::Num(_) => Self::exact_scalar_leaf(node),
+                        _ => true,
+                    };
+                    scalar
+                });
+                scalar
+            })
+            && let Some(result) = self.evaluate_terminal_trace::<true>(trace)
+        {
+            // The terminal kernel emits each free explicit slot once per
+            // term. Canonical vector components have no callbacks, and the exact
+            // function-free spectators cannot introduce tensor cleanup work.
+            return Atom::mul_many(product.iter().map(|factor| {
+                if factor == trace { result.as_view() } else { factor }
+            }));
+        }
 
         loop {
             // Metric contraction can close a chain or connect separate chains.
             // Include their collection in the fixed point of the complete pass.
             // Close metric-linked chains before rewriting, including inert traces.
-            let candidates = SimplificationCandidates::scan(expr.as_view(), heads);
+            let candidates = observed
+                .take()
+                .unwrap_or_else(|| SimplificationCandidates::scan(expr.as_view(), heads));
             let normalized = if candidates.normalized() {
                 expr.clone()
             } else {
@@ -484,13 +554,32 @@ impl<'settings> DiracSimplifier<'settings> {
             if rewrite || next != normalized {
                 next = self.settings.rewrite_expression(next);
             }
-            if epsilon || next != normalized {
-                next = next.simplify_epsilon();
+            // Inspect the whole rebuilt expression: unchanged outer factors
+            // may now contract with the trace output or callback result.
+            let rewritten = next != normalized;
+            if rewritten {
+                let complete = SimplificationCandidates::scan(next.as_view(), heads);
+                if complete.finished() {
+                    return next;
+                }
+                // Carry this scan only across exactly unchanged cleanup.
+                observed = Some(complete);
+            }
+            if epsilon || rewritten {
+                let updated = next.simplify_epsilon();
+                if updated != next {
+                    observed = None;
+                }
+                next = updated;
             }
             // Schoonschip already normalized dots. Repeat that walk only when a
             // later operation changed its result.
             if next != normalized {
-                next = next.normalize_dots();
+                let updated = next.normalize_dots();
+                if updated != next {
+                    observed = None;
+                }
+                next = updated;
             }
 
             if next == expr {
@@ -501,21 +590,71 @@ impl<'settings> DiracSimplifier<'settings> {
         }
     }
 
+    // Only exact rational coefficients may be regrouped by the scalar-context
+    // trace recurrence. Other numeric domains keep the original schedule.
+    fn exact_scalar_leaf(value: AtomView<'_>) -> bool {
+        match value {
+            AtomView::Var(_) => true,
+            AtomView::Num(number) => matches!(
+                number.get_coeff_view(),
+                CoefficientView::Natural(..) | CoefficientView::Large(..)
+            ),
+            _ => false,
+        }
+    }
+
     /// Evaluate standalone traces after reducing summed indices within the
     /// word. The surviving explicit indices occur once per monomial and compact
     /// arguments produce scalar dots, so no outer tensor contraction remains.
-    /// Products with spectators still use the complete pass.
-    fn evaluate_terminal_trace(expr: AtomView<'_>) -> Option<Atom> {
+    /// A scalar-product context additionally requires callback-free ordinary
+    /// words with exact leaf metadata. Free slots occur once per term; wildcard
+    /// metadata may retain inert closed diagonals. Exact scalar spectators cannot
+    /// introduce further tensor cleanup.
+    fn evaluate_terminal_trace<const SCALAR_CONTEXT: bool>(
+        self,
+        expr: AtomView<'_>,
+    ) -> Option<Atom> {
+        let output = if self.settings.expand_traces {
+            trace_kernel::TraceOutput::Expanded
+        } else {
+            trace_kernel::TraceOutput::Factored
+        };
         let AtomView::Fun(f) = expr else {
             return None;
         };
         let (rep, factors) = shadowing::trace_parts(f)?;
+        if !SCALAR_CONTEXT && self.settings.expand_traces {
+            // Scalar parameters and representation metadata may contain nested
+            // traces. The strict scalar-context admission already rejects them.
+            for argument in f.iter() {
+                let mut nested_trace = false;
+                argument.visitor(&mut |node| {
+                    nested_trace |=
+                        matches!(node, AtomView::Fun(inner) if inner.get_symbol() == T.trace);
+                    !nested_trace
+                });
+                if nested_trace {
+                    return None;
+                }
+            }
+        }
+        if SCALAR_CONTEXT
+            && !matches!(rep, AtomView::Fun(spin)
+                if spin.get_symbol() == *BISPINOR_SYMBOL
+                    && spin.get_nargs() == 1
+                    && spin.iter().next().is_some_and(Self::exact_scalar_leaf))
+        {
+            return None;
+        }
         let mut factors = factors
             .iter()
             .copied()
             .map(DiracFactor::parse)
             .collect::<Vec<_>>();
         let gamma5_position = factors.iter().position(|factor| factor.is_gamma5());
+        if SCALAR_CONTEXT && gamma5_position.is_some() {
+            return None;
+        }
         // Trace cyclicity moves one gamma5 to the front without a sign. Any
         // further gamma5 or non-gamma factor is rejected by the sequence parser.
         if let Some(position) = gamma5_position {
@@ -533,12 +672,17 @@ impl<'settings> DiracSimplifier<'settings> {
         let indices = Self::gamma_mink_index_sequence_for(rule, &factors)?;
         let mut slots = SlotMatcher::default();
         let mut repeated = 0;
+        let mut compact_count = 0;
         for (position, &index) in indices.iter().enumerate() {
             if is_minkowski_slot(index) {
                 let SlotMatch::Explicit(slot) = slots.classify(index) else {
                     return None;
                 };
-                if slot.is_concrete_index() {
+                if slot.is_concrete_index()
+                    || (SCALAR_CONTEXT
+                        && (!Self::exact_scalar_leaf(slot.dimension())
+                            || !matches!(slot.index(), AtomView::Var(_))))
+                {
                     return None;
                 }
                 // More than two occurrences do not define an Einstein sum.
@@ -549,15 +693,26 @@ impl<'settings> DiracSimplifier<'settings> {
                 }
                 repeated += occurrences;
             } else {
+                compact_count += 1;
                 let AtomView::Fun(vector) = index else {
                     return None;
                 };
                 if axial
+                    || (SCALAR_CONTEXT
+                        && (vector.get_symbol().get_normalization_function().is_some()
+                            || !vector
+                                .iter()
+                                .take(vector.get_nargs().saturating_sub(1))
+                                .all(Self::exact_scalar_leaf)))
                     || !vector.get_symbol().has_tag(&T.rank1)
                     || !slots
                         .vector_argument(vector)
                         .and_then(|argument| slots.compact_representation(argument))
-                        .is_some_and(|rep| rep.head() == *MINKOWSKI_SYMBOL && rep.is_base())
+                        .is_some_and(|rep| {
+                            rep.head() == *MINKOWSKI_SYMBOL
+                                && rep.is_base()
+                                && (!SCALAR_CONTEXT || Self::exact_scalar_leaf(rep.dimension()))
+                        })
                 {
                     return None;
                 }
@@ -570,7 +725,7 @@ impl<'settings> DiracSimplifier<'settings> {
             return Some(Atom::Zero);
         }
         let compact = !axial && indices.iter().all(|&index| !is_minkowski_slot(index));
-        if !compact
+        let result = if !compact
             && repeated == 0
             && (axial
                 || (has_four_dimensional_trace_rep(rep)
@@ -578,16 +733,36 @@ impl<'settings> DiracSimplifier<'settings> {
                         .iter()
                         .all(|factor| factor.gamma_dimension().is_some_and(is_four_dimension))))
         {
-            trace_kernel::evaluate(&indices, axial, trace_kernel::TraceOutput::Factored)
+            trace_kernel::evaluate(&indices, axial, output)?
         } else {
             let terminal = trace!(rep; std::iter::empty::<Atom>());
             let trace_unit = Self::simplify_trace_terminal(terminal.as_view())?;
-            Some(trace_kernel::evaluate_generic(
+            trace_kernel::evaluate_generic(
                 &indices,
                 trace_unit.as_view(),
-                true,
-            ))
-        }
+                // Distinct explicit arguments need no factored reductions.
+                // Expanded emission uses the canonical admission contract.
+                self.settings.expand_traces
+                    || !(SCALAR_CONTEXT
+                        && repeated == 0
+                        && indices.iter().all(|&index| is_minkowski_slot(index))),
+                output,
+            )
+        };
+        let free_explicit = indices.len() - compact_count - 2 * repeated;
+        Some(
+            if !SCALAR_CONTEXT
+                && self.settings.expand_traces
+                && compact_count > 0
+                && free_explicit > 0
+            {
+                // Broad standalone admission permits component callbacks, which
+                // can create sums or nested traces. Strict context excludes them.
+                self.simplify_complete::<false>(result.as_view()).expand()
+            } else {
+                result
+            },
+        )
     }
 
     fn simplify_chain_node(self, f: FunView) -> Option<Atom> {
@@ -1451,6 +1626,7 @@ impl DiracSimplifier<'_> {
                 &trace_mink_indices,
                 trace_unit.as_view(),
                 false,
+                trace_kernel::TraceOutput::Factored,
             ));
         }
 
@@ -1706,6 +1882,263 @@ mod tests {
     use spenso::slot;
 
     #[test]
+    fn exact_scalar_trace_products_preserve_the_terminal_result() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let (a, b) = (
+            slot!(r.mink_d, a).into_atom(),
+            slot!(r.mink_d, b).into_atom(),
+        );
+        let p = momenta(&r.mink_d.to_symbolic([]));
+        let input = trace!(&spin; [&a, &p[0], &b, &p[1], &a, &p[2], &b, &p[3]]
+            .map(|argument| gamma!(argument)));
+        let spectator = symbolica::parse_lit!((x + y) ^ 8);
+        let decorated = &spectator * &input;
+        let expected = (&spectator * input.simplify_gamma()).simplify_gamma();
+        let output = decorated.simplify_gamma();
+        assert_eq!(output, expected);
+        assert!(matches!(output.as_view(), AtomView::Mul(product)
+            if product.iter().any(|factor| factor == spectator.as_view())));
+        assert_eq!(output.simplify_gamma(), output);
+        assert_eq!(
+            decorated
+                .simplify_gamma_with(GammaSimplifySettings::default().without_trace_evaluation()),
+            decorated
+        );
+    }
+
+    #[test]
+    fn terminal_trace_products_are_closed_with_wildcard_and_tagged_scalar_leaves() {
+        test_initialize();
+        let vector = T.rank_one_tensor_symbol("idenso::terminal_closure_vector");
+        let dimension = Atom::var(symbolica::symbol!("terminal_closure_dimension"));
+        let four = Atom::num(4);
+        let index = Atom::var(symbolica::symbol!("terminal_closure_index"));
+        let wildcard = Atom::var(symbolica::symbol!("terminal_closure_wild_"));
+        let metadata = Atom::var(vector);
+        // These are scalar variables, even when their symbols also name tensor
+        // functions. Keep the entire scalar numerator as one product factor.
+        let spectator = (symbolica::parse_lit!(x + y)
+            + Atom::add_many(
+                [
+                    T.chain,
+                    T.trace,
+                    T.bracket,
+                    *crate::epsilon::EPSILON_SYMBOL,
+                    vector,
+                ]
+                .map(Atom::var),
+            ))
+        .pow(8);
+        for (name, [dim, unit, label, parameter], repeated) in [
+            ("index", [&dimension, &four, &wildcard, &metadata], true),
+            ("dimension", [&wildcard, &four, &index, &metadata], true),
+            ("spin", [&dimension, &wildcard, &index, &metadata], true),
+            ("metadata", [&dimension, &four, &index, &wildcard], true),
+            (
+                "free index",
+                [&dimension, &four, &wildcard, &metadata],
+                false,
+            ),
+        ] {
+            let compact = symbolica::function!(*MINKOWSKI_SYMBOL, dim);
+            let a = symbolica::function!(*MINKOWSKI_SYMBOL, dim, label);
+            let b = if repeated {
+                a.clone()
+            } else {
+                symbolica::function!(
+                    *MINKOWSKI_SYMBOL,
+                    dim,
+                    symbolica::symbol!("terminal_closure_other_index")
+                )
+            };
+            let p = symbolica::function!(vector, parameter, &compact);
+            let q = spenso::q!(&compact);
+            let input = trace!(symbolica::function!(*BISPINOR_SYMBOL, unit);
+                [&a, &p, &b, &q].map(|argument| gamma!(argument)));
+            let admitted = DiracSimplifier::new(&GammaSimplifySettings::default())
+                .evaluate_terminal_trace::<true>(input.as_view())
+                .unwrap_or_else(|| panic!("{name}: expected scalar-context admission"));
+            let standalone = input.simplify_gamma();
+            assert_eq!(admitted, standalone, "{name}: terminal result");
+            let raw = &spectator * &standalone;
+            // Wildcards may keep a diagonal metric unevaluated. Its eliminated
+            // dummy has no partner, so even that raw output needs no cleanup.
+            assert_eq!(raw.simplify_gamma(), raw, "{name}: full cleanup");
+            let contextual = (&spectator * &input).simplify_gamma();
+            assert_eq!(contextual, raw, "{name}: contextual result");
+            assert_eq!(contextual.simplify_gamma(), contextual, "{name}: rerun");
+            assert!(
+                matches!(contextual.as_view(), AtomView::Mul(product)
+                if product.iter().any(|factor| factor == spectator.as_view())),
+                "{name}: factored scalar numerator"
+            );
+        }
+    }
+
+    #[test]
+    fn scalar_trace_products_preserve_component_callback_order() {
+        let r = test_initialize();
+        fn component(value: AtomView<'_>, out: &mut Settable<Atom>) {
+            if let AtomView::Fun(vector) = value
+                && let Some(AtomView::Fun(slot)) = vector.iter().last()
+                && slot.get_symbol() == *MINKOWSKI_SYMBOL
+                && slot.get_nargs() == 2
+            {
+                **out = Atom::num(1);
+            }
+        }
+        let p = spenso::vector_symbol!("idenso::scalar_context_callback_p", norm = component);
+        let q = spenso::vector_symbol!("idenso::scalar_context_callback_q", norm = component);
+        let compact = r.mink_d.to_symbolic([]);
+        let p = symbolica::function!(p, &compact);
+        let q = symbolica::function!(q, &compact);
+        let a = slot!(r.mink_d, a).into_atom();
+        let input =
+            trace!(r.bis4.to_symbolic([]); [&a, &p, &a, &q].map(|argument| gamma!(argument)));
+        let spectator = symbolica::parse_lit!((x + y) ^ 8);
+        let dimension = mink_slot_dimension(a.as_view()).unwrap();
+        // Component callbacks are applied by the existing full trace route.
+        let expected = &spectator * (Atom::num(8) - Atom::num(4) * dimension * g!(&p, &q));
+        let output = (&spectator * &input).simplify_gamma();
+        assert_eq!(output, expected);
+        assert_eq!(output.simplify_gamma(), output);
+        assert!(((&output / &spectator) - input.simplify_gamma()).expand() != Atom::Zero);
+    }
+
+    #[test]
+    fn scalar_trace_products_preserve_rounded_operation_order() {
+        let r = test_initialize();
+        let dimension = r.mink_d.to_symbolic([]).as_view().to_owned();
+        let d = minkowski_dimension(dimension.as_view()).unwrap().to_owned();
+        let rounded = Atom::num(symbolica::domains::float::Float::parse("0.1", Some(11)).unwrap());
+        let four = Atom::num(4);
+        let spectator = symbolica::parse_lit!((x + y) ^ 8);
+        let inert = symbolica::function!(symbolica::symbol!("scalar_context_inert"), Atom::num(0));
+        let word = |dimension: &Atom, unit: &Atom| {
+            let compact = symbolica::function!(*MINKOWSKI_SYMBOL, dimension);
+            let p = momenta(&compact);
+            let a = symbolica::function!(
+                *MINKOWSKI_SYMBOL,
+                dimension,
+                symbolica::symbol!("scalar_context_a")
+            );
+            let b = symbolica::function!(
+                *MINKOWSKI_SYMBOL,
+                dimension,
+                symbolica::symbol!("scalar_context_b")
+            );
+            trace!(symbolica::function!(*BISPINOR_SYMBOL, unit);
+                [&a, &p[0], &b, &p[1], &a, &p[2], &b, &p[3]].map(|argument| gamma!(argument)))
+        };
+        // These independently guard both compact-only metadata positions;
+        // an explicit slot elsewhere must not mask a missing admission check.
+        let compact = r.mink_d.to_symbolic([]);
+        let p = momenta(&compact);
+        let metadata = symbolica::function!(
+            T.rank_one_tensor_symbol("idenso::rounded_compact_metadata"),
+            &rounded,
+            &compact
+        );
+        let leading_metadata = trace!(r.bis4.to_symbolic([]);
+            [&metadata, &p[0]].map(|argument| gamma!(argument)));
+        let rounded_compact = symbolica::function!(*MINKOWSKI_SYMBOL, &rounded);
+        let p = momenta(&rounded_compact);
+        let compact_dimension = trace!(r.bis4.to_symbolic([]);
+            [&p[0], &p[1]].map(|argument| gamma!(argument)));
+        for input in [leading_metadata, compact_dimension] {
+            assert!(
+                DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<true>(input.as_view())
+                    .is_none()
+            );
+            assert!(
+                DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<false>(input.as_view())
+                    .is_some()
+            );
+        }
+        for (name, input) in [
+            ("trace unit", &spectator * word(&d, &rounded)),
+            ("dimension", &spectator * word(&rounded, &four)),
+            ("spectator", &rounded * &spectator * word(&d, &four)),
+        ] {
+            // An inert function keeps the established full-route ordering.
+            // Compare exact floating coefficients on both calls, without a tolerance.
+            let reference = (&inert * &input).simplify_gamma() / &inert;
+            let output = input.simplify_gamma();
+            assert_eq!(output, reference, "{name}: first call");
+            assert_eq!(
+                output.simplify_gamma(),
+                reference.simplify_gamma(),
+                "{name}: rerun"
+            );
+        }
+    }
+
+    #[test]
+    fn cleanup_callbacks_can_introduce_new_traces() {
+        let reps = test_initialize();
+        let compact = reps.mink4.to_symbolic([]);
+        let spin = reps.bis4.to_symbolic([]);
+        let mink = *MINKOWSKI_SYMBOL;
+        let inner = trace!(
+            &spin,
+            gamma!(slot!(reps.mink4, rho)),
+            gamma!(slot!(reps.mink4, sigma))
+        );
+        let emitted = inner.clone();
+        let inner_vector = spenso::vector_symbol!(
+            "idenso::cleanup_inner_vector",
+            norm = move |value, out| {
+                if let AtomView::Fun(function) = value
+                    && let Some(AtomView::Fun(slot)) = function.iter().last()
+                    && slot.get_symbol() == mink
+                    && slot.get_nargs() == 1
+                {
+                    **out = emitted.clone();
+                }
+            }
+        );
+        let other = T.rank_one_tensor_symbol("idenso::cleanup_other_vector");
+        let nested = symbolica::function!(inner_vector, symbolica::function!(other, &compact));
+        let component = nested.clone();
+        let outer_vector = spenso::vector_symbol!(
+            "idenso::cleanup_outer_vector",
+            norm = move |value, out| {
+                if let AtomView::Fun(function) = value
+                    && let Some(AtomView::Fun(slot)) = function.iter().last()
+                    && slot.get_symbol() == mink
+                    && slot.get_nargs() == 2
+                {
+                    **out = component.clone();
+                }
+            }
+        );
+        // The outer trace emits a nested vector. Dot normalization then
+        // constructs its compact component, whose callback introduces a trace.
+        assert!(!nested.contains_symbol(T.trace));
+        assert!(nested.normalize_dots().contains_symbol(T.trace));
+        let spectator = symbolica::parse_lit!((x + y) ^ 8);
+        let input = &spectator
+            * trace!(
+                &spin,
+                gamma!(symbolica::function!(outer_vector, &compact)),
+                gamma!(slot!(reps.mink4, mu))
+            );
+        let expected = &spectator
+            * 4
+            * g!(
+                inner.simplify_gamma(),
+                symbolica::function!(other, &compact)
+            );
+        let output = input.simplify_gamma();
+        assert!(!output.contains_symbol(T.trace));
+        assert_eq!(output, expected);
+        assert_eq!(output.simplify_gamma(), output);
+    }
+
+    #[test]
     fn rewrite_guard_retains_empty_trace_and_non_gamma_chain_identities() {
         let r = test_initialize();
         let trace = trace!(r.bis4.to_symbolic([]); std::iter::empty::<Atom>());
@@ -1754,12 +2187,17 @@ mod tests {
                 let mut factors: Vec<_> = slots[..length].iter().map(|slot| gamma!(slot)).collect();
                 factors.insert(position, gamma5!());
                 let input = trace!(&spin; factors);
-                let shortcut = DiracSimplifier::evaluate_terminal_trace(input.as_view())
+                let shortcut = DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<false>(input.as_view())
                     .expect("a distinct-index short axial trace is terminal");
                 // A factorized scalar spectator forces the full existing
                 // pipeline, without expanding or changing the trace word.
                 let fallback = &spectator * &input;
-                assert!(DiracSimplifier::evaluate_terminal_trace(fallback.as_view()).is_none());
+                assert!(
+                    DiracSimplifier::new(&GammaSimplifySettings::default())
+                        .evaluate_terminal_trace::<false>(fallback.as_view())
+                        .is_none()
+                );
                 assert_eq!(
                     fallback.simplify_gamma(),
                     &spectator * shortcut.expand(),
@@ -1792,7 +2230,9 @@ mod tests {
         );
         for input in [repeated, two_gamma5, compact, generic_dimension, long] {
             assert!(
-                DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_none(),
+                DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<false>(input.as_view())
+                    .is_none(),
                 "{input}"
             );
         }
@@ -1815,7 +2255,8 @@ mod tests {
             let result = input.simplify_gamma();
             assert!((&result - expected).expand().is_zero());
             assert_eq!(
-                DiracSimplifier::evaluate_terminal_trace(input.as_view()),
+                DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<false>(input.as_view()),
                 Some(result.clone())
             );
             assert_eq!(
@@ -1837,7 +2278,11 @@ mod tests {
             trace!(&spin, gamma!(&a), gamma!(&b)),
             trace!(&spin, gamma5!(), gamma!(&a)),
         ] {
-            assert!(DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_none());
+            assert!(
+                DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<false>(input.as_view())
+                    .is_none()
+            );
             assert_eq!(input.simplify_gamma(), input);
         }
         let odd = trace!(&spin;
@@ -1912,7 +2357,11 @@ mod tests {
                     let result = input.simplify_gamma();
                     assert!((&result - &expected).expand().is_zero());
                     assert_eq!(result.simplify_gamma(), result);
-                    assert!(DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_some());
+                    assert!(
+                        DiracSimplifier::new(&GammaSimplifySettings::default())
+                            .evaluate_terminal_trace::<false>(input.as_view())
+                            .is_some()
+                    );
                     let next = Atom::num(2) * &pq * &expected - &pp * &qq * &previous;
                     previous = expected;
                     expected = next;
@@ -1942,17 +2391,27 @@ mod tests {
         let indexed = spenso::p!(r.mink4.pattern(Atom::num(91)));
         for argument in [unknown, malformed, indexed] {
             let input = trace!(&spin, gamma!(&p), gamma!(argument));
-            assert!(DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_none());
+            assert!(
+                DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<false>(input.as_view())
+                    .is_none()
+            );
         }
         let mixed = trace!(
             &spin,
             gamma!(&p),
             gamma!(spenso::q!(r.mink_d.to_symbolic([])))
         );
-        assert!(DiracSimplifier::evaluate_terminal_trace(mixed.as_view()).is_none());
+        assert!(
+            DiracSimplifier::new(&GammaSimplifySettings::default())
+                .evaluate_terminal_trace::<false>(mixed.as_view())
+                .is_none()
+        );
         let spectator = symbolica::parse_lit!((x + y) ^ 8);
         assert!(
-            DiracSimplifier::evaluate_terminal_trace((&spectator * &input).as_view()).is_none()
+            DiracSimplifier::new(&GammaSimplifySettings::default())
+                .evaluate_terminal_trace::<false>((&spectator * &input).as_view())
+                .is_none()
         );
         assert_eq!(
             input.simplify_gamma_with(GammaSimplifySettings::default().without_trace_evaluation()),
@@ -2034,7 +2493,8 @@ mod tests {
                         let input = trace!(&spin; word.iter().cycle().skip(start).take(4)
                             .map(|&i| gamma!(&slots[i])));
                         let expected = coefficient.as_view() * unit * g!(&slots[1], &slots[2]);
-                        let result = DiracSimplifier::evaluate_terminal_trace(input.as_view())
+                        let result = DiracSimplifier::new(&GammaSimplifySettings::default())
+                            .evaluate_terminal_trace::<false>(input.as_view())
                             .expect("the summed pair reduces without emitting tensor metrics");
                         assert_eq!(result, expected, "dimension {dimension}, rotation {start}");
                         assert_eq!(input.simplify_gamma(), result);
@@ -2058,7 +2518,9 @@ mod tests {
                 vec![&a, &p[0], &b, &p[1], &a, &p[2], &b, &p[3]],
             ] {
                 let input = trace!(&spin; word.into_iter().map(|index| gamma!(index)));
-                let result = DiracSimplifier::evaluate_terminal_trace(input.as_view()).unwrap();
+                let result = DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<false>(input.as_view())
+                    .unwrap();
                 result.visitor(&mut |node| {
                     assert!(node != a.as_view() && node != b.as_view());
                     true
@@ -2071,15 +2533,25 @@ mod tests {
             let fixed_component = trace!(&spin; [&component, &p[0], &p[1], &component, &p[2], &p[3]]
                 .map(|index| gamma!(index)));
             assert!(
-                DiracSimplifier::evaluate_terminal_trace(fixed_component.as_view()).is_none(),
+                DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<false>(fixed_component.as_view())
+                    .is_none(),
                 "fixed components do not define Einstein sums"
             );
             let ambiguous = trace!(&spin; [&a, &p[0], &a, &p[1], &a, &p[2]]
                 .map(|index| gamma!(index)));
-            assert!(DiracSimplifier::evaluate_terminal_trace(ambiguous.as_view()).is_none());
+            assert!(
+                DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<false>(ambiguous.as_view())
+                    .is_none()
+            );
             let input = trace!(&spin; [&a, &p[0], &p[1], &p[2], &a, &p[3], &p[4], &p[5]]
                 .map(|index| gamma!(index)));
-            assert!(DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_some());
+            assert!(
+                DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<false>(input.as_view())
+                    .is_some()
+            );
         }
     }
 
@@ -2102,7 +2574,11 @@ mod tests {
         });
         let spectator = symbolica::parse_lit!((x + y) ^ 8);
         let decorated = &spectator * &input;
-        assert!(DiracSimplifier::evaluate_terminal_trace(decorated.as_view()).is_none());
+        assert!(
+            DiracSimplifier::new(&GammaSimplifySettings::default())
+                .evaluate_terminal_trace::<false>(decorated.as_view())
+                .is_none()
+        );
         let complete = decorated.simplify_gamma();
         // Remove only the spectator for the standalone polynomial certificate;
         // the compound scalar numerator itself remains unexpanded.

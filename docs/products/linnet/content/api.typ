@@ -329,6 +329,10 @@ which selects the same subgraph as the whole edge. Half-edge highlighting covers
 of a paired edge, or the entire dangling edge. Copy the panel's construction into
 `graph.subgraph(nodes=[...], edges=[...], half_edges=[...])` to create a Python selection.
 Figure selections are browser state and do not mutate the Python graph.
+Zoom buttons and Ctrl/Meta-scroll change the graph camera; drag to pan and use Fit to restore
+the complete drawing. With the graph focused, `+` and `-` zoom, arrow keys pan, and `0` fits.
+Details appear beside the graph in wide outputs and below it in narrow outputs. Zooming
+preserves the selection and pinned details, whose text stays at its original size.
 Embedding applications can read the SVG element's `linnetSelection` property or listen for
 `linnet-selection-change`; its event detail contains sorted `nodes`, `edges`, and `half_edges` arrays.
 Use the Python selection API explicitly when applying graph algorithms to those IDs.
