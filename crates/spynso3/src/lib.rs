@@ -340,6 +340,12 @@ impl<'a, 'py> FromPyObject<'a, 'py> for TensorDataDescriptor {
             )
         })?;
         let args = TensorExpression::descriptor_args(&expression);
+        Self::new(descriptor, name, args)
+    }
+}
+
+impl TensorDataDescriptor {
+    fn new(descriptor: StructuredAtom, name: Symbol, args: Vec<Atom>) -> PyResult<Self> {
         let layout = tensor_data_layout(&descriptor.interface)?;
         let owner = fresh_open_owner();
         let logical_axes = (0..layout.logical_shape().len()).collect::<Vec<_>>();
