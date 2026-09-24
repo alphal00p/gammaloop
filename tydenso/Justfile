@@ -77,11 +77,20 @@ check: build check-wasm-features
       exit 1
     fi
     symbolica_version="3.0.0"
+    symbolica_git="$(nix eval --impure --raw --expr '(builtins.fromTOML (builtins.readFile ../Cargo.toml)).patch.crates-io.symbolica.git')"
+    symbolica_revision="$(nix eval --impure --raw --expr '(builtins.fromTOML (builtins.readFile ../Cargo.toml)).patch.crates-io.symbolica.rev')"
     check_dir="$(mktemp -d)"
     trap 'rm -rf "$check_dir"' EXIT
     mkdir -p "$check_dir/tymbolica" ../target/tymbolica
     git -C "$tymbolica_checkout" archive "$tymbolica_revision" | tar -x -C "$check_dir/tymbolica"
     tymbolica_checkout="$check_dir/tymbolica"
+    # Atom payloads require the same storage format in all three engines. Apply
+    # the root's pin only to this copy, preserving the plugin's Wasm features.
+    cat >> "$tymbolica_checkout/Cargo.toml" <<EOF
+
+    [patch.crates-io]
+    symbolica = { git = "$symbolica_git", rev = "$symbolica_revision" }
+    EOF
     # Rebuild the pinned combined algebra/integration engine without changing the checkout.
     # Its build script reads Cargo's target and feature settings; generated plugin
     # assets remain outside the Rust source inputs.
@@ -92,16 +101,26 @@ check: build check-wasm-features
       unset CARGO_TARGET_DIR
       nix run --no-write-lock-file "path:$PWD#build"
     )
-    expected="$(printf 'version = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$symbolica_version")"
     for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
       for package in symbolica numerica graphica; do
+        source="registry+https://github.com/rust-lang/crates.io-index"
+        if [ "$package" = symbolica ]; then
+          source="git+$symbolica_git?rev=$symbolica_revision#$symbolica_revision"
+        fi
+        expected="$(printf 'version = "%s"\nsource = "%s"\n' "$symbolica_version" "$source")"
         resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
         if [ "$resolved" != "$expected" ]; then
-          echo "$lock must resolve exactly one crates.io $package at $symbolica_version; found ${resolved:-none}" >&2
+          echo "$lock must resolve exactly one $package at $symbolica_version from $source; found ${resolved:-none}" >&2
           exit 1
         fi
       done
     done
+    tree="$(cargo tree --locked --manifest-path "$tymbolica_checkout/Cargo.toml" --target wasm32-unknown-unknown --package symbolica-typst-plugin --edges normal --prefix none -e features)"
+    if grep -Eq 'feature "(integer-gmp|float-mpfr|native_code_generation)"|(gmp-mpfr-sys|rug) v|gammaloop-workspace-hack' <<<"$tree"; then
+      echo "Tymbolica's target graph contains native-only dependencies" >&2
+      printf '%s\n' "$tree" >&2
+      exit 1
+    fi
     cmp typst/render.typ ../crates/spynso3/typst/render.typ
     cmp typst/notation.typ ../crates/spynso3/typst/notation.typ
 

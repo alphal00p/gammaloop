@@ -215,6 +215,13 @@ impl<'a> Chain for AtomView<'a> {
     }
 
     fn chainify(&self, representation: LibraryRep) -> Atom {
+        // Both endpoints must use this representation. Terminal metric/epsilon
+        // expressions often have no such slots; avoid building a replacement
+        // and invoking its matcher at every unrelated function in that case.
+        if !self.contains_symbol(representation.symbol()) {
+            return self.to_owned();
+        }
+
         let in_index = representation.to_symbolic([W_.d_, W_.i_]);
 
         let out_index = representation.dual().to_symbolic([W_.d_, W_.j_]);
@@ -279,7 +286,7 @@ mod tests {
     use insta::assert_snapshot;
     use spenso::g;
     use spenso::{chain, slot};
-    use symbolica::{parse, parse_lit};
+    use symbolica::{parse, parse_lit, symbol};
     use symbolica_utils::AtomPrintExt;
 
     use crate::representations::{Bispinor, ColorFundamental};
@@ -357,6 +364,49 @@ mod tests {
             // Structural equality checks the original factorization, not only
             // equality after expanding or evaluating the scalar expression.
             assert_eq!(scalar.collect_chains(representation), scalar);
+        }
+    }
+
+    #[test]
+    fn chainify_preserves_terminal_tensors_and_scalar_factorization() {
+        test_initialize();
+        let terminal = parse_lit!(
+            ((x + y) ^ 8)
+                * (g(mink(4, mu), p(mink(4)))
+                    + epsilon(mink(4, mu), mink(4, nu), mink(4, rho), mink(4, sigma)))
+                / (1 + x * y),
+            default_namespace = "spenso"
+        );
+        for representation in [Bispinor {}.into(), ColorFundamental {}.into()] {
+            assert_eq!(terminal.chainify(representation), terminal);
+        }
+    }
+
+    #[test]
+    fn chainify_finds_generic_tensors_inside_sums_and_powers() {
+        test_initialize();
+        let scalar = parse_lit!((x + y) ^ 8);
+        let head = symbol!("chainify_generic_tensor");
+        let metadata = symbol!("chainify_metadata");
+        for representation in [
+            LibraryRep::from(Bispinor {}),
+            LibraryRep::from(ColorFundamental {}),
+            LibraryRep::from(ColorFundamental {}).dual(),
+        ] {
+            let dimension = parse_lit!(n ^ 2 - 1);
+            let start = representation.to_symbolic([dimension.clone(), parse_lit!(label(a))]);
+            let end = representation
+                .dual()
+                .to_symbolic([dimension, parse_lit!(label(b))]);
+            let tensor = function!(head, &scalar, &start, metadata, &end);
+            let chained = chain!(
+                start,
+                end,
+                function!(head, &scalar, T.chain_in, metadata, T.chain_out)
+            );
+            let input = (&scalar + tensor).pow(2);
+            let expected = (&scalar + chained).pow(2);
+            assert_eq!(input.chainify(representation), expected);
         }
     }
 

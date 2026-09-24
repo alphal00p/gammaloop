@@ -987,6 +987,7 @@ dependencies = [
  "spenso",
  "symbolica",
  "thiserror",
+ "three-dimensional-reps",
  "typed-index-collections",
 ]
 
@@ -1089,6 +1090,7 @@ version = "0.1.0"
 dependencies = [
  "feynkit-model",
  "pyo3",
+ "serde_json",
  "thiserror",
 ]
 
@@ -3072,8 +3074,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 [[package]]
 name = "symbolica"
 version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c060dc0a9613c88aadee7095109bf350e549067c9ecf7ea217064cdf3d439721"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=06906976bca24fefc5203aee699d90d62ebe08cd#06906976bca24fefc5203aee699d90d62ebe08cd"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -3131,9 +3132,9 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.25.6"
+version = "2.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97114f6aba423d7a6a1336992ce0e5140e56a5176cce1a72ab252b5560ede2fe"
+checksum = "b3e0ed8cf2dd16f83f5393de7e34de02516bbcb2d7d0e85bb2a5615c665c947b"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
@@ -3283,6 +3284,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ad99c4c6d32803332c548b1af0540b357b3f5fc0be8f6c6bfe8b2e6ae784070"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "three-dimensional-reps"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "bincode-trait-derive",
+ "itertools 0.14.0",
+ "linnet",
+ "serde",
+ "symbolica",
+ "thiserror",
+ "typed-index-collections",
 ]
 
 [[package]]

@@ -19,7 +19,7 @@ use std::{
 #[cfg(feature = "shadowing")]
 use symbolica::{
     atom::{
-        Atom, AtomView, Symbol,
+        Atom, AtomView, FunctionBuilder, Symbol,
         representation::{FunView, ListIterator},
     },
     symbol,
@@ -130,12 +130,27 @@ impl SlotHead {
 }
 
 #[cfg(feature = "shadowing")]
-/// Borrowed slot syntax. Recognition leaves dimension and index payloads unvalidated.
+/// Borrowed representation syntax with an optional variance wrapper.
+/// Dimension and index payloads remain symbolic rather than being coerced.
 #[derive(Clone, Copy, Debug)]
-pub struct SlotView<'a> {
+pub struct RepresentationView<'a> {
     function: FunView<'a>,
     wrapper: Option<Symbol>,
     arguments: ListIterator<'a>,
+}
+
+#[cfg(feature = "shadowing")]
+enum RepresentationMatch<'a> {
+    Recognized(RepresentationView<'a>),
+    Opaque,
+    Other,
+}
+
+#[cfg(feature = "shadowing")]
+/// Borrowed explicit slot syntax, containing exactly a dimension and an index.
+#[derive(Clone, Copy, Debug)]
+pub struct SlotView<'a> {
+    representation: RepresentationView<'a>,
 }
 
 #[cfg(feature = "shadowing")]
@@ -160,40 +175,40 @@ impl<'a> SlotMatch<'a> {
 }
 
 #[cfg(feature = "shadowing")]
-impl<'a> SlotView<'a> {
+impl<'a> RepresentationView<'a> {
     /// Decode arguments once after recognizing a representation or duality wrapper.
     #[inline]
     fn classify(
         value: AtomView<'a>,
         mut classify_head: impl FnMut(FunView<'a>) -> SlotHead,
-    ) -> SlotMatch<'a> {
+    ) -> RepresentationMatch<'a> {
         let AtomView::Fun(mut function) = value else {
-            return SlotMatch::Other;
+            return RepresentationMatch::Other;
         };
         let mut wrapper = None;
         match classify_head(function) {
-            SlotHead::Other => return SlotMatch::Other,
+            SlotHead::Other => return RepresentationMatch::Other,
             SlotHead::Representation => {}
             SlotHead::Wrapper => {
                 let mut arguments = function.iter();
                 if arguments.len() != 1 {
-                    return SlotMatch::Opaque;
+                    return RepresentationMatch::Opaque;
                 }
                 let Some(AtomView::Fun(inner)) = arguments.next() else {
-                    return SlotMatch::Opaque;
+                    return RepresentationMatch::Opaque;
                 };
                 if !matches!(classify_head(inner), SlotHead::Representation) {
-                    return SlotMatch::Opaque;
+                    return RepresentationMatch::Opaque;
                 }
                 wrapper = Some(function.get_symbol());
                 function = inner;
             }
         }
         let arguments = function.iter();
-        if arguments.len() != 2 {
-            return SlotMatch::Opaque;
+        if !matches!(arguments.len(), 1 | 2) {
+            return RepresentationMatch::Opaque;
         }
-        SlotMatch::Explicit(Self {
+        RepresentationMatch::Recognized(Self {
             function,
             wrapper,
             arguments,
@@ -206,19 +221,99 @@ impl<'a> SlotView<'a> {
         self.arguments.next().unwrap()
     }
 
+    /// The representation head, without any variance wrapper.
+    pub fn head(self) -> Symbol {
+        self.function.get_symbol()
+    }
+
+    pub fn wrapper(self) -> Option<Symbol> {
+        self.wrapper
+    }
+
+    /// Whether the syntax denotes the base orientation of its representation.
+    pub fn is_base(self) -> bool {
+        self.wrapper.is_none()
+            || (self.wrapper == Some(AIND_SYMBOLS.uind)
+                && self.head().has_tag(&SPENSO_TAG.dualizable))
+            || (self.wrapper == Some(AIND_SYMBOLS.selfdualind)
+                && self.head().has_tag(&SPENSO_TAG.self_dual))
+    }
+
+    pub fn is_self_dual(self) -> bool {
+        self.is_base() && self.head().has_tag(&SPENSO_TAG.self_dual)
+    }
+
+    pub fn is_dual(self) -> bool {
+        self.wrapper == Some(AIND_SYMBOLS.dind) && self.head().has_tag(&SPENSO_TAG.dualizable)
+    }
+
+    /// Compare exact symbolic dimensions and complementary variance using tags.
+    /// This also supports tagged representations that have no library registration.
+    pub fn matches(self, other: Self) -> bool {
+        self.head() == other.head()
+            && self.dimension() == other.dimension()
+            && ((self.is_self_dual() && other.is_self_dual())
+                || (self.head().has_tag(&SPENSO_TAG.dualizable)
+                    && ((self.is_base() && other.is_dual())
+                        || (self.is_dual() && other.is_base()))))
+    }
+
+    /// Build the compact base representation, retaining its exact dimension.
+    pub fn compact(self) -> Atom {
+        FunctionBuilder::new(self.head())
+            .add_arg(self.dimension())
+            .finish()
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<'a> SlotView<'a> {
+    #[inline]
+    fn classify(
+        value: AtomView<'a>,
+        classify_head: impl FnMut(FunView<'a>) -> SlotHead,
+    ) -> SlotMatch<'a> {
+        match RepresentationView::classify(value, classify_head) {
+            RepresentationMatch::Recognized(representation)
+                if representation.arguments.len() == 2 =>
+            {
+                SlotMatch::Explicit(Self { representation })
+            }
+            RepresentationMatch::Other => SlotMatch::Other,
+            _ => SlotMatch::Opaque,
+        }
+    }
+
+    pub fn representation(self) -> RepresentationView<'a> {
+        self.representation
+    }
+
+    /// Borrow the dimension expression without requiring a number or symbol.
+    #[inline]
+    pub fn dimension(self) -> AtomView<'a> {
+        self.representation.dimension()
+    }
+
     #[inline]
     /// Borrow the original explicit index payload without coercing its value.
     pub fn index(mut self) -> AtomView<'a> {
-        self.arguments.next();
-        self.arguments.next().unwrap()
+        self.representation.arguments.next();
+        self.representation.arguments.next().unwrap()
+    }
+
+    /// Concrete component markers are not summed abstract index labels.
+    pub fn is_concrete_index(self) -> bool {
+        matches!(self.index(), AtomView::Fun(index)
+            if [AIND_SYMBOLS.cind, AIND_SYMBOLS.find].contains(&index.get_symbol()))
     }
 
     fn parse<T: RepName, Aind: ParseableAind>(
         mut self,
         rep: T,
     ) -> Result<Slot<T, Aind>, SlotError> {
-        let dim = Dimension::try_from(self.arguments.next().unwrap())?;
-        let aind = Aind::from_view(self.arguments.next().unwrap()).map_err(Into::into)?;
+        let dim = Dimension::try_from(self.representation.arguments.next().unwrap())?;
+        let aind =
+            Aind::from_view(self.representation.arguments.next().unwrap()).map_err(Into::into)?;
         Ok(Slot {
             rep: Representation { dim, rep },
             aind,
@@ -265,6 +360,41 @@ impl SlotMatcher {
         SlotView::classify(value, |function| self.classify_head(function))
     }
 
+    /// Recognize exactly `rep(dimension)`, optionally inside one variance wrapper.
+    pub fn compact_representation<'a>(
+        &mut self,
+        value: AtomView<'a>,
+    ) -> Option<RepresentationView<'a>> {
+        match RepresentationView::classify(value, |function| self.classify_head(function)) {
+            RepresentationMatch::Recognized(representation)
+                if representation.arguments.len() == 1 =>
+            {
+                Some(representation)
+            }
+            _ => None,
+        }
+    }
+
+    /// Borrow the final argument of a canonical vector-shaped function.
+    /// Earlier scalar metadata is opaque, but direct representation arguments
+    /// are rejected. Callers decide whether the head must carry a rank-one tag.
+    pub fn vector_argument<'a>(&mut self, function: FunView<'a>) -> Option<AtomView<'a>> {
+        if function.get_symbol().is_scalar()
+            || !matches!(self.classify(function.as_view()), SlotMatch::Other)
+        {
+            return None;
+        }
+        let mut arguments = function.iter();
+        let mut last = arguments.next()?;
+        for argument in arguments {
+            if !matches!(self.classify(last), SlotMatch::Other) {
+                return None;
+            }
+            last = argument;
+        }
+        Some(last)
+    }
+
     /// Validate a recognized slot using the requested representation and index types.
     /// Use [`SlotView::index`] when exact symbolic index identity must be preserved.
     pub fn parse<T: RepName, Aind: ParseableAind>(
@@ -282,19 +412,20 @@ impl SlotMatcher {
         &mut self,
         slot: SlotView<'_>,
     ) -> Result<LibraryRep, RepresentationError> {
-        let head = slot.function.get_symbol();
+        let head = slot.representation.head();
+        let wrapper = slot.representation.wrapper();
         let rep = if let Some((_, _, rep)) = self
             .resolved
             .iter()
-            .find(|(symbol, wrapper, _)| *symbol == head && *wrapper == slot.wrapper)
+            .find(|(symbol, cached_wrapper, _)| *symbol == head && *cached_wrapper == wrapper)
         {
             *rep
         } else {
-            let rep = match slot.wrapper {
+            let rep = match wrapper {
                 Some(wrapper) => LibraryRep::try_from_symbol(head, wrapper)?,
                 None => LibraryRep::try_from_symbol_coerced(head)?,
             };
-            let entry = (head, slot.wrapper, rep);
+            let entry = (head, wrapper, rep);
             if self.resolved.len() < 16 {
                 self.resolved.push(entry);
             } else {
@@ -316,8 +447,8 @@ impl<'a, T: RepName, Aind: ParseableAind> TryFrom<AtomView<'a>> for Slot<T, Aind
             SlotHead::from_symbol(function.get_symbol())
         })
         .into_slot(value)?;
-        let head = slot.function.get_symbol();
-        let rep = match slot.wrapper {
+        let head = slot.representation.head();
+        let rep = match slot.representation.wrapper() {
             Some(wrapper) => T::try_from_symbol(head, wrapper)?,
             None => T::try_from_symbol_coerced(head)?,
         };

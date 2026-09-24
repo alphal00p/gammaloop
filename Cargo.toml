@@ -86,6 +86,9 @@ walkdir = "2.5.0"
 
 which = "8.0.0"
 
+[patch.crates-io]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "06906976bca24fefc5203aee699d90d62ebe08cd" }
+
 # Reuse optimized Symbolica while keeping workspace debug builds inexpensive.
 [profile.dev.package.symbolica]
 opt-level = 2

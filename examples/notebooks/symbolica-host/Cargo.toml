@@ -21,5 +21,8 @@ default = ["native"]
 native = ["feynkit-py/native", "spynso3/native"]
 wasm = ["feynkit-py/wasm", "spynso3/wasm"]
 
+[patch.crates-io]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "06906976bca24fefc5203aee699d90d62ebe08cd" }
+
 [profile.dev]
 debug = 0

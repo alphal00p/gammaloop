@@ -1,5 +1,11 @@
 (() => {
   'use strict';
+  window.addEventListener('message',event => {
+    if (event.source===parent && event.data?.type==='spenso-theme'
+        && ['light','dark'].includes(event.data.theme)) {
+      document.documentElement.style.colorScheme=event.data.theme;
+    }
+  });
   const data = JSON.parse(document.getElementById('tensor-data').textContent);
   const shape = data.shape;
   const rank = shape.length;

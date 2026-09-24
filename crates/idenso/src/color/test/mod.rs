@@ -972,7 +972,7 @@ fn antisymmetric_three_generator_trace_reduces_to_structure_constant() {
         )
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2");
 }
 
 #[test]
@@ -985,7 +985,7 @@ fn antisymmetric_trace_commutator_reduces_before_terminal_trace() {
         color_t!(slot!(r.coad_da, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2");
 }
 
 #[test]
@@ -998,7 +998,7 @@ fn antisymmetric_trace_commutator_preserves_projector_sign() {
         color_t!(slot!(r.coad_da, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1𝑖/2*f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-𝑖/2*f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -1011,7 +1011,7 @@ fn antisymmetric_chain_commutator_reduces_to_structure_constant() {
         antisym!(color_t!(slot!(r.coad_da, a)), color_t!(slot!(r.coad_da, b))),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,x),in,out))*f(coad(dA,a),coad(dA,b),coad(dA,x))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,x),in,out))*f(coad(dA,a),coad(dA,b),coad(dA,x))*𝑖/2");
 }
 
 #[test]
@@ -1631,7 +1631,7 @@ fn ratio_simplify() {
 
     let simplified = expr.cook_indices().simplify_color();
 
-    assert_snapshot!(simplified.collect_color_constants().collect_factors().to_bare_ordered_string(), @"-1𝑖/2*G^4*cas(2,coad(ohoho))*ee^2*idx(2,cof(ahaha))*ohoho");
+    assert_snapshot!(simplified.collect_color_constants().collect_factors().to_bare_ordered_string(), @"-𝑖/2*G^4*cas(2,coad(ohoho))*ee^2*idx(2,cof(ahaha))*ohoho");
 }
 
 #[test]

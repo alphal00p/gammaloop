@@ -1483,7 +1483,10 @@ def _(mo):
     output counts, matching FORM programs, source identities and validation
     results are recorded in `examples/notebooks/gamma_trace_ordering.json`.
 
-    ### Applied shared slot substitution and epsilon cleanup
+    ### Earlier shared slot substitution and epsilon cleanup
+
+    These measurements record the shared-slot update before the local metric
+    normalization below.
 
     Metrics and tagged vectors now use **the same slot substitution**. The
     contractor scans product factors directly, trying metric sources before
@@ -1563,6 +1566,189 @@ def _(mo):
     remains explicitly ignored with this reason; passing component checks do
     not certify this case. The measurement record separates this limitation
     from the unchanged benchmark snapshots.
+
+    ### Applied local metric normalization
+
+    These measurements use **crates.io Symbolica 3.0.0**. The main-branch
+    comparison below retains this normalizer and changes the pinned dependency.
+
+    The previous axial-twelve profile spent **17.128 ms** checking redundant
+    metrics and **6.361 ms** checking metric traces inside one **28.448 ms**
+    `normalize_dots()` call. Every result was unchanged. These stages repeatedly
+    walked an already normalized expression and attempted wildcard matches
+    at eligible metric heads.
+
+    Intrinsic metric identities now run **locally when Symbolica constructs
+    `g`**: compatible repeated abstract slots yield their dimension, and a
+    compatible explicit slot with a tagged compact vector yields that vector
+    component. Scalar linearity still applies. `normalize_dots()` handles a
+    root-level identity directly, then uses a **read-only visitor** to check for
+    remaining nested-vector or integral-power identities. If none applies,
+    it returns the existing expression without rebuilding it. Otherwise, one
+    rewriting walk uses borrowed slot recognition instead of whole-expression
+    replacement rules. Scalar parameters and slot payloads stay opaque, and
+    numerator sums stay factored.
+
+    This check matters even after removing wildcard rules: assigning an
+    unchanged node in Symbolica's rewriting walker to prune its children marks
+    that path as changed and rebuilds its ancestors. The visitor can prune the
+    same opaque payloads without triggering reconstruction or normalization.
+
+    Recognition requires canonical slot shapes, exact dimensions, compatible
+    representations and variance, and a final structural argument for vectors.
+    Malformed arguments and dimension mismatches remain explicit. Fixed
+    components marked by `cind` or `find` are excluded from abstract-index
+    traces and power contractions. For abstract powers, the existing convention
+    remains: negative even powers normalize; negative odd and nonintegral
+    powers remain explicit.
+
+    Construction also makes scalar composition consistent: **`g(i,i) = D`
+    implies `g(i,i)^2 = D^2` and `g(i,i)^3 = D^3`**. The former ordering applied
+    the metric-power rule first and incorrectly gave `D` for the square.
+    The distinct-index identity `g(i,j)^2 = D` remains a contraction. Exact
+    HEP regressions use a separate tensor with metric components and no
+    normalization callback, so both sides do not simply collapse during
+    construction before the trace-power check.
+
+    The expanded benchmark retains identical source strings and separately
+    times parsing, `normalize_dots()` on constructed atoms, and parsing followed
+    by normalization. **Parse-only includes constructor callbacks;
+    parse-plus-normalize exposes their total cost**, including work moved out
+    of the later pass. The run covers **73 inputs and 641 case/method pairs**.
+    Each Rust median uses five warm samples, rotating method order and adapting
+    repetitions toward 8 ms per sample, pinned to CPU 6 of the shared host.
+    Construction-inclusive timings, in microseconds:
+
+    | Input | Parse before | Parse after | Parse + normalize before | Parse + normalize after |
+    |:--|--:|--:|--:|--:|
+    | Metric self-trace | 3.105 | 3.822 | 12.391 | 3.860 |
+    | Metric and tensor | 4.880 | 5.471 | 16.160 | 6.051 |
+    | Metric and compact vector | 3.713 | 4.737 | 12.107 | 4.971 |
+    | Mismatched dimensions | 3.124 | 3.633 | 13.148 | 4.057 |
+    | Compact dot with scalar factors | 5.751 | 6.365 | 11.037 | 6.880 |
+
+    Parsing costs more in these examples because local metric checks now
+    happen there. **The combined operation improves with that cost included.**
+    Constructed input snapshots can change eagerly; recorded source strings
+    remain identical. The trace-power correction and stricter canonical
+    recognition also intentionally change some outputs, which the measurement
+    record distinguishes from unchanged output comparisons.
+
+    On unchanged axial-twelve output, isolated `normalize_dots()` improves
+    **27.794 → 0.858 ms (32.39×)**, and complete Schoonschip improves
+    **59.577 → 5.265 ms (11.32×)**. Full gamma timings exclude initial input
+    creation but include metrics constructed while evaluating the trace.
+    Matching **FORM 5.0.0** wall times include amortized startup, parsing,
+    tracing, sorting and cleanup: one warmup process, then three measured
+    processes with six batches each on CPU 3. All entries are milliseconds:
+
+    | Input | Before | After | FORM wall |
+    |:--|--:|--:|--:|
+    | Axial distinct indices, 6 | 0.647 | 0.204 | — |
+    | Axial distinct indices, 8 | 4.952 | 1.141 | — |
+    | Axial distinct indices, 10 | 36.379 | 7.161 | — |
+    | Axial distinct indices, 12 | 264.302 | 49.084 | 0.62948 |
+    | Axial crossing, 12 | 3.268 | 1.643 | 0.03008 |
+    | External metrics, 12 | 6.291 | 3.524 | 0.06158 |
+    | Free indices, 8 | 0.150 | 0.162 | 0.05679 |
+    | Free indices, 12 | 6.622 | 6.496 | 2.91656 |
+
+    Axial twelve improves **5.38×**. Free eight becomes about **7.9% slower**;
+    its shortcut already avoids cleanup, while constructing already-normal
+    metrics can incur the new checks. Free twelve changes little. FORM remains
+    about **78× faster** for axial twelve under these timing boundaries.
+    `examples/notebooks/dot_normalization.json` preserves all cases, raw
+    samples, input/output snapshot hashes, classified changed outputs,
+    source identities and matching FORM programs. The benchmark command
+    recreates the complete snapshots. A dash marks a case without a fresh
+    matching FORM run.
+
+    Eight dot-normalization calls process the large axial-twelve output.
+    Multiplying the isolated per-call reduction by eight estimates **215.5 ms
+    saved**, close to the **215.2 ms** reduction in the complete pipeline.
+    This is a timing-based attribution estimate, not an exact measurement of
+    those calls inside the pipeline.
+
+    A separate final profile uses five warm samples on CPU 7 and checks that
+    every stage preserves the terminal expression. It measures **0.867 ms**
+    for dot normalization, **5.330 ms** for Schoonschip and **6.722 ms** for
+    epsilon cleanup. Chain collection is now the largest measured stage:
+    `chainify` takes **20.957 ms** and `collect_gamma_chains` **24.475 ms**;
+    simplifying the already-terminal expression takes **39.275 ms**. These
+    stage measurements overlap and cannot be added to reconstruct full gamma
+    runtime.
+
+    The selected suites have **632 passing tests**: 336 in Idenso, 261 in
+    Spenso with shadowing enabled, and 35 HEP component tests. Two previously
+    recorded tests still fail, and 23 are skipped, including the known compact
+    dual-dot variance diagnostic above. The record names these limitations
+    and retains commands and logs. All three scoped Clippy checks pass with
+    warnings denied.
+
+    ### Pinned Symbolica main comparison
+
+    Active Rust workspaces and the Python lock now pin Symbolica main at
+    **`06906976bca24fefc5203aee699d90d62ebe08cd`**. Its package version still
+    reads 3.0.0; the source revision distinguishes it from the registry release
+    above. The unchanged benchmark driver covers **73 inputs and 641
+    case/method pairs**. All **787 plain-text source, input and output
+    snapshots match** the optimized registry baseline exactly.
+
+    Full gamma medians, in milliseconds. Both executables were measured
+    afresh, registry first and pinned main second, with five warm samples on
+    CPU 6. Our validation compiler group was paused for both runs and resumed
+    afterward. Other shared-host load remains uncontrolled; builds were not
+    interleaved.
+
+    | Input | Registry 3.0.0 | Pinned main |
+    |:--|--:|--:|
+    | Axial distinct indices, 8 | 1.145 | 1.091 |
+    | Axial distinct indices, 10 | 7.172 | 6.870 |
+    | Axial distinct indices, 12 | 48.962 | 46.879 |
+    | Axial crossing, 12 | 1.645 | 1.621 |
+    | External metrics, 12 | 3.524 | 3.628 |
+    | Free indices, 8 | 0.160 | 0.159 |
+    | Free indices, 12 | 6.399 | 6.726 |
+
+    **The differences are small and mixed.** Axial-twelve dot normalization
+    takes **0.889 → 0.848 ms**, and its full pipeline is about **4.3% faster**.
+    Free twelve is about **5.1% slower**, and the external-metric case about
+    **3% slower**. This sequential shared-host comparison does not establish a
+    broad upstream speedup.
+    `examples/notebooks/symbolica_main_update.json` retains both raw timing
+    sets, source and lock identities, build metadata, snapshot hashes and
+    validation results. FORM numbers in that record are reused from the
+    preceding comparison; FORM was not rerun for this dependency update.
+
+    The binary atom export format changes **0 → 1**, and this revision rejects
+    legacy format-0 payloads. The surrounding full state-export format also
+    moves **5 → 6**, requiring compatible payload consumers. To migrate saved
+    atoms, export expressions as strings with the older version and parse them
+    using the new version.
+    Matching printed outputs does not establish binary-format compatibility.
+
+    The standalone native notebook host and Tydenso **`wasm32` dependency checks
+    pass** at this revision. It includes the upstream fix for decoding a stored
+    64-bit length on a 32-bit target. Tydenso also passes
+    `preserve_indices = false` at its Dirac-adjoint call site, preserving its
+    previous behavior. Separate native and Wasm runtime probes check binary
+    round trips, malformed lengths and legacy-format rejection; exact
+    cross-platform byte equality covers the zero fixture. Fifteen existing
+    Idenso snapshots were updated only for imaginary-unit display; their
+    inputs and algebra are unchanged. The selected native suites retain
+    **632 passing tests**, the same two known failures and 23 skipped tests.
+    All three scoped Clippy checks pass with warnings denied. These native
+    results do not certify the separate Tydenso/Tymbolica runtime payload
+    exchange.
+
+    That runtime exchange remains **blocked**: the pinned atom-payload
+    dependency `18e04916` accepts outer export version 5 and rejects version 6
+    before import. The record keeps the reproduced failure and an isolated
+    candidate patch; the candidate is not applied to the workspace dependency,
+    and the tracked plugin assets retain their previous build. In isolation,
+    the candidate passes 22 payload tests against each of registry and
+    pinned-main Symbolica, 21 Tydenso runtime checks, and two-way exchange with
+    the rebuilt Tymbolica engine.
     """)
     return
 

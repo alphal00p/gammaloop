@@ -302,6 +302,98 @@ impl TraceEvaluation {
             }
         }
     }
+
+    fn assert_free_axial_trace(length: usize) {
+        let evaluations = [0, 1, 2].map(Self::new);
+        let slots: Vec<_> = (0..length)
+            .map(|index| {
+                Minkowski {}
+                    .new_rep(4)
+                    .slot::<AbstractIndex, _>(symbolica::symbol!(format!("free_axial_mu{index}")))
+                    .to_atom()
+            })
+            .collect();
+        let closing_vectors: Vec<_> = evaluations[0]
+            .momenta
+            .iter()
+            .zip(&slots)
+            .map(|(momentum, slot)| {
+                let AtomView::Fun(momentum) = momentum.as_view() else {
+                    unreachable!("test momenta are vector functions")
+                };
+                function!(momentum.get_symbol(), slot)
+            })
+            .collect();
+        let mut reference = Vec::new();
+        let mut nonzero_samples = 0;
+        for position in [0, 1, length / 2, length] {
+            let mut factors: Vec<_> = slots.iter().map(|slot| idenso::gamma!(slot)).collect();
+            factors.insert(position, idenso::gamma5!());
+            let trace = spenso::trace!(&Bispinor {}.new_rep(4); factors);
+            // Simplify before attaching spectators: distinct explicit slots
+            // select the standalone axial shortcut rather than its full pass.
+            let simplified = trace.simplify_gamma();
+            assert_ne!(trace, simplified);
+            assert_eq!(simplified.simplify_gamma(), simplified);
+            // Contract each closing vector at its original gamma before taking
+            // the matrix trace. HEP's nested trace boundary would otherwise
+            // materialize a tensor with 4^length free Lorentz components before
+            // seeing outside vectors. Compact slash arguments use the same
+            // registered vector/gamma components and no gamma simplification.
+            let mut original_factors: Vec<_> = evaluations[0].momenta[..length]
+                .iter()
+                .map(|momentum| idenso::gamma!(momentum))
+                .collect();
+            original_factors.insert(position, idenso::gamma5!());
+            let original = spenso::trace!(&Bispinor {}.new_rep(4); original_factors);
+            for (sample, evaluation) in evaluations.iter().enumerate() {
+                let expected = evaluation.evaluate(&original);
+                // Each output slot occurs in one metric or epsilon per term.
+                // Close those subnetworks with the same explicit vectors and
+                // contract actual HEP components independently. This preserves
+                // the polynomial's factorization and avoids a rank-length
+                // intermediate tensor; no gamma/epsilon identity is used here.
+                let closed = simplified.replace_map(|atom, _, output| {
+                    let AtomView::Fun(tensor) = atom else {
+                        return;
+                    };
+                    if ![ETS.metric, *EPSILON_SYMBOL].contains(&tensor.get_symbol()) {
+                        return;
+                    }
+                    let mut tensors = evaluation.scalar_tensors.borrow_mut();
+                    let value = tensors.entry(atom.to_owned()).or_insert_with(|| {
+                        let vectors = tensor.iter().map(|slot| {
+                            &closing_vectors[slots
+                                .iter()
+                                .position(|expected| expected.as_view() == slot)
+                                .expect("kernel tensor arguments retain the explicit slots")]
+                        });
+                        evaluation.evaluate(&(atom * Atom::mul_many(vectors).as_view()))
+                    });
+                    **output = value.clone();
+                });
+                assert_eq!(
+                    expected,
+                    evaluation.evaluate(&closed),
+                    "free axial length {length}, gamma5 position {position}, sample {sample}"
+                );
+                if position == 0 {
+                    nonzero_samples += usize::from(!expected.is_zero());
+                    reference.push(expected);
+                } else {
+                    let sign = if position.is_multiple_of(2) { 1 } else { -1 };
+                    assert_eq!(expected, Atom::num(sign) * &reference[sample]);
+                }
+            }
+        }
+        assert!(
+            nonzero_samples > 0,
+            "free axial length {length} is nontrivial"
+        );
+        if length == 4 {
+            assert_eq!(reference[0], Atom::num(4) * Atom::i());
+        }
+    }
 }
 
 // Keep each arity/pattern below the integration runner's timeout, without
@@ -321,6 +413,11 @@ trace_cases!(assert_trace_length;
 trace_cases!(assert_repeated_indices;
     cyclic_contraction: [0, 13], short_chisholm: [2, 5],
     odd_long_chisholm: [0, 6], even_long_chisholm: [0, 7],
+);
+trace_cases!(assert_free_axial_trace;
+    explicit_free_axial_trace_4: 4,
+    explicit_free_axial_trace_8: 8,
+    explicit_free_axial_trace_12: 12,
 );
 
 #[test]

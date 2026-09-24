@@ -51,6 +51,40 @@ impl SlotContraction {
         let mut current = view.to_owned();
         let mut slots = SlotMatcher::default();
         loop {
+            if let AtomView::Mul(product) = current.as_view()
+                && let Some(next) =
+                    Self::contract_product(product, chain_like, rank_one, &mut slots)
+            {
+                if next == current {
+                    return next;
+                }
+                current = next;
+            }
+            // The root product was already checked. A visitor can prune slot
+            // payloads without causing replace_map to rebuild their ancestors.
+            let mut root = true;
+            let mut found = false;
+            current.visitor(&mut |atom| {
+                let is_root = std::mem::replace(&mut root, false);
+                if found {
+                    return false;
+                }
+                match atom {
+                    AtomView::Mul(product) if !is_root => {
+                        found =
+                            Self::contract_product_once(product, chain_like, rank_one, &mut slots)
+                                .is_some();
+                    }
+                    AtomView::Fun(_) if !matches!(slots.classify(atom), SlotMatch::Other) => {
+                        return false;
+                    }
+                    _ => {}
+                }
+                !found
+            });
+            if !found {
+                return current;
+            }
             let next = current.replace_map(|atom, _, out| match atom {
                 AtomView::Mul(product) => {
                     if let Some(contracted) =
@@ -62,8 +96,6 @@ impl SlotContraction {
                 AtomView::Fun(_) if !matches!(slots.classify(atom), SlotMatch::Other) => {
                     out.set_from_view(&atom);
                 }
-                // Local contractions inside a function or power are valid;
-                // replace_partner prevents contractions across those scopes.
                 _ => {}
             });
             if next == current {
@@ -73,7 +105,29 @@ impl SlotContraction {
         }
     }
 
+    // Finish this product before rebuilding enclosing sums and functions. Each
+    // step still normalizes its factors and restarts metric-first selection.
     fn contract_product(
+        product: MulView<'_>,
+        chain_like: bool,
+        rank_one: bool,
+        slots: &mut SlotMatcher,
+    ) -> Option<Atom> {
+        let mut current = Self::contract_product_once(product, chain_like, rank_one, slots)?;
+        while let AtomView::Mul(product) = current.as_view() {
+            let Some(next) = Self::contract_product_once(product, chain_like, rank_one, slots)
+            else {
+                break;
+            };
+            if next == current {
+                break;
+            }
+            current = next;
+        }
+        Some(current)
+    }
+
+    fn contract_product_once(
         product: MulView<'_>,
         chain_like: bool,
         rank_one: bool,
@@ -110,7 +164,7 @@ impl SlotContraction {
                         product,
                         position,
                         source,
-                        replacement,
+                        &|| replacement.to_owned(),
                         chain_like,
                         slots,
                     )
@@ -127,13 +181,15 @@ impl SlotContraction {
                 let Some((slot_position, source)) = Self::rank_one_endpoint(function, slots) else {
                     continue;
                 };
-                let stripped = source.representation.base().to_symbolic([source.dimension]);
-                let compact = Self::replace_argument(function, slot_position, stripped);
+                // Construct the compact vector only after finding a partner.
                 if let Some(replaced) = Self::replace_partner(
                     product,
                     position,
                     source,
-                    compact.as_view(),
+                    &|| {
+                        let stripped = source.representation.base().to_symbolic([source.dimension]);
+                        Self::replace_argument(function, slot_position, stripped)
+                    },
                     chain_like,
                     slots,
                 ) {
@@ -150,26 +206,18 @@ impl SlotContraction {
         function: FunView<'a>,
         slots: &mut SlotMatcher,
     ) -> Option<(usize, Endpoint<'a>)> {
-        if function.get_symbol().is_scalar() || !function.get_symbol().has_tag(&SPENSO_TAG.rank1) {
+        if !function.get_symbol().has_tag(&SPENSO_TAG.rank1) {
             return None;
         }
-        let mut arguments = function.iter().enumerate().peekable();
-        while let Some((position, argument)) = arguments.next() {
-            if arguments.peek().is_none() {
-                return Endpoint::parse(argument, slots).map(|endpoint| (position, endpoint));
-            }
-            if !matches!(slots.classify(argument), SlotMatch::Other) {
-                return None;
-            }
-        }
-        None
+        let argument = slots.vector_argument(function)?;
+        Endpoint::parse(argument, slots).map(|endpoint| (function.get_nargs() - 1, endpoint))
     }
 
     fn replace_partner(
         product: MulView<'_>,
         source_position: usize,
         source: Endpoint<'_>,
-        replacement: AtomView<'_>,
+        replacement: &impl Fn() -> Atom,
         chain_like: bool,
         slots: &mut SlotMatcher,
     ) -> Option<Atom> {
@@ -207,7 +255,7 @@ impl SlotContraction {
     fn replace_function(
         function: FunView<'_>,
         source: Endpoint<'_>,
-        replacement: AtomView<'_>,
+        replacement: &impl Fn() -> Atom,
         chain_like: bool,
         slots: &mut SlotMatcher,
     ) -> Option<Atom> {
@@ -219,12 +267,12 @@ impl SlotContraction {
             let (position, endpoint) = Self::rank_one_endpoint(function, slots)?;
             return source
                 .matches(&endpoint)
-                .then(|| Self::replace_argument(function, position, replacement.to_owned()));
+                .then(|| Self::replace_argument(function, position, replacement()));
         }
         for (position, argument) in function.iter().enumerate() {
             let replaced =
                 if Endpoint::parse(argument, slots).is_some_and(|slot| source.matches(&slot)) {
-                    Some(replacement.to_owned())
+                    Some(replacement())
                 } else if chain_like && head == SPENSO_TAG.chain && position >= 2 {
                     if let AtomView::Fun(factor) = argument {
                         Self::replace_function(factor, source, replacement, false, slots)
@@ -252,7 +300,7 @@ impl SlotContraction {
     fn replace_projector(
         projector: FunView<'_>,
         source: Endpoint<'_>,
-        replacement: AtomView<'_>,
+        replacement: &impl Fn() -> Atom,
         slots: &mut SlotMatcher,
     ) -> Option<Atom> {
         for (position, factor) in projector.iter().enumerate() {
@@ -337,6 +385,49 @@ mod tests {
                 SlotContraction::run(expression.as_view(), false, false),
                 parse(expected),
                 "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn product_contractions_finish_inside_independent_scopes() {
+        initialize_vectors();
+        for (input, expected) in [
+            (
+                "g(mink(4,a),mink(4,b))*g(mink(4,b),mink(4,c))*T(mink(4,c))+g(mink(4,d),mink(4,e))*g(mink(4,e),mink(4,f))*U(mink(4,f))",
+                "T(mink(4,a))+U(mink(4,d))",
+            ),
+            (
+                "f(g(mink(4,a),mink(4,b))*g(mink(4,b),mink(4,c))*T(mink(4,c)))",
+                "f(T(mink(4,a)))",
+            ),
+            (
+                "(x+g(mink(4,a),mink(4,b))*g(mink(4,b),mink(4,c))*T(mink(4,c)))^2",
+                "(x+T(mink(4,a)))^2",
+            ),
+            (
+                "g(mink(4,a),mink(4,b))*slot_contraction_p(mink(4,b))*T(mink(4,a))",
+                "T(slot_contraction_p(mink(4)))",
+            ),
+        ] {
+            let result = SlotContraction::run(parse(input).as_view(), false, true);
+            assert_eq!(result, parse(expected), "{input}");
+            assert_eq!(SlotContraction::run(result.as_view(), false, true), result);
+        }
+    }
+
+    #[test]
+    fn contraction_probe_prunes_root_slot_payloads() {
+        crate::representations::initialize();
+        for input in [
+            "mink(g(mink(4,a),mink(4,b))*T(mink(4,b)),index)",
+            "mink(4,g(mink(4,a),mink(4,b))*T(mink(4,b)))",
+            "dind(cof(N,index),g(mink(4,a),mink(4,b))*T(mink(4,b)))",
+        ] {
+            let expression = parse(input);
+            assert_eq!(
+                SlotContraction::run(expression.as_view(), true, true),
+                expression
             );
         }
     }

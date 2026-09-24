@@ -127,14 +127,17 @@ mod tests {
                 "g(mink(4,a),mink(4,b))*epsilon(mink(4,c),mink(4,d),mink(4,e),mink(4,f))",
                 false,
             ),
-            ("g(mink(4,a),mink(4,a))", true),
+            // Metric traces normalize during construction, before the scan.
+            ("g(mink(4,a),mink(4,a))", false),
+            ("Unknown(mink(4,a),mink(4,a))", true),
             ("g(mink(4,a),mink(4,b))*g(mink(4,b),mink(4,c))", true),
             (
                 "g(mink(4,a),mink(4,b))*epsilon(mink(4,b),mink(4,c),mink(4,d),mink(4,e))",
                 true,
             ),
             ("g(mink(4,a),mink(4,b))^2", true),
-            ("f(g(mink(4,a),mink(4,a)))", true),
+            ("f(g(mink(4,a),mink(4,a)))", false),
+            ("f(Unknown(mink(4,a),mink(4,a)))", true),
             (
                 "g(mink(4,a),mink(4,b))*(g(mink(4,b),mink(4,c))+g(mink(4,b),mink(4,d)))",
                 true,

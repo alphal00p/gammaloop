@@ -132,6 +132,22 @@ impl GammaSimplifySettings {
     }
 
     fn rewrite_expression(&self, expr: Atom) -> Atom {
+        // Empty chains and traces still have identities, even without gamma
+        // factors. Only the absence of both eligible heads makes this a no-op.
+        let mut candidate = false;
+        expr.visitor(&mut |node| {
+            if candidate {
+                return false;
+            }
+            if let AtomView::Fun(function) = node {
+                let head = function.get_symbol();
+                candidate = head == T.chain || (self.evaluate_traces && head == T.trace);
+            }
+            !candidate
+        });
+        if !candidate {
+            return expr;
+        }
         expr.replace_map(|a, b, c| self.rewrite_node(a, b, c))
     }
 
@@ -438,31 +454,42 @@ impl<'settings> DiracSimplifier<'settings> {
     }
 
     /// A standalone trace with distinct explicit indices has no contractions
-    /// left after kernel evaluation: each output monomial uses each index once.
-    /// Avoid running the full tensor fixed point over thousands of terminal
-    /// metric products. Products with spectators still use the complete pass.
+    /// left after kernel evaluation: each monomial uses each index once, in
+    /// metric pairs and, for an axial trace, one epsilon. Products with
+    /// spectators still use the complete pass.
     fn evaluate_short_free_trace(expr: AtomView<'_>) -> Option<Atom> {
         let AtomView::Fun(f) = expr else {
             return None;
         };
         let (rep, factors) = shadowing::trace_parts(f)?;
-        if !has_four_dimensional_trace_rep(rep) || factors.len() > 14 {
+        if !has_four_dimensional_trace_rep(rep) || factors.len() > 15 {
             return None;
         }
-        let factors = factors
+        let mut factors = factors
             .iter()
             .copied()
             .map(DiracFactor::parse)
             .collect::<Vec<_>>();
+        let gamma5_position = factors.iter().position(|factor| factor.is_gamma5());
+        // Trace cyclicity moves one gamma5 to the front without a sign. Any
+        // further gamma5 or non-gamma factor is rejected by the sequence parser.
+        if let Some(position) = gamma5_position {
+            factors = Self::cyclic_without_position(&factors, position);
+        }
         let indices = Self::gamma_mink_index_sequence_for(FOUR_DIM_CHISHOLM, &factors)?;
-        if indices
-            .iter()
-            .enumerate()
-            .any(|(i, &index)| !is_minkowski_slot(index) || indices[..i].contains(&index))
+        if indices.len() > 14
+            || indices
+                .iter()
+                .enumerate()
+                .any(|(i, &index)| !is_minkowski_slot(index) || indices[..i].contains(&index))
         {
             return None;
         }
-        trace_kernel::evaluate(&indices, false)
+        let axial = gamma5_position.is_some();
+        if axial && indices.len() < 4 {
+            return Some(Atom::Zero);
+        }
+        trace_kernel::evaluate(&indices, axial)
     }
 
     fn simplify_chain_node(self, f: FunView) -> Option<Atom> {
@@ -1560,6 +1587,99 @@ mod tests {
     use super::*;
     use crate::{gamma, gamma5, test_support::test_initialize};
     use spenso::slot;
+
+    #[test]
+    fn rewrite_guard_retains_empty_trace_and_non_gamma_chain_identities() {
+        let r = test_initialize();
+        let trace = trace!(r.bis4.to_symbolic([]); std::iter::empty::<Atom>());
+        let start = slot!(r.bis4, a).into_atom();
+        let end = slot!(r.bis4, b).into_atom();
+        let coefficient = symbolica::parse_lit!((x + y) ^ 8);
+        let settings = GammaSimplifySettings::default();
+        assert_eq!(
+            settings.rewrite_expression(&coefficient * &trace),
+            &coefficient * Atom::num(4)
+        );
+        assert_eq!(
+            settings
+                .without_trace_evaluation()
+                .rewrite_expression(&coefficient * &trace),
+            &coefficient * trace
+        );
+        for chain in [
+            chain!(&start, &end),
+            chain!(&start, &end, gamma5!(), gamma5!()),
+        ] {
+            assert_eq!(
+                settings.rewrite_expression(settings.rewrite_expression(&coefficient * chain)),
+                &coefficient * id_atom(start.as_view(), end.as_view())
+            );
+        }
+        let terminal = &coefficient * g!(slot!(r.mink4, mu), slot!(r.mink4, nu));
+        assert_eq!(settings.rewrite_expression(terminal.clone()), terminal);
+    }
+
+    #[test]
+    fn free_axial_shortcut_matches_complete_pass_at_each_gamma5_position() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let slots: Vec<_> = (0..14)
+            .map(|index| r.mink4.pattern(Atom::num(index)))
+            .collect();
+        let spectator = symbolica::parse_lit!((x + y) ^ 8);
+        for length in 0..=14 {
+            let positions: Vec<_> = if length <= 8 {
+                (0..=length).collect()
+            } else {
+                vec![0, length / 2, length]
+            };
+            for position in positions {
+                let mut factors: Vec<_> = slots[..length].iter().map(|slot| gamma!(slot)).collect();
+                factors.insert(position, gamma5!());
+                let input = trace!(&spin; factors);
+                let shortcut = DiracSimplifier::evaluate_short_free_trace(input.as_view())
+                    .expect("a distinct-index short axial trace is terminal");
+                // A factorized scalar spectator forces the full existing
+                // pipeline, without expanding or changing the trace word.
+                let fallback = &spectator * &input;
+                assert!(DiracSimplifier::evaluate_short_free_trace(fallback.as_view()).is_none());
+                assert_eq!(
+                    fallback.simplify_gamma(),
+                    &spectator * &shortcut,
+                    "length {length}, gamma5 position {position}"
+                );
+                assert_eq!(input.simplify_gamma(), shortcut);
+                assert_eq!(
+                    input.simplify_gamma_with(
+                        GammaSimplifySettings::default().without_trace_evaluation()
+                    ),
+                    input
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn free_axial_shortcut_leaves_contractions_and_unsupported_words_to_full_pass() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let mu = slot!(r.mink4, mu).into_atom();
+        let nu = slot!(r.mink4, nu).into_atom();
+        let repeated = trace!(&spin, gamma5!(), gamma!(&mu), gamma!(&mu));
+        let two_gamma5 = trace!(&spin, gamma5!(), gamma5!(), gamma!(&mu), gamma!(&nu));
+        let slash = spenso::p!(r.mink4.to_symbolic([]));
+        let compact = trace!(&spin, gamma5!(), gamma!(slash));
+        let generic_dimension = trace!(&spin, gamma5!(), gamma!(slot!(r.mink_d, mu)));
+        let long = trace!(&spin;
+            [gamma5!()].into_iter().chain((0..16).map(|index| gamma!(r.mink4.pattern(Atom::num(index)))))
+        );
+        for input in [repeated, two_gamma5, compact, generic_dimension, long] {
+            assert!(
+                DiracSimplifier::evaluate_short_free_trace(input.as_view()).is_none(),
+                "{input}"
+            );
+        }
+    }
 
     fn momenta(rep: &Atom) -> [Atom; 8] {
         std::array::from_fn(|i| {

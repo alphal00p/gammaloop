@@ -38,6 +38,7 @@ type Library = TensorLibrary<MixedTensor<f64, ExplicitKey<AbstractIndex>>, Abstr
 struct MetricEvaluation {
     library: Library,
     vectors: [Symbol; 4],
+    metric_alias: Symbol,
     antisymmetric: Symbol,
     labelled: Symbol,
 }
@@ -54,6 +55,9 @@ impl MetricEvaluation {
         let mink = Minkowski {}.new_rep(4);
         let bis = Bispinor {}.new_rep(4);
         let cof = ColorFundamental {}.new_rep(3);
+        // This tensor has the same exact components as g, without its eager
+        // normalization callback, so constructor identities have an oracle.
+        let metric_alias = spenso::tensor_symbol!("metric_validation_unreduced_metric"; Symmetric);
         // Generic mixed-tensor metrics use f64 constants; explicit Atom-valued
         // entries keep this oracle exact even when a metric remains a leaf.
         for (representations, dimension, lorentzian) in [
@@ -61,8 +65,7 @@ impl MetricEvaluation {
             ([bis.to_lib(); 2], 4, false),
             ([cof.to_lib(), cof.dual().to_lib()], 3, false),
         ] {
-            let key = ExplicitKey::from_iter(representations, ETS.metric, None);
-            let components = (0..dimension * dimension)
+            let components: Vec<_> = (0..dimension * dimension)
                 .map(|flat| {
                     let (row, column) = (flat / dimension, flat % dimension);
                     Atom::num(if row != column {
@@ -74,13 +77,16 @@ impl MetricEvaluation {
                     })
                 })
                 .collect();
-            library.insert_explicit(key.map_canonical(|structure| {
-                MixedTensor::Param(ParamTensor::param(
-                    DenseTensor::from_storage_data(components, structure)
-                        .unwrap()
-                        .into(),
-                ))
-            }));
+            for name in [ETS.metric, metric_alias] {
+                let key = ExplicitKey::from_iter(representations, name, None);
+                library.insert_explicit(key.map_canonical(|structure| {
+                    MixedTensor::Param(ParamTensor::param(
+                        DenseTensor::from_storage_data(components.clone(), structure)
+                            .unwrap()
+                            .into(),
+                    ))
+                }));
+            }
         }
         let vectors = std::array::from_fn(|index| {
             let name = SPENSO_TAG.rank_one_tensor_symbol(&format!("metric_validation_p{index}"));
@@ -164,6 +170,7 @@ impl MetricEvaluation {
         Self {
             library,
             vectors,
+            metric_alias,
             antisymmetric,
             labelled,
         }
@@ -246,15 +253,55 @@ fn metric_chains_and_traces_preserve_exact_components() {
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, nu, rho, _] = MetricEvaluation::slots();
-        for expression in [
-            spenso::g!(&mu, &nu)
-                * spenso::g!(&nu, &rho)
-                * evaluation.vector(0, &mu)
-                * evaluation.vector(1, &rho),
-            spenso::g!(&mu, &nu) * spenso::g!(&nu, &rho) * spenso::g!(&rho, &mu),
-            spenso::g!(&mu, &mu),
+        for (expression, must_change) in [
+            (
+                spenso::g!(&mu, &nu)
+                    * spenso::g!(&nu, &rho)
+                    * evaluation.vector(0, &mu)
+                    * evaluation.vector(1, &rho),
+                true,
+            ),
+            (
+                spenso::g!(&mu, &nu) * spenso::g!(&nu, &rho) * spenso::g!(&rho, &mu),
+                true,
+            ),
+            // Self-traces are already scalar when the metric is constructed.
+            (spenso::g!(&mu, &mu), false),
         ] {
-            let _ = evaluation.assert_rewrite(expression, &settings, true);
+            let _ = evaluation.assert_rewrite(expression, &settings, must_change);
+        }
+    }
+}
+
+#[test]
+fn long_product_contractions_preserve_independent_sum_scopes() {
+    for sample in 0..3 {
+        let evaluation = MetricEvaluation::new(sample);
+        let slots: Vec<_> = (0..9)
+            .map(|index| {
+                Minkowski {}
+                    .new_rep(4)
+                    .slot::<AbstractIndex, _>(symbol!(&format!("local_chain_{index}")))
+                    .to_atom()
+            })
+            .collect();
+        let chain: Atom = (0..8)
+            .map(|index| spenso::g!(&slots[index], &slots[index + 1]))
+            .product();
+        // Reusing dummy labels between independent scalar terms must not join
+        // their networks. The sum remains factored inside the outer power.
+        let first = &chain * evaluation.vector(0, &slots[0]) * evaluation.vector(1, &slots[8]);
+        let second = &chain * evaluation.vector(2, &slots[0]) * evaluation.vector(3, &slots[8]);
+        let expression = (first + second * 2 + 101).pow(2);
+        for settings in [
+            SchoonschipSettings::default().without_rank1_tensors(),
+            SchoonschipSettings::default(),
+        ] {
+            let value = evaluation.assert_rewrite(expression.clone(), &settings, true);
+            assert!(
+                !value.is_zero(),
+                "the component comparison must be nontrivial"
+            );
         }
     }
 }
@@ -369,14 +416,104 @@ fn dual_metric_loops_preserve_exact_components() {
     let [i, j, k] =
         ["color_i", "color_j", "color_k"].map(|name| cof.slot::<AbstractIndex, _>(symbol!(name)));
     let settings = SchoonschipSettings::default().without_rank1_tensors();
-    for expression in [
-        spenso::g!(i, i.dual()),
-        spenso::g!(i, j.dual()) * spenso::g!(j, k.dual()) * spenso::g!(k, i.dual()),
+    for (expression, must_change) in [
+        (spenso::g!(i, i.dual()), false),
+        (
+            spenso::g!(i, j.dual()) * spenso::g!(j, k.dual()) * spenso::g!(k, i.dual()),
+            true,
+        ),
     ] {
         assert_eq!(
-            evaluation.assert_rewrite(expression, &settings, true),
+            evaluation.assert_rewrite(expression, &settings, must_change),
             Atom::num(3)
         );
+    }
+}
+
+#[test]
+fn constructed_metric_traces_are_scalar_before_taking_powers() {
+    let evaluation = MetricEvaluation::new(0);
+    let [mu, _, _, _] = MetricEvaluation::slots();
+    let cof = ColorFundamental {}.new_rep(3);
+    let color = cof.slot::<AbstractIndex, _>(symbol!("trace_color"));
+    let lorentz_trace = function!(evaluation.metric_alias, &mu, &mu);
+    let color_trace = function!(
+        evaluation.metric_alias,
+        color.to_atom(),
+        color.dual().to_atom()
+    );
+    // The alias retains a genuine tensor-network trace. In particular, the
+    // square of the scalar g(mu,mu)=D is D², not the old power-before-trace D.
+    for (source, oracle, expected) in [
+        (
+            "g(mink(4,mu),mink(4,mu))^2",
+            lorentz_trace.clone().pow(2),
+            16,
+        ),
+        (
+            "g(mink(4,mu),mink(4,mu))^3",
+            lorentz_trace.clone().pow(3),
+            64,
+        ),
+        (
+            "g(cof(3,trace_color),dind(cof(3,trace_color)))^2",
+            color_trace.clone().pow(2),
+            9,
+        ),
+        (
+            "(-3*g(mink(4,mu),mink(4,mu))+2)^2",
+            (&lorentz_trace * -3 + 2).pow(2),
+            100,
+        ),
+        (
+            "(g(mink(4,mu),mink(4,mu))+2)^2*(g(cof(3,trace_color),dind(cof(3,trace_color)))+1)",
+            (&lorentz_trace + 2).pow(2) * (&color_trace + 1),
+            144,
+        ),
+    ] {
+        let constructed = Atom::parse(
+            source,
+            "spenso",
+            symbolica::parser::ParseSettings::symbolica(),
+        )
+        .unwrap();
+        assert_eq!(constructed, Atom::num(expected), "source: {source}");
+        assert_eq!(constructed.normalize_dots(), constructed);
+        assert_eq!(
+            evaluation.assert_same_value(&oracle, &constructed),
+            Atom::num(expected)
+        );
+    }
+}
+
+#[test]
+fn constructed_compact_metric_agrees_with_explicit_component_contraction() {
+    for sample in 0..3 {
+        let evaluation = MetricEvaluation::new(sample);
+        let [mu, nu, _, _] = MetricEvaluation::slots();
+        for coefficient in [1, -3] {
+            let source = format!(
+                "g({},{coefficient}*{})",
+                mu.to_plain_string(),
+                evaluation.compact(0).to_plain_string()
+            );
+            let constructed = Atom::parse(
+                &source,
+                "spenso",
+                symbolica::parser::ParseSettings::symbolica(),
+            )
+            .unwrap();
+            assert_eq!(constructed, evaluation.vector(0, &mu) * coefficient);
+            assert_eq!(constructed.normalize_dots(), constructed);
+            let explicit = function!(evaluation.metric_alias, &mu, &nu)
+                * evaluation.vector(0, &nu)
+                * evaluation.vector(1, &mu)
+                * coefficient;
+            assert_eq!(
+                evaluation.assert_same_value(&explicit, &(constructed * evaluation.vector(1, &mu))),
+                Atom::num(coefficient * [8, 1, 1][sample])
+            );
+        }
     }
 }
 

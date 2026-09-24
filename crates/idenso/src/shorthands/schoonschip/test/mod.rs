@@ -101,7 +101,9 @@ fn simple_dot() {
     assert_snapshot!(result.to_bare_ordered_string(), @"g(p(1,mink(dim)),p(2,mink(dim)))");
 
     let result = g!(slot!(mink, 1), &p1_stripped).normalize_dots();
-    assert_snapshot!(result.to_bare_ordered_string(), @"p(1,mink(dim),mink(D,1))");
+    // `mink!(dim)` names the literal dimension `dim`, whereas `mink` above uses
+    // `D`. A mismatched compact slot must not acquire another explicit slot.
+    assert_snapshot!(result.to_bare_ordered_string(), @"g(mink(D,1),p(1,mink(dim)))");
 
     let result = p1.clone().pow(Atom::num(4)).normalize_dots();
     assert_snapshot!(result.to_bare_ordered_string(), @"(g(p(1,mink(D)),p(1,mink(D))))^2");

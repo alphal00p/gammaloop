@@ -46,7 +46,7 @@ serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
 serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
-symbolica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "06906976bca24fefc5203aee699d90d62ebe08cd", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
 toml_datetime = { version = "1", features = ["serde"] }
 toml_parser = { version = "1" }
@@ -89,7 +89,7 @@ serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
 serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
-symbolica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "06906976bca24fefc5203aee699d90d62ebe08cd", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 syn = { version = "2", features = ["extra-traits", "fold", "full", "visit-mut"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
 toml_datetime = { version = "1", features = ["serde"] }
