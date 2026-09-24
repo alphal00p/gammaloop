@@ -20,7 +20,7 @@ mod diagram;
 mod mapping;
 mod parametric;
 mod partial_fraction;
-pub use mapping::{IntegralMapping, PropagatorMapping};
+pub use mapping::{IntegralMapping, PropagatorMapping, QuadraticMomentum};
 
 type CoefficientMatrix = Matrix<RationalPolynomialField<IntegerRing, u16>>;
 
