@@ -180,6 +180,7 @@
     "spenso-macros": [],
     "spynso3": [
       "idenso",
+      "linnet",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros"
@@ -481,6 +482,7 @@
     "spenso-macros": {},
     "spynso3": {
       "idenso": [],
+      "linnet": [],
       "spenso": [
         "portable-payload",
         "python",
@@ -1334,6 +1336,7 @@
     "spenso-macros": [],
     "spynso3": [
       "idenso",
+      "linnet",
       "spenso",
       "spenso-hep-lib",
       "spenso-macros"
@@ -1644,6 +1647,7 @@
     "spenso-macros": {},
     "spynso3": {
       "idenso": [],
+      "linnet": [],
       "spenso": [
         "portable-payload",
         "python",

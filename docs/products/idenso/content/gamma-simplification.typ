@@ -815,6 +815,60 @@ contains the exact assignments, result values, raw timing samples, source hashes
 and executable FORM programs. These finite component checks support equivalence
 without requiring a common symbolic normal form.
 
+== Generic-dimensional traces and contraction progress
+
+A 2026-09-24 comparison uses symbolic Lorentz dimension $D$ and independent spin
+trace normalization `Tr(1)=4`. Generic traces now memoize factored pairing
+polynomials within one call. Compact ordinary words also reuse adjacent squares
+and the repeated-slash identity inside this evaluator. Gamma-five stays strictly
+four-dimensional. Terminal 4D traces use cached factored integer recipes.
+
+The following warm times are milliseconds on the shared EPYC 9754 host, with
+`dev-optim` and Symbolica main `06906976`. Idenso measures in-process wall time
+including output destruction. FORM 5.0.0 measures internal `tracen` plus sorting
+CPU time over independent expressions. Both exclude parsing and startup.
+
+#table(
+  columns: 5,
+  [Free gammas], [Previous Idenso], [Idenso factored], [FORM expanded], [Idenso with expansion],
+  [8], [2.768], [0.178], [0.038], [0.364],
+  [10], [26.658], [0.530], [0.345], [3.250],
+  [12], [272.400], [2.222], [3.983], [44.122],
+  [14], [3441.666], [19.557], [52.667], [1123.733],
+)
+
+The fourteen-gamma factored calculation improves by 176 times. This does not
+establish parity: full expansion remains substantially slower than FORM.
+Diagnostic expansion is restricted to standalone trace polynomials; graph
+numerators and spectators retain their factorization. Paired and alternating
+fourteen-slash words take 13.5 and 37.9 microseconds, compared with FORM's 0.77
+and 9.5 microseconds. Full symbolic generic-D outputs match FORM through length
+fourteen, independently of any four-dimensional identities.
+
+An unchanged fourteen-gamma rerun improves from 345.1 to 144.6 ms, against
+FORM's 46.2 ms. Its 2.68 million tree nodes still make traversal expensive.
+One shared symbol scan skips absent chain, trace and epsilon operations, while
+unchanged intermediate results avoid repeated dot normalization.
+
+Full axial-twelve simplification improves from 2.356 to 0.621 ms and ordinary
+free-twelve from 6.422 to 2.794 ms. Public Schoonschip on a 64-metric chain
+improves from 738.4 to 34.7 microseconds; the separately measured FORM CPU time
+is 3.2 microseconds. Short metric hits do not show the same benefit. Metric paths
+and closed loops are resolved through endpoint incidence before constructing
+replacement atoms; ambiguous incidence retains ordered substitution.
+
+The latest validation has 355 passing Idenso tests and 42 passing HEP tests,
+with the existing tensor-display snapshot failure and 23 skipped tests. Exact
+before/after polynomials, FORM metric certificates, and independent
+six-dimensional Clifford checks accompany the HEP network oracles. Scoped
+Clippy passes with warnings denied. A later external metric can still fail to
+contract through an already-evaluated factored trace sum; this is reproduced in
+both the archived baseline and current implementation.
+
+The #source-link("examples/notebooks/tensor_contraction_parity.json", label: "contraction parity progress record")
+retains raw samples, generated FORM programs, the generic-D benchmark driver,
+source identities and validation evidence.
+
 == Run locally
 
 Use an interpreter containing the combined Symbolica community host with Spenso and Idenso,

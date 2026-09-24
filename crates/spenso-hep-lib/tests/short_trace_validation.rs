@@ -13,7 +13,7 @@ use spenso::{
     network::{
         ExecutionResult, Sequential, SmallestDegree,
         library::symbolic::{ETS, ExplicitKey, TensorLibrary},
-        parsing::{ParseSettings, StrictTensorFilter},
+        parsing::{AtomStructureExt, ParseSettings, StrictTensorFilter},
     },
     structure::{
         abstract_index::AbstractIndex,
@@ -459,6 +459,99 @@ impl TraceEvaluation {
             "the component comparison must be nontrivial"
         );
     }
+
+    fn assert_late_metric(length: usize, axial: bool, generic_dimension: bool) {
+        let evaluations = [0, 1, 2].map(Self::generic);
+        let dimension = symbolica::symbol!("spenso::late_metric_dimension");
+        let representation = if generic_dimension {
+            Minkowski {}.new_rep(dimension)
+        } else {
+            Minkowski {}.new_rep(4)
+        };
+        let slots: Vec<_> = (0..length)
+            .map(|i| representation.pattern(symbolica::symbol!(format!("late_metric_mu{i}"))))
+            .collect();
+        let factors = axial
+            .then(|| idenso::gamma5!())
+            .into_iter()
+            .chain(slots.iter().map(|slot| idenso::gamma!(slot)));
+        let trace = spenso::trace!(&Bispinor {}.new_rep(4); factors);
+        // Evaluate first: this must exercise substitution into the factored
+        // metric/epsilon polynomial, not index contraction inside the trace.
+        let evaluated = trace.simplify_gamma();
+        let specialize = |expression: &Atom| {
+            expression.replace_map(|atom, _, out| {
+                if atom == Atom::var(dimension).as_view() {
+                    **out = Atom::num(4);
+                }
+            })
+        };
+        for right in [1, length / 2] {
+            let metric = spenso::g!(&slots[0], &slots[right]);
+            let late = &metric * &evaluated;
+            let result = late.simplify_gamma();
+            assert_ne!(late, result);
+            assert!(
+                !result.has_repeated_explicit_indices(),
+                "remaining contraction: {result}"
+            );
+            assert_eq!(result.simplify_gamma(), result);
+            let result = specialize(&result);
+            let remaining: Vec<_> = slots
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != 0 && *i != right)
+                .map(|(i, slot)| (i, specialize(slot)))
+                .collect();
+            let closing: Vec<_> = remaining
+                .iter()
+                .map(|(i, slot)| function!(evaluations[0].momenta[*i].get_symbol().unwrap(), slot))
+                .collect();
+            let slots: Vec<_> = remaining.into_iter().map(|(_, slot)| slot).collect();
+            let repeated =
+                specialize(&representation.pattern(symbolica::symbol!("late_metric_internal")));
+            let factors = axial
+                .then(|| idenso::gamma5!())
+                .into_iter()
+                .chain((0..length).map(|i| {
+                    idenso::gamma!(if i == 0 || i == right {
+                        &repeated
+                    } else {
+                        &evaluations[0].momenta[i]
+                    })
+                }));
+            // The oracle contracts the original gamma matrices, with the
+            // external metric sewn as a repeated Lorentz index. It uses no
+            // simplified trace or symbolic gamma identity.
+            let original = spenso::trace!(&Bispinor {}.new_rep(4); factors);
+            let mut nonzero = false;
+            for evaluation in &evaluations {
+                let expected = evaluation.evaluate(&original);
+                assert_eq!(
+                    expected,
+                    evaluation.evaluate_free_trace_result(&result, &slots, &closing)
+                );
+                nonzero |= !expected.is_zero();
+            }
+            assert!(nonzero, "late metric oracle must be nontrivial");
+        }
+    }
+}
+
+#[test]
+fn late_metrics_contract_four_dimensional_trace_polynomials() {
+    TraceEvaluation::assert_late_metric(4, false, false);
+    TraceEvaluation::assert_late_metric(10, false, false);
+}
+
+#[test]
+fn late_metrics_contract_axial_trace_polynomials() {
+    TraceEvaluation::assert_late_metric(12, true, false);
+}
+
+#[test]
+fn late_metrics_contract_generic_dimensional_trace_polynomials() {
+    TraceEvaluation::assert_late_metric(10, false, true);
 }
 
 // Keep each arity/pattern below the integration runner's timeout, without

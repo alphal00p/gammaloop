@@ -1866,7 +1866,9 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     {
         self.graph.dot_impl(
             &self.graph.full_filter(),
-            format!("tree = {}", self.expression_subgraph().string_label()),
+            // Base62 labels may start with a digit; DOT otherwise splits `1H`
+            // into a numeric value and a spurious node named `H`.
+            format!("tree = \"{}\"", self.expression_subgraph().string_label()),
             &|_| None,
             &|e| {
                 if let NetworkEdge::Slot(s) = e {

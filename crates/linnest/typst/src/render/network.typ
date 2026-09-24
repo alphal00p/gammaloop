@@ -24,14 +24,6 @@
   stroke: none,
 )
 
-#let tree-label(g) = {
-  let value = graph.info(g).global-statements.at("tree", default: none)
-  if value == none {
-    panic("network renderer: expected a graph-level `tree` statement")
-  }
-  str(value).trim("\"")
-}
-
 #let edge-depth(edge, depths) = {
   let depth = none
   let source = edge.at("source-half-edge", default: none)
@@ -54,7 +46,12 @@
 }
 
 #let record-label-value(record, fallback: none) = {
-  let value = record.at("label", default: none)
+  let data = record.at("data", default: (:))
+  let value = if type(data) == dictionary {
+    data.at("value", default: data.at("slot", default: none))
+  } else { none }
+  if value != none { return value }
+  if value == none { value = record.at("label", default: none) }
   let statements = record.at("statements", default: none)
   if value == none and statements != none {
     value = statements.at("label", default: none)
@@ -107,7 +104,10 @@
   } else if value == "∑" {
     "sum"
   } else {
-    classified-leaf-kind(value)
+    let data = record.at("data", default: (:))
+    if type(data) == dictionary and data.keys().contains("kind") {
+      data.kind
+    } else { classified-leaf-kind(value) }
   }
 }
 
@@ -145,7 +145,11 @@
   } else if value == "∑" {
     $sum$
   } else {
-    text(weight: "bold")[#display-leaf-label(value)]
+    let data = node.at("data", default: (:))
+    let label = if type(data) == dictionary and data.keys().contains("value") {
+      value
+    } else { display-leaf-label(value) }
+    text(weight: "bold")[#label]
   }
 }
 
@@ -330,23 +334,23 @@
   }
 }
 
-// Draw Spenso's executable graph. The tree annotation distinguishes expression
-// edges from tensor contractions; use the shared pipeline for typed overrides.
-#let render(dot, config: (:)) = {
+// Draw a network graph, distinguishing the expression tree from contraction
+// edges. Both native callers and the DOT example supply an explicit subgraph.
+#let render(g, tree, root: 0, config: (:)) = {
   set page(width: auto, height: auto, margin: 4pt, fill: none)
   set text(size: 8pt)
-  context for g in graph.parse(dot) {
-    let tree = subgraph.label(g, tree-label(g))
+  context {
     let tree-hedges = tree-hedge-set(tree)
     let depths = subgraph.node-depths(g, tree)
     let styled-nodes = graph.nodes(g)
-    g = graph.map(g, edge: edge => {
+    let g = graph.map(g, edge: edge => {
       if tree-edge-selected(tree-hedges, edge) {
         (statements: ("source-route-exit": "north", "sink-route-exit": "south"))
       } else {
         non-tree-route-exit-statements(styled-nodes, edge)
       }
     })
+    let style = config.at("style", default: none)
     let style = (
       node-label: node-label,
       node-label-style: tree-node-label-style,
@@ -354,7 +358,8 @@
       edge-label: non-tree-edge-label(tree-hedges),
       edge-label-style: tree-edge-label-style,
       unit: diagram-unit,
-    ) + config.at("style", default: (:))
+    ) + if style == none { (:) } else { style }
+    let drawing = config.at("draw", default: none)
     let drawing = (
       unit: diagram-unit,
       draw-node: draw-tree-node,
@@ -362,11 +367,11 @@
       sink-style: sink-edge-style(tree-hedges, depths),
       edge-omega: 0.35,
       padding: 0.4,
-    ) + config.at("draw", default: (:))
+    ) + if drawing == none { (:) } else { drawing }
     let layout-defaults = (
       layout-algo: "dot",
       subgraph: tree,
-      layout-roots: (0,),
+      layout-roots: (root,),
       tree-dx: 0.35,
       tree-dy: 2.2,
       route-label-width-cap: 0.,
@@ -378,4 +383,29 @@
       style: style, draw: drawing, layout-defaults: layout-defaults,
     ), g)
   }
+}
+
+// Native Python networks arrive as typed values through RenderConfig, exactly
+// like the Feynman graph builder. Preserve IDs instead of reconstructing them
+// from a DOT parser's insertion order.
+#let render-network(network, config: (:)) = {
+  let g = graph.build({
+    for item in network.nodes {
+      graph.node(id: item.id, kind: item.kind, value: item.value,
+        inspection: (node: item.id, kind: item.kind, value: item.value))
+    }
+    for item in network.edges {
+      let endpoints = ()
+      if item.source != none {
+        endpoints.push(graph.source(item.source.at(0), id: item.source.at(1)))
+      }
+      if item.sink != none {
+        endpoints.push(graph.sink(item.sink.at(0), id: item.sink.at(1)))
+      }
+      graph.edge(..endpoints, id: item.id, orientation: item.orientation,
+        slot: item.slot, inspection: (edge: item.id, slot: item.slot))
+    }
+  })
+  let tree = subgraph.select(g, edges: network.edges.filter(item => item.tree).map(item => item.id))
+  render(g, tree, root: network.root, config: config)
 }

@@ -5,6 +5,7 @@ edition = "2024"
 description = "Tensor identities for symbolica"
 
 [dependencies]
+ahash = { workspace = true }
 bincode = { workspace = true, optional = true }
 bincode-trait-derive = { workspace = true, optional = true }
 eyre = { workspace = true }

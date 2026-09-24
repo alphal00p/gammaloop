@@ -1,12 +1,103 @@
 //! Network graph rendering through Linnet's shared asset and SVG pipeline.
+use linnet::half_edge::involution::{Flow, HedgePair, Orientation};
 use pyo3::{
     prelude::*,
-    types::{PyBytes, PyDict},
+    types::{PyBytes, PyDict, PyList},
+};
+use spenso::network::{
+    StructureLessDisplay,
+    graph::{NetworkEdge, NetworkLeaf, NetworkNode},
+    store::TensorScalarStore,
 };
 
 use crate::network::SpensoNet;
 
 impl SpensoNet {
+    /// Copy native topology and leaf metadata into Linnet's typed configuration.
+    /// No textual graph format is involved; original node/edge/half-edge IDs survive.
+    fn render_snapshot<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let graph = &self.network.graph.graph;
+        let store = &self.network.store;
+        let nodes = PyList::empty(py);
+        for (id, _, node) in graph.iter_nodes() {
+            let (kind, value) = match node {
+                NetworkNode::Op(op) => ("operator", op.display_with(ToString::to_string)),
+                NetworkNode::Leaf(leaf) => match leaf {
+                    NetworkLeaf::LibraryKey { key, .. } => ("library", key.canonical().display()),
+                    NetworkLeaf::LocalTensor(index) => {
+                        ("tensor", store.get_tensor(*index).display())
+                    }
+                    NetworkLeaf::TensorSum(indices) => {
+                        ("tensor", format!("Sum of {} tensors", indices.len()))
+                    }
+                    NetworkLeaf::ScaledTensor(term) => (
+                        "tensor",
+                        match term.scale {
+                            Some(scale) => format!(
+                                "{} · {}",
+                                store.get_scalar_ref(scale),
+                                store.get_tensor(term.tensor).display()
+                            ),
+                            None => store.get_tensor(term.tensor).display(),
+                        },
+                    ),
+                    NetworkLeaf::ScaledTensorSum(terms) => {
+                        ("tensor", format!("Sum of {} scaled tensors", terms.len()))
+                    }
+                    NetworkLeaf::Scalar(scalar) => {
+                        ("scalar", store.get_scalar_ref(*scalar).to_string())
+                    }
+                },
+            };
+            let record = PyDict::new(py);
+            record.set_item("id", id.0)?;
+            record.set_item("kind", kind)?;
+            record.set_item("value", value)?;
+            nodes.append(record)?;
+        }
+        let edges = PyList::empty(py);
+        for (pair, id, edge) in graph.iter_edges() {
+            let (source, sink) = match pair {
+                HedgePair::Paired { source, sink } => (Some(source), Some(sink)),
+                HedgePair::Unpaired {
+                    hedge,
+                    flow: Flow::Source,
+                } => (Some(hedge), None),
+                HedgePair::Unpaired {
+                    hedge,
+                    flow: Flow::Sink,
+                } => (None, Some(hedge)),
+                HedgePair::Split { .. } => unreachable!("whole network graphs have no split edges"),
+            };
+            let record = PyDict::new(py);
+            record.set_item("id", id.0)?;
+            record.set_item("source", source.map(|h| (graph.node_id(h).0, h.0)))?;
+            record.set_item("sink", sink.map(|h| (graph.node_id(h).0, h.0)))?;
+            record.set_item(
+                "orientation",
+                match edge.orientation {
+                    Orientation::Default => "default",
+                    Orientation::Reversed => "reversed",
+                    Orientation::Undirected => "undirected",
+                },
+            )?;
+            record.set_item("tree", edge.data.is_head())?;
+            record.set_item(
+                "slot",
+                match edge.data {
+                    NetworkEdge::Head => String::new(),
+                    NetworkEdge::Slot(slot) => slot.to_string(),
+                },
+            )?;
+            edges.append(record)?;
+        }
+        let snapshot = PyDict::new(py);
+        snapshot.set_item("nodes", nodes)?;
+        snapshot.set_item("edges", edges)?;
+        snapshot.set_item("root", graph.node_id(self.network.graph.head()).0)?;
+        Ok(snapshot)
+    }
+
     pub(crate) fn prepare_render<'py>(
         &self,
         py: Python<'py>,
@@ -14,7 +105,7 @@ impl SpensoNet {
     ) -> PyResult<Bound<'py, PyAny>> {
         let linnet = py.import("linnet")?;
         let options = PyDict::new(py);
-        options.set_item("network-dot", self.to_dot())?;
+        options.set_item("network", self.render_snapshot(py)?)?;
         let kwargs = PyDict::new(py);
         kwargs.set_item("template_options", options)?;
         let mut effective = linnet.getattr("RenderConfig")?.call((), Some(&kwargs))?;
@@ -27,8 +118,8 @@ impl SpensoNet {
             PyBytes::new(
                 py,
                 concat!(
-                    "#import \"crates/linnest/typst/src/render/network.typ\": render\n",
-                    "#render(_linnet_config.options.at(\"network-dot\"), config: _linnet_config)\n",
+                    "#import \"crates/linnest/typst/src/render/network.typ\": render-network\n",
+                    "#render-network(_linnet_config.options.at(\"network\"), config: _linnet_config)\n",
                 )
                 .as_bytes(),
             ),

@@ -3124,6 +3124,7 @@ checksum = "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
 name = "idenso"
 version = "0.3.0"
 dependencies = [
+ "ahash 0.8.12",
  "base64 0.22.1",
  "bincode 2.0.1",
  "bincode-trait-derive",
@@ -6298,6 +6299,7 @@ dependencies = [
  "eyre",
  "idenso",
  "itertools 0.14.0",
+ "linnet",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
