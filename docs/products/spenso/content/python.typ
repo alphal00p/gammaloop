@@ -103,6 +103,8 @@ python -m marimo edit examples/notebooks/spenso_api_tour.py
 
 Mathematical objects expose notebook HTML and LaTeX displays. `TensorNetwork` draws its
 current executable graph in notebooks, using Linnest's operator and typed-leaf styles.
+The renderer passes native node, edge, and half-edge identities directly to Linnest's
+graph builder; DOT remains a separate export format.
 `render(config=...)` returns interactive SVG and `to_linnest(config=...)` returns its
 Typst entrypoint; both accept `linnet.RenderConfig`, like Feynman diagrams.
 `to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.

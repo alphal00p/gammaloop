@@ -290,28 +290,33 @@ def _(mo):
 
 
 @app.cell
-def _(S, TensorExpression, a, b, identity, identity_card, lorentz, mo, spin, word):
+def _(
+    S,
+    TensorExpression,
+    TensorName,
+    a,
+    b,
+    identity,
+    identity_card,
+    lorentz,
+    mo,
+    spin,
+    word,
+):
     p, q = S("gamma_tutorial::p", "gamma_tutorial::q")
-    gamma_head, metric_head = S("spenso::gamma", "spenso::g")
-    p_compact, q_compact = p(lorentz.to_expression()), q(lorentz.to_expression())
-    slash_p = TensorExpression(
-        gamma_head(spin(a).to_expression(), spin(b).to_expression(), p_compact)
-    )
-    slash_q = TensorExpression(
-        gamma_head(spin(a).to_expression(), spin(b).to_expression(), q_compact)
-    )
-    # These factors carry explicit endpoints, so make the chain-local versions
-    # through the registered in/out form rather than inventing sewing labels.
-    incoming, outgoing, chain_head = S("spenso::in", "spenso::out", "spenso::chain")
-    slash_sandwich = TensorExpression(
-        chain_head(
-            spin(a).to_expression(),
-            spin(b).to_expression(),
-            gamma_head(incoming, outgoing, p_compact),
-            gamma_head(incoming, outgoing, q_compact),
-            gamma_head(incoming, outgoing, p_compact),
+    gamma_head = TensorName.gamma().to_expression()
+    metric_head = TensorName.g().to_expression()
+
+    def slash(momentum):
+        return TensorExpression(
+            gamma_head(spin.to_expression(), spin.to_expression(), momentum)
         )
-    )
+
+    p_compact, q_compact = p(lorentz.to_expression()), q(lorentz.to_expression())
+    slash_p = slash(p_compact)(a, b)
+    slash_q = slash(q_compact)(a, b)
+    slash_sandwich = word(slash(p_compact), slash(q_compact), slash(p_compact))
+    incoming, outgoing, chain_head = S("spenso::in", "spenso::out", "spenso::chain")
     p_squared = metric_head(p_compact, p_compact)
     p_dot_q = metric_head(p_compact, q_compact)
     slash_check = identity_card(
@@ -320,7 +325,7 @@ def _(S, TensorExpression, a, b, identity, identity_card, lorentz, mo, spin, wor
         2 * p_dot_q * word(slash_p) - p_squared * word(slash_q),
     )
     slash_check
-    return chain_head, gamma_head, incoming, outgoing, slash_check
+    return chain_head, gamma_head, incoming, outgoing, slash, slash_check
 
 
 @app.cell(hide_code=True)
@@ -716,16 +721,23 @@ def _(mo):
 
 
 @app.cell
-def _(E, S, TensorExpression, TensorName, slash_length, slash_pattern):
+def _(
+    AUTO,
+    E,
+    S,
+    TensorExpression,
+    TensorName,
+    gamma,
+    lorentz,
+    slash,
+    slash_length,
+    slash_pattern,
+    tr,
+):
     from functools import reduce
     from operator import mul
 
-    _bis, _mink, _gamma, _trace, _cyclic, _in, _out, _g = S(
-        *(
-            f"spenso::{name}"
-            for name in ("bis", "mink", "gamma", "trace", "cyclic", "in", "out", "g")
-        )
-    )
+    _metric = TensorName.g().to_expression()
     _p, _q = (
         TensorName.vector(f"gamma_benchmark::{name}").to_expression()
         for name in ("p", "q")
@@ -738,15 +750,13 @@ def _(E, S, TensorExpression, TensorName, slash_length, slash_pattern):
         else ["p", "q"] * _m
     )
     _momenta = [{"p": _p, "q": _q}[name] for name in momentum_names]
-    _indices = [_mink(4, S(f"gamma_benchmark::mu{i}")) for i in range(_n)]
-    bare_trace = TensorExpression(
-        _trace(_bis(4), _cyclic(*(_gamma(_in, _out, i) for i in _indices)))
+    _indices = [lorentz(S(f"gamma_benchmark::mu{i}")) for i in range(_n)]
+    bare_trace = tr(*(gamma(AUTO, AUTO, i) for i in _indices))
+    momentum_factors = reduce(
+        mul, (p(i.to_expression()) for p, i in zip(_momenta, _indices))
     )
-    momentum_factors = reduce(mul, (p(i) for p, i in zip(_momenta, _indices)))
     indexed_trace = TensorExpression(momentum_factors * bare_trace.to_expression())
-    compact_trace = TensorExpression(
-        _trace(_bis(4), _cyclic(*(_gamma(_in, _out, p(_mink(4))) for p in _momenta)))
-    )
+    compact_trace = tr(*(slash(p(lorentz.to_expression())) for p in _momenta))
 
     _pp, _qq, _pq = S(
         "gamma_benchmark::pp", "gamma_benchmark::qq", "gamma_benchmark::pq"
@@ -760,10 +770,11 @@ def _(E, S, TensorExpression, TensorName, slash_length, slash_pattern):
                 scalar_oracle,
                 (2 * _pq * scalar_oracle - _pp * _qq * _previous).expand(),
             )
+    _p_compact, _q_compact = _p(lorentz.to_expression()), _q(lorentz.to_expression())
     scalar_expected = (
-        scalar_oracle.replace(_pp, _g(_p(_mink(4)), _p(_mink(4))))
-        .replace(_qq, _g(_q(_mink(4)), _q(_mink(4))))
-        .replace(_pq, _g(_p(_mink(4)), _q(_mink(4))))
+        scalar_oracle.replace(_pp, _metric(_p_compact, _p_compact))
+        .replace(_qq, _metric(_q_compact, _q_compact))
+        .replace(_pq, _metric(_p_compact, _q_compact))
     )
     return (
         bare_trace,
@@ -1849,8 +1860,74 @@ def _(mo):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Generic-dimensional traces and contraction progress
+
+    The 2026-09-24 comparison uses **symbolic Lorentz dimension D** and
+    **Tr(1) = 4**. Idenso now memoizes the factored pairing recurrence within
+    each call. Canonical compact slashes also reduce adjacent squares and
+    $\not p\not q\not p=2(p\cdot q)\not p-p^2\not q$ inside that evaluator,
+    avoiding intermediate trace expressions and repeated cleanup.
+
+    Warm milliseconds on the same shared EPYC host, optimized Rust and
+    Symbolica main `06906976`. Idenso uses in-process wall time including output
+    destruction; FORM 5.0.0 uses its internal `tracen`-plus-sort CPU timer,
+    amortized over independent expressions. Parsing and startup are excluded.
+
+    | Free gammas | Previous Idenso | Current, factored | FORM, expanded | Idenso including expansion |
+    |--:|--:|--:|--:|--:|
+    | 8 | 2.768 | 0.178 | 0.038 | 0.364 |
+    | 10 | 26.658 | 0.530 | 0.345 | 3.250 |
+    | 12 | 272.400 | 2.222 | 3.983 | 44.122 |
+    | 14 | 3441.666 | 19.557 | 52.667 | 1123.733 |
+
+    The fourteen-gamma factored result improves by **176×**, but this does
+    **not establish parity**: FORM constructs the full polynomial, while Idenso
+    retains sums inside products. Requiring the expanded result exposes a
+    substantial remaining cost. These diagnostic expansions apply only to
+    standalone trace polynomials, never to graph numerators or spectators.
+
+    Repeated compact words improve too. A fourteen-slash paired word takes
+    **13.5 µs** versus FORM's **0.77 µs**; the alternating word takes **37.9 µs**
+    versus **9.5 µs**. The corresponding Idenso improvements are **14.7×** and
+    **102.5×**. Mixed explicit contracted indices still trail FORM more widely.
+
+    An unchanged rerun of the fourteen-gamma generic result improves from
+    **345.1 to 144.6 ms**, versus FORM's **46.2 ms**. The result contains
+    2.68 million tree nodes. One scan now checks the symbols needed by several
+    passes, and final dot normalization is skipped when subsequent passes
+    leave the already-normalized result unchanged. Reruns still need work.
+
+    The same iteration factors terminal 4D kernels and resolves metric paths
+    before rebuilding products. Full axial-twelve simplification improves
+    **2.356 → 0.621 ms**, ordinary free-twelve **6.422 → 2.794 ms**, and public
+    Schoonschip on a 64-metric chain **738.4 → 34.7 µs**. FORM's separately
+    measured metric-chain CPU time is **3.2 µs**. A single metric hit is slightly
+    slower (**2.90 → 3.11 µs**); the gains depend on expression shape.
+
+    Full symbolic generic-D polynomials agree with FORM through fourteen
+    gammas. Twenty before/after trace comparisons and eighteen metric cases
+    agree exactly; independent HEP network checks and six-dimensional Clifford
+    checks also pass. Validation records **355 passing Idenso tests** and
+    **42 passing HEP tests**. The existing tensor-display snapshot failure
+    remains, with 23 tests skipped. Scoped Clippy passes with warnings denied.
+
+    A remaining limitation is multiplying an already-evaluated trace by an
+    external metric: contraction across the factored sum can remain incomplete.
+    This also occurs in the archived baseline. Supplying the metric before
+    evaluating the trace follows the complete contraction route.
+
+    Raw samples, generated FORM programs, source hashes, validation and the
+    standalone generic-D driver are preserved in
+    `examples/notebooks/tensor_contraction_parity.json`.
+    """)
+    return
+
+
 @app.cell
-def _(E, S, TensorExpression, TensorName, form_executable, lorentz):
+def _(E, S, TensorExpression, TensorName, form_executable, g5, lorentz, slash, tr):
     from itertools import permutations
 
     from symbolica import Expression
@@ -1860,24 +1937,9 @@ def _(E, S, TensorExpression, TensorName, form_executable, lorentz):
         TensorNetwork,
     )
 
-    _bis, _mink, _gamma, _g5, _trace, _cyclic, _inside, _outside, _metric = S(
-        *(
-            f"spenso::{name}"
-            for name in (
-                "bis",
-                "mink",
-                "gamma",
-                "gamma5",
-                "trace",
-                "cyclic",
-                "in",
-                "out",
-                "g",
-            )
-        )
-    )
     _names = [TensorName.vector(f"gamma_hep::p{i}") for i in range(10)]
-    _momenta = [name.to_expression()(_mink(4)) for name in _names]
+    _metric = TensorName.g().to_expression()
+    _momenta = [name.to_expression()(lorentz.to_expression()) for name in _names]
     _base = [
         [2, 1, 0, 1],
         [1, 2, 1, -1],
@@ -1903,10 +1965,10 @@ def _(E, S, TensorExpression, TensorName, form_executable, lorentz):
     _expressions = {}
     for _length in (4, 8, 10):
         for _axial in (False, True):
-            _factors = [_gamma(_inside, _outside, p) for p in _momenta[:_length]]
+            _factors = [slash(p) for p in _momenta[:_length]]
             if _axial:
-                _factors.insert(0, _g5(_inside, _outside))
-            _original = _trace(_bis(4), _cyclic(*_factors))
+                _factors.insert(0, g5)
+            _original = tr(*_factors).to_expression()
             _expressions[_length, _axial] = {
                 "Original gamma network": _original,
                 "Idenso metric/epsilon network": TensorExpression(_original)
@@ -2024,6 +2086,419 @@ def _(hep_component_checks, hep_component_form_sources, mo):
 
 
 @app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Ordered gluonic-ladder Feynman rules
+
+    This benchmark preserves the supplied eight-vertex routing, the six-term
+    three-gluon Lorentz rule, and the substitution order **1 → 8**. It contracts
+    the two external Lorentz ports with `k10` and `k20`. No on-shell identities,
+    color factors, couplings, or propagator denominators are included.
+    The supplied topology has eleven internal edges and eight vertices, hence
+    **four loops**, despite the original three-loop label.
+
+    The reference FORM script sorts and contracts after *each* replacement.
+    Its intermediate term counts are **6, 34, 192, 1,084, 6,069, 10,947,
+    23,937, 9,652**. Changing substitution order changes the intermediate work.
+
+    Two timings answer different questions. **Rule substitution** applies the
+    eight replacements with `rhs_cache_size=1000` and a held RHS expansion;
+    the vertex product stays factored. **Ordered scalar reduction** additionally
+    expands and contracts the accumulated vertices after every replacement.
+    Unprocessed vertex factors are held outside that accumulator; they multiply
+    every intermediate term and do not change its term count.
+    Only the latter has the same 9,652-term endpoint as FORM. This explicitly
+    requested polynomial expansion is confined to this standalone benchmark.
+
+    **Recorded validation, 2026-09-24:** an optimized native Spenso build took
+    **54.970 s** for the full reduction. FORM 5.0.0 took **0.744 s** warm process
+    time (three-run median; **0.72 s** reported CPU time), a wall-time ratio of
+    **73.9×**. Rule substitution alone took **0.424 ms** warm (five-run median).
+    All eight term counts and every coefficient of the final polynomial agreed.
+    These are shared-host measurements, recorded with build information in
+    `examples/notebooks/gluon_ladder_timing.json`; the table below measures the
+    current session when the full-reduction button is pressed.
+    """)
+    return
+
+
+@app.cell
+def _(E, S, TensorName, lorentz, prod):
+    from symbolica import T
+
+    ladder_momenta = {
+        i: TensorName.vector(f"gluon_ladder::k{i}").to_expression()(
+            lorentz.to_expression()
+        )
+        for i in (0, 1, 2, 3, 4, 10, 20)
+    }
+    _k = ladder_momenta
+    _mu = {i: lorentz(S(f"gluon_ladder::mu{i}")).to_expression() for i in range(1, 12)}
+    ladder_metric = TensorName.g().to_expression()
+    _vx = S("gluon_ladder::vx")
+    # All three momenta enter each vertex. The final three arguments are
+    # Lorentz slots, or compact momenta for the two external polarizations.
+    _routing = [
+        (-_k[0], _k[0] - _k[1], _k[1], _k[10], _mu[1], _mu[8]),
+        (-_k[1], _k[2], _k[1] - _k[2], _mu[1], _mu[2], _mu[9]),
+        (-_k[2], _k[3], _k[2] - _k[3], _mu[2], _mu[3], _mu[10]),
+        (-_k[3], _k[4], _k[3] - _k[4], _mu[3], _mu[4], _mu[11]),
+        (-_k[4], _k[0], _k[4] - _k[0], _mu[4], _k[20], _mu[5]),
+        (-_k[4] + _k[0], -_k[3] + _k[4], _k[3] - _k[0], _mu[5], _mu[11], _mu[6]),
+        (-_k[3] + _k[0], -_k[2] + _k[3], _k[2] - _k[0], _mu[6], _mu[10], _mu[7]),
+        (-_k[2] + _k[0], -_k[1] + _k[2], _k[1] - _k[0], _mu[7], _mu[9], _mu[8]),
+    ]
+    assert all(sum(vertex[:3], E("0")) == E("0") for vertex in _routing)
+    ladder_vertices = [_vx(i, *vertex) for i, vertex in enumerate(_routing, 1)]
+    ladder_input = prod(ladder_vertices)
+    _p1, _p2, _p3, _i1, _i2, _i3 = S(
+        *(f"gluon_ladder::{name}_" for name in ("p1", "p2", "p3", "i1", "i2", "i3"))
+    )
+    _g = ladder_metric
+    ladder_rhs = (
+        -_g(_i1, _i3) * _g(_p1, _i2)
+        + _g(_i1, _i2) * _g(_p1, _i3)
+        + _g(_i2, _i3) * _g(_p2, _i1)
+        - _g(_i1, _i2) * _g(_p2, _i3)
+        - _g(_i2, _i3) * _g(_p3, _i1)
+        + _g(_i1, _i3) * _g(_p3, _i2)
+    ).hold(T().expand())
+    ladder_patterns = [_vx(i, _p1, _p2, _p3, _i1, _i2, _i3) for i in range(1, 9)]
+    ladder_expected_counts = (6, 34, 192, 1084, 6069, 10947, 23937, 9652)
+    return (
+        ladder_expected_counts,
+        ladder_input,
+        ladder_metric,
+        ladder_momenta,
+        ladder_patterns,
+        ladder_rhs,
+        ladder_vertices,
+    )
+
+
+@app.cell
+def _(ladder_input, ladder_patterns, ladder_rhs, median, perf_counter):
+    ladder_substitution_samples = []
+    for _round in range(6):
+        _result = ladder_input
+        _start = perf_counter()
+        for _pattern in ladder_patterns:
+            _result = _result.replace(_pattern, ladder_rhs, rhs_cache_size=1000)
+        ladder_substitution_samples.append(perf_counter() - _start)
+        if _round == 0:
+            ladder_factored = _result
+        else:
+            assert _result == ladder_factored
+    ladder_substitution_seconds = median(ladder_substitution_samples[1:])
+    return ladder_substitution_samples, ladder_substitution_seconds
+
+
+@app.cell
+def _(mo):
+    run_ladder_reduction = mo.ui.run_button(
+        label="Time the full ordered ladder reduction (can take minutes)"
+    )
+    run_ladder_reduction
+    return (run_ladder_reduction,)
+
+
+@app.cell
+def _(
+    E,
+    TensorExpression,
+    ladder_expected_counts,
+    ladder_patterns,
+    ladder_rhs,
+    ladder_vertices,
+    mo,
+    perf_counter,
+    run_ladder_reduction,
+):
+    ladder_stages = []
+    ladder_result = None
+    if run_ladder_reduction.value:
+        _result = E("1")
+        _cumulative = 0.0
+        with mo.status.progress_bar(
+            total=8, title="Applying ladder vertices"
+        ) as _progress:
+            for _i, (_vertex, _pattern) in enumerate(
+                zip(ladder_vertices, ladder_patterns), 1
+            ):
+                _start = perf_counter()
+                _factor = _vertex.replace(_pattern, ladder_rhs, rhs_cache_size=1000)
+                # Unprocessed vertices remain spectator factors, just as in FORM.
+                # Distribute the current product before contraction, then collect
+                # the scalar products and expand the resulting polynomial.
+                _result = (
+                    TensorExpression((_result * _factor).expand())
+                    .schoonschip()
+                    .normalize_dots()
+                    .to_expression()
+                    .expand()
+                )
+                _seconds = perf_counter() - _start
+                _cumulative += _seconds
+                _terms = sum(1 for _ in _result.terms())
+                assert _terms == ladder_expected_counts[_i - 1], (_i, _terms)
+                ladder_stages.append(
+                    {
+                        "vertex": _i,
+                        "Spenso terms": _terms,
+                        "Spenso step wall (s)": _seconds,
+                        "Spenso cumulative wall (s)": _cumulative,
+                    }
+                )
+                _progress.update()
+        ladder_result = _result
+    return ladder_result, ladder_stages
+
+
+@app.cell
+def _():
+    # Supplied gluon.frm, preserving its rules, routing and sort order.
+    ladder_form_source = r"""#-
+format nospaces;
+Dimension 4;
+Auto Index mu;
+Auto Vector k;
+CF vx, f;
+S x;
+
+L F = vx(1,-k0, k0-k1, k1, k10, mu1, mu8)*
+    vx(2,-k1, k2, k1-k2, mu1, mu2, mu9)*
+    vx(3,-k2, k3, k2-k3, mu2, mu3, mu10)*
+    vx(4,-k3, k4, k3-k4, mu3, mu4, mu11)*
+    vx(5,-k4, k0, k4-k0, mu4, k20, mu5)*
+    vx(6,-k4+k0, -k3+k4, k3-k0, mu5, mu11, mu6)*
+    vx(7,-k3+k0, -k2+k3, k2-k0, mu6, mu10, mu7)*
+    vx(8,-k2+k0, -k1+k2, k1-k0, mu7, mu9, mu8);
+
+#do i=1,8
+    id vx(`i', k1?, k2?, k3?, mu1?, mu2?, mu3?) =
+        (- d_(mu1, mu3) * d_(k1, mu2)
+                    + d_(mu1, mu2) * d_(k1, mu3)
+                    + d_(mu2, mu3) * d_(k2, mu1)
+                    - d_(mu1, mu2) * d_(k2, mu3)
+                    - d_(mu2, mu3) * d_(k3, mu1)
+                    + d_(mu1, mu3) * d_(k3, mu2)
+                    );
+
+*    Print +s;
+    .sort:gluon-`i';
+#enddo
+
+*Print +s;
+.end
+"""
+    return (ladder_form_source,)
+
+
+@app.cell
+def _(
+    form_executable, ladder_expected_counts, ladder_form_source, median, perf_counter
+):
+    import re as _re
+    import subprocess as _subprocess
+    import tempfile as _tempfile
+    from pathlib import Path as _Path
+
+    ladder_form_stages = []
+    ladder_form_process_samples = []
+    ladder_form_polynomial = None
+    ladder_form_stdout = None
+    if form_executable:
+        with _tempfile.TemporaryDirectory(prefix="gluon-ladder-form-") as _directory:
+            _path = _Path(_directory) / "gluon.frm"
+            _path.write_text(ladder_form_source)
+            for _round in range(4):
+                _start = perf_counter()
+                _run = _subprocess.run(
+                    [form_executable, "-q", str(_path)],
+                    cwd=_directory,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                _seconds = perf_counter() - _start
+                if _run.returncode:
+                    raise RuntimeError(
+                        f"FORM ladder failed:\n{_run.stdout}\n{_run.stderr}"
+                    )
+                _stages = _re.findall(
+                    r"Time =\s*([\d.]+) sec\s+Generated terms =\s*(\d+)"
+                    r"\s+F\s+Terms in output =\s*(\d+)\s+gluon-(\d+)"
+                    r"\s+Bytes used\s*=\s*(\d+)",
+                    _run.stdout,
+                )
+                assert (
+                    tuple(int(stage[2]) for stage in _stages) == ladder_expected_counts
+                ), _run.stdout
+                assert [int(stage[3]) for stage in _stages] == list(range(1, 9))
+                if _round:
+                    ladder_form_process_samples.append(_seconds)
+                    ladder_form_stages.append(_stages)
+            ladder_form_stdout = _run.stdout
+            ladder_form_stages = [
+                {
+                    "vertex": _i + 1,
+                    "FORM terms": ladder_expected_counts[_i],
+                    "FORM generated terms": int(ladder_form_stages[0][_i][1]),
+                    "FORM cumulative CPU (s)": median(
+                        float(run[_i][0]) for run in ladder_form_stages
+                    ),
+                }
+                for _i in range(8)
+            ]
+            # A separate, untimed run exports the exact polynomial for validation.
+            _path.write_text(
+                ladder_form_source.replace(
+                    ".end", '#write <polynomial.txt> "%E",F\n.end'
+                )
+            )
+            _check = _subprocess.run(
+                [form_executable, "-q", str(_path)],
+                cwd=_directory,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if _check.returncode:
+                raise RuntimeError(
+                    f"FORM polynomial export failed:\n{_check.stdout}\n{_check.stderr}"
+                )
+            ladder_form_polynomial = (_Path(_directory) / "polynomial.txt").read_text()
+    return (
+        ladder_form_polynomial,
+        ladder_form_process_samples,
+        ladder_form_stages,
+        ladder_form_stdout,
+    )
+
+
+@app.cell
+def _(E, S, ladder_form_polynomial, ladder_metric, ladder_momenta, ladder_result):
+    import re as _re
+
+    ladder_exact_match = None
+    if ladder_result is not None and ladder_form_polynomial is not None:
+        # Compare complete polynomials in independent scalar products. Term
+        # counts alone cannot certify signs, coefficients or momentum routing.
+        _scalar = ladder_result
+        for _i, _p in ladder_momenta.items():
+            for _j, _q in ladder_momenta.items():
+                if _i <= _j:
+                    _scalar = _scalar.replace(
+                        ladder_metric(_p, _q), S(f"gluon_ladder::s{_i}x{_j}")
+                    )
+        _reference = E(
+            _re.sub(
+                r"k(\d+)\.k(\d+)",
+                lambda match: "gluon_ladder::s{}x{}".format(
+                    *sorted(map(int, match.groups()))
+                ),
+                ladder_form_polynomial.strip().rstrip(";"),
+            )
+        )
+        ladder_exact_match = _scalar == _reference
+        assert ladder_exact_match, "Spenso and FORM ladder polynomials differ"
+    return (ladder_exact_match,)
+
+
+@app.cell(hide_code=True)
+def _(
+    form_executable,
+    form_version,
+    ladder_exact_match,
+    ladder_expected_counts,
+    ladder_form_process_samples,
+    ladder_form_source,
+    ladder_form_stages,
+    ladder_form_stdout,
+    ladder_stages,
+    ladder_substitution_samples,
+    ladder_substitution_seconds,
+    median,
+    mo,
+):
+    _rows = []
+    _reference_cpu = (0.00, 0.00, 0.00, 0.00, 0.02, 0.17, 0.36, 0.49)
+    for _i, _terms in enumerate(ladder_expected_counts):
+        _row = {
+            "vertex": _i + 1,
+            "reference terms": _terms,
+            "supplied FORM cumulative CPU (s)": _reference_cpu[_i],
+        }
+        if ladder_form_stages:
+            _row.update(ladder_form_stages[_i])
+        if ladder_stages:
+            _row.update(ladder_stages[_i])
+        _rows.append(_row)
+    _notes = [
+        (
+            f"**Rule substitution only:** first call {1000 * ladder_substitution_samples[0]:.3f} ms; "
+            f"five-run warm median {1000 * ladder_substitution_seconds:.3f} ms. "
+            "This result remains factored and is not the 9,652-term scalar polynomial."
+        ),
+        (
+            "Stage times exclude input construction, term counting, validation and display. "
+            "Spenso reports a single full run's wall time; FORM statistics report cumulative "
+            "CPU time rounded to 0.01 s. The supplied 0.49 s is a reference measurement, "
+            "not a measurement of this notebook's machine. Use an optimized community build "
+            "for performance comparisons."
+        ),
+    ]
+    if form_executable:
+        _notes.append(
+            f"**Local FORM:** `{form_version}`. Warm process median "
+            f"{median(ladder_form_process_samples):.3f} s over three measured runs, "
+            "including startup, parsing and sorting; polynomial export is untimed."
+        )
+    else:
+        _notes.append(
+            "Native FORM is unavailable here. The table shows the supplied reference; "
+            "set `FORM_EXECUTABLE` in a native notebook session to measure it locally."
+        )
+    if ladder_stages:
+        _seconds = ladder_stages[-1]["Spenso cumulative wall (s)"]
+        _notes.append(
+            f"**Full Spenso reduction:** {_seconds:.3f} s, with all eight term counts checked."
+        )
+        if ladder_form_process_samples:
+            _notes.append(
+                f"Spenso in-process wall / FORM process wall = "
+                f"{_seconds / median(ladder_form_process_samples):.2f}×."
+            )
+    else:
+        _notes.append(
+            "Run the full reduction above to fill in the Spenso stage timings."
+        )
+    if ladder_exact_match:
+        _notes.append(
+            "**Exact check passed:** all coefficients of the 9,652-term scalar polynomial agree with FORM."
+        )
+    mo.vstack(
+        [
+            *(mo.md(note) for note in _notes),
+            mo.ui.table(_rows, selection=None, pagination=False, show_download=True),
+            mo.accordion(
+                {
+                    "Reference FORM source": mo.md(
+                        f"```form\n{ladder_form_source}\n```"
+                    ),
+                    "Local FORM output": mo.md(
+                        f"```text\n{ladder_form_stdout or 'Not run'}\n```"
+                    ),
+                }
+            ),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
 def _(
     boundary_checks,
     benchmark_results,
@@ -2039,6 +2514,9 @@ def _(
     slash_check,
     trace_checks,
     trace_terms,
+    ladder_substitution_seconds,
+    ladder_form_stages,
+    ladder_exact_match,
 ):
     mo.Html(
         '<p data-notebook-ready="gamma_simplification">All identity, boundary and HEP component checks passed.</p>'

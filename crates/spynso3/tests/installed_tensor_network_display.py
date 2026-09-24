@@ -1,5 +1,6 @@
 """Linnest renders executable networks without evaluating their source formula."""
 
+import re
 import unittest
 
 import linnet
@@ -23,6 +24,12 @@ class NetworkDisplayTests(unittest.TestCase):
         expression = network.expression().to_expression()
         before = network.to_dot()
         html = network.to_html()
+        self.assertRegex(before, r'tree = "[0-9A-Za-z]+"')
+        # Numeric-leading tree IDs must not become extra DOT nodes.
+        node_ids = set(
+            re.findall(r'data-linnet-kind="node" data-linnet-id="(\d+)"', html)
+        )
+        self.assertEqual(node_ids, {"0", "1", "2"})
         self.assertIn("TensorNetwork", html)
         self.assertIn('data-linnet-kind="node"', html)
         self.assertIn('data-linnet-kind="edge"', html)
@@ -54,8 +61,9 @@ class NetworkDisplayTests(unittest.TestCase):
         config = linnet.RenderConfig(title="Network preview")
         source = network.to_linnest(config=config)
         self.assertIn("Network preview", source)
-        self.assertIn("network-dot", source)
-        self.assertNotIn('read("network.dot")', source)
+        self.assertIn("render-network", source)
+        self.assertNotIn("digraph", source)
+        self.assertNotIn("network-dot", source)
         # The entrypoint contains its data; Linnet supplies the shared assets.
         prepared = linnet.PreparedRender.from_sources({"main.typ": source.encode()})
         self.assertIn("<svg", prepared.to_svg())

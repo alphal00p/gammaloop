@@ -6,7 +6,8 @@ import decimal
 import linnet
 import symbolica.core
 import typing
-from symbolica.core import ComplexFloat, Condition, Expression, Float, FormattedOutput, HeldExpression, PatternRestriction
+from symbolica import ComplexFloat, Float
+from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction
 
 AUTO: _AutoIndex
 _: _AutoIndex
@@ -2834,6 +2835,8 @@ class TensorName:
     def __new__(cls, name: builtins.str, *, rank: typing.Optional[builtins.int] = None, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, is_flat: typing.Optional[builtins.bool] = None, is_scalar: typing.Optional[builtins.bool] = None, is_real: typing.Optional[builtins.bool] = None, is_integer: typing.Optional[builtins.bool] = None, is_positive: typing.Optional[builtins.bool] = None, tags: typing.Optional[typing.Sequence[builtins.str]] = None, aliases: typing.Optional[typing.Sequence[builtins.str]] = None, normalization: typing.Optional[symbolica.core.Transformer | typing.Callable[[symbolica.core.Expression], symbolica.core.Expression]] = None, print: typing.Optional[dict[str, str] | typing.Callable[..., str | None]] = None, derivative: typing.Optional[typing.Any] = None, series: typing.Optional[typing.Any] = None, eval: typing.Optional[typing.Any] = None, data: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | str | dict | list | bytes] = None) -> TensorName:
         r"""
         Create a new tensor name with optional mathematical properties.
+        With only a name, reuse an existing tensor symbol and its attributes,
+        callbacks and custom printers, as Symbolica's S(name) does.
 
         Parameters
         ----------

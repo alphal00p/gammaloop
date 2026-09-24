@@ -1364,7 +1364,7 @@ impl SpensoNet {
     }
 
     /// Return the computational graph in Graphviz DOT format.
-    pub(crate) fn to_dot(&self) -> String {
+    fn to_dot(&self) -> String {
         self.network.dot_pretty()
     }
 

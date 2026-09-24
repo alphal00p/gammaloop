@@ -56,6 +56,21 @@ class Catalogue(HTMLParser):
 
 
 class LibraryDisplayTests(unittest.TestCase):
+    def test_name_only_lookup_keeps_printers_and_explicit_options_still_validate(self):
+        original = TensorName(
+            "library_display::reused",
+            is_symmetric=True,
+            print={"typst": "macron(R)"},
+        )
+        reused = TensorName("library_display::reused")
+        self.assertEqual(reused.to_expression(), original.to_expression())
+        self.assertEqual(
+            reused.to_expression().get_attributes(),
+            original.to_expression().get_attributes(),
+        )
+        with self.assertRaises(TypeError):
+            TensorName("library_display::reused", is_symmetric=False)
+
     def test_empty_catalogue_explains_factories(self):
         library = TensorLibrary()
         html = library.to_html()

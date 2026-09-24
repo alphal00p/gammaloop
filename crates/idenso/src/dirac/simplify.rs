@@ -8,7 +8,7 @@ use spenso::{
     structure::{
         abstract_index::AbstractIndex,
         representation::{LibraryRep, Minkowski, RepName},
-        slot::{DummyAind, ParseableAind},
+        slot::{DummyAind, ParseableAind, SlotMatcher},
     },
     trace,
 };
@@ -423,7 +423,7 @@ impl<'settings> DiracSimplifier<'settings> {
 
     pub(crate) fn simplify(self, expr: AtomView) -> Atom {
         if self.settings.evaluate_traces
-            && let Some(result) = Self::evaluate_short_free_trace(expr)
+            && let Some(result) = Self::evaluate_terminal_trace(expr)
         {
             return result;
         }
@@ -436,14 +436,49 @@ impl<'settings> DiracSimplifier<'settings> {
             // Metric contraction can close a chain or connect separate chains.
             // Include their collection in the fixed point of the complete pass.
             // Close metric-linked chains before rewriting, including inert traces.
-            let next = self
-                .settings
-                .rewrite_expression(
-                    expr.schoonschip_with_settings(&metric_settings)
-                        .collect_gamma_chains(),
-                )
-                .simplify_epsilon()
-                .normalize_dots();
+            let normalized = expr.schoonschip_with_settings(&metric_settings);
+            // Share the absence check across the remaining passes. Large trace
+            // results need no chain collection or Dirac rewrite, and ordinary
+            // generic-dimensional traces contain no epsilon either.
+            let (mut collect, mut rewrite, mut epsilon) = (false, false, false);
+            let bispinor: LibraryRep = Bispinor {}.into();
+            let [bispinor, chain, bracket, trace, epsilon_head] = [
+                bispinor.symbol(),
+                T.chain,
+                T.bracket,
+                T.trace,
+                *crate::epsilon::EPSILON_SYMBOL,
+            ]
+            .map(|head| head.get_id());
+            normalized.visitor(&mut |node| {
+                let head = match node {
+                    AtomView::Fun(function) => function.get_symbol_id(),
+                    AtomView::Var(variable) => variable.get_symbol_id(),
+                    _ => return true,
+                };
+                collect |= head == bispinor || head == chain || head == bracket;
+                rewrite |= head == chain || (self.settings.evaluate_traces && head == trace);
+                epsilon |= head == epsilon_head;
+                !(collect && rewrite && epsilon)
+            });
+            let mut next = if collect {
+                normalized.collect_gamma_chains()
+            } else {
+                normalized.clone()
+            };
+            // A preceding pass can introduce work absent from the initial scan:
+            // collection closes traces, and a trace rewrite can emit epsilons.
+            if rewrite || next != normalized {
+                next = self.settings.rewrite_expression(next);
+            }
+            if epsilon || next != normalized {
+                next = next.simplify_epsilon();
+            }
+            // Schoonschip already normalized dots. Repeat that walk only when a
+            // later operation changed its result.
+            if next != normalized {
+                next = next.normalize_dots();
+            }
 
             if next == expr {
                 return next;
@@ -453,11 +488,11 @@ impl<'settings> DiracSimplifier<'settings> {
         }
     }
 
-    /// A standalone trace with distinct explicit indices has no contractions
-    /// left after kernel evaluation: each monomial uses each index once, in
-    /// metric pairs and, for an axial trace, one epsilon. Products with
-    /// spectators still use the complete pass.
-    fn evaluate_short_free_trace(expr: AtomView<'_>) -> Option<Atom> {
+    /// Evaluate standalone traces after reducing summed indices within the
+    /// word. The surviving explicit indices occur once per monomial and compact
+    /// arguments produce scalar dots, so no outer tensor contraction remains.
+    /// Products with spectators still use the complete pass.
+    fn evaluate_terminal_trace(expr: AtomView<'_>) -> Option<Atom> {
         let AtomView::Fun(f) = expr else {
             return None;
         };
@@ -482,33 +517,81 @@ impl<'settings> DiracSimplifier<'settings> {
         } else {
             TRACE_GAMMA_RECURSION
         };
-        let indices = Self::gamma_mink_index_sequence_for(rule, &factors)?;
-        if (axial && indices.len() > 14)
-            || indices
-                .iter()
-                .enumerate()
-                .any(|(i, &index)| !is_minkowski_slot(index) || indices[..i].contains(&index))
-        {
+        let mut indices = Self::gamma_mink_index_sequence_for(rule, &factors)?;
+        let mut slots = SlotMatcher::default();
+        let mut repeated = 0;
+        for (position, &index) in indices.iter().enumerate() {
+            if is_minkowski_slot(index) {
+                // More than two occurrences do not define an Einstein sum.
+                // Preserve the complete pass's existing ordered substitutions.
+                let occurrences = indices[..position].iter().filter(|&&i| i == index).count();
+                if occurrences > usize::from(!axial) {
+                    return None;
+                }
+                repeated += occurrences;
+            } else {
+                let AtomView::Fun(vector) = index else {
+                    return None;
+                };
+                if axial
+                    || !vector.get_symbol().has_tag(&T.rank1)
+                    || !slots
+                        .vector_argument(vector)
+                        .and_then(|argument| slots.compact_representation(argument))
+                        .is_some_and(|rep| rep.head() == *MINKOWSKI_SYMBOL && rep.is_base())
+                {
+                    return None;
+                }
+            }
+        }
+        if axial && indices.len() > 14 {
             return None;
         }
-        if axial && indices.len() < 4 {
+        if indices.len() % 2 == 1 || (axial && indices.len() < 4) {
             return Some(Atom::Zero);
         }
-        if axial
-            || (has_four_dimensional_trace_rep(rep)
-                && factors
-                    .iter()
-                    .all(|factor| factor.gamma_dimension().is_some_and(is_four_dimension)))
+        let mut coefficient = Atom::num(1);
+        if !axial {
+            // These identities emit only a scalar and another word. Keep the
+            // factors borrowed instead of materializing shorter trace atoms and
+            // scheduling whole-expression normalization after each contraction.
+            while repeated > 0 {
+                let (start, distance) = Self::trace_repeated_pair(&factors, is_minkowski_slot)?;
+                let dimension = factors[start].gamma_dimension()?;
+                let factor = match distance {
+                    1 => dimension.to_owned(),
+                    2 => Atom::num(2) - dimension,
+                    distance if distance.is_multiple_of(2) && is_four_dimension(dimension) => {
+                        Atom::num(-2)
+                    }
+                    _ => return None,
+                };
+                coefficient *= factor;
+                factors.rotate_left(start);
+                // gamma(mu) A_odd gamma(mu) = -2 reverse(A_odd) in 4D.
+                // The one-gamma interior is valid in D dimensions with 2-D.
+                factors[1..distance].reverse();
+                factors.remove(distance);
+                factors.remove(0);
+                repeated -= 1;
+            }
+            indices = Self::gamma_mink_index_sequence_for(rule, &factors)?;
+        }
+        let compact = !axial && indices.iter().all(|&index| !is_minkowski_slot(index));
+        let result = if !compact
+            && (axial
+                || (has_four_dimensional_trace_rep(rep)
+                    && factors
+                        .iter()
+                        .all(|factor| factor.gamma_dimension().is_some_and(is_four_dimension))))
         {
-            trace_kernel::evaluate(&indices, axial, trace_kernel::TraceOutput::Factored)
+            trace_kernel::evaluate(&indices, axial, trace_kernel::TraceOutput::Factored)?
         } else {
             let terminal = trace!(rep; std::iter::empty::<Atom>());
             let trace_unit = Self::simplify_trace_terminal(terminal.as_view())?;
-            Some(trace_kernel::evaluate_generic(
-                &indices,
-                trace_unit.as_view(),
-            ))
-        }
+            trace_kernel::evaluate_generic(&indices, trace_unit.as_view(), compact)
+        };
+        Some(coefficient * result)
     }
 
     fn simplify_chain_node(self, f: FunView) -> Option<Atom> {
@@ -1371,6 +1454,7 @@ impl DiracSimplifier<'_> {
             return Some(trace_kernel::evaluate_generic(
                 &trace_mink_indices,
                 trace_unit.as_view(),
+                false,
             ));
         }
 
@@ -1434,12 +1518,15 @@ impl DiracSimplifier<'_> {
         (priority, distance)
     }
 
-    fn rotate_trace_to_repeated_pair<'a>(factors: &[DiracFactor<'a>]) -> Vec<DiracFactor<'a>> {
+    fn trace_repeated_pair(
+        factors: &[DiracFactor<'_>],
+        admits_index: impl Fn(AtomView<'_>) -> bool,
+    ) -> Option<(usize, usize)> {
         let mut best = None;
         for (i, left) in factors.iter().enumerate() {
             for (j, right) in factors.iter().enumerate().skip(i + 1) {
                 if Self::mink_index_pair(GAMMA_ANTICOMMUTATION, left, right)
-                    .is_some_and(|(a, b)| a == b)
+                    .is_some_and(|(a, b)| a == b && admits_index(a))
                 {
                     let distance = j - i;
                     for candidate in [(i, distance), (j, factors.len() - distance)] {
@@ -1451,7 +1538,12 @@ impl DiracSimplifier<'_> {
                 }
             }
         }
-        Self::cyclic_from_position(factors, best.map_or(0, |((start, _), _)| start))
+        best.map(|(pair, _)| pair)
+    }
+
+    fn rotate_trace_to_repeated_pair<'a>(factors: &[DiracFactor<'a>]) -> Vec<DiracFactor<'a>> {
+        let start = Self::trace_repeated_pair(factors, |_| true).map_or(0, |(start, _)| start);
+        Self::cyclic_from_position(factors, start)
     }
 
     fn simplify_special_trace_pair(rep: AtomView<'_>, factors: &[DiracFactor<'_>]) -> Option<Atom> {
@@ -1673,12 +1765,12 @@ mod tests {
                 let mut factors: Vec<_> = slots[..length].iter().map(|slot| gamma!(slot)).collect();
                 factors.insert(position, gamma5!());
                 let input = trace!(&spin; factors);
-                let shortcut = DiracSimplifier::evaluate_short_free_trace(input.as_view())
+                let shortcut = DiracSimplifier::evaluate_terminal_trace(input.as_view())
                     .expect("a distinct-index short axial trace is terminal");
                 // A factorized scalar spectator forces the full existing
                 // pipeline, without expanding or changing the trace word.
                 let fallback = &spectator * &input;
-                assert!(DiracSimplifier::evaluate_short_free_trace(fallback.as_view()).is_none());
+                assert!(DiracSimplifier::evaluate_terminal_trace(fallback.as_view()).is_none());
                 assert_eq!(
                     fallback.simplify_gamma(),
                     &spectator * shortcut.expand(),
@@ -1711,7 +1803,7 @@ mod tests {
         );
         for input in [repeated, two_gamma5, compact, generic_dimension, long] {
             assert!(
-                DiracSimplifier::evaluate_short_free_trace(input.as_view()).is_none(),
+                DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_none(),
                 "{input}"
             );
         }
@@ -1734,7 +1826,7 @@ mod tests {
             let result = input.simplify_gamma();
             assert!((&result - expected).expand().is_zero());
             assert_eq!(
-                DiracSimplifier::evaluate_short_free_trace(input.as_view()),
+                DiracSimplifier::evaluate_terminal_trace(input.as_view()),
                 Some(result.clone())
             );
             assert_eq!(
@@ -1756,7 +1848,7 @@ mod tests {
             trace!(&spin, gamma!(&a), gamma!(&b)),
             trace!(&spin, gamma5!(), gamma!(&a)),
         ] {
-            assert!(DiracSimplifier::evaluate_short_free_trace(input.as_view()).is_none());
+            assert!(DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_none());
             assert_eq!(input.simplify_gamma(), input);
         }
         let odd = trace!(&spin;
@@ -1804,6 +1896,81 @@ mod tests {
         assert!(!result.has_repeated_explicit_indices());
     }
 
+    #[test]
+    fn compact_trace_words_preserve_scalar_recurrences_and_spin_dimension() {
+        let r = test_initialize();
+        for representation in [r.mink4.to_symbolic([]), r.mink_d.to_symbolic([])] {
+            let p = spenso::p!(&representation);
+            let q = spenso::q!(&representation);
+            let pp = g!(&p, &p);
+            let qq = g!(&q, &q);
+            let pq = g!(&p, &q);
+            for spin in [r.bis4.to_symbolic([]), r.bis_d.to_symbolic([])] {
+                let unit = bispinor_dimension(spin.as_view()).unwrap();
+                let paired = trace!(&spin;
+                    [&p, &p].into_iter().chain(std::iter::repeat_n(&q, 12)).map(|p| gamma!(p))
+                );
+                assert_eq!(paired.simplify_gamma(), unit.to_owned() * &pp * qq.pow(6));
+
+                // For A=p/ q/, A²-2(p.q)A+p²q²=0. This independent scalar
+                // recurrence certifies all seven alternating pairs exactly.
+                let mut previous = unit.to_owned();
+                let mut expected = unit * pq.as_view();
+                for pairs in 1..=7 {
+                    let input = trace!(&spin;
+                        (0..2 * pairs).map(|i| gamma!(if i % 2 == 0 { &p } else { &q }))
+                    );
+                    let result = input.simplify_gamma();
+                    assert!((&result - &expected).expand().is_zero());
+                    assert_eq!(result.simplify_gamma(), result);
+                    assert!(DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_some());
+                    let next = Atom::num(2) * &pq * &expected - &pp * &qq * &previous;
+                    previous = expected;
+                    expected = next;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn compact_trace_shortcut_keeps_metadata_and_rejects_noncanonical_arguments() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let rep = r.mink4.to_symbolic([]);
+        let head = T.rank_one_tensor_symbol("idenso::compact_trace_metadata");
+        let vector = |arguments: &[Atom]| FunctionBuilder::new(head).add_args(arguments).finish();
+        let p = vector(&[Atom::num(1), rep.clone()]);
+        let q = vector(&[Atom::num(2), rep.clone()]);
+        let input = trace!(&spin, gamma!(&p), gamma!(&q));
+        assert_eq!(input.simplify_gamma(), Atom::num(4) * g!(&p, &q));
+        let odd = trace!(&spin, gamma!(&p), gamma!(&q), gamma!(&p));
+        assert!(odd.simplify_gamma().is_zero());
+
+        let unknown = FunctionBuilder::new(symbolica::symbol!("compact_trace_unknown"))
+            .add_arg(&rep)
+            .finish();
+        let malformed = vector(&[rep.clone(), rep.clone()]);
+        let indexed = spenso::p!(r.mink4.pattern(Atom::num(91)));
+        for argument in [unknown, malformed, indexed] {
+            let input = trace!(&spin, gamma!(&p), gamma!(argument));
+            assert!(DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_none());
+        }
+        let mixed = trace!(
+            &spin,
+            gamma!(&p),
+            gamma!(spenso::q!(r.mink_d.to_symbolic([])))
+        );
+        assert!(DiracSimplifier::evaluate_terminal_trace(mixed.as_view()).is_none());
+        let spectator = symbolica::parse_lit!((x + y) ^ 8);
+        assert!(
+            DiracSimplifier::evaluate_terminal_trace((&spectator * &input).as_view()).is_none()
+        );
+        assert_eq!(
+            input.simplify_gamma_with(GammaSimplifySettings::default().without_trace_evaluation()),
+            input
+        );
+    }
+
     fn momenta(rep: &Atom) -> [Atom; 8] {
         std::array::from_fn(|i| {
             FunctionBuilder::new(T.rank_one_tensor_symbol(&format!("idenso::trace_order::p{i}")))
@@ -1840,7 +2007,11 @@ mod tests {
         );
         // Rotation and the actual selector must agree on the one-word route.
         let input = trace!(&spin; factors.iter());
-        assert_eq!(input.simplify_gamma(), expected_first.simplify_gamma());
+        assert!(
+            (input.simplify_gamma() - expected_first.simplify_gamma())
+                .expand()
+                .is_zero()
+        );
         // Open chains retain their existing shortest-pair ordering.
         let (start, end) = (slot!(r.bis4, i).into_atom(), slot!(r.bis4, j).into_atom());
         assert_eq!(
@@ -1850,6 +2021,63 @@ mod tests {
             ),
             Some((0, 5)),
         );
+    }
+
+    #[test]
+    fn contracted_terminal_trace_preserves_dimensions_and_free_slots() {
+        use spenso::structure::dimension::Dimension;
+
+        let r = test_initialize();
+        for dimension in [
+            Atom::num(4),
+            Atom::num(6),
+            Atom::var(symbolica::symbol!("terminal_trace_D")),
+        ] {
+            let mink = Minkowski {}.new_rep(Dimension::try_from(dimension.as_view()).unwrap());
+            let slots: Vec<_> = (0..3).map(|i| mink.pattern(Atom::num(i))).collect();
+            for spin in [r.bis4.to_symbolic([]), r.bis_d.to_symbolic([])] {
+                let unit = bispinor_dimension(spin.as_view()).unwrap();
+                for (word, coefficient) in [
+                    ([0, 1, 2, 0], dimension.clone()),
+                    ([0, 1, 0, 2], Atom::num(2) - &dimension),
+                ] {
+                    for start in 0..4 {
+                        let input = trace!(&spin; word.iter().cycle().skip(start).take(4)
+                            .map(|&i| gamma!(&slots[i])));
+                        let expected = coefficient.as_view() * unit * g!(&slots[1], &slots[2]);
+                        let result = DiracSimplifier::evaluate_terminal_trace(input.as_view())
+                            .expect("the summed pair reduces without emitting tensor metrics");
+                        assert_eq!(result, expected, "dimension {dimension}, rotation {start}");
+                        assert_eq!(input.simplify_gamma(), result);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn terminal_trace_rejects_branching_or_ambiguous_contractions() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        for dimension in [4, 6] {
+            let mink = Minkowski {}.new_rep(dimension);
+            let a = mink.pattern(Atom::num(10));
+            let p = momenta(&mink.to_symbolic([]));
+            for word in [
+                vec![&a, &p[0], &p[1], &a, &p[2], &p[3], &p[4], &p[5]],
+                vec![&a, &p[0], &a, &p[1], &a, &p[2]],
+            ] {
+                let input = trace!(&spin; word.into_iter().map(|index| gamma!(index)));
+                assert!(DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_none());
+            }
+            let input = trace!(&spin; [&a, &p[0], &p[1], &p[2], &a, &p[3], &p[4], &p[5]]
+                .map(|index| gamma!(index)));
+            assert_eq!(
+                DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_some(),
+                dimension == 4,
+                "long odd-interior reversal is four-dimensional"
+            );
+        }
     }
 
     #[test]

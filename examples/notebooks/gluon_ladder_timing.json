@@ -1,0 +1,134 @@
+{
+  "ladder_substitution_samples": [
+    0.0015560660976916552,
+    0.00044034095481038094,
+    0.00044534215703606606,
+    0.00042416201904416084,
+    0.0004167009610682726,
+    0.00041444203816354275
+  ],
+  "ladder_substitution_seconds": 0.00042416201904416084,
+  "ladder_stages": [
+    {
+      "vertex": 1,
+      "Spenso terms": 6,
+      "Spenso step wall (s)": 0.002871341072022915,
+      "Spenso cumulative wall (s)": 0.002871341072022915
+    },
+    {
+      "vertex": 2,
+      "Spenso terms": 34,
+      "Spenso step wall (s)": 0.005265590036287904,
+      "Spenso cumulative wall (s)": 0.008136931108310819
+    },
+    {
+      "vertex": 3,
+      "Spenso terms": 192,
+      "Spenso step wall (s)": 0.033102803165093064,
+      "Spenso cumulative wall (s)": 0.04123973427340388
+    },
+    {
+      "vertex": 4,
+      "Spenso terms": 1084,
+      "Spenso step wall (s)": 0.2458572150208056,
+      "Spenso cumulative wall (s)": 0.2870969492942095
+    },
+    {
+      "vertex": 5,
+      "Spenso terms": 6069,
+      "Spenso step wall (s)": 1.7646734570153058,
+      "Spenso cumulative wall (s)": 2.0517704063095152
+    },
+    {
+      "vertex": 6,
+      "Spenso terms": 10947,
+      "Spenso step wall (s)": 8.769500855123624,
+      "Spenso cumulative wall (s)": 10.82127126143314
+    },
+    {
+      "vertex": 7,
+      "Spenso terms": 23937,
+      "Spenso step wall (s)": 17.759485631017014,
+      "Spenso cumulative wall (s)": 28.580756892450154
+    },
+    {
+      "vertex": 8,
+      "Spenso terms": 9652,
+      "Spenso step wall (s)": 26.389625516021624,
+      "Spenso cumulative wall (s)": 54.97038240847178
+    }
+  ],
+  "ladder_form_stages": [
+    {
+      "vertex": 1,
+      "FORM terms": 6,
+      "FORM generated terms": 8,
+      "FORM cumulative CPU (s)": 0.0
+    },
+    {
+      "vertex": 2,
+      "FORM terms": 34,
+      "FORM generated terms": 48,
+      "FORM cumulative CPU (s)": 0.0
+    },
+    {
+      "vertex": 3,
+      "FORM terms": 192,
+      "FORM generated terms": 272,
+      "FORM cumulative CPU (s)": 0.0
+    },
+    {
+      "vertex": 4,
+      "FORM terms": 1084,
+      "FORM generated terms": 1536,
+      "FORM cumulative CPU (s)": 0.0
+    },
+    {
+      "vertex": 5,
+      "FORM terms": 6069,
+      "FORM generated terms": 8672,
+      "FORM cumulative CPU (s)": 0.03
+    },
+    {
+      "vertex": 6,
+      "FORM terms": 10947,
+      "FORM generated terms": 72828,
+      "FORM cumulative CPU (s)": 0.23
+    },
+    {
+      "vertex": 7,
+      "FORM terms": 23937,
+      "FORM generated terms": 131364,
+      "FORM cumulative CPU (s)": 0.48
+    },
+    {
+      "vertex": 8,
+      "FORM terms": 9652,
+      "FORM generated terms": 287244,
+      "FORM cumulative CPU (s)": 0.72
+    }
+  ],
+  "ladder_form_process_samples": [
+    0.7509707140270621,
+    0.7438735191244632,
+    0.7266400039661676
+  ],
+  "ladder_exact_match": true,
+  "provenance": {
+    "date_utc": "2026-09-24",
+    "hostname": "itphlies",
+    "platform": "Linux-6.18.45-x86_64-with-glibc2.42",
+    "python": "3.13.12",
+    "cpu": "AMD EPYC 9754 128-Core Processor",
+    "profile": "cargo release (optimized)",
+    "symbolica_revision": "06906976bca24fefc5203aee699d90d62ebe08cd",
+    "notebook": "examples/notebooks/gamma_simplification.py",
+    "notebook_sha256": "ad6a69e338ae9948438ab335d060a5b2ae4aa26a394f3b0b416fd8ff6c4df22c",
+    "form": "FORM 5.0.0",
+    "form_reference_sha256": "c85cd777989f3aea7d7d56259705ae5f53887fb9ab949bfea96b60e42fc38e8d",
+    "extension_sha256": "581a2f0a69cb684a763607630654fc06a062b33453f1496ea9b4a9b889a9bd5f",
+    "host_manifest": "[package]\nname = \"gluon-ladder-notebook-host\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n[lib]\nname = \"core\"\ncrate-type = [\"cdylib\"]\n[dependencies]\nspynso3 = { path = \"/common/dev/gammaloop/feynkit-rich-display/crates/spynso3\" }\nsymbolica = { version = \"3.0.0\", default-features = false, features = [\"python_export\", \"python_abi3\", \"native_code_generation\", \"integer-gmp\", \"float-mpfr\", \"tracing_max_level_info\"] }\npyo3 = { version = \"0.28\", features = [\"abi3\", \"extension-module\"] }\n[patch.crates-io]\nsymbolica = { git = \"https://github.com/symbolica-dev/symbolica\", rev = \"06906976bca24fefc5203aee699d90d62ebe08cd\" }\n",
+    "timing_scope": "Spenso: single full run, sum of step wall times, excluding construction, term counting, validation and display. FORM: three measured process runs after one warmup, plus an untimed polynomial export. Rule substitution: first call and five warm samples, no contraction of the factored vertex product.",
+    "validation": "Exact intermediate term counts and symbolic equality of the complete final scalar-product polynomial."
+  }
+}

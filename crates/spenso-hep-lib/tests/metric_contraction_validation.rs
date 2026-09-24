@@ -404,6 +404,58 @@ fn metric_rewrites_preserve_sum_and_power_scopes() {
 }
 
 #[test]
+fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
+    for sample in 0..3 {
+        let evaluation = MetricEvaluation::new(sample);
+        let [mu, nu, rho, sigma] = MetricEvaluation::slots();
+        let sum = evaluation.vector(0, &mu) + evaluation.vector(1, &mu) * 2;
+        let scalar = spenso::g!(evaluation.compact(2), evaluation.compact(3)) + 17;
+        // Close the output only after rewriting. Otherwise the source metric
+        // could consume the closing vector and never exercise the sum partner.
+        let metric_input = spenso::g!(&mu, &nu) * &sum * scalar.pow(2);
+        let metric_result = metric_input
+            .schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors());
+        assert_ne!(metric_input, metric_result);
+        let spectator = evaluation.vector(2, &nu);
+        let value = evaluation.assert_same_value(
+            &(&metric_input * &spectator),
+            &(&metric_result * &spectator),
+        );
+        assert!(!value.is_zero());
+        for expression in [
+            evaluation.vector(2, &mu) * &sum,
+            spenso::g!(&mu, evaluation.compact(2)) * &sum,
+        ] {
+            let _ = evaluation.assert_rewrite(expression, &SchoonschipSettings::default(), true);
+        }
+
+        let antisymmetric_sum =
+            function!(evaluation.antisymmetric, &mu, &rho) + spenso::g!(&mu, &rho) * 3;
+        let expression = spenso::g!(&mu, &sigma) * antisymmetric_sum;
+        let simplified = expression.schoonschip();
+        assert_ne!(expression, simplified);
+        let closing = evaluation.vector(0, &sigma) * evaluation.vector(3, &rho);
+        let _ = evaluation.assert_same_value(&(&expression * &closing), &(&simplified * &closing));
+
+        let cof = ColorFundamental {}.new_rep(3);
+        let a = cof.slot::<AbstractIndex, _>(symbol!("linear_color_a"));
+        let b = cof.slot::<AbstractIndex, _>(symbol!("linear_color_b"));
+        for (source, metric, closing_slot) in [
+            (a.to_atom(), spenso::g!(a.dual(), b), b.dual().to_atom()),
+            (a.dual().to_atom(), spenso::g!(a, b.dual()), b.to_atom()),
+        ] {
+            let sum = evaluation.vector(0, &source) + evaluation.vector(1, &source) * 2;
+            let expression = metric * sum;
+            let simplified = expression.schoonschip();
+            assert_ne!(expression, simplified);
+            let closing = evaluation.vector(2, &closing_slot);
+            let _ =
+                evaluation.assert_same_value(&(&expression * &closing), &(&simplified * &closing));
+        }
+    }
+}
+
+#[test]
 fn compact_vectors_and_chain_like_metric_endpoints_preserve_exact_components() {
     let settings = SchoonschipSettings::default().with_chain_like_functions();
     for sample in 0..3 {

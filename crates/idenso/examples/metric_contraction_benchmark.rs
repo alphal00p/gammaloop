@@ -219,6 +219,25 @@ impl Case {
             .map(|i| format!("S{i}(x{i})"))
             .collect::<Vec<_>>()
             .join("*");
+        for length in [8, 32, 128] {
+            let sum = (0..length)
+                .map(|i| format!("T{i}(mink(4,b))"))
+                .collect::<Vec<_>>()
+                .join("+");
+            for (kind, source) in [
+                ("metric", "g(mink(4,a),mink(4,b))"),
+                ("vector", "cleanup_benchmark::V(mink(4,b))"),
+            ] {
+                cases.push(Self::parse(
+                    &format!("{kind}_sum_{length}"),
+                    &format!("{source}*({sum})"),
+                ));
+            }
+        }
+        cases.push(Self::parse(
+            "factored_nested_sum_partner",
+            "(x+y)^6*g(mink(4,a),mink(4,b))*(z*T(mink(4,b))+(x+y)*(U(mink(4,b))+V(mink(4,b))))",
+        ));
         cases.push(Self::parse(
             "many_spectators_hit",
             &format!("{spectators}*g(mink(4,a),mink(4,b))*T(mink(4,b))"),
@@ -343,6 +362,36 @@ impl Case {
             cases.push(Self {
                 name: name.into(),
                 expression: input.simplify_gamma(),
+                gamma_input: Some(input),
+                source: None,
+            });
+        }
+        for (dimension, length, axial) in [
+            ("4", 4, false),
+            ("4", 10, false),
+            ("D", 10, false),
+            ("4", 12, true),
+        ] {
+            let mut factors: Vec<_> = (0..length)
+                .map(|i| format!("gamma(in,out,mink({dimension},late_mu{i}))"))
+                .collect();
+            if axial {
+                factors.insert(0, "gamma5(in,out)".into());
+            }
+            let trace =
+                Self::parse("", &format!("trace(bis(4),cyclic({}))", factors.join(","))).expression;
+            let metric = Self::parse(
+                "",
+                &format!("g(mink({dimension},late_mu0),mink({dimension},late_mu1))"),
+            )
+            .expression;
+            let input = metric * trace.simplify_gamma();
+            cases.push(Self {
+                name: format!(
+                    "late_metric_{dimension}_{length}_{}",
+                    if axial { "axial" } else { "ordinary" }
+                ),
+                expression: input.clone(),
                 gamma_input: Some(input),
                 source: None,
             });

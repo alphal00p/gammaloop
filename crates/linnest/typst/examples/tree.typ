@@ -1,6 +1,12 @@
 #import "../src/render/network.typ": render
+#import "../src/lib.typ": graph, subgraph
 
-#show raw.where(lang: "dot"): it => render(it.text)
+#show raw.where(lang: "dot"): it => {
+  for g in graph.parse(it.text) {
+    let label = str(graph.info(g).global-statements.at("tree")).trim("\"")
+    render(g, subgraph.label(g, label))
+  }
+}
 
 ```dot
 digraph {

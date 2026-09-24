@@ -49,6 +49,7 @@ impl Recipe {
             .collect::<PyResult<Vec<_>>>()?;
         let mut counters = HashMap::new();
         let mut indices = Vec::new();
+        let mut dimensions = Vec::new();
         for slot in tensor.descriptor.interface.logical_slots() {
             let rep = slot.rep();
             let base = rep.rep.base();
@@ -65,6 +66,7 @@ impl Recipe {
                 "spenso::cos" => "cos",
                 _ => "",
             };
+            dimensions.push(dimension.clone());
             let mut source = if constructor.is_empty() {
                 format!(
                     "Representation({}, {dimension}, is_self_dual={})",
@@ -92,9 +94,27 @@ impl Recipe {
         } else {
             format!("\n    {},\n", arguments.join(",\n    "))
         };
+        let constructor = match (name.get_name(), dimensions.as_slice()) {
+            ("spenso::gamma", [_, _, d]) => format!("TensorExpression.gamma({d})"),
+            ("spenso::gamma5", [d, _]) => format!("TensorExpression.gamma5({d})"),
+            ("spenso::projm", [d, _]) => format!("TensorExpression.projm({d})"),
+            ("spenso::projp", [d, _]) => format!("TensorExpression.projp({d})"),
+            ("spenso::sigma", [d, _, _, _]) => format!("TensorExpression.sigma({d})"),
+            ("spenso::f", [d, _, _]) => format!("TensorExpression.f({d})"),
+            ("spenso::t", [a, f, _]) => format!("TensorExpression.t({a}, {f})"),
+            ("spenso::g", [_, _]) => {
+                format!("TensorExpression.g({}, {})", arguments[0], arguments[1])
+            }
+            ("spenso::flat", [_, _]) => format!("TensorExpression.flat({})", arguments[0]),
+            _ => format!("TensorName({})({call})", Self::quote(py, name.get_name())?),
+        };
+        let imports = if constructor.starts_with("TensorExpression.") {
+            "Representation, TensorExpression"
+        } else {
+            "Representation, TensorName"
+        };
         let access = format!(
-            "from symbolica import E, S\nfrom symbolica.community.spenso import Representation, TensorName\n\nkey = TensorName({})({call})\ntensor = library[key]",
-            Self::quote(py, name.get_name())?,
+            "from symbolica import E, S\nfrom symbolica.community.spenso import {imports}\n\nkey = {constructor}\ntensor = library[key]"
         );
         let labels = indices
             .iter()

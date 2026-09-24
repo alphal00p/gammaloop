@@ -1,6 +1,6 @@
 //! Contract a metric or tagged vector by replacing one compatible tensor slot.
 
-use std::collections::HashMap;
+use ahash::AHashMap;
 
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
@@ -41,6 +41,18 @@ impl<'a> Endpoint<'a> {
     fn compatible(&self, other: &Self) -> bool {
         self.dimension == other.dimension && self.representation.matches(&other.representation)
     }
+
+    fn same_index(&self, other: &Self) -> bool {
+        self.index == other.index
+            && self.dimension == other.dimension
+            && self.representation.base() == other.representation.base()
+    }
+}
+
+enum SlotReplacement {
+    Absent,
+    Replaced(Atom),
+    Ambiguous,
 }
 
 pub(crate) struct SlotContraction;
@@ -175,8 +187,8 @@ impl SlotContraction {
         if metrics.len() < 3 {
             return None;
         }
-        let mut occurrences: HashMap<_, (usize, usize, bool)> =
-            HashMap::with_capacity(2 * metrics.len());
+        let mut occurrences: AHashMap<_, (usize, usize, bool)> =
+            AHashMap::with_capacity(2 * metrics.len());
         let mut neighbors = vec![[None::<usize>; 2]; metrics.len()];
         for (edge, (_, _, endpoints)) in metrics.iter().enumerate() {
             for (side, endpoint) in endpoints.iter().enumerate() {
@@ -382,18 +394,94 @@ impl SlotContraction {
             if position == source_position {
                 continue;
             }
-            // Sums, powers and function payloads cannot consume an outside
-            // index. Only direct tensor slots and opted-in chain bodies can.
-            let AtomView::Fun(function) = factor else {
-                continue;
+            let result = match factor {
+                AtomView::Fun(function) => {
+                    Self::replace_function(function, source, replacement, chain_like, false, slots)
+                }
+                AtomView::Add(_) => {
+                    Self::replace_linear(factor, source, replacement, chain_like, slots)
+                }
+                _ => SlotReplacement::Absent,
             };
-            if let Some(replaced) =
-                Self::replace_function(function, source, replacement, chain_like, slots)
-            {
+            if let SlotReplacement::Replaced(replaced) = result {
                 return Some((source_position, position, replaced));
             }
         }
         None
+    }
+
+    /// A sum exposes a slot only when every term contains it exactly once.
+    /// Products pass it through one factor; all other factors remain borrowed.
+    /// Powers and function metadata retain their independent scopes. Construct
+    /// replacements inside this linear syntax without distributing products.
+    fn replace_linear(
+        expression: AtomView<'_>,
+        source: Endpoint<'_>,
+        replacement: &impl Fn() -> Atom,
+        chain_like: bool,
+        slots: &mut SlotMatcher,
+    ) -> SlotReplacement {
+        match expression {
+            AtomView::Fun(function) => {
+                Self::replace_function(function, source, replacement, chain_like, true, slots)
+            }
+            AtomView::Add(sum) => {
+                let mut replaced = Vec::new();
+                let mut absent = false;
+                for term in sum.iter() {
+                    match Self::replace_linear(term, source, replacement, chain_like, slots) {
+                        SlotReplacement::Replaced(term) if !absent => replaced.push(term),
+                        SlotReplacement::Absent if replaced.is_empty() => absent = true,
+                        _ => return SlotReplacement::Ambiguous,
+                    }
+                }
+                if absent {
+                    SlotReplacement::Absent
+                } else {
+                    SlotReplacement::Replaced(Atom::add_many(replaced))
+                }
+            }
+            AtomView::Mul(product) => {
+                let mut changed = None;
+                for (position, factor) in product.iter().enumerate() {
+                    match Self::replace_linear(factor, source, replacement, chain_like, slots) {
+                        SlotReplacement::Replaced(factor) if changed.is_none() => {
+                            changed = Some((position, factor));
+                        }
+                        SlotReplacement::Absent => {}
+                        _ => return SlotReplacement::Ambiguous,
+                    }
+                }
+                let Some((position, replacement)) = changed else {
+                    return SlotReplacement::Absent;
+                };
+                SlotReplacement::Replaced(Atom::mul_many(product.iter().enumerate().map(
+                    |(i, factor)| {
+                        if i == position {
+                            replacement.as_view()
+                        } else {
+                            factor
+                        }
+                    },
+                )))
+            }
+            AtomView::Pow(power) => {
+                // A tensor power can expose a nonlinear occurrence. It cannot
+                // be ignored when another factor offers the same index. Only
+                // a source-free power is an opaque scalar spectator here.
+                match Self::replace_linear(
+                    power.get_base_exp().0,
+                    source,
+                    replacement,
+                    chain_like,
+                    slots,
+                ) {
+                    SlotReplacement::Absent => SlotReplacement::Absent,
+                    _ => SlotReplacement::Ambiguous,
+                }
+            }
+            _ => SlotReplacement::Absent,
+        }
     }
 
     fn replace_function(
@@ -401,61 +489,106 @@ impl SlotContraction {
         source: Endpoint<'_>,
         replacement: &impl Fn() -> Atom,
         chain_like: bool,
+        linear: bool,
         slots: &mut SlotMatcher,
-    ) -> Option<Atom> {
+    ) -> SlotReplacement {
         let head = function.get_symbol();
         if head.is_scalar() || !matches!(slots.classify(function.as_view()), SlotMatch::Other) {
-            return None;
+            return SlotReplacement::Absent;
         }
         if head.has_tag(&SPENSO_TAG.rank1) {
-            let (position, endpoint) = Self::rank_one_endpoint(function, slots)?;
-            return source
-                .matches(&endpoint)
-                .then(|| Self::replace_argument(function, position, replacement()));
+            let Some((position, endpoint)) = Self::rank_one_endpoint(function, slots) else {
+                return SlotReplacement::Absent;
+            };
+            return if source.matches(&endpoint) {
+                SlotReplacement::Replaced(Self::replace_argument(function, position, replacement()))
+            } else if linear && source.same_index(&endpoint) {
+                SlotReplacement::Ambiguous
+            } else {
+                SlotReplacement::Absent
+            };
         }
+        let mut changed = None;
         for (position, argument) in function.iter().enumerate() {
-            let replaced =
-                if Endpoint::parse(argument, slots).is_some_and(|slot| source.matches(&slot)) {
-                    Some(replacement())
-                } else if chain_like && head == SPENSO_TAG.chain && position >= 2 {
-                    if let AtomView::Fun(factor) = argument {
-                        Self::replace_function(factor, source, replacement, false, slots)
-                    } else {
-                        None
-                    }
-                } else if chain_like && head == SPENSO_TAG.trace && position == 1 {
-                    if let AtomView::Fun(projector) = argument
-                        && [*shadowing::CYCLIC, *shadowing::SYM].contains(&projector.get_symbol())
-                    {
-                        Self::replace_projector(projector, source, replacement, slots)
-                    } else {
-                        None
-                    }
+            let replaced = if let Some(endpoint) = Endpoint::parse(argument, slots) {
+                if source.matches(&endpoint) {
+                    SlotReplacement::Replaced(replacement())
+                } else if linear && source.same_index(&endpoint) {
+                    // A same-variance occurrence cannot hide an internal pair
+                    // while another occurrence consumes the external metric.
+                    SlotReplacement::Ambiguous
                 } else {
-                    None
-                };
-            if let Some(replaced) = replaced {
-                return Some(Self::replace_argument(function, position, replaced));
+                    SlotReplacement::Absent
+                }
+            } else if chain_like && head == SPENSO_TAG.chain && position >= 2 {
+                if let AtomView::Fun(factor) = argument {
+                    Self::replace_function(factor, source, replacement, false, linear, slots)
+                } else {
+                    SlotReplacement::Absent
+                }
+            } else if chain_like && head == SPENSO_TAG.trace && position == 1 {
+                if let AtomView::Fun(projector) = argument
+                    && [*shadowing::CYCLIC, *shadowing::SYM].contains(&projector.get_symbol())
+                {
+                    Self::replace_projector(projector, source, replacement, linear, slots)
+                } else {
+                    SlotReplacement::Absent
+                }
+            } else {
+                SlotReplacement::Absent
+            };
+            match replaced {
+                SlotReplacement::Replaced(replaced) if !linear => {
+                    return SlotReplacement::Replaced(Self::replace_argument(
+                        function, position, replaced,
+                    ));
+                }
+                SlotReplacement::Replaced(replaced) if changed.is_none() => {
+                    changed = Some((position, replaced));
+                }
+                SlotReplacement::Absent => {}
+                _ => return SlotReplacement::Ambiguous,
             }
         }
-        None
+        match changed {
+            Some((position, replacement)) => {
+                SlotReplacement::Replaced(Self::replace_argument(function, position, replacement))
+            }
+            None => SlotReplacement::Absent,
+        }
     }
 
     fn replace_projector(
         projector: FunView<'_>,
         source: Endpoint<'_>,
         replacement: &impl Fn() -> Atom,
+        linear: bool,
         slots: &mut SlotMatcher,
-    ) -> Option<Atom> {
+    ) -> SlotReplacement {
+        let mut changed = None;
         for (position, factor) in projector.iter().enumerate() {
-            if let AtomView::Fun(function) = factor
-                && let Some(replaced) =
-                    Self::replace_function(function, source, replacement, false, slots)
-            {
-                return Some(Self::replace_argument(projector, position, replaced));
+            let AtomView::Fun(function) = factor else {
+                continue;
+            };
+            match Self::replace_function(function, source, replacement, false, linear, slots) {
+                SlotReplacement::Replaced(replaced) if !linear => {
+                    return SlotReplacement::Replaced(Self::replace_argument(
+                        projector, position, replaced,
+                    ));
+                }
+                SlotReplacement::Replaced(replaced) if changed.is_none() => {
+                    changed = Some((position, replaced));
+                }
+                SlotReplacement::Absent => {}
+                _ => return SlotReplacement::Ambiguous,
             }
         }
-        None
+        match changed {
+            Some((position, replacement)) => {
+                SlotReplacement::Replaced(Self::replace_argument(projector, position, replacement))
+            }
+            None => SlotReplacement::Absent,
+        }
     }
 
     fn replace_argument(function: FunView<'_>, position: usize, replacement: Atom) -> Atom {
@@ -557,6 +690,80 @@ mod tests {
             let result = SlotContraction::run(parse(input).as_view(), false, true);
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(SlotContraction::run(result.as_view(), false, true), result);
+        }
+    }
+
+    #[test]
+    fn linear_sum_partners_preserve_factorization_and_substitute_each_term() {
+        initialize_vectors();
+        for (input, expected) in [
+            (
+                "g(mink(D,a),mink(D,b))*(T(mink(D,b))+U(mink(D,b)))",
+                "T(mink(D,a))+U(mink(D,a))",
+            ),
+            (
+                "(x+y)^6*g(mink(4,a),mink(4,b))*(z*T(mink(4,b))+(x+y)*(U(mink(4,b))+V(mink(4,b))))",
+                "(x+y)^6*(z*T(mink(4,a))+(x+y)*(U(mink(4,a))+V(mink(4,a))))",
+            ),
+            (
+                "g(lor(D,a),dind(lor(D,b)))*(T(lor(D,b))+U(lor(D,b)))",
+                "T(lor(D,a))+U(lor(D,a))",
+            ),
+            (
+                "g(dind(lor(D,a)),lor(D,b))*(T(dind(lor(D,b)))+U(dind(lor(D,b))))",
+                "T(dind(lor(D,a)))+U(dind(lor(D,a)))",
+            ),
+            (
+                "slot_contraction_p(mink(4,a))*(T(mink(4,a))+U(mink(4,a)))",
+                "T(slot_contraction_p(mink(4)))+U(slot_contraction_p(mink(4)))",
+            ),
+            (
+                "g(mink(4,a),slot_contraction_p(label,mink(4)))*(T(mink(4,a))+U(mink(4,a)))",
+                "T(slot_contraction_p(label,mink(4)))+U(slot_contraction_p(label,mink(4)))",
+            ),
+            (
+                "g(mink(4,a),mink(4,b))*(chain(bis(4,i),bis(4,j),T(in,out,mink(4,b)))+chain(bis(4,i),bis(4,j),U(in,out,mink(4,b))))",
+                "chain(bis(4,i),bis(4,j),T(in,out,mink(4,a)))+chain(bis(4,i),bis(4,j),U(in,out,mink(4,a)))",
+            ),
+            (
+                "g(mink(4,a),mink(4,b))*(trace(bis(4),cyclic(T(in,out,mink(4,b))))+trace(bis(4),cyclic(U(in,out,mink(4,b)))))",
+                "trace(bis(4),cyclic(T(in,out,mink(4,a))))+trace(bis(4),cyclic(U(in,out,mink(4,a))))",
+            ),
+            (
+                "g(mink(4,4294967297),mink(4,f(x)))*(T(mink(4,f(x)))+U(mink(4,f(x))))",
+                "T(mink(4,4294967297))+U(mink(4,4294967297))",
+            ),
+        ] {
+            let expression = parse(input);
+            let result = SlotContraction::run(expression.as_view(), true, true);
+            assert_eq!(result, parse(expected), "{input}");
+            assert_eq!(SlotContraction::run(result.as_view(), true, true), result);
+        }
+    }
+
+    #[test]
+    fn sum_substitution_rejects_missing_repeated_and_incompatible_slots() {
+        initialize_vectors();
+        for input in [
+            "g(mink(4,a),mink(4,b))*(T(mink(4,b))+U(mink(4,c)))",
+            "g(mink(4,a),mink(4,b))*(T(mink(4,b))+U(mink(5,b)))",
+            "g(mink(4,a),mink(4,b))*(T(mink(4,b))+U(euc(4,b)))",
+            "g(mink(4,a),mink(4,b))*(T(mink(4,b),mink(4,b))+U(mink(4,b)))",
+            "g(mink(4,a),mink(4,b))*(T(mink(4,b))*V(mink(4,b))+U(mink(4,b)))",
+            "g(lor(D,a),dind(lor(D,b)))*(T(lor(D,b))+U(dind(lor(D,b))))",
+            "g(lor(D,a),dind(lor(D,b)))*(T(lor(D,b))*V(dind(lor(D,b)))+U(lor(D,b)))",
+            "g(mink(4,a),mink(4,b))*(T(f(mink(4,b)))+U(f(mink(4,b))))",
+            "g(mink(4,a),mink(4,b))*(T(mink(4,b))^3+U(mink(4,b)))",
+            "g(mink(4,a),mink(4,b))*(T(mink(4,b))^3*U(mink(4,b))+V(mink(4,b)))",
+            "g(mink(4,a),mink(4,b))*(slot_contraction_scalar(mink(4,b))+U(mink(4,b)))",
+            "g(mink(4,a),mink(4,b))*(trace(bis(4),cyclic(T(in,out,mink(4,b)),U(in,out,mink(4,b))))+V(mink(4,b)))",
+        ] {
+            let expression = parse(input);
+            assert_eq!(
+                SlotContraction::run(expression.as_view(), true, true),
+                expression,
+                "{input}"
+            );
         }
     }
 
@@ -730,7 +937,6 @@ mod tests {
             "g(mink(4,a),mink(4,b))*f(T(mink(4,b)))",
             "g(mink(4,a),mink(4,b))*T(mink(4,f(mink(4,b))))",
             "g(mink(4,a),mink(4,b))*T(mink(4,b))^2",
-            "g(mink(4,a),mink(4,b))*(T(mink(4,b))+U(mink(4,b)))",
             "g(P(mink(4)),Q(mink(4)))*T(P(mink(4)))",
         ] {
             let expression = parse(input);
@@ -788,7 +994,6 @@ mod tests {
             "slot_contraction_p(mink(4,a))*T(f(mink(4,a)))",
             "slot_contraction_p(mink(4,a))*T(mink(4,f(mink(4,a))))",
             "slot_contraction_p(mink(4,a))*T(mink(4,a))^2",
-            "slot_contraction_p(mink(4,a))*(T(mink(4,a))+U(mink(4,a)))",
             "slot_contraction_p(mink(4,a),mink(4,b))*T(mink(4,b))",
             "slot_contraction_p(mink(4,a,extra))*T(mink(4,a))",
             "slot_contraction_p(dind(cof(N,a),extra))*T(cof(N,a))",

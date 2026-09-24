@@ -34,8 +34,10 @@ use spenso::{
     },
 };
 use symbolica::{
-    api::python::{PythonNormalization, PythonUserData},
-    atom::{Atom, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder},
+    api::python::{PythonNormalization, PythonUserData, get_namespace},
+    atom::{
+        Atom, AtomView, DefaultNamespace, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder,
+    },
     symbol,
 };
 
@@ -301,6 +303,8 @@ impl SpensoName {
     #[new]
     #[pyo3(signature = (name, *, rank=None, is_symmetric=None, is_antisymmetric=None, is_cyclesymmetric=None, is_linear=None, is_flat=None, is_scalar=None, is_real=None, is_integer=None, is_positive=None, tags=None, aliases=None, normalization=None, print=None, derivative=None, series=None, eval=None, data=None))]
     /// Create a new tensor name with optional mathematical properties.
+    /// With only a name, reuse an existing tensor symbol and its attributes,
+    /// callbacks and custom printers, as Symbolica's S(name) does.
     ///
     /// Parameters
     /// ----------
@@ -372,6 +376,41 @@ impl SpensoName {
         eval: Option<Py<PyAny>>,
         data: Option<PythonUserData>,
     ) -> PyResult<Self> {
+        if rank.is_none()
+            && [
+                is_symmetric,
+                is_antisymmetric,
+                is_cyclesymmetric,
+                is_linear,
+                is_flat,
+                is_scalar,
+                is_real,
+                is_integer,
+                is_positive,
+            ]
+            .iter()
+            .all(Option::is_none)
+            && tags.is_none()
+            && aliases.is_none()
+            && normalization.is_none()
+            && print.is_none()
+            && derivative.is_none()
+            && series.is_none()
+            && eval.is_none()
+            && data.is_none()
+        {
+            let namespace = DefaultNamespace {
+                namespace: get_namespace(py)?.into(),
+                data: "",
+                file: "".into(),
+                line: 0,
+            };
+            if let Some(name) = Symbol::get_symbol(namespace.attach_namespace(&name))
+                && name.has_tag(&SPENSO_TAG.tensor)
+            {
+                return Ok(Self { name });
+            }
+        }
         let rank_one = match rank {
             None => false,
             Some(1) => true,
