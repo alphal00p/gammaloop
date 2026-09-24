@@ -1,0 +1,209 @@
+= Symbolica expansion performance reproducer
+
+This standalone program isolates the expanded-output cost of an ordinary
+generic-dimensional gamma trace. It depends only on Symbolica main `06906976`
+and the Rust standard library. No Idenso rewrite rules, Spenso slot parsing,
+tensor networks or pattern matching execute in the timed operation.
+
+The input is the memoized, factored Clifford pairing polynomial with `Tr(1)=4`.
+All free-index metrics are algebraically independent. The `tensor` payload is
+`g(mink(D,mu_i),mink(D,mu_j))`; `shallow` removes the representation wrapper;
+`variables` replaces each metric by a scalar variable. These deliberately
+different payloads expose the cost of carrying tensor syntax through expansion.
+
+== Run
+
+From this directory:
+
+```sh
+cargo build --release --locked
+./target/release/expansion 12 tensor expand
+./target/release/expansion 12 tensor poly
+./target/release/expansion 14 variables expand
+```
+
+Use even lengths from 2 to 14; compare at least 8, 10, 12 and 14. On Linux, pin
+each process with `taskset -c N` and repeat in fresh processes, alternating
+methods. The driver uses optimization level 2 and dependencies level 3, matching
+the measured workspace configuration. GMP and MPFR are required. `Cargo.lock`
+pins a separate standalone dependency tree; the historical matrix retains the
+identities of its original frozen workspace libraries in the benchmark record.
+
+Each invocation emits five JSON records. Input construction, an untimed reference
+expansion, and exact output comparison are excluded from `expansion_ns`.
+Destruction is recorded separately in `drop_ns`. The output must equal the
+ordinary expansion and contain $(n-1)!!$ terms. This checks the two expansion APIs
+against each other; independent Clifford and FORM validation belongs to the
+full trace benchmark. It is not a proof based solely on counting terms.
+
+== Measured bottleneck
+
+The companion #link("../../notebooks/tensor_contraction_parity.json")[benchmark
+record], under `expansion_primitive_followup`, retains the original matrix driver,
+its exact build command, raw samples and profile. That larger driver additionally
+checks inverse substitution for every payload, including contracted words.
+Its timings are separate from this minimal reproducer, which adds an untimed
+reference expansion and may therefore have a different allocator state.
+
+On 2026-09-24, three processes with five samples each on CPU 9 of a shared
+EPYC 9754 host measured the following expansion construction times:
+
+#table(
+  columns: 4,
+  [Free gammas], [Tensor, ms], [Shallow, ms], [Variables, ms],
+  [12], [37.49], [35.41], [33.77],
+  [14], [756.93], [635.30], [580.23],
+)
+
+At length 14, `expand_via_poly` with byte exponents reduces the tensor case to
+679.91 ms. Scalar variables reach 414.22 ms, but substitution back to metrics
+takes another 353.61 ms, before counting the forward substitution. These results
+do not establish an end-to-end gain from replacing tensor atoms with variables.
+All 1,080 inverse-substitution checks in the six-case matrix agree exactly.
+
+The length-12 ordinary expansion records 384.8 million Callgrind instructions
+with tensor payloads and 340.1 million with scalar variables, an 11.6% reduction.
+Exclusive instruction counts attribute about 19.8% to normalization, 11.7% to
+product/sum buffer extension, 8.3% to factor comparison, 8.3% to copying and 4.5%
+to byte comparison. These are instruction shares, not wall-time percentages.
+The profile excludes trace construction and contains no pattern matching.
+
+For context, the separately measured production length-14 pipeline takes
+789.14 ms including trace construction, expansion and destruction, against
+FORM 5.0.0's 53.67 ms internal `tracen` plus sort CPU time. FORM and Idenso
+return the same 135,135-term polynomial. The clocks and experiment lifecycles
+differ; neither the factored-output timing nor an expansion-only prototype
+establishes parity with FORM.
+
+== Isolated primitive experiments
+
+The companion #link("primitive_measurements.json")[primitive measurement record]
+contains paired samples, executable driver sources, build identities and exact
+output checks. The patches in `patches/` target Symbolica `06906976`; they are
+experiments and are not applied to this repository's dependency.
+
+`poly-emission.patch` emits normalized square-free monomials directly when their
+variables are distinct normalized symbols or function calls. Other variable
+forms, aliases and powers retain the existing normalization. The separate
+`poly-presence.patch` checks whether a variable occurs, rather than whether its
+maximum degree is nonzero. This also fixes the isolated signed-exponent boundary
+case `1+x^-1`, whose maximum degree is zero although `x` occurs.
+
+Three rotated process rounds with seven samples each measure the following
+conversion times for already constructed polynomials:
+
+#table(
+  columns: 4,
+  [Free gammas], [Original, ms], [Direct emission, ms], [Plus presence check, ms],
+  [8], [0.0625], [0.0349], [0.0331],
+  [10], [0.7394], [0.3333], [0.3133],
+  [12], [8.8232], [4.3299], [3.6278],
+  [14], [198.9511], [122.0897], [104.1423],
+)
+
+All 504 measured outputs agree exactly. Separate boundary checks exercise
+aliasing, compound variables, powers and the signed-exponent case. This is not
+the full upstream test suite. A power-heavy control regresses by about 4%.
+
+The effect on complete expansion is smaller. A separate paired experiment
+loads the exact factored production outputs and includes expansion plus result
+destruction: length-14 `expand_via_poly` improves from 700.8 to 605.7 ms, while
+ordinary `expand` stays at about 670 ms. Length-12 polynomial expansion improves
+47.6 to 42.0 ms but remains slower than ordinary expansion at 34.6 ms. All 126
+API comparisons and the fingerprints of all 630 timing records agree exactly.
+These isolated builds share dependency identities within each comparison;
+their timings must not be subtracted from the earlier production lifecycle.
+
+The addition experiment uses flat sorting when every input to `add_many` is a
+single term, retaining original input order when equal terms merge. Its first
+versions improve addition of the 135,135 final length-14 monomials from 152.3
+to 37.1 ms, but regress existing-sum controls by approximately 4–12%. Updating
+the heap's front cursor in place makes the largest all-sum control slower still;
+that variant is rejected.
+
+The subsequent variant keeps the full cursors in a vector and moves only their
+comparison keys and positions through the heap. Three rotated process rounds
+on CPU 6 measure:
+
+#table(
+  columns: 3,
+  [Addition input], [Original, µs], [Compact heap and singleton sort, µs],
+  [Free-12 final monomials], [4,489.63], [1,078.19],
+  [Free-14 final monomials], [158,176.08], [35,664.37],
+  [64 existing sums], [52.30], [51.86],
+  [512 existing sums], [595.34], [572.46],
+  [512 mixed sums and single terms], [139.96], [112.93],
+)
+
+None of the 22 measured case medians regresses against the original addition.
+This is an isolated addition result, not a complete trace or expansion result.
+The earlier 63 boundary checks compare textual output; the timing matrix has
+198 untimed oracle checks and 1,386 timing records. A stronger certificate
+compares raw Atom bytes for 1,017 case/permutation records, including 939 with
+actual sum cursors. All input streams, first outputs and rerun outputs match
+between versions. It covers rounded 11-, 53- and 80-bit coefficients, zero gaps,
+nonfinite values, finite fields and rational-polynomial coefficients. Some
+rounded and finite-field zeros change representation on rerun in both versions;
+the certificate preserves that baseline behavior rather than assuming bytewise
+idempotence.
+All seven upstream normalization unit tests also pass using the same isolated
+wrapper lock and dependency features. This is not the full Symbolica test suite.
+
+A further trial merges already normalized product factors during ordinary
+expansion. It passes 156 binary baseline comparisons but regresses length 12
+from 35.0 to 42.3 ms and length 14 from 671.6 to 759.2 ms. The length-12
+Callgrind total grows from 385.4 to 406.1 million instructions: normalization
+falls from 72.9 to 8.8 million, but collecting factor lists and eagerly
+multiplying unit coefficients costs more than it saves. This trial is rejected;
+its complete sources, raw samples and profiles remain in the measurement record.
+
+== Direct expanded trace construction
+
+A separate constructor evaluates a copy of the Clifford word identities directly
+into an integer-coefficient polynomial, avoiding the factored-expression-to-polynomial
+conversion. It starts from an already classified word and includes the metric
+table, dimension parsing, leaf enumeration, polynomial construction, Atom
+emission and destruction. It excludes public gamma-AST recognition and cleanup.
+The #link("../../notebooks/tensor_contraction_parity.json")[contraction record]
+retains the sources, dependency fingerprints and all samples under
+`direct_expanded_constructor_followup`.
+
+For free length 14, the constructor takes 256.79 ms with the frozen production
+library. In a separate matched dependency family, the original library takes
+248.23 ms and the polynomial-emission patches reduce this to 157.61 ms.
+Adding the earlier addition patch gives 159.82 ms: polynomial emission builds
+an Add directly and does not use the optimized `add_many` path. All 432 untimed
+mode comparisons pass across the twelve-case, four-library matrix.
+
+Expanding every contracted word is not a suitable default. With actual Spenso
+metric registration, the branching-eight result grows from 1,852 to 3,398 Atom
+bytes and its rerun slows from 29.5 to 52.6 µs. The order-sensitive twelve-gamma
+result instead shrinks from 133,818 to 52,401 bytes and its rerun improves from
+1.927 to 0.764 ms. All thirty downstream comparison processes agree algebraically.
+The constructor driver registers a symmetric metric only; the downstream check
+uses Spenso's full attributes and normalization callback. A public integration
+must therefore be measured with the real registration and retain scalar
+spectators in their original factored form.
+
+A subsequent copied-library trial shares the production word evaluator between
+factored and sparse output algebras. The sparse representation stores and clones
+lists of integer monomials at intermediate subwords, unlike the earlier leaf
+emitter. Its public order-sensitive-twelve lifecycle, including expansion and
+destruction, improves from 5.995 to 1.472 ms; the separate FORM reference is
+0.733 ms. However, the default first call slows from 0.974 to 1.405 ms, and
+unselected controls also regress. The rerun improves from 1.855 to 0.725 ms.
+This trial is rejected; the retained implementation is unchanged.
+Both copied libraries use matching direct-rustc flags and frozen production
+dependencies. Cargo's incremental compilation and codegen partitioning are not
+reproduced, so this is a matched public-API experiment, not a replacement for the
+retained Cargo-build checkpoint.
+
+The public driver uses bare traces, which return directly from the terminal
+evaluator. Thus post-trace cleanup cannot explain the 1.405 ms first call.
+Intermediate storage and compiler effects remain hypotheses pending a phase
+profile. Before timing, the trial also fixes two confirmed boundaries: mixed
+free slots and compact vectors can invoke callbacks producing non-polynomial
+variable forms, and replacing binary addition with variadic addition can change
+factorization. The final trial conservatively excludes mixed residual arguments
+and preserves the original binary operations. Its source, controls and timings
+are retained in the contraction record.

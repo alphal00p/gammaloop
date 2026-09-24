@@ -9,38 +9,41 @@ from symbolica.community.spenso import (
     Representation,
     Tensor,
     TensorExpression,
-    TensorLibrary,
     TensorName,
     TensorNetwork,
 )
 
 
 class NetworkDisplayTests(unittest.TestCase):
-    def test_spinor_current_is_nary_before_execution(self):
-        spinor = Representation.bis(4)
-        jbar = TensorName("nary_current::Jbar")(spinor)
-        j = TensorName("nary_current::J")(spinor)
-        gamma = TensorExpression.gamma(4)
-        factors = [jbar(1), gamma(1, 2, 1), gamma(2, 3, 2), gamma(3, 4, 3), j(4)]
-        current = factors[0]
-        nested = current.to_expression()
-        for factor in factors[1:]:
-            current = current * factor
-            nested = TensorNetwork.bracket()(nested, factor.to_expression())
-        library = TensorLibrary.hep_lib_atom()
-        network = current.to_network(library=library)
-        self.assertEqual(network.to_dot().count('label = "∏"'), 1)
+    def test_brackets_protect_open_occurrences_and_disappear_after_indexing(self):
+        rep = Representation.mink(4)
+        p = TensorName("bracket_slots::p")(rep)
+        q = TensorName("bracket_slots::q")(rep)
+        dyad = p.outer(p)
+        self.assertEqual(dyad.rank, 2)
+        self.assertIn("bracket(", str(dyad.to_expression()))
+        indexed = dyad("mu", "nu")
+        self.assertEqual(indexed.rank, 2)
         self.assertEqual(
-            list(current.to_expression()), [f.to_expression() for f in factors]
+            indexed.to_expression(), p("mu").to_expression() * p("nu").to_expression()
         )
-        reference = TensorExpression(nested).to_network(library=library)
-        network.execute(library=library)
-        reference.execute(library=library)
-        actual = list(network.result_tensor(library=library))
-        expected = list(reference.result_tensor(library=library))
-        self.assertEqual(len(actual), 64)
-        self.assertTrue(
-            all((a - b).expand() == E("0") for a, b in zip(actual, expected))
+        for left, right in [(p, q), (q, p)]:
+            product = left.outer(right)
+            self.assertEqual(
+                product("mu", "nu").to_expression(),
+                left("mu").to_expression() * right("nu").to_expression(),
+            )
+        imported = TensorExpression(
+            TensorNetwork.bracket()(p("mu").to_expression(), q("nu").to_expression())
+        )
+        self.assertEqual(
+            imported.to_expression(), p("mu").to_expression() * q("nu").to_expression()
+        )
+        summed = (p("mu") + q("mu")).outer(p("nu"))
+        self.assertEqual(
+            summed.to_expression(),
+            (p("mu").to_expression() + q("mu").to_expression())
+            * p("nu").to_expression(),
         )
 
     def test_graph_tracks_execution_while_source_expression_is_preserved(self):

@@ -22,7 +22,7 @@ use crate::structure::{
     TensorStructure,
     abstract_index::AIND_SYMBOLS,
     representation::{BaseRepName, LibraryRep, Minkowski},
-    slot::{AbsInd, DummyAind, ParseableAind, Slot, SlotError, SlotMatcher},
+    slot::{AbsInd, DummyAind, ParseableAind, Slot, SlotError, SlotMatch, SlotMatcher},
 };
 use crate::{network::tags::SPENSO_TAG, shadowing};
 
@@ -75,7 +75,24 @@ pub trait AtomStructureExt {
     /// one repeat the base's indices. Compact representations carry no explicit
     /// index. Equality ignores dimension and duality: this is a syntactic
     /// candidate check, not a certificate of a valid contraction.
+    /// Stops at the first candidate.
     fn has_repeated_explicit_indices(&self) -> bool;
+
+    /// Check repeated indices while observing the same syntactic traversal.
+    ///
+    /// The observer receives each visited node before its children, together
+    /// with its slot classification (`Other` for non-functions). Explicit,
+    /// compact and malformed slots are visited once; their dimensions and index
+    /// payloads remain opaque. The root is always visited, including a root sum.
+    ///
+    /// Observation continues after the first repetition, without collecting
+    /// further index occurrences. Every node within this traversal's scope is
+    /// observed for either result; payloads remain opaque. Use the boolean-only
+    /// predicate when no observation is needed so it can stop early.
+    fn has_repeated_explicit_indices_with_observer<'a>(
+        &'a self,
+        observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>),
+    ) -> bool;
 
     /// Replace four-dimensional Minkowski representations and slots by `dimension`.
     /// This must precede Lorentz contractions; scalar factors and other spaces are unchanged.
@@ -106,6 +123,13 @@ impl AtomStructureExt for Atom {
         self.as_view().has_repeated_explicit_indices()
     }
 
+    fn has_repeated_explicit_indices_with_observer<'a>(
+        &'a self,
+        observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>),
+    ) -> bool {
+        super::indices::RepeatedIndices::contains::<true>(self.as_view(), observe)
+    }
+
     fn with_lorentz_dimension(&self, dimension: AtomView<'_>) -> Atom {
         self.as_view().with_lorentz_dimension(dimension)
     }
@@ -128,7 +152,14 @@ impl AtomStructureExt for Atom {
 
 impl AtomStructureExt for AtomView<'_> {
     fn has_repeated_explicit_indices(&self) -> bool {
-        super::indices::RepeatedIndices::contains(*self)
+        super::indices::RepeatedIndices::contains::<false>(*self, |_, _| {})
+    }
+
+    fn has_repeated_explicit_indices_with_observer<'a>(
+        &'a self,
+        observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>),
+    ) -> bool {
+        super::indices::RepeatedIndices::contains::<true>(*self, observe)
     }
 
     fn with_lorentz_dimension(&self, dimension: AtomView<'_>) -> Atom {

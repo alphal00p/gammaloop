@@ -8,7 +8,7 @@ use spenso::{
     structure::{
         abstract_index::AbstractIndex,
         representation::{LibraryRep, Minkowski, RepName},
-        slot::{DummyAind, ParseableAind, SlotMatcher},
+        slot::{DummyAind, ParseableAind, SlotMatch, SlotMatcher},
     },
     trace,
 };
@@ -24,7 +24,7 @@ use crate::{
     dirac::GammaSimplifier,
     epsilon::{EpsilonSimplifier, epsilon4},
     representations::Bispinor,
-    shorthands::schoonschip::{Schoonschip, SchoonschipSettings},
+    shorthands::schoonschip::{Schoonschip, SchoonschipSettings, SimplificationCandidates},
 };
 
 use super::{AGS, id_atom};
@@ -431,36 +431,49 @@ impl<'settings> DiracSimplifier<'settings> {
         // A trace can emit metrics connected to surviving words. Contract those
         // before each rewrite, so later iterations expose their repeated indices.
         let metric_settings = SchoonschipSettings::default().with_chain_like_functions();
+        let bispinor: LibraryRep = Bispinor {}.into();
+        let heads = [
+            bispinor.symbol(),
+            T.chain,
+            T.bracket,
+            T.trace,
+            *crate::epsilon::EPSILON_SYMBOL,
+        ];
+        let [bispinor, chain, bracket, trace, epsilon_head] = heads.map(|head| head.get_id());
 
         loop {
             // Metric contraction can close a chain or connect separate chains.
             // Include their collection in the fixed point of the complete pass.
             // Close metric-linked chains before rewriting, including inert traces.
-            let normalized = expr.schoonschip_with_settings(&metric_settings);
+            let candidates = SimplificationCandidates::scan(expr.as_view(), heads);
+            let normalized = if candidates.normalized() {
+                expr.clone()
+            } else {
+                expr.schoonschip_with_settings(&metric_settings)
+            };
             // Share the absence check across the remaining passes. Large trace
             // results need no chain collection or Dirac rewrite, and ordinary
             // generic-dimensional traces contain no epsilon either.
             let (mut collect, mut rewrite, mut epsilon) = (false, false, false);
-            let bispinor: LibraryRep = Bispinor {}.into();
-            let [bispinor, chain, bracket, trace, epsilon_head] = [
-                bispinor.symbol(),
-                T.chain,
-                T.bracket,
-                T.trace,
-                *crate::epsilon::EPSILON_SYMBOL,
-            ]
-            .map(|head| head.get_id());
-            normalized.visitor(&mut |node| {
-                let head = match node {
-                    AtomView::Fun(function) => function.get_symbol_id(),
-                    AtomView::Var(variable) => variable.get_symbol_id(),
-                    _ => return true,
-                };
-                collect |= head == bispinor || head == chain || head == bracket;
-                rewrite |= head == chain || (self.settings.evaluate_traces && head == trace);
-                epsilon |= head == epsilon_head;
-                !(collect && rewrite && epsilon)
-            });
+            if candidates.complete && normalized == expr {
+                let [has_bispinor, has_chain, has_bracket, has_trace, has_epsilon] =
+                    candidates.symbols;
+                collect = has_bispinor || has_chain || has_bracket;
+                rewrite = has_chain || (self.settings.evaluate_traces && has_trace);
+                epsilon = has_epsilon;
+            } else {
+                normalized.visitor(&mut |node| {
+                    let head = match node {
+                        AtomView::Fun(function) => function.get_symbol_id(),
+                        AtomView::Var(variable) => variable.get_symbol_id(),
+                        _ => return true,
+                    };
+                    collect |= head == bispinor || head == chain || head == bracket;
+                    rewrite |= head == chain || (self.settings.evaluate_traces && head == trace);
+                    epsilon |= head == epsilon_head;
+                    !(collect && rewrite && epsilon)
+                });
+            }
             let mut next = if collect {
                 normalized.collect_gamma_chains()
             } else {
@@ -522,6 +535,12 @@ impl<'settings> DiracSimplifier<'settings> {
         let mut repeated = 0;
         for (position, &index) in indices.iter().enumerate() {
             if is_minkowski_slot(index) {
+                let SlotMatch::Explicit(slot) = slots.classify(index) else {
+                    return None;
+                };
+                if slot.is_concrete_index() {
+                    return None;
+                }
                 // More than two occurrences do not define an Einstein sum.
                 // Preserve the complete pass's existing ordered substitutions.
                 let occurrences = indices[..position].iter().filter(|&&i| i == index).count();
@@ -2045,6 +2064,16 @@ mod tests {
                     true
                 });
             }
+            let component = mink.pattern(symbolica::function!(
+                spenso::structure::abstract_index::AIND_SYMBOLS.cind,
+                Atom::num(0)
+            ));
+            let fixed_component = trace!(&spin; [&component, &p[0], &p[1], &component, &p[2], &p[3]]
+                .map(|index| gamma!(index)));
+            assert!(
+                DiracSimplifier::evaluate_terminal_trace(fixed_component.as_view()).is_none(),
+                "fixed components do not define Einstein sums"
+            );
             let ambiguous = trace!(&spin; [&a, &p[0], &a, &p[1], &a, &p[2]]
                 .map(|index| gamma!(index)));
             assert!(DiracSimplifier::evaluate_terminal_trace(ambiguous.as_view()).is_none());

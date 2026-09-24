@@ -10,7 +10,7 @@ use spenso::{
     shadowing,
     structure::{
         OrderedStructure, TensorStructure,
-        abstract_index::AbstractIndex,
+        abstract_index::{AIND_SYMBOLS, AbstractIndex},
         partial::{PartialIndex, PartialSlot, PartialStructure, PartialStructureExt},
         representation::{LibraryRep, RepName, Representation},
         slot::{DummyAind, IsAbstractSlot, ParseableAind, Slot},
@@ -29,7 +29,7 @@ pub struct StructuredAtom {
 impl StructuredAtom {
     pub fn new(atom: Atom, interface: PartialStructure) -> Self {
         Self {
-            atom,
+            atom: Self::normalize_products(atom.as_view()),
             interface: interface.canonicalize_open_ports(),
         }
     }
@@ -45,20 +45,108 @@ impl StructuredAtom {
     /// Brackets are associative ordered products, not index scopes. Splice only
     /// bracket children; sums and chain/trace binders remain intact.
     fn bracket_product(left: AtomView<'_>, right: AtomView<'_>) -> Atom {
-        let mut pending = vec![right, left];
-        let mut product = FunctionBuilder::new(SPENSO_TAG.bracket);
-        while let Some(factor) = pending.pop() {
-            if let AtomView::Fun(function) = factor
-                && function.get_symbol() == SPENSO_TAG.bracket
-            {
-                let start = pending.len();
-                pending.extend(function.iter());
-                pending[start..].reverse();
-            } else {
-                product = product.add_arg(factor);
-            }
+        let product = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(left)
+            .add_arg(right)
+            .finish();
+        Self::normalize_products(product.as_view())
+    }
+
+    /// Ordinary multiplication is safe once tensor slots have identities.
+    /// An unresolved occurrence must survive separately and in positional order:
+    /// in particular, `bracket(p(rep), p(rep))` must not become `p(rep)^2`.
+    fn has_unresolved_ports(value: AtomView<'_>) -> bool {
+        if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(value) {
+            return matches!(slot.aind(), AbstractIndex::Open { .. });
         }
-        product.finish()
+        if Representation::<LibraryRep>::try_from(value).is_ok() {
+            return true;
+        }
+        match value {
+            AtomView::Add(sum) => sum.iter().any(Self::has_unresolved_ports),
+            AtomView::Mul(product) => product.iter().any(Self::has_unresolved_ports),
+            AtomView::Pow(power) => Self::has_unresolved_ports(power.get_base_exp().0),
+            // Dot owns the slots of its operands; they are not public occurrences.
+            AtomView::Fun(fun)
+                if fun.get_symbol() == SPENSO_TAG.dot || fun.get_symbol().is_scalar() =>
+            {
+                false
+            }
+            AtomView::Fun(fun)
+                if is_composite_head(fun.get_symbol()) || fun.get_symbol() == AIND_SYMBOLS.aind =>
+            {
+                fun.iter()
+                    .skip(usize::from(fun.get_symbol() == SPENSO_TAG.trace))
+                    .any(Self::has_unresolved_ports)
+            }
+            AtomView::Fun(fun) if value.is_tensorial(StrictTensorFilter::Tagged) => fun
+                .iter()
+                .filter(|&arg| {
+                    direct_structural_port(arg)
+                        || matches!(arg, AtomView::Fun(f) if f.get_symbol() == AIND_SYMBOLS.aind)
+                })
+                .any(Self::has_unresolved_ports),
+            _ => false,
+        }
+    }
+
+    fn unresolved_factors<'a>(value: AtomView<'a>, factors: &mut Vec<AtomView<'a>>) {
+        if let AtomView::Mul(product) = value {
+            for factor in product.iter() {
+                Self::unresolved_factors(factor, factors);
+            }
+        } else if Self::has_unresolved_ports(value) {
+            factors.push(value);
+        }
+    }
+
+    fn normalize_products(value: AtomView<'_>) -> Atom {
+        match value {
+            AtomView::Add(sum) => sum
+                .iter()
+                .fold(Atom::Zero, |sum, term| sum + Self::normalize_products(term)),
+            AtomView::Mul(product) => product.iter().fold(Atom::num(1), |product, factor| {
+                product * Self::normalize_products(factor)
+            }),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                Self::normalize_products(base).pow(exponent.to_owned())
+            }
+            AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.bracket => {
+                let mut factors = Vec::new();
+                for arg in fun.iter() {
+                    let factor = Self::normalize_products(arg);
+                    if let AtomView::Fun(nested) = factor.as_view()
+                        && nested.get_symbol() == SPENSO_TAG.bracket
+                    {
+                        factors.extend(nested.iter().map(|arg| arg.to_owned()));
+                    } else {
+                        factors.push(factor);
+                    }
+                }
+                let ordinary = factors
+                    .iter()
+                    .fold(Atom::num(1), |product, factor| product * factor);
+                let mut before = Vec::new();
+                for factor in &factors {
+                    Self::unresolved_factors(factor.as_view(), &mut before);
+                }
+                let mut after = Vec::new();
+                Self::unresolved_factors(ordinary.as_view(), &mut after);
+                // Explicit indices survive sorting. Unresolved factors must
+                // neither change positional order nor coalesce into powers.
+                if before != after {
+                    FunctionBuilder::new(SPENSO_TAG.bracket)
+                        .add_args(factors)
+                        .finish()
+                } else {
+                    ordinary
+                }
+            }
+            // Tensor arguments include scalar metadata; chain and trace arguments
+            // also own placeholder scopes. Do not rewrite inside those containers.
+            _ => value.to_owned(),
+        }
     }
 
     /// Build a presentation-only atom whose surviving tensor ports follow the
@@ -1586,11 +1674,15 @@ mod tests {
     }
 
     fn factor_slots(atom: &Atom, symbol: Symbol) -> Vec<Slot<LibraryRep, AbstractIndex>> {
-        let AtomView::Fun(product) = atom.as_view() else {
-            panic!("expected an ordered product")
+        let factors = match atom.as_view() {
+            AtomView::Fun(product) if product.get_symbol() == SPENSO_TAG.bracket => {
+                product.iter().collect::<Vec<_>>()
+            }
+            AtomView::Mul(product) => product.iter().collect(),
+            _ => panic!("expected a tensor product"),
         };
-        product
-            .iter()
+        factors
+            .into_iter()
             .find_map(|factor| {
                 let AtomView::Fun(fun) = factor else {
                     return None;
@@ -1615,12 +1707,7 @@ mod tests {
         let left = outer(&a, &b);
         let right = outer(&c, &d);
         let result = outer(&left, &right);
-        let expected = FunctionBuilder::new(SPENSO_TAG.bracket)
-            .add_arg(&a.atom)
-            .add_arg(&b.atom)
-            .add_arg(&c.atom)
-            .add_arg(&d.atom)
-            .finish();
+        let expected = &a.atom * &b.atom * &c.atom * &d.atom;
         assert_eq!(result.atom, expected);
         assert_eq!(result.rank(), 4);
         assert_eq!(outer(&outer(&left, &c), &d).atom, expected);
@@ -1644,13 +1731,12 @@ mod tests {
             .add_arg(&trace)
             .finish();
         let flattened = StructuredAtom::bracket_product(nested.as_view(), d.atom.as_view());
-        let expected = FunctionBuilder::new(SPENSO_TAG.bracket)
-            .add_arg(sum)
-            .add_arg(chain)
-            .add_arg(trace)
-            .add_arg(&d.atom)
-            .finish();
+        let expected = sum * chain * trace * &d.atom;
         assert_eq!(flattened, expected);
+        assert_eq!(
+            StructuredAtom::normalize_products(flattened.as_view()),
+            flattened
+        );
     }
 
     #[test]
@@ -1674,11 +1760,7 @@ mod tests {
         });
         let expected = factors
             .iter()
-            .fold(
-                FunctionBuilder::new(SPENSO_TAG.bracket),
-                |builder, factor| builder.add_arg(&factor.atom),
-            )
-            .finish();
+            .fold(Atom::num(1), |product, factor| product * &factor.atom);
         assert_eq!(result.atom, expected);
         assert_eq!(result.interface.logical_slots(), vec![slots[0], slots[5]]);
         let network = result
@@ -2148,13 +2230,16 @@ mod tests {
                 .unwrap();
         let q_symbol = SPENSO_TAG.tensor_symbol("z_outer_q");
         let p_symbol = SPENSO_TAG.tensor_symbol("a_outer_p");
-        let AtomView::Fun(product) = indexed.as_view() else {
-            panic!("expected an ordered product")
+        let factors = match indexed.as_view() {
+            AtomView::Fun(product) if product.get_symbol() == SPENSO_TAG.bracket => {
+                product.iter().collect::<Vec<_>>()
+            }
+            AtomView::Mul(product) => product.iter().collect(),
+            _ => panic!("expected a tensor product"),
         };
-        assert_eq!(product.get_symbol(), SPENSO_TAG.bracket);
         let mut q_is_indexed = false;
         let mut p_is_open = false;
-        for factor in product.iter() {
+        for factor in factors {
             let AtomView::Fun(fun) = factor else {
                 continue;
             };

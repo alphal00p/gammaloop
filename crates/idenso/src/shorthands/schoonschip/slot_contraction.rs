@@ -167,55 +167,94 @@ impl SlotContraction {
         if product.iter().len() < 4 {
             return None;
         }
-        let mut metrics = Vec::new();
+        let metric = ETS.metric;
+        let count = product.iter().filter(|factor| {
+            matches!(factor, AtomView::Fun(f) if f.get_symbol_id() == metric.get_id() && f.get_nargs() == 2)
+        }).count();
+        if count < 3 {
+            return None;
+        }
+        struct Metric<'a> {
+            position: usize,
+            arguments: [AtomView<'a>; 2],
+            dimension: AtomView<'a>,
+            // A half-edge is 2 * index in this vector + argument position.
+            neighbors: [Option<usize>; 2],
+            removed: bool,
+        }
+        let mut metrics: Vec<Metric> = Vec::new();
+        let mut occurrences: AHashMap<_, (usize, LibraryRep, bool)> = AHashMap::new();
+        // Exact representation/dimension pairs recur along a path. Hash their
+        // shared identity once instead of including both payloads in each key.
+        let mut spaces = AHashMap::new();
+        let mut last_space = None;
         for (position, factor) in product.iter().enumerate() {
             let AtomView::Fun(function) = factor else {
                 continue;
             };
-            if function.get_symbol() != ETS.metric || function.get_nargs() != 2 {
+            if function.get_symbol_id() != metric.get_id() || function.get_nargs() != 2 {
                 continue;
             }
             let mut arguments = function.iter();
             let arguments = [arguments.next().unwrap(), arguments.next().unwrap()];
-            let [Some(first), Some(second)] = arguments.map(|a| Endpoint::parse(a, slots)) else {
+            let [Some(first), Some(second)] = arguments.map(|arg| Endpoint::parse(arg, slots))
+            else {
                 continue;
             };
-            if first.compatible(&second) && !first.matches(&second) {
-                metrics.push((position, arguments, [first, second]));
+            if !first.compatible(&second) || first.matches(&second) {
+                continue;
+            }
+            if metrics.is_empty() {
+                metrics.reserve(count);
+                occurrences.reserve(count * 2);
+            }
+            let edge = metrics.len();
+            metrics.push(Metric {
+                position,
+                arguments,
+                dimension: first.dimension,
+                neighbors: [None; 2],
+                removed: false,
+            });
+            let space_key = (first.representation.base(), first.dimension);
+            let space = if let Some((previous, space)) = last_space
+                && previous == space_key
+            {
+                space
+            } else {
+                let next = spaces.len();
+                let space = *spaces.entry(space_key).or_insert(next);
+                last_space = Some((space_key, space));
+                space
+            };
+            for (side, endpoint) in [first, second].into_iter().enumerate() {
+                let key = (space, endpoint.index);
+                match occurrences.entry(key) {
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert((2 * edge + side, endpoint.representation, false));
+                    }
+                    std::collections::hash_map::Entry::Occupied(mut entry) => {
+                        let (other, other_rep, repeated) = entry.get_mut();
+                        // More than two metric occurrences have no unambiguous
+                        // path interpretation; retain ordered slot substitution.
+                        if std::mem::replace(repeated, true) {
+                            return None;
+                        }
+                        if !endpoint.representation.matches(other_rep) {
+                            continue;
+                        }
+                        metrics[edge].neighbors[side] = Some(*other);
+                        metrics[*other / 2].neighbors[*other % 2] = Some(2 * edge + side);
+                    }
+                }
             }
         }
         if metrics.len() < 3 {
             return None;
         }
-        let mut occurrences: AHashMap<_, (usize, usize, bool)> =
-            AHashMap::with_capacity(2 * metrics.len());
-        let mut neighbors = vec![[None::<usize>; 2]; metrics.len()];
-        for (edge, (_, _, endpoints)) in metrics.iter().enumerate() {
-            for (side, endpoint) in endpoints.iter().enumerate() {
-                let key = (
-                    endpoint.representation.base(),
-                    endpoint.dimension,
-                    endpoint.index,
-                );
-                if let Some((other_edge, other_side, repeated)) = occurrences.get_mut(&key) {
-                    // More than two metric occurrences have no unambiguous
-                    // path interpretation; retain ordered slot substitution.
-                    if std::mem::replace(repeated, true) {
-                        return None;
-                    }
-                    if endpoint.matches(&metrics[*other_edge].2[*other_side]) {
-                        neighbors[edge][side] = Some(*other_edge);
-                        neighbors[*other_edge][*other_side] = Some(edge);
-                    }
-                } else {
-                    occurrences.insert(key, (edge, side, false));
-                }
-            }
-        }
         // A tensor occurrence in addition to two metric endpoints makes the
-        // incidence ambiguous. Do not turn that into a path contraction; the
-        // ordered substitution below continues to own such expressions.
-        let mut metric_positions = metrics.iter().map(|metric| metric.0).peekable();
+        // incidence ambiguous. The ordered substitution below owns that case.
+        let mut metric_positions = metrics.iter().map(|metric| metric.position).peekable();
         for (position, factor) in product.iter().enumerate() {
             if metric_positions.peek() == Some(&position) {
                 metric_positions.next();
@@ -227,71 +266,82 @@ impl SlotContraction {
                     return false;
                 }
                 if let Some(endpoint) = Endpoint::parse(atom, slots) {
-                    let key = (
-                        endpoint.representation.base(),
-                        endpoint.dimension,
-                        endpoint.index,
-                    );
-                    ambiguous = occurrences.get(&key).is_some_and(|entry| entry.2);
+                    if let Some(&space) =
+                        spaces.get(&(endpoint.representation.base(), endpoint.dimension))
+                    {
+                        ambiguous = occurrences
+                            .get(&(space, endpoint.index))
+                            .is_some_and(|entry| entry.2);
+                    }
                     return false;
                 }
-                !matches!(atom, AtomView::Fun(f) if f.get_symbol().is_scalar())
+                !matches!(atom,AtomView::Fun(f) if f.get_symbol().is_scalar())
                     && matches!(slots.classify(atom), SlotMatch::Other)
             });
             if ambiguous {
                 return None;
             }
         }
-        let mut visited = vec![false; metrics.len()];
-        let mut removed = vec![false; product.iter().len()];
         let mut replacements = Vec::new();
-        let mut pending = Vec::new();
-        let mut component = Vec::new();
-        let mut boundary = Vec::with_capacity(2);
+        // Every node has at most two neighbors. Walking away from both sides
+        // finds a path's boundaries without a DFS stack; returning to its start
+        // closes a loop. Removed nodes also mark completed components.
         for start in 0..metrics.len() {
-            if visited[start] {
+            if metrics[start].removed || metrics[start].neighbors == [None; 2] {
                 continue;
             }
-            pending.push(start);
-            component.clear();
-            boundary.clear();
-            while let Some(edge) = pending.pop() {
-                if std::mem::replace(&mut visited[edge], true) {
-                    continue;
-                }
-                component.push(edge);
-                for (side, neighbor) in neighbors[edge].iter().enumerate() {
-                    if let Some(neighbor) = neighbor {
-                        pending.push(*neighbor);
-                    } else {
-                        boundary.push(metrics[edge].1[side]);
+            metrics[start].removed = true;
+            let mut boundary = [metrics[start].arguments[0]; 2];
+            let mut closed = false;
+            for (side, boundary) in boundary.iter_mut().enumerate() {
+                let (mut edge, mut side) = (start, side);
+                loop {
+                    let Some(next) = metrics[edge].neighbors[side] else {
+                        *boundary = metrics[edge].arguments[side];
+                        break;
+                    };
+                    let (next, next_side) = (next / 2, next % 2);
+                    if next == start {
+                        closed = true;
+                        break;
                     }
+                    metrics[next].removed = true;
+                    edge = next;
+                    side = 1 - next_side;
+                }
+                if closed {
+                    break;
                 }
             }
-            if component.len() < 2 {
-                continue;
-            }
-            let contracted = match boundary.as_slice() {
-                [] => metrics[start].2[0].dimension.to_owned(),
-                [first, second] => FunctionBuilder::new(ETS.metric)
-                    .add_arg(*first)
-                    .add_arg(*second)
-                    .finish(),
-                _ => unreachable!("a metric component is a path or a cycle"),
-            };
-            for &edge in &component {
-                removed[metrics[edge].0] = true;
-            }
-            replacements.push(contracted);
+            replacements.push(if closed {
+                metrics[start].dimension.to_owned()
+            } else {
+                FunctionBuilder::new(metric)
+                    .add_arg(boundary[0])
+                    .add_arg(boundary[1])
+                    .finish()
+            });
         }
         if replacements.is_empty() {
             return None;
         }
+        let mut metric_positions = metrics.iter().peekable();
         Some(Atom::mul_many(
             product
                 .iter()
                 .enumerate()
-                .filter_map(|(i, factor)| (!removed[i]).then_some(AtomOrView::View(factor)))
+                .filter_map(|(position, factor)| {
+                    if let Some(metric) = metric_positions.peek()
+                        && metric.position == position
+                    {
+                        let removed = metric.removed;
+                        metric_positions.next();
+                        if removed {
+                            return None;
+                        }
+                    }
+                    Some(AtomOrView::View(factor))
+                })
                 .chain(replacements.into_iter().map(AtomOrView::Atom)),
         ))
     }
@@ -921,6 +971,14 @@ mod tests {
             (
                 "g(mink(4,a),mink(4,b))*g(mink(4,b),mink(4,c))*g(mink(5,a),mink(5,b))*g(mink(5,b),mink(5,c))",
                 "g(mink(4,a),mink(4,c))*g(mink(5,a),mink(5,c))",
+            ),
+            (
+                "g(mink(D,z),mink(D,b))*g(mink(D,b),mink(D,a))*g(mink(D,a),mink(D,c))*g(mink(D,c),mink(D,y))*T(mink(D,y))",
+                "T(mink(D,z))",
+            ),
+            (
+                "g(mink(D,a),mink(D,b))*g(mink(D,b),mink(D,c))*g(mink(D,c),mink(D,a))*g(lor(Nc,a),dind(lor(Nc,b)))*g(lor(Nc,b),dind(lor(Nc,c)))*g(lor(Nc,c),dind(lor(Nc,a)))",
+                "D*Nc",
             ),
         ] {
             let result = SlotContraction::run(parse(input).as_view(), false, false);
