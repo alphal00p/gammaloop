@@ -40,6 +40,10 @@ pub struct GraphEvaluationResult<T: FloatLike> {
     /// Componentwise absolute values after physical cancellation at each point,
     /// summed over distinct sampling-channel points of the same outer draw.
     pub absolute_integrand_result: Option<Complex<F<T>>>,
+    /// Private amplitude stability monitor: sum of complex norms at distinct
+    /// channel points, after common-point physical cancellation. Unlike the
+    /// componentwise absolute report, it is invariant under helicity phases.
+    pub(crate) channel_norm_sum: Option<F<T>>,
     pub reference_moments: Option<ReferenceMoments<T>>,
     pub event_groups: GenericEventGroupList<T>,
     pub event_processing_time: Duration,
@@ -52,6 +56,7 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
         Self {
             integrand_result: Complex::new_re(zero),
             absolute_integrand_result: None,
+            channel_norm_sum: None,
             reference_moments: None,
             event_groups: GenericEventGroupList::default(),
             event_processing_time: Duration::ZERO,
@@ -67,6 +72,13 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
                 *current += absolute;
             } else {
                 self.absolute_integrand_result = Some(absolute);
+            }
+        }
+        if let Some(norm) = other.channel_norm_sum {
+            if let Some(current) = &mut self.channel_norm_sum {
+                *current += norm;
+            } else {
+                self.channel_norm_sum = Some(norm);
             }
         }
         if let Some(moments) = other.reference_moments {
@@ -88,6 +100,9 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
     pub(crate) fn apply_sampling_factor(&mut self, factor: F<T>) {
         if let Some(absolute) = &mut self.absolute_integrand_result {
             *absolute *= factor.abs();
+        }
+        if let Some(norm) = &mut self.channel_norm_sum {
+            *norm *= factor.abs();
         }
         if let Some(moments) = &mut self.reference_moments {
             moments.rescale(&factor);

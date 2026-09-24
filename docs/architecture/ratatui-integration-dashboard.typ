@@ -52,6 +52,23 @@ integration workers
 This boundary keeps terminal dependencies and input handling out of the numerical workers. The
 dashboard is a view over status snapshots, not a second integration state machine.
 
+== Signed and componentwise absolute views
+
+The dashboard starts in the signed view. `a` / `A` switches every tab to
+componentwise absolute monitoring, `⟨|Re I|⟩` and `⟨|Im I|⟩`, including chart
+history, uncertainties, discrete-bin sorting, and max-weight panels. The selected
+view and logical discrete bin survive tab changes, sorting, and suspend/resume.
+Absolute panels omit targets and target differences; `ETA to ⟨I⟩ target` remains
+the signed stopping estimate in both views.
+
+The integration worker first sums physical cuts, counterterms, orientations, and
+group members at each sampled channel point, then takes componentwise absolute
+values. Explicit channel sums add these positive contributions before one
+outer-cube statistics update. The monitored quantity is neither the complex
+modulus nor the absolute value of the final signed channel sum. Shallow discrete
+monitor accumulators copy only the monitored level's probabilities; they do not
+sample, adapt, copy descendants, or alter the production RNG sequence.
+
 == Terminal lifecycle and failure containment
 
 The alternate screen is entered lazily on the first update. Before a canonical tabled summary

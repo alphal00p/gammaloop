@@ -208,33 +208,54 @@ commands = [
 name = "uv_profile"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10
+  #       --per-orientation --seed 7620260809
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 6,8,14,15
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/uv_profiles/pristine_random_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp6_10_seed7620260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10
       --per-orientation --seed 7620260809
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 6,8,14,15
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/uv_profiles/pristine_random_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp6_10_seed7620260809""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/uv_profiles/pristine_random_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp6_10_seed7620260809_all_uv_limits""",
 ]
 
 [[command_blocks]]
 name = "uv_profile_f128"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --use_f128
+  #       --per-orientation --seed 7620260809
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 6,8,14,15
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/uv_profiles/pristine_random_f128_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp6_10_seed7620260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --use_f128
       --per-orientation --seed 7620260809
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 6,8,14,15
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/uv_profiles/pristine_random_f128_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp6_10_seed7620260809""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/uv_profiles/pristine_random_f128_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp6_10_seed7620260809_all_uv_limits""",
 ]
 
 [[command_blocks]]
 name = "uv_profile_f128_low"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 4 --max-scaling 8 --use_f128
+  #       --per-orientation --seed 7620260809
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 6,8,14,15
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/uv_profiles/pristine_random_f128_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp4_8_seed7620260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 4 --max-scaling 8 --use_f128
       --per-orientation --seed 7620260809
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 6,8,14,15
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/uv_profiles/pristine_random_f128_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp4_8_seed7620260809""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL076/uv_profiles/pristine_random_f128_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp4_8_seed7620260809_all_uv_limits""",
 ]
 
 [[command_blocks]]

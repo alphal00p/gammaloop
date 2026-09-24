@@ -99,14 +99,26 @@ commands = [
 name = "remediation_uv_random_masks14_15"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 53420260810
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 14 --subset-cardinality 3
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/trials/remediation/uv_random_g0_lmb0_mask14_n5_exp6_10_seed53420260810"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 53420260810
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 14 --subset-cardinality 3
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/trials/remediation/uv_random_g0_lmb0_mask14_n5_exp6_10_seed53420260810""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/trials/remediation/uv_random_g0_lmb0_mask14_n5_exp6_10_seed53420260810_all_uv_limits""",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 53420260811
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 15 --subset-cardinality 4
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/trials/remediation/uv_random_g0_lmb0_mask15_n5_exp6_10_seed53420260811"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 53420260811
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 15 --subset-cardinality 4
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/trials/remediation/uv_random_g0_lmb0_mask15_n5_exp6_10_seed53420260811""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL534/trials/remediation/uv_random_g0_lmb0_mask15_n5_exp6_10_seed53420260811_all_uv_limits""",
 ]
 
 [[command_blocks]]

@@ -1,0 +1,160 @@
+= GL490 manual IR-safe threshold audit
+<gl490-manual-ir-safe-threshold-audit>
+== Outcome
+<outcome>
+- #strong[Threshold structure edited:] no. The graph has no explicit `threshold_counterterms` document, and no threshold-on limit becomes non-integrable relative to its precision/control evidence.
+- #strong[All limits OK:] #strong[yes];. Generic soft and double-soft limits, all three nondegenerate correlated threshold bridges, the process-valid hard-collinear pair, and both diagnostic collinear pairs are IR safe.
+- #strong[Integration converged:] #strong[yes];. The existing 13,700-sample checkpoint remains applicable because the DOT, threshold structure, generation basis, and integration settings are unchanged.
+- #strong[Selected random UV:] pass for the q13-dependent three-loop mask 14 and full four-loop mask 15, per orientation and summed.
+
+== Provenance and topology
+<provenance-and-topology>
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([artifact], [SHA-256],),
+    table.hline(),
+    [pinned numerical CLI], [`0f8ed2c842814995bdcad19b3bc2a406eb75cb4a1784a74aa3c3de6b0e9d2b1b`],
+    [raw master-state DOT], [`de2d890ad92ce24d6bb4b7bc440aa8becfbb7ae534181c70515c91e42b8e00f9`],
+    [pristine `graphs/GL490.dot`], [`b2d128b4522135a1591c5ff0e102e83b1172ab9e8f3c29bcd7cfa14a03767d6b`],
+    [final run card], [`cb03e2165f9a28f4214b0a693f29aa5c598f605105ab0fc9d81d1750bffa00a3`],
+    [random mask-14 `uv_profile.json`], [`244b2e0299068d2932f6f54ef12dc3bc75421257daa6dd48f448f691020aab8c`],
+    [random mask-15 `uv_profile.json`], [`449dd4617a07cf62703abbe7aa1e617b11a91b25f0adf984c03c38db82211dbe`],
+  )]
+  , kind: table
+  )
+
+GL490 is a four-loop graph whose generated LMB 0 is `(e4,e7,e11,e13)`. Vertex 7 is `V_36`, incident on gluons `e12`, `e13`, and `e14`; no `V_37` occurs. With zero incoming spatial momentum,
+
+```text
+q12 = K2 - K1
+q13 = K3
+q14 = K1 - K2 - K3
+q12 + q13 + q14 = 0.
+```
+
+The relevant massive momenta are `q3=K2+K3`, `q7=K1`, and `q11=K2`. The IR ranks are 3 for one soft momentum, 6 for the independent all-gluon double-soft locus, and 2 for a hard-collinear transverse relation.
+
+Clean full generation retains #strong[232 unrestricted orientations];, three cuts, and 10 evaluators:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (right,auto,auto,),
+    table.header([cut], [edges], [active thresholds],),
+    table.hline(),
+    [0], [`(2,6,7)`], [left E53, E45, E51, E6],
+    [1], [`(2,4,7,14)`], [left E53, E45],
+    [2], [`(2,4,7,12,13)`], [none],
+  )]
+  , kind: table
+  )
+
+The active edge sets are E6 `(3,7,12,13)`, E51 `(3,7,14)`, E45 `(7,11,12)`, and E53 `(7,11,13,14)`. E6/E51 coalesce at `q12=0`; all four share the common root at `q13=0`; and E45/E53 coalesce at `q14=0`. Threshold subtraction is enabled, with its generated aggregate recorded as `additional_contribution_sums.threshold_counterterm_0`. No cut or orientation filter is used.
+
+== Corrected geometry and fit method
+<corrected-geometry-and-fit-method>
+The first correlated-q12 trial put both top momenta at rest, while the old q13 geometry was radial and the old q14 negative branch was precision-sensitive. Those trials remain provenance only. The final Arb paths use generic massive momenta and move every targeted surface on both branches:
+
+- q12/E6-E51: `K1=K2=(80,-60,40)` and `K3=(150.93405375788296,-106.0617675055394,279.4319643895941)`.
+- q13/all-active: `K1=(-413.83565972137444,-80.96662393516857, -12.315871389057861)`, `K2=(-379.01086802337534,-157.77435577777703, 35.821244485992736)`, and `K3=0`. The axis changes both K1 and K3, so E45 is not pinned at its root.
+- q14/E45-E53: the same K1 and K2 with `K3=K1-K2=(-34.82479169799910,76.80773184260846, -48.137115875050597)`; only K1 moves along `(211,-157,193)`.
+
+The collinear midpoints use `v=(30,-40,120)`, a hard nonzero partner on the same ray, and the exactly transverse vector `d=(40,30,0)`. The three pairs are `(q12,q13)=(v,1.2v)`, `(q12,q14)=(v,1.2v)`, and `(q13,q14)=(v,1.2v)`, respectively. All unrelated active thresholds are at least `61.5` away from zero. Only q12/q13 occurs together in a process-valid cut (cut 2); the other pairs are conservative diagnostics.
+
+Each final Arb path has eight logarithmic points on each signed branch over `10^-6 <= |lambda| <= 10^-2`. The quoted envelopes combine the nearest 4-, 6-, and 8-point fits to `|I(lambda)| ~ |lambda|^-p`. All six JSON files contain 16/16 finite evaluated points, with no skip or NaN.
+
+== IR and threshold results
+<ir-and-threshold-results>
+Previously adjudicated evidence is retained unchanged:
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,right,auto,auto,auto,),
+    table.header([limit], [rank], [precision], [p envelope / behavior], [result],),
+    table.hline(),
+    [generic q12 soft], [3], [Arb], [`1.00011..1.00029`, min R2 `.999999988`], [pass],
+    [generic q13 soft], [3], [Arb], [`.999966..1.000022`, min R2 `.999999999838`], [pass],
+    [generic q14 soft], [3], [Arb], [`2.000014..2.000065`, min R2 `.999999999853`], [pass],
+    [independent all-gluon double soft], [6], [f64], [`2.9997..3.0118`, min R2 `.999984`], [pass],
+    [all-soft/all-surface bridge], [6], [f64], [`2.9978..2.9994`, min R2 `.999861`], [pass],
+    [E6/E51/E45/E53, IR away], [0], [f64], [active bounded plateaus, \`], [p],
+  )]
+  , kind: table
+  )
+
+The final nondegenerate Arb adjudicators close the formerly incomplete rows:
+
+#figure(
+  align(center)[#table(
+    columns: 6,
+    align: (auto,right,right,right,auto,auto,),
+    table.header([limit], [rank], [total p envelope], [minimum R2], [CT behavior], [result],),
+    table.hline(),
+    [q12 / E6-E51], [3], [`.999660..1.000885`], [`.999999271`], [bounded plateau], [pass],
+    [q13 / all active surfaces], [3], [`.993447..1.006497`], [`.999959059`], [`.995601..1.002611`], [pass],
+    [q14 / E45-E53], [3], [`1.994751..2.000779`], [`.999993863`], [`2.000052..2.004991`], [pass],
+    [process-valid q12/q13 collinear], [2], [`-.000205..+.000206`], [bounded plateau], [bounded plateau], [pass],
+    [diagnostic q12/q14 collinear], [2], [`-.001259..+.001225`], [bounded plateau], [bounded plateau], [pass],
+    [diagnostic q13/q14 collinear], [2], [`-.000213..+.000227`], [bounded plateau], [bounded plateau], [pass],
+  )]
+  , kind: table
+  )
+
+The low formal R2 of a flat series is not evidence of growth. Across four decades the three collinear totals remain finite and nearly constant. On the physical q12/q13 path, cuts 1 and 2 separately scale as `p=1.999895..2.000109` and cancel in the complete sum; cut 2 is the process-valid member containing both gluons. The diagnostic pairs are already bounded cut by cut. Per-cut, original, CT, and generated aggregate weights remain serialized in every approach JSON.
+
+The old f64 q13-soft total at `p=3.95669..4.02892` is precision loss, not a physical defect: the identical threshold-off path gives `.999952..1.00884`, while threshold-on Arb gives `.999966..1.000022`; its Arb original and CT are separately safe. The new correlated CT terms are bounded at q12, scale near `p=1` at q13, and near `p=2` at q14, all below the rank-3 integrability bound. Thus no threshold-on branch has a causal non-integrable worsening. A `[7,11]` projection, GL297/GL638-style parent split, or LMB remap is unsupported and would disturb already passing sectors, so the pristine structure is retained.
+
+The final Arb guard completed normally in `188.888653278 s`, peaked at `1,095,954,432` bytes recursive RSS, and kept at least `429,012,287,488` bytes free. Evidence is under `states/state_GL490/trials/remediation/` and the guard record is `states/state_GL490/trials/guards/final_correlated_collinear_arb.json`.
+
+== Clean full-UV generation
+<clean-full-uv-generation>
+The final independent state is `states/state_GL490/trials/final_state`:
+
+- full local and integrated UV completed with 10 evaluators and no fallback;
+- internal total `63.001565224 s`, Spenso `8.237249063 s`, Symbolica `37.677231037 s`, and compilation zero;
+- internal peak RAM `1,172,185,088` bytes;
+- guard completion `76.144716263 s`, peak recursive RSS `1,190,514,688` bytes, and minimum free disk `428,979,781,632` bytes.
+
+The guard record is `states/state_GL490/trials/guards/final_clean_full_generate.json`.
+
+== Selected random per-orientation UV audit
+<selected-random-per-orientation-uv-audit>
+The old fixed-ray masks 6 and 8 remain #strong[inconclusive];, exactly as originally classified: each serialized 232 null fits without the newer vanishing counters. Their SHA-256 values remain `24cd33fc5cbcbdfdcbe4656dd16c47f8c6709ed892bdbef0f089399f769b85f0` and `b0ec4e7414c283924e83b13f815ff2be6523b172921c80fed6dc79a1a381f383`. They are superseded by random rays, not silently reclassified. The old mask-14 attempt had no serialized coverage and is likewise replaced.
+
+Two seeded no-fixed-ray profiles cover the exact q13-dependent sector and the full generated basis:
+
+#figure(
+  align(center)[#table(
+    columns: 6,
+    align: (right,right,auto,auto,auto,right,),
+    table.header([mask], [seed], [fixed], [free], [scales], [orientations],),
+    table.hline(),
+    [14], [49020260810], [`[e4]`], [`[e7,e11,e13]`], [`1e6..1e10`, 5 points], [232],
+    [15], [49020260811], [`[]`], [`[e4,e7,e11,e13]`], [`1e6..1e10`, 5 points], [232],
+  )]
+  , kind: table
+  )
+
+Each file contains exactly graph 0, LMB 0, and its requested subset. Every one of the 232 unique orientation entries per mask has `finite_samples=5`, `positive_finite_samples=0`, `analysis=null`, and `missing_fit_is_vanishing=true`; the summed entry has the same counters. The root `allow_vanishing_missing_fits=true` flag therefore accepts these as vanishing safe series. Across both masks there are 464 accepted orientation series, two accepted sums, zero fitted exceptions, and zero bad counters.
+
+The combined guarded run completed normally in `461.132773161 s` including shared-slot wait, peaked at `736,534,528` bytes recursive RSS, kept at least `428,969,820,160` bytes free, and did not use `--timeout-success`. Evidence is under `states/state_GL490/trials/remediation/uv_random_g0_lmb0_mask{14,15}_*` and `states/state_GL490/trials/guards/final_random_uv_masks14_15.json`.
+
+== Integration and max-weight provenance
+<integration-and-max-weight-provenance>
+No fresh integration was needed because remediation changed only diagnostic command blocks; the DOT/CT/LMB and numerical settings are byte-identical. The existing full-UV checkpoint remains the final integration evidence:
+
+- 13,700 samples in 137 completed 100-sample iterations;
+- signed result `(7.7111058858e-5 +/- 1.1232509031e-4) + (2.5916928881e-6 +/- 6.6421674754e-6)i`;
+- componentwise absolute result `(1.8442491122e-4 +/- 1.1231597001e-4) + (3.6409455762e-5 +/- 6.6349159274e-6)i`;
+- absolute relative errors `60.90%` and `18.22%`, zero nonfinite samples, and `0.02190%` unstable samples at Double precision.
+
+This satisfies the campaign\'s 75% componentwise-absolute criterion, so `converged = yes`. The successful timeout checkpoint guard took `212.397 s`, peaked at `2,365,882,368` bytes, and kept `142,595,731,456` bytes free.
+
+The predecessor checkpoint\'s max-weight coordinates were not retained by its ignored regeneration workspace, so no new replay classification is claimed. Raw extrema alone do not contradict the complete limit inventory above.
+
+== Conclusion
+<conclusion>
+GL490 retains its pristine threshold structure and `(4,7,11,13)` basis. Exact Arb and per-cut decomposition close every correlated and collinear branch; random per-orientation masks 14 and 15 pass by explicit vanishing counters; clean full-UV generation succeeds; and the applicable integration checkpoint is converged. Therefore `all limits OK = yes` and `integration converged = yes`.

@@ -1,0 +1,260 @@
+= GL588 remediation audit
+<gl588-remediation-audit>
+== Outcome
+<outcome>
+- #strong[Final threshold structure:] no explicit directive. Three causal E4 projections were generated and rejected; their states are preserved.
+- #strong[Generation basis edited:] yes, from `(3,4,6,7)` to the topology-valid `(3,4,13,14)` basis. The card applies the exact inverse coordinate transformation to every inherited point and axis.
+- #strong[Full local and integrated UV generation:] yes, with 31 evaluators, 8 process-valid cuts, and 536 unrestricted orientations.
+- #strong[All limits OK:] #strong[no];. The all-orientation `e14+E4` path is a precision-confirmed rank-three failure, `p=4.00003108..4.00025317` in Arb. Its exact threshold-off copy passes at `p=1.002160..1.005748`, so the failure is threshold driven. The final IR-away E4 path independently fails at `p=1.99999739..2.00000440`.
+- #strong[UV profile:] incomplete. The original nine-point summed-orientation screen timed out after 392.088 s. A selector-enabled retry restricted to graph 0, LMB 0, and masks 1 and 5 also timed out after 332.260 s. Neither attempt wrote JSON, so UV coverage and fits are unavailable.
+- #strong[Integration:] the task-start no-directive checkpoint converged under the campaign rule at 14,600 samples. A new checkpoint in the exactly remapped basis was not started while higher-priority guarded jobs occupied both shared heavy slots.
+- #strong[Conclusion:] unresolved. Every encodable projected E4 candidate retains the same smooth `p≈4` tail; the only common-parent candidate that could align the cut-2/cut-6 fixed complements also triggers an E25 overlap-center failure.
+
+== Reproducibility
+<reproducibility>
+All GammaLoop invocations used `scripts/run_guarded.py`, `RAYON_NUM_THREADS=3`, a 15 GiB recursive-RSS limit, a 12 GiB disk floor, a 6 GiB free-memory floor, and the two-job shared semaphore. This GL588 worker did not edit source, tests, shared scripts, the plan, or the summary, and did not commit or push. The coordinator supplied a rebuilt selector-enabled binary for the final focused UV attempt.
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([artifact], [SHA-256],),
+    table.hline(),
+    [release GammaLoop used for generation and IR/CT science], [`d655c43b3ea32797095c8f8d787176581c843b62840ae0af29337ddfacaff9b4`],
+    [selector-enabled GammaLoop used for the exact UV retry], [`1ffa0545aa2b4d3502b8840f28ecf1cef32c3d5d5e2f4fb9b940f76578f1cb11`],
+    [final no-directive DOT], [`79ed1baa98c2de39912c83a3431aec12d5c40ff5609b773eb225dff1122fd56a`],
+    [final run card], [`1c00015715925846c75bc875aa945b82b61ca3e3748865e33835a3588b69db25`],
+    [final `generation_summary.json`], [`a9d7c9e1d0819b45a88943754bf4cc7d7bd18aceec91de6a14e9a93b36f9cab8`],
+  )]
+  , kind: table
+  )
+
+The final clean full-UV generation completed normally. Its internal statistics are:
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,right,),
+    table.header([quantity], [value],),
+    table.hline(),
+    [evaluators], [31],
+    [expression build], [36.160851533 s],
+    [Spenso], [4.243098655 s],
+    [Symbolica evaluation], [7.036273384 s],
+    [internal total], [#strong[47.440223572 s];],
+    [GammaLoop peak RAM], [268,091,392 bytes],
+    [guard duration], [57.563316 s],
+    [guard recursive-RSS peak], [335,417,344 bytes],
+    [minimum observed free disk], [442,752,696,320 bytes],
+  )]
+  , kind: table
+  )
+
+== Exact basis remap and topology
+<exact-basis-remap-and-topology>
+Let the old `(3,4,6,7)` coordinates be `(a,b,c,d)` and the final `(3,4,13,14)` coordinates be `(A,B,C,D)`. The tracked change is
+
+```text
+(A,B,C,D) = (a,b,c-b,b-d),
+(a,b,c,d) = (A,B,B+C,B-D).
+```
+
+Every one of the 42 inherited point/axis vectors was transformed with this map and checked by applying the inverse. In the final coordinates,
+
+```text
+q2=B-A; q3=A; q4=B; q5=q10=A+C; q6=B+C; q7=q8=B-D;
+q12=B+C-D; q13=C; q14=D.
+```
+
+Thus `q13=0` and `q14=0` are direct, independent rank-three constraints and their intersection has rank six. The final DOT keeps `lmb_id=0,1,2,3` only on edges `3,4,13,14`; it has no `pin`, `dir`, `lmb_rep`, or `threshold_counterterms` attribute. No `V_36` or `V_37` vertex is present, so no hard-collinear family is required.
+
+Generation preserves the complete process inventory:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (right,auto,auto,),
+    table.header([cut], [edges], [active associations],),
+    table.hline(),
+    [0], [`(2,5,8,13,14)`], [none],
+    [1], [`(2,4,5,13)`], [left `E52,E27,E69,E65`],
+    [2], [`(2,10,12,14)`], [left `E52,E27,E69,E65,E51*`],
+    [3], [`(2,7,10,13,14)`], [none],
+    [4], [`(2,6,10)`], [left `E52,E27,E19,E65,E18,E29*,E51*`],
+    [5], [`(2,3,12,13,14)`], [none],
+    [6], [`(2,3,7,14)`], [right `E3,E4,E25*`],
+    [7], [`(2,3,6,13)`], [left `E52,E27,E19`],
+  )]
+  , kind: table
+  )
+
+Stars denote pinched surfaces. With `E(x)=sqrt(|x|^2+173^2)`, the active equations used in the audit are
+
+```text
+E3 =(5,10):       2E(A+C)-1000
+E4 =(3,5,13):     E(A)+E(A+C)+|C|-1000
+E18=(4,6,13):     E(B)+E(B+C)+|C|-1000
+E19=(6,8,13,14):  E(B+C)+E(B-D)+|C|+|D|-1000
+E25=(3,5,7,12):   E(A)+E(A+C)+E(B-D)+E(B+C-D)-1000
+E27=(7,8):        2E(B-D)-1000
+E29=(4,6,7,12):   E(B)+E(B+C)+E(B-D)+E(B+C-D)-1000
+E51=(3,8,10,12):  E(A)+E(B-D)+E(A+C)+E(B+C-D)-1000
+E52=(8,12,13):    E(B-D)+E(B+C-D)+|C|-1000
+E65=(4,7,14):     E(B)+E(B-D)+|D|-1000
+E69=(4,12,13,14): E(B)+E(B+C-D)+|C|+|D|-1000.
+```
+
+== Complete inherited IR inventory
+<complete-inherited-ir-inventory>
+Every path uses the complete graph sum, graph ID zero, 50 signed logarithmic points over `1e-6 <= |lambda| <= 1e-2`, no midpoint, and three cores. The common correlated axis in final coordinates is
+
+```text
+(19,-23,41; 47,29,-31; -16,-46,78; -164,186,-224).
+```
+
+The basis remap is an exact reparameterization, so the task-start all-orientation values and fits apply unchanged to these transformed coordinates. The card retains every explicit path. There are 11 passes, seven fit-quality inconclusives, and one formal failure:
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,auto,right,right,auto,),
+    table.header([path], [final midpoint `(A;B;C;D)`], [rank], [p envelope], [class],),
+    table.hline(),
+    [generic `e13`], [`(74,-52,137;-91,64,83;0;-122,111,24)`], [3], [`1.999971..2.003069`], [pass],
+    [generic `e14`], [`(74,-52,137;-91,64,83;122,-111,-24;0)`], [3], [`2.007154..2.231017`], [pass],
+    [generic double], [`(74,-52,137;-91,64,83;0;0)`], [6], [`5.405895..6.862804`], [inconclusive],
+    [`e13+E27/E52`], [`(74,-52,137;121,-77,63;0;121,-77,-406.117256)`], [3], [`1.931112..2.287622`], [inconclusive],
+    [`e13+E19/E65/E69`], [`(74,-52,137;220.071,0,0;0;440.142,0,0)`], [3], [`1.999958..2.000505`], [pass],
+    [`e13+E18`], [`(74,-52,137;0,0,469.117256;0;-31,47,410.117256)`], [3], [`1.997683..2.000643`], [pass],
+    [`e13+E25/E51`], [`(0;121,-77,63;0;121,-77,-214.488739)`], [3], [`1.998482..2.002666`], [pass],
+    [`e13+E29`], [`(74,-52,137;0;0;0,0,-277.488739)`], [3], [`2.001850..2.048569`], [inconclusive],
+    [`e13+E3/E4`], [`(0,0,469.117256;121,-77,63;0;90,-30,4)`], [3], [`1.882672..3.680857`], [inconclusive],
+    [`e14+E27/E65`], [`(74,-52,137;0,0,469.117256;31,-47,-410.117256;0)`], [3], [`2.000009..2.000167`], [pass],
+    [`e14+E18/E19/E52/E69`], [`(74,-52,137;220.071,0,0;-440.142,0,0;0)`], [3], [`1.999863..1.999946`], [pass],
+    [`e14+E25/E51`], [`(314.811985,0,0;157.405992,0,0;-314.811985,0,0;0)`], [3], [`1.999933..2.000015`], [pass],
+    [`e14+E29`], [`(74,-52,137;0;0,0,277.488739;0)`], [3], [`2.000108..2.028988`], [pass],
+    [`e14+E3`], [`(90,-30,473.117256;121,-77,63;-90,30,-4;0)`], [3], [`1.999454..2.014593`], [pass],
+    [`e14+E4`], [`(0;197.702539,0,0;-395.405079,0,0;0)`], [3], [`3.998628..4.000056`], [#strong[fail];],
+    [double + six-surface family], [`(74,-52,137;0,0,469.117256;0;0)`], [6], [`3.997692..4.101330`], [inconclusive],
+    [double + `E25/E51`], [`(0;0,0,277.488739;0;0)`], [6], [`4.006062..4.360539`], [pass],
+    [double + `E29`], [`(74,-52,137;0,0,180.474375;0;0)`], [6], [`1.626744..10.298944`], [inconclusive],
+    [double + `E3/E4`], [`(0,0,469.117256;121,-77,63;0;0)`], [6], [`5.053188..7.924320`], [inconclusive],
+  )]
+  , kind: table
+  )
+
+All recorded target soft norms and threshold distances have fitted slopes in `0.999901281..1.000098691`. Poor `R²`, broad envelopes, or branch disagreement make the seven noted paths inconclusive rather than failures.
+
+== Decisive precision and threshold-only evidence
+<decisive-precision-and-threshold-only-evidence>
+The remediation reran `e14+E4` in unrestricted all-orientation Arb with 16 signed points over `1e-6..1e-4`. It completed in 101.348 s, peaked at 845,357,056 bytes recursive RSS, and wrote a full JSON result. Its six closest-window fits give
+
+```text
+p = 4.000031077926877 .. 4.0002531680994915
+minimum R² = 0.9999999986443309
+```
+
+This removes the previous precision ambiguity. The exact threshold-off f64 control passes with `p=1.002160..1.005748`.
+
+The final no-directive IR-away E4 path uses
+
+```text
+point = (0; 121,-77,63; -395.40507859733976,0,0; 31,-47,59)
+axis  = (19,-23,41; 0; 0; 0).
+```
+
+It has an active threshold counterterm and is a clean rank-zero failure:
+
+```text
+p = 1.9999973889966236 .. 2.000004404003029
+minimum R² = 0.9999999999993251.
+```
+
+At `|lambda|=1e-6` on the negative branch, the cut-2 CT is `+7.854947931170766e-27`, while the cut-6 CT is `-1.0622355586855591e-39`; the total is `+7.854947931148865e-27`. Thus the same cut-2 family that generates the soft-enhanced tail also creates an uncancelled Higgs-crossing threshold pole away from the IR locus.
+
+== Threshold-counterterm remediation ledger
+<threshold-counterterm-remediation-ledger>
+The four-page `resources/ttH_defo.pdf` motivates treating thresholds connected through a soft limit in a shared NLO-like one-loop subspace. A genuine two-loop branch is admissible only in a region separated from the soft locus. GL588 therefore tested the smallest topology-valid E4 structures before any partition.
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,auto,right,right,auto,),
+    table.header([E4 prescription under cut `(2,3,7,14)`], [structural/runtime result], [`e14+E4`], [IR-away E4], [decision],),
+    table.hline(),
+    [no explicit directive], [full generation], [Arb `p=4.000031..4.000253`], [`p=1.999997..2.000004`], [unresolved final reference],
+    [`[3,13]`, parent `[3,4,13,14]`], [31 evaluators; inventory unchanged], [`p=3.998925..3.999797`], [`p=1.999997..2.000004`], [reject],
+    [`[3]`, parent `[3,4,13,14]`], [31 evaluators; inventory unchanged], [`p=3.998925..3.999797`], [`p=1.999997..2.000004`], [reject],
+    [`[3]`, parent `[3,10,12,14]`], [generation/inventory pass; IR-away run aborts E25 center construction], [`p=3.998925..3.999797`], [no JSON], [reject/blocker],
+  )]
+  , kind: table
+  )
+
+For the two generation-parent candidates at `|lambda|=1e-6`, the cut-2 CT is `+5.742639962643666e-15`, whereas the cut-6 CT is only about `-1e-32`. Their soft scaling is subleading and cannot cancel the cut-2 `p≈4` term.
+
+Consequently no bounded smooth partition of the tested `[3]` and `[3,13]` variants can help: a finite combination of `p≈1` cut-6 pieces cannot generate a `p≈4` counterterm. An exact `1/0` selector or a singular multiplier would violate the remediation rules. The only causal remaining test was to embed `[3]` in the cut-2 parent `(3,10,12,14)`, so both cuts used the same active coordinate and fixed complement. Although generation accepted it with the complete 31-evaluator inventory, it left the `p≈4` fit unchanged and the IR-away run stopped with
+
+```text
+LU graph 'GL588' cut group 4 right subspace failed overlap-center construction
+in probe rotation Identity rotation: Could not find center of EsurfaceID(2),
+edges [3,5,7,12].
+```
+
+Those edges are E25. Per the structural gate, no further bounded partition was attempted. Rejected states are preserved as:
+
+- `state_GL588_e4_2l_rejected`
+- `state_GL588_e4_shared3_rejected`
+- `state_GL588_shared_cut2_parent_rejected`
+- `state_GL588_pristine_arb_confirmed`
+
+== Focused UV screen
+<focused-uv-screen>
+The initial API/source audit found no selector in the then-public cross-section UV profiler: it visited every generated LMB and every nonempty loop subset. The coordinator subsequently supplied generic graph, LMB, subset-mask, and subset-cardinality selectors. Analytic mode remains unavailable for cross sections.
+
+Both attempts used nine points over exponents `6..10` and the recorded four-direction ray
+
+```text
+directions = [(19,-23,41), (47,29,-31), (-16,-46,78), (-164,186,-224)]
+norms      = [1000,1100,1300,1700].
+```
+
+The broad summed-orientation attempt remained compute-bound until timeout. Its guard lasted 392.088 s, peaked at 694,296,576 bytes recursive RSS, retained at least 442,736,967,680 bytes free disk, returned child code `-15`, and wrote no output.
+
+The exact retry used graph index 0, LMB index 0 (`(3,4,13,14)`), subset masks `1,5`, subset cardinalities `1,2`, and per-orientation output. These masks are exactly the tested one-loop `[3]` and genuine-two-loop `[3,13]` UV subspaces and exclude the `e14` coordinate. This run also timed out without serializing a profile: its guard lasted 332.260 s, peaked at 1,293,881,344 bytes recursive RSS, retained at least 430,688,174,080 bytes free disk, and returned child code `-15`. The intended JSON path was `states/state_GL588/uv_profiles/exact_g0_lmb0_masks1_5_per_orientation_exp6_10/uv_profile.json`, but neither the file nor its directory exists. Coverage is therefore zero serialized profiles; slopes, `R²`, and JSON SHA-256 are unavailable. Both guards terminated all GL588 descendants. No further run was started after the campaign lease expired.
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,auto,auto,),
+    table.header([attempt], [guard record], [guard SHA-256],),
+    table.hline(),
+    [broad], [`states/GL588_guard/final_uv_focused_summed_fixed.guard.json`], [`d2dc2cdcc371c17d5b4012a70479b2a99f882a983ab8133b0f902175eb9a08bb`],
+    [exact selected], [`states/GL588_guard/final_uv_exact_g0_lmb0_masks1_5_per_orientation.guard.json`], [`f6eca1ccfec4973c9809651c43b2a524c19c76d46d3b380231901ef5c5ddff5b`],
+  )]
+  , kind: table
+  )
+
+== Historical integration diagnostic
+<historical-integration-diagnostic>
+The task-start report records a completed no-directive, full-UV checkpoint. The final basis is an exact invertible reparameterization and the final graph still has no explicit threshold directive, so this remains useful order-of-magnitude evidence, but it was not promoted as a new final-basis run.
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,right,right,),
+    table.header([quantity], [real], [imaginary],),
+    table.hline(),
+    [signed central value], [`1.0744822672975702e-4`], [`9.57822693945131e-21`],
+    [signed error], [`1.6939355516896475e-4`], [`7.44909372763308e-21`],
+    [componentwise-absolute central value], [`4.365136296448574e-4`], [`1.354404132769259e-20`],
+    [componentwise-absolute error], [`1.6935736029362458e-4`], [`7.448672110192692e-21`],
+    [componentwise-absolute relative error], [`38.797726%`], [`54.995935%`],
+  )]
+  , kind: table
+  )
+
+The checkpoint contains 14,600 samples at 36.9 ms/sample/core, with 100% f64, 0% unstable, and 0% nonfinite samples. Both absolute-component relative errors are below 75%, so the historical checkpoint is converged under the campaign rule. It does not validate the failed IR/threshold limits. Its extrema were not replayed after the science freeze, so their locus classification remains incomplete.
+
+== Conclusion
+<conclusion>
+GL588 is decisively #strong[not IR safe with the presently encodable threshold structures];. Arb confirms the `e14+E4` rank-three integrand grows as `lambda^-4`, threshold-off reduces it to a safe `lambda^-1`, and an IR-away E4 path exposes an additional `lambda^-2` pole dominated by cut-2 counterterms. Neither the smallest genuine-two-loop projection nor either one-loop embedding changes the soft tail; the only shared-parent embedding also breaks E25 overlap-center construction. The no-directive graph is therefore retained, together with a cleaner topology-valid generation basis and a card that reproduces every diagnostic and rejected cure.

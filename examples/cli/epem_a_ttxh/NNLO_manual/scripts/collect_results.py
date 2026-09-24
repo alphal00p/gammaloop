@@ -98,7 +98,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--uv-mode", choices=("full", "local-only", "blocked"))
     parser.add_argument("--observation", default="")
     parser.add_argument("--output-record", type=Path)
-    parser.add_argument("--output-md", type=Path)
+    parser.add_argument("--output-typ", type=Path)
     parser.add_argument("--summary-states-root", type=Path)
     parser.add_argument("--summary-output", type=Path)
     args = parser.parse_args()
@@ -241,16 +241,17 @@ def format_complex(value: dict | None) -> str:
     return f"({value.get('re')!s}, {value.get('im')!s})"
 
 
-def markdown_cell(value: object) -> str:
-    return str(value).replace("|", "\\|").replace("\n", " ")
+def typst_text(value: object) -> str:
+    return re.sub(r"([\\#$*_<>\[\]@`])", r"\\\1", str(value).replace("\n", " "))
 
 
-def summary_markdown(states_root: Path) -> str:
+def summary_typst(states_root: Path) -> str:
     header = (
-        "| graph_id | threshold struct. edited? | converged? | all limits OK? | "
-        "central value | error | absolute central value | absolute error | n_points | "
-        "generation time | runtime per sample per core | short observation |\n"
-        "|---|---|---|---|---|---|---|---|---:|---|---|---|\n"
+        "#table(\n  columns: 12,\n"
+        "  table.header([graph\\_id], [threshold struct. edited?], [converged?], "
+        "[all limits OK?], [central value], [error], [absolute central value], "
+        "[absolute error], [n\\_points], [generation time], "
+        "[runtime per sample per core], [short observation]),\n"
     )
     rows = []
     completed = 0
@@ -291,46 +292,46 @@ def summary_markdown(states_root: Path) -> str:
                 integration.get("runtime_per_sample_per_core") or "—",
                 record.get("observation") or "Audit recorded.",
             ]
-        rows.append("| " + " | ".join(markdown_cell(value) for value in values) + " |")
+        rows.append("  [" + "], [".join(typst_text(value) for value in values) + "],")
     return (
-        "# Manual NNLO ttH IR-safety audit\n\n"
-        f"Progress: **{completed}/{len(GRAPH_IDS)}** graph audits recorded.\n\n"
+        "= Manual NNLO ttH IR-safety audit\n\n"
+        f"Progress: *{completed}/{len(GRAPH_IDS)}* graph audits recorded.\n\n"
         + header
         + "\n".join(rows)
-        + "\n"
+        + "\n)\n"
     )
 
 
-def markdown(record: dict) -> str:
+def typst(record: dict) -> str:
     generation = record["generation"]
     integration = record["integration"]
     generation_time = generation.get("time_seconds")
     generation_display = "—" if generation_time is None else f"{generation_time:.6g} s"
-    return f"""# {record["graph_id"]}
+    return f"""= {record["graph_id"]}
 
-## Status
+== Status
 
 - Threshold structure edited: {record["threshold_edited"]}
 - All limits OK: {record["all_limits"]}
 - UV mode: {record["uv_mode"]}
 - Converged: {integration.get("converged", False)}
-- Observation: {record["observation"] or "Pending detailed graph audit."}
+- Observation: {typst_text(record["observation"] or "Pending detailed graph audit.")}
 
-## Generation
+== Generation
 
 - Internal generation time: {generation_display}
 - Peak generation RAM: {generation.get("peak_ram_bytes")}
 - Status: {generation.get("status")}
 
-## IR limits
+== IR limits
 
 Record every limit's edges, midpoint, axis, rank, target-distance fits, signed-branch p envelope, and classification here.
 
-## Threshold directives
+== Threshold directives
 
 Record the original and final compact specification, subspace rationale, and threshold-only checks here.
 
-## Integration
+== Integration
 
 - Signed central value `(re, im)`: {format_complex(integration.get("result"))}
 - Signed error `(re, im)`: {format_complex(integration.get("error"))}
@@ -341,7 +342,7 @@ Record the original and final compact specification, subspace rationale, and thr
 - Absolute relative errors: {integration.get("absolute_relative_error_percent", {})}
 - Stability statistics: {integration.get("statistics", {})}
 
-## Max-weight inspection
+== Max-weight inspection
 
 Signed:
 
@@ -361,7 +362,7 @@ def main() -> int:
     args = parse_args()
     if args.summary_output is not None:
         args.summary_output.parent.mkdir(parents=True, exist_ok=True)
-        args.summary_output.write_text(summary_markdown(args.summary_states_root))
+        args.summary_output.write_text(summary_typst(args.summary_states_root))
         return 0
     assert args.graph_id is not None
     assert args.state is not None
@@ -383,10 +384,10 @@ def main() -> int:
         args.output_record.write_text(
             json.dumps(record, indent=2, sort_keys=True) + "\n"
         )
-    if args.output_md is not None:
-        args.output_md.parent.mkdir(parents=True, exist_ok=True)
-        args.output_md.write_text(markdown(record))
-    if args.output_record is None and args.output_md is None:
+    if args.output_typ is not None:
+        args.output_typ.parent.mkdir(parents=True, exist_ok=True)
+        args.output_typ.write_text(typst(record))
+    if args.output_record is None and args.output_typ is None:
         print(json.dumps(record, indent=2, sort_keys=True))
     return 0
 

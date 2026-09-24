@@ -85,18 +85,36 @@ commands = [
 name = "remediation_pristine_uv_random_masks8_14_15"
 commands = [
   "set process -p epem_a_tth -i NNLO kv general.evaluator_method=SingleParametric general.generate_events=false general.store_additional_weights_in_event=false subtraction.disable_threshold_subtraction=false",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 8620260810
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 8 --subset-cardinality 1
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/trials/remediation/uv_random_g0_lmb0_mask8_n5_exp6_10_seed8620260810"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 8620260810
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 8 --subset-cardinality 1
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/trials/remediation/uv_random_g0_lmb0_mask8_n5_exp6_10_seed8620260810""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/trials/remediation/uv_random_g0_lmb0_mask8_n5_exp6_10_seed8620260810_all_uv_limits""",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 8620260811
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 14 --subset-cardinality 3
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/trials/remediation/uv_random_g0_lmb0_mask14_n5_exp6_10_seed8620260811"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 8620260811
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 14 --subset-cardinality 3
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/trials/remediation/uv_random_g0_lmb0_mask14_n5_exp6_10_seed8620260811""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/trials/remediation/uv_random_g0_lmb0_mask14_n5_exp6_10_seed8620260811_all_uv_limits""",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 8620260812
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 15 --subset-cardinality 4
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/trials/remediation/uv_random_g0_lmb0_mask15_n5_exp6_10_seed8620260812"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 8620260812
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 15 --subset-cardinality 4
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/trials/remediation/uv_random_g0_lmb0_mask15_n5_exp6_10_seed8620260812""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL086/trials/remediation/uv_random_g0_lmb0_mask15_n5_exp6_10_seed8620260812_all_uv_limits""",
 ]
 
 [[command_blocks]]

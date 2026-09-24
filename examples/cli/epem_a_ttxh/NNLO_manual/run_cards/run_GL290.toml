@@ -417,36 +417,60 @@ commands = [
 name = "uv_profile_final_g0_lmb0_mask2_n5_exp6_10"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 29020260809
+  #       --uv-ray-directions 37,126,-109,3,5,-7,-11,13,17,47,29,-31
+  #       --uv-ray-norms 1000,1100,1300,1700
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 2 --subset-cardinality 1
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_g0_lmb0_mask2_per_orientation_n5_exp6_10_seed29020260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 29020260809
       --uv-ray-directions 37,126,-109,3,5,-7,-11,13,17,47,29,-31
       --uv-ray-norms 1000,1100,1300,1700
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 2 --subset-cardinality 1
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_g0_lmb0_mask2_per_orientation_n5_exp6_10_seed29020260809""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_g0_lmb0_mask2_per_orientation_n5_exp6_10_seed29020260809_all_uv_limits""",
 ]
 
 [[command_blocks]]
 name = "uv_profile_final_g0_lmb0_mask4_n5_exp6_10"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 29020260809
+  #       --uv-ray-directions 37,126,-109,3,5,-7,-11,13,17,47,29,-31
+  #       --uv-ray-norms 1000,1100,1300,1700
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 4 --subset-cardinality 1
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_g0_lmb0_mask4_per_orientation_n5_exp6_10_seed29020260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 29020260809
       --uv-ray-directions 37,126,-109,3,5,-7,-11,13,17,47,29,-31
       --uv-ray-norms 1000,1100,1300,1700
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 4 --subset-cardinality 1
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_g0_lmb0_mask4_per_orientation_n5_exp6_10_seed29020260809""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_g0_lmb0_mask4_per_orientation_n5_exp6_10_seed29020260809_all_uv_limits""",
 ]
 
 [[command_blocks]]
 name = "uv_profile_final_g0_lmb0_mask6_n5_exp6_10"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 29020260809
+  #       --uv-ray-directions 37,126,-109,3,5,-7,-11,13,17,47,29,-31
+  #       --uv-ray-norms 1000,1100,1300,1700
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 6 --subset-cardinality 2
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_g0_lmb0_mask6_per_orientation_n5_exp6_10_seed29020260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --per-orientation --seed 29020260809
       --uv-ray-directions 37,126,-109,3,5,-7,-11,13,17,47,29,-31
       --uv-ray-norms 1000,1100,1300,1700
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 6 --subset-cardinality 2
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_g0_lmb0_mask6_per_orientation_n5_exp6_10_seed29020260809""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_g0_lmb0_mask6_per_orientation_n5_exp6_10_seed29020260809_all_uv_limits""",
 ]
 
 # Lower scales distinguish the four steep cancellation-limited mask-2 fits
@@ -455,12 +479,20 @@ commands = [
 name = "uv_profile_retry_g0_lmb0_mask2_n5_exp4_8"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 4 --max-scaling 8 --per-orientation --seed 29020260809
+  #       --uv-ray-directions 37,126,-109,3,5,-7,-11,13,17,47,29,-31
+  #       --uv-ray-norms 1000,1100,1300,1700
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 2 --subset-cardinality 1
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/retry_g0_lmb0_mask2_per_orientation_n5_exp4_8_seed29020260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 4 --max-scaling 8 --per-orientation --seed 29020260809
       --uv-ray-directions 37,126,-109,3,5,-7,-11,13,17,47,29,-31
       --uv-ray-norms 1000,1100,1300,1700
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 2 --subset-cardinality 1
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/retry_g0_lmb0_mask2_per_orientation_n5_exp4_8_seed29020260809""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/retry_g0_lmb0_mask2_per_orientation_n5_exp4_8_seed29020260809_all_uv_limits""",
 ]
 
 # Certification profile: omit fixed-ray arguments so the seeded random ray is
@@ -469,10 +501,16 @@ commands = [
 name = "uv_profile_final_seeded_random_g0_lmb0_mask6_n5_exp4_8"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 4 --max-scaling 8 --per-orientation --seed 29020260810
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 6 --subset-cardinality 2
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_seeded_random_g0_lmb0_mask6_per_orientation_n5_exp4_8_seed29020260810"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 4 --max-scaling 8 --per-orientation --seed 29020260810
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 6 --subset-cardinality 2
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_seeded_random_g0_lmb0_mask6_per_orientation_n5_exp4_8_seed29020260810""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL290/uv_profiles/final_seeded_random_g0_lmb0_mask6_per_orientation_n5_exp4_8_seed29020260810_all_uv_limits""",
 ]
 
 [[command_blocks]]

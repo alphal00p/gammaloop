@@ -376,12 +376,20 @@ commands = ["run runtime_uv_profile", """profile ultra-violet -p epem_a_tth -i N
 
 [[command_blocks]]
 name = "uv_profile_exact_g0_lmb0_masks1_5_per_orientation"
-commands = ["run runtime_uv_profile", """profile ultra-violet -p epem_a_tth -i NNLO
+commands = ["run runtime_uv_profile",
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #   --n-points 9 --min-scaling 6 --max-scaling 10 --per-orientation --seed 58820260809
+  #   --uv-ray-directions 19,-23,41,47,29,-31,-16,-46,78,-164,186,-224
+  #   --uv-ray-norms 1000,1100,1300,1700
+  #   --graph-index 0 --lmb-index 0 --loop-subset-mask 1,5 --subset-cardinality 1,2
+  #   --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL588/uv_profiles/exact_g0_lmb0_masks1_5_per_orientation_exp6_10"""
+  """profile ultra-violet -p epem_a_tth -i NNLO
   --n-points 9 --min-scaling 6 --max-scaling 10 --per-orientation --seed 58820260809
   --uv-ray-directions 19,-23,41,47,29,-31,-16,-46,78,-164,186,-224
   --uv-ray-norms 1000,1100,1300,1700
-  --graph-index 0 --lmb-index 0 --loop-subset-mask 1,5 --subset-cardinality 1,2
-  --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL588/uv_profiles/exact_g0_lmb0_masks1_5_per_orientation_exp6_10"""]
+  --graph 0 --selected-limits all
+  --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL588/uv_profiles/exact_g0_lmb0_masks1_5_per_orientation_exp6_10_all_uv_limits"""]
 
 [[command_blocks]]
 name = "uv_profile_escalated_per_orientation"

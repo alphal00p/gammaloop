@@ -1,0 +1,205 @@
+= GL286 manual IR-safe threshold audit
+<gl286-manual-ir-safe-threshold-audit>
+== Outcome
+<outcome>
+- #strong[Threshold structure edited:] no. The final DOT is byte-identical to the pristine graph, retains LMB `(4,5,6,12)`, and has no explicit `threshold_counterterms` document. Exact Arb resolves the old hard-`e12/e13` f64 failure as precision loss, so no projected CT is causally justified.
+- #strong[All limits OK:] #strong[inconclusive];. The former decisive f64 failure is now a bounded Arb plateau with threshold subtraction both on and off. Several other baseline f64 paths remain fit-quality inconclusive and were not promoted to passes.
+- #strong[UV mode:] clean full local and integrated UV regeneration succeeded. A seeded-random selected mask-11 profile certifies all 568 orientations as safely vanishing; fixed mask 3 independently gives the same diagnostic result.
+- #strong[Collinear scope:] all three hard, nonzero pairwise sectors at the graph\'s `V_36` triple-gluon vertex are encoded and evaluated.
+
+== Provenance and topology
+<provenance-and-topology>
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([artifact], [SHA-256],),
+    table.hline(),
+    [selector/metadata-enabled `target/release/gammaloop`], [`0f8ed2c842814995bdcad19b3bc2a406eb75cb4a1784a74aa3c3de6b0e9d2b1b`],
+    [raw master-state DOT], [`ea7e9826157df98e13ff79021dcd0c5d8fd7b1eb951e682289584826b8d5e443`],
+    [final cleaned `graphs/GL286.dot`], [`cd7de9cb6e37c0f4f1263c42e6db8cad70e375d07179a93737d31ec160937b1a`],
+    [final run card], [`b5e82f3af8dfd9ad78186d97fdc4d7297e6b9f10a92d5feca8cd90b2438e831b`],
+    [threshold-on f64/Arb causal JSON], [`ed3371f74a1d30941e38e2c95f8932e74c6a91baf3bf3655950408eba3c55863` / `d7577a59fb781b65317fc9a05010b671b207e93d0f6c0a003e9e70afd46efe00`],
+    [threshold-off f64/Arb causal JSON], [`f73ff0cd0972bd4d75981fdb15f2d181667fc5f6248224e72a3417b5b984b952` / `6569c8012cea62d0f30bed31271331999440c65fd1654a1234f7f811472fea76`],
+    [seeded-random mask-11 UV JSON], [`1cbdf1db9cf90d3d76c44eb9a9ee0a0b01cf6ffd35bba1bdd48f36991cb90abe`],
+    [fixed-ray mask-3 UV JSON], [`1ae6d45eaf726db4f64c153c0f0ce053b51f560cc12ce911323c351ed2a29ab7`],
+  )]
+  , kind: table
+  )
+
+GL286 has four loops and LMB basis edges `(4,5,6,12)`. Vertex 7 is `V_36`, incident on gluons `e12`, `e13`, and `e14`; no `V_37` occurs. The raw diagnostic decomposition gives
+
+```text
+q12 = K3
+q13 = K0 - K1 - K3
+q14 = K1 - K0
+q12 + q13 + q14 = 0.
+```
+
+Thus there are three single-soft loci, one independent rank-six double-soft locus (any two force the third), and three rank-two hard-collinear sectors. Relevant massive momenta are `q3=q9=K0-K1+K2` and `q11=q3-K3`.
+
+== Cuts, orientations, and active thresholds
+<cuts-orientations-and-active-thresholds>
+The process-aware import generated #strong[568 unrestricted orientations] (IDs 0--567), 12 process-valid cuts, and 28 evaluators:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (right,auto,auto,),
+    table.header([cut], [edges], [active thresholds],),
+    table.hline(),
+    [0], [`(2,7,11,13)`], [E46, E53, E39],
+    [1], [`(2,7,11,12,14)`], [none],
+    [2], [`(2,7,9,14)`], [none],
+    [3], [`(2,7,9,12,13)`], [none],
+    [4], [`(2,6,7)`], [E53, E39, E21, E61],
+    [5], [`(2,4,11,13,14)`], [none],
+    [6], [`(2,4,11,12)`], [E17, E16, E60],
+    [7], [`(2,4,9)`], [E17, E16, E60],
+    [8], [`(2,4,6,14)`], [none],
+    [9], [`(2,4,6,12,13)`], [none],
+    [10], [`(2,3,5,14)`], [E46, E53],
+    [11], [`(2,3,5,12,13)`], [none],
+  )]
+  , kind: table
+  )
+
+Surface edge sets are E16 `(4,5,14)`, E17 `(5,7)`, E21 `(3,6,14)`, E39 `(3,9)`, E46 `(3,11,13,14)`, E53 `(3,11,12)`, E60 `(4,5,12,13)`, and E61 `(3,6,12,13)`. At `q12=0`, the pairs E16/E60, E21/E61, and E39/E53 coalesce. At `q13=0`, E16/E60, E21/E61, and E46/E53 coalesce. At `q14=0`, the pairs are E16/E17, E21/E39, and E46/E53. The correlated double-soft point coalesces all active families.
+
+No forced cuts, orientation patterns, runtime orientation filters, or orientation IDs occur in the card. Every result is the complete graph sum. Current approach JSON stores nonzero threshold terms under `additional_contribution_sums.threshold_counterterm_0`; the generic fitter\'s legacy `active_threshold_counterterm` flag is therefore a false negative.
+
+== Limit constructions
+<limit-constructions>
+Vectors are `(K0,K1,K2,K3)`, three components per loop momentum. The baseline blocks use 50 signed logarithmic points, `10^-6 <= |lambda| <= 10^-2`, a skipped midpoint, three cores, graph ID 0, and no orientation ID. The causal remediation reuses the exact hard-`e12/e13` midpoint and axis with 16 points per signed branch in f64 and Arb, both with threshold subtraction on and exactly off.
+
+#figure(
+  align(center)[#table(
+    columns: 4,
+    align: (auto,auto,auto,auto,),
+    table.header([block], [midpoint], [axis], [rank / targets],),
+    table.hline(),
+    [`soft_e12`], [`[-91,64,83,74,-52,137,37,126,-109,0,0,0]`], [`[0,0,0,0,0,0,0,0,0,211,-157,193]`], [3; `q12`],
+    [`soft_e13`], [`[105,-99,196,74,-52,137,37,126,-109,31,-47,59]`], [`[211,-157,193,0,0,0,0,0,0,0,0,0]`], [3; `q13`],
+    [`soft_e14`], [`[-91,64,83,-91,64,83,37,126,-109,31,-47,59]`], [`[0,0,0,211,-157,193,0,0,0,0,0,0]`], [3; `q14`],
+    [`double_soft`], [`[-91,64,83,-91,64,83,37,126,-109,0,0,0]`], [`[0,0,0,98,-86,342,0,0,0,211,-157,193]`], [6; all three `q`],
+    [`collinear_e12_e13`], [`[-91,64,83,-157,152,-181,37,126,-109,30,-40,120]`], [`[0,0,0,-31,53,0,0,0,0,47,29,0]`], [2; transverse `q12/q13`],
+    [`collinear_e12_e14`], [`[-91,64,83,-61,24,203,37,126,-109,30,-40,120]`], [same collinear axis], [2; transverse `q12/q14`],
+    [`collinear_e13_e14`], [`[-91,64,83,-61,24,203,37,126,-109,-66,88,-264]`], [same collinear axis], [2; transverse `q13/q14`],
+    [`correlated_e12_1660`], [`[0,0,-220.071,0,0,220.071,37,126,-109,0,0,0]`], [`[0,0,19,0,0,0,0,0,0,211,-157,193]`], [3; `q12`, E16/E60],
+    [`correlated_e12_2161`], [`[-91,64,83,11.8642396316,-73.1523195088,379.9434822065,100,70,-50,0,0,0]`], [`[0,0,0,0,0,0,19,23,-17,211,-157,193]`], [3; `q12`, E21/E61],
+    [`correlated_e12_3953`], [`[31,-47,83,-59,101,-73,-90,148,313.11725613113,0,0,0]`], [`[0,0,0,0,0,0,0,0,47,211,-157,193]`], [3; `q12`, E39/E53],
+    [`correlated_e13_all`], [`[0,0,-220.071,0,0,220.071,0,0,220.071,0,0,-440.142]`], [`[0,0,0,0,0,19,0,0,0,47,29,-31]`], [3; `q13`, all three coalescing pairs],
+    [`correlated_e14_1617_2139`], [`[0,0,469.11725613113,0,0,469.11725613113,469.11725613113,0,0,31,-47,83]`], [`[0,0,0,47,29,-31,19,0,0,0,0,0]`], [3; `q14`, E16/E17 and E21/E39],
+    [`correlated_e14_4653`], [`[31,-47,83,31,-47,83,0,0,220.071,0,0,440.142]`], [`[0,0,0,47,29,-31,0,0,0,0,0,19]`], [3; `q14`, E46/E53],
+    [`correlated_double_soft`], [`[0,0,469.11725613113,0,0,469.11725613113,469.11725613113,0,0,0,0,0]`], [`[0,0,0,98,-86,342,0,0,0,211,-157,193]`], [6; all soft and all active E-surfaces],
+  )]
+  , kind: table
+  )
+
+The generated `*.series.json` evidence directly verifies all target norms, transverse relations, and eta distances. Every target-distance fit has slope within `0.999923..1.00020` and unit-quality fits, so none of the classifications below is caused by a malformed approach path.
+
+== Baseline f64 branch/window fits
+<baseline-f64-branchwindow-fits>
+Entries are `window:p/R^2`; classifications are from the mandated 8/12/16-point envelopes.
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,right,auto,auto,auto,),
+    table.header([path], [rank], [negative branch], [positive branch], [class],),
+    table.hline(),
+    [`soft_e12`], [3], [8:`4.0388/.997828`, 12:`4.0060/.998945`, 16:`3.9301/.999214`], [8:`1.9995/1`, 12:`1.9998/1`, 16:`1.9998/1`], [inconclusive (branch disagreement)],
+    [`soft_e13`], [3], [8:`2.0142/.999452`, 12:`2.0074/.999833`, 16:`2.0047/.999928`], [8:`2.0064/.999773`, 12:`2.0024/.999932`, 16:`2.0014/.999971`], [pass],
+    [`soft_e14`], [3], [8:`3.9384/.857922`, 12:`3.9713/.941073`, 16:`4.1279/.967033`], [8:`3.2406/.872326`, 12:`3.7202/.955708`, 16:`4.2313/.943025`], [inconclusive],
+    [`double_soft`], [6], [8:`4.9667/.846521`, 12:`4.8544/.946944`, 16:`4.8874/.977237`], [8:`4.9483/.995467`, 12:`4.9841/.998662`, 16:`4.9908/.999437`], [inconclusive],
+    [`collinear_e12_e13`], [2], [8:`3.9250/.998955`, 12:`3.9605/.999617`, 16:`3.9762/.999781`], [8:`3.9550/.998951`, 12:`3.9714/.999507`, 16:`3.9936/.999748`], [#strong[fail];],
+    [`collinear_e12_e14`], [2], [8:`4.0059/.961062`, 12:`6.3583/.584775`, 16:`4.5034/.580756`], [8:`5.0128/.070237`, 12:`1.4847/.020886`, 16:`2.7864/.128352`], [inconclusive],
+    [`collinear_e13_e14`], [2], [8:`14.088/.343690`, 12:`5.2800/.133136`, 16:`3.4071/.114545`], [8:`-9.5097/.184559`, 12:`-4.9947/.164161`, 16:`.7422/.006093`], [inconclusive],
+    [`correlated_e12_1660`], [3], [8:`1.9985/.999998`, 12:`1.9992/.999999`, 16:`1.9995/1`], [8:`2.0000/1`, 12:`1.9999/1`, 16:`1.9999/1`], [pass],
+    [`correlated_e12_2161`], [3], [8:`2.1364/.995905`, 12:`2.0697/.998273`, 16:`2.0431/.999128`], [8:`2.0004/1`, 12:`2.0002/1`, 16:`2.0002/1`], [pass],
+    [`correlated_e12_3953`], [3], [8:`1.9903/.999935`, 12:`1.9953/.999978`, 16:`1.9971/.999990`], [8:`1.9705/.991840`, 12:`1.9864/.997589`, 16:`1.9948/.998979`], [inconclusive (one poor fit)],
+    [`correlated_e13_all`], [3], [8:`1.9411/.997045`; 9 finite points], [8:`1.8791/.997015`; 9 finite points], [inconclusive (nonfinite near points)],
+    [`correlated_e14_1617_2139`], [3], [`p=3.7378..3.8838`, min R2 `.808574`], [`p=3.7919..4.3999`, min R2 `.858047`], [inconclusive],
+    [`correlated_e14_4653`], [3], [`p=3.9770..4.6807`, min R2 `.818672`], [`p=3.5789..4.3770`, min R2 `.680465`], [inconclusive],
+    [`correlated_double_soft`], [6], [`p=4.4873..4.9191`, min R2 `.970087`], [`p=5.0076..5.0188`, min R2 `.999914`], [inconclusive (span `.5315`)],
+  )]
+  , kind: table
+  )
+
+== Precision and threshold diagnosis
+<precision-and-threshold-diagnosis>
+The remediation completed the exact four-way causal panel on the nondegenerate hard-`e12/e13` path. The midpoint keeps all massive and eta scales hard, while `q13=1.2 q12`, `q14=-2.2 q12`, and the transverse approach has nonzero rank two. Fits below use the nearest 8/12/16 points on each signed branch; `p=-d log|I|/d log|lambda|`.
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,auto,auto,auto,auto,),
+    table.header([arithmetic / threshold CTs], [negative branch `p`], [positive branch `p`], [nearest-point magnitude], [diagnosis],),
+    table.hline(),
+    [f64 / on], [`3.9742, 3.9462, 3.2482`], [`3.9723, 3.9518, 3.2523`], [grows to `~6.2e-26`], [cancellation loss],
+    [f64 / off], [`3.7109, 2.3905, 1.5563`], [`3.6200, 2.3649, 1.5391`], [grows to `~5.8e-29`], [cancellation loss],
+    [Arb / on], [`0.000006, 0.000038, 0.000279`], [`-0.000006, -0.000038, -0.000271`], [flat `8.57e-38..8.65e-38`], [bounded plateau],
+    [Arb / off], [`0.000084, 0.000526, 0.003743`], [`-0.000084, -0.000527, -0.003807`], [flat `5.66e-36..6.35e-36`], [bounded plateau],
+  )]
+  , kind: table
+  )
+
+The low Arb R2 values (`0.497..0.761`) are expected when fitting an almost constant series and are not growth. Threshold-off Arb is also bounded, so disabling subtraction is neither a cure nor necessary.
+
+Per-cut normalized display weights localize the f64 artifact to cut 7 `(2,4,9)`: its aggregate `threshold_counterterm_0` falsely scales as `p=3.9745` and `3.9726` in the nearest eight points. In Arb the same cut-7 CT is flat (`|p|<6.8e-5`), as are the CT totals on active cuts 0, 4, 6, and 10 (`|p|<1.5e-4`). Bare cut pairs 2/3, 8/9, and 10/11 individually scale near `p=2` and cancel in the complete sum. This decomposition supplies a numerical cause---precision loss inside one f64 CT evaluation---not a missing common projected parent or a genuine two-loop threshold region.
+
+The four guarded runs completed normally in 16.940 s (f64/on), 33.175 s (f64/off), 166.453 s (Arb/on), and 124.139 s (Arb/off). No association was edited, so threshold-only structural validation is not applicable. The pristine autogenerated CT structure is retained.
+
+== Selected UV profiles
+<selected-uv-profiles>
+The certification profile uses a seeded random ray, not the deterministic diagnostic ray: graph 0, original LMB 0 `(4,5,6,12)`, exact subset mask 11, free edges `[4,5,12]`, fixed edge `[6]`, five scales `10^6..10^10`, and all 568 unrestricted orientations. The JSON has root `allow_vanishing_missing_fits=true`. Its summed result and every orientation record have `finite_samples=5`, `positive_finite_samples=0`, and `missing_fit_is_vanishing=true`. Thus all null fits are auditable exact-vanishing series and the selected sector passes. The guard completed normally in 384.751 s with 3,483,791,360 bytes peak recursive RSS.
+
+Fixed-ray mask 3 is a diagnostic cross-check for free edges `[4,5]` with `[6,12]` fixed. It likewise emitted all 568 orientations, five finite samples each, zero positive-finite samples, and an explicit vanishing flag at both summed and per-orientation levels. Its guard completed normally in 250.728 s with 3,477,979,136 bytes peak RSS. The fixed-ray result is not used as the certification hierarchy\'s primary evidence.
+
+== Generation
+<generation>
+- Remediation full-UV internal generation time: #strong[342.356448 s];.
+- Evaluators: 28; compile time: 0.
+- Internal peak RAM: 3,709,292,544 bytes.
+- Expression-build time: 40.040 s; Spenso time: 26.560 s; Symbolica time: 275.755 s.
+- Full local/integrated UV succeeded on the first attempt; no local-only result exists.
+- Guard duration / peak recursive RSS: 345.501 s / 3,658,772,480 bytes; minimum free disk was 429,820,477,440 bytes.
+
+== Integration
+<integration>
+The original `m_uv=91.188` variant ran with three cores, Monte Carlo graph/LMB-channel sampling, summed orientations, one `z` rotation, and one `Double` stability level. The watchdog sent `SIGINT` after approximately three minutes; GammaLoop checkpointed iteration 48 and exited normally during grace.
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([metric], [value],),
+    table.hline(),
+    [final completed samples], [4,800],
+    [runtime per sample per core], [#strong[109 ms];],
+    [signed central `(re,im)`], [`(4.182437700193696e-5, -3.911859847314311e-5)`],
+    [signed error `(re,im)`], [`(3.51248453843805e-5, 4.0492611060377616e-5)`],
+    [absolute central \`(], [re],
+    [absolute error \`(], [re],
+    [absolute relative error], [`41.1677%` real, `55.7434%` imaginary],
+    [nonfinite samples], [`0%`],
+    [retained unstable-or-nonfinite aggregate], [`0.0208333%`],
+    [rough `converged?`], [#strong[yes];],
+    [guard outcome], [`timeout`, return code 0 after checkpoint grace],
+    [guard duration / peak recursive RSS], [`212.308 s` / `8,446,558,208` bytes],
+    [minimum disk free], [`147,989,778,432` bytes],
+  )]
+  , kind: table
+  )
+
+The finite checkpoint has no nonfinite samples and both componentwise-absolute relative errors are below 75%, satisfying the campaign\'s diagnostic convergence rule. Signed relative errors are reported only diagnostically.
+
+== Max-weight replay
+<max-weight-replay>
+Persisted signed extrema are real `+0.1513708558` (LMB channel 14), real `-0.05399217983` (channel 17), imaginary `+0.02711493822` (channel 3), and imaginary `-0.1904975545` (channel 14). Componentwise-absolute maxima are `0.1513708558` real and `0.1904975545` imaginary; their complete 12-dimensional coordinates are retained in `integration_result.json` and `result_record.json`.
+
+The extrema were not replayed with `inspect` before the one-lease freeze, so their massless-edge norms and eta distances remain #strong[unclassified/incomplete];. No focused path or directive is inferred from unreplayed coordinates.
+
+== Conclusion
+<conclusion>
+GL286 requires no threshold directive or LMB change. The prior hard-`e12/e13` f64 failure is a precision artifact: exact Arb gives bounded plateaus with threshold subtraction on and off, and per-cut attribution shows only a spurious f64 cut-7 CT tail. The seeded-random selected UV sector is safely vanishing for the sum and all 568 orientations. Remaining baseline paths are still fit-quality inconclusive, so the honest final status is `all limits OK = inconclusive`, not a threshold failure. The existing finite, converged integration remains applicable to the byte-identical pristine graph.

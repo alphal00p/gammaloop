@@ -1,6 +1,7 @@
 use super::*;
 use gammaloop_api::{StateLoadOption, state::RunHistory};
 use gammaloop_integration_tests::workspace_root;
+use gammalooprs::{settings::RuntimeSettings, utils::serde_utils::SmartSerde};
 use std::fs;
 
 fn is_generated_state_dir(path: &Path) -> bool {
@@ -47,10 +48,24 @@ fn all_example_toml_cards_are_loadable() -> Result<()> {
     let failures = cards
         .iter()
         .filter_map(|card| {
-            RunHistory::load(card).err().map(|err| {
-                let display_path = card.strip_prefix(&workspace_root).unwrap_or(card);
-                format!("{}:\n{err:?}", display_path.display())
-            })
+            RunHistory::load(card)
+                .map(|_| ())
+                .or_else(|run_error| {
+                    // Both schemas reject unknown fields, so a malformed run
+                    // card cannot pass as a standalone runtime overlay.
+                    RuntimeSettings::from_file(card, "example runtime settings")
+                        .map(|_| ())
+                        .map_err(|runtime_error| {
+                            eyre::eyre!(
+                                "Neither a valid run card nor runtime settings:\nRun card: {run_error:?}\nRuntime settings: {runtime_error:?}"
+                            )
+                        })
+                })
+                .err()
+                .map(|err| {
+                    let display_path = card.strip_prefix(&workspace_root).unwrap_or(card);
+                    format!("{}:\n{err:?}", display_path.display())
+                })
         })
         .collect_vec();
 

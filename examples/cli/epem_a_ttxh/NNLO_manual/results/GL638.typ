@@ -1,0 +1,203 @@
+= GL638 remediation audit
+<gl638-remediation-audit>
+== Outcome
+<outcome>
+- #strong[Final graph:] the task-start GL638 DOT was restored byte-for-byte. No remediation candidate was accepted.
+- #strong[Threshold structure edited?:] yes. The final graph retains the established projected one-loop/two-loop threshold-counterterm variants, but this lease made no additional final DOT edit.
+- #strong[All limits OK?:] #strong[inconclusive];. The retained all-orientation prescription still evaluates one local multiplier as `NaN+NaNi` on the first generic `q13` soft path. The strongest structural candidate removes the diagnosed `q14 ~ lambda^-3` term, but GammaLoop cannot encode its required single projected E30 instance without a duplicate-parent-LMB conflict.
+- #strong[Full UV generation:] yes, 33 evaluators with local and integrated UV counterterms and no compilation.
+- #strong[Mandatory per-orientation UV profile:] incomplete. The baseline entered evaluation, emitted four invalid-radial-solution refusals, reached its 780-second process timeout, and wrote no `uv_profile.json`.
+- #strong[Integration converged?:] yes under the campaign\'s rough numerical rule, using the previously completed checkpoint for this byte-identical final DOT. It is only a numerical diagnostic and does not validate the unresolved IR limit.
+- #strong[Conclusion:] unresolved. Every encodable nonconstant partition tested here spoils a required LU cancellation, while the encodable exact selector is forbidden by the remediation rules.
+
+== Reproducibility
+<reproducibility>
+All GammaLoop calls in this lease used `scripts/run_guarded.py`, the shared two-job slot directory, `RAYON_NUM_THREADS=3`, a 15 GiB recursive-RSS cap, a 12 GiB disk floor, and a 6 GiB available-memory floor. No source, test, shared script, resource, plan, or summary file was changed, and no build, commit, or escalation was performed.
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([artifact], [SHA-256],),
+    table.hline(),
+    [`target/release/gammaloop`], [`d655c43b3ea32797095c8f8d787176581c843b62840ae0af29337ddfacaff9b4`],
+    [final `NNLO_manual/graphs/GL638.dot`], [`9e2fd457642a48f4d04fa1bd86920b71b2620a21862aa4a8665847ebc79c345f`],
+    [final `NNLO_manual/run_cards/run_GL638.toml`], [`18d3d96222971f1679f9d605fc3f8ae9c422904cedb62deb35f57d453a27e54a`],
+  )]
+  , kind: table
+  )
+
+The card adds a basis-display block, the mandatory baseline UV profile, and three distinct adaptive f128 profile blocks. The adaptive blocks were reserved for completed-but-unreliable baseline fits; they were not used after the baseline timed out without producing a fit file.
+
+== Topology and complete process inventory
+<topology-and-complete-process-inventory>
+- Generation LMB edges: `(3,4,7,10)`.
+- Massless gluons: `q13 = K0-K3` and `q14 = K2-K0` in the generation basis.
+- No triple- or four-gluon vertex is present, so this graph has no required hard-collinear family.
+- Six process-valid cuts are retained, with no `force_cuts`, orientation pattern, or orientation ID:
+  - `c0 = (2,6,12,13)`
+  - `c1 = (2,6,10)`
+  - `c2 = (2,6,7,13,14)`
+  - `c3 = (2,4,12)`
+  - `c4 = (2,4,10,13)`
+  - `c5 = (2,4,7,14)`
+- Generation produced 33 evaluators. The full saved state exposes 388 orientations (`0..387`).
+
+The threshold associations relevant to the diagnosis are complete:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,auto,auto,),
+    table.header([cut], [side], [E-surfaces],),
+    table.hline(),
+    [`c0`], [left], [E29 `(8,12,14)`, E30 `(7,8)`],
+    [`c1`], [left], [E29 `(8,12,14)`, E28 `(8,10,13,14)`, E30 `(7,8)`, E11 `(3,12)`, E10 `(3,10,13)`, E47 `(3,7,14)`],
+    [`c3`], [left], [E29 `(8,12,14)`, E30 `(7,8)`],
+    [`c3`], [right], [E43 `(5,12,13)`, E17 `(5,10)`],
+    [`c4`], [left], [E28 `(8,10,13,14)`, E30 `(7,8)`],
+    [`c5`], [right], [E17 `(5,10)`, E52 `(5,7,13,14)`],
+  )]
+  , kind: table
+  )
+
+== Final retained threshold prescription
+<final-retained-threshold-prescription>
+For E30 `(7,8)` under `c0`, `c1`, `c3`, and `c4`, the DOT retains two projected instances with parent LMB `[3,4,7,10]`:
+
++ `intrinsic_1l` in subspace `[7]`;
++ `embedded_2l` in subspace `[3,7]`.
+
+The one- and two-loop variants use complementary normalized squared `eta(star,eset(...))` weights. E29 is the partner surface except for `c4`, whose physical partner is E14 `(2,4,10,13)`. Under `c1`, E29 also has `shared_1l` in `[7]`. Threshold subtraction remains enabled and the full association inventory is preserved.
+
+This is the exact task-start prescription, not a claim that it is all-orientation safe. Its normalized weights have a common-zero locus; the final generic P1 run aborts with:
+
+```text
+Failed to evaluate local multiplier for graph 'GL638' cut group 0 left variant 1
+threshold multiplier evaluated to non-finite value (NaN+NaNi)
+```
+
+== Physics and implementation audit
+<physics-and-implementation-audit>
+The four-page `resources/ttH_defo.pdf` motivates treating a one-loop subspace as an NLO-like object and sharing CTs across cuts connected by a soft limit. A one-loop/two-loop partition is justified only for genuinely distinct deformation regions, and its two-loop branch must itself be soft safe. This points to the smallest common projected subspace before introducing independent variants.
+
+The GL280 multiplier-frame audit found only two usable frames:
+
+- `star` is evaluated at each selected CT root, so a surface\'s own star eta is identically zero and nominally shared weights need not agree between roots;
+- `effective` is the base surface for local pieces but the root surface for integrated pieces, and changes again for iterated components.
+
+There is therefore no public invariant “original/base surface” frame with which to construct a common smooth partition. This is why changing only the multiplier formula did not solve GL638.
+
+== Candidate ledger
+<candidate-ledger>
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,auto,auto,),
+    table.header([candidate], [evidence], [decision],),
+    table.hline(),
+    [Task-start normalized star ratio], [Local/full generation succeeds; generic P1 immediately reaches `NaN+NaNi` in group 0 left variant 1.], [Rejected as a new cure; restored only because it is the task-start graph.],
+    [Same ratio in `effective` frame], [Generation succeeds, but P1 reaches a nonfinite integrated multiplier because integrated `effective` resolves to the root.], [Rejected.],
+    [Polar/atan rewrite in `effective` frame], [Generation succeeds; runtime exits because `symbolica_atan` is not implemented for complex f64 values.], [Rejected.],
+    [Isolate only E30 one-loop or two-loop branch], [Both diagnostic states generate. Generic `q13` remains rank-3 unsafe; the branch comparison localizes the `q14 ~ lambda^-3` term to the E30 two-loop branch.], [Diagnostic only; exact `1/0` selectors are forbidden.],
+    [Project c1 E28 to `[7]`, E11/E47 to `[3]`, use one common parent, and retain only one-loop E30], [`q14` passes at rank 3 with `p=2.00000955..2.00005207` and minimum `R^2=0.999999999906`. In `q13`, E29/E30/E28 cancellation reduces components from about `1e-19` to `1e-28`; f64 noise gives inconclusive `p=3.15101..5.07928`, minimum `R^2=0.696529`.], [Strongest physics candidate, but the tested state needs a forbidden exact selector.],
+    [Encode one genuine E30 `[7]` instance per association], [Explicit forms collide with default variants or resolve nominal parent `[3,4,7,10]` to duplicate internal LMB indices. The final failure is `Threshold subspaces use different parent LMBs 26 and 0`.], [Blocked by current association/parent resolution.],
+    [Exact `1/0` duplicate metadata], [Full generation succeeds and is runtime-equivalent to the desired one-loop-only structure.], [Rejected: late exact gates are expressly disallowed.],
+    [Smooth finite star partition `1/(1+eta_soft^2)` and complement], [Full generation succeeds and removes `0/0`, but the four CT roots see different star values. `q13` regresses cleanly to `p=2.99998859..3.00001517`.], [Rejected: breaks LU cancellation.],
+    [Mixed transformed parent `[3,4,10,14]`], [Locally valid, but mixing parent frames destroys E29 cancellation; both `q13` and `q14` are clean `p≈3`. A global move to this parent cannot be generated without an exact card-coordinate transform and association-resolution changes.], [Rejected before any final basis mutation.],
+  )]
+  , kind: table
+  )
+
+The decisive branch-isolation comparison is:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,auto,auto,),
+    table.header([diagnostic structure], [`q13`], [`q14`],),
+    table.hline(),
+    [projected common-parent + two-loop E30 only], [inconclusive/noisy `p=3.46539..4.88954`], [unsafe `p=2.99998166..3.00001604`],
+    [projected common-parent + one-loop E30 only], [cancellation reaches f64 noise, inconclusive], [#strong[pass];, `p=2.00000955..2.00005207`],
+  )]
+  , kind: table
+  )
+
+This supports the `ttH_defo.pdf` expectation that the two-loop region must not carry the soft singularity. It does not authorize retaining the diagnostic gate.
+
+== Required IR/threshold paths
+<required-irthreshold-paths>
+The card preserves the complete P1-P12 inventory: generic `q13`, generic `q14`, double soft, five correlated soft/threshold families, the common-threshold double-soft path, and three IR-away threshold-only paths. The final retained prescription prevents even P1 from producing finite samples, so every final IR/threshold classification remains #strong[inconclusive];. Candidate-specific `q13` and `q14` runs above are causal diagnostics, not substitutes for a passing final inventory. Threshold-off results were not treated as cures.
+
+== Final full-UV generation
+<final-full-uv-generation>
+The restored final DOT generated local and integrated UV counterterms successfully:
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,right,),
+    table.header([metric], [value],),
+    table.hline(),
+    [evaluators], [33],
+    [expression build], [25.53 s],
+    [Spenso], [8.79 s],
+    [Symbolica evaluation], [30.35 s],
+    [internal total], [#strong[64.67 s];],
+    [compile], [0 s],
+    [GammaLoop-reported peak RAM], [532.65 MiB],
+    [guard recursive-RSS peak], [851,861,504 bytes],
+    [guard duration (including shared-slot wait)], [369.779 s],
+    [minimum free disk], [450,475,720,704 bytes],
+    [guard result], [completed, return code 0],
+  )]
+  , kind: table
+  )
+
+Evidence: `states/GL638_guard/restored_final_full_uv_generation.log` and `.guard.json`.
+
+== Mandatory all-orientation UV profile
+<mandatory-all-orientation-uv-profile>
+The final baseline requests 33 points over exponent range `8..12`, seed `63820260809`, every visible LMB subset, and all 388 orientations, with threshold subtraction enabled and `SingleParametric` evaluation.
+
+GammaLoop emitted four copies of `refusing to evaluate a threshold counterterm with an invalid radial solution`, remained compute-bound, and did not serialize its output before the watchdog stopped it. The guard duration was 812.110 s including slot acquisition and cleanup; the process received its configured 780 s, reached 2,377,396,224 bytes peak recursive RSS, and left at least 450,433,777,664 bytes free on the monitored disk. `run_guarded.py` exited 124 with `exit_reason = "timeout"`; the child return code was `-15`. No baseline JSON exists from which to diagnose a precision or range problem, so launching an adaptive retry would not satisfy the remediation decision rule.
+
+Evidence: `states/GL638_guard/restored_final_uv_profile.log` and `.guard.json`. Neither the requested output directory nor `uv_profile.json` was created.
+
+== Historical guarded integration diagnostic
+<historical-guarded-integration-diagnostic>
+The final DOT is byte-identical to the graph used by the existing completed integration checkpoint, so that checkpoint is retained rather than spending the remediation lease rerunning an unchanged, explicitly IR-unresolved integrand. It does not validate threshold safety.
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([metric], [value],),
+    table.hline(),
+    [signed central `(re,im)`], [`(-0.0348461494706937, -1.986319126611796e-19)`],
+    [signed error `(re,im)`], [`(0.03694638248370692, 7.275162622199048e-19)`],
+    [absolute central \`(], [re],
+    [absolute error \`(], [re],
+    [absolute relative errors], [67.3557% real, 54.2370% imaginary],
+    [samples], [13,100],
+    [runtime per sample per core], [41.0 ms],
+    [nonfinite samples], [0%],
+    [retained unstable-or-nonfinite aggregate], [0.0305344%],
+    [rough campaign convergence], [#strong[yes];],
+  )]
+  , kind: table
+  )
+
+== Evidence map and next required capability
+<evidence-map-and-next-required-capability>
+- `states/state_GL638_retained_star_baseline`: task-start multiplier failure.
+- `states/state_GL638_effective_ratio_rejected` and `state_GL638_effective_polar_unsupported`: rejected frame/formula attempts.
+- `states/state_GL638_one_loop_only_diagnostic` and `state_GL638_two_loop_only_diagnostic`: branch localization.
+- `states/state_GL638_common_parent_one_loop_diagnostic`: strongest projected candidate and q14 pass.
+- `states/state_GL638_common_parent_two_loop_diagnostic`: isolated unsafe two-loop q14 behavior.
+- `states/state_GL638_full_overlap_metadata_diagnostic`: forbidden exact-gate control.
+- `states/state_GL638_soft_partition_rejected`: finite but cancellation-breaking partition.
+- `states/state_GL638_transformed_mixed_parent_rejected`: rejected transformed-parent comparison.
+- `states/GL638_guard/*.log` and `*.guard.json`: guarded commands and resource records.
+
+A clean implementation needs either (1) an invariant base-surface multiplier frame shared by local, integrated, and iterated CT pieces, or (2) unambiguous selection/canonicalization of the duplicate internal parent LMB so a single projected E30 instance can replace the diagnostic gate. Until one exists, GL638 remains #strong[full-UV generated, numerically sampled, but IR unresolved/inconclusive];.

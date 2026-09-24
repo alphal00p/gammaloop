@@ -139,16 +139,16 @@ class CollectionTests(unittest.TestCase):
                     {
                         "threshold_edited": "yes",
                         "all_limits": "inconclusive",
-                        "observation": "pilot | still running",
+                        "observation": "pilot | [still] #running",
                         "generation": {"time_seconds": 12.5},
                         "integration": {"converged": False},
                     }
                 )
             )
-            rendered = collect_results.summary_markdown(root)
-            self.assertIn("Progress: **1/71**", rendered)
-            self.assertEqual(rendered.count("\n| GL"), 71)
-            self.assertIn("pilot \\| still running", rendered)
+            rendered = collect_results.summary_typst(root)
+            self.assertIn("Progress: *1/71*", rendered)
+            self.assertEqual(rendered.count("\n  [GL"), 71)
+            self.assertIn("pilot | \\[still\\] \\#running", rendered)
 
     def test_collects_internal_timings_and_absolute_convergence(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -10,6 +10,20 @@ import pathlib
 import typing
 
 @typing.final
+class AbsoluteIntegrationResult:
+    r"""
+    Componentwise absolute estimates, maxima, and discrete breakdown for an integration slot.
+    """
+    @property
+    def integral(self) -> IntegralEstimate: ...
+    @property
+    def table_results(self) -> builtins.list[IntegrationTableComponentResult]: ...
+    @property
+    def max_weight_info(self) -> builtins.list[MaxWeightInfoEntry]: ...
+    @property
+    def grid_breakdown(self) -> ComponentDiscreteBreakdown: ...
+
+@typing.final
 class AdditionalWeight:
     r"""
     Named auxiliary complex weight attached to a generated event.
@@ -97,14 +111,14 @@ class CutInfo:
         Causal-flow orientation identifier, when sampled explicitly.
         """
     @property
-    def lmb_channel_id(self) -> typing.Optional[builtins.int]:
+    def sampling_channel_id(self) -> typing.Optional[builtins.int]:
         r"""
-        Loop-momentum-basis multichannel identifier, when sampled explicitly.
+        Canonical sampling channel identifier, when sampled explicitly.
         """
     @property
-    def lmb_channel_edge_ids(self) -> typing.Optional[builtins.list[builtins.int]]:
+    def sampling_channel_edge_ids(self) -> typing.Optional[builtins.list[builtins.int]]:
         r"""
-        Edge identifiers defining the selected loop-momentum basis, when available.
+        Edge identifiers defining the selected sampling channel basis, when available.
         """
 
 @typing.final
@@ -244,7 +258,12 @@ class EvaluationResult:
     @property
     def integrand_result(self) -> complex:
         r"""
-        Complex integrand value before applying the parameterization Jacobian.
+        Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
+        """
+    @property
+    def absolute_integrand_result(self) -> typing.Optional[complex]:
+        r"""
+        Componentwise absolute physical contributions summed over channel points, before the outer-grid weight.
         """
     @property
     def integrator_weight(self) -> builtins.float:
@@ -330,6 +349,11 @@ class Event:
         r"""
         Named auxiliary complex weights such as threshold-counterterm contributions.
         """
+    @property
+    def threshold_counterterms(self) -> typing.Optional[ThresholdCountertermEventInfo]:
+        r"""
+        Addable threshold decomposition with physical occurrence metadata, when retained.
+        """
     def __str__(self) -> builtins.str:
         r"""
         Return a human-readable event summary.
@@ -404,7 +428,7 @@ class GammaLoopAPI:
     def read_only_state(self) -> builtins.bool: ...
     @property
     def active_state_folder(self) -> builtins.str: ...
-    def __new__(cls, state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, trace_logs_filename: typing.Optional[builtins.str] = None, level: typing.Optional[LogLevel] = None, logfile_level: typing.Optional[LogLevel] = None, logging_prefix: builtins.object | None = None, read_only_state: builtins.bool = False, settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, clean_state: builtins.bool = False) -> GammaLoopAPI:
+    def __new__(cls, state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, trace_logs_filename: typing.Optional[builtins.str] = None, level: typing.Optional[LogLevel] = None, logfile_level: typing.Optional[LogLevel] = None, logging_prefix: builtins.object | None = None, read_only_state: builtins.bool = False, settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, clean_state: builtins.bool = False, processes: typing.Optional[typing.Sequence[builtins.str]] = None, integrands: typing.Optional[typing.Sequence[builtins.str]] = None) -> GammaLoopAPI:
         r"""
         Load or create a GammaLoop state and initialize its CLI session.
 
@@ -1456,6 +1480,16 @@ class IntegrandGraph:
         r"""
         Whether this graph is the representative graph of its group.
         """
+    @property
+    def threshold_counterterm_directives(self) -> builtins.list[ThresholdCountertermDirective]:
+        r"""
+        Threshold directives requested for this graph, including implicit defaults.
+        """
+    @property
+    def threshold_counterterms(self) -> typing.Optional[ThresholdCountertermMetadataRegistry]:
+        r"""
+        Resolved graph-local threshold registry, when generated metadata is available.
+        """
 
 @typing.final
 class IntegrandGraphGroup:
@@ -1740,7 +1774,12 @@ class SampleEvaluationResult:
     @property
     def integrand_result(self) -> complex:
         r"""
-        Complex integrand value before applying the parameterization Jacobian.
+        Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
+        """
+    @property
+    def absolute_integrand_result(self) -> typing.Optional[complex]:
+        r"""
+        Componentwise absolute physical contributions summed over channel points, before the outer-grid weight.
         """
     @property
     def integrator_weight(self) -> builtins.float:
@@ -1906,6 +1945,11 @@ class SlotIntegrationResult:
     def max_weight_info(self) -> builtins.list[MaxWeightInfoEntry]: ...
     @property
     def grid_breakdown(self) -> ComponentDiscreteBreakdown: ...
+    @property
+    def absolute(self) -> AbsoluteIntegrationResult:
+        r"""
+        Estimates of componentwise absolute physical contributions.
+        """
 
 @typing.final
 class StabilityResult:
@@ -1939,6 +1983,192 @@ class StabilityResult:
         r"""
         Total wall-clock time spent at this precision level, in seconds.
         """
+
+@typing.final
+class ThresholdCountertermAssociationMetadata:
+    r"""
+    Association of a threshold surface with an eligible physical cut and its origin.
+    """
+    @property
+    def cut_id(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def cut_edges(self) -> builtins.list[builtins.int]: ...
+    @property
+    def threshold_edges(self) -> builtins.list[builtins.int]: ...
+    @property
+    def esurface_id(self) -> builtins.int: ...
+    @property
+    def eligible(self) -> builtins.bool: ...
+    @property
+    def origin(self) -> builtins.str: ...
+
+@typing.final
+class ThresholdCountertermComponentMetadata:
+    r"""
+    Signed threshold component with its contributing variants and evaluator references.
+    """
+    @property
+    def component_id(self) -> builtins.int: ...
+    @property
+    def cut_group_id(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def kind(self) -> builtins.str: ...
+    @property
+    def variant_ids(self) -> builtins.list[builtins.int]: ...
+    @property
+    def evaluator_ids(self) -> builtins.list[typing.Optional[builtins.int]]: ...
+    @property
+    def sign(self) -> builtins.int: ...
+
+@typing.final
+class ThresholdCountertermComponentOccurrence:
+    r"""
+    Physical amplitude or local-unitarity occurrence of a threshold component.
+    """
+    @property
+    def kind(self) -> builtins.str: ...
+    @property
+    def raised_esurface_id(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def overlap_groups(self) -> builtins.list[builtins.int]: ...
+    @property
+    def left_threshold_order(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def right_threshold_order(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def lu_cut_order(self) -> typing.Optional[builtins.int]: ...
+
+@typing.final
+class ThresholdCountertermComponentWeight:
+    r"""
+    Fully normalized threshold weight and its optional evaluation before the user multiplier.
+    """
+    @property
+    def component_id(self) -> builtins.int: ...
+    @property
+    def occurrence(self) -> ThresholdCountertermComponentOccurrence: ...
+    @property
+    def multiplier_values(self) -> builtins.list[builtins.float]: ...
+    @property
+    def effective_multiplier(self) -> builtins.float: ...
+    @property
+    def bare(self) -> typing.Optional[typing.Any]: ...
+    @property
+    def weighted(self) -> typing.Any: ...
+    @property
+    def evaluation_skipped(self) -> builtins.bool: ...
+
+@typing.final
+class ThresholdCountertermDirective:
+    r"""
+    Requested threshold variant, selected edges, and optional multiplier before generation.
+    """
+    @property
+    def cut_edge_ids(self) -> builtins.list[builtins.int]: ...
+    @property
+    def threshold_edge_ids(self) -> builtins.list[builtins.int]: ...
+    @property
+    def name(self) -> builtins.str: ...
+    @property
+    def implicit_default(self) -> builtins.bool: ...
+    @property
+    def requested_subspace(self) -> typing.Optional[builtins.list[builtins.int]]: ...
+    @property
+    def requested_parent_lmb(self) -> typing.Optional[builtins.list[builtins.int]]: ...
+    @property
+    def disabled(self) -> builtins.bool: ...
+    @property
+    def multiplier(self) -> typing.Optional[ThresholdCountertermMultiplierMetadata]: ...
+
+@typing.final
+class ThresholdCountertermEvaluatorMetadata:
+    r"""
+    Compiled threshold expression and the variants sharing its graph-local evaluator.
+    """
+    @property
+    def evaluator_id(self) -> builtins.int: ...
+    @property
+    def cut_group_id(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def collection_evaluator_id(self) -> builtins.int: ...
+    @property
+    def expression(self) -> builtins.str: ...
+    @property
+    def variant_ids(self) -> builtins.list[builtins.int]: ...
+
+@typing.final
+class ThresholdCountertermEventInfo:
+    r"""
+    Original event contribution and the addable threshold-component decomposition.
+    """
+    @property
+    def original(self) -> typing.Any: ...
+    @property
+    def components(self) -> builtins.list[ThresholdCountertermComponentWeight]: ...
+
+@typing.final
+class ThresholdCountertermMetadataRegistry:
+    r"""
+    Graph-local threshold variants, compiled evaluators, and addable components.
+    """
+    @property
+    def graph_name(self) -> builtins.str: ...
+    @property
+    def variants(self) -> builtins.list[ThresholdCountertermVariantMetadata]: ...
+    @property
+    def evaluators(self) -> builtins.list[ThresholdCountertermEvaluatorMetadata]: ...
+    @property
+    def components(self) -> builtins.list[ThresholdCountertermComponentMetadata]: ...
+
+@typing.final
+class ThresholdCountertermMultiplierMetadata:
+    r"""
+    Symbolic multiplier expression and its function definitions and derivative policy.
+    """
+    @property
+    def expression(self) -> builtins.str: ...
+    @property
+    def function_map(self) -> builtins.dict[builtins.str, builtins.str]: ...
+    @property
+    def symmetrize(self) -> builtins.bool: ...
+    @property
+    def opaque_derivatives(self) -> builtins.bool: ...
+
+@typing.final
+class ThresholdCountertermVariantMetadata:
+    r"""
+    Requested and resolved subspaces, associations, and activation of one threshold variant.
+    """
+    @property
+    def variant_id(self) -> builtins.int: ...
+    @property
+    def name(self) -> builtins.str: ...
+    @property
+    def group_id(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def cut_group_id(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def associations(self) -> builtins.list[ThresholdCountertermAssociationMetadata]: ...
+    @property
+    def side(self) -> builtins.str: ...
+    @property
+    def threshold_esurface_ids(self) -> builtins.list[builtins.int]: ...
+    @property
+    def requested_subspace(self) -> typing.Optional[builtins.list[builtins.int]]: ...
+    @property
+    def resolved_subspace(self) -> builtins.list[builtins.int]: ...
+    @property
+    def requested_parent_lmb(self) -> typing.Optional[builtins.list[builtins.int]]: ...
+    @property
+    def resolved_parent_lmb(self) -> builtins.list[builtins.int]: ...
+    @property
+    def subspace_loop_count(self) -> builtins.int: ...
+    @property
+    def multiplier(self) -> typing.Optional[ThresholdCountertermMultiplierMetadata]: ...
+    @property
+    def generated(self) -> builtins.bool: ...
+    @property
+    def active(self) -> builtins.bool: ...
 
 @typing.final
 class LogLevel(enum.Enum):

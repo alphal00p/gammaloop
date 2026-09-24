@@ -1,0 +1,208 @@
+= GL076
+<gl076>
+== Provenance and topology
+<provenance-and-topology>
+- Lease: 2026-08-09 01:49:40--02:19:40 +0200.
+- GammaLoop CLI SHA-256: `fc9d20e0ffbca1b334ab57908b29aeea34ecda68f5c3a76664d8ca4f8536256c`.
+- Final cleaned DOT SHA-256: `c30c0635a86aaecfe85ffbc6c93deb803e25375d1cd0899ce95ce721f1c6fcdc`.
+- Raw diagnostic DOT SHA-256: `dd24b57bb8c6b9c477791d673fcaa60e1580a56a61e355b8374487ff84dd5829`.
+- Final run-card SHA-256: `147e357f2922680a97eb583ebd3200dc422e0c6e1de2245670f14a203635aea1`.
+- Four-loop graph. The only triple-gluon vertex is `V_36` at vertex 7, incident to massless edges `e12`, `e13`, and `e14`; there is no `V_37` vertex.
+- The final DOT contains four basis-edge `lmb_id` fields and contains none of `pin`, `dir`, or `lmb_rep`. It intentionally has no explicit `threshold_counterterms`: the candidate projection found during the lease did not pass clean generation.
+
+The raw diagnostic momentum decomposition, with vanishing incoming spatial momentum, is
+
+```text
+q12 = K3
+q13 = -K1 + K2
+q14 = K1 - K2 - K3 = -(q12 + q13).
+```
+
+Thus any two soft constraints imply the third. The independent soft ranks are 3 and 6. A hard gluon-collinear transverse relation has rank 2.
+
+== Generated cuts, orientations, and thresholds
+<generated-cuts-orientations-and-thresholds>
+Full local and integrated UV generation produced all 232 orientations and exactly three process-valid cuts:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (right,auto,auto,),
+    table.header([cut id], [edges], [active left threshold surfaces],),
+    table.hline(),
+    [0], [`[2,3,9]`], [E46=`[9,11,14]`, E32=`[9,11,12,13]`, E26=`[7,11,12]`, E33=`[6,9,13]`, E50=`[6,9,12,14]`, E27=`[6,7]`],
+    [1], [`[2,3,7,13]`], [E51=`[7,11,13,14]`, E26=`[7,11,12]`],
+    [2], [`[2,3,7,12,14]`], [none],
+  )]
+  , kind: table
+  )
+
+The other generated surfaces E23, E24, E25, E29, E30, E31, E42, E43, and E44 are inactive for these process-valid cuts. The evaluator count 12 in `generation_summary.json` is not an orientation count.
+
+== Reproducible paths and target scaling
+<reproducible-paths-and-target-scaling>
+Every executed path used the complete graph sum with `--momentum-space --graph-id 0`, no orientation selector, 50 logarithmic points per branch over `1e-6`--`1e-2`, midpoint skipped, and three cores. Vectors below are the 12-component `(K0,K1,K2,K3)` midpoint and axis recorded verbatim in the run card.
+
+#figure(
+  align(center)[#table(
+    columns: 4,
+    align: (auto,auto,auto,auto,),
+    table.header([path], [midpoint], [axis], [rank/status],),
+    table.hline(),
+    [soft e12], [`(37,126,-109; -91,64,83; 74,-52,137; 0,0,0)`], [`(0,0,0; 0,0,0; 0,0,0; 211,-157,193)`], [3, executed],
+    [soft e13], [`(37,126,-109; -91,64,83; -91,64,83; 31,-47,59)`], [`(0,0,0; 0,0,0; 211,-157,193; 0,0,0)`], [3, executed],
+    [soft e14], [`(37,126,-109; 105,-99,196; 74,-52,137; 31,-47,59)`], [`(0,0,0; 211,-157,193; 0,0,0; 0,0,0)`], [3, executed],
+    [double soft], [`(37,126,-109; -91,64,83; -91,64,83; 0,0,0)`], [`(0,0,0; 0,0,0; 98,-86,342; 211,-157,193)`], [6, executed],
+    [hard collinear e12/e13], [`(37,126,-109; -91,64,83; -61,24,203; 30,-40,120)`], [`(0,0,0; 0,0,0; -31,53,0; 47,29,0)`], [2, executed],
+    [hard collinear e12/e14], [`(37,126,-109; -91,64,83; -157,152,-181; 30,-40,120)`], [same collinear axis], [2, executed],
+    [hard collinear e13/e14], [`(37,126,-109; -91,64,83; -61,24,203; -66,88,-264)`], [same collinear axis], [2, executed],
+  )]
+  , kind: table
+  )
+
+Target-distance scaling is analytic for these linear momentum maps. On each soft path the labelled `q` is exactly `lambda` times its nonzero three-vector. On the double-soft path `q12=lambda(211,-157,193)`, `q13=lambda(98,-86,342)`, and `q14=-lambda(309,-243,535)`, so every target norm has slope exactly 1. For each hard-collinear path, expanding the relative transverse/cross-product residual about the nonzero collinear midpoint gives a nonzero term linear in `lambda`; therefore its target distance is `Theta(|lambda|)`. The fit files were produced with `--no-kinematic-check` because the current approach JSON does not carry an explicit target-distance series, so these are exact construction checks rather than independently fitted numerical slopes.
+
+Two correlated e12-soft/threshold paths were added to the card after inspecting the cut metadata but could not be executed within the single lease:
+
+- E46/E32/E33/E50 bridge: midpoint `(37,126,-109; 0,0,-220.071; 0,0,220.071; 0,0,0)`, axis `(0,0,0; 3,5,-7; -11,13,17; 47,29,-31)`.
+- E26/E27 bridge: midpoint `(37,126,-109; 0,0,469.11725613113; 74,-52,137; 0,0,0)`, axis `(0,0,0; 0,0,47; 0,0,0; 211,-157,193)`.
+
+Both have `q12=Theta(lambda)` and generic non-tangent threshold axes. Six IR-away threshold-only cards for E46, E32, E33, E50, E26, and E27 are also present, with their full numerical midpoint/axis values in `run_GL076.toml`; they remain unexecuted and therefore cannot be counted as evidence.
+
+== Fit evidence
+<fit-evidence>
+The fitter used the closest 8, 12, and 16 finite nonzero points on each signed branch. Classification below applies the accepted rank margin, `R^2 >= 0.995`, and envelope-span criteria.
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,right,right,right,auto,),
+    table.header([limit], [rank], [complete p envelope], [R2 range], [result],),
+    table.hline(),
+    [soft e12], [3], [`[2.748119, 4.116896]` (span 1.368777)], [0.772953--0.915090], [#strong[inconclusive];: all six fits are poor and the envelope is too wide],
+    [soft e13], [3], [`[1.992645, 2.000036]`], [0.999982--1.000000], [pass],
+    [soft e14], [3], [`[0.990060, 1.000158]`], [0.999925--1.000000], [pass],
+    [double soft], [6], [`[2.999938, 3.000428]`], [1.000000--1.000000], [pass],
+    [collinear e12/e13], [2], [`[-0.0000023, 0.0000023]`], [0.877831--0.966511], [#strong[inconclusive];: finite-looking but poor R2],
+    [collinear e12/e14], [2], [`[3.387313, 5.756779]` (span 2.369466)], [0.251759--0.916476], [#strong[inconclusive];: strong, noisy branch/window dependence],
+    [collinear e13/e14], [2], [`[-0.0000067, 0.0000067]`], [0.877820--0.966560], [#strong[inconclusive];: finite-looking but poor R2],
+  )]
+  , kind: table
+  )
+
+For soft e12, per-cut/additional-weight inspection localizes the anomalous behavior to cut 0\'s threshold contribution: the cut-0 original contribution scales approximately as `p=1`, while its threshold-counterterm contribution produces the poor `p~2.7--3.1` behavior (and the closest-window total reaches `p=4.12`). Cuts 1 and 2 have original soft scaling near `p=2`. This is evidence of a threshold/soft interaction, not a classified non-integrable total limit because the required fits fail quality checks. For the physical e12/e14 collinear cut, the cut-1 and cut-2 pieces individually scale near `p=2`, while threshold terms are flat; cancellation in the complete sum is too noisy to classify.
+
+The generated approach JSON stores active threshold terms under `additional_contribution_sums.threshold_counterterm_0`. The fitter\'s `active_threshold_counterterm=false` flag is a schema-detection limitation and must not be interpreted as threshold subtraction being disabled.
+
+== Directive diagnosis
+<directive-diagnosis>
+At `q12=0`, cut 0\'s six thresholds coalesce pairwise:
+
+```text
+E46 [9,11,14]      <-> E32 [9,11,12,13]  common subspace [9,11]
+E33 [6,9,13]       <-> E50 [6,9,12,14]   common subspace [6,9]
+E26 [7,11,12]      <-> E27 [6,7]         common subspace [7]
+```
+
+A provisional six-association directive was tested, but GammaLoop requires one compatible explicit parent LMB for the cut group. Candidate parents that embed `[9,11]` and `[7]` do not contain defining edge 6, while the `[6,9]` parent is incompatible with the `[7]` group. Clean generation rejected the attempted parents. Because neither the correlated paths nor threshold-only validation could then be completed, the provisional directive was removed. The final graph is valid and threshold subtraction remains enabled, but the threshold-soft issue is unresolved.
+
+== Generation, integration, and conclusion
+<generation-integration-and-conclusion>
+- UV mode: full local plus integrated UV succeeded; no local-only fallback was used.
+- Final internal generation time: #strong[90.231566666 s] (`generation_summary.json` `stats.total_time`); peak generation RAM 4,544,462,848 bytes; 12 evaluator reports; compilation time zero.
+- Guarded integration reached 50 completed iterations and 5,000 samples before the watchdog sent `SIGINT`; the checkpoint was emitted cleanly. The guard reason is `timeout`, wrapper duration 212.401 s including signal/checkpoint grace, peak recursive RSS 5,279,236,096 bytes, and minimum observed free disk 156,083,032,064 bytes.
+- Signed central value `(re,im)`: #strong[`(1.8428135998e-5, 1.5610684756e-6)`] with component errors #strong[`(2.8428882345e-5, 9.6835942617e-6)`];. Signed relative errors are 154.27% and 620.32%; they are reported but not used for the rough convergence decision.
+- Componentwise-absolute central value `(|re|,|im|)`: #strong[`(9.7509705423e-5, 4.9215730963e-5)`] with errors #strong[`(2.8396606757e-5, 9.6585687743e-6)`];, i.e. 29.12% and 19.62% relative errors.
+- Runtime per sample per core from the last completed GammaLoop status: #strong[107 ms];. JSON\'s average total evaluation time is 95.049481 ms and is only a cross-check.
+- Stability: 100% f64, 0% f128/arb, 0% nonfinite, and 0.04% nonfinite-or-retained-unstable; 15,000 generated/accepted events. This satisfies the campaign\'s rough `converged?` rule because a finite checkpoint exists, the nonfinite percentage is zero, and every nonzero absolute component has relative error below 75%.
+- Signed extrema were `re+ = 8.7021091511e-2`, `re- = -1.0064670301e-1`, `im+ = 2.1225750230e-2`, and `im- = -1.9047622479e-2`. Componentwise-absolute extrema were `|re| = 1.0064670301e-1` and `|im| = 2.1225750230e-2`; all stored coordinates are preserved in `result_record.json`. The lease expired before `inspect` replay, so these points are unclassified and no focused limit is inferred from them.
+- `threshold struct. edited?`: #strong[no] (no accepted final directive).
+- `all limits OK?`: #strong[inconclusive] (soft e12, all collinear fits, correlated paths, and threshold-only checks are not classified).
+- `converged?`: #strong[yes] under the specified absolute-value diagnostic rule; this does not repair or override the inconclusive IR audit.
+
+Concise conclusion: GL076 exposes a real cut-0 threshold/soft cancellation problem at e12, but the one-lease evidence is insufficient to validate a legal common-parent projection. No unvalidated threshold structure was left in the cleaned graph, and no limit was overclaimed as passing.
+
+== Final LMB-remediation follow-up (2026-08-09)
+<final-lmb-remediation-follow-up-2026-08-09>
+This follow-up completed the authorized generation-LMB search and supersedes the earlier statement that no remapped basis or mandatory final UV profile had been tested. All GammaLoop calls were guarded with the shared two-job slot, `RAYON_NUM_THREADS=3`, a 15 GiB recursive-RSS ceiling, a 12 GiB disk floor, and a 6 GiB available-memory floor.
+
+=== Exact basis change and candidate ledger
+<exact-basis-change-and-candidate-ledger>
+The topology-valid generation basis was changed temporarily from `[2,6,9,12]` to `[3,7,9,12]`. In terms of the original card coordinates the exact transformation was
+
+```text
+(K0',K1',K2',K3') = (K2-K0,K1,K2,K3),
+(K0,K1,K2,K3) = (K2'-K0',K1',K2',K3').
+```
+
+Every stored midpoint and approach axis was transformed with this map and checked by the inverse map before use. Generation retained 12 evaluators, all 232 orientations, all three cuts, and the unchanged surface inventory.
+
+#figure(
+  align(center)[#table(
+    columns: 4,
+    align: (auto,auto,auto,auto,),
+    table.header([candidate], [proper-threshold gate], [decisive IR gate], [decision],),
+    table.hline(),
+    [Native common-parent prescription: E46/E32/E33/E50 in `[9]`, E26/E27 in `[7]`, parent `[3,7,9,12]`], [E46 `(9,11,14)` aborts because projected instance 4 fails overlap-center/radial-root validation], [q12 and both correlated bridges improve to `p≈1`; e13, e14, and double-soft behavior is retained], [reject: a subtraction whose physical E46 root cannot be evaluated is not safe],
+    [Alternate root-valid parent `[3,9,12,13]`], [IR-away thresholds are finite], [e13 regresses to `p≈4` at rank 3 and double soft to `p≈7` at rank 6], [reject: non-integrable soft regressions],
+    [Expanded E46/E32 prescription: E46/E32 in `[7,9]`, E33/E50 in `[9]`, E26/E27 in `[7]`, common parent `[3,7,9,12]`], [structural generation succeeds with exactly six variants; E46 Arb threshold path completes with a flat total, \`], [p], [\<= 5.21e-6\`],
+    [Mixed native/alternate-parent prescription], [generation reports incompatible explicit threshold-counterterm parents], [not reached], [reject structurally],
+    [`[3,6,9,12]` / `[6,9]` alternatives], [retain a projected-root failure or regress q12], [`p≈3` where evaluable], [reject],
+  )]
+  , kind: table
+  )
+
+The expanded candidate\'s E46 success is causal: at its stored midpoint the physical E46 eta is approximately `4.55e-13`, its three on-shell energies sum to 1000, and the projected two-loop surface has a negative minimum, so radial roots exist. Completing the full `[7,9]` cycle fixes the previous projected root construction, but its clean q12 result proves that this cure removes a required soft cancellation.
+
+=== Why an eta-squared partition was not admitted
+<why-an-eta-squared-partition-was-not-admitted>
+A GL638-style duplicate cannot combine the two root-valid diagnostics within the current directive machinery. The one-loop copy resolves under parent `[3,9,12,13]`, whereas the two-loop `[7,9]` copy resolves under `[3,7,9,12]`; generation already rejects those mixed parents, and the former does not contain `[7,9]`. In addition, the natural normalized weights would have denominator
+
+```text
+eta(star,E46)^2 + eta(star,E32)^2.
+```
+
+The required correlated q12 bridge is precisely the locus where E46 and E32 coalesce and both etas vanish. The denominator is therefore exactly `0/0` on a required limit, not merely small. An epsilon regulator, late exact-zero gate, or disabled threshold term would change the subtraction and was not used.
+
+=== Restored final graph and full-UV generation
+<restored-final-graph-and-full-uv-generation>
+No candidate passes both root and IR gates. The task-start DOT and original generation basis `e2/e6/e9/e12 -> 0/1/2/3` were consequently restored byte-for-byte; all card coordinates were inverse-transformed exactly.
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([artifact], [SHA-256],),
+    table.hline(),
+    [release `target/release/gammaloop`], [`0f8ed2c842814995bdcad19b3bc2a406eb75cb4a1784a74aa3c3de6b0e9d2b1b`],
+    [final `graphs/GL076.dot`], [`8a6460f19ff0b9a41c2b5a7f7a9e1ac0e2790cb36258bee868797917da001371`],
+    [final `run_cards/run_GL076.toml`], [`773956ae533eef64ba8decdbb5813d48531e290d7f572cdc5f8f6c495b527d80`],
+  )]
+  , kind: table
+  )
+
+Fresh pristine local-plus-integrated UV generation completed with 12 evaluators and all 232 orientations. The internal total was `197.396006720 s` (`34.079 s` expression construction, `44.141 s` Spenso, `119.177 s` Symbolica, no compilation), and GammaLoop reported 3,579,297,792 bytes peak RAM. The guard completed in `199.133 s`, sampled a 3,438,620,672-byte recursive-RSS peak, and retained at least 428,596,396,032 bytes free on the monitored disk.
+
+=== Mandatory tailored per-orientation UV profile
+<mandatory-tailored-per-orientation-uv-profile>
+The final state was profiled on a seeded random ray with graph 0, generation LMB 0, five points at scales `10^6..10^10`, every one of the 232 orientations, and masks 6 (`q13=K2-K1`), 8 (`q12=K3`), 14 (`q14=K1-K2-K3`), and 15 (overall). Threshold subtraction remained enabled.
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (right,auto,auto,),
+    table.header([mask], [orientation result], [fitted slope / quality],),
+    table.hline(),
+    [6], [232/232 have five finite samples and are explicitly vanishing], [no unexplained missing fits],
+    [8], [216 fitted, 16 explicitly vanishing; all 232 have five finite samples], [`-1.00003825..-0.99997071`, minimum `R²=0.999999998928`],
+    [14], [232/232 have five finite samples and are explicitly vanishing], [no unexplained missing fits],
+    [15], [232/232 have five finite samples and are explicitly vanishing], [no unexplained missing fits],
+  )]
+  , kind: table
+  )
+
+There are zero nonfinite samples, zero slopes above `-0.9`, zero fits below `R²=0.99`, and zero entries that lack either a fit or an explicit vanishing classification. Of 1,085 stored fitted point evaluations, 1,080 completed in double precision and the aggregate mask-8 inspection used five Arb retries; none is marked NaN. Evidence is in `states/state_GL076/uv_profiles/pristine_random_g0_lmb0_masks6_8_14_15_per_orientation_n5_exp6_10_seed7620260809/uv_profile.json`.
+
+The final DOT is byte-identical to the graph used for the existing 5,000-sample converged checkpoint, and fresh full-UV generation confirms state compatibility, so integration was not rerun. The numerical results and rough convergence classification in the preceding section remain applicable; they do not resolve the q12 threshold-soft obstruction.
+
+Final classifications are therefore `threshold struct. edited? = no`, `all limits OK? = inconclusive`, and `converged? = yes` under the campaign\'s rough integration criterion. The remaining blocker is a genuine tradeoff in the currently expressible threshold projections: the one-loop prescription keeps q12 integrable but fails E46 root construction, while the root-valid two-loop completion produces a logarithmic q12 limit.

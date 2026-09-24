@@ -1,0 +1,189 @@
+= GL701 manual IR-safe threshold audit
+<gl701-manual-ir-safe-threshold-audit>
+== Outcome
+<outcome>
+- #strong[Threshold structure edited:] no. The generated graph has no threshold association active in either process-valid cut, and every accepted approach has exactly zero threshold-counterterm weight.
+- #strong[All limits OK:] #strong[yes];. Exact Arb repeats resolve every one of the eleven required single-soft, double-soft, and correlated-threshold paths as a bounded plateau.
+- #strong[UV mode:] full local and integrated UV, plus a tailored seeded-random per-orientation profile of masks 4, 8, 12, and 15.
+- #strong[Integration converged:] yes. The 208,300-sample checkpoint is finite, has zero unstable/nonfinite evaluations, and has componentwise-absolute relative errors of `6.81484%` and `10.33257%`.
+- #strong[Scientific conclusion:] no threshold-driven failure exists. Threshold-off is bit-for-bit identical on a representative correlated path, so a GL297/GL638-style projection or partition would be unsupported.
+
+== Reproducibility and provenance
+<reproducibility-and-provenance>
+Every GammaLoop invocation used `scripts/run_guarded.py`, the shared two-slot lock, a 15 GiB recursive-RSS cap, a 12 GiB disk floor, a 6 GiB host-available-memory floor, and the pinned release executable. No source was edited and no build or escalation was performed.
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([artifact], [SHA-256],),
+    table.hline(),
+    [`target/release/gammaloop`], [`0f8ed2c842814995bdcad19b3bc2a406eb75cb4a1784a74aa3c3de6b0e9d2b1b`],
+    [final `graphs/GL701.dot`], [`01f501326e63b5b7c8472d706cce1f985193053adc0eead1fd3529ae2344a9f7`],
+    [final `run_cards/run_GL701.toml`], [`64efac5a660e42ff09216fbfc3517e160669ee5f791624d9a98efd95416f462d`],
+    [final `generation_summary.json`], [`d492266decee5022c936eed04bd46b00aac0b8ad97b7d0b61fb185026f56d57e`],
+    [`integration_result.json`], [`b1048fa34ed62d292ec840cb91bc8529c27f6677bceec88d64e2c8ca73a07163`],
+    [`result_record.json`], [`e399977be46bfc98f6f151374f95efd89a6b29746ccd4b657e20bbc98c43d4c5`],
+  )]
+  , kind: table
+  )
+
+The tracked card is the clean, from-scratch reproduction contract. Its final direct-import regeneration and both exact-remediation wrappers completed successfully against the dedicated remediation state.
+
+== Topology, routing, cuts, and thresholds
+<topology-routing-cuts-and-thresholds>
+GL701 has four loops, a massless light-`d` loop, two gluons, and no `V_36` or `V_37` vertex. There is therefore no required hard gluon-collinear family. With basis edges `(2,4,7,9)`, spatial momentum conservation gives
+
+```text
+e2 = K0                         (H)
+e3 = K1-K0                      (t)
+e4 = K1                         (t)
+e5 = K1-K0-K2                   (t)
+e6 = K1-K2                      (t)
+e7 = K2, e8 = -K2              (g)
+e9 = e10 = e12 = K3            (d)
+e14 = K3-K2                     (d)
+```
+
+The two physical massless cut-soft constraints are therefore `K3=0` for `e9` and `K3-K2=0` for `e14`, each rank three. Their independent double-soft intersection has rank six.
+
+The full generation contains #strong[128 orientations] and two cuts:
+
+- cut 0 `(2,3,6,9,14)`, LMB channel `(3,6,9,14)`;
+- cut 1 `(2,4,5,9,14)`, LMB channel `(4,5,9,14)`.
+
+No orientation ID or cut filter appears in the card. Every accepted approach evaluates the complete graph, cut, and orientation sum.
+
+The eight displayed E-surfaces are E22 `(9,10)`, E29 `(9,12)`, E35 `(8,9,14)`, E36 `(2,3,6,9,14)`, E37 `(3,5,9,14)`, E38 `(4,6,9,14)`, E39 `(2,4,5,9,14)`, and E40 `(7,9,14)`. All are reported active in #strong[no cut];; E36 and E39 are the cuts themselves and are skipped as threshold counterterms. Writing `Et(k)=sqrt(|k|²+173²)`, the non-cut equations audited are
+
+```text
+eta22 = eta29 = 2|K3|-1000
+eta35 = eta40 = |K2|+|K3|+|K3-K2|-1000
+eta37 = Et(K1-K0)+Et(K1-K0-K2)+|K3|+|K3-K2|-1000
+eta38 = Et(K1)+Et(K1-K2)+|K3|+|K3-K2|-1000.
+```
+
+== Complete accepted approach inventory
+<complete-accepted-approach-inventory>
+All paths use 50 logarithmic points on each signed branch over `10^-6 <= |lambda| <= 10^-2`, skip the midpoint, use three cores, and contain 100 finite evaluated points. Vectors are ordered `(K0|K1|K2|K3)`. Fits independently use the nearest 8, 12, and 16 points on each branch. The analytic target constraints vanish linearly along each axis; the classification below was run without a separately serialized target-distance series.
+
+#figure(
+  align(center)[#table(
+    columns: 6,
+    align: (auto,auto,auto,right,right,auto,),
+    table.header([path (rank)], [midpoint], [axis], [p envelope], [min R²], [result],),
+    table.hline(),
+    [`e9` soft (3)], [\`(37,126,-109], [74,-52,137], [-91,64,83], [0)\`], [\`(0],
+    [`e14` soft (3)], [\`(37,126,-109], [74,-52,137], [-91,64,83], [-91,64,83)\`], [\`(0],
+    [double soft (6)], [\`(37,126,-109], [74,-52,137], [0], [0)\`], [\`(0],
+    [`e9` + E35/E40 (3)], [\`(37,126,-109], [74,-52,137], [0,0,500], [0)\`], [\`(0],
+    [`e14` + E22/E29/E35/E40 (3)], [\`(37,126,-109], [74,-52,137], [0,0,500], [0,0,500)\`], [\`(0],
+    [`e9` + E37 (3)], [\`(37,126,-109], [37,126,111.071], [0,0,440.142], [0)\`], [\`(0],
+    [`e14` + E37 (3)], [\`(37,126,-109], [37,126,111.071], [0,0,440.142], [0,0,440.142)\`], [\`(0],
+    [double soft + E37 (6)], [\`(37,126,-109], [37,126,360.117256], [0], [0)\`], [\`(0],
+    [`e9` + E38 (3)], [\`(37,126,-109], [0,0,220.071], [0,0,440.142], [0)\`], [\`(0],
+    [`e14` + E38 (3)], [\`(37,126,-109], [0,0,220.071], [0,0,440.142], [0,0,440.142)\`], [\`(0],
+    [double soft + E38 (6)], [\`(37,126,-109], [0,0,469.117256], [0], [0)\`], [\`(0],
+  )]
+  , kind: table
+  )
+
+The total integrand is a finite plateau: all fitted powers are compatible with zero by orders of magnitude, not with a divergent IR power. The original mechanical `inconclusive` labels arise only because a log-log regression on an essentially constant f64 value has poor `R²`; the exact reassessment below supplies the boundedness check required by the remediation rules.
+
+Across all 1,100 accepted threshold-on points, `threshold_counterterm_0` is exactly `0+0i`. The E37 `e9` threshold-off diagnostic has the same `p=1.54e-7..3.22e-6` envelope and the serialized sequence of 100 total weights has the identical SHA-256 `64578005d9b4bb6f841f2c5c6fd0fa64a08c323cd81bd6e84b9c77c5187ae0b8` in both modes. This rules out a threshold-subtraction cause for the formal fit labels.
+
+== Exact remediation reassessment
+<exact-remediation-reassessment>
+Every accepted physical path was repeated with exact Arb arithmetic, the same midpoint and non-tangent axis, 16 logarithmic points on each signed branch, and the unrestricted orientation sum. All 352 evaluations are finite, neither branch grows toward its limit, and every stored threshold-counterterm contribution remains exactly zero.
+
+#figure(
+  align(center)[#table(
+    columns: 6,
+    align: (auto,right,right,right,auto,auto,),
+    table.header([path], [rank], [exact Arb p envelope], [total-weight magnitude range], [JSON SHA-256], [verdict],),
+    table.hline(),
+    [`e9` soft], [3], [`[2.447e-5, 2.480e-3]`], [`2.2465e-42 .. 2.3593e-42`], [`9cc6c85ea548cfbe3dc489f0333a9a23e1160853f55e8eec5d2de06a94a2909b`], [bounded plateau],
+    [`e14` soft], [3], [`[4.915e-5, 3.491e-3]`], [`2.6375e-42 .. 3.5213e-42`], [`ef338c2b5ed5713c2871318fb61aee7df4eda9a870804969df12152dcdfab8bf`], [bounded plateau],
+    [independent double soft], [6], [`[-1.641e-3, 4.952e-3]`], [`1.0591e-41 .. 1.1705e-41`], [`c3334217325b6b644b213266e8c1c14542b646e671c2a0eb291819a00ab6884e`], [bounded plateau],
+    [`e9` + E35/E40], [3], [`[1.170e-6, 4.118e-4]`], [`6.7585e-44 .. 9.4050e-44`], [`e9d651a9a126492ef8c4a68c7a748adda2ad9fc9fc5361acf1ca5f95843f55ff`], [bounded plateau],
+    [`e14` + E22/E29/E35/E40], [3], [`[5.154e-6, 4.642e-4]`], [`1.8691e-43 .. 5.4189e-43`], [`ee84edfcf62e0f1c58c3cdc07c27a2f2623875e804da7b91a3493e97644bd25f`], [bounded plateau],
+    [`e9` + E37], [3], [`[1.111e-6, 4.182e-4]`], [`5.7822e-43 .. 8.2473e-43`], [`e622050831467f00e54918da3bce92cf8a78a07fe156f3343ff325b4c5883c22`], [bounded plateau],
+    [`e14` + E37], [3], [`[5.779e-6, 4.798e-4]`], [`1.6522e-42 .. 4.8019e-42`], [`a866f0eef0d41e26343d251b5fed5dafed0c20ab993f5218ea1d85c771e0304c`], [bounded plateau],
+    [double soft + E37], [6], [`[-2.250e-4, 5.290e-3]`], [`4.4247e-44 .. 4.8106e-44`], [`3eacc5673d9206e4f35aa7f4a942c580e41371128a5bacc0b638f982271316e7`], [bounded plateau],
+    [`e9` + E38], [3], [`[1.111e-6, 4.182e-4]`], [`5.7822e-43 .. 8.2473e-43`], [`ccdbe57e0450844fc530707e0a0c1d42797269b6348ffb3e4fe2727887335c81`], [bounded plateau],
+    [`e14` + E38], [3], [`[5.779e-6, 4.798e-4]`], [`1.6522e-42 .. 4.8019e-42`], [`119792a91cc4c6b61a5d6e38df7f6ebf6615e80eccb4664856050314e39248a3`], [bounded plateau],
+    [double soft + E38], [6], [`[-6.409e-5, 5.679e-3]`], [`3.3551e-45 .. 3.6603e-45`], [`1dec592307a5acf6693fe8d5e498c1537b4ebdb623c14e3761245cbc32c70de1`], [bounded plateau],
+  )]
+  , kind: table
+  )
+
+The exact fits retain low `R²` (`0.495..0.500`) because the fitted exponents are compatible with zero; this is the expected behavior of a constant or nearly constant series, not evidence of a power divergence. The five generic/double checks completed in `10.141010 s` with `52,346,880` bytes peak recursive RSS, and the six correlated-single checks completed in `12.090616 s` with `52,129,792` bytes peak RSS.
+
+=== Rejected probe geometries
+<rejected-probe-geometries>
+An initial attempt forced E37 and E38 to coincide by setting `K0=K1=0`. Its three paths produced no usable points because the complete evaluation was nonfinite. Splitting E37 and E38 while retaining one exactly zero massive top momentum left the four single-soft paths nonfinite, although both double-soft paths were finite and are retained above. These are rejected degenerate midpoint constructions, not IR failures.
+
+The accepted symmetric geometries instead solve the massive-pair equation with `|K2|=440.142` and each massive spatial momentum `220.071`; they are finite on both branches. All rejected raw JSON and analysis records remain in the assigned state for auditability.
+
+== Threshold-directive decision
+<threshold-directive-decision>
+No `threshold_counterterms` directive was added. There is no active threshold association, no nonzero CT contribution, no smooth branch-consistent failure, and no change under threshold-off. Consequently neither an Arb escalation nor a projected/partitioned threshold cure passes the campaign\'s causal gate. Threshold subtraction remains enabled in the card and final integration.
+
+== Tailored per-orientation UV profile
+<tailored-per-orientation-uv-profile>
+The final seeded-random profile used graph 0, LMB 0 `(2,4,7,9)`, masks 4, 8, 12, and 15, five scales `10^6..10^10`, and seed `70120260809`; no fixed `--uv-ray-*` option was used. These masks isolate the physical `K2`, `K3`, joint `K2/K3`, and overall four-loop sectors without spending the audit on irrelevant subsets. For every mask, the summed series and all 128 original orientations have `finite_samples=5`, `positive_finite_samples=0`, and `missing_fit_is_vanishing=true`, under root `allow_vanishing_missing_fits=true`. All 516 audited series are therefore finite exact-vanishing profiles rather than missing or nonfinite fits. The UV JSON SHA-256 is `8db3124c4ebc31e5b3236d35ef57467249c357988ddeb322017a5b3478c09e23`; the guard completed normally in `33.624243 s` with `74,584,064` bytes peak recursive RSS.
+
+== Full-UV generation
+<full-uv-generation>
+The final remediation state contains three evaluators and full local plus integrated UV subtraction. The final generation summary reports `1.240440739 s` internal time, Spenso `0.070955674 s`, Symbolica `0.204632887 s`, compile `0 s`, and `51,748,864` bytes peak internal RAM. The successful final-card regeneration guard completed in `1.851396 s`, with `53,743,616` bytes peak recursive RSS and `428,928,663,552` bytes minimum free disk.
+
+== Guarded integration
+<guarded-integration>
+The integration uses `m_uv=91.188`, threshold subtraction enabled, summed orientations, graph/LMB Monte Carlo with OSE channel weights, three cores, one `z` rotation, and only the Double stability level. The guard sent `SIGINT` at 185 seconds; GammaLoop checkpointed iteration 2083 and returned code 0 during grace.
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([metric], [value],),
+    table.hline(),
+    [`neval`], [`208,300`],
+    [runtime per sample per core], [`2.66 ms`],
+    [signed result `(re,im)`], [`(-1.7129204145292998e-10, 7.756653055528301e-29)`],
+    [signed error `(re,im)`], [`(1.167327916553692e-11, 1.1944083065061257e-28)`],
+    [absolute result \`(], [re],
+    [absolute error \`(], [re],
+    [absolute relative errors], [`6.81484%` real, `10.33257%` imaginary],
+    [nonfinite / unstable-or-nonfinite], [`0% / 0%`],
+    [precision mix], [`100% f64`, `0% f128`, `0% Arb`],
+    [rough convergence], [#strong[yes];],
+    [guard outcome], [`timeout`, return code 0 after checkpoint grace],
+    [guard duration / peak RSS], [`217.138 s / 60,190,720` bytes],
+    [minimum free disk], [`451,849,224,192` bytes],
+  )]
+  , kind: table
+  )
+
+The signed-imaginary relative error is `153.99%` because its signed central value is consistent with zero; it is diagnostic only and does not replace the prescribed componentwise-absolute test.
+
+== Max weights
+<max-weights>
+The persisted extrema reduce to two unique coordinates:
+
+- signed real `-1.1836910874114712e-6` and signed imaginary positive `+1.6564102538213158e-23` share LMB channel 1; they are also the componentwise-absolute maxima;
+- signed imaginary negative is `-4.917047189861485e-24` in LMB channel 0.
+
+Exact coordinates are preserved in `integration_result.json`, `result_record.json`, and the final card\'s `inspect_max_weights` block. They were not replayed after the science set and result record were frozen, so their massless norms and threshold distances remain explicitly unclassified. No new singular direction is inferred from raw adaptive weights.
+
+== Evidence map and conclusion
+<evidence-map-and-conclusion>
+- `guard/remediation_regenerate_final_card.log` and `.guard.json`: successful final full-UV generation.
+- `guard/display_structure.log` and `display_lmbs.log`: exact orientation, cut, threshold, and LMB inventories.
+- `approaches/*.json` and `*.analysis.json`: accepted paths, threshold-off copy, and rejected midpoint probes.
+- the eleven `*arb16.json` files and matching analyses: exact bounded-plateau reassessment of every accepted path.
+- `uv_profiles/final_random_g0_lmb0_masks4_8_12_15_per_orientation_n5_exp6_10_seed70120260809/uv_profile.json`: selected-mask UV evidence with original orientation identities.
+- `guard/separated_threshold_approaches.log` and `symmetric_single_thresholds.log`: corrected E37/E38 recovery.
+- `guard/integration.log`, `.guard.json`, and `integration_workspace/integration_result.json`: converged checkpoint.
+- `result_record.json`: machine-readable coordinator record.
+
+Final classification: #strong[no threshold or LMB edit; all explicit limits are exact bounded plateaus; the selected random per-orientation UV sectors pass; the byte-identical graph\'s full-UV integration converged.]

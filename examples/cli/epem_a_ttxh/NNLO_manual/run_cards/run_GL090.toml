@@ -344,12 +344,19 @@ commands = [
 name = "remediation_uv_random_masks10_12_14_15"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10
+  #       --per-orientation --seed 9020260810
+  #       --graph-index 0 --lmb-index 0
+  #       --loop-subset-mask 10,12,14,15
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL090/uv_profiles/remediation_random_g0_lmb0_masks10_12_14_15_n5_exp6_10_seed9020260810"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10
       --per-orientation --seed 9020260810
-      --graph-index 0 --lmb-index 0
-      --loop-subset-mask 10,12,14,15
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL090/uv_profiles/remediation_random_g0_lmb0_masks10_12_14_15_n5_exp6_10_seed9020260810""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL090/uv_profiles/remediation_random_g0_lmb0_masks10_12_14_15_n5_exp6_10_seed9020260810_all_uv_limits""",
 ]
 
 [[command_blocks]]

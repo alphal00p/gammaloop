@@ -2957,4 +2957,33 @@ mod tests {
             Some((ContributionKind::Bin(1), ComponentKind::Real))
         );
     }
+
+    #[test]
+    fn numerical_stability_line_shows_processed_percentages() {
+        let line = numerical_stability_median_line(&[
+            StatisticsMedianEntry {
+                label: StyledText::plain("f64"),
+                value: StyledText::plain("2.4e-16"),
+                processed_percentage: StyledText::plain("12.34%"),
+            },
+            StatisticsMedianEntry {
+                label: StyledText::plain("f128"),
+                value: StyledText::plain("1.3e-26"),
+                processed_percentage: StyledText::plain("1.23e-3%"),
+            },
+            StatisticsMedianEntry {
+                label: StyledText::plain("arb"),
+                value: StyledText::plain("N/A"),
+                processed_percentage: StyledText::plain("0.00%"),
+            },
+        ]);
+
+        assert_eq!(
+            line.spans
+                .into_iter()
+                .map(|span| span.content.into_owned())
+                .collect::<String>(),
+            "stability: f64: 2.4e-16 (12.34%)   f128: 1.3e-26 (1.23e-3%)   arb: N/A (0.00%)"
+        );
+    }
 }

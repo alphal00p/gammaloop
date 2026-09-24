@@ -1,0 +1,143 @@
+= GL488 remediation audit
+<gl488-remediation-audit>
+== Final status
+<final-status>
+- #strong[Threshold structure edited:] no. The task-start DOT is retained byte-for-byte, with threshold subtraction enabled for every cut and all 272 orientations.
+- #strong[Full UV generation:] yes. A final clean state contains local and integrated UV counterterms and the original 10-evaluator inventory.
+- #strong[All limits OK:] yes. Improved geometry plus matched Arb threshold-on/off runs resolve every formerly inconclusive required soft, double-soft, hard-collinear, and correlated threshold limit.
+- #strong[Selected random UV:] pass for the tailored three-loop mask 14 and full four-loop mask 15, per orientation and summed.
+- #strong[Integration converged:] yes. Because the DOT is unchanged, the prior finite 13,100-sample checkpoint remains applicable; no new integration was needed.
+
+No threshold projection, parent subspace, partition, or LMB remap is causally justified. Every apparent first-pass failure is instead a double-precision cancellation or degenerate-geometry artifact.
+
+== Provenance and clean generation
+<provenance-and-clean-generation>
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([artifact], [SHA-256],),
+    table.hline(),
+    [`target/release/gammaloop`], [`0f8ed2c842814995bdcad19b3bc2a406eb75cb4a1784a74aa3c3de6b0e9d2b1b`],
+    [final `graphs/GL488.dot`], [`43a933c58358042df84aa8c1de3907c909144ee1cbaf929e43c2175f373178ff`],
+    [final `run_cards/run_GL488.toml`], [`53463b5126802115782a0d84c007060a805511e63f2a643b1db4cb465b0b4dc7`],
+    [mask-14 `uv_profile.json`], [`1ab3463719888fdeea84699d5556e522320c8714aca53c51ae98abcec38da74e`],
+    [mask-15 `uv_profile.json`], [`647d500c48cc33945ff53e1963b44106b17557ce40ad8d21dc5a93045a3260ee`],
+  )]
+  , kind: table
+  )
+
+The final clean state is `states/state_GL488/trials/final_state`. Full local-plus-integrated UV generation completed normally in 62.192 s. The watchdog observed 1,216,823,296 bytes peak recursive RSS and at least 429,055,672,320 bytes free on the monitored disk. The internal summary reports 10 evaluators, 61.076 s total generation time, 1,328,971,776 bytes peak RAM, 8.422 s in spenso, 33.226 s in Symbolica, and zero compilation time. Generation retained all 272 orientations and five process-valid cuts, with no forced cut or orientation.
+
+== Routing, cuts, and threshold equations
+<routing-cuts-and-threshold-equations>
+The four-loop basis is `(e3,e4,e7,e12)`. With vanishing incoming spatial momentum,
+
+```text
+q12 = K3
+q13 = K1 - K2 - K3
+q14 = K2 - K1
+q12 + q13 + q14 = 0.
+
+q3  = K0
+q4  = K1
+q5  = q7 = q8 = K2
+q6  = K0 - K1 + K2
+q11 = K0 - K1 + K2 + K3.
+```
+
+Single-soft rank is 3, the independent all-gluon double-soft rank is 6, and a hard-collinear transverse relation has rank 2. The process-valid collinear pairs are e13/e14 in cut 0 and e12/e13 in cut 4. The e12/e14 check is diagnostic only.
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (right,auto,auto,),
+    table.header([cut], [edges], [active left thresholds],),
+    table.hline(),
+    [0], [`[2,7,11,13,14]`], [none],
+    [1], [`[2,7,11,12]`], [E33, E53],
+    [2], [`[2,6,7]`], [E33, E53],
+    [3], [`[2,3,7,14]`], [none],
+    [4], [`[2,3,7,12,13]`], [none],
+  )]
+  , kind: table
+  )
+
+Writing `Et(k)=sqrt(173^2+|k|^2)`, the only active equations are
+
+```text
+E33 = Et(K1) + Et(K2) + |K2-K1| - 1000
+E53 = Et(K1) + Et(K2) + |K3| + |K1-K2-K3| - 1000.
+```
+
+At `q12=0` and `q13=0`, E33 and E53 are the same complete-root family with smallest common hard edge set `[4,7]`. At `q14=0`, E33 is the two-top root, while E53 is the separate `2 Et(K1)+2|K3|=1000` root.
+
+== Corrected geometry and fit method
+<corrected-geometry-and-fit-method>
+The first-pass q14/E53 path put both massive momenta at rest, while the q13 bridge put one top at rest. The replacements keep every massive momentum generic and separate unrelated roots:
+
+- Generic e13 soft: `K2=(-157,152,-181)`, `K3=(30,-40,120)`, and `K1=K2+K3`; both E33 and E53 are `-288.024595...`, safely away.
+- Generic double soft: `K1=K2=(100,70,-50)`, `K3=0`; both thresholds are `-564.895415...`, safely away, and the two approach vectors are independent.
+- q14/E53: `K1=K2=(100,70,-50)` and `K3=(107.36340434824416,-162.7767743344347,204.33680182407758)`. Here `Et(K1)=217.55229256433958`, `|K3|=282.4477074356604`, so E53 is exactly zero while E33 remains `-564.895415...`.
+- q13/E33-E53: all `K1`, `K2`, and `K3` are nonzero, `K1=K2+K3`, and `Et(K1)+Et(K2)+|K3|=1000`; the complete pair is isolated.
+- Both physical collinear midpoints use three nonzero gluon momenta on the required same/opposite rays, and each axis changes only a nonparallel transverse component while the partner remains hard.
+
+The exact coordinates and axes are in the run card. Arb paths use eight logarithmic points per signed branch over `1e-6..1e-2`; q14/E53 uses 16 f64 points per branch. Fits use `|I(lambda)| ~ |lambda|^-p`; rank `r` is integrable when `p < r`. Every cited point is finite and evaluated.
+
+== Final IR and threshold results
+<final-ir-and-threshold-results>
+#figure(
+  align(center)[#table(
+    columns: 7,
+    align: (auto,right,auto,right,right,right,auto,),
+    table.header([limit], [rank], [precision], [threshold-on `p`], [threshold-off `p`], [minimum R2], [result],),
+    table.hline(),
+    [generic e13 soft], [3], [Arb], [`[0.989506,0.990737]`], [`[0.996245,1.001334]`], [0.999908], [pass],
+    [independent all-gluon double soft], [6], [Arb], [`[2.988918,3.028738]`], [`[2.995859,3.003950]`], [0.999911], [pass],
+    [physical e12/e13 collinear], [2], [Arb], [`[-1.375e-4,1.381e-4]`], [`[-1.259e-4,1.292e-4]`], [flat plateau], [pass],
+    [physical e13/e14 collinear], [2], [Arb], [`[-5.102e-5,5.385e-5]`], [`[-2.710e-5,2.994e-5]`], [flat plateau], [pass],
+    [q14 / isolated E53], [3], [f64], [`[0.999433,1.000474]`], [`[0.999433,1.000475]`], [0.999995], [pass],
+    [q13 / common E33-E53 bridge], [3], [Arb], [`[1.002354,1.003478]`], [`[1.003466,1.006736]`], [0.999957], [pass],
+  )]
+  , kind: table
+  )
+
+The low formal R2 values for the collinear totals are expected when fitting bounded plateaus. Their magnitudes are constant across four decades. The e12/e13 approach has cuts 3 and 4 at `p=1.9981..2.0020`, with cut 4 the process-valid member. The e13/e14 approach has cuts 0 and 1 at `p=1.9999..2.0001`, with cut 0 process-valid. The complete all-cut Arb sums cancel to `p` consistent with zero. This is the required IR cancellation, not a missing threshold term.
+
+Per-cut and generated aggregate weights were retained in every approach JSON. The pristine DOT has no explicit threshold component registry, so `threshold_counterterm_0` is the generated aggregate. On the q13 bridge, cut 2 and its CT both scale at `p≈1`, while the other individual cuts scale near `p=3` and cancel in the complete sum. Threshold-on and threshold-off totals agree at `p≈1`. On q14/E53 the CT sum is bounded and the on/off totals coincide to fit precision.
+
+Previously passing required sectors remain unchanged: generic q12 and q14 soft, q12/E33-E53, and q14/E33. The non-process e12/e14 diagnostic remains a bounded cross-check. Together with the six rows above, this completes the required IR inventory, so `all limits OK? = yes`.
+
+Because no threshold-on limit is causally worse than its identical threshold-off partner, a GL297 projected parent, GL638 one-/two-loop partition, or LMB remap would add unsupported structure and risk the already passing q12/q14 families. The complete evaluator and threshold-association inventory is therefore preserved.
+
+== Selected random per-orientation UV audit
+<selected-random-per-orientation-uv-audit>
+Two seeded random, no-fixed-ray profiles cover the exact q13-dependent subset and the full basis:
+
+#figure(
+  align(center)[#table(
+    columns: 6,
+    align: (right,right,auto,auto,auto,right,),
+    table.header([mask], [seed], [fixed], [free], [scales], [observed orientations],),
+    table.hline(),
+    [14], [48820260809], [`[e3]`], [`[e4,e7,e12]`], [`1e6..1e10`, 5 points], [272],
+    [15], [48820260810], [`[]`], [`[e3,e4,e7,e12]`], [`1e6..1e10`, 5 points], [272],
+  )]
+  , kind: table
+  )
+
+Each file contains exactly graph 0, LMB 0, and the requested subset. For each mask, all 272 orientation entries have `finite_samples=5`, `positive_finite_samples=0`, `analysis=null`, and `missing_fit_is_vanishing=true`; the summed entry has the same counters. The root flag `allow_vanishing_missing_fits=true` accepts these as vanishing safe series. Across the union there are 544 orientation entries, 544 accepted vanishing series, two accepted summed series, zero fitted exceptions, and zero bad counters.
+
+The combined guarded run completed normally in 79.815 s, peaked at 670,543,872 bytes recursive RSS, left at least 429,055,934,464 bytes free, and did not use `--timeout-success`. Evidence is under `states/state_GL488/trials/remediation/uv_random_g0_lmb0_mask{14,15}_*` and in `states/state_GL488/trials/guards/final_random_uv_masks14_15.json`.
+
+== Integration and conclusion
+<integration-and-conclusion>
+The byte-identical DOT carries forward the prior 13,100-sample full-UV checkpoint:
+
+- signed central value `(1.1554852724e-5,-4.4341675452e-6 i)` with errors `(1.2661225174e-5,3.3836024642e-6)`;
+- componentwise-absolute central value `(5.8763185198e-5,1.5715646407e-5 i)` with errors `(1.2651213349e-5,3.3810370690e-6)`;
+- componentwise-absolute relative errors 21.53% and 21.51%; 100% f64, zero nonfinite samples, and zero retained unstable samples.
+
+This satisfies the campaign\'s convergence criterion, so `converged? = yes`. The historical maximum-weight coordinates were not replayed, but the complete focused IR/threshold inventory above is now stable and classified.
+
+Final conclusion: GL488 is #strong[full-UV generated, UV certified, IR safe, and converged] with its pristine threshold prescription. Improved geometry and Arb expose the former inconclusive powers as cancellation noise. No CT or LMB cure is needed.

@@ -1,0 +1,137 @@
+= GL190 threshold/IR audit
+<gl190-thresholdir-audit>
+== Provenance and generation
+<provenance-and-generation>
+- Raw diagnostic DOT SHA-256: `09160f5a92d71d3f461f459fbd522cf021bd7e357c5f54959d4de940d2b5df77`.
+- Clean committed DOT SHA-256: `143a3b7a95acb3ad8d57aa392aa4d7faf67ffb1104d10d63e3434a4bf3e40110`.
+- Final run-card SHA-256: `966b389af842c1aa5c1b347be9a28bfa7ca2d7b68ee29fb0db3c60cd94401724`.
+- Pinned CLI SHA-256: `0f8ed2c842814995bdcad19b3bc2a406eb75cb4a1784a74aa3c3de6b0e9d2b1b`.
+- Generation used the exact accepted process specification, retained all process-valid cuts and all orientations, and completed with full local and integrated UV subtraction. No fallback was used.
+- The clean remediation regeneration completed normally in `1.320770 s` guard time with `50,282,496` bytes peak recursive RSS. `generation_summary.json` (SHA-256 `ffd17815c6a361ca33fb3e4c0b4a67ece4c129f611efe55538b2742e63522d43`) reports `stats.total_time = 0.657499080 s`, 2 evaluators, `48,074,752` bytes peak RAM, and no compilation.
+- The final state has 64 orientations and one valid cut, cut 0 `(2,3,6,9,14)`. The seven displayed threshold surfaces are E19 `(9,10)`, E25 `(9,12)`, E30 `(8,9,14)`, E31 `(2,3,6,9,14)`, E32 `(4,6,9,14)`, E33 `(5,6,9,14)`, and E34 `(7,9,14)`; the display reports all as active in no cut.
+
+The first guarded `all_approaches` wrapper encountered the non-interactive state-card redefinition check and produced no physics output. The final card was then aligned into `state_GL190/run.toml` with no regeneration or physics mutation, and guarded job `GL190_all_approaches_sync` completed all explicit blocks. The failed wrapper log is retained and is not counted as evidence.
+
+== Topology and momentum routing
+<topology-and-momentum-routing>
+GL190 has four loops, a massless light-`d` loop, two gluon propagators, and no `V_36` or `V_37` vertex. The diagnostic routing gives
+
+```text
+e2 = K0                    (t, lmb_id 0)
+e3 = -K0 + K1             (H)
+e4 = K1                    (t, lmb_id 1)
+e5 = K1                    (t)
+e6 = K1 - K2               (t)
+e7 = K2                    (g, lmb_id 2)
+e8 = -K2                   (g)
+e9 = K3                    (d, lmb_id 3)
+e10 = K3 - Ptot            (d)
+e12 = K3 - Ptot            (d)
+e14 = K3 - K2 - Ptot       (d)
+```
+
+Spatially the two cut light-quark momenta are `q9 = K3` and physical `p14 = K2-K3`. Thus the independent cut-soft constraints are `K3=0` and `K3-K2=0`, with ranks 3 and 3, and their independent double-soft intersection has rank 6. Although GL190 is not in the mandatory `V_36` gluon-collinear queue, cut 0 exposes the massless `g -> d d~` splitting. The hard `q9 || p14` tests below are therefore conservative extra coverage (rank 2), not a claim that GL190 belongs to the V36 queue.
+
+With `MT=173`, the audited duplicate energy-equation families were
+
+```text
+|eta19/25| = |2 |K3| - 1000|
+|eta30/34| = ||K2| + |K3| + |K3-K2| - 1000|
+|eta32/33| = |Et(K1) + Et(K1-K2) + |K3| + |K3-K2| - 1000|
+```
+
+where `Et(k)=sqrt(|k|^2+173^2)`. Every named target distance has fitted slope `1.000000` on all 8/12/16-point windows on both signed branches (the E32/E33 double-soft maximum is `1.000001`). All 1,100 approach evaluations are finite. The stored `threshold_counterterm_0` additional weight is exactly zero throughout every path.
+
+== Explicit all-orientation limits
+<explicit-all-orientation-limits>
+All points and axes below are ordered as the 12 spatial components `(K0,K1,K2,K3)`. Each block used the complete graph sum with no orientation ID, 50 logarithmic points on each signed branch (`100` evaluated), `1e-6 <= |lambda| <= 1e-2`, the midpoint skipped, and three cores. `p` is the full envelope of the 8/12/16-point fits.
+
+#figure(
+  align(center)[#table(
+    columns: 6,
+    align: (auto,auto,auto,right,right,auto,),
+    table.header([path (rank)], [midpoint], [axis], [fitted p envelope], [minimum R2], [verdict],),
+    table.hline(),
+    [e9 soft (3)], [`(37,126,-109; 74,-52,137; -91,64,83; 0,0,0)`], [`(0;0;0; 211,-157,193)`], [`[3.64e-6,1.89e-5]`], [0.877824], [bounded plateau],
+    [e14 soft (3)], [`(37,126,-109; 74,-52,137; -91,64,83; -91,64,83)`], [`(0;0;0; 211,-157,193)`], [`[7.01e-6,2.74e-5]`], [0.877830], [bounded plateau],
+    [e9/e14 double soft (6)], [`(37,126,-109; 74,-52,137; 0,0,0; 0,0,0)`], [`(0;0; 98,-86,342; 211,-157,193)`], [`[-3.65e-6,5.47e-5]`], [0.001067], [bounded plateau],
+    [hard d/d\~ collinear, threshold-away (2)], [`(37,126,-109; 74,-52,137; 0,0,400; 0,0,160)`], [`(0;0; 0,0,23; 13,17,0)`], [`[-2.72e-6,2.72e-6]`], [0.877831], [bounded plateau],
+    [e9 soft + E30/E34 (3)], [`(37,126,-109; 74,-52,137; 0,0,500; 0,0,0)`], [`(0;0;0; 13,17,19)`], [`[1.38e-7,2.78e-6]`], [0.877831], [bounded plateau],
+    [e14 soft + E19/E25/E30/E34 (3)], [`(37,126,-109; 74,-52,137; 0,0,500; 0,0,500)`], [`(0;0;0; 13,17,19)`], [`[5.21e-7,2.88e-6]`], [0.877813], [bounded plateau],
+    [e9 soft + E32/E33 (3)], [`(37,126,-109; 0,0,0; 0,0,395.405078597340; 0,0,0)`], [`(0;0;0; 13,17,19)`], [`[1.15e-7,2.76e-6]`], [0.877831], [bounded plateau],
+    [e14 soft + E32/E33 (3)], [`(37,126,-109; 0,0,0; 0,0,395.405078597340; 0,0,395.405078597340)`], [`(0;0;0; 13,17,19)`], [`[5.57e-7,2.87e-6]`], [0.877781], [bounded plateau],
+    [double soft + E32/E33 (6)], [`(37,126,-109; 0,0,469.117256131130; 0,0,0; 0,0,0)`], [`(0;0; 98,-86,342; 211,-157,193)`], [`[-1.05e-3,2.35e-4]`], [0.000026], [bounded plateau],
+    [hard collinear + E30/E34 (2)], [`(37,126,-109; 74,-52,137; 0,0,500; 0,0,200)`], [`(0;0; 0,0,23; 13,17,0)`], [`[-2.82e-6,2.82e-6]`], [0.877831], [bounded plateau],
+    [hard collinear + E32/E33 (2)], [`(37,126,-109; 0,0,0; 0,0,395.405078597340; 0,0,158.162031438936)`], [`(0;0; 0,0,23; 13,17,0)`], [`[-3.06e-6,3.06e-6]`], [0.877831], [bounded plateau],
+  )]
+  , kind: table
+  )
+
+The complete integrand is a numerically flat finite plateau (`p` compatible with zero by many orders of magnitude). The original mechanical classifier called the near-zero-slope fits inconclusive solely because a constant series has a poorly determined log-log slope. The remediation rules explicitly permit bounded-plateau checks for this case, so representative rank-three, rank-six, and rank-two sectors were repeated in exact Arb arithmetic rather than treating low `R2` as growth.
+
+== Remediation reassessment
+<remediation-reassessment>
+Each exact check used the same physical midpoint and non-tangent axis as the corresponding full-weight test, 16 logarithmic points on each signed branch, and the complete orientation sum. All evaluations were finite and the stored threshold-counterterm contribution was exactly zero.
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,right,right,auto,auto,),
+    table.header([representative sector], [exact Arb p envelope], [total-weight magnitude range], [JSON SHA-256], [verdict],),
+    table.hline(),
+    [e9 soft, rank 3], [`[2.62e-5, 2.476e-3]`], [`7.4696e-43 .. 8.7813e-43`], [`6e81704798247c8a30f4367ec352f7e13fff9683246d696e7103df3d74ecc611`], [bounded plateau],
+    [e9/e14 double soft, rank 6], [`[-8.57e-4, 4.448e-3]`], [`3.9298e-42 .. 4.4620e-42`], [`13684cd39e142474dfe8523b842e01946ac98890f65c3a7ed0cd9aa67f0a83fb`], [bounded plateau],
+    [hard e9/e14 collinear, rank 2], [`[-3.524e-4, 3.527e-4]`], [`3.6108e-44 .. 3.6496e-44`], [`5f4ac816e9b5da85bbc5776a11317453365b0d9760b1cb01d46fbcc93d8045ca`], [bounded plateau],
+  )]
+  , kind: table
+  )
+
+The Arb fits retain the expected low `R2` (`0.495..0.761`) because the values are constant to high relative accuracy; neither branch grows toward the limit. The rank representatives span every physical constraint class used by the eleven baseline paths. The correlated variants only place the same constraints on threshold surfaces whose counterterm is identically zero, and their target-distance slopes were already verified as linear. This resolves all eleven old fit-quality-only classifications as safe bounded plateaus without inventing a threshold structure.
+
+The exact-check guard completed normally in `3.355965 s` with `42,782,720` bytes peak recursive RSS.
+
+== Tailored per-orientation UV profile
+<tailored-per-orientation-uv-profile>
+The final seeded-random profile used graph 0, LMB 0 `(2,4,7,9)`, masks 4, 8, 12, and 15, five scales `10^6..10^10`, and seed `19020260809`; no fixed `--uv-ray-*` option was used. These masks cover the physical `K2`, `K3`, joint `K2/K3`, and overall four-loop sectors while avoiding irrelevant exhaustive subsets. For every mask, the summed series and all 64 orientations have `finite_samples=5`, `positive_finite_samples=0`, and `missing_fit_is_vanishing=true`, with root `allow_vanishing_missing_fits=true`. All 260 audited series are therefore finite exact-vanishing profiles rather than missing/nonfinite fits. The UV JSON SHA-256 is `4fe52578c305e53875864aa584023bb18cbe8086316286d96a2a9918c57a69bf`; the guard completed normally in `9.238936 s` with `62,119,936` bytes peak recursive RSS.
+
+== Threshold directive decision
+<threshold-directive-decision>
+No `threshold_counterterms` directive was added. Generation reports no threshold surface active in the sole process-valid cut, and explicit event decompositions show a zero threshold-counterterm weight on all tested generic and correlated paths. Editing a parent subspace under those conditions would be unsupported. Threshold subtraction remains enabled in the card and integration.
+
+== Integration diagnostic
+<integration-diagnostic>
+The original `m_uv=91.188` variant was integrated with summed orientations, Monte Carlo graph/LMB sampling, OSE LMB-channel weights, three cores, one `z` rotation, and only the required Double stability level. The guard sent `SIGINT` at the 180-second integration timeout; GammaLoop checkpointed cleanly, returned code 0, and all descendants were gone. Wrapper duration including checkpoint grace was `212.568603 s`, peak recursive RSS was `159,776,768` bytes, and minimum observed free disk was `131,677,007,872` bytes.
+
+The last completed status and `integration_result.json` give:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,right,right,),
+    table.header([metric], [real], [imaginary],),
+    table.hline(),
+    [signed central value], [`-2.418798532741264e-10`], [`-1.1972751175073265e-28`],
+    [signed error], [`1.5885469308136912e-11`], [`9.075658370959634e-29`],
+    [signed relative error], [`6.57%`], [`75.80%`],
+    [componentwise-absolute central value], [`2.418798532741264e-10`], [`1.6026171278063901e-27`],
+    [componentwise-absolute error], [`1.5885469308136912e-11`], [`9.073610572430684e-29`],
+    [componentwise-absolute relative error], [`6.5675%`], [`5.6617%`],
+  )]
+  , kind: table
+  )
+
+- `neval = 687,200`; final runtime is `786 us/sample/core` verbatim from the completed integration-log status.
+- Stability statistics: `f64=100%`, `f128=0%`, `Arb=0%`, nonfinite/unstable `0.00%` (`nan_percentage=0`).
+- `converged? = yes`: the checkpoint is finite, contains no nonfinite samples, and both nonzero componentwise-absolute relative errors are below 75%. The larger signed-imaginary relative error is reported but is not the convergence criterion.
+
+The persisted maxima are:
+
+- signed real `-8.123613949879962e-6` and absolute real `+8.123613949879962e-6` at `x=(0.1294153975,0.8147147988,0.8051285432,0.2358281930,0.2038090100,0.5852982447,0.1119765660,0.5173488941,0.4505232608,0.2415805840,0.3194663059,0.5104370939)`;
+- signed imaginary `+1.063252926701176e-23` at `x=(0.0693807547,0.2258918523,0.2762343014,0.1280452407,0.3550483247,0.8214873717,0.1351527053,0.2342092748,0.1210520681,0.1503640587,0.3564235833,0.4094225496)`;
+- signed imaginary `-4.771798342708209e-23` and absolute imaginary `+4.771798342708209e-23` at `x=(0.1950649880,0.4966355031,0.2704175958,0.2407291067,0.8491296327,0.1035322580,0.0838193300,0.7653922530,0.6898142671,0.1734022118,0.8412577916,0.3923490495)`.
+
+The coordinator freeze arrived immediately after checkpoint collection, so these coordinates were not replayed with `inspect`; their massless-edge norms and threshold distances remain explicitly unclassified. No claim that a maximum is generic or on an IR/threshold locus is made.
+
+== Conclusion
+<conclusion>
+GL190 needs no explicit threshold directive or LMB change. Exact Arb arithmetic resolves the old low-`R2` soft, double-soft, and conservative collinear fits as bounded plateaus, while all correlated paths have linear target distances and identically zero threshold-counterterm weight. The tailored seeded-random UV profile safely vanishes for the sum and all 64 orientations in every relevant subset. The byte-identical DOT leaves the existing converged full-UV integration applicable. Final campaign fields are: `threshold struct. edited? = no`, `converged? = yes`, and `all limits OK? = yes`.

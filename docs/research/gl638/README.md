@@ -13,17 +13,17 @@ The executable prescription is in
 [GL638.dot](../../../examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot), with generation
 and integration controls in
 [the card](../../../examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO_test_GL638.toml).
-[The implementation plan](../../../IR_SAFE_THRESHOL_UPDATE.md) records the
+[The implementation plan](../../../IR_SAFE_THRESHOL_UPDATE.typ) records the
 grouping invariants and extended research history. Automatic construction of
 threshold metadata remains deferred.
 
-[Portable replay commands and inputs](REPLAY.md) cover the soft precision
+[Portable replay commands and inputs](REPLAY.typ) cover the soft precision
 failure, coincident/nearby A/P roots, and hard/smooth sliver boundary controls.
 Regenerate saved integrands after changing DOT metadata or generated exact-pi
 coefficients; localization and Euler stability settings apply at runtime to
 loaded states.
 
-[The runtime follow-up](runtime-followup.md) checks the remaining mechanisms
+[The runtime follow-up](runtime-followup.typ) checks the remaining mechanisms
 with 54 A/P stability comparisons, three 30,000-sample pilots on 20 cores,
 and current-binary H/Z and maximum-weight replays. Generic Euler rescues the
 tested nearby A/P points; exact coincidence remains undefined. Adding the
@@ -163,7 +163,7 @@ The CSV values are the recorded JSON numbers, including f64 exports of Arb
 results; no sampling Jacobian or radial measure has been folded into them.
 The local executed protocol is archived under
 `twenty-core/default-metadata-soft/{PLAN.json,run.py,execution}` and requires
-both generated states. [The portable replay instructions](REPLAY.md) illustrate
+both generated states. [The portable replay instructions](REPLAY.typ) illustrate
 the same raw-inspect/reset mechanism, but their script consumes a different
 JSON schema and does not directly run this 168-case panel.
 
@@ -398,7 +398,7 @@ payloads and precision flags. Both exact A/P cases now finish Arb Unstable with
 no accuracy estimate, retaining `is_nan=true`, null cut-1 weights and sanitized
 zero totals. Their finite intermediate Quad rotation error, when present,
 remains unchanged. This corrects failure reporting; the coincident-root failure
-and the known nearby-A/P false acceptance remain. See [the replay notes](REPLAY.md).
+and the known nearby-A/P false acceptance remain. See [the replay notes](REPLAY.typ).
 
 The self-contained regression requires no generated SM state:
 
@@ -534,7 +534,7 @@ estimate. At eta_P=1e−6 GeV and eta_A/eta_P=1.0001, the historical z-probe
 Quad evaluation passes its rotation check but its imaginary value differs from
 Arb by a factor of 1120. The current generic Euler probe rejects that Quad
 value and recovers the direct Arb reference, as documented in
-[the runtime follow-up](runtime-followup.md). This is a threshold energy
+[the runtime follow-up](runtime-followup.typ). This is a threshold energy
 offset, not a soft radius. Defining the exact coincident limit requires a
 common divided-difference/confluent evaluation preserving
 Jacobian, damping, multiplier and group factors. More qualifiers do not define

@@ -204,7 +204,12 @@ fn amplitude_threshold_counterterms_follow_lmb_channel_normalization() -> Result
         {
             event_weight.0 += event.weight.re.0;
             event_weight.1 += event.weight.im.0;
+            // Auxiliary terms remain factorized; compare their full contributions
+            // with the common Jacobian and sampling partition restored.
+            let factor = &event.additional_weights.weights
+                [&gammalooprs::observables::events::AdditionalWeightKey::FullMultiplicativeFactor];
             for (key, value) in &event.additional_weights.weights {
+                let value = value * factor;
                 match key {
                     gammalooprs::observables::events::AdditionalWeightKey::Original => {
                         original_weight.0 += value.re.0;
@@ -256,8 +261,8 @@ fn amplitude_threshold_counterterms_follow_lmb_channel_normalization() -> Result
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = false
-lmb_channels = "summed"
+sampling_multichanneling = false
+sampling_channels = "summed"
 lmb_basis_ids = {{ "{graph_name}" = [{basis_id}] }}
 '"#,
         ))?;
@@ -274,9 +279,9 @@ lmb_basis_ids = {{ "{graph_name}" = [{basis_id}] }}
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "monte_carlo"
-lmb_channel_weight = "{channel_weight}"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+sampling_channel_weight = "{channel_weight}"
 lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 '"#,
             basis_ids[0], basis_ids[1],
@@ -341,9 +346,9 @@ lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "summed"
-lmb_channel_weight = "{channel_weight}"
+sampling_multichanneling = true
+sampling_channels = "summed"
+sampling_channel_weight = "{channel_weight}"
 lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 '"#,
             basis_ids[0], basis_ids[1],
@@ -461,8 +466,8 @@ type = "graph_id"
 [quantities.orientation_id]
 type = "orientation_id"
 
-[quantities.lmb_channel_id]
-type = "lmb_channel_id"
+[quantities.sampling_channel_id]
+type = "sampling_channel_id"
 
 [observables.integral_hist]
 quantity = "integral"
@@ -479,8 +484,8 @@ quantity = "orientation_id"
 kind = "discrete"
 domain = { type = "explicit_range", min = 0, max = 64 }
 
-[observables.lmb_channel_id_hist]
-quantity = "lmb_channel_id"
+[observables.sampling_channel_id_hist]
+quantity = "sampling_channel_id"
 kind = "discrete"
 domain = { type = "explicit_range", min = 0, max = 64 }
 '"#,
@@ -532,8 +537,8 @@ domain = { type = "explicit_range", min = 0, max = 64 }
         vec![
             "graph_id_hist".to_string(),
             "integral_hist".to_string(),
-            "lmb_channel_id_hist".to_string(),
             "orientation_id_hist".to_string(),
+            "sampling_channel_id_hist".to_string(),
         ]
     );
     for histogram in result.observables.histograms.values() {

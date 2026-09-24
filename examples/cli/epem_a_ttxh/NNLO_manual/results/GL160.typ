@@ -1,0 +1,261 @@
+= GL160 threshold/IR remediation
+<gl160-thresholdir-remediation>
+== Outcome
+<outcome>
+- Threshold structure edited: #strong[yes];.
+- Final prescription: on cut `(2,3,6,14)`, both right-side surfaces `E27=(9,10)` and `E19=(6,9,12)` use the shared one-loop subspace `[9]` with explicit parent LMB `[2,4,6,9]`.
+- Generation basis changed: #strong[no];. The original topology-valid basis `(e2,e4,e6,e9)` already supplied the required nonsingular parent.
+- UV mode: #strong[full local and integrated UV];; five evaluators.
+- Process-valid cuts / unrestricted orientations: #strong[2 / 128];.
+- All required IR and threshold-only limits OK: #strong[yes];.
+- Selected per-orientation UV profiles OK: #strong[yes] for exact masks `6,12,14,15`.
+- Integration converged: #strong[yes];.
+
+The pristine threshold-on `q14`-soft/`E19` path had the smooth causal defect `p=3.000005..3.000026`, while its identical threshold-off diagnostic had `p=1.000007..1.000029`. Projecting both active right-side counterterms onto their common edge-9 motion cures that defect without disabling threshold subtraction: the final nondegenerate Arb result is `p=1.000031..1.005882`, and all seven complete-graph f64 regressions pass.
+
+== Provenance and guards
+<provenance-and-guards>
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([artifact], [SHA-256],),
+    table.hline(),
+    [pinned release GammaLoop], [`0f8ed2c842814995bdcad19b3bc2a406eb75cb4a1784a74aa3c3de6b0e9d2b1b`],
+    [raw master-state DOT], [`d5990e63696e08ce9f63ea9117e0cab7d4b9f0fe590aa4e66a5259d1156730cc`],
+    [task-start pristine DOT], [`994d5232f1fc9f66f40b13c3028147b5a3b11065d55bfb8d240c29d67f4f85ab`],
+    [task-start pristine card], [`5d4a56b8f8003b812e18f72bf64319392e28bfa2671de5e8cb2c643e8b6a3a71`],
+    [final projected DOT], [`b5e85b1afd315227f8f3be6dddcb24acffc16f9b151323a87375c26c8ba6976c`],
+    [final card], [`ed1fc3e723e6ee61b8d7a598fd6fc389d98f800b7912ca6d9efefc68076b716d`],
+    [candidate generation summary], [`b242052093d5ec3630131c3eceea013080ff952ff7a8e1178a0ba536317445ba`],
+    [candidate decisive Arb JSON], [`49d3501898bcca42544107469ded105c6c7bab0487a7e3fdcf9c369c785f24ce`],
+    [final generation summary], [`8aa37f94d40d8423c76ce24ed67279773a97115d37e030cf35b0a1e2da1d4e52`],
+    [final decisive Arb JSON], [`581f265f7dfaa43fd63953863002eb9219e7b1ed9ffb6c2a26a6542917f59dc3`],
+    [threshold-only E27 / E19 JSON], [`541e9ce720713238c26aeca09a8de1642e70a8c08c99bf9fd678a4375e52d6c5` / `97efeed0a30dbfae456e814e6cf4a79baea424c76eb7cf8de6a203f8d79e62d8`],
+    [selected UV JSON], [`27f461de7b44dc9ee32e22a1ad06ee38294a8f3ced85ad83fbfb43fe7c14ee4b`],
+    [integration result], [`983c0b6cf1ac38e69a76d5fe55221ac9326f083bc5e3a2bb2cdcbe18de6d2e11`],
+    [final max-weight inspect log], [`a67de30521841c27c39fbaf435d8bb74b584a7997433e2373460ae3493cba5b4`],
+  )]
+  , kind: table
+  )
+
+Every GammaLoop invocation used `scripts/run_guarded.py`, the shared two-job slot directory, `RAYON_NUM_THREADS=3`, the 15 GiB recursive-RSS cap, 12 GiB disk floor, 6 GiB available-memory floor, and the graph lease deadline. No source, test, shared script, build, summary, plan, or git operation was touched by this worker.
+
+== Topology, cuts, and active surfaces
+<topology-cuts-and-active-surfaces>
+GL160 is a four-loop graph with unchanged basis edges `e2,e4,e6,e9`. Its two massless internal gluons are `e12` and `e14`; there is no `V_36` or `V_37`, so no hard-collinear queue applies. Suppressing the vanishing incoming spatial sum, the diagnostic routing remains
+
+```text
+q12 = K2 - K3
+q14 = K1 - K2
+e4/e5 = K1
+e6/e7/e13 = K2
+e9/e10 = K3
+```
+
+The exact process specification retains five evaluators, all 128 orientations, and two cut groups:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (right,auto,auto,),
+    table.header([cut], [cut edges], [active thresholds],),
+    table.hline(),
+    [0], [`(2,3,10,12,14)`], [none],
+    [1], [`(2,3,6,14)`], [right `E27=(9,10)`, `E19=(6,9,12)`],
+  )]
+  , kind: table
+  )
+
+Their equations are
+
+```text
+eta27 = 2 E(K3) - 1000
+eta19 = E(K2) + E(K3) + |K2-K3| - 1000.
+```
+
+At `q12=0`, E19 and E27 coalesce. At `q14=0` they give distinct intersections, and at double soft they coalesce again.
+
+== Causal diagnosis and candidate ledger
+<causal-diagnosis-and-candidate-ledger>
+The former report treated the pristine `p≈3` result as marginal. Under the remediation rules it is instead a real CT defect: it is exceptionally smooth, branch-consistent, and changes to `p≈1` on the identical threshold-off path. The candidate search was therefore structural rather than an epsilon or exact-zero workaround.
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,auto,auto,auto,auto,),
+    table.header([candidate], [CT structure], [basis], [decisive nondegenerate Arb result], [disposition],),
+    table.hline(),
+    [C0], [no explicit directive], [`(e2,e4,e6,e9)`], [historical threshold-on `p=[3.000005,3.000026]`; off `p=[1.000007,1.000029]`], [rejected: causal CT defect],
+    [C1], [E27 and E19 both `[9]`, parent `[2,4,6,9]`], [unchanged], [`p=[1.000031,1.005882]`, minimum `R²=0.999966`], [accepted],
+  )]
+  , kind: table
+  )
+
+No other candidate or LMB remap was attempted: C1 passed immediately, retained the full evaluator/association inventory, and preserved every previous pass. There is no evidence for distinct one-loop and two-loop deformation regions, so a GL638-style complementary multiplier partition would add unsupported structure.
+
+The final graph-level document is
+
+```toml
+schema_version = 1
+
+[[cuts]]
+edges = [2, 3, 6, 14]
+
+  [[cuts.thresholds]]
+  edges = [9, 10]
+    [[cuts.thresholds.counterterms]]
+    name = "shared_cut1_1l"
+    subspace = [9]
+    parent_lmb = [2, 4, 6, 9]
+
+  [[cuts.thresholds]]
+  edges = [6, 9, 12]
+    [[cuts.thresholds.counterterms]]
+    name = "shared_cut1_1l"
+    subspace = [9]
+    parent_lmb = [2, 4, 6, 9]
+```
+
+The serialized registry resolves both requested subspaces to `[9]`, both requested parents to `[2,4,6,9]`, and records both variants as generated and active. Threshold subtraction remains enabled throughout accepted generation, limits, UV profiling, inspection, and integration.
+
+== Reproducible paths and target geometry
+<reproducible-paths-and-target-geometry>
+Coordinates are `(K0;K1;K2;K3)`. The seven f64 regressions use 50 signed logarithmic points over `10^-6 <= |lambda| <= 10^-2`; the decisive and threshold-only Arb checks use 16 points over the same interval. All skip the midpoint, use three cores, and evaluate the unrestricted complete graph sum.
+
+#figure(
+  align(center)[#table(
+    columns: 4,
+    align: (auto,auto,auto,right,),
+    table.header([path], [midpoint], [axis], [rank],),
+    table.hline(),
+    [generic `e12`], [`(37,126,-109;74,-52,137;-91,64,83;-91,64,83)`], [`(0;0;0;211,-157,193)`], [3],
+    [generic `e14`], [`(37,126,-109;-91,64,83;-91,64,83;31,-47,59)`], [`(0;0;211,-157,193;0)`], [3],
+    [generic double soft], [`(37,126,-109;-91,64,83;-91,64,83;-91,64,83)`], [`(0;0;98,-86,342;211,-157,193)`], [6],
+    [`e12+E19/E27`], [`(37,126,-109;74,-52,137;0,0,469.11725613113;0,0,469.11725613113)`], [`(0;0;19,-23,41;211,-157,193)`], [3],
+    [`e14+E27`], [`(37,126,-109;74,-52,137;74,-52,137;0,0,469.11725613113)`], [`(0;0;211,-157,193;19,-23,41)`], [3],
+    [nondegenerate `e14+E19`], [`(37,126,-109;37,-29,409.8001916343071;37,-29,409.8001916343071;37,-29,41)`], [`(0;0;211,-157,193;19,-23,41)`], [3],
+    [double soft + `E19/E27`], [`(37,126,-109;0,0,469.11725613113;0,0,469.11725613113;0,0,469.11725613113)`], [`(0;0;98,-86,342;211,-157,193)`], [6],
+  )]
+  , kind: table
+  )
+
+The new E19 root has `K3=(37,-29,41)`, not the old radial center. It satisfies `eta19=2.3e-13 GeV`, while `eta27=-632.196 GeV` and `|q12|=368.800 GeV`; its correlated-axis derivative is `d eta19/dlambda=373.044 GeV`. Meanwhile `q14` is exactly linear with a nonzero three-vector coefficient. The other soft distances are linear by the routing above, the double-soft axes are independent, and the coalescing absolute-value cusps are linear on each signed branch. Thus every required kinematic distance has asymptotic log slope one.
+
+== Final IR fits
+<final-ir-fits>
+Entries in the branch columns are `p(8)/p(12)/p(16)`. All rows satisfy the campaign fit criteria and pass their rank bound.
+
+#figure(
+  align(center)[#table(
+    columns: 7,
+    align: (auto,right,auto,auto,auto,right,auto,),
+    table.header([path], [r], [negative branch], [positive branch], [envelope], [minimum R²], [result],),
+    table.hline(),
+    [generic `e12`], [3], [`1.000072/1.000032/1.000022`], [`0.999913/0.999932/0.999943`], [`[0.999913,1.000072]`], [0.999999971], [pass],
+    [generic `e14`], [3], [`1.000007/1.000012/1.000019`], [`0.999995/0.999992/0.999987`], [`[0.999987,1.000019]`], [1.000000000], [pass],
+    [generic double soft], [6], [`1.999979/2.000035/2.000095`], [`1.991035/1.995378/1.997132`], [`[1.991035,2.000095]`], [0.999955090], [pass],
+    [`e12+E19/E27`], [3], [`0.999213/0.999598/0.999761`], [`0.999779/0.999896/0.999946`], [`[0.999213,0.999946]`], [0.999999093], [pass],
+    [`e14+E27`], [3], [`1.000007/1.000010/1.000016`], [`1.000005/1.000008/1.000013`], [`[1.000005,1.000016]`], [1.000000000], [pass],
+    [nondegenerate `e14+E19`], [3], [`1.000004/1.000007/1.000011`], [`1.000018/1.000028/1.000045`], [`[1.000004,1.000045]`], [1.000000000], [pass],
+    [double soft + `E19/E27`], [6], [`2.000152/2.000090/2.000071`], [`2.005046/2.002492/2.001476`], [`[2.000071,2.005046]`], [0.999960901], [pass],
+    [nondegenerate `e14+E19`, Arb16], [3], [`1.000031/1.000194/1.001362`], [`1.000131/1.000819/1.005882`], [`[1.000031,1.005882]`], [0.999965672], [pass],
+    [same nondegenerate path, threshold off], [3], [`1.000006/1.000010/1.000015`], [`1.000012/1.000019/1.000030`], [`[1.000006,1.000030]`], [1.000000000], [pass, diagnostic only],
+  )]
+  , kind: table
+  )
+
+The unchanged numerical envelopes for the other six f64 families show that the shared projection did not spoil a previously passing sector.
+
+== IR-away threshold-only checks
+<ir-away-threshold-only-checks>
+The E27 root uses `(K1,K2,K3)=((74,-52,137),(-91,64,83),(0,0,469.11725613113))` and varies only K3 by `(19,-23,41)`. It has `eta19=+123.625 GeV`, `|q12|=401.825 GeV`, `|q14|=208.799 GeV`, and `d eta27/dlambda=76.935 GeV`.
+
+The E19 root uses `(K1,K2,K3)=((74,-52,137),(37,-29,409.8001916343071),(37,-29,41))` and varies only K2 by `(19,-23,41)`. It has `eta27=-632.196 GeV`, `|q12|=368.800 GeV`, `|q14|=276.257 GeV`, and `d eta19/dlambda=81.626 GeV`. Both are therefore hard, nonsoft, and non-tangent.
+
+#figure(
+  align(center)[#table(
+    columns: 6,
+    align: (auto,auto,right,auto,right,auto,),
+    table.header([surface], [Arb p envelope], [closest-eight total drift], [active original / CT norms near `10^-6`], [total norm], [result],),
+    table.hline(),
+    [E27], [`[-0.000144,+0.000145]`], [`1.58e-5` relative], [`1.064e-38 / 1.062e-38`], [`4.527e-41`], [bounded active-CT plateau],
+    [E19], [`[-0.000316,+0.000317]`], [`3.48e-5` relative], [`2.213e-41 / 2.840e-41`], [`6.265e-42`], [bounded active-CT plateau],
+  )]
+  , kind: table
+  )
+
+Their log fits have low `R²≈0.499` only because the totals are constant to four or five relative decimal places. The remediation rule explicitly accepts such demonstrably bounded plateaux. The serialized CT summaries show nonzero original and counterterm pieces, closure at `10^-55` or below, and an active threshold registry. Identical threshold-off diagnostics are also bounded (`p` envelopes `[-0.00997,0.00888]` and `[-0.000655,0.000656]`); they are diagnostic only and are not used as the cure.
+
+== Selected UV certification
+<selected-uv-certification>
+The final seeded-random, per-orientation profile used graph 0, generation LMB 0 `(e2,e4,e6,e9)`, five scales `10^6..10^10`, seed `16020260809`, and these exact physical masks:
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (right,auto,auto,right,auto,),
+    table.header([mask], [free basis edges], [target], [summed + orientations], [result],),
+    table.hline(),
+    [6], [`(e4,e6)`], [`q14=K1-K2` support], [129], [exact vanishing],
+    [12], [`(e6,e9)`], [`q12=K2-K3` support], [129], [exact vanishing],
+    [14], [`(e4,e6,e9)`], [joint soft-coordinate support], [129], [exact vanishing],
+    [15], [`(e2,e4,e6,e9)`], [overall four-loop limit], [129], [exact vanishing],
+  )]
+  , kind: table
+  )
+
+For every one of the 516 audited series, the JSON records five finite samples, zero positive-finite samples, and `missing_fit_is_vanishing=true`; the root explicitly has `allow_vanishing_missing_fits=true`. All 128 orientation labels are unique and complete for every mask. There is no unexplained null fit, nonfinite point, poor slope, or drift, so no range or precision retry is warranted. The guard completed normally in 28.058 s with 262,135,808 bytes peak recursive RSS.
+
+== Full-UV generation
+<full-uv-generation>
+The fresh accepted generation produced five evaluators with full local and integrated UV. GammaLoop\'s internal generation time was #strong[6.607116082 s] and internal peak RAM was #strong[244,617,216 bytes];. The guard completed in 7.404 s, peaked at 225,161,216 recursive-RSS bytes, and observed at least 427,848,368,128 free disk bytes. The candidate generation independently produced the same five evaluators in 6.518839575 internal seconds.
+
+== Corrected-state integration
+<corrected-state-integration>
+The permitted 15-minute ceiling was not consumed. Once a robust converged checkpoint existed, the coordinator requested a clean stop to release the shared slot. GammaLoop handled `SIGINT`, retained iteration 1230, emitted the result, and returned zero.
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,right,right,),
+    table.header([quantity], [real], [imaginary],),
+    table.hline(),
+    [signed central value], [`-6.336676749239333e-7`], [`+2.6290961033958994e-7`],
+    [signed error], [`1.0725151107884483e-7`], [`1.9008300238584506e-7`],
+    [signed relative error], [16.93%], [72.30%],
+    [componentwise-absolute central value], [`7.680447532171575e-7`], [`1.0074106922085485e-6`],
+    [componentwise-absolute error], [`1.0724437164822864e-7`], [`1.9006277560260878e-7`],
+    [componentwise-absolute relative error], [#strong[13.96%];], [#strong[18.87%];],
+  )]
+  , kind: table
+  )
+
+- Completed samples: #strong[123,000];.
+- Runtime per sample per core from the final log: #strong[9.30 ms];.
+- Stability: #strong[100% f64];, #strong[0% f128];, #strong[0% Arb];, #strong[0% nonfinite];, and #strong[0% nonfinite-or-unstable];.
+- Converged: #strong[yes];. Both nonzero absolute components are far below the 75% relative-error ceiling.
+- Integration guard: normal completion in 420.772 s including slot wait and checkpoint handling; peak recursive RSS 224,313,344 bytes; minimum free disk 427,803,672,576 bytes.
+
+== Max-weight replay
+<max-weight-replay>
+The four signed and two absolute extrema reduce to three unique coordinates; the final card replays all three. The signed `re-` coordinate is also the absolute-real maximum, and the signed `im+` coordinate is also the absolute-imaginary maximum.
+
+#figure(
+  align(center)[#table(
+    columns: 4,
+    align: (auto,right,auto,right,),
+    table.header([extrema], [LMB channel], [inspect `(re,im)`], [f64 relative accuracy],),
+    table.hline(),
+    [signed `re+`], [1], [`(+5.44450e-3,-2.24697e-2)`], [`2.49e-15`],
+    [signed `re-`, signed `im-`, absolute `re`], [0], [`(-6.75757e-4,-7.58629e-4)`], [`1.69e-15`],
+    [signed `im+`, absolute `im`], [0], [`(+1.74544e-4,+2.56084e-3)`], [`1.05e-15`],
+  )]
+  , kind: table
+  )
+
+All three replay as `Stable(2 samples)` with finite event decompositions. Their cut-gluon energies span 37.5--319.3 GeV, so none is an external soft locus; GL160 has no required collinear sector. Active CT components at the two cut-1 points are finite and use unit multipliers, as prescribed.
+
+== Conclusion
+<conclusion>
+GL160 is cured. The smallest common one-loop projection `[9]` with parent `[2,4,6,9]` changes the causal q14/E19 power from nonintegrable `p≈3` to integrable `p≈1`, preserves all other IR limits, leaves both edited thresholds properly subtracted at hard IR-away roots, passes exact per-orientation UV coverage, and gives a stable converged full-UV integration. No generation-basis change, multiplier partition, regulator, exact gate, or threshold-off cure is needed.

@@ -1,0 +1,119 @@
+= GL554 manual IR-safe threshold remediation
+<gl554-manual-ir-safe-threshold-remediation>
+== Outcome
+<outcome>
+- #strong[Final status:] unresolved. The clean DOT was restored byte-for-byte; no threshold-counterterm prescription passed both the exact IR target and the mandatory all-orientation UV gate.
+- #strong[Threshold structure edited in the final graph:] no. Final DOT SHA-256 is `e414e60c765ddfe626630014216d350a96473ad37304d92c31b5f37df4b18c3f`.
+- #strong[Decisive baseline defect:] the correlated `q13` threshold bridge has `p=5.0000017779..5.0000511202` in both f64 and Arb at IR rank 3. Disabling threshold subtraction restores `p≈1`.
+- #strong[Closest IR cure:] projecting cut-0 `E6=(3,7,13)` onto `[3]` gives an Arb bridge pass with `p=1.9999919373..2.0000091727`, but that projected radial problem is invalid in the UV in two topology-grounded parent LMBs.
+- #strong[Symmetry-related alternative:] `E6->[7]` is globally evaluable and makes the E6 component itself `p≈2`, but leaves a smooth cut-0 `p≈3` mismatch in the raised `E38/E66` pair. The one evidence-driven two-loop adjustment makes that mismatch larger.
+- #strong[All limits OK:] no. A final post-edit regression and UV JSON do not exist because no candidate reached the acceptance gate.
+
+== Reproducibility
+<reproducibility>
+Every GammaLoop invocation used `scripts/run_guarded.py`, the shared two-slot lock, a 15 GiB recursive RSS ceiling, a 12 GiB disk floor, a 6 GiB host-memory floor, three Rayon threads, all process cuts, and all orientations. No source, build, test, or shared-summary file was edited.
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([artifact], [SHA-256],),
+    table.hline(),
+    [`target/release/gammaloop`], [`d655c43b3ea32797095c8f8d787176581c843b62840ae0af29337ddfacaff9b4`],
+    [final `graphs/GL554.dot`], [`e414e60c765ddfe626630014216d350a96473ad37304d92c31b5f37df4b18c3f`],
+    [final `run_cards/run_GL554.toml`], [`96f2e0c10e928ec5cf55db90b09980c151082c1b27270eb038aaf2c2dfdc4b23`],
+  )]
+  , kind: table
+  )
+
+The card retains reproducible blocks for the three soft limits, double soft, all three V36 collinear sectors, all three correlated threshold bridges, six threshold-only surfaces, f64/Arb q13 checks, threshold-off diagnostics, and the 33-point per-orientation UV profile. Trial states, JSON, analyses, logs, and guard records are under `states/state_GL554/trials/`.
+
+== Topology and generated structure
+<topology-and-generated-structure>
+GL554 is a four-loop graph with one `V_36` triple-gluon vertex incident to the massless edges e12, e13, and e14. With zero incoming spatial momentum,
+
+```text
+q12 = K3
+q13 = K0 - K2
+q14 = K2 - K0 - K3
+q12 + q13 + q14 = 0.
+```
+
+The guarded baseline generated full local and integrated UV successfully: 22 evaluators, 388 orientations, seven process-valid cuts, 31.297 s wrapper time, and 271,396,864 bytes peak recursive RSS. The active threshold associations are:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (right,auto,auto,),
+    table.header([cut], [edges], [active thresholds],),
+    table.hline(),
+    [0], [`[2,6,10]`], [left E66, E38, E39, E60, E5, E6],
+    [1], [`[2,6,7,13,14]`], [none],
+    [2], [`[2,6,7,12]`], [left E6, E62],
+    [3], [`[2,4,10,14]`], [left E66, E38, E39],
+    [4], [`[2,4,10,12,13]`], [none],
+    [5], [`[2,4,7,13]`], [right E16, E17, E50],
+    [6], [`[2,4,7,12,14]`], [none],
+  )]
+  , kind: table
+  )
+
+The trial structures touched E5=`[3,10,12,13]`, E60=`[3,10,14]`, E38=`[8,10,12]`, E66=`[8,10,13,14]`, E17=`[5,7,13,14]`, and E50=`[5,7,12]`. The V36 process sectors require all three pairwise collinear checks.
+
+== Baseline limits
+<baseline-limits>
+All approach commands use the complete graph sum, 50 signed logarithmic points per side over `1e-6..1e-2`, a skipped midpoint, and three cores. Fits use the closest 8, 12, and 16 finite points per branch.
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,right,auto,),
+    table.header([limit], [rank], [result],),
+    table.hline(),
+    [generic soft e12], [3], [pass, `p≈2`],
+    [generic soft e13], [3], [inconclusive cancellation tail],
+    [generic soft e14], [3], [pass, `p≈2`],
+    [independent double soft], [6], [inconclusive noisy `p≈6` tail],
+    [V36 e12/e13, e12/e14, e13/e14 collinear], [2], [finite but cancellation-dominated/inconclusive],
+    [correlated e12 bridge], [3], [pass, `p≈2`],
+    [correlated e13 bridge, f64], [3], [#strong[fail];, `p=5.0000017779..5.0000511202`, R2≈1],
+    [correlated e13 bridge, Arb], [3], [#strong[fail];, identical p envelope],
+    [same e13 bridge, threshold off], [3], [restored to `p≈0.897..1.010`],
+    [correlated e14 bridge], [3], [branch-asymmetric/inconclusive],
+  )]
+  , kind: table
+  )
+
+The baseline Arb guard completed in 190.188 s at 715,816,960 bytes peak RSS. Its agreement with f64 and the threshold-off restoration prove that the q13 pole is threshold-counterterm induced.
+
+== Component localization
+<component-localization>
+Temporary constant multiplier tags were used only diagnostically and were removed before every structural candidate. At q13:
+
+- components 6/7 map to E5;
+- components 8/9 map to E6 (`tag=106`);
+- components 10/11 map to the raised E38/E66 association (`tag=138`);
+- components 12/13 map to E39; and components 14/15 map to E60.
+
+The baseline cut-0 E6 component is the unique smooth `p≈5` source. At `|lambda|=1e-6`, its untagged value is about `+6.4053e-9` on the negative branch and `-1.2504e-8` on the positive branch. The raised pair is only `p≈3` and many orders smaller. This rules out a q13 gate or an E38/E66 selector as the primary cure.
+
+== Rejected structures
+<rejected-structures>
++ The direct requested two-loop projections were generated with cut-relative parents `[2,3,8,10]`, `[2,4,8,10]`, and `[2,4,5,7]`. Generation succeeds, but q13 remains `p≈5` and cut 3 worsens from `p≈2` to `p≈3`.
++ Coherent shared one-loop and physical first-line variants, including the reflected cut-0 parent `[3,6,8,10]`, also leave the q13 total at `p≈5`. The six IR-away threshold-only probes are finite, CT-active, and bounded (`|p|<9e-6`) for the rejected coherent variant; this does not rescue its IR failure.
++ Component evidence identifies E6, so `E6->[3]` was tested with every cut-0 association in parent A `[2,3,8,10]`. Arb gives a clean total pass, `p=1.9999919373..2.0000091727`. Cut 0 is `p≈2`; the apparent f64 cut-2 irregularity is an exact Arb cancellation of opposite `p≈4` components to a `p≈2` cut total.
++ The `[3]` cure is nevertheless globally invalid. The mandatory f64 UV profile aborts immediately on `cut group 2 left projected E-surface instance 0`: invalid center/radial root. Explicit `--use_f128` escalates through Arb and fails at the same point. Repeating the cure in reflected parent B `[3,6,8,10]` produces the identical final-Arb radial failure.
++ The symmetry-related `E6->[7]`, with coherent parent `[3,6,7,10]` or `[2,3,7,10]`, is evaluable and makes E6 `p≈2`, but leaves cut 0 at smooth `p≈3`. In parent D the raised components are `+1.03518e-19` and `-9.14627e-20` at `lambda=-1e-6`, leaving `+1.20552e-20` with `p=2.99999952`.
++ The sole coefficient-motivated follow-up put the raised pair in shared `[7,10]`. It worsens the opposite coefficients to `+1.39122e-19` and `-1.17474e-19`, leaving `+2.16479e-20` with `p=2.99999823`. It was rejected.
+
+The no-parent ambiguity enumeration and every accepted/rejected candidate are preserved in `trials/noparent`, `parent_A`, `shared_1l_coherent`, `shared_1l_parentB0`, `physical_1l`, `component_tags`, `e6_1l_cure`, `e6_1l_parentB_cure`, `e6_1l_line7_cure`, `e6_1l_line7_parentD`, and `line7_raised2l`.
+
+== UV audit and integration
+<uv-audit-and-integration>
+The reproducible UV request is 33 points, exponents 8..12, every orientation, seed `55420260809`. The baseline f64 run timed out after 632.314 s without a JSON; its retry was cleanly interrupted after 1005.296 s to preserve the lease for remediation. Candidate `[3]` then failed immediately in both f64 and explicit f128/Arb, as described above. Therefore no candidate has a passing UV JSON, and no integration was authorized after remediation.
+
+The older clean-graph checkpoint remains finite and statistically converged under the campaign\'s rough absolute-component rule (13,200 samples; absolute relative errors 26.02% real and 21.63% imaginary; zero nonfinite/unstable), but it is not evidence for any rejected edit.
+
+== Conclusion
+<conclusion>
+GL554 has a confirmed threshold-induced q13 soft defect. The defect is now localized to the cut-0 E6 counterterm, and the two minimal physical-line cures are sharply characterized: `[3]` is IR exact but globally radial-invalid; `[7]` is globally evaluable but exposes a genuine raised-pair `p≈3` mismatch. No tested topology-grounded adjustment satisfies both requirements, so the scientifically safe result is an unresolved pristine graph with reproducible failure evidence, not an unvalidated threshold prescription.

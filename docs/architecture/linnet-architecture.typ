@@ -116,6 +116,9 @@ the endpoint side determines underlying flow. Serialization maps caller data int
 types and writes through a caller-provided `fmt::Write` or `io::Write`; DOT parsing separately
 offers string- and file-based entry points. Malformed direction, endpoint, and explicit-ID data
 are reported as parser errors; they do not panic or publish a partially constructed graph.
+Graph-level multiline attribute values preserve their literal internal indentation
+through serialization and reparsing. Structural DOT indentation applies outside
+the quoted value, so embedded configuration retains its original whitespace.
 
 == Feature and persistence boundaries
 

@@ -1,0 +1,181 @@
+= GL362 threshold/IR audit
+<gl362-thresholdir-audit>
+== Outcome
+<outcome>
+- Final threshold structure edited: #strong[yes];.
+- Process-valid cuts / unrestricted orientations: #strong[4 / 432];.
+- Collinear requirement: #strong[none] (`V_36` and `V_37` are absent).
+- All eleven no-UV structural IR/correlated probes: #strong[pass];.
+- Every explicitly edited association has an active, finite, IR-away threshold crossing.
+- Final UV-bearing state: #strong[blocked];; both bounded local-UV builds timed out before a generation summary or save.
+- Final per-orientation UV audit and integration: #strong[blocked by the missing state];.
+- Campaign `all_limits_ok`: #strong[no];, because none of those passes could be replayed on an accepted UV-bearing state and the mandatory UV audit is missing.
+
+The original exact `e13 + E7/E51/E61` path was a threshold-induced rank-three failure with `p=5` in both f64 and Arb, while its exact threshold-off copy had `p=1`. The accepted prescription projects every active threshold on cuts `(2,5,9)` and `(2,6,7)` into one common one-loop topology. The formerly bad path is now a stable pass with `p=1.999819 ... 2.000003`; all ten neighboring IR paths also pass.
+
+== Provenance and topology
+<provenance-and-topology>
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([artifact], [SHA-256],),
+    table.hline(),
+    [pinned release GammaLoop], [`d655c43b3ea32797095c8f8d787176581c843b62840ae0af29337ddfacaff9b4`],
+    [accepted DOT], [`70021433ca9131412a3ce324376d6eb79221747e34467ace32c86df086881450`],
+    [accepted run card], [`888203ee4931459243f37ae318c493d11f08192e45ceb428307dc514f8b5ca1e`],
+    [first accepted-build guard record], [`676192daa9322ee8ca336f48a5271139a1c0a8f1b3508bbcdcb8cf82a69fc857`],
+    [accepted-build retry guard record], [`a916c30026b440f8a41ecb3795b7be07664f8962cbe8c61167e8bdc0c0de30a3`],
+    [result record], [`6f918291f3323d21fe3758027935e03f05d7cf6f0bb18db14c4bb1a646f9aa1f`],
+  )]
+  , kind: table
+  )
+
+GL362 is a four-loop graph with generation basis edges `e3,e4,e5,e11`. Its only massless internal edges are gluons `e12` and `e13`. The graph has no triple-gluon vertex, so no hard-collinear path is required. The accepted DOT preserves all four `lmb_id` edges and has no `pin`, `dir`, or `lmb_rep`.
+
+Writing `(a,b,c,d)=(K0,K1,K2,K3)`, the useful routing is
+
+```text
+q6 = q9 = a+c-b
+q12 = b+d-a-c
+q13 = c-d
+q14 = a+c-d
+q11 = d
+```
+
+The two soft constraints are independent. A single-soft rank is therefore three and the double-soft rank is six.
+
+== Cuts and active surfaces
+<cuts-and-active-surfaces>
+The exact generated cut inventory is:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (right,auto,auto,),
+    table.header([cut], [edges], [active thresholds],),
+    table.hline(),
+    [0], [`(2,6,11,13)`], [right `E21*`],
+    [1], [`(2,6,7)`], [right `E51,E61,E21*`],
+    [2], [`(2,5,11,12)`], [left `E8*`],
+    [3], [`(2,5,9)`], [left `E9,E7,E8*`],
+  )]
+  , kind: table
+  )
+
+The star denotes a pinched instance. With `E(v)=sqrt(|v|^2+173^2)`, the active equations are
+
+```text
+E7 =(5,9,12,13): E(c)+E(q6)+|q12|+|q13|-1000
+E8 =(3,5,11,14): E(a)+E(c)+E(d)+E(q14)-1000
+E9 =(5,11,13):   E(c)+E(d)+|q13|-1000
+E21=(4,6,11,14): E(b)+E(q6)+E(d)+E(q14)-1000
+E51=(6,11,12):   E(q6)+E(d)+|q12|-1000
+E61=(6,7,12,13): E(q6)+E(c)+|q12|+|q13|-1000
+```
+
+At `q12=0`, E7/E9/E61 coalesce. At `q13=0`, E7/E51/E61 coalesce. At double soft all four ordinary surfaces coalesce, while E8/E21 form the bridge family.
+
+== Accepted threshold prescription
+<accepted-threshold-prescription>
+The first component decomposition showed that changing only E7/E51/E61 could not cure the graph: on the target path the still-legacy E8 and E9 local CT components carried the leading `lambda^-5` coefficient. Following the shared-one-loop prescription in `ttH_defo.pdf`, the accepted DOT therefore changes all active thresholds on the affected cuts:
+
+#figure(
+  align(center)[#table(
+    columns: 4,
+    align: (auto,auto,auto,auto,),
+    table.header([cut], [thresholds], [subspace], [parent LMB],),
+    table.hline(),
+    [`(2,5,9)`], [E7 `(5,9,12,13)`, E8 `(3,5,11,14)`, E9 `(5,11,13)`], [`[5]`], [`[2,5,11,14]`],
+    [`(2,6,7)`], [E51 `(6,11,12)`, E61 `(6,7,12,13)`, E21 `(4,6,11,14)`], [`[6]`], [`[2,6,11,14]`],
+  )]
+  , kind: table
+  )
+
+These are the unique cut-compatible parents whose requested fundamental cycles have the same active topology on both sides:
+
+```text
+(3,4,5,6,7,9,12,13)
+```
+
+Keeping both soft edges in that topology avoids the radial-root failure of the smaller central cycle. No multiplier, epsilon regulator, disabled variant, forced cut, or forced orientation is present.
+
+=== Rejected candidates
+<rejected-candidates>
++ E7 alone in `[5]` with parent `[2,3,5,12]` failed the generic-e12 runtime gate: cut group 0 left projected instance 0 had no valid center/radial root.
++ E51 alone in `[6]` with parent `[2,3,6,12]` left the target at `p=4.999992 ... 5.000007`.
++ E61 alone in the same central topology also left the target at `p=5` and failed the E8/E21 runtime gate.
++ Joint E51/E61 projection failed that same E8/E21 gate.
++ Projecting E7/E51/E61 into the unique large cycle still left the target at `p=4.999991 ... 5.000018`; the decomposition then identified E8/E9 as the missing leading terms.
+
+All rejected directives were removed. Their guarded logs remain under `state_GL362/guard/`.
+
+== Required IR approaches
+<required-ir-approaches>
+Every run used the complete graph sum (`--graph-id 0`) with no orientation ID, all four cuts, 50 logarithmic points on each signed branch over `1e-6 <= |lambda| <= 1e-2`, a skipped midpoint, and three cores. Except where shown separately, the common axis is
+
+```text
+(19,-23,41; 47,29,-31; 31,-17,47; 211,-157,193).
+```
+
+Fits use the nearest 8, 12, and 16 finite points independently on both branches. The table reports the full six-fit `p` envelope and minimum R-squared.
+
+#figure(
+  align(center)[#table(
+    columns: 7,
+    align: (auto,auto,auto,right,auto,right,auto,),
+    table.header([path], [midpoint `(K0;K1;K2;K3)`], [axis], [rank], [`p` envelope], [min R²], [class],),
+    table.hline(),
+    [generic e12], [`(91,64,83;-91,64,83;31,-47,59;213,-47,59)`], [`(211,-157,193;0;0;0)`], [3], [`[1.998293,2.002885]`], [1.000000], [pass],
+    [generic e13], [`(91,64,83;-91,64,83;31,-47,59;31,-47,59)`], [`(0;0;211,-157,193;0)`], [3], [`[1.004673,1.012260]`], [0.999975], [pass],
+    [independent double soft], [`(91,64,83;91,64,83;31,-47,59;31,-47,59)`], [`(98,-86,342;0;211,-157,193;0)`], [6], [`[1.958073,1.998883]`], [0.999890], [pass],
+    [e12 + E7/E9/E61], [`(74,-52,137;74,-52,532.405079;0,0,395.405079;0)`], [common], [3], [`[1.999825,2.000159]`], [1.000000], [pass],
+    [e12 + E51], [`(74,-52,137;105,-99,-273.117256;31,-47,59;0,0,469.117256)`], [common], [3], [`[1.999818,2.000089]`], [1.000000], [pass],
+    [e12 + E8/E21], [`(180.474375,0,0;0,180.474375,0;-180.474375,0,0;0,-180.474375,0)`], [common], [3], [`[0.999887,1.000017]`], [1.000000], [pass],
+    [e13 + E9], [`(74,-52,137;-91,64,83;0,0,469.117256;0,0,469.117256)`], [common], [3], [`[0.999574,0.999974]`], [0.999997], [pass],
+    [e13 + E7/E51/E61], [`(0;0,0,395.405079;0;0)`], [common], [3], [`[1.999819,2.000003]`], [1.000000], [#strong[pass];],
+    [e13 + E8/E21], [`(180.474375,0,0;0,180.474375,0;-180.474375,0,0;-180.474375,0,0)`], [common], [3], [`[0.999844,0.999972]`], [1.000000], [pass],
+    [double soft + ordinary], [`(74,-52,137;74,-52,137;0,0,469.117256;0,0,469.117256)`], [common], [6], [`[1.979544,1.997178]`], [0.999672], [pass],
+    [double soft + E8/E21], [`(180.474375,0,0;180.474375,0,0;0,180.474375,0;0,180.474375,0)`], [common], [6], [`[2.002147,2.020899]`], [0.999854], [pass],
+  )]
+  , kind: table
+  )
+
+The exact threshold-off target is retained only as a diagnostic. It has no active threshold CT and passes with `p=[0.999811,0.999941]`, minimum `R²=0.999999995`. Thus the edited threshold-on result is the cure; disabling subtraction is not used as one.
+
+== IR-away threshold-only checks
+<ir-away-threshold-only-checks>
+Each explicit association is crossed with both gluon momenta hard. All 100 points are finite and every JSON reports an active threshold CT. The generic fitter labels these nearly constant data inconclusive because a plateau has little log-log variance and hence low R²; the campaign\'s threshold-only criterion is boundedness (`p <= 0.25`), not a spurious power-law fit. All five paths satisfy it by a wide margin.
+
+| associations | midpoint | axis | `|q12|` | `|q13|` | `p` envelope | result | |---|---|---|---:|---:|---|---| | E7/E61 | `(50,-70,90;266.991006,146.991006,90;0,0,100;0,-216.991006,100)` | K1x | 216.991 | 216.991 | `[-5.53e-8,0.003293]` | bounded plateau | | E51 | `(50,-70,90;412.861131,10,90;0,0,100;0,-80,100)` | K1x | 362.861 | 80.000 | `[-1.83e-7,1.99e-7]` | bounded plateau | | E9 | `(50,-70,90;10,20,30;0,0,220.071;0,0,-220.071)` | K2z | 509.747 | 440.142 | `[-1.04e-7,1.04e-7]` | bounded plateau | | E8 | `(150.276498,0,0;30,-40,50;0,150.276498,0;0,0,150.276498)` | K0x | 301.301 | 212.523 | `[-1.15e-7,1.15e-7]` | bounded plateau | | E21 | `(0,128.696884,0;128.696884,0,0;0,0,128.696884;128.696884,128.696884,0)` | K1x | 287.775 | 222.910 | `[-1.10e-7,3.53e-7]` | bounded plateau |
+
+== Generation evidence
+<generation-evidence>
+- On the original unedited DOT, full integrated-UV generation stopped immediately with `No such file or directory (os error 2)` at `uv/approx/integrated.rs:333`.
+- The mandatory original local-UV attempt timed out after 632.133 s, with peak tree RSS 3,205,525,504 bytes and no saved state.
+- No-UV structural generation consistently completed with 13 evaluators and all 432 orientations in about 13 s. This mode was used only to choose and regress the threshold structure; it is not represented as final UV evidence.
+- Two early short candidate probes used a mistakenly local `.heavy_slots` directory. No other child was active; after both probes finished, the unheld directory was moved recoverably to `guard/administrative_stray_heavy_slots`. Every later command used the campaign-wide `states/.heavy_slots` path.
+- The complete accepted no-UV 11-path regression completed under its guard in 110.782 s, peak tree RSS 292,720,640 bytes.
+- The first accepted local-UV build attempt reached its fixed 540 s compute timeout. Its exact guard record is: duration 572.2340848445892 s including signal grace, peak tree RSS 3,360,075,776 bytes, minimum free disk 451,718,414,336 bytes, `exit_reason=timeout`, wrapper return 124, child return 0 after the interrupt, and no orphan or partial state.
+- The single authorized retry reached its exact 600 s compute timeout (632.1091616153717 s including signal grace), peak tree RSS 3,362,799,616 bytes, minimum free disk 451,686,694,912 bytes, `exit_reason=timeout`, wrapper return 124, and child return -15. It produced no summary or saved state and left no orphan. Per the campaign ceiling, it was not extended or repeated.
+
+== UV profile
+<uv-profile>
+Blocked because neither bounded accepted-structure build saved a state. The card fixes 33 points on exponents `8..12`, seed `36220260809`, all nonempty LMB subsets, and per-orientation output. Acceptance requires complete positive finite coverage, raw slopes at most `-0.9`, `R² >= 0.99`, and the overlapping-window drift gate from the campaign plan. No UV JSON exists, so this audit is explicitly missing rather than inferred from an exit code, a structural no-UV probe, or a rounded DOD.
+
+== Integration
+<integration>
+No accepted-structure integration is reported because no UV-bearing state could be saved and profiled. The previous campaign\'s local-only integral belongs to the superseded unedited DOT and is not reused as evidence for this prescription.
+
+== Evidence map
+<evidence-map>
+- `guard/all_shared_no_uv_regression.{log,guard.json}`: accepted complete eleven-path structural regression.
+- `approach_*.json` and `approach_*.analysis.json`: signed raw data and fits; the threshold-only files include E7/E61, E51, E9, E8, and E21.
+- `guard/final_local_uv_generation.{log,guard.json}` and `guard/final_local_uv_generation_retry.{log,guard.json}`: the exact two accepted-structure generation blockers.
+- `result_record.json`: machine-readable `threshold_edited=yes`, `all_limits=no`, `uv_mode=blocked`, and missing integration.
+
+The approach geometries are unchanged from the prior audit. Direct substitution gives linear soft momenta on every required path, and the retained signed kinematic fits have slopes in `0.999945 ... 1.000055`; changing the counterterm registry does not change those kinematics.
+
+== Conclusion
+<conclusion>
+The all-active-threshold shared-one-loop prescription removes GL362\'s genuine threshold-induced IR failure without disabling subtraction. All eleven all-orientation IR/correlated paths pass, and all six explicit associations retain finite active threshold subtraction on IR-away crossings. The final classification is therefore #strong[threshold structure cured in no-UV probes / campaign all-limits no / UV mode blocked / integration missing];. The two capped clean builds provide honest blocker evidence but no accepted-state limit replay, UV profile, or integration result.

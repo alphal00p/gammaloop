@@ -1,0 +1,183 @@
+= GL132
+<gl132>
+== Provenance and topology
+<provenance-and-topology>
+- Initial lease: 2026-08-09 02:05:49--02:35:23 +0200; final remediation continuation completed on 2026-08-09 UTC.
+- GammaLoop CLI SHA-256: `0f8ed2c842814995bdcad19b3bc2a406eb75cb4a1784a74aa3c3de6b0e9d2b1b`.
+- Raw diagnostic DOT SHA-256: `8a6660260147d5400df32104c46a86f730424f7d61402c75b7f993b602f343c9`.
+- Final cleaned DOT SHA-256: `6c623f9a1f9aaf16b486f386cd00abab00de7391383ac316c6683324bb0458e2`.
+- Final run-card SHA-256: `b5cfd28940f8f0a9af27b3694ec206bc0c27c6a1c6ff82dda31f198479f61f22`.
+- Four-loop graph. Vertex 7 is the only `V_36` triple-gluon vertex, incident to massless edges 12, 13, and 14. There is no `V_37` vertex.
+- The cleaned DOT preserves four `lmb_id` basis edges and contains none of `pin`, `dir`, or `lmb_rep`.
+
+With vanishing incoming spatial momentum, the raw diagnostic decomposition gives
+
+```text
+q12 = K3
+q13 = K1 - K2 - K3
+q14 = -K1 + K2
+q12 + q13 + q14 = 0.
+```
+
+Thus any two soft constraints imply the third. Single-soft rank is 3, the coincident all-gluon double-soft locus has rank 6, and each independent hard-collinear transverse relation has rank 2.
+
+== Generated structure
+<generated-structure>
+Full local and integrated UV generation succeeded. The state contains all #strong[128 orientations];, no forced cuts or orientation filter, and exactly two process-valid cuts:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (right,auto,auto,),
+    table.header([cut id], [edges], [active right threshold surfaces],),
+    table.hline(),
+    [0], [`[2,3,6,14]`], [E17=`[6,11,13,14]`, E39=`[6,11,12]`],
+    [1], [`[2,3,6,12,13]`], [none],
+  )]
+  , kind: table
+  )
+
+The other generated surfaces E16, E18--E21, and E40--E42 are inactive in the process-valid cuts. The generation evaluator count is 5 and is not an orientation count.
+
+== Reproducible paths
+<reproducible-paths>
+Every approach in the card uses the complete graph sum with `--momentum-space --graph-id 0`, no orientation selector, logarithmic signed branches over `1e-6`--`1e-2`, midpoint skipped, and three cores. The original screens use 50 points per branch; the final Arb adjudicators use 16. Semicolon-separated triples below are `(K0;K1;K2;K3)`.
+
+#figure(
+  align(center)[#table(
+    columns: 4,
+    align: (auto,auto,auto,right,),
+    table.header([path], [midpoint], [axis], [rank],),
+    table.hline(),
+    [soft e12], [`(37,126,-109; -91,64,83; 74,-52,137; 0,0,0)`], [`(0;0;0; 211,-157,193)` in K3], [3],
+    [soft e13], [`(37,126,-109; -91,64,83; -122,111,24; 31,-47,59)`], [`(0;0;211,-157,193;0)`], [3],
+    [soft e14], [`(37,126,-109; -91,64,83; -91,64,83; 31,-47,59)`], [`(0;0;211,-157,193;0)`], [3],
+    [all-gluon double soft], [`(37,126,-109; -91,64,83; -91,64,83; 0,0,0)`], [`(0;0;98,-86,342;211,-157,193)`], [6],
+    [correlated soft e13 / E17-E39], [`(37,126,-109; 0,0,395.405078597340; 0,0,0; 0,0,395.405078597340)`], [`(0;0;3,5,-7;47,29,-31)`], [3],
+    [correlated soft e14 / E17-E39], [`(37,126,-109; 0,0,0; 0,0,0; 0,0,395.405078597340)`], [`(0;3,5,-7;0;47,29,-31)`], [3],
+    [correlated double soft / E17-E39], [`(37,126,-109; 0,0,469.11725613113; 0,0,469.11725613113; 0,0,0)`], [`(0;98,-86,342;0;211,-157,193)`], [6],
+    [hard collinear e12/e13], [`(37,126,-109; -91,64,83; -91,64,-117; 0,0,120)`], [`(0;0;-47,-29,0;47,29,0)`], [2],
+    [hard collinear e12/e14], [`(37,126,-109; -91,64,83; -91,64,163; 0,0,120)`], [`(0;0;0;47,29,0)`], [2],
+    [hard collinear e13/e14], [`(37,126,-109; -91,64,83; -91,64,163; 0,0,-200)`], [`(0;0;47,29,0;0)`], [2],
+    [threshold-only E39], [`(37,126,-109; -91,64,83; 0,0,0; 0,0,395.405078597340)`], [K3 axis `(0,0,47)`], [0],
+    [threshold-only E17], [`(37,126,-109; 305.616565650999,0,0; 0,0,0; 0,0,100)`], [K1 axis `(47,29,-31)`], [0],
+    [generic threshold-only E39 Arb], [`(37,126,-109; -91,64,83; 80,-50,30; 20,40,359.780181275721)`], [K3 axis `(0,0,47)`], [0],
+    [generic threshold-only E17 Arb], [`(37,126,-109; 257.402877266514,120,-80; 80,-50,30; 20,40,100)`], [K1 axis `(47,0,0)`], [0],
+  )]
+  , kind: table
+  )
+
+Target scaling is exact from the linear momentum map. Each named soft momentum is `lambda` times a nonzero vector. On the double-soft paths the two independent vectors are nonparallel and every gluon norm is `Theta(|lambda|)`. The hard-collinear midpoints have positive nonzero fractions on a common ray and their independent transverse residuals are linear in `lambda`. The correlated roots follow
+
+```text
+173 + sqrt(173^2 + x^2) + x = 1000,
+x = 395.4050785973398,
+2*sqrt(173^2 + y^2) = 1000,
+y = 469.11725613113.
+```
+
+The two final threshold-only midpoints instead solve the nondegenerate hard equations
+
+```text
+E(K2) + E(K2+K3) + |K3| = 1000                         (E39),
+E(K2) + E(K2+K3) + |K1-K2-K3| + |K2-K1| = 1000       (E17).
+```
+
+Their selected axes have nonzero first derivatives of the target eta. All three gluon momenta are hard and pairwise non-collinear, and the E39 point also avoids the old `K2=0` massive-line degeneracy.
+
+The fitter was invoked with `--no-kinematic-check` because approach schema 3 does not store a dedicated target-distance series; these analytic identities are the independent scaling check.
+
+== Baseline fit and localization
+<baseline-fit-and-localization>
+With no explicit directive, the generic IR-away soft paths and double-soft path passed:
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,right,right,right,auto,),
+    table.header([limit], [rank], [p envelope], [minimum R2], [result],),
+    table.hline(),
+    [soft e12], [3], [`[0.991344,1.000100]`], [0.999691], [pass],
+    [soft e13], [3], [`[0.999074,1.000054]`], [0.999942], [pass],
+    [soft e14], [3], [`[0.999990,1.000047]`], [1.000000], [pass],
+    [double soft], [6], [`[2.999967,3.000033]`], [1.000000], [pass],
+    [collinear e12/e13], [2], [`[4.235513,7.618624]`], [0.461746], [inconclusive: catastrophic cut cancellation in f64],
+    [collinear e12/e14], [2], [approximately 0], [0.877830], [inconclusive: flat data fail R2],
+    [collinear e13/e14], [2], [approximately 0], [0.877827], [inconclusive: flat data fail R2],
+  )]
+  , kind: table
+  )
+
+Only e12/e13 is the process-valid physical pair-collinear sector because cut 1 contains that pair. At its midpoint, the two cut contributions are individually about `1e-33` with opposite sign while the complete result is about `1e-39`; the threshold contribution is flat. Its large noisy fitted power is therefore precision-limited, not evidence that the threshold counterterm generates the collinear behavior. The other pair paths are retained as cross-checks.
+
+The final reduced-Arb reruns resolve all three flat series without changing the graph:
+
+#figure(
+  align(center)[#table(
+    columns: 4,
+    align: (auto,right,right,auto,),
+    table.header([path], [Arb `p` envelope], [all-point magnitude ratio], [result],),
+    table.hline(),
+    [physical e12/e13], [`[-0.00006162,0.00006397]`], [`1.001905`], [bounded/pass],
+    [diagnostic e12/e14], [`[-0.00022365,0.00022499]`], [`1.006822`], [bounded],
+    [diagnostic e13/e14], [`[-0.00027358,0.00027950]`], [`1.008416`], [bounded],
+  )]
+  , kind: table
+  )
+
+Their low R2 values are the expected result of fitting an almost constant Arb series, not evidence of growth. The corresponding JSON SHA-256 values are `a05265135a9587561ef0609a8e54ae81fea6cf45b3c630f6a37a6d032d29da4b`, `44794435f88526d02c5e5a319714767563e0ed04d933031e0d1764308a0ea732`, and `67d37a6e2f8ed51653edbe244a648a7aef31636e6482179ba11041214c8c38d0`.
+
+In f64, the decisive baseline correlated e13/E17-E39 path appeared to give a well-fitted rank-3 #strong[failure];, `p=[4.114724,4.343450]`, with all R2 values above 0.99909 and span 0.22873. Contribution fits localized the apparent power:
+
+- the complete original contribution has `p=0.99998` on both branches;
+- the threshold-counterterm contribution has `p=4.11545` (negative) and `p=4.12077` (positive), with R2 at least 0.99942.
+
+The complete all-orientation Arb rerun resolves this as cancellation precision rather than a physical failure. With the final #strong[unmodified] graph it passes with `p=[1.00000009,1.00000429]`, span `4.19e-6`, and minimum R2 `0.999999999997443`. The correlated rank-six path likewise passes with `p=[2.99999653,3.00000347]` and minimum R2 `0.999999999999813`. The explicit threshold-off command remains a diagnostic only and is never used as a cure.
+
+The original correlated e14 construction returned nonfinite values at all 100 Arb points. Unlike e13, e14 does not connect the two process-valid cuts: cut 0 contains e14, whereas cut 1 contains e12 and e13 and their two positive on-shell energies do not collapse when e14 alone is soft. It is therefore retained as a process-invalid conservative diagnostic rather than promoted into the required queue.
+
+The old E39-only midpoint also returned only nonfinite values, but it set the massive `q6=K2` spatial momentum exactly to zero. The final generic hard-root checks remove that degeneracy and close both active surfaces. E39 has `p=[-0.00019642,0.00019686]` and magnitude ratio `1.005978`; E17 has `p=[-0.00090062,0.00090094]` and ratio `1.027677`. All 32 signed Arb points are finite, both paths have a nonzero named `threshold_counterterm_0` contribution, and both totals are bounded plateaus. Their JSON hashes are `0bf950a05f59a75afc8b907618e8b9b11ea320e318b5d9cbd827aa9276bcad97` and `8e846e176dd27b4858094cb4a763374c788ec76fd766ffd4e04187111f1a305a` for E39 and E17, respectively.
+
+== Directive diagnosis and validation
+<directive-diagnosis-and-validation>
+At `q13=0` or `q14=0`, E17 and E39 become equal as energy surfaces because the remaining two gluon momenta are equal in norm. At the all-gluon soft locus both reduce to the same two-top threshold. A candidate common projection used subspace `[6,11]` and the unique graph-global parent LMB `[2,3,6,11]`.
+
+The candidate projection passes the e13 correlated Arb fit with `p=[1.00000063,1.00000563]`, but fails the mandatory E39 IR-away check even at Arb precision: forcing E17 makes overlap-center construction abort because E17 has no center at that E39-only point. Alternative one-edge probes were also rejected: `[6]` produced nonfinite threshold-only evaluations, while `[11]` left the f64 apparent failure unchanged. Candidate evidence is preserved under `state_GL132/diagnostics/`; none of these trials is retained in the final DOT.
+
+Because the unmodified graph passes the decisive correlated path in Arb, while every explicit projection candidate fails a required threshold-only check, #strong[no explicit threshold directive is needed or accepted];. The final graph has no `threshold_counterterms` attribute and threshold subtraction remains enabled. The physical pair-collinear sector and both active threshold-only surfaces now pass their final Arb adjudicators; the historical correlated-e14 construction is not process-valid. Therefore `all limits OK? = yes`.
+
+== Mandatory tailored UV profile
+<mandatory-tailored-uv-profile>
+The fresh full local+integrated-UV state was profiled in the exact pristine basis `(2,4,6,12)` with seed `13220260810`, five scales `10^6..10^10`, graph/LMB selectors `0/0`, and only the physically relevant masks 6, 8, 14, and 15. For each mask the sum and all 128 orientations are present:
+
+#figure(
+  align(center)[#table(
+    columns: 6,
+    align: (right,right,right,right,right,auto,),
+    table.header([mask], [fitted series], [exact finite vanishing series], [slope envelope], [minimum R2], [result],),
+    table.hline(),
+    [6], [0], [129], [--], [--], [pass],
+    [8], [97], [32], [`[-1.00025114,-0.99998723]`], [`0.9999999304`], [pass],
+    [14], [0], [129], [--], [--], [pass],
+    [15], [0], [129], [--], [--], [pass],
+  )]
+  , kind: table
+  )
+
+Every series has five finite samples; every fitted series has five strictly positive finite magnitudes, and every missing fit is explicitly classified as vanishing. There are no bad or omitted orientations. The profile JSON SHA-256 is `00f65d6c3f193303696a16d5ec57a42bd13ec9630bebc037ace9abd5a12380b2`; its guard completed in 76.511 s with 351,887,360 bytes peak recursive RSS.
+
+== Integration and conclusion
+<integration-and-conclusion>
+- UV mode: full local plus integrated UV; no local-only fallback.
+- Final internal generation time: #strong[8.490248166 s] from the fresh `generation_summary.json` `stats.total_time`; peak generation RAM 338,145,280 bytes; compilation time zero.
+- Final classification: threshold structure edited #strong[no];; all limits OK #strong[yes];.
+- The guarded integration stopped by planned timeout after 199.459 s including SIGINT/checkpoint grace. It retained #strong[72,500] completed samples and reported #strong[7.44 ms/sample/core] from the last completed status.
+- Signed central value: `(-4.4669394297009755e-9, +3.165220021607701e-7 i)` with component errors `(1.361185401399717e-7, 1.3104298946004125e-7)`.
+- Componentwise-absolute central value: `(+1.0142771978161882e-6, +8.581412446069978e-7 i)` with errors `(1.3606640761258314e-7, 1.310095016183998e-7)`. Relative absolute errors are 13.4151% and 15.2667%.
+- Nonfinite percentage is 0%; finite-Double unstable percentage is 0.00275862%. Under the accepted absolute-error criterion, `converged? = yes`.
+- Signed max weights are re+ `8.66373274968793e-3`, re- `-1.6653626976443443e-3`, im+ `5.786667639011826e-3`, and im- `-5.056909025370863e-3`. The absolute re/im maxima reuse the signed re+/im+ coordinates.
+- The shared re+/absolute-re coordinate was replayed with `inspect`: both cut events have hard gluons (cut-0 gluon energy 338.68 GeV; cut-1 gluon energies 281.56 and 220.59 GeV), and the cut-1 pair is not on a common ray. It is not an evident soft or collinear locus. The other three unique stored coordinates and explicit eta-distance reconstruction were not completed before the one-lease documentation freeze, so no stronger max-weight classification is claimed.
+
+Concise conclusion: GL132 needs no accepted explicit threshold directive. Its apparent f64 E17/E39 correlated failure is an all-orientation cancellation-precision artifact resolved by Arb, while the common projection that also resolves it is globally invalid. Reduced Arb proves the required physical collinear limit is a bounded plateau, and generic hard-root Arb checks prove both active threshold counterterms are bounded away from IR geometry. Exact selected UV masks pass the sum and every orientation. Together with the finite converged pristine integration, the final audit is #strong[all limits yes / converged yes];.
+
+- Threshold subtraction remains enabled in every accepted run.

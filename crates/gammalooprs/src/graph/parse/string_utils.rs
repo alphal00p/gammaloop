@@ -3,13 +3,12 @@ use symbolica::prelude::*;
 use color_eyre::Result;
 use eyre::eyre;
 
-fn escaped_dot_string(value: &str, preserve_newlines: bool) -> String {
+fn escaped_dot_string(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for c in value.chars() {
         match c {
             '\\' => escaped.push_str("\\\\"),
             '"' => escaped.push_str("\\\""),
-            '\n' if preserve_newlines => escaped.push('\n'),
             '\n' => escaped.push_str("\\n"),
             '\r' => escaped.push_str("\\r"),
             '\t' => escaped.push_str("\\t"),
@@ -22,52 +21,7 @@ fn escaped_dot_string(value: &str, preserve_newlines: bool) -> String {
 /// Escapes raw text as a complete quoted DOT attribute value, including outer quotes.
 /// Complete statement values remain semantic strings for Linnet's serializer to escape.
 pub(crate) fn dot_attr_value(value: &str) -> String {
-    format!("\"{}\"", escaped_dot_string(value, false))
-}
-
-/// Escapes raw text for a DOT statement value whose writer supplies the outer quotes.
-pub(crate) fn dot_statement_value(value: &str) -> String {
-    escaped_dot_string(value, false)
-}
-
-/// Escapes a DOT statement value while leaving line breaks literal for readable embedded text.
-pub(crate) fn dot_multiline_statement_value(value: &str) -> String {
-    format!("\n{}", escaped_dot_string(value, true))
-}
-
-/// Decodes the quoted-string escapes retained by the DOT parser.
-///
-/// Unknown Graphviz escapes are preserved literally. This matters for embedded languages such as
-/// TOML, where a backslash may itself be meaningful after the DOT layer has been removed.
-pub(crate) fn decode_dot_string(value: &str) -> Result<String> {
-    let value = value
-        .strip_prefix('"')
-        .and_then(|value| value.strip_suffix('"'))
-        .unwrap_or(value);
-    let mut decoded = String::with_capacity(value.len());
-    let mut chars = value.chars();
-    while let Some(character) = chars.next() {
-        if character != '\\' {
-            decoded.push(character);
-            continue;
-        }
-
-        let escaped = chars
-            .next()
-            .ok_or_else(|| eyre!("DOT string ends with an incomplete escape"))?;
-        match escaped {
-            '\\' => decoded.push('\\'),
-            '"' => decoded.push('"'),
-            'n' => decoded.push('\n'),
-            'r' => decoded.push('\r'),
-            't' => decoded.push('\t'),
-            other => {
-                decoded.push('\\');
-                decoded.push(other);
-            }
-        }
-    }
-    Ok(decoded)
+    format!("\"{}\"", escaped_dot_string(value))
 }
 
 pub trait ToQuoted {
@@ -192,9 +146,7 @@ impl FromStripedStr for usize {
 mod tests {
     use linnet::parser::DotGraph;
 
-    use super::{
-        decode_dot_string, dot_attr_value, dot_multiline_statement_value, dot_statement_value,
-    };
+    use super::dot_attr_value;
 
     const RAW_DOT_VALUE: &str = "quote:\" slash:\\ lf:\n cr:\r tab:\t";
     const ESCAPED_DOT_VALUE: &str = r#"quote:\" slash:\\ lf:\n cr:\r tab:\t"#;
@@ -205,10 +157,6 @@ mod tests {
             dot_attr_value(RAW_DOT_VALUE),
             format!(r#""{ESCAPED_DOT_VALUE}""#)
         );
-        assert_eq!(
-            dot_multiline_statement_value(RAW_DOT_VALUE),
-            "\nquote:\\\" slash:\\\\ lf:\n cr:\\r tab:\\t"
-        );
     }
 
     #[test]
@@ -217,18 +165,11 @@ mod tests {
         graph
             .global_data
             .statements
-            .insert("escaped".to_string(), dot_statement_value(RAW_DOT_VALUE));
+            .insert("escaped".to_string(), RAW_DOT_VALUE.to_string());
 
         let reparsed: DotGraph = DotGraph::from_string(graph.debug_dot()).unwrap();
 
-        assert_eq!(
-            reparsed.global_data.statements["escaped"],
-            ESCAPED_DOT_VALUE
-        );
-        assert_eq!(
-            decode_dot_string(&reparsed.global_data.statements["escaped"]).unwrap(),
-            RAW_DOT_VALUE
-        );
+        assert_eq!(reparsed.global_data.statements["escaped"], RAW_DOT_VALUE);
     }
 
     #[test]
@@ -239,16 +180,20 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            decode_dot_string(&graph.global_data.statements["embedded"]).unwrap(),
+            graph.global_data.statements["embedded"],
             "schema_version = 1\n\ncuts = []"
         );
     }
 
     #[test]
-    fn dot_codec_round_trips_unicode_and_unknown_escapes() {
+    fn dot_statements_preserve_unicode_and_embedded_language_escapes() {
         let raw = "eta:η theta:θ regex:\\d quote:\" newline:\n";
-        let encoded = dot_statement_value(raw);
-
-        assert_eq!(decode_dot_string(&encoded).unwrap(), raw);
+        let mut graph: DotGraph = DotGraph::from_string("digraph G {}").unwrap();
+        graph
+            .global_data
+            .statements
+            .insert("embedded".into(), raw.into());
+        let reparsed: DotGraph = DotGraph::from_string(graph.debug_dot()).unwrap();
+        assert_eq!(reparsed.global_data.statements["embedded"], raw);
     }
 }

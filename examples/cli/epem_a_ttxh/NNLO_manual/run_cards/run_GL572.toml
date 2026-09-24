@@ -124,15 +124,24 @@ commands = [
 name = "uv_profile_GL572_pristine_graph0_lmb0_targeted_masks"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 9 --min-scaling 8 --max-scaling 12
+  #       --per-orientation --seed 57220260809
+  #       --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
+  #       --uv-ray-norms=1000,1000,1000,1000
+  #       --graph-index=0 --lmb-index=0
+  #       --loop-subset-mask=1,2,4,5,8,12,15
+  #       --subset-cardinality=1,2,4
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_graph0_lmb0_masks_1_2_4_5_8_12_15_exp8_12_seed57220260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 9 --min-scaling 8 --max-scaling 12
       --per-orientation --seed 57220260809
       --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
       --uv-ray-norms=1000,1000,1000,1000
-      --graph-index=0 --lmb-index=0
-      --loop-subset-mask=1,2,4,5,8,12,15
-      --subset-cardinality=1,2,4
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_graph0_lmb0_masks_1_2_4_5_8_12_15_exp8_12_seed57220260809""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_graph0_lmb0_masks_1_2_4_5_8_12_15_exp8_12_seed57220260809_all_uv_limits""",
 ]
 
 # Five-point split fallbacks serialize each physically decisive sector
@@ -142,42 +151,69 @@ commands = [
 name = "uv_profile_GL572_pristine_g0_lmb0_mask5_q13_5pt"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 8 --max-scaling 12
+  #       --per-orientation --seed 57220260809
+  #       --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
+  #       --uv-ray-norms=1000,1000,1000,1000
+  #       --graph-index=0 --lmb-index=0
+  #       --loop-subset-mask=5 --subset-cardinality=2
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_g0_lmb0_mask5_q13_5pt_exp8_12_seed57220260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 8 --max-scaling 12
       --per-orientation --seed 57220260809
       --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
       --uv-ray-norms=1000,1000,1000,1000
-      --graph-index=0 --lmb-index=0
-      --loop-subset-mask=5 --subset-cardinality=2
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_g0_lmb0_mask5_q13_5pt_exp8_12_seed57220260809""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_g0_lmb0_mask5_q13_5pt_exp8_12_seed57220260809_all_uv_limits""",
 ]
 
 [[command_blocks]]
 name = "uv_profile_GL572_pristine_g0_lmb0_mask12_q14_5pt"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 8 --max-scaling 12
+  #       --per-orientation --seed 57220260809
+  #       --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
+  #       --uv-ray-norms=1000,1000,1000,1000
+  #       --graph-index=0 --lmb-index=0
+  #       --loop-subset-mask=12 --subset-cardinality=2
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_g0_lmb0_mask12_q14_5pt_exp8_12_seed57220260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 8 --max-scaling 12
       --per-orientation --seed 57220260809
       --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
       --uv-ray-norms=1000,1000,1000,1000
-      --graph-index=0 --lmb-index=0
-      --loop-subset-mask=12 --subset-cardinality=2
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_g0_lmb0_mask12_q14_5pt_exp8_12_seed57220260809""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_g0_lmb0_mask12_q14_5pt_exp8_12_seed57220260809_all_uv_limits""",
 ]
 
 [[command_blocks]]
 name = "uv_profile_GL572_pristine_g0_lmb0_mask15_overall_5pt"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 8 --max-scaling 12
+  #       --per-orientation --seed 57220260809
+  #       --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
+  #       --uv-ray-norms=1000,1000,1000,1000
+  #       --graph-index=0 --lmb-index=0
+  #       --loop-subset-mask=15 --subset-cardinality=4
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_g0_lmb0_mask15_overall_5pt_exp8_12_seed57220260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 8 --max-scaling 12
       --per-orientation --seed 57220260809
       --uv-ray-directions=211,-157,193,37,126,-109,98,-86,342,-91,64,83
       --uv-ray-norms=1000,1000,1000,1000
-      --graph-index=0 --lmb-index=0
-      --loop-subset-mask=15 --subset-cardinality=4
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_g0_lmb0_mask15_overall_5pt_exp8_12_seed57220260809""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL572/uv_profiles/pristine_g0_lmb0_mask15_overall_5pt_exp8_12_seed57220260809_all_uv_limits""",
 ]
 
 [[command_blocks]]

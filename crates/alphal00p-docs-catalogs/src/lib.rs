@@ -1173,7 +1173,7 @@ mod tests {
             .values()
             .flat_map(|item| item.members.iter().map(move |member| (item, member)))
             .collect::<Vec<_>>();
-        assert_eq!(members.len(), 75);
+        assert_eq!(members.len(), 71);
         let undocumented = members
             .iter()
             .filter(|(_, member)| {

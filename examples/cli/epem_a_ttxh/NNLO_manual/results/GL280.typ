@@ -1,0 +1,302 @@
+= GL280
+<gl280>
+== Final current-release certification (2026-08-09)
+<final-current-release-certification-2026-08-09>
+This follow-up supersedes only the generation, UV-profile, and integration status in the remediation continuation below. It does #strong[not] overturn the complete projected-CT, generation-LMB, and complementary-partition no-go. The final DOT remains the pristine graph: every tested expressible cure leaves a smooth `lambda^-2` E29/E70 hard-collinear term or spoils another mandatory limit.
+
+=== Accepted structure and fresh generation
+<accepted-structure-and-fresh-generation>
+- Final generation basis: `(e4,e5,e9,e13)`, with spatial map `q11=K2-K1`, `q13=K3`, and `q14=K1-K2-K3`.
+- Final DOT SHA-256: `e78eb64787031452ce442103f237939a25bab0d67ed305a10b109b1158897400`.
+- Current release SHA-256: `0f8ed2c842814995bdcad19b3bc2a406eb75cb4a1784a74aa3c3de6b0e9d2b1b`.
+- Final run-card SHA-256: `b7f5b35bfa5a58fe573fed11e50c8c99bd98f3c7b29eb9a89fcc0ea35aa15cac`.
+- Fresh state: `states/state_GL280/final_state_pristine_current_release`; its saved `run.toml` SHA-256 is `40993ceae443d6a1be744aa234057a65af47837e8a283c10a34122beea97a968`.
+
+Fresh local-plus-integrated UV generation completed with the same #strong[23 evaluators];, all #strong[440 orientations];, all ten process-valid cuts, and zero compile time. `generation_summary.json` records `311.910814977 s` total, including `26.398016963 s` in Spenso and `249.316891295 s` in Symbolica; internal peak RAM was `3,407,904,768` bytes. The guard\'s `509.399 s` wall time includes the shared-slot wait; its sampled recursive-RSS peak was `3,468,161,024` bytes and its minimum free disk was `428,473,319,424` bytes.
+
+=== Exact selector-limited per-orientation UV audit
+<exact-selector-limited-per-orientation-uv-audit>
+The selector masks were derived directly in generation LMB 0, not guessed: mask 6/cardinality 2 scales `K1,K2` (`q11` support), mask 8/cardinality 1 scales `K3` (`q13`), mask 14/cardinality 3 scales `K1,K2,K3` (`q14`), and mask 15/cardinality 4 is the overall limit. Every batch uses a seeded random ray, five requested scales, all 440 orientations, the summed series, and enabled threshold subtraction.
+
+#figure(
+  align(center)[#table(
+    columns: 7,
+    align: (right,auto,right,right,right,right,auto,),
+    table.header([mask], [final range/precision], [fitted series], [explicitly vanishing series], [slope range], [minimum R2], [result],),
+    table.hline(),
+    [6], [`6..10`, automatic precision], [0], [441], [---], [---], [pass],
+    [8], [`4..8`, explicit Arb (`--use_f128`)], [361], [80], [`[-3.000039835236421,-0.9997648052658406]`], [`0.9999996189931533`], [pass],
+    [14], [`6..10`, automatic precision], [0], [441], [---], [---], [pass],
+    [15], [`6..10`, automatic precision], [0], [441], [---], [---], [pass],
+  )]
+  , kind: table
+  )
+
+Here 441 means the requested 440 orientations plus the summed series. Every vanishing entry has exactly five finite samples, zero positive samples, `missing_fit_is_vanishing=true`, and the file-level `allow_vanishing_missing_fits=true`; none is an unexplained null fit. Every mask-8 fit has five positive finite samples, finite slope/intercept/R2, five serialized point details, and no NaN. Its summed slope is `-0.9999907337494187` with `R2=0.999999999937076`. All 1,805 fitted point evaluations used Arb precision.
+
+The first mask-8 `6..10` pass was physically safe but not certifying: 24 of its 361 fits had only four positive samples because their highest finite sample was exactly zero. The same random ray was therefore moved down to `4..8` and forced through Arb. It restored full positive-point coverage; over the 361 matched fits, the maximum whole-range slope drift is only `0.000708673773770041` (summed drift `9.17369956365821e-6`), far below the `0.15` stability allowance. No further range change is indicated.
+
+#figure(
+  align(center)[#table(
+    columns: 4,
+    align: (right,auto,right,right,),
+    table.header([mask/profile], [JSON SHA-256], [guard wall (s)], [peak RSS (bytes)],),
+    table.hline(),
+    [6, `6..10`], [`5219a12a140d83fe153b123e87e840bce48f8a6174d6cf5b922b95bdc1dd041c`], [`509.500`], [`2,997,452,800`],
+    [8, Arb `4..8`], [`d481dde628c7d2638078ed8642e36c64f4919aa7181ca9ab195fa25f5a4fdefe`], [`410.119`], [`2,991,218,688`],
+    [14, `6..10`], [`688f776b7f452ba019a36ed7c0665d544980fb9aa24dfa7b550419d85e2863cf`], [`243.749`], [`3,070,525,440`],
+    [15, `6..10`], [`e4d413e1484ddfcc3475e0186d812920942cbc039fcb7df44c399d083c967962`], [`267.526`], [`3,133,415,424`],
+  )]
+  , kind: table
+  )
+
+The long guard walls for masks 6, 14, and 15 include shared-slot queueing; all guards completed normally with return code zero and no surviving child.
+
+=== Fresh accepted-state integration
+<fresh-accepted-state-integration>
+The fresh full state supports integration and was therefore tested rather than carrying the older checkpoint as final evidence. After #strong[6,200 completed samples];, beyond the historical 4,800-sample depth, the guard forwarded a clean keyboard interrupt. GammaLoop emitted `integration_workspace/integration_result.json`, returned zero, and left no child. The result JSON SHA-256 is `ba73879baf2a6ae97333e3e9f3440913fe843f29e2bf2552f5b177eabe90a4ad`.
+
+- Signed central value `(re,im)`: `(1.199236927440744e-5,-7.107224121929446e-5)` with errors `(1.3885983655007965e-5,6.486936394796635e-5)`.
+- Componentwise-absolute central value `(|re|,|im|)`: `(5.11465969815124e-5,1.0258210711019014e-4)` with errors `(1.3871616440420807e-5,6.486255995709372e-5)`, hence relative errors `27.121289116135884%` and `63.22989630873989%`.
+- Runtime per sample per core from the last completed status: #strong[233 ms] on three cores. The JSON average total evaluation time is `171.272701 ms`.
+- Stability: 100% f64, 0% f128/Arb, #strong[0% NaN];, and `0.016129032258064516%` NaN-or-retained-unstable; all 62,000 generated events were accepted.
+- Guard wall time was `589.176 s`, including shared-slot wait and checkpoint grace. Peak recursive RSS was `7,445,438,464` bytes and minimum free disk was `428,421,808,128` bytes.
+
+Signed extrema are real `+4.8806217334905054e-2` / `-3.554215120849453e-2` and imaginary `+3.2239850723073754e-2` / `-3.9646380721583513e-1`. Componentwise-absolute extrema reuse the real-positive and imaginary-negative coordinates. Their exact graph/LMB/12-coordinate records are preserved in the result JSON; they were not replayed, and no IR- or threshold-locus claim is inferred from an adaptive maximum.
+
+The finite checkpoint, zero NaN rate, and both nonzero absolute relative errors below 75% give #strong[`converged? = yes`] under the campaign\'s rough rule. This numerical classification does not override the structural IR result. Final classifications are therefore #strong[threshold structure edited = no];, #strong[all limits OK = no/unresolved];, #strong[tailored UV = pass];, and #strong[converged = yes];. The remaining blocker is still the expressibility of an E29/E70 one-/two-loop partition invariant across all localized and reflected counterterm pieces.
+
+== Remediation continuation (2026-08-09, superseding the historical audit below)
+<remediation-continuation-2026-08-09-superseding-the-historical-audit-below>
+This section supersedes the earlier outcome, fit table, generation timing, and conclusion retained below for provenance. The remediation reran GL280 with the current release, explicitly modified and tested its threshold-counterterm structure, and then restored the graph byte-for-byte after every candidate failed a mandatory IR limit.
+
+=== Final status and provenance
+<final-status-and-provenance>
+- #strong[Threshold structure edited:] no. The final DOT is the pristine graph with SHA-256 `e78eb64787031452ce442103f237939a25bab0d67ed305a10b109b1158897400`.
+- #strong[All limits OK:] no; the audit is #strong[unresolved];. Two smooth, active-CT hard-collinear limits scale as `lambda^-2` at rank two for every viable projected and partitioned candidate.
+- #strong[UV mode:] full local plus integrated UV. A clean final generation produced 23 evaluators with compilation disabled.
+- Current release SHA-256: `d655c43b3ea32797095c8f8d787176581c843b62840ae0af29337ddfacaff9b4`.
+- Final run-card SHA-256: `bcd756768f26dd1a2631a2431beb50a04ee5b0bab41389cdce9014b6d4338fa0`.
+- Saved generation/runtime card SHA-256: `ad75ae17c64d96cc78fb9b268f689e15d91a8189f25e465162250f92b6b15805`.
+- Every GammaLoop call used `scripts/run_guarded.py`, the shared two-slot lock, a 15 GiB recursive RSS cap, 12 GiB disk floor, 6 GiB available-memory floor, and `RAYON_NUM_THREADS=3`. No source edit, build, epsilon regulator, forced cut, or selected-orientation shortcut was used.
+
+The final clean full-UV generation completed in 304.521 s of guard time. Its internal total was 301.555408295 s, including 26.219114179 s in Spenso and 240.504015719 s in Symbolica, with zero compile time. Internal peak RAM was 3,453,652,992 bytes and guarded peak recursive RSS was 3,330,134,016 bytes. The final state is `states/state_GL280`.
+
+The mandatory all-orientation UV profile (`33` points, scaling exponents `8..12`, seed `28020260809`, `--per-orientation`) was then attempted from this state. It did not finish before the hard lease deadline and emitted no partial profile: the guard stopped it after 439.927 s with return code `-15`, peak recursive RSS 5,774,192,640 bytes, and no surviving child. Consequently UV generation is complete but orientation-resolved UV convergence remains #strong[unvalidated/incomplete];. The optional integration checkpoint was not rerun during this remediation; the superseded historical integration below is not promoted to final-candidate evidence.
+
+=== Structure and corrected component attribution
+<structure-and-corrected-component-attribution>
+The original generation basis `(4,5,9,13)`, all 440 orientations, ten physical cuts, and 23-evaluator inventory were reproduced. The active associations are:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,auto,auto,),
+    table.header([cuts], [side], [threshold surfaces],),
+    table.hline(),
+    [0 and 7], [left], [E70=`[5,9,13,14]`, E43=`[5,9,11]`, E33=`[5,7]`],
+    [2 and 6], [right], [E29=`[3,7,13,14]`, E39=`[3,9]`, E47=`[3,7,11]`],
+  )]
+  , kind: table
+  )
+
+Schema-v3 registry order corrects an earlier exploratory attribution. Under cuts 2/6 the component pairs are E29, E39, E47; under cuts 7/0 they are E33, E43, E70. The smooth `lambda^-2` hard-collinear terms are exclusively the genuine two-loop E29/E70 counterterms, not E33/E39. This correction is visible directly in each approach JSON\'s registry plus per-event component weights.
+
+=== Candidate sequence and decisive evidence
+<candidate-sequence-and-decisive-evidence>
+The first projected prescription used the smallest shared two-loop frames E70=`[5,9]`, E29=`[3,7]` and one-loop frames E43/E33=`[5]`, E47/E39=`[3]`. Giving all surfaces two-loop frames made q11-correlated E43/E47 behave as `lambda^-3`, so that version was rejected. Projecting the ordinary surfaces to one loop fixed every tested soft family but exposed the decisive hard-collinear counterterm power:
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,right,right,right,auto,),
+    table.header([candidate-2 path], [rank], [p envelope], [minimum R2], [result],),
+    table.hline(),
+    [e13/e14 hard collinear], [2], [`[2.000452,2.004211]`], [`0.9999916`], [fail/inconclusive band; smooth CT growth],
+    [e13/e11 hard collinear], [2], [`[2.000047,2.000121]`], [`0.9999997`], [fail/inconclusive band; smooth CT growth],
+    [correlated e13 / E29-E43-E47-E70], [3], [`[1.998210,2.005690]`], [`0.999972`], [pass],
+    [correlated e14 / E29-E43-E47-E70], [3], [`[1.999718,2.000104]`], [`0.999999895`], [pass],
+    [correlated e11 / E33-E39-E43-E47, stable window], [3], [`[0.991136,0.999006]`], [`0.999538`], [pass],
+    [all-gluon soft / all thresholds], [6], [`[5.000210,5.016547]`], [`0.999991`], [pass],
+  )]
+  , kind: table
+  )
+
+The three threshold-only E33/E39, E43/E47, and E29/E70 paths were finite, counterterm-active, and bounded with `|p| < 2e-7`; their near-constant values naturally give uninformative log-fit R2 values. Explicit versus generated one-loop parents did not change either collinear result.
+
+A topology-valid generation-basis move to `(3,5,12,13)` was then tested with the exact coordinate transform
+
+```text
+L = (K2, K1, K0 + K1 - K2 - K3, K3).
+```
+
+It preserved the two collinear powers (`p=1.99756..2.00196` and `p=2.000006..2.000775`) and the correlated q13/q14 passes, but regressed the q11/E33-E39-E43-E47 path to `p=3.94985..4.26959`. The move was rejected and the original basis restored.
+
+Finally, following `ttH_defo.pdf`, E70 and E29 were each split into a shared one-loop and genuine two-loop variant with complementary squared-eta weights; E43 and E47 were used as their unresolved-boundary partners. The intended DOT comments and formulas are preserved here because the rejected directive was removed from the final graph:
+
+```text
+E70: [5] versus [5,9], using eta(E70)^2 and eta(E43)^2
+E29: [3] versus [3,7], using eta(E29)^2 and eta(E47)^2
+```
+
+With `eta(star,...)`, the current-surface eta vanishes at the selected CT root, so the one-loop multiplier is approximately zero and the divergent two-loop multiplier is one. Both collinear powers remain unchanged. With `eta(effective,...)`, primary components receive genuine nontrivial weights near one half, but the effective point changes across localized/reflected pieces; the fitted powers again remain unchanged:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,right,right,),
+    table.header([partition frame and path], [p envelope], [minimum R2],),
+    table.hline(),
+    [star, e13/e14], [`[2.000437,2.004190]`], [`0.9999916`],
+    [star, e13/e11], [`[2.000047,2.000121]`], [`0.9999997`],
+    [effective, e13/e14], [`[2.000447,2.004171]`], [`0.9999915`],
+    [effective, e13/e11], [`[2.000006,2.000103]`], [`0.99999965`],
+  )]
+  , kind: table
+  )
+
+The effective-frame correlated q13 and q14 paths still pass with `p=[1.999878,2.005432]` and `[1.998265,1.999706]`. The third collinear geometry aborts on an invalid projected radial solution and cannot rescue the two smooth failures. Implementation inspection shows that multiplier inputs expose only component-local `Effective` and root-projected `Star`; there is no invariant original-sample frame in which to encode the desired partition consistently. No mathematically justified cure can therefore be retained with the current interface.
+
+=== Evidence map and conclusion
+<evidence-map-and-conclusion>
+- `states/state_GL280_candidate_shared_1l_explicit_acceptance`: complete projected-candidate approaches and threshold-only checks.
+- `states/state_GL280_candidate_lmb_remap_3_5_12_13`: rejected basis-remap approaches.
+- `states/state_GL280_candidate_partition_star_E43_E47` and `state_GL280_candidate_partition_effective_E43_E47`: the two rejected complementary partitions.
+- `states/GL280_guard`: generation, structural, approach, and final UV guard records and logs.
+
+The final graph is intentionally pristine. GL280 remains unresolved because the necessary E29/E70 one-/two-loop separation cannot be expressed in a multiplier frame invariant across all CT pieces; retaining any tested directive would leave a smooth logarithmic hard-collinear divergence.
+
+#line(length: 100%)
+
+== Historical audit retained for provenance (superseded)
+<historical-audit-retained-for-provenance-superseded>
+== Provenance and topology
+<provenance-and-topology>
+- Lease: 2026-08-09 02:32:12--03:01:52 +0200.
+- GammaLoop CLI SHA-256: `fc9d20e0ffbca1b334ab57908b29aeea34ecda68f5c3a76664d8ca4f8536256c`.
+- Raw diagnostic DOT SHA-256: `4fbfc2b40cd26b7f8cd59b121845df848c434deeb7c274a4fde09f14ee5fbb31`.
+- Final cleaned DOT SHA-256: `e78eb64787031452ce442103f237939a25bab0d67ed305a10b109b1158897400`.
+- Final run-card SHA-256: `7cbffbfbba4f0bda7f2e966ce2ba9788159de0b169d100183d6c132a31eadb05`.
+- Four-loop graph. Vertex 7 is the only `V_36` triple-gluon vertex, incident to massless edges 11, 13, and 14. There is no `V_37` vertex.
+- The cleaned DOT preserves four `lmb_id` basis edges and contains none of `pin`, `dir`, or `lmb_rep`. It has no explicit `threshold_counterterms` attribute.
+
+With vanishing incoming spatial momentum, the raw diagnostic decomposition gives
+
+```text
+q11 = -K1 + K2
+q13 = K3
+q14 = K1 - K2 - K3
+q11 + q13 + q14 = 0.
+```
+
+Any two soft constraints therefore imply the third. Single-soft rank is 3, the coincident all-gluon double-soft locus has rank 6, and each independent hard-collinear transverse relation has rank 2.
+
+== Generated structure
+<generated-structure>
+Full local and integrated UV generation succeeded. The state contains all #strong[440 orientations];, no forced cut or orientation filter, and ten process-valid cuts:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (right,auto,auto,),
+    table.header([cut id], [edges], [active threshold surfaces],),
+    table.hline(),
+    [0], [`[2,9,12,14]`], [left E70=`[5,9,13,14]`, E43=`[5,9,11]`, E33=`[5,7]`],
+    [1], [`[2,9,11,12,13]`], [none],
+    [2], [`[2,7,12,13]`], [right E39=`[3,9]`, E29=`[3,7,13,14]`, E47=`[3,7,11]`],
+    [3], [`[2,7,11,12,14]`], [none],
+    [4], [`[2,6,9,13,14]`], [none],
+    [5], [`[2,6,9,11]`], [none],
+    [6], [`[2,6,7]`], [right E39, E29, E47],
+    [7], [`[2,4,9]`], [left E70, E43, E33],
+    [8], [`[2,4,7,13,14]`], [none],
+    [9], [`[2,4,7,11]`], [none],
+  )]
+  , kind: table
+  )
+
+The generated state has 23 evaluators, a 1.07 GiB evaluator binary, compilation disabled, and no shared object. Internal generation time is #strong[139.874789709 s] (`generation_summary.json` `stats.total_time`); peak generation RAM is 5,521,358,848 bytes.
+
+== Reproducible paths
+<reproducible-paths>
+Every accepted approach uses the complete graph sum with `--momentum-space --graph-id 0`, no orientation selector, 50 logarithmic points on both signed branches over `1e-6`--`1e-2`, midpoint skipped, and three cores. Semicolon-separated triples below are `(K0;K1;K2;K3)`.
+
+#figure(
+  align(center)[#table(
+    columns: 4,
+    align: (auto,auto,auto,right,),
+    table.header([path], [midpoint], [axis], [rank],),
+    table.hline(),
+    [soft e13], [`(37,126,-109; -91,64,83; 74,-52,137; 0,0,0)`], [`(0;0;0;211,-157,193)`], [3],
+    [soft e14], [`(37,126,-109; -91,64,83; -122,111,24;31,-47,59)`], [`(0;0;211,-157,193;0)`], [3],
+    [soft e11], [`(37,126,-109; -91,64,83; -91,64,83;31,-47,59)`], [`(0;0;211,-157,193;0)`], [3],
+    [all-gluon double soft], [`(37,126,-109; -91,64,83; -91,64,83;0,0,0)`], [`(0;0;98,-86,342;211,-157,193)`], [6],
+    [hard collinear e13/e14], [`(37,126,-109; -91,64,83; -91,64,-117;0,0,120)`], [`(0;0;-47,-29,0;47,29,0)`], [2],
+    [hard collinear e13/e11], [`(37,126,-109; -91,64,83; -91,64,163;0,0,120)`], [`(0;0;0;47,29,0)`], [2],
+    [hard collinear e14/e11], [`(37,126,-109; -91,64,83; -91,64,163;0,0,-200)`], [`(0;0;47,29,0;0)`], [2],
+    [correlated e13 / E29-E43-E47-E70], [`(37,126,-109;0,0,0;0,0,395.405078597340;0,0,0)`], [`(0;0;3,5,-7;47,29,-31)`], [3],
+    [correlated e14 / E29-E43-E47-E70], [`(37,126,-109;0,0,0;0,0,395.405078597340;0,0,-395.405078597340)`], [`(0;3,5,-7;0;47,29,-31)`], [3],
+    [correlated e11 / E33-E39-E43-E47], [`(37,126,-109;0,0,469.11725613113;0,0,469.11725613113;31,-47,59)`], [`(0;3,5,-7;47,29,-31;0)`], [3],
+    [correlated e11 / E29-E70], [`(37,126,-109;0,0,0;0,0,0;0,0,327)`], [`(0;3,5,-7;47,29,-31;0)`], [3],
+    [correlated all-soft / all six surfaces], [`(37,126,-109;0,0,469.11725613113;0,0,469.11725613113;0,0,0)`], [`(0;0;98,-86,342;211,-157,193)`], [6],
+  )]
+  , kind: table
+  )
+
+The target distances scale linearly by the displayed momentum identities. Hard-collinear midpoints have nonzero positive fractions on a common ray and only independent transverse relative directions are perturbed. The correlated roots use
+
+```text
+173 + sqrt(173^2 + x^2) + x = 1000,  x = 395.4050785973398,
+2*sqrt(173^2 + y^2) = 1000,          y = 469.11725613113,
+2*173 + 2*z = 1000,                  z = 327.
+```
+
+The fitter used `--no-kinematic-check` because schema-3 approach JSON has no dedicated distance series; the exact linear relations above are the independent scaling check.
+
+== Fits and directive diagnosis
+<fits-and-directive-diagnosis>
+No explicit directive was present during the audit:
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,right,right,right,auto,),
+    table.header([limit], [rank], [p envelope], [minimum R2], [result],),
+    table.hline(),
+    [soft e13], [3], [`[1.999925,4.020459]`], [0.997910], [inconclusive: branch disagreement],
+    [soft e14], [3], [`[1.990702,2.023905]`], [0.999523], [pass],
+    [soft e11], [3], [`[3.581224,4.451497]`], [0.680764], [inconclusive: poor fits/span],
+    [double soft], [6], [`[4.997154,5.031097]`], [0.999320], [pass],
+    [collinear e13/e14], [2], [`[4.163064,4.543450]`], [0.992960], [inconclusive: two fits below R2 threshold],
+    [collinear e13/e11], [2], [`[-0.092850,9.790038]`], [0.000039], [inconclusive: cancellation noise],
+    [collinear e14/e11], [2], [`[-4.924068,10.405115]`], [0.000268], [inconclusive: cancellation noise],
+    [correlated e14 / E29-E43-E47-E70], [3], [`[3.999663,5.406891]`], [0.996319], [inconclusive: branch disagreement],
+    [correlated e11 / E33-E39-E43-E47], [3], [`[3.749855,5.576185]`], [0.878713], [inconclusive: poor fits/span],
+    [correlated e11 / E29-E70], [3], [`[1.200540,3.263170]`], [0.597714], [inconclusive: poor fits/span],
+    [correlated all-soft / all thresholds], [6], [`[4.926220,4.997225]`], [0.999858], [pass],
+  )]
+  , kind: table
+  )
+
+All three hard-collinear pairs occur in a process-valid cut: e11/e13 in cut 1, e11/e14 in cut 3, and e13/e14 in cuts 4 and 8. Their f64 complete sums are therefore retained as required evidence, but their failed fit-quality contract prevents promotion to either pass or fail.
+
+The correlated e13/E29-E43-E47-E70 path is an explicit blocker: default f64 evaluation aborts because a threshold counterterm has an invalid radial solution, and a targeted complete-orientation Arb rerun reaches the same final-Arb validation error. The q11/E33-E39-E43-E47 Arb adjudicator was guarded for 240 s and cleaned up on timeout before producing JSON. These outcomes do not establish a physical non-integrable power.
+
+At e13 or e14 soft, the natural common projected subspaces would be `[5,9]` for E70/E43 and `[3,7]` for E29/E47. At e11 soft, E33/E43 would instead share `[5]` and E39/E47 `[3]`; thus the same E43/E47 surfaces would need distinct one-loop and two-loop deformation regions. The available evidence does not justify guessing the required complementary variants, and no candidate could receive all mandatory IR and threshold-only validation within this lease. Consequently #strong[no directive is accepted] and no threshold-only path is required for the final unedited DOT.
+
+`all limits OK?` is #strong[inconclusive];: two generic soft/double-soft checks and the decisive correlated rank-six check pass, but the required collinear and rank-three correlated families remain inconclusive or runtime-blocked. Threshold subtraction stayed enabled throughout; no threshold-off result is used.
+
+== Integration and conclusion
+<integration-and-conclusion>
+- UV mode: full local plus integrated UV; no local-only fallback.
+- Threshold structure edited: #strong[no];.
+- All limits OK: #strong[inconclusive];.
+- The watchdog sent `SIGINT` at the planned integration timeout and GammaLoop emitted a final checkpoint; wrapper duration was #strong[217.512 s] including grace, peak process-tree RSS 7,327,105,024 bytes, and no child survived.
+- The last completed status retained #strong[4,800 samples] and reports #strong[110 ms/sample/core] on three cores.
+- Signed central value: `(+8.481711538754209e-6, -7.351038510101294e-6 i)` with component errors `(1.4687640967266888e-5, 1.3995634610831123e-5)`.
+- Componentwise-absolute central value: `(+5.065079770263488e-5, +4.427320194458735e-5 i)` with errors `(1.466994193781117e-5, 1.39814378980205e-5)`. Relative absolute errors are 28.9629% and 31.5799%.
+- Nonfinite percentage is 0%; the retained finite-Double unstable percentage is 0.0416667%. The completed finite checkpoint satisfies the accepted absolute-error criterion, so `converged? = yes`.
+- Signed max weights are re+ `3.7429735073361774e-2`, re- `-3.554215120849441e-2`, im+ `3.223985072307369e-2`, and im- `-3.57080859353631e-2`. Absolute re/im maxima reuse the signed re+/im- coordinates.
+- The stored maximum-weight coordinates were not replayed before the documentation freeze. No claim that they are generic or on an IR/threshold locus is made; this is an explicit incomplete diagnostic.
+
+Concise conclusion: GL280\'s unmodified graph passes its generic e14-soft, double-soft, and all-threshold double-soft checks. The complete all-orientation f64 sums for the other soft and physical collinear limits are precision/fit limited, while the e13 correlated surface is runtime-invalid even in Arb. Because the topology combines candidate one-loop and two-loop projected regions without sufficient validation for a safe partition, the lease leaves the threshold structure unmodified and the limit audit honestly inconclusive.

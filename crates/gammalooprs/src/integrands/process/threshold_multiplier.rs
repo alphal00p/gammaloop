@@ -1523,7 +1523,16 @@ mod tests {
     use crate::{
         GammaLoopContextContainer, dot,
         graph::parse::from_dot::IntoGraph,
-        integrands::process::evaluators::{ActiveF64Backend, EvaluatorBackendPolicy},
+        integrands::process::{
+            cross_section::{
+                export::export_threshold_multiplier_collection,
+                load::{
+                    StandaloneThresholdMultiplierCollectionArchive,
+                    build_threshold_multiplier_collection,
+                },
+            },
+            evaluators::{ActiveF64Backend, EvaluatorBackendPolicy},
+        },
         momentum::{
             FourMomentum,
             sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta},
@@ -1534,7 +1543,7 @@ mod tests {
         },
         utils::{ArbPrec, f128, load_generic_model},
     };
-    use symbolica::state::State;
+    use symbolica::{domains::float::Complex as SymComplex, state::State};
 
     fn initialized_layout(
         model_parameters: Vec<Atom>,
@@ -2060,61 +2069,103 @@ mod tests {
 
     #[test]
     fn eager_only_collection_roundtrips_and_evaluates_in_all_precisions() {
-        let layout = initialized_layout(Vec::new(), 0, Vec::new(), Vec::new());
-        let expression = layout.parse_expression("7", &BTreeMap::new()).unwrap();
-        let collection = ThresholdMultiplierEvaluatorCollection::build(
-            layout,
-            vec![(ThresholdCountertermVariantId(0), Some(expression))],
-            Vec::new(),
-            &EvaluatorSettings::default(),
-        )
-        .unwrap()
-        .unwrap();
-
-        let encoded = bincode::encode_to_vec(&collection, bincode::config::standard()).unwrap();
-        let model = load_generic_model("sm");
-        let mut state_bytes = Vec::new();
-        State::export(&mut state_bytes).unwrap();
-        let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
-        let context = GammaLoopContextContainer {
-            model: &model,
-            state_map: &state_map,
-        };
-        let (mut decoded, _): (ThresholdMultiplierEvaluatorCollection, _) =
-            bincode::decode_from_slice_with_context(&encoded, bincode::config::standard(), context)
+        for direct_translation in [false, true] {
+            let layout =
+                initialized_layout(vec![parse!("archive_weight")], 0, Vec::new(), Vec::new());
+            let expression = layout
+                .parse_expression(
+                    "outer(2) + captured",
+                    &BTreeMap::from([
+                        ("captured".into(), "archive_weight + 1".into()),
+                        (
+                            "nested(archive_weight)".into(),
+                            "archive_weight * captured".into(),
+                        ),
+                        ("outer(y)".into(), "nested(y + 1) + captured()".into()),
+                    ]),
+                )
                 .unwrap();
-        decoded.validate(1, 0).unwrap();
+            let collection = ThresholdMultiplierEvaluatorCollection::build(
+                layout,
+                vec![(ThresholdCountertermVariantId(0), Some(expression))],
+                Vec::new(),
+                &EvaluatorSettings {
+                    direct_translation,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+            .unwrap();
 
-        let f64_values = ThresholdMultiplierInputValues::new(decoded.layout(), F(0.0));
-        let f128_values =
-            ThresholdMultiplierInputValues::new(decoded.layout(), F(f128::from_f64(0.0)));
-        let arb_values =
-            ThresholdMultiplierInputValues::new(decoded.layout(), F(ArbPrec::from_f64(0.0)));
-        {
-            let evaluator = &mut decoded.evaluators_mut()[0];
-            let mut metadata = EvaluationMetaData::new_empty();
-            assert_eq!(
-                evaluator.evaluate(&f64_values, &mut metadata).unwrap(),
-                F(7.0)
-            );
-            assert_eq!(
-                evaluator
-                    .evaluate(&f128_values, &mut metadata)
-                    .unwrap()
-                    .0
-                    .into_f64(),
-                7.0
-            );
-            assert_eq!(
-                evaluator
-                    .evaluate(&arb_values, &mut metadata)
-                    .unwrap()
-                    .0
-                    .into_f64(),
-                7.0
-            );
+            let encoded = bincode::encode_to_vec(&collection, bincode::config::standard()).unwrap();
+            let model = load_generic_model("sm");
+            let mut state_bytes = Vec::new();
+            State::export(&mut state_bytes).unwrap();
+            let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
+            let context = GammaLoopContextContainer {
+                model: &model,
+                state_map: &state_map,
+            };
+            let (mut decoded, _): (ThresholdMultiplierEvaluatorCollection, _) =
+                bincode::decode_from_slice_with_context(
+                    &encoded,
+                    bincode::config::standard(),
+                    context,
+                )
+                .unwrap();
+            decoded.validate(1, 0).unwrap();
 
-            let generic = evaluator.generic_evaluator_mut();
+            let archive: StandaloneThresholdMultiplierCollectionArchive<String> =
+                export_threshold_multiplier_collection(&decoded).unwrap();
+            assert_eq!(archive.evaluators[0].additional_fn_map_entries.len(), 3);
+            let encoded = bincode::encode_to_vec(&archive, bincode::config::standard()).unwrap();
+            let (archive, _): (StandaloneThresholdMultiplierCollectionArchive<String>, _) =
+                bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+            let mut standalone =
+                build_threshold_multiplier_collection(archive, 1, 0, &state_map).unwrap();
+
+            for (input, expected) in [(5, 30.0), (7, 40.0)] {
+                let mut f64_values = ThresholdMultiplierInputValues::new(decoded.layout(), F(0.0));
+                let mut f128_values =
+                    ThresholdMultiplierInputValues::new(decoded.layout(), F::<f128>::default());
+                let mut arb_values =
+                    ThresholdMultiplierInputValues::new(decoded.layout(), F::<ArbPrec>::default());
+                f64_values.set_real(0, F(0.0).from_usize(input)).unwrap();
+                f128_values
+                    .set_real(0, F::<f128>::default().from_usize(input))
+                    .unwrap();
+                arb_values
+                    .set_real(0, F::<ArbPrec>::default().from_usize(input))
+                    .unwrap();
+                let evaluator = &mut decoded.evaluators_mut()[0];
+                let mut metadata = EvaluationMetaData::new_empty();
+                assert_eq!(
+                    evaluator.evaluate(&f64_values, &mut metadata).unwrap(),
+                    F(expected)
+                );
+                assert_eq!(
+                    evaluator
+                        .evaluate(&f128_values, &mut metadata)
+                        .unwrap()
+                        .0
+                        .into_f64(),
+                    expected
+                );
+                assert_eq!(
+                    evaluator
+                        .evaluate(&arb_values, &mut metadata)
+                        .unwrap()
+                        .0
+                        .into_f64(),
+                    expected
+                );
+
+                let (_, _, evaluator, result) = &mut standalone.evaluators[0];
+                evaluator.evaluate(&[SymComplex::new(input as f64, 0.0)], result);
+                assert_eq!(result.as_slice(), &[SymComplex::new(expected, 0.0)]);
+            }
+
+            let generic = decoded.evaluators_mut()[0].generic_evaluator_mut();
             generic
                 .activate_symjit(CompilationOptimizationLevel::O2)
                 .unwrap();
@@ -2136,19 +2187,19 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(generic.active_f64_backend(), ActiveF64Backend::Eager);
-        }
 
-        let expected_visits = decoded.evaluators().len();
-        let mut visits = 0;
-        decoded
-            .for_each_generic_evaluator_mut(|generic| {
-                visits += 1;
-                assert_eq!(generic.backend_policy, EvaluatorBackendPolicy::EagerOnly);
-                assert_eq!(generic.active_f64_backend(), ActiveF64Backend::Eager);
-                Ok(())
-            })
-            .unwrap();
-        assert_eq!(visits, expected_visits);
+            let expected_visits = decoded.evaluators().len();
+            let mut visits = 0;
+            decoded
+                .for_each_generic_evaluator_mut(|generic| {
+                    visits += 1;
+                    assert_eq!(generic.backend_policy, EvaluatorBackendPolicy::EagerOnly);
+                    assert_eq!(generic.active_f64_backend(), ActiveF64Backend::Eager);
+                    Ok(())
+                })
+                .unwrap();
+            assert_eq!(visits, expected_visits);
+        }
     }
 
     #[test]
@@ -2308,7 +2359,57 @@ mod tests {
                 _ => {}
             }
         }
+        let previous_values = changed_values.as_slice().to_vec();
         assert_eq!(workspace.kinematic_points.len(), 2);
+
+        // A model refresh can change masses without changing the samples or their
+        // cache IDs. Both frames must rebuild energies and E-surfaces together.
+        for mass in [0.0, 5.0] {
+            let mut changed_masses = masses.clone();
+            changed_masses[energy_edge] = F(mass);
+            let values = workspace
+                .bind(
+                    &layout,
+                    &graph.loop_momentum_basis,
+                    &changed_masses,
+                    &changed_model_values,
+                    &changed_additional_values,
+                    &effective,
+                    &star,
+                )
+                .unwrap();
+            for (point, sample) in [
+                (ThresholdMultiplierPoint::Effective, &effective),
+                (ThresholdMultiplierPoint::Star, &star),
+            ] {
+                let energy_index = layout
+                    .inputs()
+                    .iter()
+                    .position(|input| {
+                        *input
+                            == ThresholdMultiplierInput::EdgeEnergy {
+                                point,
+                                edge: energy_edge.0,
+                            }
+                    })
+                    .unwrap();
+                let eta_index = layout
+                    .inputs()
+                    .iter()
+                    .position(|input| {
+                        *input == ThresholdMultiplierInput::Esurface { point, esurface: 0 }
+                    })
+                    .unwrap();
+                let energy = (sample.loop_moms().iter().next().unwrap().norm_squared()
+                    + F(mass * mass))
+                .sqrt();
+                assert_eq!(values.as_slice()[energy_index].re, energy);
+                let expected_eta =
+                    previous_values[eta_index].re - previous_values[energy_index].re + energy;
+                assert!((values.as_slice()[eta_index].re - expected_eta).abs() < F(1e-12));
+            }
+            assert_eq!(workspace.kinematic_points.len(), 2);
+        }
     }
 
     #[test]

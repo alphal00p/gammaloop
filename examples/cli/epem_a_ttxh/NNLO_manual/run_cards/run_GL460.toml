@@ -283,10 +283,16 @@ commands = [
 name = "uv_profile_final_seeded_random_g0_lmb0_masks6_12_n5_exp4_8"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 4 --max-scaling 8 --per-orientation --seed 46020260809
+  #       --graph-index 0 --lmb-index 0 --loop-subset-mask 6,12 --subset-cardinality 2
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL460/uv_profiles/final_seeded_random_g0_lmb0_masks6_12_n5_exp4_8_seed46020260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 4 --max-scaling 8 --per-orientation --seed 46020260809
-      --graph-index 0 --lmb-index 0 --loop-subset-mask 6,12 --subset-cardinality 2
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL460/uv_profiles/final_seeded_random_g0_lmb0_masks6_12_n5_exp4_8_seed46020260809""",
+      --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL460/uv_profiles/final_seeded_random_g0_lmb0_masks6_12_n5_exp4_8_seed46020260809_all_uv_limits""",
 ]
 
 [[command_blocks]]

@@ -67,7 +67,15 @@ def check_card(path: Path, graph_id: str) -> list[str]:
     )
     if expected_import not in commands:
         errors.append(f"{path}: missing exact process-aware graph import")
-    for prohibited in ("--orientation-id", "force_cuts", "orientation_pattern"):
+    for prohibited in (
+        "--orientation-id",
+        "force_cuts",
+        "orientation_pattern",
+        "--graph-index",
+        "--lmb-index",
+        "--loop-subset-mask",
+        "--subset-cardinality",
+    ):
         if prohibited in commands:
             errors.append(f"{path}: command contains prohibited {prohibited}")
     settings = card.get("cli_settings", {}).get("global", {})
@@ -112,7 +120,7 @@ def main() -> int:
         path.stem.removeprefix("run_")
         for path in (args.root / "run_cards").glob("run_GL*.toml")
     }
-    found_results = {path.stem for path in (args.root / "results").glob("GL*.md")}
+    found_results = {path.stem for path in (args.root / "results").glob("GL*.typ")}
     errors = []
     for label, found in (
         ("DOT", found_dots),
@@ -131,10 +139,12 @@ def main() -> int:
         errors.extend(
             check_card(args.root / "run_cards" / f"run_{graph_id}.toml", graph_id)
         )
-    summary = args.root / "results" / "summary.md"
+    summary = args.root / "results" / "summary.typ"
     if (
         not summary.exists()
-        or sum(line.startswith("| GL") for line in summary.read_text().splitlines())
+        or sum(
+            line.lstrip().startswith("[GL") for line in summary.read_text().splitlines()
+        )
         != 71
     ):
         errors.append(f"{summary}: must contain exactly 71 graph rows")

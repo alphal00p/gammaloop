@@ -100,11 +100,17 @@ commands = [
 name = "uv_profile_final_random_g0_lmb0_mask4_q12_n5_exp4_8"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 4 --max-scaling 8
+  #       --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
+  #       --loop-subset-mask 4 --subset-cardinality 1
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask4_q12_n5_exp4_8_seed30420260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 4 --max-scaling 8
-      --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
-      --loop-subset-mask 4 --subset-cardinality 1
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask4_q12_n5_exp4_8_seed30420260809""",
+      --per-orientation --seed 30420260809 --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask4_q12_n5_exp4_8_seed30420260809_all_uv_limits""",
 ]
 
 # Adaptive retry for the process-invalid 4..8 mask-4 screen.  The higher UV
@@ -114,11 +120,17 @@ commands = [
 name = "uv_profile_final_random_g0_lmb0_mask4_q12_n5_exp6_10"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10
+  #       --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
+  #       --loop-subset-mask 4 --subset-cardinality 1
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask4_q12_n5_exp6_10_seed30420260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10
-      --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
-      --loop-subset-mask 4 --subset-cardinality 1
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask4_q12_n5_exp6_10_seed30420260809""",
+      --per-orientation --seed 30420260809 --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask4_q12_n5_exp6_10_seed30420260809_all_uv_limits""",
 ]
 
 # Exact-precision adjudicator for the repeated final-f64 projected-root
@@ -127,77 +139,119 @@ commands = [
 name = "uv_profile_final_random_g0_lmb0_mask4_q12_n5_exp6_10_arb"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --use_f128
+  #       --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
+  #       --loop-subset-mask 4 --subset-cardinality 1
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask4_q12_n5_exp6_10_arb_seed30420260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --use_f128
-      --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
-      --loop-subset-mask 4 --subset-cardinality 1
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask4_q12_n5_exp6_10_arb_seed30420260809""",
+      --per-orientation --seed 30420260809 --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask4_q12_n5_exp6_10_arb_seed30420260809_all_uv_limits""",
 ]
 
 [[command_blocks]]
 name = "uv_profile_final_random_g0_lmb0_mask8_q13_n5_exp6_10"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10
+  #       --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
+  #       --loop-subset-mask 8 --subset-cardinality 1
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask8_q13_n5_exp6_10_seed30420260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10
-      --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
-      --loop-subset-mask 8 --subset-cardinality 1
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask8_q13_n5_exp6_10_seed30420260809""",
+      --per-orientation --seed 30420260809 --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask8_q13_n5_exp6_10_seed30420260809_all_uv_limits""",
 ]
 
 [[command_blocks]]
 name = "uv_profile_final_random_g0_lmb0_mask8_q13_n5_exp6_10_arb"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --use_f128
+  #       --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
+  #       --loop-subset-mask 8 --subset-cardinality 1
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask8_q13_n5_exp6_10_arb_seed30420260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --use_f128
-      --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
-      --loop-subset-mask 8 --subset-cardinality 1
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask8_q13_n5_exp6_10_arb_seed30420260809""",
+      --per-orientation --seed 30420260809 --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask8_q13_n5_exp6_10_arb_seed30420260809_all_uv_limits""",
 ]
 
 [[command_blocks]]
 name = "uv_profile_final_random_g0_lmb0_mask12_double_n5_exp6_10"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10
+  #       --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
+  #       --loop-subset-mask 12 --subset-cardinality 2
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask12_double_n5_exp6_10_seed30420260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10
-      --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
-      --loop-subset-mask 12 --subset-cardinality 2
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask12_double_n5_exp6_10_seed30420260809""",
+      --per-orientation --seed 30420260809 --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask12_double_n5_exp6_10_seed30420260809_all_uv_limits""",
 ]
 
 [[command_blocks]]
 name = "uv_profile_final_random_g0_lmb0_mask12_double_n5_exp6_10_arb"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --use_f128
+  #       --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
+  #       --loop-subset-mask 12 --subset-cardinality 2
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask12_double_n5_exp6_10_arb_seed30420260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --use_f128
-      --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
-      --loop-subset-mask 12 --subset-cardinality 2
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask12_double_n5_exp6_10_arb_seed30420260809""",
+      --per-orientation --seed 30420260809 --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask12_double_n5_exp6_10_arb_seed30420260809_all_uv_limits""",
 ]
 
 [[command_blocks]]
 name = "uv_profile_final_random_g0_lmb0_mask15_overall_n5_exp6_10"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10
+  #       --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
+  #       --loop-subset-mask 15 --subset-cardinality 4
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask15_overall_n5_exp6_10_seed30420260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10
-      --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
-      --loop-subset-mask 15 --subset-cardinality 4
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask15_overall_n5_exp6_10_seed30420260809""",
+      --per-orientation --seed 30420260809 --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask15_overall_n5_exp6_10_seed30420260809_all_uv_limits""",
 ]
 
 [[command_blocks]]
 name = "uv_profile_final_random_g0_lmb0_mask15_overall_n5_exp6_10_arb"
 commands = [
   "run runtime_uv_profile",
+
+  # Current CLI profiles all UV limits of this graph; LMB/mask selection is retired.
+  # """profile ultra-violet -p epem_a_tth -i NNLO
+  #       --n-points 5 --min-scaling 6 --max-scaling 10 --use_f128
+  #       --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
+  #       --loop-subset-mask 15 --subset-cardinality 4
+  #       --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask15_overall_n5_exp6_10_arb_seed30420260809"""
   """profile ultra-violet -p epem_a_tth -i NNLO
       --n-points 5 --min-scaling 6 --max-scaling 10 --use_f128
-      --per-orientation --seed 30420260809 --graph-index 0 --lmb-index 0
-      --loop-subset-mask 15 --subset-cardinality 4
-      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask15_overall_n5_exp6_10_arb_seed30420260809""",
+      --per-orientation --seed 30420260809 --graph 0 --selected-limits all
+      --output ./examples/cli/epem_a_ttxh/NNLO_manual/states/state_GL304_shared_projection_parent491213/uv_profiles/final_random_g0_lmb0_mask15_overall_n5_exp6_10_arb_seed30420260809_all_uv_limits""",
 ]
 
 [[command_blocks]]

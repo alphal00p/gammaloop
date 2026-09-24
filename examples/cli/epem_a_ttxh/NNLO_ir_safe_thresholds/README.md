@@ -32,7 +32,7 @@ roots used by the iterated helper. Thus the GL638 prescription remains a
 diagnostic, not a validated general cure. These scans disable integrated UV
 generation because it fails identically with and without threshold metadata.
 The measured results and pending coupled-subtraction design are recorded in
-[`IR_SAFE_THRESHOL_UPDATE.md`](../../../../IR_SAFE_THRESHOL_UPDATE.md).
+[`IR_SAFE_THRESHOL_UPDATE.typ`](../../../../IR_SAFE_THRESHOL_UPDATE.typ).
 
 Every explicit `[[cuts.thresholds.counterterms]]` entry requires a full
 `parent_lmb`, including disabled entries and entries specifying only a name or

@@ -1,0 +1,174 @@
+= GL703 manual IR-safe threshold audit
+<gl703-manual-ir-safe-threshold-audit>
+== Outcome
+<outcome>
+- #strong[Threshold structure edited:] no. None of the generated E-surfaces is active in any process-valid cut, and the threshold-counterterm contribution is exactly zero at every accepted approach and max-weight replay point.
+- #strong[All limits OK:] #strong[yes];. Exact Arb repeats resolve both required cut-fermion soft families, their independent double-soft intersection, and both conservative common-gluon-soft diagnostics as bounded plateaus.
+- #strong[UV mode:] full local and integrated UV, plus a tailored seeded-random per-orientation profile of masks 4, 8, 12, and 15.
+- #strong[Integration converged:] yes. The 77,700-evaluation checkpoint is finite, contains no unstable or nonfinite sample, and has componentwise-absolute relative errors `46.43398%` and `43.99655%`.
+- #strong[Scientific conclusion:] there is no threshold-driven failure and no causal basis for a GL297/GL638-style projection or partition; no threshold or LMB edit is needed.
+
+== Reproducibility and provenance
+<reproducibility-and-provenance>
+Every GammaLoop invocation used `scripts/run_guarded.py`, the shared two-slot lock, a 15 GiB recursive-RSS cap, a 12 GiB disk floor, a 6 GiB host-available-memory floor, and the pinned release executable. No GammaLoop source or test was edited, and no build or escalation was performed.
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([artifact], [SHA-256],),
+    table.hline(),
+    [`target/release/gammaloop`], [`0f8ed2c842814995bdcad19b3bc2a406eb75cb4a1784a74aa3c3de6b0e9d2b1b`],
+    [final `graphs/GL703.dot`], [`5273a878f23c7829bcc1d27b772eb5a4da44f2412f0b805ceed9b0aaf1c541f7`],
+    [final `run_cards/run_GL703.toml`], [`5b12949f5ce7eb4a2ee7dc4dd6147a4f5d15855afac90008938cdce8babc27fc`],
+    [final `generation_summary.json`], [`37d45a89b18307f5d1e4816b61b985fa0b36c0857b8826010c2c7212e7cf9d73`],
+    [`integration_result.json`], [`f24c866494f08ee3b6674770d11ebefdef1c01ed235c887aa44017dff5d1eaaa`],
+    [`result_record.json`], [`b85aeed5c2b97259a3d0b38bc34a9163309b191ecd159defa1fa0fa8a84ddd97`],
+  )]
+  , kind: table
+  )
+
+== Topology, routing, cuts, and thresholds
+<topology-routing-cuts-and-thresholds>
+GL703 has four loops, two gluons, and a massless light-`d` loop. It contains neither `V_36` nor `V_37`, so there is no required hard gluon-collinear family. With basis edges `(2,4,7,9)` and vanishing incoming spatial momentum, the diagnostic routing is
+
+```text
+e2 = K0                         (H)
+e3 = K0+K1                     (t)
+e4 = K1                         (t)
+e5 = K0+K1+K2                  (t)
+e6 = K1+K2                     (t)
+e7 = K2, e8 = -K2              (g)
+e9 = e10 = K3                  (d)
+e12 = e13 = K3-K2              (d)
+```
+
+The required process-valid massless families are therefore `e9/e10` soft (`K3=0`, rank 3), `e12/e13` soft (`K3-K2=0`, rank 3), and their independent intersection (`K3=K2=0`, rank 6). The common internal-gluon locus `e7=e8=0` is one rank-three constraint `K2=0`, not two independent soft constraints; two hard-complement choices retain it as a conservative diagnostic.
+
+Full generation contains #strong[248 unrestricted orientations] and four cuts:
+
+- cut 0 `(2,4,5,10,12)`;
+- cut 1 `(2,3,6,9,13)`;
+- cut 2 `(2,4,5,9,13)`;
+- cut 3 `(2,3,6,10,12)`.
+
+No orientation ID, force-cut setting, or runtime orientation filter occurs in the card. Each approach evaluates the complete graph, cut, and orientation sum.
+
+The generated E-surfaces are E27 `(7,10,12)`, E29 `(3,5,10,12)`, E30 `(2,3,6,10,12)`, E31 `(9,10)`, E34 `(2,4,5,10,12)`, E35 `(4,6,10,12)`, E37 `(8,10,12)`, E45 `(12,13)`, E46 `(8,9,13)`, E47 `(2,4,5,9,13)`, E48 `(3,5,9,13)`, E49 `(4,6,9,13)`, E50 `(2,3,6,9,13)`, and E51 `(7,9,13)`. GammaLoop reports #strong[none active in any cut];, including the cut surfaces that are skipped as threshold counterterms.
+
+== Complete approach inventory
+<complete-approach-inventory>
+All five paths use 50 logarithmic points on each signed branch over `10^-6 <= |lambda| <= 10^-2`, skip the midpoint, use three cores, and have 100 finite evaluations. Vectors are ordered `(K0|K1|K2|K3)`. Exact rational row reduction gives ranks `3`, `3`, `6`, and `3` for the two cut-soft families, their intersection, and the common-gluon locus. Direct fits to each analytic target norm give slope `1` and `R²=1` (the double-soft `K3-K2` slope is `1.0000000000000002`).
+
+#figure(
+  align(center)[#table(
+    columns: 7,
+    align: (auto,auto,auto,right,right,right,auto,),
+    table.header([path], [midpoint], [axis], [rank], [p envelope], [min R²], [result],),
+    table.hline(),
+    [`soft_e9_e10`], [\`(74,-52,137], [-91,64,83], [37,126,-109], [0)\`], [\`(0], [0],
+    [`soft_e12_e13`], [\`(74,-52,137], [-91,64,83], [37,126,-109], [37,126,-109)\`], [\`(0], [0],
+    [`double_soft_d_families`], [\`(74,-52,137], [-91,64,83], [0], [0)\`], [\`(0], [0],
+    [`soft_e7_e8_common` diagnostic], [\`(74,-52,137], [-91,64,83], [0], [37,126,-109)\`], [\`(0], [0],
+    [`soft_e7_e8_crosscheck` diagnostic], [\`(143,-71,211], [31,97,-53], [0], [-48,59,161)\`], [\`(0], [0],
+  )]
+  , kind: table
+  )
+
+Entries below are `p/R²` for the nearest 8, 12, and 16 points; negative and positive branches are separated by a semicolon.
+
+```text
+soft_e9_e10:       -1.54783e-5/.966512, -2.41494e-5/.926514, -3.86481e-5/.877837;
+                       6.31432e-6/.966510,  9.85182e-6/.926510,  1.57671e-5/.877824
+soft_e12_e13:       6.31430e-6/.966510,  9.85181e-6/.926509,  1.57671e-5/.877824;
+                      -1.54780e-5/.966510, -2.41493e-5/.926511, -3.86480e-5/.877835
+double_soft:         7.71505e-5/.450979,  3.04623e-5/.233437,  1.30363e-5/.101323;
+                      -8.79140e-5/.581768, -3.46964e-5/.297043, -9.72713e-6/.053522
+gluon_common:        4.10708e-5/.141906,  5.28772e-6/.007708, -8.73828e-6/.044029;
+                      -5.84857e-5/.087085, -1.85314e-5/.029639, -1.51036e-6/.000461
+gluon_crosscheck:    .00762743/.598795, .00419754/.510053, .00262082/.433609;
+                      .00616607/.173006, .00290194/.126636, .00160308/.091044
+```
+
+The closest-point behavior is bounded rather than divergent. For example, the first common-gluon complement stays near `-2.675e-42`, while the required double-soft path stays within `2.31726e-41..2.43920e-41` over the complete sampled range. The remediation rules supersede the old mechanical low-`R²` classification by permitting an exact bounded-plateau check.
+
+Across all #strong[500] accepted points, `threshold_counterterm_0` is exactly `0+0i`. Because there is no active threshold association, there is no correlated soft/threshold path to construct and no meaningful threshold-off causal comparison.
+
+== Remediation reassessment
+<remediation-reassessment>
+Every accepted physical family was repeated with exact Arb arithmetic, the same midpoint and non-tangent axis, 16 logarithmic points on each signed branch, and the unrestricted orientation sum. All 160 evaluations are finite and every stored CT contribution remains exactly zero.
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,right,right,auto,auto,),
+    table.header([sector], [exact Arb p envelope], [total-weight magnitude range], [JSON SHA-256], [verdict],),
+    table.hline(),
+    [e9/e10 soft, rank 3], [`[-4.933e-3, 2.083e-3]`], [`1.1857e-42 .. 1.6585e-41`], [`222ce67fba212704815129dce908e974b1005d29b310551fe1684d4212cabee1`], [bounded plateau],
+    [e12/e13 soft, rank 3], [`[-4.933e-3, 2.083e-3]`], [`1.1857e-42 .. 1.6585e-41`], [`80483dd5ae1db8fdcc4b3368a57e90ee2577a4ef0adf6b7396d6758ffe9681f8`], [bounded plateau],
+    [independent double soft, rank 6], [`[-8.971e-4, 2.467e-3]`], [`2.3173e-41 .. 2.4392e-41`], [`b7a19469d10cc22413bfa6df0d6d39c9a5d917d1aa3340187dd5ae5cee214be9`], [bounded plateau],
+    [common e7/e8 soft, rank 3], [`[-1.860e-3, 1.893e-3]`], [`2.5992e-42 .. 2.7513e-42`], [`bf1a97da8a747fab16bb9d4b8bdd129209c690623a5fec2e8bcc546bf84d4df3`], [bounded plateau],
+    [alternate common e7/e8 soft, rank 3], [`[-1.198e-4, 1.195e-4]`], [`2.4344e-43 .. 2.4432e-43`], [`04ab263ca105886c1b47c7927a5325aa067cb8a3cebc3f7ebec855a7b4b65eff`], [bounded plateau],
+  )]
+  , kind: table
+  )
+
+The exact fits retain low `R²` (`0.493..0.499`) because all exponents are compatible with zero; neither signed branch grows toward its limit. The exact wrapper completed normally in `84.283544 s`, including shared-slot wait, with `86,360,064` bytes peak recursive RSS.
+
+== Tailored per-orientation UV profile
+<tailored-per-orientation-uv-profile>
+The final seeded-random profile used graph 0, LMB 0 `(2,4,7,9)`, masks 4, 8, 12, and 15, five scales `10^6..10^10`, and seed `70320260809`; no fixed `--uv-ray-*` option was used. These masks cover K2, K3, joint K2/K3, and the overall four-loop sector. For every mask, the sum and all 248 orientations have `finite_samples=5`, `positive_finite_samples=0`, and `missing_fit_is_vanishing=true`, under root `allow_vanishing_missing_fits=true`. All 996 audited series are therefore finite exact-vanishing profiles rather than missing or nonfinite fits. The UV JSON SHA-256 is `d25477faa60a59d54ddf6e608b8d461656fdba4e033b9cbf8be9aed5324e0354`; the guard completed normally in `133.274644 s` with `93,302,784` bytes peak recursive RSS.
+
+== Threshold-directive decision
+<threshold-directive-decision>
+No `threshold_counterterms` directive was added. The prerequisites for a cure are absent: there is no active association, no nonzero CT contribution, no smooth threshold-driven failure, and hence no common projected parent or one-loop/two-loop partition to validate. Threshold subtraction remains enabled in both the approaches and the integration. No threshold-only path is required for an unedited graph, and such a path could not satisfy the requirement of showing an active CT here.
+
+== Full-UV generation
+<full-uv-generation>
+The clean remediation direct-import generation produced five evaluators with full local plus integrated UV subtraction. The persisted generation summary reports `2.667900919 s` internal time, including Spenso `0.225846485 s`, Symbolica `0.578734105 s`, compile `0 s`, and `70,270,976` bytes peak internal RAM. The generation guard completed successfully in `11.182622 s`, peaked at `72,622,080` bytes recursive RSS, and observed at least `429,073,629,184` bytes free disk.
+
+== Guarded integration
+<guarded-integration>
+The integration uses `m_uv=91.188`, threshold subtraction enabled, summed orientations, graph/LMB Monte Carlo with OSE channel weights, three cores, one `z` rotation, and only the Double stability level. The guard sent `SIGINT` at 180 seconds; GammaLoop checkpointed iteration 777 and returned code 0 during grace.
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([metric], [value],),
+    table.hline(),
+    [`neval`], [`77,700`],
+    [runtime per sample per core], [`6.94 ms`],
+    [signed result `(re,im)`], [`(-1.0523954496770684e-10, 1.081912905681368e-27)`],
+    [signed error `(re,im)`], [`(5.1110365061709654e-11, 9.257563885128223e-28)`],
+    [signed relative errors], [`48.56574%` real, `85.56663%` imaginary],
+    [absolute result \`(], [re],
+    [absolute error \`(], [re],
+    [absolute relative errors], [`46.43398%` real, `43.99655%` imaginary],
+    [nonfinite / unstable-or-nonfinite], [`0% / 0%`],
+    [precision mix], [`100% f64`, `0% f128`, `0% Arb`],
+    [rough convergence], [#strong[yes];],
+    [guard outcome], [`timeout`, return code 0 after checkpoint grace],
+    [guard duration / peak RSS], [`212.201765 s / 105,082,880` bytes],
+    [minimum free disk], [`451,842,408,448` bytes],
+  )]
+  , kind: table
+  )
+
+== Max-weight replay
+<max-weight-replay>
+The persisted extrema are signed real positive `+1.3001174606853919e-8` and real negative `-3.8183903671382892e-6` in LMB channel 2, plus signed imaginary positive `+7.0266171428338770e-23` and imaginary negative `-5.0877947818059637e-24` in LMB channel 3. The real-negative and imaginary-positive entries are also the respective componentwise-absolute maxima.
+
+All four distinct stored coordinates are reproduced in the card\'s `inspect_max_weights` block. Their complete-graph re-evaluations are finite and f64-stable, with relative-accuracy estimates `1.47e-16`, `1.99e-16`, `0`, and `1.61e-16`; all 16 emitted cut-event CT weights are exactly zero. The cut massless-edge norms inferred from their emitted `d/d~` energies are at least `16.6415 GeV`, and the smallest energy-pair gap is `50.1770 GeV`, so none is near either required cut-soft family or the common `K2=0` locus. There is no active threshold distance to test. They are classified as generic adaptive points, not evidence of a missed IR or threshold direction. The replay guard completed in `0.789907 s`, peaked at `41,840,640` bytes RSS, and returned code 0.
+
+== Evidence map and conclusion
+<evidence-map-and-conclusion>
+- `guard/generate_full.log` and `.guard.json`: successful full-UV generation.
+- `guard/display.log`: 248 orientations, four cuts, and the complete inactive E-surface inventory.
+- the five approach JSON files and matching `.analysis.json` records: 500 finite points and strict classifications.
+- `guard/all_approaches_final.log` and `.guard.json`: the final complete five-path execution (`9.795309 s`, `84,668,416` bytes peak RSS).
+- `guard/integration.log`, `.guard.json`, and `integration_workspace/integration_result.json`: converged checkpoint and extrema.
+- `guard/inspect_max_weights.log` and `.guard.json`: stable extrema replay.
+- `result_record.json`: machine-readable final coordinator record.
+
+Final classification: #strong[no threshold or LMB edit; all explicit limits are exact bounded plateaus; the selected random per-orientation UV sectors pass; the byte-identical graph\'s full-UV integration converged.]

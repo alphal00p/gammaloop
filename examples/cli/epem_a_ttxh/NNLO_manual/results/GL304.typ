@@ -1,0 +1,286 @@
+= GL304 threshold/IR audit
+<gl304-thresholdir-audit>
+== Remediation outcome (2026-08-09, final)
+<remediation-outcome-2026-08-09-final>
+- #strong[Threshold structure edited:] yes. The retained candidate uses the shared one-loop `[4]` and `[9]` projections for all 18 active associations. Threshold subtraction remains enabled in generation, every accepted approach, UV profiling, and integration.
+- #strong[Generation basis edited:] yes. The original `(4,5,9,13)` basis was changed to the topology-valid `(4,9,12,13)` basis, making both gluon momenta explicit. The exact coordinate transformation is `(K0,K1,K2,K3) -> (A,C,Q,D) = (K0,K2,K0+K3-K1,K3)`, with inverse `K1=A+D-Q`. Every retained midpoint and axis uses the transformed coordinates.
+- #strong[q12 remediation:] complete. Exact Arb resolves all three cancellation-limited q12 totals. The generic path needs the reduced `1e-8..1e-4` asymptotic range; the two threshold intersections pass on the standard `1e-6..1e-2` range.
+- #strong[All limits OK:] no. The required q12 and q13 families and the combined double-soft family are IR safe, and all edited associations have bounded IR-away threshold crossings. The generic and two isolated double-soft f64 totals remain cancellation-inconclusive, and the mandatory selected UV masks 4, 8, and 12 abort projected-root validation even in Arb.
+- #strong[Converged:] no. The final-state integration saved one 100-sample iteration, then stopped on an E49 overlap-center failure. Its componentwise-absolute real relative error is `96.6421%`, above the campaign\'s `75%` ceiling.
+
+=== Accepted structure and generation
+<accepted-structure-and-generation>
+At `D=q13=0`, E7/E8/E47 share the same massive motion along edge 4 and E32/E49/E54 share it along edge 9. The same directions apply at `Q=q12=0`. The accepted directive therefore uses parent `[4,9,12,13]`, subspace `[4]` for every E7/E8/E47 association, and subspace `[9]` for every E32/E49/E54 association.
+
+The final display audit confirms 580 orientations, ten process-valid cuts, 33 evaluators, and every directive shown below. The six IR-away surface probes exercise every listed association copy without a skipped CT component.
+
+The complete active mapping is:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,auto,auto,),
+    table.header([cut], [projected `[4]` thresholds], [projected `[9]` thresholds],),
+    table.hline(),
+    [`(2,11,14)`], [E7, E8], [E54, E32],
+    [`(2,9,12,14)`], [E7, E8], [---],
+    [`(2,7,11,13)`], [---], [E54, E32],
+    [`(2,6,13,14)`], [---], [E32, E49],
+    [`(2,6,7)`], [---], [E54, E32, E49],
+    [`(2,4,11,12)`], [E8, E47], [---],
+    [`(2,4,9)`], [E7, E8, E47], [---],
+  )]
+  , kind: table
+  )
+
+Full local and integrated-UV generation completed normally with all #strong[33] evaluators retained, matching the pristine inventory. Internal generation time was `38.792997342 s`, internal peak RAM was `186,568,704` bytes, and compile time was zero. The guard completed in `39.626414 s`, with peak recursive RSS `188,514,304` bytes and minimum free disk `446,596,644,864` bytes.
+
+=== Final-state IR evidence
+<final-state-ir-evidence>
+All entries use the unrestricted graph sum, 50 logarithmic points on each signed branch, a skipped midpoint, and three cores. Fits use the nearest 8, 12, and 16 points on each branch. The reduced-range row is the same affine q12 geometry evaluated deeper in its asymptotic region; no complement or threshold structure changes between the two Arb runs.
+
+#figure(
+  align(center)[#table(
+    columns: 6,
+    align: (auto,auto,right,right,right,auto,),
+    table.header([path], [precision], [rank], [total p envelope], [min R2], [result],),
+    table.hline(),
+    [q13 generic], [f64], [3], [`[1.999729,2.000113]`], [1.000000], [pass],
+    [q12 generic], [f64], [3], [`[2.122960,2.466451]`], [0.982386], [inconclusive; CT aggregate `[2.132935,2.484854]`],
+    [q12 generic], [Arb, `1e-6..1e-2`], [3], [`[2.127648,2.459101]`], [0.982390], [safe power; widest-window curvature],
+    [q12 generic], [Arb, `1e-8..1e-4`], [3], [`[2.001132,2.004990]`], [0.999999], [#strong[pass];],
+    [generic double soft], [f64], [6], [`[6.581421,7.609730]`], [0.912530], [cancellation inconclusive; CT aggregate `[3.999975,3.999990]`],
+    [q13 + E7/E8], [f64], [3], [`[1.999624,2.000050]`], [1.000000], [pass],
+    [q13 + E49/E54], [f64], [3], [`[1.995931,2.000033]`], [0.999989], [pass],
+    [q13 + both families], [f64], [3], [`[1.994820,2.008756]`], [0.999966], [pass],
+    [q12 + E32/E54], [f64], [3], [`[3.065432,5.717473]`], [0.728287], [cancellation inconclusive; CT aggregate `[1.999973,2.000034]`],
+    [q12 + E32/E54], [Arb], [3], [`[2.000002,2.000374]`], [1.000000], [#strong[pass];],
+    [q12 + E7/E47], [f64], [3], [`[1.997374,1.999763]`], [0.999999], [pass],
+    [q12 + both families], [f64], [3], [`[1.883289,2.520256]`], [0.786575], [cancellation inconclusive; CT aggregate `[2.000000,2.000035]`],
+    [q12 + both families], [Arb], [3], [`[1.999999,2.000034]`], [1.000000], [#strong[pass];],
+    [double + E7/E8/E47], [f64], [6], [`[6.346713,7.983609]`], [0.758741], [cancellation inconclusive; CT aggregate `[3.999894,4.000015]`],
+    [double + E32/E54/E49], [f64], [6], [`[6.160932,7.730927]`], [0.791875], [cancellation inconclusive; CT aggregate `[3.999975,4.000056]`],
+    [double + both families], [f64], [6], [`[6.932136,7.740352]`], [0.930830], [cancellation inconclusive; CT aggregate `[3.999965,4.000056]`],
+    [double + both families], [Arb], [6], [`[3.999965,4.000056]`], [1.000000], [#strong[pass];],
+  )]
+  , kind: table
+  )
+
+The old E49/E54 and E7/E47 points placed the projected common momentum at an exact zero and reproduced the center/radial-root refusal. They were not treated as evidence against the directive. Analytically on-shell replacements use `Q=(0,0,200)` with `C=(332.71008400708274,0,0)` for E49/E54, and `D=(0,0,200)` with `A=(332.71008400708274,0,0)` for E7/E47. Moving the hard center and soft coordinate independently makes both target distances non-tangent; both paths then evaluate and pass. The simultaneous-family replacements use those same hard centers, with `|A-Q|` or `|C| = 469.117256131130` where required.
+
+=== IR-away threshold-only association audit
+<ir-away-threshold-only-association-audit>
+The common hard values are `Q=(80,-50,40)` and `D=(31,-47,59)`, with norms `102.469508` and `81.553663`. Each midpoint lies only on the named E-surface; the nearest other edited E-surface is at least `33.0984` energy units away. The axis varies A for the `[4]` family and C for the `[9]` family. The listed coefficient is the nonzero radial derivative of the target eta, so the target distance is linear in `|lambda|`.
+
+#figure(
+  align(center)[#table(
+    columns: 6,
+    align: (auto,right,auto,right,right,auto,),
+    table.header([surface], [active association copies], [varied coordinate], [eta coefficient], [total p envelope], [result],),
+    table.hline(),
+    [E7], [3], [Ax], [`1.838416`], [`[-1.0419e-7,1.0424e-7]`], [bounded plateau],
+    [E8], [4], [Ax], [`1.876469`], [`[-1.0691e-7,1.0707e-7]`], [bounded plateau],
+    [E47], [2], [Ax], [`1.808046`], [`[-9.6279e-8,9.6472e-8]`], [bounded plateau],
+    [E32], [4], [Cx], [`1.876469`], [`[-1.0751e-7,1.0752e-7]`], [bounded plateau],
+    [E49], [2], [Cx], [`1.808046`], [`[-1.0830e-7,1.0830e-7]`], [bounded plateau],
+    [E54], [3], [Cx], [`1.829149`], [`[-1.0732e-7,1.0733e-7]`], [bounded plateau],
+  )]
+  , kind: table
+  )
+
+Every file contains 100/100 finite evaluated points, no NaN, and a nonzero CT sum at every point. Across the six files, all 31,200 serialized CT component entries have `occurrence_count=1`, `skipped_count=0`, and nonzero weight. The generic fitter reports low R2 because these data are constant to f64 precision; their powers are seven orders of magnitude inside the threshold-only `p <= 0.25` boundedness criterion.
+
+=== Final selected UV audit
+<final-selected-uv-audit>
+The final seeded-random profile uses graph/LMB `0/0`, seed `30420260809`, five points at scales `1e6..1e10`, every orientation, and only the physically relevant masks 4 (`Q=q12`), 8 (`D=q13`), 12 (independent double soft), and 15 (overall). Fixed-ray arguments are absent, and each mask has a separate output directory and guard.
+
+- Mask 4 failed at cut group 2, left projected E-surface instance 0. It failed in f64 over both `1e4..1e8` and `1e6..1e10`, then reproduced after the final Arb stability level on the identical seed and selector.
+- Mask 8 failed at cut group 2, left projected E-surface instance 1 in both f64 and Arb over `1e6..1e10`.
+- Mask 12 failed on that same instance in both f64 and Arb.
+- Mask 15 completed in `187.887350 s`, with peak recursive RSS `551,395,328` bytes and minimum free disk `428,421,808,128` bytes. Its 580 orientation entries and summed entry each contain five finite zero samples, zero positive samples, and `missing_fit_is_vanishing=true`. There is no bad or unclassified serialized entry.
+
+The three failed masks produced no JSON and contribute zero UV coverage; their process-invalid diagnostics are recorded only as root blockers. Mask 15\'s JSON SHA-256 is `c9a1c76ce02281f4f4391229d9a5dbe6e88694bedfb230f889e3db3d137033b6`. The superseded exhaustive 33-point run also produced no JSON before its timeout.
+
+The runtime blocker does not justify a speculative GL638 partition. A smooth duplicate variant is still center/root evaluated before a nonzero multiplier can suppress it, so it retains the failing projected instance. An exact piecewise selector is not represented by the tested directive machinery. Reverting to the full-dimensional CT loses the demonstrated IR cure, while an epsilon regulator, late exact-zero gate, or disabled association is forbidden. The shared projections are therefore retained as the best scientific state, with their generic-root limitation explicit.
+
+=== Final-candidate integration
+<final-candidate-integration>
+The accepted full-UV state was integrated with three cores, summed orientations, Monte Carlo graph/LMB sampling with OSE weights, one z rotation, and one Double stability level. Iteration 1 completed with 100 samples at `74.9 ms/sample/core`; the next iteration stopped on cut group 1\'s right subspace because E49 `(3,6,12,13)` had no overlap center. The checkpoint is a diagnostic, not a converged integral.
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,right,right,),
+    table.header([metric], [real], [imaginary],),
+    table.hline(),
+    [signed central value], [`-7.076413092740338e-2`], [`2.1672179297255485e-4`],
+    [signed error], [`7.339501315307652e-2`], [`6.790701219981792e-4`],
+    [signed relative error], [`103.7178%`], [`313.3373%`],
+    [componentwise-absolute central value], [`7.589164639137916e-2`], [`9.486678159057399e-4`],
+    [componentwise-absolute error], [`7.334324918168891e-2`], [`6.726961021511481e-4`],
+    [componentwise-absolute relative error], [`96.6421%`], [`70.9096%`],
+  )]
+  , kind: table
+  )
+
+All 100 retained evaluations used f64; `nan_percentage=0` and `nan_or_unstable_percentage=0`. The guard duration was `152.610942 s`, mostly shared-slot wait, with peak recursive RSS `713,928,704` bytes and minimum free disk `428,502,417,408` bytes. The integration JSON SHA-256 is `04cbbfa5ddd3acb7682354f54e2969d333c373ed0b730761c0a5313906838844`.
+
+Final signed extrema are `re+=0.2553779064846239`, `re-=-7.332471235733586`, `im+=0.05696763254531863`, and `im-=-0.036382387712434204`; the absolute-real maximum is `7.332471235733586`. Their exact LMB channels and 12 coordinates are preserved in `integration_result.json`. The root abort made this checkpoint decisive, so the extrema were not replayed and no IR/threshold-locus claim is attached.
+
+=== Reproducibility hashes
+<reproducibility-hashes>
+- retained DOT: `b04a2ac6f9fd53f4c51f81ef0d74cbdf0b282fddb43d3f2171bc217c6006c7b7`;
+- final card: `68bf8d23403ff9b4aecbc2608914637c775f46181b44c0e142a5549aa7559b32`;
+- pinned CLI: `0f8ed2c842814995bdcad19b3bc2a406eb75cb4a1784a74aa3c3de6b0e9d2b1b`;
+- generation summary: `2c860f92cfc1f695be5b6893f9f2ef7b144e6079bc0c6f2993a0375067b89713`;
+- reduced q12 Arb: `760916f63476c9cffbf22bfe1b502e59e9b203d87ab78a1c8f02d0f854fb971a`;
+- q12/E32-E54 Arb: `82ea37d312e2dcc546d8e0a533edb8f4826c79bb35fe964f5fe5ae3caba4a435`;
+- q12/both Arb: `52f0280bf9692dd872d8a46b769fc0383532c8bc17b42d83bed21440faef1e16`.
+
+=== Final conclusion
+<final-conclusion>
+The shared `[4]`/`[9]` prescription cures every q12 and q13 intersection tested, and its 18 associations pass their IR-away surface checks. It is nevertheless not a globally executable cure: generic seeded UV rays for masks 4, 8, and 12 fail projected-root construction even in Arb, and ordinary integration reaches the corresponding E49 overlap-center blocker. The current multiplier machinery cannot exactly gate that projected instance away from the soft region, so the IR-supported candidate is retained without claiming convergence. Final fields are `threshold struct. edited? = yes`, `converged? = no`, and `all limits OK? = no`.
+
+The remediation result above supersedes the pristine-structure conclusion retained below for provenance.
+
+#quote(block: true)[
+Everything below this point is the superseded pristine-structure baseline. Its directives, hashes, fit classifications, and convergence fields are historical provenance and are not final GL304 results.
+]
+
+== Superseded baseline provenance and generation
+<superseded-baseline-provenance-and-generation>
+- Raw diagnostic DOT SHA-256: `74bb7519ca37e15a17b9be8321b876aa781301a659c837d077e4bed32416800a`.
+- Clean committed DOT SHA-256: `694cae48ffd17a10f5d9004b790acace656c893ec2bede26902a8a1de71366f5`.
+- Final run-card SHA-256: `48282654cecc6190562eb8d321bed9422dd9a0b3386f7a4541dcbe63cef768e7`.
+- Pinned CLI SHA-256: `fc9d20e0ffbca1b334ab57908b29aeea34ecda68f5c3a76664d8ca4f8536256c`.
+- Full local and integrated UV generation succeeded; no local-only fallback was used. `generation_summary.json` reports `stats.total_time = 29.464122041 s`, 33 evaluators, 4 generation cores, 441,630,720 bytes peak RAM, and zero compilation time.
+- The exact accepted process specification retained all 580 orientations and all ten process-valid cuts. No cut, orientation pattern, runtime orientation filter, or orientation ID appears in the card.
+
+The valid cuts and their generated active associations are:
+
+#figure(
+  align(center)[#table(
+    columns: 4,
+    align: (right,auto,auto,auto,),
+    table.header([cut], [edges], [left thresholds], [right thresholds],),
+    table.hline(),
+    [0], [`(2,11,14)`], [E7, E8], [E54, E32],
+    [1], [`(2,9,12,14)`], [E7, E8], [none],
+    [2], [`(2,7,11,13)`], [none], [E54, E32],
+    [3], [`(2,7,9,12,13)`], [none], [none],
+    [4], [`(2,6,13,14)`], [none], [E32, E49],
+    [5], [`(2,6,7)`], [none], [E54, E32, E49],
+    [6], [`(2,4,11,12)`], [E8, E47], [none],
+    [7], [`(2,4,9)`], [E7, E8, E47], [none],
+    [8], [`(2,4,6,12,13)`], [none], [none],
+    [9], [`(2,3,5,12,13)`], [none], [none],
+  )]
+  , kind: table
+  )
+
+The complete generated surface inventory is E7 `(5,13,14)`, E8 `(5,7)`, E15 `(2,6,13,14)`, E16 `(2,6,7)`, E21 `(3,4,6,13,14)`, E23 `(3,4,6,7)`, E32 `(3,9)`, E33 `(4,5,6,9)`, E34 `(5,6,9,12,14)`, E35 `(4,5,9,11,13)`, E36 `(2,4,9)`, E37 `(2,9,12,14)`, E40 `(5,6,11,14)`, E41 `(2,11,14)`, E43 `(3,4,11,14)`, E46 `(2,3,5,12,13)`, E47 `(4,5,12,13)`, E49 `(3,6,12,13)`, E50 `(2,4,6,12,13)`, E54 `(3,11,12)`, E55 `(4,5,6,11,12)`, E56 `(2,4,11,12)`, E61 `(2,7,9,12,13)`, E62 `(2,7,11,13)`, E64 `(3,4,7,11,13)`, and E70 `(3,6,7,12,14)`. Only E7/E8/E32/E47/E49/E54 are active in process-valid cuts.
+
+== Routing and IR map
+<routing-and-ir-map>
+GL304 has four loops, two gluon propagators, and no `V_36` or `V_37`. The raw diagnostic routing gives, spatially,
+
+```text
+e2  = K0-K2                 H
+e3  = K2                    t
+e4  = K0                    t, lmb_id 0
+e5  = K1                    t, lmb_id 1
+e6  = -K0+K1+K2             t
+e7  = K1                    t
+e9  = K2                    t, lmb_id 2
+e11 = -K0-K3+K1+K2          t
+e12 = K0+K3-K1              g
+e13 = K3                    g, lmb_id 3
+e14 = K1-K3                 t
+```
+
+Thus `q13=K3` and `q12=K0+K3-K1` are independent rank-3 soft constraints and their common locus has rank 6. The two gluons do not meet in a triple-gluon or gluon-splitting vertex, so there is no process-valid hard-collinear pair to add for this non-V36 graph.
+
+At `q13=0`, E7/E8 and E49/E54 coalesce. At `q12=0`, E32/E54 and E7/E47 coalesce. At double soft, E7/E8/E47 share one threshold equation and E32/E54/E49 share another; both equations can vanish simultaneously. With `Et(k)=sqrt(|k|^2+173^2)`, the checked equations were
+
+```text
+eta7  = Et(K1) + |K3| + Et(K1-K3) - 1000
+eta8  = 2 Et(K1) - 1000
+eta49 = Et(K2) + Et(-K0+K1+K2) + |q12| + |K3| - 1000
+eta54 = Et(K2) + Et(-K0-K3+K1+K2) + |q12| - 1000
+eta32 = 2 Et(K2) - 1000
+eta47 = Et(K0) + Et(K1) + |q12| + |K3| - 1000
+```
+
+All fitted target distances have slope between `0.999999983` and `1.000005138` across both signed branches and all 8/12/16-point windows.
+
+== Explicit all-orientation evidence
+<explicit-all-orientation-evidence>
+Every completed block used the complete graph sum, 50 logarithmic points per signed branch, `1e-6 <= |lambda| <= 1e-2`, skipped midpoint, and three cores. Coordinates are `(K0;K1;K2;K3)`. Threshold counterterms are nonzero on every completed threshold-on path.
+
+#figure(
+  align(center)[#table(
+    columns: 6,
+    align: (auto,auto,auto,right,right,auto,),
+    table.header([path (rank)], [midpoint], [axis], [p envelope], [min R2], [formal result],),
+    table.hline(),
+    [e13 soft (3)], [`(37,126,-109;74,-52,137;-91,64,83;0,0,0)`], [`(0;0;0;211,-157,193)`], [`[3.7940,4.7273]`], [0.947007], [inconclusive],
+    [e12 soft (3)], [`(37,126,-109;74,-52,137;-91,64,83;37,-178,246)`], [`(0;0;0;211,-157,193)`], [`[2.999965,3.000046]`], [1.000000], [inconclusive (margin)],
+    [double soft (6)], [`(37,126,-109;37,126,-109;74,-52,137;0,0,0)`], [`(98,-86,342;0;0;211,-157,193)`], [`[4.9986,5.1967]`], [0.981795], [inconclusive],
+    [e13 + E7/E8 (3)], [`(37,126,-109;0,0,469.117256;-91,64,83;0,0,0)`], [`(0;0,0,23;0;211,-157,193)`], [`[4.009934,4.290365]`], [0.996374], [#strong[fail];],
+    [same exact path, threshold off], [same], [same], [`[2.559003,4.774444]`], [0.833988], [diagnostic inconclusive; no cure],
+    [e12 + E32/E54 (3)], [`(-37,178,-246;37,126,-109;0,0,469.117256;74,-52,137)`], [`(211,-157,193;0;0,0,23;0)`], [`[2.999998,3.000006]`], [1.000000], [inconclusive (margin)],
+    [double + E7/E8/E47 (6)], [`(0,0,469.117256;0,0,469.117256;-91,64,83;0,0,0)`], [`(98,-86,342;0,0,23;0;211,-157,193)`], [`[4.9897,6.1944]`], [0.839743], [inconclusive],
+    [double + E32/E54/E49 (6)], [`(37,126,-109;37,126,-109;0,0,469.117256;0,0,0)`], [`(98,-86,342;0;0,0,23;211,-157,193)`], [`[5.2908,6.6943]`], [0.746220], [inconclusive],
+    [double + both families (6)], [`(0,0,469.117256;0,0,469.117256;0,469.117256,0;0,0,0)`], [`(98,-86,342;0,0,23;0,29,0;211,-157,193)`], [`[5.6815,6.8958]`], [0.953491], [inconclusive],
+  )]
+  , kind: table
+  )
+
+Four required correlated blocks remain explicit but incomplete because current GammaLoop aborts before emitting JSON:
+
+- e13 + E49/E54 and e13 + both families: final-f64 validation rejects cut group 0, right overlap group 0, E-surface 0;
+- e12 + E7/E47 and e12 + both families: final-f64 validation rejects cut group 1, right overlap group 0, E-surface 0.
+
+Each reports `threshold-counterterm evaluation remained invalid ... failed center or radial-root validation in probe rotation Identity`. The first `all_approaches` invocation stopped at the e13/E49-E54 blocker; all later blocks were therefore invoked individually under the guard so no missing path was mistaken for completed evidence. The initial 11-component typo in the combined-double card was corrected before its successful run and is not scientific evidence.
+
+The E7/E8 threshold-on path is a smooth, branch-consistent rank-3 failure, but the identical threshold-off diagnostic does not restore an integrable power or fit quality. It therefore fails the explicit Arb authorization gate. No Arb run was made, and threshold-off is not accepted as a cure.
+
+== Directive decision
+<directive-decision>
+No `threshold_counterterms` directive is accepted. The only formal failure is not materially cured by disabling threshold subtraction, while four other mandatory intersections do not yield evaluable f64 evidence. Guessing a projected parent or variants would therefore violate the evidence contract. Threshold subtraction remains enabled. Because the DOT is unedited, no threshold-only post-edit validation is required.
+
+== Integration
+<integration>
+The original `m_uv=91.188` variant was integrated with three cores, summed orientations, Monte Carlo graph/LMB sampling with OSE channel weights, one `z` rotation, and the single Double stability level. The guard sent `SIGINT` at 180 seconds; GammaLoop checkpointed and returned code 0, and no descendant survived. Wrapper duration including checkpoint grace was `212.509950 s`, peak tree RSS was `1,841,053,696` bytes, and minimum observed free disk was `129,750,773,760` bytes.
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,right,right,),
+    table.header([metric], [real], [imaginary],),
+    table.hline(),
+    [signed central value], [`-2.995942226738755e-3`], [`-4.100981360914127e-19`],
+    [signed error], [`4.405722750158919e-3`], [`3.585378086668807e-19`],
+    [signed relative error], [`147.06%`], [`87.43%`],
+    [componentwise-absolute central value], [`9.855154922912163e-3`], [`5.094101923247295e-19`],
+    [componentwise-absolute error], [`4.405160668494100e-3`], [`3.585306538023390e-19`],
+    [componentwise-absolute relative error], [`44.6991%`], [`70.3815%`],
+  )]
+  , kind: table
+  )
+
+- `neval = 17,800`; runtime is `30.3ms/sample/core` verbatim from the final completed integration-log status.
+- `f64=100%`, `f128=0%`, `Arb=0%`; `nan_percentage=0.0%`, while the retained finite-Double unstable-plus-nonfinite statistic is `0.0337079%`.
+- `converged? = yes`: the checkpoint is finite, has no nonfinite samples, and both nonzero componentwise-absolute relative errors are at most 75%. Signed relative errors are reported but do not determine convergence.
+
+Persisted extrema are:
+
+- signed real `+45.47578477792955` at LMB channel 2, `x=(0.3916549183,0.0259809818,0.9226959763,0.2779636222,0.9356045897,0.1035226412,0.0394494530,0.8037863312,0.0356052603,0.3298039795,0.0444296078,0.7368724889)`;
+- signed real `-47.39977898277602`, signed imaginary `-6.214412858791416e-15`, absolute real `+47.39977898277602`, and absolute imaginary `+6.214412858791416e-15` at LMB channel 2, `x=(0.1374282898,0.5273101107,0.6997001537,0.1680426390,0.1531375640,0.7061181244,0.2013245474,0.3712314164,0.6899169938,0.2135944864,0.4532390527,0.3936021249)`;
+- signed imaginary `+4.578280552609670e-16` at LMB channel 8, `x=(0.2136566791,0.4241599762,0.0621774708,0.2949579170,0.3468211605,0.4001618187,0.0572885477,0.9072393811,0.0525734608,0.0843020186,0.0519126096,0.0579721005)`.
+
+The coordinator freeze followed creation of `result_record.json`, so these extrema were not replayed with `inspect`. Their `q12/q13` norms and threshold distances remain explicitly unclassified; no generic/IR/threshold-locus claim is made.
+
+== Superseded baseline conclusion
+<superseded-baseline-conclusion>
+GL304 remains unresolved and needs further runtime/precision work before any directive can be supported. The exact E7/E8 intersection formally fails, threshold-off does not cure it, and four other required intersections are blocked by threshold-counterterm radial validation. No graph directive was guessed. The full-UV integration nonetheless meets the prescribed absolute-error convergence rule. Final fields are `threshold struct. edited? = no`, `converged? = yes`, and `all limits OK? = no`.

@@ -1,0 +1,188 @@
+= GL290
+<gl290>
+== Outcome
+<outcome>
+GL290 now carries an accepted cut-local threshold prescription. On cut `[2,4,9]`, all four active thresholds E32, E48, E64, and E41 use one `shared_1l` counterterm on `subspace = [5]`. The parent is explicitly `[2,4,5,11]`, preserving the signed cycles previously selected by generation. Threshold subtraction remains enabled.
+
+This is a causal cure of the previously smooth correlated-q13 failure:
+
+- pristine, threshold subtraction on (Arb): `p = 4.999998808`--`5.000000690`;
+- pristine, threshold subtraction off (Arb): `p = 1.000001248`--`1.000007542`;
+- final four-threshold prescription, subtraction on (Arb): `p = 1.999996600`--`1.999999155`.
+
+All six final Arb fits have R2 at least `0.9999999999997411`. Thus the bad power is introduced by the pristine threshold terms and removed by the cut-coherent projection without disabling subtraction. No completed broad path is a new clean failure. Several broad f64 fits remain formally inconclusive because of cancellations, so this report does not upgrade the whole broad suite to formal passes.
+
+== Reproducibility
+<reproducibility>
+- Remediation lease: epoch `1786288961`--`1786294361`.
+- Release GammaLoop CLI SHA-256: `0f8ed2c842814995bdcad19b3bc2a406eb75cb4a1784a74aa3c3de6b0e9d2b1b`.
+- Final DOT SHA-256: `df595a47262816c416908f7c011494c1b0450b1bf810099174375b4fc8a9c70d`.
+- Final run-card SHA-256: `319d9a3ba1755af461484ec8367454023d2cbc7132607409a50215620ef81a75`.
+- Pristine DOT SHA-256: `ef702955a2a016c80b59b95cbc921770335504697a9a8857559fb4dac1564756`.
+- Pristine Arb on/off approach SHA-256: `cbc16b6a605c6d64d8d39ce4a10e765ef552dd169233d6f77e2f9509006ab314` and `37ca62fe41aa82777ba18086b183a71b684860c7ae9b38280d64690cbfc3a8fd`.
+- Final Arb approach SHA-256: `83aadf328bfb9cef64a2a36d2089f6fa52d907c5edc1e0d9ac53816f838c594a`.
+
+All remediation commands ran through `scripts/run_guarded.py` with three Rayon threads, a 15 GiB recursive-RSS cap, 12 GiB minimum free disk, and 6 GiB host-memory reserve. Diagnostic states were preserved rather than reused as the final state:
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,auto,),
+    table.header([state], [purpose],),
+    table.hline(),
+    [`state_GL290_pristine_adaptive_confirmed`], [pristine Arb on/off discriminator],
+    [`state_GL290_cut7_component_tags`], [component attribution],
+    [`state_GL290_cut7_E41_E64_shared5_rejected`], [rejected partial prescription],
+    [`state_GL290`], [accepted four-threshold prescription],
+  )]
+  , kind: table
+  )
+
+== Topology and generated structure
+<topology-and-generated-structure>
+The LMB is `(e4,e5,e11,e12) = (K0,K1,K2,K3)`. At the single `V_36` triple-gluon vertex,
+
+```text
+q12 = K3
+q13 = K2 - K1
+q14 = K1 - K2 - K3 = -(q12 + q13).
+```
+
+Any two soft momenta therefore force the third soft. A single-soft constraint has rank 3, the independent double-soft constraint rank 6, and an independent hard-collinear transverse relation rank 2.
+
+Final full local-plus-integrated UV generation retains 440 orientations, ten process-valid cuts, and 25 evaluators. The active threshold surfaces are:
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (right,auto,),
+    table.header([cut], [side and surfaces],),
+    table.hline(),
+    [`[2,6,11,13]`], [right: E45=`[3,11,13,14]`, E51=`[3,11,12]`, E38=`[3,9]`],
+    [`[2,6,7]`], [right: E51=`[3,11,12]`, E38=`[3,9]`, E29=`[3,7,14]`, E59=`[3,7,12,13]`],
+    [`[2,4,11,12]`], [left: E48=`[5,11,13]`, E66=`[5,11,12,14]`, E32=`[5,7]`],
+    [`[2,4,9]`], [left: E32=`[5,7]`, E48=`[5,11,13]`, E64=`[5,9,14]`, E41=`[5,9,12,13]`],
+  )]
+  , kind: table
+  )
+
+The other six cuts have no active threshold side. Every final cut-7 directive is active and resolves exactly to subspace `[5]` in common parent `[2,4,5,11]`; generation does not silently discard or expand one of them.
+
+== Cause and prescription search
+<cause-and-prescription-search>
+The pristine adaptive f64 and Arb runs both gave a smooth `p=5` on the correlated q13-soft bridge. The exact Arb branch/window values were
+
+```text
+subtraction on, negative: 5.000000334, 5.000000476, 5.000000690
+subtraction on, positive: 4.999999422, 4.999999177, 4.999998808
+subtraction off, negative: 1.000003656, 1.000005205, 1.000007542
+subtraction off, positive: 1.000001248, 1.000001777, 1.000002575
+```
+
+The threshold-off minimum R2 is `0.9999999999949039`. The on/off comparison isolates the threshold layer rather than the bare graph as the source.
+
+Tagged cut-7 components then showed smooth `p=5` behavior in both E41 and E64. Their generated pristine subspaces were `[5,11]` in parent `[2,4,5,11]`. Projecting only those two thresholds to `[5]` was rejected: their components became negligible, but untouched same-cut E32 and E48 continued to supply the total `p=5`. For example, at `lambda=-1e-6`, E32 and E48 contribute `-4.347446e-8` and `-1.187005e-9`, while the projected E41/E64 terms are of order `1e-14`; the total is `-4.466147e-8`. This rejected approach has SHA-256 `80432966450b0a7886227af7b1fa8ce3f04bc38ed3c461f39ee7dc026c1fd065`.
+
+The evidence requires a coherent same-cut change, not isolated treatment of only the two initially tagged surfaces. The accepted DOT therefore assigns the same one-loop projection to E32, E48, E64, and E41. In the final Arb run:
+
+```text
+negative windows 4/6/8: 1.999998352, 1.999997653, 1.999996600
+positive windows 4/6/8: 1.999999155, 1.999998797, 1.999998256
+```
+
+The f64 tail is cancellation-noisy, but Arb resolves it decisively. This is the strategy advocated for a family of threshold terms sharing the same one-loop soft cancellation: retain subtraction while relocating the family to the common one-loop subspace.
+
+== Broad IR regression
+<broad-ir-regression>
+The final f64 regression used closest-point windows 8/12/16. All 1,200 evaluations were finite and no runtime path failed. The table records the complete exponent envelope and minimum R2; `r` is the target codimension.
+
+#figure(
+  align(center)[#table(
+    columns: 5,
+    align: (auto,right,right,right,auto,),
+    table.header([limit], [r], [exponent envelope], [minimum R2], [result],),
+    table.hline(),
+    [soft e12], [3], [`2.631632`--`5.279852`], [0.772861], [inconclusive],
+    [soft e13], [3], [`2.141754`--`2.730020`], [0.923673], [inconclusive],
+    [soft e14], [3], [`3.589469`--`5.024002`], [0.621744], [inconclusive],
+    [double soft], [6], [`6.435592`--`7.373089`], [0.899098], [inconclusive],
+    [collinear e12/e13], [2], [`3.486454`--`6.092256`], [0.657357], [inconclusive],
+    [collinear e12/e14], [2], [`-6.233571`--`1.357073`], [0.000131], [inconclusive],
+    [collinear e13/e14], [2], [`2.171224`--`13.908771`], [0.032115], [inconclusive],
+    [correlated e12 bridge], [3], [`3.683853`--`4.792149`], [0.826750], [inconclusive],
+    [correlated e12/E51-E38], [3], [`3.483535`--`4.898474`], [0.761614], [inconclusive],
+    [correlated e13 main], [3], [`3.304075`--`13.742659`], [0.270103], [f64 inconclusive; Arb pass above],
+    [correlated e13/E48-E32], [3], [`1.910422`--`3.429954`], [0.835931], [inconclusive],
+    [correlated e14 bridge], [3], [`1.501261`--`3.796534`], [0.547474], [inconclusive],
+  )]
+  , kind: table
+  )
+
+These erratic f64 slopes are not smooth counterexamples. They are retained as an explicit limitation: only the formerly decisive main bridge received the high-precision discriminator.
+
+== Threshold preservation
+<threshold-preservation>
+Four IR-away paths independently approach E32, E48, E64, and E41 with the final counterterms active. Each path completed 100 evaluations with no skips. Their totals are flat across the closest windows:
+
+#figure(
+  align(center)[#table(
+    columns: 2,
+    align: (auto,right,),
+    table.header([surface], [fitted exponent envelope],),
+    table.hline(),
+    [E32], [`-3.270361e-8`--`+3.270361e-8`],
+    [E48], [`-9.690367e-8`--`+9.690808e-8`],
+    [E64], [`-4.605200e-8`--`+4.605182e-8`],
+    [E41], [`-1.815292e-7`--`+1.815291e-7`],
+  )]
+  , kind: table
+  )
+
+The low R2 of an essentially constant series makes the generic slope fitter label these runs inconclusive, but the physical check passes: the threshold terms remain active and nonzero as each surface is approached. E32 and E48 are isolated from other distinct eta surfaces by large margins (at least `604.497` and `532.848`, respectively). E64/E41 necessarily coalesce with the physically identical E29/E59 surfaces, respectively; their soft momenta stay nonzero (`|q13|=176.918`). Thus this check does not obtain a false threshold signal from an IR limit.
+
+== UV generation and profiles
+<uv-generation-and-profiles>
+Full local-plus-integrated UV generation completed without fallback or compilation. Internal generation took `398.0862034 s` (Spenso `30.6119204 s`, Symbolica `330.9963064 s`, inferred expression construction `36.4780 s`). The guard took `402.3004 s`, with peak recursive RSS `4,903,272,448` bytes and minimum free disk `429,773,422,592` bytes. The generated C\# source, integrand, and generation-summary SHA-256 values are, respectively,
+
+```text
+a9bf2fca4071ffe2b72d55e73577440503ce81d2829c0023834b24d599da47c3
+1d49194c330c441ff7b8d90f40583e285dcc23c5708205578557fc662c853885
+cfc5263d86264223e1217938772dc2ecf3e92facdf7c8222f2bd71c26a78e2e1
+```
+
+Per-orientation UV results for graph 0, LMB 0 are:
+
+#figure(
+  align(center)[#table(
+    columns: 3,
+    align: (auto,auto,auto,),
+    table.header([subset], [ray/scales], [result],),
+    table.hline(),
+    [mask 2], [fixed, exponents 6--10], [440/440 entries have five finite samples; 240 fitted with maximum slope `-0.999990444`; 200 allowed vanishing fits. Four steep fits have R2 below 0.99, so slope-safe but fit-quality inconclusive.],
+    [mask 4], [fixed, exponents 6--10], [440/440 entries have five finite samples and zero positive samples; all 440 are permitted vanishing missing fits.],
+    [mask 6], [seeded random, exponents 4--8], [440/440 entries have five finite samples and zero positive samples; all 440 are permitted vanishing missing fits.],
+  )]
+  , kind: table
+  )
+
+The corresponding UV-profile SHA-256 values are `355a3732eb59b0cab9eaf1144d5a6ef497bb78a6364bca3cbf62bfceee42441f`, `3f5f6c2e5708264a095d770b7e40a5fb21371bcee616896fb1b3a11e50d1acd3`, and `af88d6befcea204c5cb31d0b1a4f72c2b71d29064f746bdd2847517d162c6683`. The random mask-6 run omits fixed-ray arguments and is the final independent two-loop UV certification. One earlier mask-4 attempt timed out while queued and produced no JSON; the guarded retry above completed. The lower-scale mask-2 retry and fixed-ray mask-6 diagnostic remain carded but were not run after the campaign science freeze.
+
+== Integration checkpoint and conclusion
+<integration-checkpoint-and-conclusion>
+The only integration is the preserved #strong[pristine-DOT] checkpoint; the final candidate was not reintegrated before the science freeze. It completed 4,200 samples with no nonfinite or retained unstable samples. Its signed central value and error are
+
+```text
+(1.7168265785e-5, -4.1824967692e-6) +/-
+(2.5597530867e-5,  1.5518643058e-5),
+```
+
+and its componentwise-absolute central value and error are
+
+```text
+(7.1029874867e-5, 3.7975385646e-5) +/-
+(2.5575422718e-5, 1.5507707838e-5).
+```
+
+The latter relative errors are 36.01% and 40.84%, and the last status reported `96.7 ms` per sample per core. This is a converged rough numerical diagnostic under the campaign\'s absolute-component criterion, but it is not evidence that the final edited integrand was integrated.
+
+#strong[Conclusion:] threshold structure edited #strong[yes];; threshold subtraction retained #strong[yes];; formerly decisive correlated-q13 failure cured #strong[yes];; final full UV generation and random per-orientation certification completed #strong[yes];. The broad f64 all-limit suite remains formally inconclusive, and the integration number remains a pristine checkpoint rather than a final-candidate rerun.
