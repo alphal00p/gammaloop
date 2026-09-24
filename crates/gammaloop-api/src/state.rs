@@ -1592,6 +1592,8 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
+// Version 9 combines the Symbolica 3 evaluator/CFF payloads with advanced sampling
+// and multiplier layouts. Earlier states must be regenerated.
 // Version 8 adds multiplier function-map metadata and on-shell energy inputs to
 // the positional bincode layouts. Older generated states must be regenerated.
 // Version 7 stores CFF coefficients using native Rational encoding.
@@ -1602,7 +1604,7 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 5 persists component-local generated-CFF ownership and prefactor
 // metadata. Older states use a previous positional bincode layout and must be
 // regenerated rather than decoded as the new expression type.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 8;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 9;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -5741,7 +5743,9 @@ rotation_axis = [{type = "x"}, {type = "y"}]
             &MomentumSpaceEvaluationInput {
                 loop_momenta: raw
                     .point
-                    .chunks_exact(3)
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
                     .map(|p| ThreeMomentum {
                         px: F(p[0]),
                         py: F(p[1]),

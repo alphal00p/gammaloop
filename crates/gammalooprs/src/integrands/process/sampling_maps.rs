@@ -3070,7 +3070,9 @@ impl<T: FloatLike> SamplingMapComponent<T> for SamplingMapKernel {
         }
         let loop_momenta = LoopMomenta(
             point
-                .chunks_exact(3)
+                .as_chunks::<3>()
+                .0
+                .iter()
                 .map(|components| {
                     ThreeMomentum::new(
                         F(components[0].clone()),

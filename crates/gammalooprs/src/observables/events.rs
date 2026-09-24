@@ -2,7 +2,7 @@ use super::clustering::ClusteringResult;
 use crate::momentum::{FourMomentum, Rotation};
 use crate::utils::{F, FloatLike, into_complex_ff64};
 use colored::Colorize;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeStruct};
 use smallvec::SmallVec;
 use spenso::algebra::complex::Complex;
 use std::collections::BTreeMap;
@@ -137,14 +137,31 @@ impl<T: FloatLike> GenericEventGroupList<T> {
     }
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Deserialize)]
 pub struct GenericAdditionalWeightInfo<T: FloatLike> {
     #[serde(with = "vectorize", bound(deserialize = "T: Deserialize<'de>"))]
     pub weights: BTreeMap<AdditionalWeightKey, Complex<F<T>>>,
     /// Detailed, addable threshold-counterterm decomposition. It is absent on the legacy path so
-    /// no-directive event serialization remains unchanged.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// no-directive human-readable event serialization remains unchanged.
+    #[serde(default)]
     pub threshold_counterterms: Option<GenericThresholdCountertermEventInfo<T>>,
+}
+
+impl<T: FloatLike> Serialize for GenericAdditionalWeightInfo<T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        // Positional formats require the None marker; only named fields can be omitted.
+        let include_thresholds =
+            !serializer.is_human_readable() || self.threshold_counterterms.is_some();
+        let mut fields = serializer.serialize_struct(
+            "GenericAdditionalWeightInfo",
+            1 + usize::from(include_thresholds),
+        )?;
+        fields.serialize_field("weights", &self.weights.iter().collect::<Vec<_>>())?;
+        if include_thresholds {
+            fields.serialize_field("threshold_counterterms", &self.threshold_counterterms)?;
+        }
+        fields.end()
+    }
 }
 
 impl<T: FloatLike> GenericAdditionalWeightInfo<T> {
@@ -184,7 +201,7 @@ impl<T: FloatLike> GenericAdditionalWeightInfo<T> {
 
 /// Runtime provenance distinguishing repeated uses of one static expanded component.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(remote = "Self", tag = "kind", rename_all = "snake_case")]
 pub enum ThresholdCountertermComponentOccurrence {
     Amplitude {
         raised_esurface_id: usize,
@@ -199,22 +216,79 @@ pub enum ThresholdCountertermComponentOccurrence {
     },
 }
 
+// Positional formats use enum discriminants; the public JSON keeps its `kind` tag.
+// Serde's remote derives construct the owning enum directly, without a second runtime type.
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "ThresholdCountertermComponentOccurrence")]
+enum BinaryThresholdCountertermComponentOccurrence {
+    Amplitude {
+        raised_esurface_id: usize,
+        overlap_group: usize,
+    },
+    LocalUnitarity {
+        overlap_groups: SmallVec<[usize; 2]>,
+        left_threshold_order: Option<usize>,
+        right_threshold_order: Option<usize>,
+        lu_cut_order: Option<usize>,
+    },
+}
+
+impl Serialize for ThresholdCountertermComponentOccurrence {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if serializer.is_human_readable() {
+            Self::serialize(self, serializer)
+        } else {
+            BinaryThresholdCountertermComponentOccurrence::serialize(self, serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ThresholdCountertermComponentOccurrence {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        if deserializer.is_human_readable() {
+            Self::deserialize(deserializer)
+        } else {
+            BinaryThresholdCountertermComponentOccurrence::deserialize(deserializer)
+        }
+    }
+}
+
 /// One numeric use of a graph-registry component in an event.
 ///
 /// `bare` and `weighted` include the counterterm sign and every event normalization. `bare`
 /// excludes only the user multiplier. An exact-zero multiplier may skip the expensive bare
 /// evaluation, in which case `bare` is `None`, `weighted` is exact zero, and
 /// `evaluation_skipped` is true.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct GenericThresholdCountertermComponentWeight<T: FloatLike> {
     pub component_id: usize,
     pub occurrence: ThresholdCountertermComponentOccurrence,
     pub multiplier_values: SmallVec<[F<T>; 2]>,
     pub effective_multiplier: F<T>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub bare: Option<Complex<F<T>>>,
     pub weighted: Complex<F<T>>,
     pub evaluation_skipped: bool,
+}
+
+impl<T: FloatLike> Serialize for GenericThresholdCountertermComponentWeight<T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let include_bare = !serializer.is_human_readable() || self.bare.is_some();
+        let mut fields = serializer.serialize_struct(
+            "GenericThresholdCountertermComponentWeight",
+            6 + usize::from(include_bare),
+        )?;
+        fields.serialize_field("component_id", &self.component_id)?;
+        fields.serialize_field("occurrence", &self.occurrence)?;
+        fields.serialize_field("multiplier_values", &self.multiplier_values)?;
+        fields.serialize_field("effective_multiplier", &self.effective_multiplier)?;
+        if include_bare {
+            fields.serialize_field("bare", &self.bare)?;
+        }
+        fields.serialize_field("weighted", &self.weighted)?;
+        fields.serialize_field("evaluation_skipped", &self.evaluation_skipped)?;
+        fields.end()
+    }
 }
 
 impl<T: FloatLike> GenericThresholdCountertermComponentWeight<T> {
@@ -948,7 +1022,7 @@ mod tests {
     use serde_json::json;
     use spenso::algebra::complex::Complex;
 
-    use crate::utils::{F, f128};
+    use crate::utils::{ArbPrec, F, f128};
 
     use super::{
         GenericAdditionalWeightInfo, GenericEvent, GenericThresholdCountertermComponentWeight,
@@ -994,12 +1068,112 @@ mod tests {
         let info = GenericAdditionalWeightInfo::<f64>::default();
         assert_eq!(
             serde_json::to_value(&info).unwrap(),
-            json!({ "weights": {} })
+            json!({ "weights": [] })
         );
 
         let decoded: GenericAdditionalWeightInfo<f64> =
-            serde_json::from_value(json!({ "weights": {} })).unwrap();
+            serde_json::from_value(json!({ "weights": [] })).unwrap();
         assert!(decoded.threshold_counterterms.is_none());
+    }
+
+    #[test]
+    fn additional_weights_roundtrip_json_and_binary_with_optional_decomposition() {
+        let mut iterated = decomposition();
+        iterated.components[1].occurrence =
+            ThresholdCountertermComponentOccurrence::LocalUnitarity {
+                overlap_groups: smallvec::smallvec![3, 7],
+                left_threshold_order: Some(1),
+                right_threshold_order: Some(2),
+                lu_cut_order: Some(2),
+            };
+        iterated.components[1].multiplier_values = smallvec::smallvec![F(0.0), F(0.25)];
+        for threshold_counterterms in [None, Some(iterated)] {
+            let original = GenericAdditionalWeightInfo::<f64> {
+                weights: [
+                    (
+                        super::AdditionalWeightKey::Original,
+                        Complex::new(F(3.0), F(0.5)),
+                    ),
+                    (
+                        super::AdditionalWeightKey::AmplitudeThresholdCountertermVariant {
+                            variant_id: 6,
+                            esurface_id: 2,
+                            overlap_group: 1,
+                        },
+                        Complex::new(F(-0.25), F(0.125)),
+                    ),
+                ]
+                .into(),
+                threshold_counterterms,
+            };
+            let json = serde_json::to_value(&original).unwrap();
+            let restored: GenericAdditionalWeightInfo<f64> =
+                serde_json::from_value(json.clone()).unwrap();
+            assert_eq!(serde_json::to_value(restored).unwrap(), json);
+            if original.threshold_counterterms.is_some() {
+                let components = &json["threshold_counterterms"]["components"];
+                assert_eq!(components[0]["occurrence"]["kind"], "amplitude");
+                assert_eq!(components[1]["occurrence"]["kind"], "local_unitarity");
+                assert_eq!(components[1]["occurrence"]["overlap_groups"], json!([3, 7]));
+                assert_eq!(components[1]["occurrence"]["right_threshold_order"], 2);
+                assert_eq!(components[1]["multiplier_values"], json!([0.0, 0.25]));
+                assert!(components[0].get("bare").is_some());
+                assert!(components[1].get("bare").is_none());
+            } else {
+                assert!(json.get("threshold_counterterms").is_none());
+            }
+            let encoded =
+                bincode::serde::encode_to_vec(&original, bincode::config::standard()).unwrap();
+            let (restored, consumed): (GenericAdditionalWeightInfo<f64>, _) =
+                bincode::serde::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+            assert_eq!(consumed, encoded.len());
+            assert_eq!(serde_json::to_value(restored).unwrap(), json);
+        }
+    }
+
+    #[test]
+    fn additional_weights_roundtrip_preserves_native_precision() {
+        let one = F::<f128>::default().one();
+        let precise_quad = one + one.from_usize(2).powi(-80);
+        assert_ne!(precise_quad, F::from_ff64(precise_quad.into_ff64()));
+        let quad = GenericAdditionalWeightInfo::<f128> {
+            weights: [(
+                super::AdditionalWeightKey::Original,
+                Complex::new(precise_quad, -precise_quad),
+            )]
+            .into(),
+            ..Default::default()
+        };
+        let json = serde_json::to_vec(&quad).unwrap();
+        let restored: GenericAdditionalWeightInfo<f128> = serde_json::from_slice(&json).unwrap();
+        assert_eq!(restored.weights, quad.weights);
+        let encoded = bincode::serde::encode_to_vec(&quad, bincode::config::standard()).unwrap();
+        let (restored, consumed): (GenericAdditionalWeightInfo<f128>, _) =
+            bincode::serde::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+        assert_eq!(consumed, encoded.len());
+        assert_eq!(restored.weights, quad.weights);
+
+        // Quad stores a double-double mantissa; Arb additionally preserves exponents
+        // below binary64's range. Neither boundary may narrow the native weights.
+        let tiny_arb = F::<ArbPrec>::default().from_usize(2).powi(-1400);
+        assert!(tiny_arb > tiny_arb.zero());
+        assert_eq!(tiny_arb.into_ff64(), F(0.0));
+        let arb = GenericAdditionalWeightInfo::<ArbPrec> {
+            weights: [(
+                super::AdditionalWeightKey::Original,
+                Complex::new(tiny_arb.clone(), -tiny_arb),
+            )]
+            .into(),
+            ..Default::default()
+        };
+        let json = serde_json::to_vec(&arb).unwrap();
+        let restored: GenericAdditionalWeightInfo<ArbPrec> = serde_json::from_slice(&json).unwrap();
+        assert_eq!(restored.weights, arb.weights);
+        let encoded = bincode::serde::encode_to_vec(&arb, bincode::config::standard()).unwrap();
+        let (restored, consumed): (GenericAdditionalWeightInfo<ArbPrec>, _) =
+            bincode::serde::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+        assert_eq!(consumed, encoded.len());
+        assert_eq!(restored.weights, arb.weights);
     }
 
     #[test]

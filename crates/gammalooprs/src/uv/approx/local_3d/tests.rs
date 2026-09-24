@@ -88,9 +88,15 @@ fn two_edge_graph() -> Result<Graph> {
 
 #[test]
 fn absent_threshold_projection_preserves_zero_cut_orders() -> Result<()> {
-    use crate::cff::esurface::{EsurfaceID, RaisedEsurfaceGroup};
+    use crate::cff::esurface::{Esurface, EsurfaceID, RaisedEsurfaceGroup};
 
     let mut graph = two_edge_graph()?;
+    let absent_surface = EsurfaceID(graph.surface_cache.esurface_cache.len());
+    graph.surface_cache.esurface_cache.push(Esurface {
+        energies: vec![EdgeIndex(0)],
+        external_shift: Vec::new(),
+        vertex_set: crate::cff::VertexSet::dummy(),
+    });
     let options = graph.denominator_only_cff_3d_expression_options();
     let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
     let production = graph.generate_3d_expression_for_integrand(
@@ -100,12 +106,18 @@ fn absent_threshold_projection_preserves_zero_cut_orders() -> Result<()> {
         Some(&Atom::one()),
     )?;
     assert!(!production.expression.orientations.is_empty());
+    assert!(
+        production
+            .expression
+            .get_orientations_with_esurface(absent_surface)
+            .is_empty()
+    );
     let pattern = OrientationPattern::default();
     let mut cutset = CutSet::empty(graph.n_hedges());
-    // This shape diagnostic selects no surface of a nonzero bubble source,
-    // while requesting both raised orders. The resulting residue is zero.
+    // This shape diagnostic selects a registered surface absent from a nonzero
+    // bubble source, while requesting both raised orders. The residue is zero.
     cutset.residue_selector.left_th_cut = Some(RaisedEsurfaceGroup {
-        esurface_ids: vec![EsurfaceID::from(usize::MAX)],
+        esurface_ids: vec![absent_surface],
         max_occurence: 2,
     });
     let localizer = Localizer::new(

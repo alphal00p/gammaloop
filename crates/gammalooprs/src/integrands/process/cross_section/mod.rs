@@ -82,7 +82,6 @@ use eyre::Context;
 use eyre::eyre;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
-    slice,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -1853,9 +1852,10 @@ impl GraphTerm for CrossSectionGraphTerm {
                 let origin = frame
                     .inverse(&vec![zero.0.clone(); 3 * parent.len()], &[])?
                     .coordinates;
-                let origin_loops = LoopMomenta::from_iter(origin.chunks_exact(3).map(|v| {
-                    ThreeMomentum::new(F(v[0].clone()), F(v[1].clone()), F(v[2].clone()))
-                }));
+                let origin_loops =
+                    LoopMomenta::from_iter(origin.as_chunks::<3>().0.iter().map(|v| {
+                        ThreeMomentum::new(F(v[0].clone()), F(v[1].clone()), F(v[2].clone()))
+                    }));
                 for block in &channel.blocks {
                     let energy_sets = block.target.energy_edge_sets();
                     if energy_sets.is_empty() {
@@ -2023,7 +2023,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                                 LoopMomenta::from_iter((0..lmb.loop_edges.len()).map(|_| {
                                     ThreeMomentum::new(radius.zero(), radius.zero(), radius.zero())
                                 }));
-                            for (&index, v) in active.iter().zip(direction.chunks_exact(3)) {
+                            for (&index, v) in
+                                active.iter().zip(direction.as_chunks::<3>().0.iter())
+                            {
                                 velocity[index] = ThreeMomentum::new(
                                     F(v[0].clone()),
                                     F(v[1].clone()),
@@ -2210,7 +2212,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                             // unspecified here. Their BQ representative cannot
                             // affect either the host root or the target equation.
                             let mut native = origin.clone();
-                            for (&index, values) in preceding.iter().zip(raw_prior.chunks_exact(3))
+                            for (&index, values) in
+                                preceding.iter().zip(raw_prior.as_chunks::<3>().0.iter())
                             {
                                 native[3 * index.0..3 * index.0 + 3].clone_from_slice(values);
                             }
@@ -2308,8 +2311,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                                     LoopMomenta::from_iter((0..lmb.loop_edges.len()).map(|_| {
                                         ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())
                                     }));
-                                for (&index, p) in
-                                    complement.iter().zip(physical_prior.chunks_exact(3))
+                                for (&index, p) in complement
+                                    .iter()
+                                    .zip(physical_prior.as_chunks::<3>().0.iter())
                                 {
                                     physical_loops[index] = ThreeMomentum::new(
                                         F(p[0].clone()),

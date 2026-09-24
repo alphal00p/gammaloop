@@ -4969,7 +4969,7 @@ mod tests {
                     .all_st_cuts_for_cs(
                         cross_section.source_nodes.clone(),
                         cross_section.target_nodes.clone(),
-                        &cross_section.graph.get_initial_state_tree().0,
+                        &cross_section.graph.get_initial_state_tree(),
                     )
                     .into_iter()
                     .find(|(_, candidate, _)| {
@@ -5074,7 +5074,7 @@ mod tests {
                     .all_st_cuts_for_cs(
                         cross_section.source_nodes.clone(),
                         cross_section.target_nodes.clone(),
-                        &cross_section.graph.get_initial_state_tree().0,
+                        &cross_section.graph.get_initial_state_tree(),
                     )
                     .into_iter()
                     .find(|(_, candidate, _)| {
@@ -5402,7 +5402,7 @@ mod tests {
                     .all_st_cuts_for_cs(
                         graph.source_nodes.clone(),
                         graph.target_nodes.clone(),
-                        &graph.graph.get_initial_state_tree().0,
+                        &graph.graph.get_initial_state_tree(),
                     )
                     .into_iter()
                     .filter(|(_, cut, _)| {

@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::Path, slice, sync::Arc};
+use std::{collections::BTreeMap, path::Path, sync::Arc};
 
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;

@@ -651,6 +651,10 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
         },
         "event_groups": event_groups,
     });
+    // The public x-space result includes its sampling Jacobian; event weights are
+    // also complete. This reference uses the common-point OSE partition and the
+    // per-surface SOCP constraints. Their redundant cones shift approximate centers
+    // slightly; main and this route agree below 3e-12 with identical forced centers.
     // Retain signed absorptive weights: the corrected left/right threshold prescription
     // flips cut 2 imaginary parts while the three-loop graph normalization stays fixed.
     // Edge relabeling can change CFF discovery and event enumeration; physical cut IDs
@@ -672,11 +676,11 @@ fn gl20_multichannel_local_inspect_event_snapshot() -> Result<()> {
                 event["cut_info"]
                     .as_object_mut()
                     .unwrap()
-                    .remove("lmb_channel_id");
+                    .remove("sampling_channel_id");
             }
             events.sort_by_cached_key(|event| {
                 (
-                    event["cut_info"]["lmb_channel_edge_ids"]
+                    event["cut_info"]["sampling_channel_edge_ids"]
                         .as_array()
                         .unwrap()
                         .iter()
@@ -1226,8 +1230,8 @@ fn lu_rust_explicit_lmb_multichanneling_groups_channel_events_and_tags_metadata(
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "summed"
+sampling_multichanneling = true
+sampling_channels = "summed"
 '"#,
     )?;
 
@@ -1299,8 +1303,8 @@ lmb_channels = "summed"
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "monte_carlo"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
 '"#,
     )?;
 
@@ -1347,8 +1351,8 @@ lmb_channels = "monte_carlo"
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "monte_carlo"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
 lmb_basis_ids = {{ {master_graph_name} = [1, 0] }}
 '"#,
     ))?;
@@ -1472,8 +1476,8 @@ fn amplitude_group_members_resolve_lmb_overrides_through_the_master() -> Result<
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "monte_carlo"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
 lmb_basis_ids = {{ "{master_name}" = [{override_basis_id}] }}
 '"#,
     ))?;
@@ -1600,7 +1604,13 @@ fn lu_threshold_counterterms_follow_lmb_channel_normalization() -> Result<()> {
             {
                 event_weight.0 += event.weight.re.0;
                 event_weight.1 += event.weight.im.0;
+                // Auxiliary terms remain factorized; compare their complete event
+                // contributions, including the common flux/Jacobian/partition factor.
+                let factor = &event.additional_weights.weights[
+                    &gammalooprs::observables::events::AdditionalWeightKey::FullMultiplicativeFactor
+                ];
                 for (key, value) in &event.additional_weights.weights {
+                    let value = value * factor;
                     match key {
                         gammalooprs::observables::events::AdditionalWeightKey::Original => {
                             original_weight.0 += value.re.0;
@@ -1652,8 +1662,8 @@ fn lu_threshold_counterterms_follow_lmb_channel_normalization() -> Result<()> {
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = false
-lmb_channels = "summed"
+sampling_multichanneling = false
+sampling_channels = "summed"
 lmb_basis_ids = {{ "{graph_name}" = [{basis_id}] }}
 '"#,
         ))?;
@@ -1675,9 +1685,9 @@ lmb_basis_ids = {{ "{graph_name}" = [{basis_id}] }}
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "monte_carlo"
-lmb_channel_weight = "{channel_weight}"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+sampling_channel_weight = "{channel_weight}"
 lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 '"#,
             basis_ids[0], basis_ids[1],
@@ -1748,9 +1758,9 @@ lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "summed"
-lmb_channel_weight = "{channel_weight}"
+sampling_multichanneling = true
+sampling_channels = "summed"
+sampling_channel_weight = "{channel_weight}"
 lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 '"#,
             basis_ids[0], basis_ids[1],
@@ -1806,9 +1816,9 @@ lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 [sampling]
 graphs = "summed"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "summed"
-lmb_channel_weight = "{channel_weight}"
+sampling_multichanneling = true
+sampling_channels = "summed"
+sampling_channel_weight = "{channel_weight}"
 lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 '"#,
             basis_ids[0], basis_ids[1],

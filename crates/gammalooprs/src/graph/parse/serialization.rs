@@ -326,21 +326,27 @@ mod tests {
         let mut graph = triangle();
         let spec = ThresholdCountertermSpec {
             schema_version: THRESHOLD_COUNTERTERM_SCHEMA_VERSION,
-            function_map: [("shifted(x_)".to_string(), "x_ + 1".to_string())].into(),
+            function_map: [
+                ("shifted(x)".to_string(), "x + 1".to_string()),
+                ("twice(x)".to_string(), "2 * shifted(x)".to_string()),
+            ]
+            .into(),
             cuts: vec![ThresholdCountertermCut {
                 edges: vec![],
                 thresholds: vec![ThresholdCountertermThreshold {
                     edges: vec![EdgeIndex(4), EdgeIndex(5)],
                     counterterms: vec![ThresholdCountertermVariant {
-                        name: Some("quoted \"variant\" η".to_string()),
+                        name: Some(
+                            "quoted \"variant\" η literal:\\n regex:\\d tab:\t line:\n end:\\"
+                                .to_string(),
+                        ),
                         group_id: None,
                         subspace: Some(vec![EdgeIndex(3)]),
                         parent_lmb: Some(vec![EdgeIndex(3)]),
                         disable: false,
                         multiplier: Some(ThresholdCountertermMultiplier {
-                            expression: "custom(\"η\", \\path, tab:\t, line:\n)".to_string(),
-                            function_map: [("shifted(x_)".to_string(), "x_ + 2".to_string())]
-                                .into(),
+                            expression: "twice(\n Q3(star, 3, cind(1))\t)".to_string(),
+                            function_map: [("shifted(x)".to_string(), "x + 2".to_string())].into(),
                             symmetrize: true,
                             opaque_derivatives: true,
                         }),

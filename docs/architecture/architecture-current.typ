@@ -97,9 +97,12 @@ Infrastructure
 - Construction delegates startup to `StateLoadOption::load`, so Python and
   CLI sessions share state-folder, settings, boot-card, and logging setup.
 - Command strings run through `CliSession`; structured sample evaluation
-  uses the shared `EvaluateSamples` command. Full integrations currently use
-  `GammaLoopAPI.run("integrate ...")` (or the CLI), because the Python module
-  does not expose a supported structured `integrate()` method.
+  uses the shared `EvaluateSamples` command. Python integration uses
+  `api.run("integrate ...")`. The retained typed `GammaLoopAPI.integrate()`
+  entrypoint remains disabled in the source. Its command-building helper covers
+  slot selection, workspace/resume settings, and optional Gaussian-reference
+  acceptance; signed and componentwise absolute integration-result classes
+  remain registered, without a supported structured Python integration producer.
 - `GammaLoopAPI` is a PyO3 `unsendable` class: each instance remains bound
   to its Python thread, while native work invoked by it may still use
   internal parallelism.
@@ -117,6 +120,11 @@ Infrastructure
 
 The command model is stateful by design: commands mutate a long-lived
 `State` that can be saved and resumed.
+
+Selective loading filters processes and integrands before loading their heavy
+payloads. The retained in-memory process IDs are dense, and loaded generation
+reports are rebound to those IDs. This selection uses the same manifest and
+version validation as a complete state load.
 
 Generation preserves the original forward sides by default. The optional `--symmetrize-left-right-states` CP optimization remains a user assertion about the selected theory, process and coupling point, with warnings at generation and runtime warm-up. Models declare covariant cut multiplets, and generated integrands retain their physical event representatives. Regenerate saved processes and integrands after the phase/model changes; see #link("phase-conventions.typ#generation-options-and-generated-states")[the generation options and generated-state contract];.
 
@@ -337,14 +345,17 @@ SymJIT rebuilds the saved Symbolica evaluator with its extra common-expression c
   - reports generated / accepted event counts and event-processing timing
   - selector failures zero the local contribution, so rejected events do
     not survive into the final retained result
-+ Stability selection still compares only the complex graph weight, but
-  the retained branch also carries the final grouped event payload.
++ Stability selection checks the signed graph weight, retained absolute
+  contributions, and Gaussian reference moments independently when present.
+  All required checks must pass; the retained branch also carries the final
+  grouped event payload.
 + The final `EvaluationResult` contains:
-  - the stable `integrand_result`, before any parameterization Jacobian
-    is applied
-  - the top-level `parameterization_jacobian` when the sample came from
-    x-space parameterization (`None` for direct momentum-space
-    evaluation)
+  - the stable `integrand_result`, including each map's Jacobian and channel
+    partition factor, combined with the physical value at native precision
+  - a unit unapplied `parameterization_jacobian` for x-space evaluation
+    (`None` for direct momentum-space evaluation); the actual map Jacobian
+    remains on the bridge's map evaluation for diagnostics (the selected
+    momentum sample carries the combined map/partition factor)
   - the separate `integrator_weight`, i.e. the Monte Carlo/grid weight
     only
   - grouped accepted events
@@ -353,6 +364,10 @@ SymJIT rebuilds the saved Symbolica evaluator with its extra common-expression c
   - ordered per-level stability results, each with relative-accuracy and
     total time spent in that stability level
   - evaluation metadata
+  Native reconstruction and stability selection return the same retained
+  precision-tagged result to both API routes. The ordinary route checks final
+  f64 representability of contributions and event weights; the precise Rust
+  route keeps the native result without a preliminary f64 reporting pass.
 + Observable filling happens only from the final stable
   `EvaluationResult` payload. Unstable branches do not contribute events
   or observables.
@@ -364,6 +379,23 @@ SymJIT rebuilds the saved Symbolica evaluator with its extra common-expression c
   #link("ratatui-integration-dashboard.typ")[integration dashboard architecture].
 
 Every evaluator receives the auxiliary numerator sampling scale `M` as an input, defaulting to one. Warm-up rejects a zero runtime scale for every amplitude or cross-section integrand, including evaluators that do not use `M`. No source-expression scan or serialized usage flag is needed. This enforces the EMR-only `a*M` contract above; `M` is not an LMB coordinate.
+
+Binary64 reporting may round exponentially suppressed, fully weighted components
+to zero. Numerical factors are combined before this rounding so a compensating
+factor cannot hide a meaningful contribution. For an averaged stability result,
+the mean absolute fully weighted probe value can establish underflow below the
+smallest normal binary64 value. This bound stays separate for each component and
+observable; an imaginary scale cannot excuse a meaningful real discrepancy.
+Overflow and invalid operations remain failures.
+
+With `stability.check_on_norm`, amplitudes compare full complex magnitudes even
+when integration selects only Re or Im: a fixed-helicity amplitude can acquire
+a global phase under spatial rotation. A private sum of channel-point complex
+norms separately detects instability hidden by signed channel cancellation.
+Common-point physical terms are summed before taking each norm. The public
+componentwise absolute result remains the primary probe's value. Cross sections
+retain checks of the selected integration components, and Gaussian-reference
+values and moments retain independent checks.
 
 === 3.1 Differential event-processing runtime
 <31-differential-event-processing-runtime>
@@ -395,6 +427,42 @@ The same pattern is now also used for evaluator execution backends:
 - the saved portable representation remains centered on eager Symbolica
   evaluators
 
+=== Canonical sampling channels
+<canonical-sampling-channels>
+`SamplingChannelCatalogue` supplies the one channel-ID domain used by grids, summed evaluation, explicit channel evaluation and event metadata. Generated LMB basis IDs describe graph routing only. Both amplitudes and cross sections use `SamplingChannelBridge` to map each selected unit-cube point into the parent frame and evaluate the partition at that raw point. Summed and Monte-Carlo evaluation apply `J_c w_c` once per graph result and event at native precision, before reporting, and retain a separate grid probability. Stability rotations act on the resulting mapped point and external frame together.
+
+Both execution modes prepare each channel on the graph-group master and reuse that point for every group member. The absolute monitor first sums all physical cuts, counterterms, orientations and group members at that point, then takes the componentwise absolute value. Explicitly summed channels add these positive contributions before one outer-cube statistics update, retaining channel covariance. The signed channel sum is not passed through `abs` afterward. Graph groups remain separate integration domains; if orientations themselves are sampled, the absolute monitor describes that sampled-orientation domain, not the absolute value of an orientation sum. GL638 studies sum orientations. Native, precise and Python evaluation outputs expose the separate `absolute_integrand_result` payload before the outer grid weight. Integration workspace version 3 rejects older checkpoints whose absolute moments used the previous convention, requiring a fresh run.
+
+The existing graph sampling setup retains a nonserialized canonical catalogue, compiled programs and native Double/Quad/Arb bridges. Process warmup constructs the configured precisions transactionally after numeric masses/externals are ready; mutable settings invalidate it and evaluation then requires warmup. Fresh bridge construction remains separate for inspection with explicit inputs. Workers clone compiled eager score buffers into separate mutexes, while each point borrows its maps and scores without cloning programs. External improvement clears old numeric caches before rebuilding from directly edited inputs.
+
+Standalone `phase_space(cut(...))` maps use the real graph\'s cut equation, warmup masses and fixed external data through the shared implicit radial kernel. Their fixed directions use the existing LU ray: route signed velocities before radial scaling so large host-null master components cancel before multiplication. They retain the auxiliary raw radial variable. Conditional cut/left/right maps now share the Symbolica-resolved ordered block plan and one geometry registry. The registry key includes qualified target, native parent, active edges and ordered prerequisites. Exact routing rejects any unsampled dependency or side displacement that would change the host cut. The existing embedding prepares the host\'s native LU root from actual preceding coordinates, then maps physical active coordinates back to raw coordinates with the complete affine shift and determinant. Every foreign inverse prepares its own supplied raw point. The complete native map is routed to the master frame once. The combined generated fixture gates pass; general nested mixed compositions remain rejected. Explicit pairs of original graph surfaces can share one active three-dimensional joint block under a physical cut. Binding and adoption resolve the same original equations, retaining side-qualified associations, masses and temporal shifts. The common-energy shift is composed with the existing LU affine pullback; its active determinant includes `tau^-3`. At physical adoption, the shared directed ray arithmetic encloses those original equations on the actual canonical and native completed points. Normal displacement and the native host residual each have half of the sampling-accuracy budget relative to the canonical normal radius. Amplitude joints use the same check with zero host residual. Errors trigger physical precision rescue from the retained source, without redrawing maps or partitions. These checks belong to sampling time, including rotations and failed attempts. They do not certify arbitrary CT multipliers, higher raised jets or projected CT-star targets. The #link("../research/advanced_sampling/HOSTED_JOINT_NORMAL_ALIGNMENT.typ")[hosted-joint audit] records the concrete geometry and acceptance gates. The old LMB-specific partition implementation is removed. Explicit `sampling.lmb_basis_ids` overrides preserve exactly the requested basis order; automatic soft-coverage augmentation applies only without that override.
+
+A named standalone cut channel accepts `radial_profile="lu_h"`, or its detailed table form. Warmup fits a normalized log-logistic proposal to the actual runtime LU h-function and compiles its CDF and derivatives alongside that channel\'s proxy program. A positive broad component induces the ordinary raw-radius law independently of the cut root. The map inverts the full mixture CDF, and inverse density uses the supplied raw radius. Named proposals share registered cut geometry without overwriting each other\'s settings. The largest raised order is collected before equivalent cut geometries are deduplicated; this initial fit does not optimize derivative envelopes. Physical h and all residue/CT derivatives remain unchanged. A composed channel may attach this profile to its unique phase-space block. The chart requires the actual LU fixed point to be certified interior; a geometric recentering cannot silently change the meaning of its radial LU scale. The profile is rejected on amplitude channels.
+
+Explicit amplitude E-surfaces populate the production compile context from real catalogue equations, masses and external momenta. Complete native parent LMBs support both full-space and proper-fiber charts. Requested parent order is resolved by reordering a clone of an existing generated basis, preserving its external routing and the catalogue\'s immutable IDs. Active axes follow parent order; an explicit surface shorthand samples its complement first, then the conditional active block. Dependent products are rejected. Ambiguous shifts, unsupported frames and rank-deficient requests fail clearly.
+
+The same implicit map prepares a center and existence status once per forward or foreign inverse, outside root iteration. Two-energy rank-one fibers use an analytic minimum including fixed energies, boosts and unequal/zero masses. General fibers use the existing SOCP center solver only as a candidate source; the actual native energy residual must certify an interior point. Conservative sign tolerances include cancelling routed inputs. Empty-complement preparation is frozen at warmup. Certified absence or explicit pinched status retains a normalized full-support fallback; a failed solve or numerically ambiguous sign requires a typed numerical error. Production preparation now uses one fixed-Arb proposal; only subsequent physical materialization/evaluation participates in precision rescue. Frozen-binding successes and typed numerical failures use the same native runtime caches. Warmup requires the canonical Arb binding for all graphs; optional native component failures cannot reject a valid canonical draw. This is not an interval certificate. Automatic discovery remains unfinished. The combined X2 numerical gates for conditional cuts and frozen-binding rescue pass, including the broader 141-test core/API run. The selected UV-finite two-loop amplitude benchmarks are recorded in #link("../research/advanced_sampling/AMPLITUDE_BENCHMARK_CANDIDATES.typ")[the amplitude study];. The kernel certifies residuals and rejects unrepresentable inverse points without clipping. The shared radial profile focuses on both signed distances to the threshold with a common analytic inverse. Native kernel tests cover Quad and arbitrary precision. Components, affine/composed maps, conditional cut data, eager/dual evaluations and foreign-density partitions now retain native values throughout. The existing eager Jacobian evaluator can select ordered active parameter columns while other prepared parameters remain fixed. Its single compiled first-derivative program receives the statically zero components of the identity seeds through Symbolica\'s `Dualizer`. This prevents an unused derivative of a prepared-only expression such as `sqrt(m)` at `m=0` from contaminating a valid active derivative. Requested singular derivatives and singular intermediates involving active inputs still produce typed numerical errors. The constructor change preserves the stored evaluator layout and the empty-mask behavior of existing physical evaluators. The graph-independent shared-energy joint component supplies a compact three-dimensional full-circle map for two energy sums with one common routed energy. It uses that eager Jacobian owner, a directed MPFR enclosure certificate for the residual disk, and an inverse density evaluated at the supplied point. The existing block resolver now treats two distinct plain surfaces under `intersect` as one three-dimensional block, with qualifiers on the pair. Their separate equations remain in the same geometry key, and the canonical program cache compiles one neutral joint expression for all participating channels. The graph matcher has prior coverage against actual routed amplitude equations. The current source adds an amplitude binder for that supported class, retaining the native shared-energy translation. Empty-prior blocks bind once at warmup through static `Affine`; only nonempty priors use the existing ordered embedding. Its trial disk radius is `e_cm * sampling.b`, with isotropic normal scale one; the component\'s conditional fallback retains the existing normalized radial map. The binder and source transport pass combined numerical gates: all-18-orientation kite Gaussian/moment acceptance, actual physical map/partition consistency and controlled Double-to-Quad body retry, plus the generated triangle\'s empty-prior binder, nonzero offset, compact roundtrip and production reference evaluation. These joint fixtures clear rotation probes; nonidentity-probe behavior and GL638 runtime improvement are not established by this milestone.
+
+The original-source preparation phase now retains the complete 1000-bit Arb draw, including graph-parent coordinates, combined factors and selected host records. Selected, summed and default/LMB routes prepare before norm-based lane selection or physical targets. The existing Gamma/Discrete owners hold completed rows with their event-group boundaries; the old cube-only summed placeholders and physical LMB reinterpretation are removed. Physical attempts materialize directly from the same anchor without maps, partitions or sampling root solves. Direct selected momentum input prepares only its partition; direct unselected input needs no map phase. Norm and debug access do not redraw. `EvaluationMetaData` retains discrete component decisions and root diagnostics, while `EvaluationSource` borrows the immutable draw. Warmed maps have no mutable draw cache. This fixes the continuous-map switching gap described in the #link("../research/advanced_sampling/CANONICAL_DRAW_SOURCE.typ")[canonical source contract];. The correction passes 214 core tests and three API gates, including the complete generated-amplitude and saved-state acceptance runs. Hosted joint binding and completed-point normal accuracy were the next cross-section gate; their later implemented ownership is described above.
+
+Physical cross-section overlaps now also have an immutable source authority. Before lane selection, the existing Gamma row traversal prepares complete accepted-cut representatives from the canonical Arb point through the physical LU root owner, then chooses identity-frame SOCP/forced centers once. Bare raw input retains its real absent channel; selected, summed and nonmaster rows use the same physical convention. Selector-only events carry the source\'s actual optional channel ID, so an explicit channel-ID predicate may change the accepted cut set. Geometry is channel-independent for the same accepted physical cuts. Reference targets and CT-off skip this preparation; amplitudes retain their existing center behavior.
+
+Rows retain the original-frame overlap authority across casts and rotations. Native consumers preserve per-cut complements, LU/alpha solves and raised packets, validating complete group membership, solve signatures and ordered parents before using the retained centers. A mismatch fails without choosing a replacement center. Both consumers promote binary64 center bits exactly before rotating in native arithmetic. Canonical event/runtime and radial history are isolated from physical probes and restored on errors. The `canonical_physical_preparation_time` metadata field exposes this work as a subset of physical time, counted once; map/adoption costs retain their separate sampling attribution. The #link("../research/advanced_sampling/CANONICAL_CT_CENTERS.typ")[center audit] records the generated gates and successful actual GL638 failure replay, without claiming amplitude covariance or numerical coverage of every selector/group.
+
+The geometry and timing source passes 175 selected core tests, including the complete 8192-draw kite rerun and its physical/retry checks, plus three API gates. `Esurface::solve_lu_cut` returns the native ordered energy ray together with its root, and physical raised eta jets evaluate that ray. Explicit LU now routes before scaling; other scalar CT/fiber evaluators retain their prior operation order and seed convention. Those gates predate the native host handoff described below and do not validate its adoption checks. Three #link("../research/advanced_sampling/GL638_LU_RAY_REPLAY.typ")[GL638 LU-ray replay evaluations] retain all 936 orientations, six physical event weights and the unchanged saved state. They establish a bounded physical regression, not improved precision or variance; GL638\'s six simple cuts do not exercise higher raised eta derivatives.
+
+The accompanying timing change passes core/API checks. `parameterization_time` accumulates map/source/partition and replay costs across attempts; canonical preparation is charged once. `integrand_evaluation_time` counts actual target bodies across all lanes and probes, excluding maps and nested host-adoption verification charged to sampling time. Evaluator and event timings are subsets removed from the benchmark\'s residual integrand row. Final metadata retains accumulated costs, including replays after its earlier result snapshot. These are measurement counters, not evidence that the GL638 10% budget is met. The inclusive evaluator timing update counts every physical evaluator wrapper call across probes and rescues, including completed calls before a failure and the raised-threshold IFT alpha helper. Earlier reports counted only the primary rotation at the first precision and cannot supply this new E split. The `canonical_sampling_preparation_time` subset uses the same elapsed interval as its contribution to S; the existing canonical physical preparation remains a subset of P. Bench rows subtract these subsets once and reject inconsistent subset durations. These additions are per-evaluation metadata only; the serialized `StatisticsCounter` and integration checkpoint layouts are unchanged. Multiworker benchmarks must report summed worker costs separately from elapsed wall time.
+
+The native host handoff is implemented and its combined gates pass. The existing runtime context owns one native record vector; the initial selected forward or direct inverse freezes its authoritative prefix before partition inverses. Only identical plans and exact represented priors reuse a record. Selected/summed samples lend that prefix to the physical owner. The subsequent source correction materializes it directly from Arb, and rotations retain the original-frame payload. Metadata contains discrete policies and root history, with canonical preparation history isolated. Graph-group masters authenticate their records before ordinary foreign graphs receive an empty payload. Physical adoption rotates the ray once and authenticates its parent/host against the selected immutable channel, then compares it with independently routed completed data using a fixed directed 2048-bit scalar/root/first-derivative/inverse-volume check. This does not certify vector-coordinate error, higher raised jets or full conditional density. The final source passes 184 unique core tests and three API gates (106.024 s). The conditional fixture\'s nonidentity physical totals agree within the fixed 1e-8 tolerance; probes retain no event buffer/counts under existing ownership. The complete 8192-draw kite passes in 1504.601 s with its 6%/8% reference bounds; this unoptimized complete-fixture timing is not a production budget measurement. Combined checking (12.56 s), clippy (57.76 s; no changed-line warnings), formatting and diff checks pass. The optimized GL638 10% budget remains unmeasured.
+
+That native-host milestone preceded hosted joint binding. The subsequent fixed-external routing, retained canonical law and original-normal adoption checks are described above; CT-star maps still need to consume the actual common center and projection alpha through their own dependency-certified handoff. Map coverage is `Full` or `Restricted`, independently of `requires_context` and the new `requires_proposal_policy` preparation flag. Certified inverse exclusion propagates through the existing compositions, embeddings and affine frames as `None`, becoming zero in the existing partition. Numerical uncertainty and underflow remain errors. Exact and proxy partitions gate restricted channels by their actual support, and bridge admission requires an explicitly selected full-support sibling. A direct-momentum request outside its selected channel gives an explicit diagnostic; generated selected points must still have positive density and satisfy forward/inverse consistency. Typed numerical errors distinguish unrepresentable derived coordinates/scores from invalid original inputs. The implicit root uses the existing native safeguarded solver, with callback errors preserved. Production retries materialize the retained canonical draw at the requested precision with matching improved native external data, reusing its mapped points and foreign-density partition. A typed physical failure discards partial values and events before retry. Precise output retains native values; ordinary output rejects unrepresentable finite values instead of silently zeroing them. Root uncertainty relative to the sampled threshold distance and density accuracy still needs its stronger certificate. Derived-expression mass evaluation, Gaussian-body underflow and final outer-grid range handling remain separate precision limits. The bridge checks the selected forward determinant against its inverse density at the actual mapped point. It reuses a selected score only when that channel actually uses its map density; OSE and user-proxy overrides evaluate the selected inverse independently. Warmup assigns one tenth of the strictest matching stability-level relative tolerance as its density budget; standalone constructors use native square-root epsilon. Failure is a typed numerical error. This is numerical proposal consistency, not a rigorous enclosure of the physical surface or of floating-point errors.
+
+Channel weights are resolved per canonical entry: the global `sampling_channel_weight` is overridden by an optional named `channel_weight`. Genuine OSE weights are available for complete ordinary LMB maps, using raw master-frame edge energies and the dimensionally consistent score `E_cm^(-3L) product(E_cm/E_e)^alpha`; surface maps retain their exact densities unless an explicit compatible user proxy is selected. The existing positive-score evaluator and support-aware partition own all strategies. `SamplingChannelSelection` owns `weight` and `alpha` together; no separate legacy LMB-weight owner or enumeration is retained. See the #link("../research/advanced_sampling/OSE_CHANNEL_WEIGHTS.typ")[OSE settings and acceptance contract];.
+
+Physical and Gaussian-reference targets share graph traversal, canonical sampling and native physical precision retries from retained draws. Reference values and raw-frame moments each pass the existing scalar stability check before joint reporting; unresolved or unrepresentable results fail acceptance. Summed reference evaluation aggregates values and raw-frame moments across mapped points before statistical squaring. Graph/orientation probabilities and outer map/grid factors are applied once; invalid draws fail acceptance. Explicit discrete coordinate selections expose partial partition contributions, which require summation or inverse-selection probabilities for unit normalization. The ordinary `integrate` workflow also accepts a `reference_gaussian` descriptor. CLI syntax is `--reference-gaussian '{"width":300}'`; Python callers pass the same command through `api.run(...)`. The retained `reference_gaussian=(300.0, [])` tuple helper, whose second item is an optional shift, belongs to the disabled typed integration entry point. Its existing complex accumulators report Gaussian normalization in Re and `|K|²` times the Gaussian, divided by the known raw second moment, in Im. Both expectations are one. This is acceptance output, not a physical imaginary part; the raw moment scale is reported separately. An omitted center is resolved to zero in the loaded process\'s spatial dimension. Physical selectors and observables must be disabled for this substitution. The initial binding requires one common nonzero loop count across each slot\'s loaded graphs; it does not infer a smaller dimensional scope from graph filters.
+
+The reference stays on the existing integration slot and is passed explicitly to worker evaluations. The same native stability loop checks its value and raw moment before reporting. No second integrand, grid or statistics engine is introduced. Workspace manifest version 3 records each resolved descriptor and the observable convention; resume requires the same reference request and checks it before restoring runtime settings. Older integration workspaces require `--restart`. Generated `gammaloop_state/` data and the binary integration checkpoint layout are unchanged by this reporting extension. See #link("../../ADVANCED_SAMPLING_PLAN.typ")[the implementation plan] for the remaining harness and channel milestones, and #link("../research/advanced_sampling/LU_H_MATCHED_SAMPLING.typ")[the LU localization study] for the implemented h-matched profile and its remaining optimization limits.
+
 === 3.2 Differential event model
 <32-differential-event-model>
 Events are stored in precision-homogeneous containers:
@@ -416,13 +484,14 @@ Each event carries:
 Observable-specific entry reweighting remains internal to the observable
 runtime; it is not stored on the event.
 
-`additional_weights` is a generic `BTreeMap` keyed by lightweight
+`additional_weights.weights` is a generic `BTreeMap` keyed by lightweight
 identifiers such as:
 
 - `FullMultiplicativeFactor`
 - `Original`
 - `ThresholdCounterterm { subset_index }`
 - `AmplitudeThresholdCounterterm { esurface_id, overlap_group }`
+- `AmplitudeThresholdCountertermVariant { variant_id, esurface_id, overlap_group }`
 
 Counterterm weights are stored with the sign with which they contribute
 to the final event weight. Cross-section events use
@@ -434,6 +503,18 @@ therefore reconstructed as:
 
 This is populated only when
 `settings.general.store_additional_weights_in_event = true`.
+
+Directive-enabled events can also retain an addable `threshold_counterterms`
+decomposition. A component ID refers to the graph's static registry, while an
+occurrence identifies its amplitude surface/overlap or local-unitarity overlaps
+and raised orders. Each component records the multiplier values, effective
+multiplier, fully normalized weighted contribution, and bare contribution with
+only the user multiplier omitted. When an exact-zero multiplier skips the bare
+evaluation, `bare` is absent, `weighted` is zero, and `evaluation_skipped` is true.
+The Rust and Python event surfaces expose the same component and provenance
+boundaries. JSON omits absent decompositions and bare weights and retains the
+occurrence's `kind` tag. Positional binary serialization keeps every optional-field
+marker and uses enum discriminants, preserving round trips through both formats.
 
 For physical W/Z final states, generation includes the model-declared covariant vector, Goldstone and ghost cut states. Event construction preserves their momenta and maps their PDGs to the requested physical vector before selectors or observables run. The same event receives its bare, UV and threshold weights, so measurement functions respect the complete gauge sum. The representative map is persisted with each cross-section graph term. Ambiguous requests mixing an explicit unphysical state with its physical-vector sector are rejected; separate diagnostic requests retain their original PDGs. See the #link("sm-conventions-audit.typ#electroweak-virtual-and-cut-state-gauge-contract")[electroweak gauge contract] for the required graph completeness and treatment of intentional subsets.
 
@@ -524,7 +605,7 @@ Current built-in quantities include:
 - `graph_id`
 - `graph_group_id`
 - `orientation_id`
-- `lmb_channel_id`
+- `sampling_channel_id`
 
 Current pair quantities include `DeltaR`. Current scalar projections
 include `E`, `CosTheta`, `PT`, `y`, `eta`, `Px`, `Py`, `Pz`, and `Mass`.
@@ -575,8 +656,8 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 7` currently).
-- Version 7 stores exact CFF coefficients as native rationals. Version 6 removed obsolete deferred-integrand fields; version 5 added component-local generated-CFF ownership and prefactor metadata; version 4 added the typed global-prefactor sign. These changes affect positional bincode data, so older states must be regenerated rather than relabeled.
+- State format is versioned with `state_manifest.toml` (`version = 9` currently).
+- Version 9 combines Symbolica 3 evaluator/rational payloads with native sampling and threshold metadata. It rejects both upstream version 7 and sampling-branch version 8 states; regenerate them rather than relabeling or migrating positional bincode data. Standalone amplitude and cross-section payload versions are 10 and 13, respectively. Version 7 stored exact CFF coefficients as native rationals. Version 6 removed obsolete deferred-integrand fields; version 5 added component-local generated-CFF ownership and prefactor metadata; version 4 added the typed global-prefactor sign.
 - State loading and direct overwrite both require exactly the current manifest version; older states must be regenerated, and states from newer binaries require a newer GammaLoop binary.
 - A missing manifest denotes an unmanifested folder rather than a legacy state and is never loaded as saved state.
 - Process settings history now uses `settings_history.toml`
@@ -599,6 +680,10 @@ mode. Authoritative completed-iteration state lives in
 snapshots live under `state/observables/<process>@<integrand>/`.
 User-facing `integration_result.json` and observable files are derived
 snapshots, not the resume authority.
+Workspace manifest version 3 also retains the resolved Gaussian-reference request
+and the convention for physical absolute contributions at distinct channel points.
+Earlier checkpoints require a fresh run; resume verifies the reference request
+before restoring settings or completed-iteration state.
 
 == Configuration Architecture
 <configuration-architecture>
@@ -609,6 +694,8 @@ Configuration is split into:
 - Runtime settings (`RuntimeSettings`): kinematics, integrator behavior,
   sampling, stability, subtraction, and differential event-processing
   configuration.
+
+Runtime updates normalize the input aliases `lmb_multichanneling`, `lmb_channels`, and `lmb_channel_weight` to `sampling_multichanneling`, `sampling_channels`, and `sampling_channel_weight` before merging with stored settings. These aliases work with files, TOML strings, and key/value updates; one update cannot specify both spellings of the same field.
 
 Differential runtime configuration currently includes:
 

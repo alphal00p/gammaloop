@@ -794,7 +794,8 @@ fn shallow_discrete_monitor_grid(
         )));
     }
 
-    let mut monitor = DiscreteGrid::new(vec![None; source.bins.len()], F(1.0), false);
+    let mut monitor =
+        DiscreteGrid::new(vec![None; source.bins.len()], F(1.0), false).map_err(Report::msg)?;
     for (monitor_bin, source_bin) in monitor.bins.iter_mut().zip(&source.bins) {
         monitor_bin.pdf = source_bin.pdf;
     }
@@ -4579,17 +4580,18 @@ mod tests {
 
     #[test]
     fn shallow_absolute_monitor_uses_local_path_pdfs_and_has_no_descendants() {
-        let continuous_grid = || Grid::Continuous(ContinuousGrid::new(1, 8, 10, None, false));
-        let monitored_grid = Grid::Discrete(DiscreteGrid::new(
-            vec![Some(continuous_grid()), Some(continuous_grid())],
-            F(10.0),
-            false,
-        ));
-        let mut production_grid = Grid::Discrete(DiscreteGrid::new(
-            vec![Some(monitored_grid)],
-            F(10.0),
-            false,
-        ));
+        let continuous_grid =
+            || Grid::Continuous(ContinuousGrid::new(1, 8, 10, None, false).unwrap());
+        let monitored_grid = Grid::Discrete(
+            DiscreteGrid::new(
+                vec![Some(continuous_grid()), Some(continuous_grid())],
+                F(10.0),
+                false,
+            )
+            .unwrap(),
+        );
+        let mut production_grid =
+            Grid::Discrete(DiscreteGrid::new(vec![Some(monitored_grid)], F(10.0), false).unwrap());
         let Grid::Discrete(root) = &mut production_grid else {
             unreachable!()
         };
@@ -4645,17 +4647,18 @@ mod tests {
 
     #[test]
     fn shallow_monitor_creation_does_not_change_production_sampling_sequence() {
-        let continuous_grid = || Grid::Continuous(ContinuousGrid::new(1, 8, 10, None, false));
-        let monitored_grid = Grid::Discrete(DiscreteGrid::new(
-            vec![Some(continuous_grid()), Some(continuous_grid())],
-            F(10.0),
-            false,
-        ));
-        let sampling_grid = Grid::Discrete(DiscreteGrid::new(
-            vec![Some(monitored_grid)],
-            F(10.0),
-            false,
-        ));
+        let continuous_grid =
+            || Grid::Continuous(ContinuousGrid::new(1, 8, 10, None, false).unwrap());
+        let monitored_grid = Grid::Discrete(
+            DiscreteGrid::new(
+                vec![Some(continuous_grid()), Some(continuous_grid())],
+                F(10.0),
+                false,
+            )
+            .unwrap(),
+        );
+        let sampling_grid =
+            Grid::Discrete(DiscreteGrid::new(vec![Some(monitored_grid)], F(10.0), false).unwrap());
         let settings = RuntimeSettings::default();
         let integrand = Integrand::TestProbe(TestProbeIntegrand::new(settings, 3));
         let mut without_monitor = CoreIterationState::new(
@@ -4888,6 +4891,7 @@ mod tests {
             metadata.stability_results.push(StabilityResult {
                 precision,
                 estimated_relative_accuracy: None,
+                estimated_decimal_digits: None,
                 status: StabilityStatus::Unstable(1),
                 total_time: Duration::ZERO,
             });

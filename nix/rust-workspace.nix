@@ -2640,6 +2640,16 @@
         done < <(find crates -type d -name snapshots | sort)
       fi
 
+      # Respect the sandbox's CPU budget while retaining the CI profile's
+      # 16-process cap on large hosts. Test-internal worker reservations remain
+      # accounted for by nextest's existing threads-required settings.
+      nextest_threads=$(nproc)
+      if (( NIX_BUILD_CORES > 0 && NIX_BUILD_CORES < nextest_threads )); then
+        nextest_threads=$NIX_BUILD_CORES
+      fi
+      export NEXTEST_TEST_THREADS=$((nextest_threads < 16 ? nextest_threads : 16))
+      echo "Nextest worker budget: $NEXTEST_TEST_THREADS"
+
       mkdir -p target/nextest
       set +e
       status=0

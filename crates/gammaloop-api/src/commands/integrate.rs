@@ -104,7 +104,7 @@ pub struct Integrate {
     pub target: Vec<String>,
 
     /// Integrate a Gaussian acceptance target, e.g. '{"width":300}' or
-    /// '{"width":300,"center":[1,2,3]}'. Re is normalization; Im is the raw
+    /// `'{"width":300,"center":[1,2,3]}'`. Re is normalization; Im is the raw
     /// second moment divided by its known expectation (both targets are one).
     /// Omitted/empty center means centered. Omission requests physics; repeat
     /// the same descriptor when resuming a reference workspace.
