@@ -241,6 +241,12 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
         self
     }
 
+    /// Topology-only external load-sharing scale, before the balancing exponent.
+    /// Recomputed when the active graph changes; independent of route geometry.
+    pub fn external_pull_scale(&self, edge: EdgeIndex) -> f64 {
+        self.external_pull_scales[edge]
+    }
+
     fn rebuild_external_pull_scales(&mut self) {
         self.external_pull_scales = vec![1.0; self.edge_points.len().0].into();
         if self.ext.included_iter().next().is_none() {
@@ -2149,7 +2155,7 @@ mod tests {
         external
             .iter()
             .enumerate()
-            .map(|(i, _)| state.external_pull_scales[EdgeIndex(internal.len() + i)])
+            .map(|(i, _)| state.external_pull_scale(EdgeIndex(internal.len() + i)))
             .collect()
     }
 
