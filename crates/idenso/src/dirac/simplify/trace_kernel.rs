@@ -278,6 +278,13 @@ mod tests {
         for (axial, expected_terms) in [(false, ordinary_terms), (true, axial_terms)] {
             let kernel = TraceKernel::<N>::generate(axial);
             assert_eq!(kernel.terms.len(), expected_terms);
+            // Terminal free-trace evaluation relies on each original index
+            // appearing once, across the epsilon and all metric pairs.
+            for (recipe, _) in &kernel.terms {
+                let mut indices = *recipe;
+                indices.sort_unstable();
+                assert_eq!(indices, std::array::from_fn(|index| index as u8));
+            }
             let mut seed = 17u64;
             for sample in 0..8 {
                 let vectors: [[i64; 4]; N] = std::array::from_fn(|_| {

@@ -18,7 +18,7 @@ use crate::{
         abstract_index::AIND_SYMBOLS,
         named::IdentityName,
         representation::{LibraryRep, RepName, initialize},
-        slot::AbsInd,
+        slot::{AbsInd, SlotMatch, SlotMatcher, SlotView},
     },
     tensors::parametric::{ConcreteOrParam, MixedTensor, ParamOrConcrete, ParamTensor},
 };
@@ -26,6 +26,97 @@ use symbolica_utils::{IntoArgs, IntoSymbol};
 
 pub type ExplicitKey<Aind> = IndexlessNamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>;
 pub type LibraryKey<Aind> = Canonicalized<ExplicitKey<Aind>>;
+
+/// Intrinsic identities of one metric application, independent of surrounding
+/// products or contraction settings. Symbolica calls this after its arguments
+/// have normalized, so traces also compose correctly inside scalar powers.
+struct MetricNormalization;
+
+impl MetricNormalization {
+    fn normalize(value: AtomView<'_>) -> Option<Atom> {
+        let AtomView::Fun(function) = value else {
+            return None;
+        };
+        let mut arguments = function.iter();
+        if arguments.len() != 2 {
+            return None;
+        }
+        let first = arguments.next().unwrap();
+        let second = arguments.next().unwrap();
+        let mut slots = SlotMatcher::default();
+        match (slots.classify(first), slots.classify(second)) {
+            (SlotMatch::Explicit(first_slot), SlotMatch::Explicit(second_slot)) => {
+                if first_slot.index() == second_slot.index()
+                    && first_slot
+                        .representation()
+                        .matches(second_slot.representation())
+                    && !first_slot.is_concrete_index()
+                    && !Self::has_wildcard(value)
+                {
+                    Some(first_slot.dimension().to_owned())
+                } else {
+                    None
+                }
+            }
+            (SlotMatch::Explicit(slot), SlotMatch::Other) => {
+                Self::compact_vector(value, first, slot, second, &mut slots)
+            }
+            (SlotMatch::Other, SlotMatch::Explicit(slot)) => {
+                Self::compact_vector(value, second, slot, first, &mut slots)
+            }
+            _ => None,
+        }
+    }
+
+    fn compact_vector(
+        metric: AtomView<'_>,
+        slot_value: AtomView<'_>,
+        slot: SlotView<'_>,
+        vector: AtomView<'_>,
+        slots: &mut SlotMatcher,
+    ) -> Option<Atom> {
+        let AtomView::Fun(vector) = vector else {
+            return None;
+        };
+        if !vector.get_symbol().has_tag(&SPENSO_TAG.rank1) {
+            return None;
+        }
+        let last = slots.vector_argument(vector)?;
+        let compact = slots.compact_representation(last)?;
+        let representation = slot.representation();
+        if !compact.is_base()
+            || representation.head() != compact.head()
+            || representation.dimension() != compact.dimension()
+            || !(representation.is_self_dual()
+                || (representation.head().has_tag(&SPENSO_TAG.dualizable)
+                    && (representation.is_base() || representation.is_dual())))
+            || slot.is_concrete_index()
+            || Self::has_wildcard(metric)
+        {
+            return None;
+        }
+        let mut result = FunctionBuilder::new(vector.get_symbol());
+        let mut arguments = vector.iter();
+        while arguments.len() > 1 {
+            result = result.add_arg(arguments.next().unwrap());
+        }
+        Some(result.add_arg(slot_value).finish())
+    }
+
+    fn has_wildcard(value: AtomView<'_>) -> bool {
+        let mut found = false;
+        value.visitor(&mut |atom| {
+            found |= match atom {
+                AtomView::Fun(function) => function.get_symbol().get_wildcard_level() > 0,
+                AtomView::Var(variable) => variable.get_symbol().get_wildcard_level() > 0,
+                _ => false,
+            };
+            !found
+        });
+        found
+    }
+}
+
 impl<Aind> ExplicitKey<Aind> {
     pub fn from_structure<S: TensorStructure + HasName<Name: IntoSymbol, Args: IntoArgs>>(
         structure: &Canonicalized<S>,
@@ -497,19 +588,10 @@ $g(#to-eq(a),#to-eq(b))$
                 }
         }
         None
-    },norm = |f,_|{
-
-        let AtomView::Fun(f)=f else{
-            return;
-        };
-
-        match f.get_nargs(){
-            3=>{},
-            2=>{},
-            1=>{},
-            _=>{},
+    },norm = |value, out| {
+        if let Some(normalized) = MetricNormalization::normalize(value) {
+            **out = normalized;
         }
-
     }),
 };
 }
@@ -807,6 +889,185 @@ impl<
             Cow::Borrowed(tensor) => Cow::Borrowed(tensor.canonical()),
             Cow::Owned(tensor) => Cow::Owned(tensor.into_canonical()),
         })
+    }
+}
+
+#[cfg(test)]
+mod metric_normalization_tests {
+    use super::*;
+    use symbolica::function;
+
+    fn assert_metric(value: &Atom) {
+        assert!(
+            matches!(value.as_view(), AtomView::Fun(function)
+            if function.get_symbol() == ETS.metric),
+            "{value}"
+        );
+    }
+
+    #[test]
+    fn metric_constructor_traces_exact_abstract_slots() {
+        let rep = SPENSO_TAG.self_dual_symbol("metric_norm_selfdual");
+        let n = Atom::var(symbol!("metric_norm_N"));
+        let dimension = n.pow(2) - 1;
+        let index = function!(symbol!("metric_norm_index"), symbol!("metric_norm_a"));
+        let slot = function!(rep, &dimension, &index);
+        assert_eq!(ETS.metric(&slot, &slot), dimension);
+
+        let large = function!(rep, &dimension, Atom::num(4_294_967_297_i64));
+        let small = function!(rep, &dimension, Atom::num(1));
+        assert_eq!(ETS.metric(&large, &large), dimension);
+        assert_metric(&ETS.metric(&small, &large));
+        assert_metric(&ETS.metric(&slot, function!(rep, Atom::num(4), &index)));
+        assert_metric(&ETS.metric(
+            &slot,
+            function!(
+                SPENSO_TAG.self_dual_symbol("metric_norm_other"),
+                &dimension,
+                &index
+            ),
+        ));
+    }
+
+    #[test]
+    fn metric_constructor_respects_variance_and_concrete_components() {
+        let rep = SPENSO_TAG.dualizable_symbol("metric_norm_dualizable");
+        let dimension = Atom::var(symbol!("metric_norm_D"));
+        let slot = function!(rep, &dimension, Atom::num(3));
+        let dual = function!(AIND_SYMBOLS.dind, &slot);
+        assert_eq!(ETS.metric(&slot, &dual), dimension);
+        assert_eq!(ETS.metric(&dual, &slot), dimension);
+        assert_metric(&ETS.metric(&slot, &slot));
+        assert_metric(&ETS.metric(&dual, &dual));
+
+        let self_dual = SPENSO_TAG.self_dual_symbol("metric_norm_components");
+        let component = function!(AIND_SYMBOLS.cind, Atom::num(1));
+        assert_metric(&ETS.metric(&component, &component));
+        let invalid_slot = function!(self_dual, &dimension, &component);
+        assert_metric(&ETS.metric(&invalid_slot, &invalid_slot));
+        let slot = function!(self_dual, &dimension, Atom::num(1));
+        // The existing variance callback removes dind around self-dual slots
+        // before the metric callback sees either argument.
+        let wrapped_slot = function!(AIND_SYMBOLS.dind, &slot);
+        assert_eq!(wrapped_slot, slot);
+        assert_eq!(ETS.metric(&slot, &wrapped_slot), dimension);
+
+        let compact_rep = function!(self_dual, &dimension);
+        let wrapped_compact = function!(AIND_SYMBOLS.dind, &compact_rep);
+        assert_eq!(wrapped_compact, compact_rep);
+        let vector = SPENSO_TAG.rank_one_tensor_symbol("metric_norm_selfdual_vector");
+        assert_eq!(
+            ETS.metric(&slot, function!(vector, &wrapped_compact)),
+            function!(vector, &slot)
+        );
+    }
+
+    #[test]
+    fn metric_constructor_compacts_canonical_vectors() {
+        let rep = SPENSO_TAG.dualizable_symbol("metric_norm_vector_rep");
+        let vector = SPENSO_TAG.rank_one_tensor_symbol("metric_norm_vector");
+        let dimension = Atom::var(symbol!("metric_norm_vector_D"));
+        let slot = function!(rep, &dimension, symbol!("metric_norm_vector_i"));
+        let dual = function!(AIND_SYMBOLS.dind, &slot);
+        let compact_rep = function!(rep, &dimension);
+        // Nested scalar metadata is retained without interpreting its payload as slots.
+        let metadata = function!(symbol!("metric_norm_metadata"; Scalar), &slot);
+        let compact = function!(vector, &metadata, &compact_rep);
+        for endpoint in [&slot, &dual] {
+            let expected = function!(vector, &metadata, endpoint);
+            assert_eq!(ETS.metric(endpoint, &compact), expected);
+            assert_eq!(ETS.metric(&compact, endpoint), expected);
+        }
+    }
+
+    #[test]
+    fn metric_constructor_leaves_malformed_and_mismatched_vectors_unchanged() {
+        let rep = SPENSO_TAG.self_dual_symbol("metric_norm_strict_rep");
+        let vector = SPENSO_TAG.rank_one_tensor_symbol("metric_norm_strict_vector");
+        let dimension = Atom::var(symbol!("metric_norm_strict_D"));
+        let compact_rep = function!(rep, &dimension);
+        let slot = function!(rep, &dimension, symbol!("metric_norm_strict_i"));
+        for malformed in [
+            function!(vector),
+            function!(vector, symbol!("metric_norm_metadata_only")),
+            function!(vector, function!(rep, Atom::num(5))),
+            function!(vector, &compact_rep, &compact_rep),
+            function!(vector, &slot, &compact_rep),
+            function!(vector, function!(rep)),
+            function!(
+                vector,
+                function!(rep, &dimension, Atom::num(1), Atom::num(2))
+            ),
+            function!(
+                vector,
+                function!(AIND_SYMBOLS.dind, &compact_rep, Atom::num(1))
+            ),
+            function!(symbol!("metric_norm_untagged_vector"), &compact_rep),
+        ] {
+            assert_metric(&ETS.metric(&slot, &malformed));
+        }
+        let malformed_slot = function!(rep, &dimension, Atom::num(1), Atom::num(2));
+        assert_metric(&ETS.metric(&malformed_slot, &malformed_slot));
+        assert_metric(&function!(ETS.metric, &slot));
+        assert_metric(&function!(ETS.metric, &slot, &slot, &slot));
+    }
+
+    #[test]
+    fn metric_constructor_preserves_wildcard_templates() {
+        let rep = SPENSO_TAG.self_dual_symbol("metric_norm_pattern_rep");
+        let vector = SPENSO_TAG.rank_one_tensor_symbol("metric_norm_pattern_vector");
+        let dimension = Atom::var(symbol!("metric_norm_pattern_D"));
+        let index = Atom::var(symbol!("metric_norm_pattern_i"));
+        for (dimension, index) in [
+            (dimension.clone(), Atom::var(symbol!("metric_norm_index_"))),
+            (Atom::var(symbol!("metric_norm_dimension_")), index.clone()),
+            (
+                dimension.clone(),
+                function!(symbol!("metric_norm_index_function_"), &index),
+            ),
+        ] {
+            let slot = function!(rep, &dimension, &index);
+            assert_metric(&ETS.metric(&slot, &slot));
+            assert_metric(&ETS.metric(&slot, function!(vector, function!(rep, &dimension))));
+        }
+        let slot = function!(rep, &dimension, &index);
+        let compact = function!(
+            vector,
+            symbol!("metric_norm_metadata___"),
+            function!(rep, &dimension)
+        );
+        assert_metric(&ETS.metric(&slot, &compact));
+        let wildcard_rep = SPENSO_TAG.self_dual_symbol("metric_norm_rep_");
+        let slot = function!(wildcard_rep, &dimension, &index);
+        assert_metric(&ETS.metric(&slot, &slot));
+    }
+
+    #[test]
+    fn metric_constructor_renormalizes_changed_arguments_and_composes_in_powers() {
+        let rep = SPENSO_TAG.self_dual_symbol("metric_norm_rebuild_rep");
+        let vector = SPENSO_TAG.rank_one_tensor_symbol("metric_norm_rebuild_vector");
+        let dimension = Atom::var(symbol!("metric_norm_rebuild_D"));
+        let other_dimension = Atom::var(symbol!("metric_norm_rebuild_E"));
+        let first = Atom::var(symbol!("metric_norm_rebuild_i"));
+        let second = Atom::var(symbol!("metric_norm_rebuild_j"));
+        let slot = function!(rep, &dimension, &first);
+        let metric = ETS.metric(&slot, function!(rep, &dimension, &second));
+        assert_eq!(
+            metric.replace(second.to_pattern()).with(first.to_pattern()),
+            dimension
+        );
+        let metric = ETS.metric(&slot, function!(vector, function!(rep, &other_dimension)));
+        assert_eq!(
+            metric
+                .replace(other_dimension.to_pattern())
+                .with(dimension.to_pattern()),
+            function!(vector, &slot)
+        );
+
+        let trace = ETS.metric(&slot, &slot);
+        assert_eq!(trace.pow(2), dimension.pow(2));
+        assert_eq!(trace.pow(3), dimension.pow(3));
+        assert_eq!(ETS.metric(&slot * 3, &slot), &dimension * 3);
     }
 }
 

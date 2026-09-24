@@ -125,7 +125,7 @@ fn sun_simplify_id4_structure_times_open_chain_contracts() {
     let r = TestReps::new();
     let expr = f!(r, a, b, c) * sun_tf!(r, i, j, b, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))*𝑖/2");
 }
 
 #[test]
@@ -134,7 +134,7 @@ fn sun_simplify_id7_cyclic_structure_times_open_chain_contracts() {
     let r = TestReps::new();
     let expr = f!(r, c, a, b) * sun_tf!(r, i, j, b, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))*𝑖/2");
 }
 
 #[test]
@@ -189,7 +189,7 @@ fn sun_simplify_id30_three_generator_trace_terminal() {
     let r = TestReps::new();
     let expr = sun_trace!(r, i, j, k);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*f(coad(dA,i),coad(dA,j),coad(dA,k))*idx(2,cof(Nc))+trace(cof(Nc),sym(t(coad(dA,i),in,out),t(coad(dA,j),in,out),t(coad(dA,k),in,out)))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"f(coad(dA,i),coad(dA,j),coad(dA,k))*idx(2,cof(Nc))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,i),in,out),t(coad(dA,j),in,out),t(coad(dA,k),in,out)))");
 }
 
 #[test]
@@ -279,7 +279,7 @@ fn sun_simplify_id75_structure_times_two_generator_open_chain() {
     let r = TestReps::new();
     let expr = f!(r, a, b, c) * sun_tf!(r, i, j, b, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"1𝑖/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))*𝑖/2");
 }
 
 #[test]

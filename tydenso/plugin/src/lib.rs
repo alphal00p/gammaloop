@@ -1405,7 +1405,7 @@ pub fn cook_indices(expr: &[u8]) -> Result<Vec<u8>, String> {
 pub fn dirac_adjoint(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
     let result = atom
-        .dirac_adjoint::<AbstractIndex>()
+        .dirac_adjoint::<AbstractIndex>(false)
         .map_err(|error| error.to_string())?;
     encode_atom_with_context(&result, &context)
 }

@@ -19,6 +19,12 @@ pub(crate) struct BracketNormalizer;
 
 impl BracketNormalizer {
     pub(crate) fn normalize(expression: AtomView<'_>) -> Atom {
+        // Every transformation below opens a bracket at this node or in one
+        // of its factors. Ordinary tensor expressions need no rebuilding.
+        if !expression.contains_symbol(SPENSO_TAG.bracket) {
+            return expression.to_owned();
+        }
+
         expression.replace_map_bottom_up(|node, _context, out| {
             if let AtomView::Mul(factors) = node {
                 if factors

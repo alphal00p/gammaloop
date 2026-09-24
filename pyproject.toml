@@ -79,4 +79,4 @@ ignore_missing_imports = true
 package = false
 
 [tool.uv.sources]
-symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", rev = "a19c760dd567c239f30d87e4e924ca2f8b8457ab" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", rev = "06906976bca24fefc5203aee699d90d62ebe08cd" }

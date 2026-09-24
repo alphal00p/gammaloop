@@ -25,6 +25,7 @@ button[aria-pressed=true] { outline:2px solid var(--blue); outline-offset:-2px; 
 .formula svg { max-width:100%; height:auto; }
 .formula code { white-space:pre-wrap; overflow-wrap:anywhere; }
 .axes { margin:8px 0; font-size:12px; }
+#plot { container-type:inline-size; }
 .panels { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); gap:16px; }
 .panels.matrices { grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr)); }
 .panels.single { grid-template-columns:minmax(0,1fr); }
@@ -45,4 +46,11 @@ button[aria-pressed=true] { outline:2px solid var(--blue); outline-offset:-2px; 
 #legend { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:14px; font-size:12px; }
 .ramp { display:inline-block; width:100px; height:10px; background:linear-gradient(90deg,color-mix(in srgb,var(--blue) 8%,var(--bg)),color-mix(in srgb,var(--blue) 62%,var(--bg))); }
 #status { font-size:12px; margin-top:8px; }
+/* Keep four slices in two complete rows until all four fit side by side. */
+@container (536px <= width < 1088px) {
+  .panels:not(.matrices):has(> :nth-child(4)) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@container (856px <= width < 1728px) {
+  .panels.matrices:has(> :nth-child(4)) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
 @media (pointer:coarse) { button, select, input[type=number] { min-height:44px; } select,input { font-size:16px; } }

@@ -7,7 +7,9 @@
 //! can time the private operation without a new public API. The two public
 //! Schoonschip methods and gamma simplification call the linked production library.
 //! The repeated-index check is timed separately; it never guards the contractor.
-//! Input creation, validation and output snapshots are outside timing. Timed calls
+//! Input creation, validation and output snapshots are outside timing except for
+//! `parse_only` and `parse_and_normalize_dots`, which start from the saved source.
+//! Comparing those methods exposes work moved into construction. Timed calls
 //! include output destruction. Settings with chain-like functions enabled also
 //! cover contractions into ordered chains and cyclic/symmetric traces.
 //!
@@ -47,6 +49,7 @@ struct Case {
     name: String,
     expression: Atom,
     gamma_input: Option<Atom>,
+    source: Option<String>,
 }
 
 impl Case {
@@ -60,6 +63,7 @@ impl Case {
             )
             .unwrap(),
             gamma_input: None,
+            source: Some(source.into()),
         }
     }
 
@@ -168,6 +172,45 @@ impl Case {
                 "epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d))*g(mink(4,e),cleanup_benchmark::V(mink(4)))",
             ),
         ];
+        for (name, source) in [
+            ("dot_self_trace", "g(mink(4,a),mink(4,a))"),
+            ("dot_self_trace_square", "g(mink(4,a),mink(4,a))^2"),
+            ("dot_self_trace_cube", "g(mink(4,a),mink(4,a))^3"),
+            ("dot_symbolic_trace_square", "g(mink(D,a),mink(D,a))^2"),
+            ("dot_compound_trace", "g(mink(Nc^2-1,a),mink(Nc^2-1,a))"),
+            ("dot_dual_trace_square", "g(lor(4,a),dind(lor(4,a)))^2"),
+            ("dot_dual_trace_miss", "g(lor(4,a),lor(4,a))"),
+            ("dot_trace_dimension_miss", "g(mink(4,a),mink(5,a))"),
+            ("dot_metric_square", "g(mink(4,a),mink(4,b))^2"),
+            ("dot_metric_fourth", "g(mink(D,a),mink(D,b))^4"),
+            ("dot_metric_negative_even", "g(mink(4,a),mink(4,b))^(-2)"),
+            ("dot_metric_fractional", "g(mink(4,a),mink(4,b))^(1/2)"),
+            ("dot_vector_square", "cleanup_benchmark::V(mink(4,a))^2"),
+            ("dot_vector_cube", "cleanup_benchmark::V(mink(4,a))^3"),
+            (
+                "dot_nested_vectors",
+                "cleanup_benchmark::V(cleanup_benchmark::W(mink(4)))",
+            ),
+            (
+                "dot_compact_vector",
+                "g(mink(4,a),cleanup_benchmark::V(mink(4)))",
+            ),
+            (
+                "dot_vector_dimension_miss",
+                "g(mink(4,a),cleanup_benchmark::V(mink(5)))",
+            ),
+            ("dot_vector_no_slot", "g(mink(4,a),cleanup_benchmark::V(x))"),
+            (
+                "dot_compact_scalar_factors",
+                "g(3*cleanup_benchmark::V(mink(4)),-2*cleanup_benchmark::W(mink(4)))",
+            ),
+            ("dot_factored_scope", "(x+g(mink(4,a),mink(4,a)))^2*(y+z)"),
+            ("dot_malformed_metric", "g(mink(4,a),mink(4,b),x)"),
+            ("dot_malformed_slot", "g(mink(4,a,x),mink(4,a,x))"),
+            ("dot_opaque_payload", "S(g(mink(4,a),mink(4,a)),x)"),
+        ] {
+            cases.push(Self::parse(name, source));
+        }
         cases.push(Self::parse(
             "symmetric_trace_partner",
             "g(mink(4,a),mink(4,b))*trace(bis(4),sym(T(mink(4,b),in,out),U(in,out)))",
@@ -205,6 +248,7 @@ impl Case {
                 name: format!("axial_{length}"),
                 expression: input.simplify_gamma(),
                 gamma_input: Some(input),
+                source: None,
             });
         }
         let indices: Vec<_> = (0..8)
@@ -215,6 +259,7 @@ impl Case {
             name: "free_trace_8".into(),
             expression: free.simplify_gamma(),
             gamma_input: Some(free),
+            source: None,
         });
         let p = p!(mink.to_symbolic([]));
         let q = q!(mink.to_symbolic([]));
@@ -223,6 +268,7 @@ impl Case {
             name: "compact_paired_8".into(),
             expression: compact.simplify_gamma(),
             gamma_input: Some(compact),
+            source: None,
         });
         let a = mink.pattern(symbol!("metric_benchmark::a"));
         let b = mink.pattern(symbol!("metric_benchmark::b"));
@@ -274,6 +320,7 @@ impl Case {
                 name: name.into(),
                 expression: input.simplify_gamma(),
                 gamma_input: Some(input),
+                source: None,
             });
         }
         let external = g!(&a, &c)
@@ -285,6 +332,7 @@ impl Case {
                 name: name.into(),
                 expression: input.simplify_gamma(),
                 gamma_input: Some(input),
+                source: None,
             });
         }
         cases
@@ -293,6 +341,9 @@ impl Case {
 
 #[derive(Clone, Copy)]
 enum Method {
+    NormalizeDots,
+    ParseOnly,
+    ParseAndNormalizeDots,
     Repeated,
     MetricCore,
     GuardedMetricCore,
@@ -302,7 +353,10 @@ enum Method {
     FullGamma,
 }
 impl Method {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 10] = [
+        Self::NormalizeDots,
+        Self::ParseOnly,
+        Self::ParseAndNormalizeDots,
         Self::Repeated,
         Self::MetricCore,
         Self::GuardedMetricCore,
@@ -313,6 +367,9 @@ impl Method {
     ];
     fn name(self) -> &'static str {
         match self {
+            Self::NormalizeDots => "normalize_dots",
+            Self::ParseOnly => "parse_only",
+            Self::ParseAndNormalizeDots => "parse_and_normalize_dots",
             Self::Repeated => "repeated_indices_only",
             Self::MetricCore => "metric_contractor_only",
             Self::GuardedMetricCore => "guarded_metric_contractor",
@@ -325,11 +382,28 @@ impl Method {
     fn input(self, case: &Case) -> Option<AtomView<'_>> {
         match self {
             Self::FullGamma => case.gamma_input.as_ref().map(Atom::as_view),
+            Self::ParseOnly | Self::ParseAndNormalizeDots => {
+                case.source.as_ref().map(|_| case.expression.as_view())
+            }
             _ => Some(case.expression.as_view()),
         }
     }
-    fn apply(self, expression: AtomView<'_>) -> Atom {
+    fn apply(self, expression: AtomView<'_>, source: Option<&str>) -> Atom {
         match self {
+            Self::NormalizeDots => expression.normalize_dots(),
+            Self::ParseOnly | Self::ParseAndNormalizeDots => {
+                let parsed = Atom::parse(
+                    source.unwrap(),
+                    "spenso",
+                    symbolica::parser::ParseSettings::symbolica(),
+                )
+                .unwrap();
+                if matches!(self, Self::ParseOnly) {
+                    parsed
+                } else {
+                    parsed.normalize_dots()
+                }
+            }
             Self::Repeated => Atom::num(i64::from(expression.has_repeated_explicit_indices())),
             Self::MetricCore => slot_contraction::SlotContraction::run(expression, true, false),
             Self::GuardedMetricCore => {
@@ -351,17 +425,17 @@ impl Method {
             Self::FullGamma => expression.simplify_gamma(),
         }
     }
-    fn run(self, expression: AtomView<'_>) {
+    fn run(self, expression: AtomView<'_>, source: Option<&str>) {
         if matches!(self, Self::Repeated) {
             black_box(black_box(expression).has_repeated_explicit_indices());
         } else {
-            let _ = black_box(self.apply(black_box(expression)));
+            let _ = black_box(self.apply(black_box(expression), black_box(source)));
         }
     }
-    fn batch(self, expression: AtomView<'_>, repetitions: usize) -> f64 {
+    fn batch(self, expression: AtomView<'_>, source: Option<&str>, repetitions: usize) -> f64 {
         let started = Instant::now();
         for _ in 0..repetitions {
-            self.run(expression);
+            self.run(expression, source);
         }
         started.elapsed().as_secs_f64() * 1e9 / repetitions as f64
     }
@@ -379,6 +453,9 @@ fn main() {
     idenso::representations::initialize();
     let _ = *idenso::epsilon::EPSILON_SYMBOL;
     for case in Case::cases() {
+        if let Some(source) = &case.source {
+            std::fs::write(directory.join(format!("{}.source", case.name)), source).unwrap();
+        }
         std::fs::write(
             directory.join(format!("{}.input", case.name)),
             case.expression.to_plain_string(),
@@ -400,7 +477,7 @@ fn main() {
         let mut output_terms = Vec::new();
         for &method in &methods {
             let input = method.input(&case).unwrap();
-            let output = method.apply(input);
+            let output = method.apply(input, case.source.as_deref());
             changed.push(output.as_view() != input);
             output_terms.push(output.nterms());
             std::fs::write(
@@ -410,28 +487,33 @@ fn main() {
             .unwrap();
             if matches!(
                 method,
-                Method::MetricCore
+                Method::NormalizeDots
+                    | Method::MetricCore
                     | Method::GuardedMetricCore
                     | Method::MetricSettings
                     | Method::FullSchoonschip
                     | Method::EpsilonCleanup
             ) {
                 assert_eq!(
-                    method.apply(output.as_view()),
+                    method.apply(output.as_view(), None),
                     output,
                     "{} {} is not idempotent",
                     case.name,
                     method.name()
                 );
             }
-            let ns = method.batch(input, 1);
+            let ns = method.batch(input, case.source.as_deref(), 1);
             repetitions.push((target_ms * 1e6 / ns).ceil().clamp(1., 500_000.) as usize);
         }
         let mut timings: Vec<Vec<f64>> = vec![Vec::new(); methods.len()];
         for sample in 0..samples {
             for offset in 0..methods.len() {
                 let m = (sample + offset) % methods.len();
-                timings[m].push(methods[m].batch(methods[m].input(&case).unwrap(), repetitions[m]));
+                timings[m].push(methods[m].batch(
+                    methods[m].input(&case).unwrap(),
+                    case.source.as_deref(),
+                    repetitions[m],
+                ));
             }
         }
         for (m, method) in methods.iter().enumerate() {

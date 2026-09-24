@@ -199,15 +199,16 @@ pub(super) fn to_html(
     );
     // Notebook HTML formatters do not execute script tags. A sandboxed srcdoc
     // keeps this portable across marimo and Jupyter, without a server or widget dependency.
-    // Inheriting the embedding page's color scheme lets its theme, including
-    // marimo's explicit theme switch, drive prefers-color-scheme inside the frame.
+    // Explicitly forward the page's theme as well: WebKit does not reliably
+    // propagate color-scheme into sandboxed frames. The sandbox stays opaque.
     let height = if view.layout.logical_shape().len() == 3 {
         760
     } else {
         520
     };
     Ok(format!(
-        r#"<iframe data-spenso-explorer title="Tensor component explorer" sandbox="allow-scripts" style="display:block;width:100%;max-width:100%;height:{height}px;min-height:240px;resize:vertical;overflow:auto;border:0;color-scheme:inherit" srcdoc="{}"></iframe>"#,
+        r#"<iframe data-spenso-explorer title="Tensor component explorer" sandbox="allow-scripts" style="display:block;width:100%;max-width:100%;height:{height}px;min-height:240px;resize:vertical;overflow:auto;border:0;color-scheme:inherit" onload="{}" srcdoc="{}"></iframe>"#,
+        escape_html(include_str!("../../typst/explorer-host.js")),
         escape_html(&document)
     ))
 }
