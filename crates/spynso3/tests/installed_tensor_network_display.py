@@ -9,12 +9,40 @@ from symbolica.community.spenso import (
     Representation,
     Tensor,
     TensorExpression,
+    TensorLibrary,
     TensorName,
     TensorNetwork,
 )
 
 
 class NetworkDisplayTests(unittest.TestCase):
+    def test_spinor_current_is_nary_before_execution(self):
+        spinor = Representation.bis(4)
+        jbar = TensorName("nary_current::Jbar")(spinor)
+        j = TensorName("nary_current::J")(spinor)
+        gamma = TensorExpression.gamma(4)
+        factors = [jbar(1), gamma(1, 2, 1), gamma(2, 3, 2), gamma(3, 4, 3), j(4)]
+        current = factors[0]
+        nested = current.to_expression()
+        for factor in factors[1:]:
+            current = current * factor
+            nested = TensorNetwork.bracket()(nested, factor.to_expression())
+        library = TensorLibrary.hep_lib_atom()
+        network = current.to_network(library=library)
+        self.assertEqual(network.to_dot().count('label = "∏"'), 1)
+        self.assertEqual(
+            list(current.to_expression()), [f.to_expression() for f in factors]
+        )
+        reference = TensorExpression(nested).to_network(library=library)
+        network.execute(library=library)
+        reference.execute(library=library)
+        actual = list(network.result_tensor(library=library))
+        expected = list(reference.result_tensor(library=library))
+        self.assertEqual(len(actual), 64)
+        self.assertTrue(
+            all((a - b).expand() == E("0") for a, b in zip(actual, expected))
+        )
+
     def test_graph_tracks_execution_while_source_expression_is_preserved(self):
         rep = Representation.euc(2)
         tensor = Tensor.dense(

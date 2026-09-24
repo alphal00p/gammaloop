@@ -517,7 +517,7 @@ impl<'settings> DiracSimplifier<'settings> {
         } else {
             TRACE_GAMMA_RECURSION
         };
-        let mut indices = Self::gamma_mink_index_sequence_for(rule, &factors)?;
+        let indices = Self::gamma_mink_index_sequence_for(rule, &factors)?;
         let mut slots = SlotMatcher::default();
         let mut repeated = 0;
         for (position, &index) in indices.iter().enumerate() {
@@ -550,52 +550,25 @@ impl<'settings> DiracSimplifier<'settings> {
         if indices.len() % 2 == 1 || (axial && indices.len() < 4) {
             return Some(Atom::Zero);
         }
-        let mut coefficient = Atom::num(1);
-        if repeated > 0 {
-            // These identities emit only a scalar and another word. Keep the
-            // factors borrowed instead of materializing shorter trace atoms and
-            // scheduling whole-expression normalization after each contraction.
-            while repeated > 0 {
-                let (start, distance) = Self::trace_repeated_pair(&factors, is_minkowski_slot)?;
-                let dimension = factors[start].gamma_dimension()?;
-                let factor = match distance {
-                    1 => dimension.to_owned(),
-                    2 => Atom::num(2) - dimension,
-                    distance if distance.is_multiple_of(2) && is_four_dimension(dimension) => {
-                        Atom::num(-2)
-                    }
-                    _ => return None,
-                };
-                coefficient *= factor;
-                factors.rotate_left(start);
-                // gamma(mu) A_odd gamma(mu) = -2 reverse(A_odd) in 4D.
-                // The one-gamma interior is valid in D dimensions with 2-D.
-                factors[1..distance].reverse();
-                factors.remove(distance);
-                factors.remove(0);
-                repeated -= 1;
-            }
-            indices = Self::gamma_mink_index_sequence_for(rule, &factors)?;
-        }
         let compact = !axial && indices.iter().all(|&index| !is_minkowski_slot(index));
-        let result = if !compact
+        if !compact
+            && repeated == 0
             && (axial
                 || (has_four_dimensional_trace_rep(rep)
                     && factors
                         .iter()
                         .all(|factor| factor.gamma_dimension().is_some_and(is_four_dimension))))
         {
-            trace_kernel::evaluate(&indices, axial, trace_kernel::TraceOutput::Factored)?
+            trace_kernel::evaluate(&indices, axial, trace_kernel::TraceOutput::Factored)
         } else {
             let terminal = trace!(rep; std::iter::empty::<Atom>());
             let trace_unit = Self::simplify_trace_terminal(terminal.as_view())?;
-            trace_kernel::evaluate_generic(&indices, trace_unit.as_view(), compact)
-        };
-        Some(if coefficient.is_one() {
-            result
-        } else {
-            coefficient * result
-        })
+            Some(trace_kernel::evaluate_generic(
+                &indices,
+                trace_unit.as_view(),
+                true,
+            ))
+        }
     }
 
     fn simplify_chain_node(self, f: FunView) -> Option<Atom> {
@@ -1522,15 +1495,12 @@ impl DiracSimplifier<'_> {
         (priority, distance)
     }
 
-    fn trace_repeated_pair(
-        factors: &[DiracFactor<'_>],
-        admits_index: impl Fn(AtomView<'_>) -> bool,
-    ) -> Option<(usize, usize)> {
+    fn rotate_trace_to_repeated_pair<'a>(factors: &[DiracFactor<'a>]) -> Vec<DiracFactor<'a>> {
         let mut best = None;
         for (i, left) in factors.iter().enumerate() {
             for (j, right) in factors.iter().enumerate().skip(i + 1) {
                 if Self::mink_index_pair(GAMMA_ANTICOMMUTATION, left, right)
-                    .is_some_and(|(a, b)| a == b && admits_index(a))
+                    .is_some_and(|(a, b)| a == b)
                 {
                     let distance = j - i;
                     for candidate in [(i, distance), (j, factors.len() - distance)] {
@@ -1542,11 +1512,7 @@ impl DiracSimplifier<'_> {
                 }
             }
         }
-        best.map(|(pair, _)| pair)
-    }
-
-    fn rotate_trace_to_repeated_pair<'a>(factors: &[DiracFactor<'a>]) -> Vec<DiracFactor<'a>> {
-        let start = Self::trace_repeated_pair(factors, |_| true).map_or(0, |(start, _)| start);
+        let start = best.map_or(0, |((start, _), _)| start);
         Self::cyclic_from_position(factors, start)
     }
 
@@ -2060,7 +2026,7 @@ mod tests {
     }
 
     #[test]
-    fn terminal_trace_rejects_branching_or_ambiguous_contractions() {
+    fn terminal_trace_contracts_branching_words_but_rejects_ambiguous_indices() {
         let r = test_initialize();
         let spin = r.bis4.to_symbolic([]);
         for dimension in [4, 6] {
@@ -2070,20 +2036,52 @@ mod tests {
             let p = momenta(&mink.to_symbolic([]));
             for word in [
                 vec![&a, &p[0], &p[1], &a, &p[2], &p[3], &p[4], &p[5]],
-                vec![&a, &p[0], &a, &p[1], &a, &p[2]],
                 vec![&a, &p[0], &b, &p[1], &a, &p[2], &b, &p[3]],
             ] {
                 let input = trace!(&spin; word.into_iter().map(|index| gamma!(index)));
-                assert!(DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_none());
+                let result = DiracSimplifier::evaluate_terminal_trace(input.as_view()).unwrap();
+                result.visitor(&mut |node| {
+                    assert!(node != a.as_view() && node != b.as_view());
+                    true
+                });
             }
+            let ambiguous = trace!(&spin; [&a, &p[0], &a, &p[1], &a, &p[2]]
+                .map(|index| gamma!(index)));
+            assert!(DiracSimplifier::evaluate_terminal_trace(ambiguous.as_view()).is_none());
             let input = trace!(&spin; [&a, &p[0], &p[1], &p[2], &a, &p[3], &p[4], &p[5]]
                 .map(|index| gamma!(index)));
-            assert_eq!(
-                DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_some(),
-                dimension == 4,
-                "long odd-interior reversal is four-dimensional"
-            );
+            assert!(DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_some());
         }
+    }
+
+    #[test]
+    fn branching_terminal_trace_preserves_free_slots_and_scalar_spectators() {
+        let r = test_initialize();
+        let spin = r.bis_d.to_symbolic([]);
+        let slots: Vec<_> = (0..5).map(|i| r.mink_d.pattern(Atom::num(i))).collect();
+        let dimension = mink_slot_dimension(slots[0].as_view()).unwrap();
+        let unit = bispinor_dimension(spin.as_view()).unwrap();
+        let input = trace!(&spin; [0, 1, 2, 0, 3, 4].map(|i| gamma!(&slots[i])));
+        let reduced = trace!(&spin; slots[1..].iter().map(|index| gamma!(index))).simplify_gamma();
+        let expected = Atom::num(4) * unit * g!(&slots[1], &slots[2]) * g!(&slots[3], &slots[4])
+            + (dimension.to_owned() - Atom::num(4)) * reduced;
+        let result = input.simplify_gamma();
+        assert!((&result - &expected).expand().is_zero());
+        result.visitor(&mut |node| {
+            assert_ne!(node, slots[0].as_view(), "the summed index must be absent");
+            true
+        });
+        let spectator = symbolica::parse_lit!((x + y) ^ 8);
+        let decorated = &spectator * &input;
+        assert!(DiracSimplifier::evaluate_terminal_trace(decorated.as_view()).is_none());
+        let complete = decorated.simplify_gamma();
+        // Remove only the spectator for the standalone polynomial certificate;
+        // the compound scalar numerator itself remains unexpanded.
+        let body = complete
+            .replace(spectator.to_pattern())
+            .with(Atom::num(1).to_pattern());
+        assert_eq!(complete, &spectator * &body);
+        assert!((body - expected).expand().is_zero());
     }
 
     #[test]

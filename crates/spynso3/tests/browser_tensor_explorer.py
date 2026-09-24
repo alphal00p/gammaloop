@@ -58,8 +58,14 @@ print('<section id="standalone">' + library[TensorExpression.gamma(4)].to_html()
             chip = page.locator('.sl-chip[title="spenso::gamma"]')
             assert page.locator(".sl-panel:visible").count() == 0
             chip.click()
-            standalone = page.locator("#standalone iframe").element_handle().content_frame()
-            library = page.locator(".sl-panel:visible iframe").element_handle().content_frame()
+            standalone = (
+                page.locator("#standalone iframe").element_handle().content_frame()
+            )
+            library = (
+                page.locator(".sl-panel:visible iframe")
+                .element_handle()
+                .content_frame()
+            )
             for width in (1000, 320, 736, 1000):
                 page.set_viewport_size({"width": width, "height": 1800})
                 check_grid(standalone)

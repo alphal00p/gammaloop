@@ -42,6 +42,25 @@ impl StructuredAtom {
         self.rank() == 0
     }
 
+    /// Brackets are associative ordered products, not index scopes. Splice only
+    /// bracket children; sums and chain/trace binders remain intact.
+    fn bracket_product(left: AtomView<'_>, right: AtomView<'_>) -> Atom {
+        let mut pending = vec![right, left];
+        let mut product = FunctionBuilder::new(SPENSO_TAG.bracket);
+        while let Some(factor) = pending.pop() {
+            if let AtomView::Fun(function) = factor
+                && function.get_symbol() == SPENSO_TAG.bracket
+            {
+                let start = pending.len();
+                pending.extend(function.iter());
+                pending[start..].reverse();
+            } else {
+                product = product.add_arg(factor);
+            }
+        }
+        product.finish()
+    }
+
     /// Build a presentation-only atom whose surviving tensor ports follow the
     /// public logical interface rather than `OrderedStructure`'s canonical
     /// storage order.
@@ -978,10 +997,7 @@ pub fn outer(left: &StructuredAtom, right: &StructuredAtom) -> StructuredAtom {
     let atom = if left.atom.as_view().is_zero() || right.atom.as_view().is_zero() {
         Atom::Zero
     } else {
-        FunctionBuilder::new(SPENSO_TAG.bracket)
-            .add_arg(&left.atom)
-            .add_arg(&right.atom)
-            .finish()
+        StructuredAtom::bracket_product(left.atom.as_view(), right.atom.as_view())
     };
     StructuredAtom::new(
         atom,
@@ -1093,10 +1109,7 @@ pub fn contract(
             .add_arg(compact_right)
             .finish()
     } else {
-        FunctionBuilder::new(SPENSO_TAG.bracket)
-            .add_arg(materialized_left)
-            .add_arg(materialized_right)
-            .finish()
+        StructuredAtom::bracket_product(materialized_left.as_view(), materialized_right.as_view())
     };
     validate_explicit_index_occurrences(&atom)?;
     Ok(StructuredAtom::new(atom, interface))
@@ -1591,6 +1604,97 @@ mod tests {
                 })
             })
             .unwrap()
+    }
+
+    #[test]
+    fn bracket_products_flatten_both_sides_without_crossing_other_heads() {
+        let a = tensor("flat_a", &[rep()]);
+        let b = tensor("flat_b", &[rep()]);
+        let c = tensor("flat_c", &[rep()]);
+        let d = tensor("flat_d", &[rep()]);
+        let left = outer(&a, &b);
+        let right = outer(&c, &d);
+        let result = outer(&left, &right);
+        let expected = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(&a.atom)
+            .add_arg(&b.atom)
+            .add_arg(&c.atom)
+            .add_arg(&d.atom)
+            .finish();
+        assert_eq!(result.atom, expected);
+        assert_eq!(result.rank(), 4);
+        assert_eq!(outer(&outer(&left, &c), &d).atom, expected);
+
+        // Even imported, deeply nested brackets flatten, but a sum or a binder
+        // remains a single factor (no distribution or placeholder capture).
+        let sum = &a.atom + &b.atom;
+        let chain = SPENSO_TAG.chain(
+            port_atom(a.interface.logical_slots()[0]),
+            port_atom(b.interface.logical_slots()[0]),
+            [&a.atom, &b.atom],
+        );
+        let trace = shadowing::trace(rep().to_symbolic([]), [&c.atom, &d.atom]);
+        let nested = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(
+                FunctionBuilder::new(SPENSO_TAG.bracket)
+                    .add_arg(&sum)
+                    .add_arg(&chain)
+                    .finish(),
+            )
+            .add_arg(&trace)
+            .finish();
+        let flattened = StructuredAtom::bracket_product(nested.as_view(), d.atom.as_view());
+        let expected = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(sum)
+            .add_arg(chain)
+            .add_arg(trace)
+            .add_arg(&d.atom)
+            .finish();
+        assert_eq!(flattened, expected);
+    }
+
+    #[test]
+    fn repeated_explicit_contractions_build_one_nary_product() {
+        use spenso::network::graph::{NetworkNode, NetworkOp};
+        let slots = (0..6)
+            .map(|i| rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(i))))
+            .collect::<Vec<_>>();
+        let factors = (0..5)
+            .map(|i| {
+                let ports = &slots[i..i + 2];
+                partial_tensor(
+                    SPENSO_TAG.tensor_symbol(&format!("nary_factor_{i}")),
+                    ports,
+                    ports,
+                )
+            })
+            .collect::<Vec<_>>();
+        let result = factors[1..].iter().fold(factors[0].clone(), |left, right| {
+            multiply(&left, right).unwrap()
+        });
+        let expected = factors
+            .iter()
+            .fold(
+                FunctionBuilder::new(SPENSO_TAG.bracket),
+                |builder, factor| builder.add_arg(&factor.atom),
+            )
+            .finish();
+        assert_eq!(result.atom, expected);
+        assert_eq!(result.interface.logical_slots(), vec![slots[0], slots[5]]);
+        let network = result
+            .atom
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert_eq!(
+            network
+                .graph
+                .graph
+                .iter_nodes()
+                .filter(|(_, _, node)| matches!(node, NetworkNode::Op(NetworkOp::Product)))
+                .count(),
+            1
+        );
+        assert_eq!(network.graph.dangling_indices().len(), 2);
     }
 
     #[test]

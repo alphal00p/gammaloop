@@ -110,7 +110,11 @@ Typst entrypoint; both accept `linnet.RenderConfig`, like Feynman diagrams.
 `to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.
 `expression()` retains the semantic source formula, `to_dot()` exports the operation
 graph, and `result_tensor()` shows evaluated component data. Rendering a network does
-not execute it. Settings and filters
+not execute it. Symbolic multiplication and outer products flatten directly nested
+product brackets while preserving factor order and resolved contraction indices.
+A repeated product therefore becomes one n-ary network node before execution;
+sums, chains, and traces retain their boundaries.
+Settings and filters
 print their full constructor arguments, and libraries and evaluators show concise summaries.
 The policy types expose named constants and integer conversion; they are PyO3 classes, not
 Python `enum.Enum` subclasses with `.name` and `.value` attributes.

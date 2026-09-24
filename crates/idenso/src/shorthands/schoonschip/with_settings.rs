@@ -13,34 +13,34 @@ impl SchoonschipWithSettings<'_> {
     pub(crate) fn run(&self, view: AtomView<'_>) -> Atom {
         let mut current = view.to_owned();
         loop {
-            let next = self.apply_once(current.as_view());
-            if next == current {
-                return next;
+            let normalized = BracketNormalizer::normalize(current.as_view()).normalize_dots();
+            // Dot normalization stays outside this guard: compact vector
+            // rewrites can require no repeated explicit index at all.
+            if normalized.has_repeated_explicit_indices() {
+                let contracted = SlotContraction::run(
+                    normalized.as_view(),
+                    self.settings.simplify_chain_like_functions,
+                    self.settings.schoonschip_rank1_tensors,
+                );
+                if contracted != normalized {
+                    let next = BracketNormalizer::normalize(contracted.normalize_dots().as_view());
+                    // The contractor already reaches its fixed point. If
+                    // cleanup changes nothing, no new contraction or
+                    // normalization can be exposed by another full pass.
+                    if next == contracted || next == current {
+                        return next;
+                    }
+                    current = next;
+                    continue;
+                }
             }
-            current = next;
+            // Initial normalization can expose another bracket identity even
+            // without a contraction, such as bracket(p(mu)^2) becoming scalar.
+            if normalized == current {
+                return normalized;
+            }
+            current = normalized;
         }
-    }
-
-    fn apply_once(&self, view: AtomView<'_>) -> Atom {
-        let normalized = BracketNormalizer::normalize(view).normalize_dots();
-        // Metric and vector contractions both consume two explicit occurrences.
-        // Dot normalization stays outside this guard: compact vector rewrites
-        // can require no repeated explicit index at all.
-        if !normalized.has_repeated_explicit_indices() {
-            return normalized;
-        }
-        let contracted = SlotContraction::run(
-            normalized.as_view(),
-            self.settings.simplify_chain_like_functions,
-            self.settings.schoonschip_rank1_tensors,
-        );
-        if contracted == normalized {
-            return contracted;
-        }
-        // Only a contraction can introduce new dot or bracket simplifications
-        // here. Initial normalization changes are still covered by run's fixed
-        // point, including powers that turn a bracket's payload into a scalar.
-        BracketNormalizer::normalize(contracted.normalize_dots().as_view())
     }
 }
 
@@ -65,6 +65,10 @@ mod tests {
             "p(mink(4,a))*q(mink(4,a))",
             "unknown(mink(4,a))*another(mink(4,a))",
             "bracket(g(mink(4,a),mink(4,b)),unknown(mink(4,b)))",
+            "(x+y)^6*g(mink(4,a),mink(4,b))*(unknown(mink(4,b))+another(mink(4,b)))",
+            "(g(mink(4,a),mink(4,b))+g(mink(4,a),mink(4,c)))*epsilon(mink(4,a),mink(4,d),mink(4,e),mink(4,f))",
+            "p(mink(4,a))*(p(mink(4,a))+q(mink(4,a)))",
+            "bracket(g(mink(4,a),mink(4,b))*p(mink(4,a))*q(mink(4,b)))",
         ];
         for (mode, settings) in [
             SchoonschipSettings::default(),

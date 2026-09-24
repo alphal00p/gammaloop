@@ -58,7 +58,7 @@ enum SlotReplacement {
 pub(crate) struct SlotContraction;
 
 impl SlotContraction {
-    /// Contract explicit metrics and optional vectors without expanding sums or interpreting powers.
+    /// Contract explicit metrics and optional vectors while preserving scalar factors.
     /// Dot normalization, including metric traces and powers, remains a
     /// prerequisite stage owned by the caller.
     pub(crate) fn run(view: AtomView<'_>, chain_like: bool, rank_one: bool) -> Atom {
@@ -366,7 +366,79 @@ impl SlotContraction {
                 }
             }
         }
+        // Substitution can leave a metric inside a factored sum while its
+        // tensor partner sits outside, for example (g(a,b)*g(c,d) -
+        // g(a,d)*g(c,b))*epsilon(a,e,f,h). Pass only that partner through the
+        // sum; unrelated products retain their factorization. A normalized
+        // metric with a compact vector becomes a rank-one source instead.
+        for (source, factor) in factors.clone().enumerate() {
+            if !matches!(factor, AtomView::Add(_)) {
+                continue;
+            }
+            for (partner, tensor) in factors.clone().enumerate() {
+                if let AtomView::Fun(function) = tensor
+                    && function.get_symbol() != ETS.metric
+                    && let Some(replacement) =
+                        Self::contract_linear_source(factor, tensor, chain_like, rank_one, slots)
+                {
+                    return Some((partner, source, replacement));
+                }
+            }
+        }
         None
+    }
+
+    fn contract_linear_source(
+        expression: AtomView<'_>,
+        partner: AtomView<'_>,
+        chain_like: bool,
+        rank_one: bool,
+        slots: &mut SlotMatcher,
+    ) -> Option<Atom> {
+        match expression {
+            AtomView::Fun(function)
+                if function.get_symbol() == ETS.metric
+                    || (rank_one && function.get_symbol().has_tag(&SPENSO_TAG.rank1)) =>
+            {
+                Self::find_contraction(
+                    [expression, partner].into_iter(),
+                    chain_like,
+                    rank_one,
+                    slots,
+                )
+                .map(|(_, _, result)| result)
+            }
+            AtomView::Add(sum) => {
+                // Every branch must absorb the partner before it can be
+                // removed from the surrounding product.
+                let terms = sum
+                    .iter()
+                    .map(|term| {
+                        Self::contract_linear_source(term, partner, chain_like, rank_one, slots)
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+                Some(Atom::add_many(terms))
+            }
+            AtomView::Mul(product) => {
+                for (position, factor) in product.iter().enumerate() {
+                    if let Some(replaced) =
+                        Self::contract_linear_source(factor, partner, chain_like, rank_one, slots)
+                    {
+                        return Some(Atom::mul_many(product.iter().enumerate().map(
+                            |(i, factor)| {
+                                if i == position {
+                                    replaced.as_view()
+                                } else {
+                                    factor
+                                }
+                            },
+                        )));
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
     }
 
     /// Tagged vectors have exactly one slot, in their final argument. Earlier
@@ -738,6 +810,65 @@ mod tests {
             let result = SlotContraction::run(expression.as_view(), true, true);
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(SlotContraction::run(result.as_view(), true, true), result);
+        }
+    }
+
+    #[test]
+    fn linear_metric_sums_contract_external_tensors_without_expanding_spectators() {
+        initialize_vectors();
+        let determinant = parse(
+            "(g(mink(4,a),mink(4,b))*g(mink(4,c),mink(4,d))-g(mink(4,a),mink(4,d))*g(mink(4,c),mink(4,b)))*epsilon(mink(4,a),mink(4,e),mink(4,f),mink(4,h))",
+        );
+        let expected = parse(
+            "g(mink(4,c),mink(4,d))*epsilon(mink(4,b),mink(4,e),mink(4,f),mink(4,h))-g(mink(4,c),mink(4,b))*epsilon(mink(4,d),mink(4,e),mink(4,f),mink(4,h))",
+        );
+        let result = SlotContraction::run(determinant.as_view(), false, false);
+        // Epsilon normalization can move a common minus sign outside the
+        // two-term tensor polynomial. There are no scalar spectators here.
+        assert_eq!(result.expand(), expected.expand());
+        assert_eq!(SlotContraction::run(result.as_view(), false, false), result);
+        for (input, expected, rank_one) in [
+            (
+                "(x+y)^6*(z*g(mink(D,a),mink(D,b))+(u+v)*(g(mink(D,a),mink(D,c))+g(mink(D,a),mink(D,d))))*T(mink(D,a))",
+                "(x+y)^6*(z*T(mink(D,b))+(u+v)*(T(mink(D,c))+T(mink(D,d))))",
+                false,
+            ),
+            (
+                "(g(lor(D,a),dind(lor(D,b)))+g(lor(D,c),dind(lor(D,b))))*T(lor(D,b))",
+                "T(lor(D,a))+T(lor(D,c))",
+                false,
+            ),
+            (
+                "(g(mink(4,a),slot_contraction_p(mink(4)))+g(mink(4,a),slot_contraction_q(mink(4))))*T(mink(4,a))",
+                "T(slot_contraction_p(mink(4)))+T(slot_contraction_q(mink(4)))",
+                true,
+            ),
+        ] {
+            let expression = parse(input);
+            if rank_one {
+                assert_eq!(
+                    SlotContraction::run(expression.as_view(), false, false),
+                    expression
+                );
+            }
+            let result = SlotContraction::run(expression.as_view(), false, rank_one);
+            assert_eq!(result, parse(expected), "{input}");
+            assert_eq!(
+                SlotContraction::run(result.as_view(), false, rank_one),
+                result
+            );
+        }
+        for input in [
+            "(g(mink(4,a),mink(4,b))+g(mink(4,c),mink(4,d)))*T(mink(4,a))",
+            "(g(mink(4,a),mink(4,b))+g(mink(5,a),mink(5,b)))*T(mink(4,a))",
+            "(g(mink(4,a),mink(4,b))^3+g(mink(4,a),mink(4,c)))*T(mink(4,a))",
+            "(g(mink(4,a),mink(4,b))+g(mink(4,a),mink(4,c)))*f(T(mink(4,a)))",
+        ] {
+            let expression = parse(input);
+            assert_eq!(
+                SlotContraction::run(expression.as_view(), false, false),
+                expression
+            );
         }
     }
 
