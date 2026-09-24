@@ -277,7 +277,7 @@ fn metric_chains_and_traces_preserve_exact_components() {
 fn long_product_contractions_preserve_independent_sum_scopes() {
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
-        let slots: Vec<_> = (0..9)
+        let slots: Vec<_> = (0..65)
             .map(|index| {
                 Minkowski {}
                     .new_rep(4)
@@ -285,23 +285,35 @@ fn long_product_contractions_preserve_independent_sum_scopes() {
                     .to_atom()
             })
             .collect();
-        let chain: Atom = (0..8)
-            .map(|index| spenso::g!(&slots[index], &slots[index + 1]))
-            .product();
-        // Reusing dummy labels between independent scalar terms must not join
-        // their networks. The sum remains factored inside the outer power.
-        let first = &chain * evaluation.vector(0, &slots[0]) * evaluation.vector(1, &slots[8]);
-        let second = &chain * evaluation.vector(2, &slots[0]) * evaluation.vector(3, &slots[8]);
-        let expression = (first + second * 2 + 101).pow(2);
-        for settings in [
-            SchoonschipSettings::default().without_rank1_tensors(),
-            SchoonschipSettings::default(),
-        ] {
-            let value = evaluation.assert_rewrite(expression.clone(), &settings, true);
-            assert!(
-                !value.is_zero(),
-                "the component comparison must be nontrivial"
-            );
+        for length in [8, 16, 32, 64] {
+            let chain: Atom = (0..length)
+                .map(|index| spenso::g!(&slots[index], &slots[index + 1]))
+                .product();
+            // Reusing dummy labels between independent scalar terms must not join
+            // their networks. The sum remains factored inside the outer power.
+            let first =
+                &chain * evaluation.vector(0, &slots[0]) * evaluation.vector(1, &slots[length]);
+            let second =
+                &chain * evaluation.vector(2, &slots[0]) * evaluation.vector(3, &slots[length]);
+            let expression = (first + second * 2 + 101).pow(2);
+            let closed: Atom = (0..length)
+                .map(|index| spenso::g!(&slots[index], &slots[(index + 1) % length]))
+                .product();
+            for settings in [
+                SchoonschipSettings::default().without_rank1_tensors(),
+                SchoonschipSettings::default(),
+            ] {
+                let value = evaluation.assert_rewrite(expression.clone(), &settings, true);
+                assert!(
+                    !value.is_zero(),
+                    "the component comparison must be nontrivial"
+                );
+                assert_eq!(
+                    evaluation.assert_rewrite(closed.clone(), &settings, true),
+                    Atom::num(4),
+                    "closed metric chain of length {length} must give the dimension"
+                );
+            }
         }
     }
 }
@@ -427,6 +439,28 @@ fn dual_metric_loops_preserve_exact_components() {
             evaluation.assert_rewrite(expression, &settings, must_change),
             Atom::num(3)
         );
+    }
+    let slots: Vec<_> = (0..64)
+        .map(|index| cof.slot::<AbstractIndex, _>(symbol!(&format!("dual_loop_{index}"))))
+        .collect();
+    for length in [8, 16, 32, 64] {
+        for reverse in [false, true] {
+            let expression: Atom = (0..length)
+                .map(|index| {
+                    let next = (index + 1) % length;
+                    if reverse {
+                        spenso::g!(slots[index].dual(), slots[next])
+                    } else {
+                        spenso::g!(slots[index], slots[next].dual())
+                    }
+                })
+                .product();
+            assert_eq!(
+                evaluation.assert_rewrite(expression, &settings, true),
+                Atom::num(3),
+                "dual loop of length {length}, reversed={reverse} must give the dimension"
+            );
+        }
     }
 }
 

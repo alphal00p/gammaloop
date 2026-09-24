@@ -227,14 +227,26 @@ impl Case {
             "many_spectators_miss",
             &format!("{spectators}*g(mink(4,a),mink(4,b))*T(mink(4,c))"),
         ));
-        let metrics = (0..8)
-            .map(|i| format!("g(mink(4,i{i}),mink(4,i{}))", i + 1))
-            .collect::<Vec<_>>()
-            .join("*");
-        cases.push(Self::parse(
-            "eight_metrics",
-            &format!("{metrics}*T(mink(4,i8))"),
-        ));
+        for length in [8, 16, 32, 64] {
+            let metrics = (0..length)
+                .map(|i| format!("g(mink(4,i{i}),mink(4,i{}))", i + 1))
+                .collect::<Vec<_>>()
+                .join("*");
+            let name = if length == 8 {
+                "eight_metrics".into()
+            } else {
+                format!("metric_chain_{length}")
+            };
+            cases.push(Self::parse(
+                &name,
+                &format!("{metrics}*T(mink(4,i{length}))"),
+            ));
+            let closed = (0..length)
+                .map(|i| format!("g(mink(4,i{i}),mink(4,i{}))", (i + 1) % length))
+                .collect::<Vec<_>>()
+                .join("*");
+            cases.push(Self::parse(&format!("metric_loop_{length}"), &closed));
+        }
         let mink = Minkowski {}.new_rep(4);
         let spin = Bispinor {}.new_rep(4).to_symbolic([]);
         for length in [6, 8, 10, 12] {

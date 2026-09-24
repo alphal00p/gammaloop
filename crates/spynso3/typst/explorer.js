@@ -37,7 +37,11 @@
   };
   const area = name => document.getElementById(name);
   const label = (text, control) => {
-    const node = el('label',text); node.append(control); return node;
+    const node = el('label'); node.append(el('span',text));
+    if (control.tagName==='SELECT') {
+      const wrapper=el('span',undefined,'select-wrap'); wrapper.append(control); node.append(wrapper);
+    } else node.append(control);
+    return node;
   };
   function select(name, options, value, change) {
     const control = el('select'); control.dataset.control = name;
@@ -58,6 +62,9 @@
   }
   function controls() {
     const host=area('controls'); host.replaceChildren();
+    const toolbar=el('div',undefined,'toolbar-top');
+    const fields=el('div',undefined,'control-fields');
+    host.append(toolbar,fields);
     const views=[['slice','One slice'],['heaviest','Heaviest first']];
     if (rank>2) views.splice(1,0,['atlas','All slices']);
     const display=el('div',undefined,'display-toggle');
@@ -73,33 +80,33 @@
       });
       display.append(toggle);
     }
-    host.append(display);
-    host.append(label('View',select('view',views,state.view,value => {
+    toolbar.append(display);
+    if (state.display==='grid' && state.view!=='heaviest') {
+      const check=el('input'); check.type='checkbox'; check.checked=state.shade; check.dataset.control='shade';
+      check.addEventListener('change',() => { state.shade=check.checked; render(); });
+      const wrapper=el('label',undefined,'check'); wrapper.append(check,el('span','Shade by component bytes')); toolbar.append(wrapper);
+    }
+    fields.append(label('View',select('view',views,state.view,value => {
       state.view=value;
       if (value==='heaviest') state.display='grid';
     })));
     if (state.view==='heaviest') return;
     if (rank>1) {
       const axes=shape.map((_,i) => [i,axisName(i)]);
-      host.append(label('Rows',select('row',axes,state.row,value => {
+      fields.append(label('Rows',select('row',axes,state.row,value => {
         const old=state.row; state.row=Number(value); if (state.column===state.row) state.column=old;
       })));
-      host.append(label('Columns',select('column',axes,state.column,value => {
+      fields.append(label('Columns',select('column',axes,state.column,value => {
         const old=state.column; state.column=Number(value); if (state.row===state.column) state.row=old;
       })));
     }
     const free=remaining();
-    free.forEach((axis,i) => host.append(label(
+    free.forEach((axis,i) => fields.append(label(
       state.view==='atlas' && i===0 ? `First slice · ${axisName(axis)}` : `Fix ${axisName(axis)}`,
       coordinate(axis,state.fixed[axis],value => { state.fixed[axis]=value; state.selected[axis]=value; })
     )));
     for (const axis of [state.row,state.column].filter(axis => axis>=0 && shape[axis]>8)) {
-      host.append(label(`Start ${axisName(axis)}`,coordinate(axis,state.starts[axis],value => { state.starts[axis]=value; })));
-    }
-    if (state.display==='grid') {
-      const check=el('input'); check.type='checkbox'; check.checked=state.shade; check.dataset.control='shade';
-      check.addEventListener('change',() => { state.shade=check.checked; render(); });
-      const wrapper=el('label',undefined,'check'); wrapper.append(check,el('span','Shade by component bytes')); host.append(wrapper);
+      fields.append(label(`Start ${axisName(axis)}`,coordinate(axis,state.starts[axis],value => { state.starts[axis]=value; })));
     }
   }
   function detail() {

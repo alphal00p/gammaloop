@@ -337,6 +337,29 @@ result = network.result_tensor(library=library)
 assert len(result) == 4
 ```
 
+The library also acts as a mapping from full unresolved signatures to stored
+component data. `library[structure]` returns a `Tensor`; its `expression()` method
+returns the symbolic reference. Keys include scalar arguments and ordered
+representations, so tensors such as `A(x, 7, rep)` and `A(x, 8, rep)` can coexist.
+`library["A"]` or `library[A]` (with `A` a `TensorName`) is a convenience when the
+name identifies exactly one stored signature; ambiguous or absent names raise
+`KeyError`.
+
+// docs-example: compile
+```python
+stored = library[structure]
+reference = stored.expression()
+signatures = library.keys()
+for signature, tensor in library.items():
+    print(signature, tensor.structure.shape)
+```
+
+`keys()`, `values()` and `items()` return snapshot lists in matching order;
+iteration yields signatures and `len(library)` counts stored tensors. Returned
+tensors are independent copies: register an edited tensor again to replace the
+stored data. Dimension-dependent factories, such as metrics, can be accessed
+with an exact concrete signature but do not appear among stored entries.
+
 `ExecutionMode.Single` selects the smallest-degree single-rewrite strategy, but execution still
 continues while work remains unless it is bounded; use `n_steps=1` to inspect exactly one step.
 `Scalar` processes scalar work while retaining tensor structure, and `All` attempts the complete

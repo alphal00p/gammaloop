@@ -1,6 +1,7 @@
-//! Short four-dimensional traces, generated from the same three-gamma identity
-//! as open chains. Only integer index recipes are cached; no user atoms or
-//! dummy indices escape into the global cache.
+//! Short trace recipes: signed pairings in arbitrary dimension, and the more
+//! compact four-dimensional reduction from the same three-gamma identity as
+//! open chains. Only integer index recipes are cached; no user atoms or dummy
+//! indices escape into the global cache.
 
 use std::{collections::BTreeMap, sync::LazyLock};
 
@@ -24,6 +25,42 @@ struct Monomial {
 }
 
 impl<const N: usize> TraceKernel<N> {
+    fn generate_pairings() -> Self {
+        let mut terms = Vec::with_capacity((1..N).step_by(2).product());
+        Self::pairings((1 << N) - 1, 0, &mut [0; N], 1, &mut terms);
+        Self { terms }
+    }
+
+    fn pairings(
+        remaining: u16,
+        position: usize,
+        recipe: &mut [u8; N],
+        mut sign: i32,
+        terms: &mut Vec<([u8; N], i32)>,
+    ) {
+        if remaining == 0 {
+            terms.push((*recipe, sign));
+            return;
+        }
+        let first = remaining.trailing_zeros();
+        let remaining = remaining & !(1 << first);
+        recipe[position] = first as u8;
+        let mut partners = remaining;
+        while partners != 0 {
+            let partner = partners.trailing_zeros();
+            recipe[position + 1] = partner as u8;
+            Self::pairings(
+                remaining & !(1 << partner),
+                position + 2,
+                recipe,
+                sign,
+                terms,
+            );
+            partners &= partners - 1;
+            sign = -sign;
+        }
+    }
+
     fn generate(axial: bool) -> Self {
         let mut terms = BTreeMap::new();
         Self::reduce_triples(0, 1, 1, Monomial::default(), axial, &mut terms);
@@ -69,7 +106,7 @@ impl<const N: usize> TraceKernel<N> {
         Self::reduce_triples(dummy, position + 2, -sign, next, axial, terms);
     }
 
-    fn evaluate(&self, indices: &[AtomView<'_>], axial: bool) -> Atom {
+    fn evaluate(&self, indices: &[AtomView<'_>], axial: bool, trace_unit: AtomView<'_>) -> Atom {
         debug_assert_eq!(indices.len(), N);
         // Each scalar product is built once and shared by all template terms.
         let metrics: Vec<_> = (0..N)
@@ -77,7 +114,7 @@ impl<const N: usize> TraceKernel<N> {
             .collect();
         Atom::add_many(self.terms.iter().map(|(indices_recipe, coefficient)| {
             let mut factors = Vec::with_capacity(N / 2 + 1);
-            factors.push(Atom::num(4 * i64::from(*coefficient)));
+            factors.push(Atom::num(i64::from(*coefficient)) * trace_unit);
             let pairs = if axial {
                 let [a, b, c, d]: [u8; 4] = indices_recipe[..4].try_into().unwrap();
                 factors.push(epsilon4(
@@ -219,12 +256,24 @@ impl Monomial {
 macro_rules! short_trace_dispatch {
     ($($length:literal),* $(,)?) => {
         pub(super) fn evaluate(indices: &[AtomView<'_>], axial: bool) -> Option<Atom> {
+            let trace_unit = Atom::num(4);
             match indices.len() {
                 1 | 3 | 5 | 7 | 9 | 11 | 13 => Some(Atom::Zero),
                 $($length => {
                     static ORDINARY: LazyLock<TraceKernel<$length>> = LazyLock::new(|| TraceKernel::generate(false));
                     static AXIAL: LazyLock<TraceKernel<$length>> = LazyLock::new(|| TraceKernel::generate(true));
-                    Some(if axial { AXIAL.evaluate(indices, true) } else { ORDINARY.evaluate(indices, false) })
+                    Some(if axial { AXIAL.evaluate(indices, true, trace_unit.as_view()) } else { ORDINARY.evaluate(indices, false, trace_unit.as_view()) })
+                },)*
+                _ => None,
+            }
+        }
+
+        pub(super) fn evaluate_generic(indices: &[AtomView<'_>], trace_unit: AtomView<'_>) -> Option<Atom> {
+            match indices.len() {
+                1 | 3 | 5 | 7 | 9 | 11 | 13 => Some(Atom::Zero),
+                $($length => {
+                    static GENERIC: LazyLock<TraceKernel<$length>> = LazyLock::new(TraceKernel::generate_pairings);
+                    Some(GENERIC.evaluate(indices, false, trace_unit))
                 },)*
                 _ => None,
             }
@@ -239,13 +288,14 @@ mod tests {
     use super::*;
 
     // Independent Clifford-algebra oracle in a Euclidean orthonormal basis.
-    // Store all sixteen blades and multiply by each vector, without trace
+    // Store all basis blades and multiply by each vector, without trace
     // recurrences or epsilon contraction identities from the implementation.
-    fn clifford_trace(vectors: &[[i64; 4]], axial: bool) -> i64 {
-        let mut blades = [0; 16];
+    fn clifford_trace<const D: usize>(vectors: &[[i64; D]], axial: bool) -> i64 {
+        assert!(!axial || D == 4);
+        let mut blades = vec![0; 1 << D];
         blades[0] = 1;
         for vector in vectors {
-            let mut next = [0; 16];
+            let mut next = vec![0; 1 << D];
             for (mask, coefficient) in blades.into_iter().enumerate() {
                 for (axis, component) in vector.iter().enumerate() {
                     let sign = if (mask >> (axis + 1)).count_ones() % 2 == 0 {
@@ -342,6 +392,64 @@ mod tests {
         check::<12>(4383, 1029);
         check::<14>(26931, 6042);
     }
+
+    fn check_generic<const N: usize>(expected_terms: usize) {
+        let kernel = TraceKernel::<N>::generate_pairings();
+        assert_eq!(kernel.terms.len(), expected_terms);
+        for (recipe, coefficient) in &kernel.terms {
+            assert!(coefficient.abs() == 1);
+            let mut indices = *recipe;
+            indices.sort_unstable();
+            assert_eq!(indices, std::array::from_fn(|index| index as u8));
+        }
+        // Six independent axes distinguish the generic formula from a 4D
+        // reduction. Keep the formal unit trace at four in both evaluations.
+        let mut seed = 23u64;
+        for sample in 0..8 {
+            let vectors: [[i64; 6]; N] = std::array::from_fn(|_| {
+                std::array::from_fn(|_| {
+                    seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+                    ((seed >> 32) % 5) as i64 - 2
+                })
+            });
+            let result: i64 = kernel
+                .terms
+                .iter()
+                .map(|(recipe, coefficient)| {
+                    4 * i64::from(*coefficient)
+                        * recipe
+                            .as_chunks::<2>()
+                            .0
+                            .iter()
+                            .map(|pair| {
+                                vectors[usize::from(pair[0])]
+                                    .iter()
+                                    .zip(vectors[usize::from(pair[1])])
+                                    .map(|(a, b)| a * b)
+                                    .sum::<i64>()
+                            })
+                            .product::<i64>()
+                })
+                .sum();
+            assert_eq!(
+                result,
+                clifford_trace(&vectors, false),
+                "generic length {N}, sample {sample}"
+            );
+        }
+    }
+
+    #[test]
+    fn generic_kernels_match_independent_six_dimensional_clifford_products() {
+        check_generic::<2>(1);
+        check_generic::<4>(3);
+        check_generic::<6>(15);
+        check_generic::<8>(105);
+        check_generic::<10>(945);
+        check_generic::<12>(10395);
+        check_generic::<14>(135135);
+    }
+
     #[test]
     fn long_axial_fallback_matches_a_clifford_component() {
         use super::super::{DiracFactor, DiracSimplifier};
@@ -409,7 +517,7 @@ mod tests {
                     };
                 }
             });
-        let vectors: Vec<_> = axes
+        let vectors: Vec<[i64; 4]> = axes
             .iter()
             .map(|&axis| std::array::from_fn(|i| i64::from(i == axis)))
             .collect();

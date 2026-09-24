@@ -462,7 +462,7 @@ impl<'settings> DiracSimplifier<'settings> {
             return None;
         };
         let (rep, factors) = shadowing::trace_parts(f)?;
-        if !has_four_dimensional_trace_rep(rep) || factors.len() > 15 {
+        if factors.len() > 15 {
             return None;
         }
         let mut factors = factors
@@ -476,7 +476,16 @@ impl<'settings> DiracSimplifier<'settings> {
         if let Some(position) = gamma5_position {
             factors = Self::cyclic_without_position(&factors, position);
         }
-        let indices = Self::gamma_mink_index_sequence_for(FOUR_DIM_CHISHOLM, &factors)?;
+        let axial = gamma5_position.is_some();
+        let rule = if axial {
+            if !has_four_dimensional_trace_rep(rep) {
+                return None;
+            }
+            FOUR_DIM_CHISHOLM
+        } else {
+            TRACE_GAMMA_RECURSION
+        };
+        let indices = Self::gamma_mink_index_sequence_for(rule, &factors)?;
         if indices.len() > 14
             || indices
                 .iter()
@@ -485,11 +494,21 @@ impl<'settings> DiracSimplifier<'settings> {
         {
             return None;
         }
-        let axial = gamma5_position.is_some();
         if axial && indices.len() < 4 {
             return Some(Atom::Zero);
         }
-        trace_kernel::evaluate(&indices, axial)
+        if axial
+            || (has_four_dimensional_trace_rep(rep)
+                && factors
+                    .iter()
+                    .all(|factor| factor.gamma_dimension().is_some_and(is_four_dimension)))
+        {
+            trace_kernel::evaluate(&indices, axial)
+        } else {
+            let terminal = trace!(rep; std::iter::empty::<Atom>());
+            let trace_unit = Self::simplify_trace_terminal(terminal.as_view())?;
+            trace_kernel::evaluate_generic(&indices, trace_unit.as_view())
+        }
     }
 
     fn simplify_chain_node(self, f: FunView) -> Option<Atom> {
@@ -1251,8 +1270,9 @@ impl DiracSimplifier<'_> {
     ///
     /// The pass first handles four-dimensional special factors (`gamma0`,
     /// `gamma5`, chiral projectors, charge conjugation), then reduces repeated ordinary gammas using the shared chain identities.
-    /// Four-dimensional words of length at most fourteen use generated kernels;
-    /// generic dimensions and longer words recurse to shorter traces.
+    /// Words of length at most fourteen use generated kernels; generic
+    /// dimensions use complete pairings, while 4D permits shorter recipes.
+    /// Longer words recurse to shorter traces.
     fn simplify_trace_node(self, f: FunView) -> Option<Atom> {
         let (rep, factors) = shadowing::trace_parts(f)?;
 
@@ -1336,6 +1356,14 @@ impl DiracSimplifier<'_> {
         if has_four_dimensional_trace_rep(rep)
             && Self::gamma_mink_index_sequence_for(FOUR_DIM_CHISHOLM, &factors).is_some()
             && let Some(result) = trace_kernel::evaluate(&trace_mink_indices, false)
+        {
+            return Some(result);
+        }
+
+        let terminal = trace!(rep; std::iter::empty::<Atom>());
+        let trace_unit = Self::simplify_trace_terminal(terminal.as_view())?;
+        if let Some(result) =
+            trace_kernel::evaluate_generic(&trace_mink_indices, trace_unit.as_view())
         {
             return Some(result);
         }
@@ -1679,6 +1707,64 @@ mod tests {
                 "{input}"
             );
         }
+    }
+
+    #[test]
+    fn generic_trace_kernel_preserves_spin_dimension_and_spectator_factorization() {
+        let r = test_initialize();
+        let slots: Vec<_> = (0..4)
+            .map(|index| r.mink_d.pattern(Atom::num(index)))
+            .collect();
+        let pairing = g!(&slots[0], &slots[1]) * g!(&slots[2], &slots[3])
+            - g!(&slots[0], &slots[2]) * g!(&slots[1], &slots[3])
+            + g!(&slots[0], &slots[3]) * g!(&slots[1], &slots[2]);
+        let spectator = symbolica::parse_lit!((x + y) ^ 8);
+        for spin in [r.bis4.to_symbolic([]), r.bis_d.to_symbolic([])] {
+            let input = trace!(&spin; slots.iter().map(|slot| gamma!(slot)));
+            let unit = bispinor_dimension(spin.as_view()).unwrap();
+            let expected = (&pairing * unit).expand();
+            let result = input.simplify_gamma();
+            assert_eq!(result, expected);
+            assert_eq!(
+                DiracSimplifier::evaluate_short_free_trace(input.as_view()),
+                Some(expected)
+            );
+            assert_eq!(
+                (&spectator * input).simplify_gamma(),
+                &spectator * &result,
+                "the outer scalar numerator remains factored"
+            );
+            assert_eq!(result.simplify_gamma(), result);
+        }
+    }
+
+    #[test]
+    fn generic_trace_dispatch_preserves_dimension_and_axial_boundaries() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let a = slot!(r.mink_d, a).into_atom();
+        let b = slot!(r.mink4, b).into_atom();
+        for input in [
+            trace!(&spin, gamma!(&a), gamma!(&b)),
+            trace!(&spin, gamma5!(), gamma!(&a)),
+        ] {
+            assert!(DiracSimplifier::evaluate_short_free_trace(input.as_view()).is_none());
+            assert_eq!(input.simplify_gamma(), input);
+        }
+        let odd = trace!(&spin;
+            (0..5).map(|index| gamma!(r.mink_d.pattern(Atom::num(index))))
+        );
+        assert_eq!(odd.simplify_gamma(), Atom::Zero);
+        assert_eq!(
+            odd.simplify_gamma_with(GammaSimplifySettings::default().without_trace_evaluation()),
+            odd
+        );
+        let symbolic_spin = trace!(r.bis_d.to_symbolic([]);
+            (0..10).map(|index| gamma!(r.mink4.pattern(Atom::num(index))))
+        );
+        // The 4D kernel fixes Tr(1)=4. A symbolic spin dimension must instead
+        // multiply the dimension-generic pairing formula.
+        assert_eq!(symbolic_spin.simplify_gamma().nterms(), 945);
     }
 
     fn momenta(rep: &Atom) -> [Atom; 8] {
