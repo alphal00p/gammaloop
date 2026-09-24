@@ -188,8 +188,8 @@ contractions on general inputs. The first gamma rewrite alone takes 2.33 ms
 and already equals the final production polynomial in this case. A single
 fourteen-index scalar-prefactor probe takes 8.92 s, compared with a three-sample
 median of 59 ms for the bare trace. Repeated processing of terminal expressions
-is the first optimization target. A fourteen-factor alternating slash
-trace is different again: eleven outer passes take 9.66 ms, including 3.76 ms in
+was the first optimization target; the applied cleanup below addresses it. A
+fourteen-factor alternating slash trace is different again: eleven outer passes take 9.66 ms, including 3.76 ms in
 Schoonschip, 2.02 ms in collection and 2.50 ms in gamma rewriting.
 
 For the standalone ordinary kernel, borrowed factor views remove avoidable copies:
@@ -200,14 +200,16 @@ The #source-link("examples/notebooks/gamma_trace_profile.json", label: "detailed
 preserves raw timings, source hashes, diagnostic variants and their limits.
 Production algebra was unchanged during this investigation.
 
-== Metric-first contraction
+== Earlier metric-first contraction
 
-The pattern Schoonschip pass now selects one metric with
-`g(a_,b_)*remainder___`, then walks the captured remainder to find a compatible
-explicit tensor slot. It substitutes that slot with the opposite metric endpoint
-and removes the metric. The matcher captures the entire product at the current
-tree level; it does not search for a metric and its tensor partner or partition the
-remainder into subsets. A failed candidate does not prevent trying another metric.
+This section records the first contractor update, before the shared slot
+substitution and epsilon cleanup below. At this stage, Schoonschip selected one
+metric with `g(a_,b_)*remainder___`, then walked the captured remainder to find a
+compatible explicit tensor slot. It substituted that slot with the opposite
+metric endpoint and removed the metric. The matcher captured the entire product
+at the current tree level; it did not search for a metric and its tensor partner
+or partition the remainder into subsets. A failed candidate did not prevent
+trying another metric.
 
 Slot compatibility includes representation, dimension and duality. Substitution
 touches direct tensor slots, keeping scalar parameters and index payloads opaque.
@@ -250,16 +252,16 @@ For the already simplified axial-twelve output, the raw failed pass improves fro
 58.11 to 23.28 ms. The guard reduces the new metric stage to 0.382 ms; putting the
 same guard before the old rules takes 0.413 ms. Thus the large terminal-output
 gain comes from avoiding work, separately from faster productive contractions.
-Complete Schoonschip still takes 67.51 ms, down from 125.44 ms.
+Complete Schoonschip at this stage takes 67.51 ms, down from 125.44 ms.
 
-The complete gamma pipeline remains much slower than FORM. These timings are in
-milliseconds; FORM uses one warmup process followed by three measured processes,
+At this stage, the complete gamma pipeline remains much slower than FORM. These
+timings are in milliseconds; FORM uses one warmup process followed by three measured processes,
 each containing six batches. Its wall time includes amortized startup, input
 parsing, tracing, sorting and cleanup. Rust input construction is outside timing.
 
 #table(
   columns: 4,
-  [Axial length], [Previous full gamma], [Current full gamma], [FORM `trace4` wall],
+  [Axial length], [Before metric first], [After metric first], [FORM `trace4` wall],
   [6], [5.79], [4.78], [0.00634],
   [8], [45.42], [36.15], [0.02023],
   [10], [332.40], [254.64], [0.09993],
@@ -273,8 +275,8 @@ the surrounding normalization and epsilon passes still dominate the full pipelin
 
 The #source-link("examples/notebooks/metric_contraction.json", label: "metric contraction measurements")
 record all 25 cases, raw samples, build/source identities, output diagnostics,
-FORM programs and validation results. All 24 HEP tests pass. The broad Spenso and
-Idenso suite has 589 passing tests and two preexisting failures; the record also
+FORM programs and validation results from that stage. All 24 HEP tests passed.
+The broad Spenso and Idenso suite had 589 passing tests and two preexisting failures; the record also
 identifies the unrelated HEP library-unit-test compile failure encountered by
 the broad Clippy command. Clippy passes for the changed libraries, examples and
 HEP integration tests.
@@ -338,10 +340,10 @@ the linked production outputs exactly. The
 preserves counters, assignments, raw timings, source identities and diagnostic
 drivers. Counts preserve factorization; outer sum arity alone hides nested sums.
 
-== Applied contraction ordering
+== Earlier contraction-order update
 
-Gamma simplification now contracts metrics into chains and traces before every
-rewrite pass. Keeping this active through the fixed point also handles metrics
+The next update made gamma simplification contract metrics into chains and
+traces before every rewrite pass. Keeping this active through the fixed point also handles metrics
 generated by evaluating a neighboring trace. The existing repeated-index scan
 guards both metric substitution and chain/vector rules; terminal expressions
 without repeated explicit indices skip those operations without tensor parsing.
@@ -353,14 +355,15 @@ priority. An interval crossing gamma-five cannot hide an applicable interval on
 the other side of the cyclic boundary. Open-chain and generic-dimensional
 repeated-pair ordering retain their existing behavior.
 
-The repeated-index example now has 105 arithmetic leaves instead of 315; its
-external-metric version goes from 4,383 to 105. The axial crossing example goes
+After this update, the repeated-index example has 105 arithmetic leaves instead
+of 315; its external-metric version goes from 4,383 to 105. The axial crossing example goes
 from 99 to 33. These counts sum nested additions and multiply product counts
 without expanding or collecting the expression. They are output-size diagnostics,
 not peak intermediate-memory measurements or equality checks.
 
-The benchmark covers 35 inputs, including 16 complete gamma pipelines, with 12
-matching FORM cases. Five warm Idenso samples use the same optimized driver and
+These historical measurements precede the cleanup below. The benchmark covers
+35 inputs, including 16 complete gamma pipelines, with 12 matching FORM cases.
+Five warm Idenso samples use the same optimized driver and
 one pinned CPU before and after the change. FORM wall times amortize startup,
 parsing, tracing, sorting and cleanup over six batches in each of three measured
 processes. All runs use the shared host; Idenso input creation is outside timing.
@@ -380,8 +383,8 @@ processes. All runs use the shared host; Idenso input creation is outside timing
 
 The two main ordinary cases improve by 2.95 and 75.4 times; the axial crossing
 case improves by 3.29 times. The small two-gamma-interior case costs about 17
-microseconds more. Distinct-index axial twelve remains dominated by cleanup,
-and FORM remains substantially faster on the contracted examples.
+microseconds more. At this stage, distinct-index axial twelve remains dominated
+by cleanup, and FORM remains substantially faster on the contracted examples.
 
 Ten new unit regressions cover cyclic priority, gamma-five boundaries, symbolic
 dimensions, inert traces and idempotence after generated metrics. Three new HEP
@@ -391,6 +394,89 @@ assignments, including the production external-metric output. The
 preserve raw samples, all matching FORM programs, source identities, factorized
 output counts and validation results. Reproduce the native measurements with the
 metric contraction benchmark command above.
+
+== Applied shared slot substitution and epsilon cleanup
+
+Metrics and tagged vectors now use the same slot substitution. The contractor
+scans product factors directly, trying metric sources before tagged rank-one
+vectors; finding a source no longer uses the metric/remainder pattern. It joins
+one compatible explicit slot to the opposite metric endpoint or compact vector,
+then removes the source factor. Representation, dimension and duality checks,
+opaque scalar parameters, and the chain-like and rank-one settings are retained.
+The repeated-index scan still guards this work, and substitutions preserve sums
+and powers rather than distributing them.
+
+Epsilon cleanup remains a separate `simplify_epsilon()` operation. When epsilon
+is present, it retains one initial whole-expression Schoonschip pass. Candidate
+selection directly distinguishes powers, products and epsilon function heads.
+It no longer runs Schoonschip at every visited node: another whole-expression
+pass runs only after an epsilon identity changed the expression, to consume the
+generated metrics. Epsilon powers and pairs with disjoint explicit indices still
+receive their identities even when the repeated-index predicate is false.
+
+The fresh comparison uses the same benchmark driver against the saved baseline
+and the new libraries: 50 inputs and 316 case/method pairs. All before/after
+output snapshots are byte-identical. Each Rust timing is a median of five warm
+samples, with adaptive repetitions targeting 8 ms per sample, pinned to CPU 6
+of the shared host; input construction is outside timing. The following
+Schoonschip timings include normalization and the repeated-index guard, in
+microseconds.
+
+#table(
+  columns: 4,
+  [Input], [Before], [After], [Speedup],
+  [Tagged vector and tensor], [44.33], [19.51], [2.27×],
+  [Tagged vector and trace], [62.62], [29.76], [2.10×],
+  [Tagged compact metric], [49.34], [24.46], [2.02×],
+)
+
+Isolated epsilon cleanup improves from 16.401 to 1.418 ms for a pair with eight
+distinct explicit indices (11.57 times), and from 827.076 to 58.705 ms on the
+already simplified axial-twelve output (14.09 times). These measurements include
+the retained initial Schoonschip pass; they do not change the trace kernel or
+reduce its final 1,029 terms.
+
+Full gamma measurements and a fresh FORM 5.0.0 run give the following
+milliseconds. FORM uses one warmup process and three measured processes, with
+six batches each, pinned to CPU 3. Its amortized wall time includes startup,
+parsing, input normalization, `trace4`, sorting and cleanup.
+
+#table(
+  columns: 4,
+  [Input], [Before], [After], [FORM wall],
+  [Axial distinct indices, 6], [4.854], [0.637], [—],
+  [Axial distinct indices, 8], [36.759], [4.895], [—],
+  [Axial distinct indices, 10], [256.810], [35.781], [—],
+  [Axial distinct indices, 12], [1805.957], [259.161], [0.61493],
+  [Axial crossing, 12], [32.130], [3.103], [0.02139],
+  [External metrics, 12], [6.846], [6.105], [0.06142],
+  [Free indices, 8], [0.153], [0.148], [0.05617],
+  [Free indices, 12], [6.759], [6.477], [2.87345],
+)
+
+Axial twelve improves by 6.97 times, and the axial crossing case by 10.36 times.
+Ordinary standalone traces change little because they already bypass most of
+this cleanup. FORM remains about 421 times faster for axial twelve under these
+timing boundaries; this does not establish parity. The
+#source-link("examples/notebooks/gamma_cleanup.json", label: "shared-slot and epsilon-cleanup measurements")
+record all cases, raw samples, output comparisons, build/source identities and
+the fresh FORM programs. A dash marks a case without a fresh matching FORM run.
+
+Normalization remains costly on the unchanged axial-twelve output. In an
+instrumented copy, one `normalize_dots()` call takes 28.45 ms, including 17.13 ms
+in redundant-metric rules and 6.36 ms in metric-trace rules. The epsilon candidate
+pass takes 1.09 ms and the repeated-index scan 0.398 ms; complete Schoonschip
+takes 59.80 ms. These are isolated five-round warm medians on CPU 6, with outputs
+checked against production. They do not add up to a decomposition of the full
+gamma pipeline.
+
+The HEP coverage retains one known limitation: an explicit vector product with
+dual slots evaluates, but both the saved baseline and the new compact-dot output
+discard the dual orientation, so the tensor-network parser rejects that output.
+The diagnostic `tagged_vector_dots_preserve_dual_slot_orientation` remains
+explicitly ignored with this reason; this case is not certified by the passing
+component checks. The measurement record identifies the limitation separately
+from the unchanged benchmark snapshots.
 
 == HEP tensor-component validation
 

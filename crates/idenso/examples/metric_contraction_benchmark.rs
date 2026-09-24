@@ -1,9 +1,9 @@
-//! Metric-first contraction and complete pipeline timings on several shapes.
+//! Shared metric/vector contraction and complete pipeline timings on several shapes.
 //!
 //! `cargo run -p idenso --profile dev-optim --example metric_contraction_benchmark
 //! -- OUTPUT_DIRECTORY [samples=5] [target_batch_ms=15]`
 //!
-//! The isolated contractor is compiled from its production source so this example
+//! The isolated metric-only contractor is compiled from its production source so this example
 //! can time the private operation without a new public API. The two public
 //! Schoonschip methods and gamma simplification call the linked production library.
 //! The repeated-index check is timed separately; it never guards the contractor.
@@ -22,6 +22,7 @@ pub use idenso::W_;
 use idenso::representations;
 use idenso::{
     dirac::GammaSimplifier,
+    epsilon::EpsilonSimplifier,
     gamma, gamma5,
     representations::Bispinor,
     shorthands::schoonschip::{Schoonschip, SchoonschipSettings},
@@ -39,8 +40,8 @@ use symbolica::{
     function, symbol,
 };
 
-#[path = "../src/shorthands/schoonschip/metric_contraction.rs"]
-mod metric_contraction;
+#[path = "../src/shorthands/schoonschip/slot_contraction.rs"]
+mod slot_contraction;
 
 struct Case {
     name: String,
@@ -63,6 +64,9 @@ impl Case {
     }
 
     fn cases() -> Vec<Self> {
+        // Register canonical rank-one heads before parsing the vector cases.
+        SPENSO_TAG.rank_one_tensor_symbol("cleanup_benchmark::V");
+        SPENSO_TAG.rank_one_tensor_symbol("cleanup_benchmark::W");
         let mut cases = vec![
             Self::parse("metric_hit", "g(mink(4,a),mink(4,b))*T(mink(4,b))"),
             Self::parse("metric_miss", "g(mink(4,a),mink(4,b))*T(mink(4,c))"),
@@ -103,6 +107,66 @@ impl Case {
             ),
             Self::parse("compact_metric", "g(mink(4,a),P(mink(4)))*T(mink(4,a))"),
             Self::parse("no_metric", "T(mink(4,a))*U(mink(4,a))"),
+            Self::parse(
+                "vector_tensor",
+                "cleanup_benchmark::V(mink(4,a))*T(mink(4,a))",
+            ),
+            Self::parse(
+                "vector_miss",
+                "cleanup_benchmark::V(mink(4,a))*T(mink(4,b))",
+            ),
+            Self::parse(
+                "vector_dimension_miss",
+                "cleanup_benchmark::V(mink(4,a))*T(mink(5,a))",
+            ),
+            Self::parse(
+                "vector_dual",
+                "cleanup_benchmark::V(lor(4,a))*T(dind(lor(4,a)))",
+            ),
+            Self::parse(
+                "vector_variance_miss",
+                "cleanup_benchmark::V(lor(4,a))*T(lor(4,a))",
+            ),
+            Self::parse(
+                "vector_parameter",
+                "cleanup_benchmark::V(a,mink(4,a))*T(mink(4,a))",
+            ),
+            Self::parse(
+                "vector_dot",
+                "cleanup_benchmark::V(mink(4,a))*cleanup_benchmark::W(mink(4,a))",
+            ),
+            Self::parse(
+                "vector_chain",
+                "cleanup_benchmark::V(mink(4,a))*chain(bis(4,s),bis(4,t),T(mink(4,a),in,out),U(in,out))",
+            ),
+            Self::parse(
+                "vector_trace",
+                "cleanup_benchmark::V(mink(4,a))*trace(bis(4),cyclic(T(mink(4,a),in,out),U(in,out)))",
+            ),
+            Self::parse(
+                "vector_symmetric_trace",
+                "cleanup_benchmark::V(mink(4,a))*trace(bis(4),sym(T(mink(4,a),in,out),U(in,out)))",
+            ),
+            Self::parse(
+                "vector_epsilon",
+                "cleanup_benchmark::V(mink(4,a))*epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d))",
+            ),
+            Self::parse(
+                "tagged_compact_metric",
+                "g(mink(4,a),cleanup_benchmark::V(mink(4)))*T(mink(4,a))",
+            ),
+            Self::parse(
+                "epsilon_square",
+                "epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d))^2",
+            ),
+            Self::parse(
+                "epsilon_distinct_pair",
+                "epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d))*epsilon(mink(4,e),mink(4,f),mink(4,h),mink(4,j))",
+            ),
+            Self::parse(
+                "epsilon_compact_spectator",
+                "epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d))*g(mink(4,e),cleanup_benchmark::V(mink(4)))",
+            ),
         ];
         cases.push(Self::parse(
             "symmetric_trace_partner",
@@ -234,15 +298,17 @@ enum Method {
     GuardedMetricCore,
     MetricSettings,
     FullSchoonschip,
+    EpsilonCleanup,
     FullGamma,
 }
 impl Method {
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 7] = [
         Self::Repeated,
         Self::MetricCore,
         Self::GuardedMetricCore,
         Self::MetricSettings,
         Self::FullSchoonschip,
+        Self::EpsilonCleanup,
         Self::FullGamma,
     ];
     fn name(self) -> &'static str {
@@ -252,6 +318,7 @@ impl Method {
             Self::GuardedMetricCore => "guarded_metric_contractor",
             Self::MetricSettings => "metric_schoonschip",
             Self::FullSchoonschip => "full_schoonschip",
+            Self::EpsilonCleanup => "epsilon_cleanup",
             Self::FullGamma => "full_gamma",
         }
     }
@@ -264,10 +331,10 @@ impl Method {
     fn apply(self, expression: AtomView<'_>) -> Atom {
         match self {
             Self::Repeated => Atom::num(i64::from(expression.has_repeated_explicit_indices())),
-            Self::MetricCore => metric_contraction::MetricContraction::run(expression, true),
+            Self::MetricCore => slot_contraction::SlotContraction::run(expression, true, false),
             Self::GuardedMetricCore => {
                 if expression.has_repeated_explicit_indices() {
-                    metric_contraction::MetricContraction::run(expression, true)
+                    slot_contraction::SlotContraction::run(expression, true, false)
                 } else {
                     expression.to_owned()
                 }
@@ -280,6 +347,7 @@ impl Method {
             Self::FullSchoonschip => expression.schoonschip_with_settings(
                 &SchoonschipSettings::default().with_chain_like_functions(),
             ),
+            Self::EpsilonCleanup => expression.simplify_epsilon(),
             Self::FullGamma => expression.simplify_gamma(),
         }
     }
@@ -346,6 +414,7 @@ fn main() {
                     | Method::GuardedMetricCore
                     | Method::MetricSettings
                     | Method::FullSchoonschip
+                    | Method::EpsilonCleanup
             ) {
                 assert_eq!(
                     method.apply(output.as_view()),
