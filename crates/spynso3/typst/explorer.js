@@ -10,6 +10,7 @@
   const remaining = () => shape.map((_,i) => i).filter(i => i !== state.row && i !== state.column);
   const state = {
     view:rank === 3 && shape[0] <= 4 ? 'atlas' : 'slice',
+    display:'grid',
     row:Math.max(0,rank-2), column:rank > 1 ? rank-1 : -1,
     fixed:Array(rank).fill(0), starts:Array(rank).fill(0),
     selected:entries[0]?.index.slice() || Array(rank).fill(0), shade:true,
@@ -51,9 +52,26 @@
   }
   function controls() {
     const host=area('controls'); host.replaceChildren();
-    const views=[['slice','One slice'],['matrix','Matrix'],['heaviest','Heaviest first']];
+    const views=[['slice','One slice'],['heaviest','Heaviest first']];
     if (rank>2) views.splice(1,0,['atlas','All slices']);
-    host.append(label('View',select('view',views,state.view,value => { state.view=value; })));
+    const display=el('div',undefined,'display-toggle');
+    display.setAttribute('role','group'); display.setAttribute('aria-label','Component display');
+    for (const [value,title] of [['grid','Memory grid'],['matrix','Matrix']]) {
+      const toggle=el('button',title); toggle.type='button'; toggle.dataset.display=value;
+      toggle.setAttribute('aria-pressed',String(state.display===value));
+      toggle.addEventListener('click',() => {
+        state.display=value;
+        if (state.view==='heaviest') state.view='slice';
+        render();
+        area('controls').querySelector(`[data-display="${value}"]`).focus();
+      });
+      display.append(toggle);
+    }
+    host.append(display);
+    host.append(label('View',select('view',views,state.view,value => {
+      state.view=value;
+      if (value==='heaviest') state.display='grid';
+    })));
     if (state.view==='heaviest') return;
     if (rank>1) {
       const axes=shape.map((_,i) => [i,axisName(i)]);
@@ -72,7 +90,7 @@
     for (const axis of [state.row,state.column].filter(axis => axis>=0 && shape[axis]>8)) {
       host.append(label(`Start ${axisName(axis)}`,coordinate(axis,state.starts[axis],value => { state.starts[axis]=value; })));
     }
-    if (state.view!=='matrix') {
+    if (state.display==='grid') {
       const check=el('input'); check.type='checkbox'; check.checked=state.shade; check.dataset.control='shade';
       check.addEventListener('change',() => { state.shade=check.checked; render(); });
       const wrapper=el('label',undefined,'check'); wrapper.append(check,el('span','Shade by component bytes')); host.append(wrapper);
@@ -110,7 +128,7 @@
     const fixedLabel=remaining().map(axis=>`${data.axes[axis]} = ${fixed[axis]}`).join(' · ');
     if (fixedLabel) panel.append(el('div',fixedLabel,'panel-heading'));
     panel.append(el('div',`Rows ${axisName(state.row)}${state.column<0 ? '' : ' · columns '+axisName(state.column)}`,'axes'));
-    if (state.view==='matrix') {
+    if (state.display==='matrix') {
       const viewport=el('div',undefined,'matrix-viewport'); const table=el('table',undefined,'matrix');
       table.setAttribute('aria-label',`Matrix slice ${fixedLabel}`);
       const body=el('tbody');
@@ -155,6 +173,7 @@
       table.append(body); plot.append(table);
     } else {
       const panels=el('div',undefined,state.view==='atlas' ? 'panels' : 'panels single');
+      if (state.display==='matrix') panels.classList.add('matrices');
       const facet=remaining()[0];
       const count=state.view==='atlas' && facet!==undefined ? Math.min(4,shape[facet]-state.fixed[facet]) : 1;
       for (let i=0;i<count;i++) {
@@ -164,7 +183,7 @@
       plot.append(panels);
     }
     const legend=area('legend'); legend.replaceChildren();
-    if (state.shade && !['matrix','heaviest'].includes(state.view)) {
+    if (state.shade && state.display==='grid' && state.view!=='heaviest') {
       legend.append(el('span',low+' B'),el('span',undefined,'ramp'),el('span',high+' B'),el('span','Deeper shade = larger payload · shared scale'));
     }
     area('status').textContent=[

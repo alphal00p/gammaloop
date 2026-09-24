@@ -4,29 +4,20 @@
 
 import marimo
 
-__generated_with = "0.21.1"
+__generated_with = "0.24.0"
 app = marimo.App(width="full")
 
 
 @app.cell
 def _():
-    import marimo as mo
     from symbolica.community.spenso import (
-        DisplaySettings,
         Representation,
         TensorExpression,
         TensorLibrary,
         TensorName,
     )
 
-    return (
-        DisplaySettings,
-        Representation,
-        TensorExpression,
-        TensorLibrary,
-        TensorName,
-        mo,
-    )
+    return Representation, TensorExpression, TensorLibrary, TensorName
 
 
 @app.cell
@@ -47,22 +38,6 @@ def _(TensorLibrary, current):
     network.execute(library=library)
     kernel = network.result_tensor(library=library)
     kernel
-    return (kernel,)
-
-
-@app.cell
-def _(mo):
-    show_static_matrix = mo.ui.checkbox(
-        label="Also show the static mathematical matrix"
-    )
-    show_static_matrix
-    return (show_static_matrix,)
-
-
-@app.cell
-def _(DisplaySettings, kernel, mo, show_static_matrix):
-    mo.stop(not show_static_matrix.value)
-    kernel.formatted(settings=DisplaySettings(tensor_view="matrix"))
     return
 
 

@@ -356,9 +356,13 @@ and #link("reference/python/spynso3/ExecutionMode/")[`ExecutionMode`].
 == Mathematical display
 
 Concrete tensors open an interactive component explorer by default in notebooks.
-Choose two displayed axes, fix the other coordinates, compare slices, or select
-*Matrix* to see the actual component formulas in a matrix. Selecting a grid cell
+Choose two displayed axes, fix the other coordinates, and compare slices.
+The visible *Memory grid / Matrix* toggle switches the current display for either
+one slice or all slices. Selecting a component
 shows its formula through the same tensor printer, including custom names.
+The explorer follows the notebook's light or dark theme and fills its output
+width. Matrix formulas scale to fit their cells; select a cell to inspect the
+formula at full size above the matrix.
 Deeper blue indicates a larger component payload: encoded Symbolica expression
 bytes, or fixed-width numeric storage. Sparse implicit entries share one default;
 they do not each occupy a stored component. Counts exclude allocation overhead
