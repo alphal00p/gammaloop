@@ -50,6 +50,51 @@ from that model can select external states.
   linking a second Symbolica extension breaks that ownership contract.
 ])
 
+== Exact particle quantum numbers
+
+`Particle.charge` is a Symbolica expression backed by Rust's `Rational`.
+JSON stores exact integers and fractions as strings, such as `"-1"` and `"2/3"`.
+Integer numeric literals are accepted too; fractional floating-point literals
+are rejected because they do not specify the intended exact charge.
+
+// docs-example: syntax
+```python
+from symbolica import E, S
+from symbolica.community import feynkit as fk
+
+charm = fk.Model.standard_model().particle("c")
+assert charm.charge == E("2/3")
+assert charm.y_charge == E("1/3")
+assert charm.y_charge_right == E("4/3")
+assert charm.weak_isospin == E("1/2")
+assert charm.weak_isospin_right == E("0")
+assert charm.mass_expression == S("UFO::MC")
+```
+
+Hypercharge follows $Q = T_3 + Y/2$, as in the
+#link("https://pdg.lbl.gov/2025/reviews/rpp2025-rev-standard-model.pdf")[PDG electroweak review].
+For fermions, `y_charge` and `weak_isospin` refer to the left-handed component;
+`y_charge_right` and `weak_isospin_right` refer to the right-handed component.
+Charge conjugation exchanges chirality and reverses the charges: the positron
+has left/right hypercharges $2, 1$ and weak-isospin components $0, 1/2$.
+`None` means missing metadata, an absent chiral field, or a state without a
+definite hypercharge. In particular, the SM has no right-handed neutrino field,
+and the neutral real Higgs and Goldstone fields are not hypercharge eigenstates.
+Weak isospin is derived from the model's charges, without a PDG-code lookup.
+
+The UFO adapter preserves `Y`, `YRight`, and the optional `charge_exact`
+attribute. Use fraction strings in those attributes to avoid rounding.
+Floating-point UFO attributes retain their decimal values as rationals; the
+adapter does not guess a small-denominator fraction from a rounded number.
+
+`mass_expression` returns exact zero for the UFO `ZERO` parameter and a symbol
+for every other mass parameter, including parameters whose current value is
+zero. The shipped SM values match `restrict_default.json`: electron, muon,
+and charm masses and their Yukawa inputs are zero, and the CKM matrix is
+identity. These are parameter-card choices; the complete particle and vertex
+content is retained. The disk JSON, fixture, and embedded model share the
+same Feynman-gauge propagators, Goldstone flags, and Lorentz structures.
+
 Try the #link("guides/showcases/first-diagram/")[interactive first-diagram showcase] or choose
 a component from the #link("guides/showcases/")[notebook gallery].
 

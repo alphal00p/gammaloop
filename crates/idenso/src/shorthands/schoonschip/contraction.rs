@@ -707,6 +707,67 @@ pub(super) const ORDER_SMALLEST_DEGREE_MIN_PRODUCT_BYTES: u8 = 5;
 impl<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool>
     SchoonschipSmallestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>
 {
+    // A scalar leaf can still contain parser-owned syntax or hidden indexed
+    // products. Only bypass network construction when the existing strict
+    // slot recognizer certifies that no explicit or malformed slots remain.
+    fn scalar_requires_network(expression: &Atom) -> bool {
+        use spenso::{
+            network::{library::symbolic::ETS, parsing::AtomStructureExt, tags::SPENSO_TAG},
+            structure::{
+                abstract_index::AIND_SYMBOLS,
+                representation::Representation,
+                slot::{SlotMatch, SlotMatcher},
+            },
+        };
+        let parser_heads = [
+            SPENSO_TAG.bracket,
+            SPENSO_TAG.pure_scalar,
+            SPENSO_TAG.dot,
+            SPENSO_TAG.chain,
+            SPENSO_TAG.trace,
+            AIND_SYMBOLS.aind,
+        ];
+        let mut slots = SlotMatcher::default();
+        let mut required = false;
+        expression.has_repeated_explicit_indices_with_observer(|node, slot| {
+            if required {
+                return;
+            }
+            match slot {
+                SlotMatch::Explicit(_) => required = true,
+                SlotMatch::Opaque => {
+                    required = slots.compact_representation(node).is_none()
+                        || Representation::<LibraryRep>::try_from(node).is_err();
+                }
+                SlotMatch::Other => {
+                    if let AtomView::Fun(function) = node {
+                        let head = function.get_symbol();
+                        required =
+                            parser_heads.contains(&head) || head.has_tag(&SPENSO_TAG.broadcast);
+                        if head == ETS.metric {
+                            let mut arguments = function.iter().map(|argument| {
+                                let AtomView::Fun(vector) = argument else {
+                                    return None;
+                                };
+                                if !vector.get_symbol().has_tag(&SPENSO_TAG.rank1) {
+                                    return None;
+                                }
+                                let argument = slots.vector_argument(vector)?;
+                                slots.compact_representation(argument)
+                            });
+                            required |= match (arguments.next(), arguments.next(), arguments.next())
+                            {
+                                (Some(Some(left)), Some(Some(right)), None) => !left.matches(right),
+                                _ => true,
+                            };
+                        }
+                    }
+                }
+            }
+        });
+        required
+    }
+
     fn simplify_scalar_tensors<Aind: AbsInd + DummyAind + ParseableAind + 'static>(
         executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
     ) -> Result<(), ContractionError> {
@@ -723,10 +784,23 @@ impl<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool>
 
         for tensor in &mut executor.tensors {
             if tensor.structure.is_scalar() && tensor.is_composite {
-                tensor.expression = tensor
-                    .expression
-                    .schoonschip_with_net::<EXPANDSUMS, Aind>(&settings)
-                    .map_err(|error| ContractionError::Other(eyre::Report::new(error)))?;
+                let shortcut = if Self::scalar_requires_network(&tensor.expression) {
+                    false
+                } else {
+                    tensor.expression.normalize_dots() == tensor.expression
+                };
+                tensor.expression = if shortcut {
+                    if EXPANDSUMS {
+                        tensor.expression.expand_num()
+                    } else {
+                        tensor.expression.clone()
+                    }
+                } else {
+                    tensor
+                        .expression
+                        .schoonschip_with_net::<EXPANDSUMS, Aind>(&settings)
+                        .map_err(|error| ContractionError::Other(eyre::Report::new(error)))?
+                };
                 tensor.is_composite = false;
                 tensor.is_metric = false;
             }

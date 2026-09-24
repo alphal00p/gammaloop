@@ -190,8 +190,8 @@ factored and sparse output algebras. The sparse representation stores and clones
 lists of integer monomials at intermediate subwords, unlike the earlier leaf
 emitter. Its public order-sensitive-twelve lifecycle, including expansion and
 destruction, improves from 5.995 to 1.472 ms; the separate FORM reference is
-0.733 ms. However, the default first call slows from 0.974 to 1.405 ms, and
-unselected controls also regress. The rerun improves from 1.855 to 0.725 ms.
+0.733 ms. However, the default first call slows from 0.974 to 1.405 ms.
+The rerun improves from 1.855 to 0.725 ms.
 This trial is rejected; the retained implementation is unchanged.
 Both copied libraries use matching direct-rustc flags and frozen production
 dependencies. Cargo's incremental compilation and codegen partitioning are not
@@ -200,10 +200,53 @@ retained Cargo-build checkpoint.
 
 The public driver uses bare traces, which return directly from the terminal
 evaluator. Thus post-trace cleanup cannot explain the 1.405 ms first call.
-Intermediate storage and compiler effects remain hypotheses pending a phase
-profile. Before timing, the trial also fixes two confirmed boundaries: mixed
+A subsequent profile identifies intermediate sparse storage as a material cost:
+the order-sensitive case increases from 9.34 to 14.06 million instructions and
+from 3,232 to 11,609 allocations. Memo-result cloning costs 2.31 million
+instructions, and sparse finalization costs 6.77 million. Earlier wall-time
+regressions in unchanged controls do not consistently reproduce. Free lengths
+twelve and fourteen retain identical allocation counts, with instruction counts
+within 1%; duplicate coefficient construction in the interior-pair control adds
+only 0.03% instructions. Its causal profile is retained under
+`direct_expanded_public_profile` in the contraction record.
+
+The representation-only follow-up under `direct_expanded_shared_nodes_trial`
+stores handles in the existing factored-trace nodes and emits polynomial leaves
+once. The matched order-sensitive-twelve full lifecycle takes 6.276 ms with
+factored output, 1.570 ms with sparse lists and 1.099 ms with shared nodes.
+Instructions decrease from 14.06 to 9.56 million and allocations from 11,609 to
+3,026. All 52 trace cases and 87 boundary/callback files exactly match the
+validated sparse-list trial. This remains a scratch-library experiment; it does
+not change production or repeat the FORM measurement.
+
+Before timing, the trial also fixes two confirmed boundaries: mixed
 free slots and compact vectors can invoke callbacks producing non-polynomial
 variable forms, and replacing binary addition with variadic addition can change
 factorization. The final trial conservatively excludes mixed residual arguments
 and preserves the original binary operations. Its source, controls and timings
 are retained in the contraction record.
+
+== Inserting an atomic factor into a normalized product
+
+A subsequent isolated Symbolica trial avoids renormalizing a product when
+expansion multiplies it by one distinct variable or function, optionally with an
+exact coefficient. It checks factor ordering and coefficient domains, inserts
+the factor into the existing byte representation, and leaves merging, powers
+and unsupported coefficient cases to normal multiplication. Both sides of this
+comparison already include the compact addition and polynomial-emission trials.
+
+Three alternating process pairs give ordinary expansion times of 35.16 to
+25.51 ms for the twelve-gamma output and 667.28 to 474.83 ms for fourteen gammas.
+The twelve-gamma instruction count falls from 386.8 to 265.6 million. All 156
+archived expansion boundary comparisons pass, including changed flags and
+reruns; seven real fixtures agree across ordinary and polynomial routes.
+Input construction and parsing are excluded, with destruction recorded
+separately. These remain shared-host measurements of an isolated dependency.
+
+This version is not integrated: simple function-times-sum controls regress by
+about 9–11%. The later-factor loop allocates scratch storage even when every
+summand is a variable, so the insertion routine immediately declines it.
+Instruction profiles confirm 268–369 extra instructions in those controls.
+A proposed lazy allocation avoids that work but remains unmeasured. The trial,
+raw timings, source and identities are stored under
+`atomic_product_insertion_trial` in `primitive_measurements.json`.

@@ -768,7 +768,11 @@ pub fn tensor_print(
         return Some(custom);
     }
     if let AtomView::Var(variable) = atom {
-        return tensor_head_print(variable.get_symbol(), resolved.backend);
+        let symbol = variable.get_symbol();
+        return tensor_head_print(symbol, resolved.backend).or_else(|| {
+            (symbol.has_tag(&SPENSO_TAG.tensor) && resolved.backend == SpensoPrintBackend::Typst)
+                .then(|| typst_tensor_head(symbol))
+        });
     }
     let settings = resolved.presentation;
     let AtomView::Fun(function) = atom else {
@@ -2046,6 +2050,18 @@ mod tests {
         );
         assert!(
             matches!(arguments[1], AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_in)
+        );
+    }
+
+    #[test]
+    fn bare_tensor_names_use_the_shared_typst_head_notation() {
+        let gamma = SPENSO_TAG.tensor_symbol("tensor_name_tests::gamma");
+        let atom = Atom::var(gamma);
+        assert_eq!(
+            prepare_tensor_print(&atom)
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            "gamma"
         );
     }
 

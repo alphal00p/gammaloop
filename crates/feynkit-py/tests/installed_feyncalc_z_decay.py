@@ -55,6 +55,10 @@ for pdg, mass, weak_isospin, electric_charge in (
     (4, S("UFO::MC"), E("1/2"), E("2/3")),
     (5, S("UFO::MB"), E("-1/2"), E("-1/3")),
 ):
+    particle = model.particle_by_pdg(pdg)
+    assert particle.mass_expression == mass
+    assert particle.weak_isospin == weak_isospin
+    assert particle.charge == electric_charge
     generated = fk.Generator(model).generate(
         fk.Process.amplitude([23], [pdg, -pdg]),
         max_vertices=1,

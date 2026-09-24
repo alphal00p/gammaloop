@@ -25,7 +25,10 @@ use crate::{
         generate_diagrams,
     },
 };
-use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
+use symbolica::{
+    api::python::{ConvertibleToExpression, PythonExpression},
+    atom::Atom,
+};
 
 fn complex_value<'py>(py: Python<'py>, value: ComplexValue) -> Bound<'py, PyComplex> {
     PyComplex::from_doubles(py, value.re, value.im)
@@ -396,16 +399,72 @@ impl PyParticle {
         &self.model.parameter_by_id(self.inner().width).unwrap().name
     }
 
-    /// Return the particle's electric charge.
+    /// Exact symbolic mass, with the UFO ZERO parameter represented as zero.
+    /// Other parameters remain symbolic, even when their current value is zero.
     ///
     /// Examples
     /// --------
-    /// >>> model.particle_by_pdg(11).charge
-    /// -1.0
-    ///
+    /// >>> model.particle("c").mass_expression
     #[getter]
-    fn charge(&self) -> f64 {
-        self.inner().charge
+    fn mass_expression(&self) -> PythonExpression {
+        self.inner().symbolic_mass(&self.model).into()
+    }
+
+    /// Electric charge in units of e, as an exact Symbolica expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.particle("c").charge
+    #[getter]
+    fn charge(&self) -> PythonExpression {
+        Atom::num(self.inner().charge.clone()).into()
+    }
+
+    /// Hypercharge in Q = T3 + Y/2; left-handed for fermions.
+    /// None means absent, undefined, or unspecified, rather than zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.particle("c").y_charge
+    #[getter]
+    fn y_charge(&self) -> Option<PythonExpression> {
+        self.inner().y_charge.clone().map(|y| Atom::num(y).into())
+    }
+
+    /// Right-handed fermion hypercharge in Q = T3 + Y/2, if specified.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.particle("c").y_charge_right
+    #[getter]
+    fn y_charge_right(&self) -> Option<PythonExpression> {
+        self.inner()
+            .y_charge_right
+            .clone()
+            .map(|y| Atom::num(y).into())
+    }
+
+    /// Third weak-isospin component Q - Y/2; left-handed for fermions.
+    /// Antiparticle chiralities are exchanged by charge conjugation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.particle("c").weak_isospin
+    #[getter]
+    fn weak_isospin(&self) -> Option<PythonExpression> {
+        self.inner().weak_isospin().map(|t| Atom::num(t).into())
+    }
+
+    /// Right-handed fermion third weak-isospin component, if specified.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.particle("c").weak_isospin_right
+    #[getter]
+    fn weak_isospin_right(&self) -> Option<PythonExpression> {
+        self.inner()
+            .weak_isospin_right()
+            .map(|t| Atom::num(t).into())
     }
 
     /// Report whether this object represents an antiparticle.
@@ -1724,7 +1783,7 @@ impl From<Arc<Model>> for PyModel {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyModel {
-    /// Load the embedded, unrestricted Standard Model with default parameters.
+    /// Load the complete embedded Standard Model with default parameters.
     /// No model files or UFO installation are required.
     ///
     /// Examples
@@ -2801,7 +2860,7 @@ positron = electron.antiparticle
 assert isinstance(positron, fk.Particle)
 assert positron.name == "e+"
 assert positron.pdg_code == -11
-assert positron.charge == 1.0
+assert str(positron.charge) == "1"
 assert positron.antiparticle.name == "e-"
 
 scalar = model.particle("s")

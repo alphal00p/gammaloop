@@ -108,6 +108,10 @@ graph builder; DOT remains a separate export format.
 `render(config=...)` returns interactive SVG and `to_linnest(config=...)` returns its
 Typst entrypoint; both accept `linnet.RenderConfig`, like Feynman diagrams.
 `to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.
+Tensor labels use the registered tensor-name printer, including custom Typst heads
+and scalar arguments. Hover summaries identify the node or edge kind. Clicking
+shows tensor storage and ports, operator inputs, or contraction indices and metric
+information; keyboard focus and Enter/Space use the same inspector.
 `expression()` retains the semantic source formula, `to_dot()` exports the operation
 graph, and `result_tensor()` shows evaluated component data. Rendering a network does
 not execute it. Tensor expressions use ordinary multiplication when explicit indices

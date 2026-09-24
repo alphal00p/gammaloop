@@ -1,10 +1,10 @@
 # Embedded Standard Model
 
-`sm.json.zlib` is the complete, unrestricted `sm` model from the existing
+`sm.json.zlib` is the complete `sm` model from the existing
 `tests/fixtures/sm.json`. It preserves all parameters, evaluated values,
 particles, propagators, Lorentz structures, couplings, and vertices.
 
-The 6,211-byte zlib stream is embedded in the library and decompressed on
+The zlib stream is embedded in the library and decompressed on
 demand. The loader needs no filesystem or Python/UFO runtime. A regression
 test compares the entire decoded definition with the source fixture and
 limits the compressed payload to 8 KiB.

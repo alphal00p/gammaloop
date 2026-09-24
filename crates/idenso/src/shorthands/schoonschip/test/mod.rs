@@ -443,3 +443,158 @@ fn explicit_metric_vectors_are_not_scalar_labels() {
     let expr = g!(slot!(mink, mu), &p) * g!(slot!(mink, mu), &q);
     assert_eq!(expr.to_dots(), spenso::dot!(p, q));
 }
+
+#[test]
+fn network_scalar_leaves_preserve_cleanup_scope_and_numeric_expansion() {
+    test_initialize();
+    let parse = |source: &str| {
+        Atom::parse(
+            source,
+            "scalar_leaf_test",
+            symbolica::parser::ParseSettings::symbolica(),
+        )
+        .unwrap()
+    };
+    let _ = symbol!("scalar_leaf_test::broadcast", tag = T.broadcast);
+    for (source, factored, expanded) in [
+        ("s*(-2*(x+y)+z)", "s*(-2*(x+y)+z)", "s*(-2*x-2*y+z)"),
+        ("s*(spenso::bracket(x)+y)", "s*(x+y)", "s*(x+y)"),
+        ("s*(spenso::bracket(x,y)+z)", "s*(x*y+z)", "s*(x*y+z)"),
+        ("s*(spenso::pure_scalar(x)+y)", "s*(x+y)", "s*(x+y)"),
+        // A bracket inside an ordinary function is opaque to network parsing.
+        (
+            "s*(f(spenso::bracket(x))+y)",
+            "s*(f(spenso::bracket(x))+y)",
+            "s*(f(spenso::bracket(x))+y)",
+        ),
+        (
+            "s*(broadcast(spenso::bracket(x))+y)",
+            "s*(broadcast(x)+y)",
+            "s*(broadcast(x)+y)",
+        ),
+    ] {
+        let input = parse(source);
+        for (settings, expected) in [
+            (SchoonschipSettings::partial(), factored),
+            (
+                SchoonschipSettings::partial().with_expanded_contracted_sums(),
+                expanded,
+            ),
+        ] {
+            assert_eq!(
+                input
+                    .schoonschip_with_net::<false, AbstractIndex>(&settings)
+                    .unwrap(),
+                parse(expected),
+                "{source}"
+            );
+            assert_eq!(
+                input
+                    .schoonschip_with_net::<true, AbstractIndex>(&settings)
+                    .unwrap(),
+                parse(expanded),
+                "{source}, EXPANDSUMS=true"
+            );
+        }
+    }
+}
+
+#[test]
+fn network_scalar_sums_keep_internal_contractions_and_factored_spectators() {
+    test_initialize();
+    let spectator = (Atom::var(symbol!("scalar_spectator_x"))
+        + Atom::var(symbol!("scalar_spectator_y")))
+    .pow(8);
+    let input = &spectator
+        * (p!(0, mink!(4, 1)) + p!(1, mink!(4, 1)))
+        * (p!(2, mink!(4, 1)) + p!(3, mink!(4, 1)));
+    let factored = input
+        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::partial())
+        .unwrap();
+    assert_eq!(factored, input);
+    let expanded = input
+        .schoonschip_with_net::<false, AbstractIndex>(
+            &SchoonschipSettings::partial().with_expanded_contracted_sums(),
+        )
+        .unwrap();
+    let expected = spectator
+        * (g!(p!(0, mink!(4)), p!(2, mink!(4)))
+            + g!(p!(0, mink!(4)), p!(3, mink!(4)))
+            + g!(p!(1, mink!(4)), p!(2, mink!(4)))
+            + g!(p!(1, mink!(4)), p!(3, mink!(4))));
+    assert_eq!(expanded, expected);
+    for settings in [
+        SchoonschipSettings::partial(),
+        SchoonschipSettings::partial().with_expanded_contracted_sums(),
+    ] {
+        assert_eq!(
+            input
+                .schoonschip_with_net::<true, AbstractIndex>(&settings)
+                .unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn network_scalar_leaves_retain_parser_errors_and_opaque_compact_forms() {
+    test_initialize();
+    let parse = |source: &str| {
+        Atom::parse(
+            source,
+            "scalar_leaf_test",
+            symbolica::parser::ParseSettings::symbolica(),
+        )
+        .unwrap()
+    };
+    let _ = symbol!("scalar_leaf_test::broadcast", tag = T.broadcast);
+    T.rank_one_tensor_symbol("scalar_leaf_test::v");
+    for settings in [
+        SchoonschipSettings::partial(),
+        SchoonschipSettings::partial().with_expanded_contracted_sums(),
+    ] {
+        for (source, diagnostic) in [
+            ("s*(spenso::bracket()+z)", "empty bracket expression"),
+            ("s*(spenso::dot(x)+z)", "Invalid dot function"),
+            (
+                "s*(spenso::chain()+z)",
+                "wrong number of arguments 0, expected 2",
+            ),
+            (
+                "s*(spenso::trace()+z)",
+                "wrong number of arguments 0, expected 1",
+            ),
+            ("s*(spenso::pure_scalar(x,y)+z)", "Too many arguments"),
+            ("s*(broadcast(x,y)+z)", "Too many arguments"),
+            (
+                "s*(spenso::aind(spenso::mink(4,a),x)+z)",
+                "Not a slot, is composite",
+            ),
+        ] {
+            let input = parse(source);
+            for result in [
+                input.schoonschip_with_net::<false, AbstractIndex>(&settings),
+                input.schoonschip_with_net::<true, AbstractIndex>(&settings),
+            ] {
+                let error = result.unwrap_err().to_string();
+                assert!(error.contains(diagnostic), "{source}: {error}");
+            }
+        }
+        // These forms are inert in the existing parser, rather than errors.
+        for source in [
+            "s*(spenso::g(x)+z)",
+            "s*(v(0,spenso::mink())+z)",
+            "s*(v(0,spenso::mink(4,a,b))+z)",
+            "s*(v(0,spenso::dind(spenso::mink(4),x))+z)",
+            "s*(v(0,spenso::mink(f(D)))+z)",
+        ] {
+            let input = parse(source);
+            for result in [
+                input.schoonschip_with_net::<false, AbstractIndex>(&settings),
+                input.schoonschip_with_net::<true, AbstractIndex>(&settings),
+            ] {
+                assert_eq!(result.unwrap(), input, "{source}");
+            }
+        }
+    }
+}

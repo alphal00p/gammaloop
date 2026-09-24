@@ -137,6 +137,9 @@
 }
 
 #let node-label(node) = {
+  let data = node.at("data", default: (:))
+  let math-source = data.at("label-typst", default: none)
+  if math-source != none { return eval("$" + math-source + "$", mode: "markup") }
   let value = node-label-value(node)
   if value == none {
     none
@@ -338,7 +341,7 @@
 // edges. Both native callers and the DOT example supply an explicit subgraph.
 #let render(g, tree, root: 0, config: (:)) = {
   set page(width: auto, height: auto, margin: 4pt, fill: none)
-  set text(size: 8pt)
+  set text(size: 10pt)
   context {
     let tree-hedges = tree-hedge-set(tree)
     let depths = subgraph.node-depths(g, tree)
@@ -392,7 +395,8 @@
   let g = graph.build({
     for item in network.nodes {
       graph.node(id: item.id, kind: item.kind, value: item.value,
-        inspection: (node: item.id, kind: item.kind, value: item.value))
+        label-typst: item.at("label-typst", default: none),
+        inspection: (node: item.id) + item.inspection)
     }
     for item in network.edges {
       let endpoints = ()
@@ -403,9 +407,10 @@
         endpoints.push(graph.sink(item.sink.at(0), id: item.sink.at(1)))
       }
       graph.edge(..endpoints, id: item.id, orientation: item.orientation,
-        slot: item.slot, inspection: (edge: item.id, slot: item.slot))
+        slot: item.slot, inspection: (edge: item.id) + item.inspection)
     }
   })
   let tree = subgraph.select(g, edges: network.edges.filter(item => item.tree).map(item => item.id))
+  if config.at("title", default: auto) == auto { config += (title: none) }
   render(g, tree, root: network.root, config: config)
 }

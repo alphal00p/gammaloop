@@ -1081,11 +1081,33 @@ default; scalar spectators retain their factorization in both routes.
 A subsequent public-library prototype shares the word evaluator between factored
 and sparse output algebras. Its order-sensitive-twelve full expanded lifecycle
 improves from 5.995 to 1.472 ms, against the separate 0.733 ms FORM reference.
-However, its default first call slows from 0.974 to 1.405 ms, and unselected
-controls also regress. The rerun improves from 1.855 to 0.725 ms. The prototype
+However, its default first call slows from 0.974 to 1.405 ms. The rerun improves
+from 1.855 to 0.725 ms. The prototype
 is rejected; the retained timings above remain the production checkpoint.
 These bare traces return directly from the terminal evaluator, so an outer
 cleanup pass cannot explain the first-call regression.
+
+A subsequent frozen-library profile identifies the intermediate sparse lists as
+a material cost: the order-sensitive case increases from 9.34 to 14.06 million
+instructions and from 3,232 to 11,609 allocations. Cloning memoized results
+accounts for 2.31 million instructions; sparse finalization accounts for 6.77
+million. Earlier wall-time regressions in unselected controls do not consistently
+reproduce: free lengths twelve and fourteen have identical allocation counts
+and instruction counts within 1%. The duplicate coefficient construction in
+the interior-pair control adds only 0.03% instructions. These measurements do
+not support attributing those control fluctuations to that extra construction.
+
+An isolated follow-up replaces those intermediate lists with handles into the
+existing factored-trace node storage and emits polynomial leaves once. It keeps
+the recurrence and selection rules unchanged. In the matched comparison, the
+order-sensitive twelve-gamma public call takes 0.993 ms with factored output,
+1.483 ms with sparse lists and 0.832 ms with shared nodes; their complete expanded
+lifecycles take 6.276, 1.570 and 1.099 ms respectively. Shared nodes reduce
+instructions to 9.56 million and allocations to 3,026. All 52 trace cases and
+87 boundary/callback files match the validated sparse-list trial exactly.
+These are scratch-library measurements; production remains unchanged. FORM
+was not rerun for this follow-up, and the earlier FORM CPU timing is not a
+matched wall-clock comparison.
 
 Late external metrics also contract through factored trace sums. A compatible
 tensor can pass through a sum when every branch can absorb it, including metrics
@@ -1105,6 +1127,100 @@ removed. All final measured trace outputs match the independent certificate.
 The #source-link("examples/notebooks/tensor_contraction_parity.json", label: "contraction parity progress record")
 retains raw samples, generated FORM programs, the generic-D benchmark driver,
 source identities and validation evidence.
+
+== Planning contractions before distribution
+
+The gluon-rule example also exposes a separate expansion boundary. The ordered
+ladder benchmark expands each new vertex into its accumulator before contracting.
+A partial network can instead keep each factor opaque, discover shared outer
+slots and apply metric or vector substitutions before distributing an incident
+sum. Scalar spectators remain outside that local distribution. The existing
+symbolic tensor, product contraction strategy and slot contractor already own
+these operations; this does not require a second parser or graph abstraction.
+
+In a closed three-vertex subcase using vertices 1, 2 and 8, the initial
+expand-first measurement takes about 5.56 ms and produces 64 scalar terms. The
+baseline network route with local sum distribution takes 24.7–27.3 ms; its final
+polynomial emission separately takes 0.30–0.48 ms. Routes that only retain
+factorization are faster but still contain uncontracted indices. Initial
+depth-one partial parsing takes 0.064 ms, less than 0.3% of the network route.
+The timing phases use independently warmed calls and must not be added as an
+exact full lifecycle. Input string parsing and shared initial dot normalization
+are excluded from these route timings.
+
+An instruction profile identifies repeated scalar recursion as the largest
+measured cost. The smallest-degree route executes 209.2 million instructions,
+of which 103.8 million are inside scalar-leaf simplification. A separate trace
+counts 487 network parse/merge passes but only 16 contraction entries. All 53
+captured scalar leaves have no explicit slots; dot normalization changes none,
+but numeric-coefficient distribution changes 25, so skipping all scalar cleanup
+would change the output. The minimum-product-terms route similarly spends
+119.5 of 230.1 million instructions inside scalar-leaf simplification. These
+inclusive figures include its nested parsing and must not be added to parser
+costs. The expand-first control executes 53.8 million instructions.
+
+Source factors are also parsed again for each branch, and substitutions can
+invoke multiple cleanup passes and residual-index searches. The initial parse
+alone does not explain the gap. Existing order scores use
+operand bytes, top-level terms and graph degree; they do not model the asymmetric
+cost of distributing one source sum and substituting into its opaque target.
+
+The retained scalar-leaf shortcut reuses the strict slot recognizer to certify
+an index-free expression without parser-owned syntax. It also requires dot
+normalization to leave the original expression unchanged. Such a leaf only
+needs the requested numeric-coefficient distribution; all other leaves enter
+the existing parser with their original expression. Brackets, trace and chain
+heads, broadcasts and malformed compact slots therefore keep their existing
+scope and error behavior.
+
+Matched copied-library measurements, with five alternating process pairs and
+eleven samples per process, give the following smallest-degree timings:
+
+#table(
+  columns: 3,
+  [Input], [Before], [After],
+  [One closed vertex], [0.906 ms], [0.713 ms],
+  [Two closed vertices], [4.197 ms], [3.149 ms],
+  [Three closed vertices], [23.696 ms], [13.619 ms],
+  [Two contracted sums], [0.224 ms], [0.190 ms],
+)
+
+The three-vertex minimum-product-terms route improves from 26.631 to 14.076 ms;
+the expand-first control remains 5.50–5.53 ms. Thus the network route still
+has substantial overhead. Instructions decrease by 42.5–42.7%. Parse/merge
+passes fall from 487 to 77 and from 607 to 117 respectively, with 16 contraction
+entries in both versions. Direct sum contraction now accounts for 34.5% of the
+smallest-degree instruction profile. These clocks include result destruction
+but exclude initial normalization and final polynomial emission. The copied
+libraries share compiler flags and dependencies, without reproducing Cargo's
+incremental codegen layout; the host has unrelated concurrent work.
+
+All 3,200 before/after comparisons agree, including both compile-time expansion
+modes, eight ordering strategies, traversal choices and runtime sum settings.
+The comparisons include 512 unchanged errors. All 39 repository Schoonschip
+tests pass under process-isolated nextest, including new coefficient, scope,
+malformed-input and factored-spectator cases. The scalar checkpoint and raw
+measurements are retained alongside the contraction profile in the parity record.
+
+A sum boundary also needs a clear invariant. Fast inference uses the first
+branch; the depth-limited parser does not certify matching later branches.
+Generated tensor rules can validate their common boundary once. Substitution
+must then respect complete slots and structural occurrences, reusing the
+restricted slot contractor, and update the affected boundary. A repeated-index
+scan remains a cheap candidate check, not a boundary certificate or contraction
+order. Outer slots establish available contractions; estimated branch growth
+and copying costs guide their order without proving global optimality.
+
+All 72 exact HEP component comparisons pass across four inputs, three integer
+assignments and six routes. Nine FORM programs also match the final scalar
+polynomials exactly. For the three-vertex subcase, FORM order 1, 2, 8 passes
+through 6, 34 and 64 terms in about 328 microseconds CPU; order 8, 1, 2 passes
+through 9, 45 and 64 terms in about 270 microseconds. More intermediate terms
+can therefore accompany a faster run. FORM includes substitutions and sorting
+from opaque vertices; the Rust wall measurements start from normalized
+six-term rules. These different timing boundaries do not establish a matched
+speedup ratio. The fixtures and validation are retained under
+`gluon_network_planning_followup` in the contraction parity record.
 
 == Run locally
 

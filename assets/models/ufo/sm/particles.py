@@ -9,6 +9,9 @@ from .object_library import all_particles, Particle
 from . import parameters as Param
 from . import propagators as Prop
 
+# Hypercharges use Q = T3 + Y/2. Y is left-handed for fermions and
+# YRight is right-handed; None means absent or not a hypercharge eigenstate.
+# charge_exact preserves fractional electric charges through JSON export.
 a = Particle(pdg_code=22,
              name='a',
              antiname='a',
@@ -21,7 +24,7 @@ a = Particle(pdg_code=22,
              charge=0,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y='0')
 
 Z = Particle(pdg_code=23,
              name='Z',
@@ -35,7 +38,7 @@ Z = Particle(pdg_code=23,
              charge=0,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y='0')
 
 W__plus__ = Particle(pdg_code=24,
                      name='W+',
@@ -49,7 +52,7 @@ W__plus__ = Particle(pdg_code=24,
                      charge=1,
                      GhostNumber=0,
                      LeptonNumber=0,
-                     Y=0)
+                     Y='0')
 
 W__minus__ = W__plus__.anti()
 
@@ -71,7 +74,7 @@ g = Particle(pdg_code=21,
              charge=0,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y='0')
 
 ghA = Particle(pdg_code=9000001,
                name='ghA',
@@ -85,7 +88,7 @@ ghA = Particle(pdg_code=9000001,
                charge=0,
                GhostNumber=1,
                LeptonNumber=0,
-               Y=0)
+               Y='0')
 
 ghA__tilde__ = ghA.anti()
 
@@ -101,7 +104,7 @@ ghZ = Particle(pdg_code=9000002,
                charge=0,
                GhostNumber=1,
                LeptonNumber=0,
-               Y=0)
+               Y='0')
 
 ghZ__tilde__ = ghZ.anti()
 
@@ -117,7 +120,7 @@ ghWp = Particle(pdg_code=9000003,
                 charge=1,
                 GhostNumber=1,
                 LeptonNumber=0,
-                Y=0)
+                Y='0')
 
 ghWp__tilde__ = ghWp.anti()
 
@@ -133,7 +136,7 @@ ghWm = Particle(pdg_code=9000004,
                 charge=-1,
                 GhostNumber=1,
                 LeptonNumber=0,
-                Y=0)
+                Y='0')
 
 ghWm__tilde__ = ghWm.anti()
 
@@ -149,7 +152,7 @@ ghG = Particle(pdg_code=9000005,
                charge=0,
                GhostNumber=1,
                LeptonNumber=0,
-               Y=0)
+               Y='0')
 
 ghG__tilde__ = ghG.anti()
 
@@ -165,7 +168,7 @@ ve = Particle(pdg_code=12,
               charge=0,
               GhostNumber=0,
               LeptonNumber=1,
-              Y=0)
+              Y='-1', YRight=None)
 
 ve__tilde__ = ve.anti()
 
@@ -181,7 +184,7 @@ vm = Particle(pdg_code=14,
               charge=0,
               GhostNumber=0,
               LeptonNumber=1,
-              Y=0)
+              Y='-1', YRight=None)
 
 vm__tilde__ = vm.anti()
 
@@ -197,7 +200,7 @@ vt = Particle(pdg_code=16,
               charge=0,
               GhostNumber=0,
               LeptonNumber=1,
-              Y=0)
+              Y='-1', YRight=None)
 
 vt__tilde__ = vt.anti()
 
@@ -213,7 +216,7 @@ u = Particle(pdg_code=2,
              charge=2/3,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y='1/3', YRight='4/3', charge_exact='2/3')
 
 u__tilde__ = u.anti()
 
@@ -229,7 +232,7 @@ c = Particle(pdg_code=4,
              charge=2/3,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y='1/3', YRight='4/3', charge_exact='2/3')
 
 c__tilde__ = c.anti()
 
@@ -245,7 +248,7 @@ t = Particle(pdg_code=6,
              charge=2/3,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y='1/3', YRight='4/3', charge_exact='2/3')
 
 t__tilde__ = t.anti()
 
@@ -261,7 +264,7 @@ d = Particle(pdg_code=1,
              charge=-1/3,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y='1/3', YRight='-2/3', charge_exact='-1/3')
 
 d__tilde__ = d.anti()
 
@@ -277,7 +280,7 @@ s = Particle(pdg_code=3,
              charge=-1/3,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y='1/3', YRight='-2/3', charge_exact='-1/3')
 
 s__tilde__ = s.anti()
 
@@ -293,7 +296,7 @@ b = Particle(pdg_code=5,
              charge=-1/3,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y='1/3', YRight='-2/3', charge_exact='-1/3')
 
 b__tilde__ = b.anti()
 
@@ -309,7 +312,7 @@ H = Particle(pdg_code=25,
              charge=0,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y=None)
 
 G0 = Particle(pdg_code=250,
               name='G0',
@@ -324,7 +327,7 @@ G0 = Particle(pdg_code=250,
               charge=0,
               GhostNumber=0,
               LeptonNumber=0,
-              Y=0)
+              Y=None)
 
 G__plus__ = Particle(pdg_code=251,
                      name='G+',
@@ -339,7 +342,7 @@ G__plus__ = Particle(pdg_code=251,
                      charge=1,
                      GhostNumber=0,
                      LeptonNumber=0,
-                     Y=0)
+                     Y='1')
 
 G__minus__ = G__plus__.anti()
 
@@ -355,7 +358,7 @@ e__minus__ = Particle(pdg_code=11,
                       charge=-1,
                       GhostNumber=0,
                       LeptonNumber=1,
-                      Y=0)
+                      Y='-1', YRight='-2')
 
 e__plus__ = e__minus__.anti()
 
@@ -371,7 +374,7 @@ mu__minus__ = Particle(pdg_code=13,
                        charge=-1,
                        GhostNumber=0,
                        LeptonNumber=1,
-                       Y=0)
+                       Y='-1', YRight='-2')
 
 mu__plus__ = mu__minus__.anti()
 
@@ -387,6 +390,6 @@ ta__minus__ = Particle(pdg_code=15,
                        charge=-1,
                        GhostNumber=0,
                        LeptonNumber=1,
-                       Y=0)
+                       Y='-1', YRight='-2')
 
 ta__plus__ = ta__minus__.anti()

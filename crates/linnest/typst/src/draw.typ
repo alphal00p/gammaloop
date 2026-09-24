@@ -261,7 +261,11 @@
 /// A valid pair with no proper interior intersection is left unchanged.
 ///
 /// SVG inspection normally uses the drawn graph's IDs. Display transformations
-/// can retain a source graph's identities with native `inspection` data:
+/// may also supply `title`, `summary`, and `properties` in `inspection` data.
+/// `summary` supplies the hover text; `title` names the click inspector and
+/// `properties` is an array of `(label, value)` string pairs shown as detail rows.
+/// These fields augment the standard topology and selection information.
+/// Display transformations can retain a source graph's identities with native `inspection` data:
 /// nodes accept `(node, edges)` and edges accept `(edge, source, sink,
 /// source-hedge, sink-hedge)`. These override inspection and selection only;
 /// layout, drawing callbacks, and subgraphs still use the drawn graph's IDs.

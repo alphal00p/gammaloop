@@ -1699,6 +1699,10 @@ class FeynmanDiagram:
         DiagramError. Use ``propagator_family()`` to extract dependent propagators
         for partial fractioning before completing their families.
 
+        Examples
+        --------
+        >>> family = diagram.integral_family()
+
         Parameters
         ----------
         independent_dot_products : list[Expression] or None, optional
@@ -3145,6 +3149,10 @@ class IntegralFamily:
         Use ``diagram.propagator_family()`` to extract dependent propagators for
         partial fractioning before completing the resulting families.
 
+        Examples
+        --------
+        >>> family = fk.IntegralFamily.from_diagram(diagram)
+
         Parameters
         ----------
         diagram : FeynmanDiagram
@@ -3209,18 +3217,28 @@ class IntegralFamily:
         cycle : bool
             Whether this family is part of a recursive formatting cycle.
         """
-    def complete(self) -> IntegralFamily:
+    def complete(self, *, candidates: typing.Optional[typing.Sequence[Expression]] = None) -> IntegralFamily:
         r"""
-        Append irreducible scalar products to obtain a complete family.
+        Complete a basis, preferring supplied inverse propagators.
 
         Original propagators retain their positions. Dependent families must
         first be partial-fractioned. Added propagators carry nonpositive powers
         when used to represent numerator factors in an IBP integral list.
+        Candidates are tried in order after applying this family's kinematics.
+        Redundant candidates are skipped; bare scalar products fill any missing
+        directions. All candidates must be affine in the loop scalar products.
 
         Examples
         --------
         >>> completed = family.complete()
         >>> assert completed.is_complete
+        >>> completed = family.complete(candidates=other_family.denominators)
+
+        Parameters
+        ----------
+        candidates : list[Expression] | None
+            Preferred auxiliary inverse propagators in this family's momentum
+            coordinates. Defaults to using only bare scalar products.
         """
     def partial_fraction(self, powers: typing.Sequence[builtins.int], *, max_states: builtins.int = 100000) -> builtins.list[tuple[Expression, builtins.list[builtins.int]]]:
         r"""
@@ -3303,6 +3321,43 @@ class IntegralFamily:
         IntegralMapping | None
             Verified mapping, or None if no supported candidate matches.
         """
+    @staticmethod
+    def find_mappings(families: typing.Sequence[IntegralFamily], *, max_candidates: builtins.int = 100000) -> builtins.list[tuple[builtins.int, IntegralMapping]]:
+        r"""
+        Group families and return verified maps to their representatives.
+
+        Returns one ``(target_index, mapping)`` per input family in input order.
+        Indices refer to the original list. Representatives map to themselves;
+        every other mapping goes directly to a retained representative.
+        The first compatible representative wins. Symbolica canonizes each
+        Symanzik pair once, then native affine-shift search verifies all merges.
+        A parametric equivalence without a verified loop map remains separate.
+
+        Families need compatible external kinematics and nonsingular quadratic
+        forms. Unsupported shift searches and exhausted budgets raise errors.
+        Different propagator counts stay separate. Select sectors and remove
+        certified scaleless integrals before grouping; complete bases afterwards.
+        This does not exchange external momenta or infer integration prescriptions.
+
+        Examples
+        --------
+        >>> mappings = fk.IntegralFamily.find_mappings(families)
+        >>> representatives = sorted({target for target, mapping in mappings})
+        >>> target, mapping = mappings[0]
+        >>> target_powers = mapping.map_powers(source_powers)
+
+        Parameters
+        ----------
+        families : list[IntegralFamily]
+            Ordered families; earlier entries are preferred as representatives.
+        max_candidates : int
+            Affine-shift candidate budget per pair; exhaustion raises an error.
+
+        Returns
+        -------
+        list[tuple[int, IntegralMapping]]
+            Target index and verified map for each input, including representatives.
+        """
     def sector(self, powers: typing.Sequence[builtins.int]) -> IntegralFamily:
         r"""
         Select the positive-power propagators of an integral's sector.
@@ -3320,6 +3375,33 @@ class IntegralFamily:
         ----------
         powers : list[int]
             One signed propagator power per family denominator.
+        """
+    def scaleless_transverse_direction(self) -> typing.Optional[builtins.list[Expression]]:
+        r"""
+        Find an unconstrained transverse loop direction proving scalelessness.
+
+        Returns a nonzero real list ``w`` in loop order such that each inverse
+        propagator is invariant under ``k_i -> k_i + w_i*r_perp`` for any
+        vector orthogonal to the external span. The corresponding unrestricted
+        transverse integral vanishes in dimensional regularization, including
+        polynomial numerators. Apply ``sector(powers)`` first to exclude
+        numerator-only entries.
+
+        Requires a nonsingular external Gram matrix. Symbolic dimension is
+        interpreted generically; a concrete dimension must exceed the external
+        basis size. None means no certificate was found. A vanishing Symanzik U
+        alone is not sufficient, and complex loop directions are not accepted.
+
+        Examples
+        --------
+        >>> direction = family.sector(powers).scaleless_transverse_direction()
+        >>> if direction is not None:
+        ...     print("Scaleless transverse integration:", direction)
+
+        Returns
+        -------
+        list[Expression] | None
+            Verified real loop direction, or no certificate.
         """
     def scaleless_scaling(self, parameters: typing.Sequence[Expression]) -> typing.Optional[builtins.list[Expression]]:
         r"""
@@ -3840,6 +3922,32 @@ class Kinematics:
         second : Expression
             Second outgoing unindexed momentum or declared linear combination.
         """
+    def three_body_phase_space(self, first: Expression, second: Expression, third: Expression) -> Expression:
+        r"""
+        Return four-dimensional three-body phase space per two Dalitz invariants.
+
+        This is ``dPhi_3/(ds12*ds23) = 1/(128*pi**3*P**2)``, where
+        ``P=first+second+third`` and ``sij=(pi+pj)**2``. The overall spatial
+        orientation is integrated. Use an orientation-independent or
+        orientation-averaged squared amplitude and physical on-shell momenta.
+        The measure includes ``(2*pi)**4*delta**4`` and one
+        ``d**3p/((2*pi)**3*2E)`` for each final particle.
+
+        Masses constrain the allowed Dalitz region; its boundaries are not
+        imposed here. Flux, spin/color averages and identical-particle factors
+        remain separate. Non-four-dimensional contexts are rejected.
+
+        Examples
+        --------
+        >>> density = kin.three_body_phase_space(k1, k2, k3)
+        >>> differential_width = squared * density / kin.flux(parent)
+
+        Parameters
+        ----------
+        first, second, third : Expression
+            Final-state on-shell momenta. Their scalar products determine the
+            total invariant mass squared through this kinematic context.
+        """
     @typing.overload
     def apply(self, expression: TensorExpression) -> TensorExpression:
         r"""
@@ -3850,7 +3958,7 @@ class Kinematics:
         Examples
         --------
         >>> result = kin.apply(contracted_tensor)
-        >>> assert result.interface == contracted_tensor.interface
+        >>> assert result.structure.slots == contracted_tensor.structure.slots
 
         Parameters
         ----------
@@ -4075,7 +4183,7 @@ class LoopMomentumBasis:
         Examples
         --------
         >>> routed = basis.route_expression(diagram.numerator_expression())
-        >>> assert routed.interface == diagram.numerator_expression().interface
+        >>> assert routed.structure.slots == diagram.numerator_expression().structure.slots
 
         Parameters
         ----------
@@ -4307,7 +4415,7 @@ class Model:
     @staticmethod
     def standard_model() -> Model:
         r"""
-        Load the embedded, unrestricted Standard Model with default parameters.
+        Load the complete embedded Standard Model with default parameters.
         No model files or UFO installation are required.
 
         Examples
@@ -5317,14 +5425,61 @@ class Particle:
         >>> width = model.parameter(particle.width_parameter)
         """
     @property
-    def charge(self) -> builtins.float:
+    def mass_expression(self) -> Expression:
         r"""
-        Return the particle's electric charge.
+        Exact symbolic mass, with the UFO ZERO parameter represented as zero.
+        Other parameters remain symbolic, even when their current value is zero.
 
         Examples
         --------
-        >>> model.particle_by_pdg(11).charge
-        -1.0
+        >>> model.particle("c").mass_expression
+        """
+    @property
+    def charge(self) -> Expression:
+        r"""
+        Electric charge in units of e, as an exact Symbolica expression.
+
+        Examples
+        --------
+        >>> model.particle("c").charge
+        """
+    @property
+    def y_charge(self) -> typing.Optional[Expression]:
+        r"""
+        Hypercharge in Q = T3 + Y/2; left-handed for fermions.
+        None means absent, undefined, or unspecified, rather than zero.
+
+        Examples
+        --------
+        >>> model.particle("c").y_charge
+        """
+    @property
+    def y_charge_right(self) -> typing.Optional[Expression]:
+        r"""
+        Right-handed fermion hypercharge in Q = T3 + Y/2, if specified.
+
+        Examples
+        --------
+        >>> model.particle("c").y_charge_right
+        """
+    @property
+    def weak_isospin(self) -> typing.Optional[Expression]:
+        r"""
+        Third weak-isospin component Q - Y/2; left-handed for fermions.
+        Antiparticle chiralities are exchanged by charge conjugation.
+
+        Examples
+        --------
+        >>> model.particle("c").weak_isospin
+        """
+    @property
+    def weak_isospin_right(self) -> typing.Optional[Expression]:
+        r"""
+        Right-handed fermion third weak-isospin component, if specified.
+
+        Examples
+        --------
+        >>> model.particle("c").weak_isospin_right
         """
     @property
     def is_antiparticle(self) -> builtins.bool:
@@ -5405,14 +5560,16 @@ class Particle:
         ValueError
             If the particle's UFO color representation is unsupported.
         """
-    def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None) -> Expression:
+    def spin_sum(self, momentum: Expression, left: Expression, right: Expression, *, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> Expression:
         r"""
         Construct this particle's external-state spin or polarization sum.
 
         Return an ordinary Symbolica expression using Spenso gamma matrices
         and metrics. Indices are bare symbols; momentum and reference are
         unindexed symbols or labeled calls such as ``Q(1)``. The calculation
-        uses four-dimensional external states. Massive vectors use the Proca
+        defaults to four-dimensional external states. ``dimension`` changes the
+        Lorentz dimension while Dirac spinor slots retain dimension four.
+        Massive vectors use the Proca
         projector. For massless vectors, supply a reference for a physical
         axial sum, or omit it for the covariant sum of a gauge-invariant
         amplitude. Subsequent kinematic substitutions must enforce on-shell
@@ -5423,14 +5580,16 @@ class Particle:
         satisfying ``p.s = 0`` and ``s.s = -1``: the rest-frame spin direction,
         boosted with the particle. The same projector sign applies to fermions
         and antifermions; do not reverse this vector for an antiparticle.
-        This option requires ``average=False``.
+        This option requires ``average=False`` and four Lorentz dimensions.
 
         Examples
         --------
         >>> from symbolica import S
         >>> p, i, j = S("p", "i", "j")
-        >>> projector = model.particle_by_pdg(11).spin_sum(p, i, j, average=True)
-        >>> polarized = model.particle_by_pdg(15).spin_sum(p, i, j, spin_vector=S("s"))
+        >>> projector = model.particle("e-").spin_sum(p, i, j, average=True)
+        >>> polarized = model.particle("ta-").spin_sum(p, i, j, spin_vector=S("s"))
+        >>> dimensional = model.particle("g").spin_sum(p, i, j, dimension=S("D"))
+        >>> six_dimensional = model.particle("g").spin_sum(p, i, j, dimension=6)
 
         Parameters
         ----------
@@ -5441,7 +5600,13 @@ class Particle:
         right : Expression
             Open index on the conjugate amplitude.
         average : bool
-            Divide by the number of physical spin states.
+            Divide by two for Dirac fermions, D-2 for massless vectors, or D-1
+            for massive vectors. Scalars have one state.
+        dimension : Expression | int | None
+            Integer or symbolic Lorentz dimension; defaults to four. Dirac
+            spinor slots and their trace dimension stay four. To use a fixed
+            two-state vector average at symbolic D, leave average=False and
+            divide the result by two.
         reference : Expression | None
             Axial reference momentum for a massless vector; need not be null.
         covariant : bool
@@ -5454,9 +5619,11 @@ class Particle:
         ------
         ValueError
             If ``spin_vector`` is used with averaging, a massless particle, or
-            a particle other than a Dirac fermion, or is not an unindexed name.
+            a particle other than a Dirac fermion, non-four-dimensional Lorentz
+            slots, or is not an unindexed name. Also raised for an invalid
+            dimension or a concrete dimension with no physical vector states.
         """
-    def sum_spins(self, expression: Expression, momentum: Expression, *, edge: builtins.int, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None) -> Expression:
+    def sum_spins(self, expression: Expression, momentum: Expression, *, edge: builtins.int, average: builtins.bool = False, reference: typing.Optional[Expression] = None, covariant: builtins.bool = False, spin_vector: typing.Optional[Expression] = None, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> Expression:
         r"""
         Sum paired generated external wavefunctions for one edge.
 
@@ -5465,7 +5632,8 @@ class Particle:
         diagram's ``projector_expression()`` or a squared amplitude. Only pairs
         with the supplied edge label are replaced; unpaired wavefunctions stay
         unchanged. Scalar particles have no external wavefunction factors.
-        External states are four-dimensional; reference and gauge conventions
+        Vector wavefunction slots must use the requested Lorentz dimension.
+        External states default to four dimensions; reference and gauge conventions
         are those of ``spin_sum``. For a massive Dirac particle, ``spin_vector``
         selects the same physical spin state as in ``spin_sum``, including for
         antiparticles. This does not sum color, conjugate amplitudes, or apply
@@ -5476,7 +5644,7 @@ class Particle:
         >>> from symbolica import S
         >>> p = S("p")
         >>> projector = diagram.projector_expression()
-        >>> summed = model.particle_by_pdg(11).sum_spins(projector, p, edge=0, average=True)
+        >>> summed = model.particle("e-").sum_spins(projector, p, edge=0, average=True)
 
         Parameters
         ----------
@@ -5487,7 +5655,13 @@ class Particle:
         edge : int
             Generated edge label of the pair to replace.
         average : bool
-            Divide by the number of physical spin states.
+            Divide by two for Dirac fermions, D-2 for massless vectors, or D-1
+            for massive vectors. Scalars have one state.
+        dimension : Expression | int | None
+            Integer or symbolic Lorentz dimension; defaults to four. Dirac
+            spinor slots and their trace dimension stay four. To use a fixed
+            two-state vector average at symbolic D, leave average=False and
+            divide the result by two.
         reference : Expression | None
             Axial reference for a massless vector; need not be null.
         covariant : bool
@@ -5500,7 +5674,9 @@ class Particle:
         ------
         ValueError
             If ``spin_vector`` is used with averaging, a massless particle, or
-            a particle other than a Dirac fermion, or is not an unindexed name.
+            a particle other than a Dirac fermion, non-four-dimensional Lorentz
+            slots, or is not an unindexed name. Also raised for an invalid
+            dimension or a concrete dimension with no physical vector states.
         """
     def __repr__(self) -> builtins.str:
         r"""

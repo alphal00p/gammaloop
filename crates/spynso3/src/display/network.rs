@@ -1,16 +1,132 @@
 //! Network graph rendering through Linnet's shared asset and SVG pipeline.
+use super::{TensorDisplayMode, format_atom_with_mode};
+use crate::{metadata::SpensoRepresentationName, network::SpensoNet};
 use linnet::half_edge::involution::{Flow, HedgePair, Orientation};
 use pyo3::{
     prelude::*,
     types::{PyBytes, PyDict, PyList},
 };
-use spenso::network::{
-    StructureLessDisplay,
-    graph::{NetworkEdge, NetworkLeaf, NetworkNode},
-    store::TensorScalarStore,
+use spenso::{
+    network::{
+        graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
+        parsing::ShadowedStructure,
+        store::TensorScalarStore,
+    },
+    structure::{
+        HasName,
+        abstract_index::AbstractIndex,
+        slot::{IsAbstractSlot, ParseableAind},
+    },
+    tensors::{complex::RealOrComplexTensor, data::DataTensor, parametric::MixedTensor},
 };
+use symbolica::atom::{Atom, FunctionBuilder, Symbol};
 
-use crate::network::SpensoNet;
+/// Domain details feed Linnet's common hover and click inspector.
+struct NetworkLabel {
+    kind: &'static str,
+    title: String,
+    value: String,
+    typst: Option<String>,
+    properties: Vec<(String, String)>,
+}
+
+impl NetworkLabel {
+    fn new(kind: &'static str, title: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            kind,
+            title: title.into(),
+            value: value.into(),
+            typst: None,
+            properties: Vec::new(),
+        }
+    }
+
+    fn property(&mut self, label: &str, value: impl ToString) {
+        self.properties.push((label.into(), value.to_string()));
+    }
+
+    fn atom(&mut self, atom: &Atom) {
+        self.value = format_atom_with_mode(atom, TensorDisplayMode::Plain, false);
+        self.typst = Some(format_atom_with_mode(atom, TensorDisplayMode::Typst, false));
+    }
+
+    fn named(&mut self, named: &impl HasName<Name = Symbol, Args = Vec<Atom>>) {
+        if let Some(name) = named.name() {
+            let args = named.args().unwrap_or_default();
+            let atom = if args.is_empty() {
+                Atom::var(name)
+            } else {
+                FunctionBuilder::new(name).add_args(&args).finish()
+            };
+            self.atom(&atom);
+            self.property("Tensor name", name.get_name());
+            if !args.is_empty() {
+                self.property(
+                    "Arguments",
+                    args.iter()
+                        .map(Atom::to_plain_string)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
+            }
+        }
+    }
+
+    fn storage<T, S>(&mut self, data: &DataTensor<T, S>) {
+        let (storage, count) = match data {
+            DataTensor::Dense(data) => ("Dense", data.data.len()),
+            DataTensor::Sparse(data) => ("Sparse", data.elements.len()),
+        };
+        self.property("Storage", storage);
+        self.property("Stored components", count);
+    }
+
+    fn tensor(
+        &mut self,
+        tensor: &MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
+        index: usize,
+    ) {
+        self.named(tensor);
+        self.property("Store index", index);
+        match tensor {
+            MixedTensor::Param(data) => {
+                self.property("Components", "Symbolic");
+                self.storage(&data.tensor);
+            }
+            MixedTensor::Concrete(RealOrComplexTensor::Real(data)) => {
+                self.property("Components", "Real");
+                self.storage(data);
+            }
+            MixedTensor::Concrete(RealOrComplexTensor::Complex(data)) => {
+                self.property("Components", "Complex");
+                self.storage(data);
+            }
+        }
+    }
+
+    fn inspection<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let details = PyDict::new(py);
+        details.set_item("title", &self.title)?;
+        let mut summary = format!("{} · {}", self.title, self.value);
+        for (label, value) in &self.properties {
+            if matches!(
+                label.as_str(),
+                "Rank"
+                    | "Port dimensions"
+                    | "Components"
+                    | "Inputs"
+                    | "Representation"
+                    | "Dimension"
+                    | "Index"
+            ) {
+                summary.push_str(&format!("\n{label}: {value}"));
+            }
+        }
+        details.set_item("summary", summary)?;
+        details.set_item("properties", &self.properties)?;
+        Ok(details)
+    }
+}
 
 impl SpensoNet {
     /// Copy native topology and leaf metadata into Linnet's typed configuration.
@@ -20,39 +136,122 @@ impl SpensoNet {
         let store = &self.network.store;
         let nodes = PyList::empty(py);
         for (id, _, node) in graph.iter_nodes() {
-            let (kind, value) = match node {
-                NetworkNode::Op(op) => ("operator", op.display_with(ToString::to_string)),
+            let mut label = match node {
+                NetworkNode::Op(op) => {
+                    let title = match op {
+                        NetworkOp::Product => "Product",
+                        NetworkOp::Sum => "Sum",
+                        NetworkOp::Neg => "Negation",
+                        NetworkOp::Power(_) => "Power",
+                        NetworkOp::Function(_) => "Function",
+                    };
+                    let mut label =
+                        NetworkLabel::new("operator", title, op.display_with(ToString::to_string));
+                    let inputs = graph
+                        .iter_crown(id)
+                        .filter(|&h| {
+                            graph.get_edge_data(h).is_head() && graph.flow(h) == Flow::Sink
+                        })
+                        .count();
+                    label.property("Inputs", inputs);
+                    match op {
+                        NetworkOp::Power(power) => label.property("Exponent", power),
+                        NetworkOp::Function(name) => label.property("Function", name.get_name()),
+                        _ => {}
+                    }
+                    label
+                }
                 NetworkNode::Leaf(leaf) => match leaf {
-                    NetworkLeaf::LibraryKey { key, .. } => ("library", key.canonical().display()),
+                    NetworkLeaf::LibraryKey { key, .. } => {
+                        let mut label = NetworkLabel::new("library", "Library tensor", "Tensor");
+                        label.named(key.canonical());
+                        label.property("Resolution", "Library reference");
+                        label
+                    }
                     NetworkLeaf::LocalTensor(index) => {
-                        ("tensor", store.get_tensor(*index).display())
+                        let mut label = NetworkLabel::new("tensor", "Stored tensor", "Tensor");
+                        label.tensor(store.get_tensor(*index), *index);
+                        label
                     }
                     NetworkLeaf::TensorSum(indices) => {
-                        ("tensor", format!("Sum of {} tensors", indices.len()))
+                        let mut label = NetworkLabel::new(
+                            "tensor",
+                            "Tensor sum",
+                            format!("Sum of {} tensors", indices.len()),
+                        );
+                        label.property("Terms", indices.len());
+                        label.property("Store indices", format!("{indices:?}"));
+                        label
                     }
-                    NetworkLeaf::ScaledTensor(term) => (
-                        "tensor",
-                        match term.scale {
-                            Some(scale) => format!(
-                                "{} · {}",
-                                store.get_scalar_ref(scale),
-                                store.get_tensor(term.tensor).display()
-                            ),
-                            None => store.get_tensor(term.tensor).display(),
-                        },
-                    ),
+                    NetworkLeaf::ScaledTensor(term) => {
+                        let mut label = NetworkLabel::new("tensor", "Scaled tensor", "Tensor");
+                        label.tensor(store.get_tensor(term.tensor), term.tensor);
+                        if let Some(scale) = term.scale {
+                            label.property(
+                                "Coefficient",
+                                store.get_scalar_ref(scale).to_plain_string(),
+                            );
+                        }
+                        label
+                    }
                     NetworkLeaf::ScaledTensorSum(terms) => {
-                        ("tensor", format!("Sum of {} scaled tensors", terms.len()))
+                        let mut label = NetworkLabel::new(
+                            "tensor",
+                            "Scaled tensor sum",
+                            format!("Sum of {} terms", terms.len()),
+                        );
+                        label.property("Terms", terms.len());
+                        label.property(
+                            "Store indices",
+                            terms
+                                .iter()
+                                .map(|term| term.tensor.to_string())
+                                .collect::<Vec<_>>()
+                                .join(", "),
+                        );
+                        label
                     }
                     NetworkLeaf::Scalar(scalar) => {
-                        ("scalar", store.get_scalar_ref(*scalar).to_string())
+                        let mut label = NetworkLabel::new("scalar", "Scalar", "");
+                        let scalar = store.get_scalar_ref(*scalar);
+                        label.atom(scalar);
+                        label.property("Expression", scalar.to_plain_string());
+                        label
                     }
                 },
             };
+            let slots = graph
+                .iter_crown(id)
+                .filter_map(|h| match graph.get_edge_data(h) {
+                    NetworkEdge::Slot(slot) => Some(*slot),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            if !slots.is_empty() || label.kind == "tensor" || label.kind == "library" {
+                label.property("Rank", slots.len());
+                label.property(
+                    "Port dimensions",
+                    slots
+                        .iter()
+                        .map(|slot| slot.rep().dim.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" × "),
+                );
+                label.property(
+                    "Slots",
+                    slots
+                        .iter()
+                        .map(|slot| slot.to_atom().to_plain_string())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                );
+            }
             let record = PyDict::new(py);
             record.set_item("id", id.0)?;
-            record.set_item("kind", kind)?;
-            record.set_item("value", value)?;
+            record.set_item("kind", label.kind)?;
+            record.set_item("value", &label.value)?;
+            record.set_item("label-typst", &label.typst)?;
+            record.set_item("inspection", label.inspection(py)?)?;
             nodes.append(record)?;
         }
         let edges = PyList::empty(py);
@@ -89,6 +288,43 @@ impl SpensoNet {
                     NetworkEdge::Slot(slot) => slot.to_string(),
                 },
             )?;
+            let mut detail = match edge.data {
+                NetworkEdge::Head => NetworkLabel::new(
+                    "dependency",
+                    if source.is_none() || sink.is_none() {
+                        "Network output"
+                    } else {
+                        "Expression dependency"
+                    },
+                    "Carries an expression result",
+                ),
+                NetworkEdge::Slot(slot) => {
+                    let rep = slot.rep();
+                    let mut detail = NetworkLabel::new(
+                        "slot",
+                        if source.is_none() || sink.is_none() {
+                            "Free tensor slot"
+                        } else {
+                            "Tensor contraction"
+                        },
+                        slot.to_string(),
+                    );
+                    let name = SpensoRepresentationName { rep: rep.rep };
+                    detail.property("Representation", rep.rep.symbol().get_name());
+                    detail.property("Dimension", rep.dim);
+                    detail.property("Index", slot.aind().to_atom().to_plain_string());
+                    detail.property("Duality", name.duality());
+                    detail.property("Metric", super::metadata::metric(rep));
+                    detail
+                }
+            };
+            if let Some(h) = source {
+                detail.property("Source half-edge", h.0);
+            }
+            if let Some(h) = sink {
+                detail.property("Sink half-edge", h.0);
+            }
+            record.set_item("inspection", detail.inspection(py)?)?;
             edges.append(record)?;
         }
         let snapshot = PyDict::new(py);
@@ -151,6 +387,7 @@ pub(crate) fn svg_theme(svg: &str) -> String {
     for (light, dark) in [
         ("#000000", "#e6ebf1"),
         ("#ffffff", "#1c2025"),
+        ("#ffffff80", "#1c202580"),
         ("#666666", "#a6b3c5"),
         ("#555555", "#b4bdc9"),
         ("#aeb4bd", "#566477"),

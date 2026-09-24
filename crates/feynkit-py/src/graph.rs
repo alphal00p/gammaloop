@@ -2123,6 +2123,10 @@ impl PyFeynmanDiagram {
     /// DiagramError. Use ``propagator_family()`` to extract dependent propagators
     /// for partial fractioning before completing their families.
     ///
+    /// Examples
+    /// --------
+    /// >>> family = diagram.integral_family()
+    ///
     /// Parameters
     /// ----------
     /// independent_dot_products : list[Expression] or None, optional

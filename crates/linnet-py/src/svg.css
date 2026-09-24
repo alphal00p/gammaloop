@@ -85,6 +85,20 @@ svg[data-linnet-interactive] .linnet-inspector button {
   cursor: pointer;
   font: inherit;
 }
+svg[data-linnet-interactive] .linnet-inspector-properties {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 10px 0 0;
+}
+svg[data-linnet-interactive] .linnet-inspector-properties dt {
+  opacity: .7;
+}
+svg[data-linnet-interactive] .linnet-inspector-properties dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 svg[data-linnet-interactive] .linnet-inspector-construction {
   margin-top: 7px;
 }

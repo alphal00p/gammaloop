@@ -2128,10 +2128,28 @@ def _(mo):
     factored and sparse output algebras. Its order-sensitive-twelve full expanded
     lifecycle improves **5.995 → 1.472 ms**, against the separate **0.733 ms**
     FORM reference. However, its default first call slows **0.974 → 1.405 ms**,
-    and unselected controls also regress. The rerun improves **1.855 → 0.725 ms**.
+    while the rerun improves **1.855 → 0.725 ms**.
     The prototype is rejected; the retained timings above remain the production
     checkpoint. These bare traces return directly from the terminal evaluator,
     so an outer cleanup pass cannot explain the first-call regression.
+
+    A frozen-library profile identifies intermediate sparse lists as a material
+    cost: the order-sensitive case increases **9.34 → 14.06 million instructions**
+    and **3,232 → 11,609 allocations**. Memo-result cloning costs **2.31 million
+    instructions**, and sparse finalization costs **6.77 million**. Earlier
+    wall-time regressions in unselected controls do not consistently reproduce:
+    free lengths twelve and fourteen have identical allocation counts and
+    instruction counts within 1%. Duplicate coefficient construction adds only
+    **0.03% instructions** in the interior-pair control.
+
+    A scratch follow-up stores shared node handles instead of intermediate
+    lists and emits polynomial leaves once, retaining the existing recurrence.
+    Its order-sensitive-twelve complete expanded lifecycle measures **1.099 ms**,
+    versus **6.276 ms** for the matched factored baseline and **1.570 ms** for
+    the sparse-list trial. Instructions fall to **9.56 million**, allocations to
+    **3,026**. All **52 trace cases** and **87 boundary/callback files** match
+    the validated sparse-list trial exactly. Production is unchanged; FORM was
+    not rerun for this follow-up.
 
     Late external metrics also contract through factored trace sums. A
     compatible tensor can be carried through a sum when every branch can absorb
@@ -2348,6 +2366,37 @@ def _(mo):
     These are shared-host measurements, recorded with build information in
     `examples/notebooks/gluon_ladder_timing.json`; the table below measures the
     current session when the full-reduction button is pressed.
+
+    **Partial-network follow-up:** a closed subcase with vertices **1, 2, 8**
+    produces **64 scalar terms**. The baseline expand-first route takes about
+    **5.56 ms**; network contraction with local sum distribution takes
+    **24.7–27.3 ms**, with final polynomial emission separately **0.30–0.48 ms**.
+    Initial depth-one parsing is only **0.064 ms**, under **0.3%** of the network
+    route. Independently warmed phases are not an exact additive lifecycle.
+    Faster factored-only outputs still have uncontracted indices.
+
+    All **72 exact HEP component comparisons** and **nine FORM polynomial
+    comparisons** pass. FORM orders **1 → 2 → 8** and **8 → 1 → 2** pass through
+    **6 → 34 → 64** and **9 → 45 → 64** terms, taking about **328 µs** and
+    **270 µs CPU** respectively. FORM includes rule substitutions and sorting;
+    the Rust wall timings start from normalized six-term rules, so these are
+    different timing boundaries. Term counts alone do not predict the winner.
+
+    **Retained scalar cleanup improvement:** certified index-free scalar leaves
+    now skip recursive network construction, retaining numeric-coefficient
+    distribution and the existing handling of parser-owned syntax. In a matched
+    five-process-pair comparison, the three-vertex network route improves from
+    **23.70 to 13.62 ms**; minimum-product-terms ordering improves from
+    **26.63 to 14.08 ms**. The expand-first control stays **5.50–5.53 ms**.
+    One-vertex, two-vertex and contracted-sum controls also improve. Parse/merge
+    passes drop **487 → 77**, with the same **16 contractions**. All **3,200**
+    output/error comparisons and **39** repository Schoonschip tests pass.
+
+    Direct sum contraction is the next substantial cost. The existing opaque
+    tensor boundaries can guide local distribution and directed substitution.
+    Sum boundaries must be validated: fast inference reads only the first branch.
+    Fixtures, timing scopes and validation are recorded under
+    `gluon_network_planning_followup` in `tensor_contraction_parity.json`.
     """)
     return
 
