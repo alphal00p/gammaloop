@@ -53,6 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let rendered = render(&component, module)?;
     let mut normalized = rendered
+        .trim_end()
         .lines()
         .map(str::trim_end)
         .collect::<Vec<_>>()
@@ -198,7 +199,16 @@ fn stub_names(module: &pyo3_stub_gen::generate::Module) -> BTreeSet<String> {
         .map(|class| class.name.to_owned())
         .chain(module.enum_.values().map(|enum_| enum_.name.to_owned()))
         .chain(module.function.keys().map(|name| (*name).to_owned()))
-        .chain(module.variables.keys().map(|name| (*name).to_owned()))
+        .chain(
+            module
+                .variables
+                .values()
+                // Private typing aliases describe annotations, not runtime exports.
+                .filter(|variable| {
+                    !(variable.name.starts_with('_') && variable.type_.name == "typing.TypeAlias")
+                })
+                .map(|variable| variable.name.to_owned()),
+        )
         .collect()
 }
 
@@ -574,6 +584,34 @@ def validate(runtime_module, stub_source):
         assert!(!rendered.contains("TensorIndices"));
         assert!(!rendered.contains("TensorStructure"));
         assert!(!rendered.contains("TensorNamespace"));
+    }
+
+    #[cfg(feature = "spenso")]
+    #[test]
+    fn spenso_stub_distinguishes_typing_aliases_from_runtime_variables() {
+        let (module_name, mut stub_info) = super::gather("spynso3").expect("Spenso StubInfo");
+        let module = stub_info
+            .modules
+            .get_mut(module_name)
+            .expect("Spenso community module");
+        assert!(
+            module
+                .to_string()
+                .contains("_ScalarInput: typing.TypeAlias")
+        );
+        super::validate_spenso_stub_surface(module)
+            .expect("typing aliases are not runtime exports");
+
+        module.variables.insert(
+            "_unexpected_runtime_value",
+            pyo3_stub_gen::generate::VariableDef {
+                name: "_unexpected_runtime_value",
+                type_: pyo3_stub_gen::TypeInfo::builtin("int"),
+                default: None,
+            },
+        );
+        let error = super::validate_spenso_stub_surface(module).unwrap_err();
+        assert!(error.to_string().contains("_unexpected_runtime_value"));
     }
 
     #[cfg(feature = "spenso")]

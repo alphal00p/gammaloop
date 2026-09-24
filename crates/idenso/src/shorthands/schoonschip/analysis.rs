@@ -1,8 +1,8 @@
 //! Share the syntactic checks that decide whether normalization has any work.
 
 use spenso::{
-    network::{parsing::AtomStructureExt, tags::SPENSO_TAG},
-    structure::slot::SlotMatch,
+    network::{library::symbolic::ETS, parsing::AtomStructureExt, tags::SPENSO_TAG},
+    structure::slot::{SlotMatch, SlotMatcher},
 };
 use symbolica::atom::{AtomView, Symbol};
 
@@ -23,6 +23,7 @@ impl<const N: usize> SimplificationCandidates<N> {
         let bracket = SPENSO_TAG.bracket.get_id();
         let rank_one = &SPENSO_TAG.rank1;
         let mut rank_one_heads = [None; 16];
+        let mut vector_slots = None;
         let mut candidates = Self {
             repeated_indices: false,
             brackets: false,
@@ -44,7 +45,13 @@ impl<const N: usize> SimplificationCandidates<N> {
                             tagged
                         }
                     };
-                    candidates.dots |= tagged;
+                    if tagged && !candidates.dots {
+                        let slots = vector_slots.get_or_insert_with(SlotMatcher::default);
+                        candidates.dots = !slots
+                            .vector_argument(function)
+                            .and_then(|argument| slots.compact_representation(argument))
+                            .is_some_and(|representation| representation.is_base());
+                    }
                     match slot {
                         SlotMatch::Explicit(slot) => {
                             // A variance wrapper can hide the representation
@@ -75,7 +82,16 @@ impl<const N: usize> SimplificationCandidates<N> {
                 AtomView::Var(variable) => {
                     candidates.observe_symbol(variable.get_symbol_id(), bracket, &symbols);
                 }
-                AtomView::Pow(_) => candidates.dots = true,
+                AtomView::Pow(power) => {
+                    // Rank-one bases are observed as functions below. Only a
+                    // metric base adds a power identity of its own; scalar
+                    // powers still expose any eligible work in their children.
+                    if !candidates.dots
+                        && let AtomView::Fun(base) = power.get_base()
+                    {
+                        candidates.dots = base.get_symbol_id() == ETS.metric.get_id();
+                    }
+                }
                 _ => {}
             });
         candidates
@@ -83,6 +99,11 @@ impl<const N: usize> SimplificationCandidates<N> {
 
     pub(crate) fn normalized(&self) -> bool {
         !self.repeated_indices && !self.brackets && !self.dots
+    }
+
+    /// The complete scan found no normalization or supplied-symbol work.
+    pub(crate) fn finished(&self) -> bool {
+        self.complete && self.normalized() && self.symbols.iter().all(|&present| !present)
     }
 
     fn observe_symbol(&mut self, id: u32, bracket: u32, symbols: &[u32; N]) {
@@ -124,9 +145,70 @@ mod tests {
     };
 
     #[test]
+    fn scalar_powers_do_not_request_dot_normalization() {
+        crate::test_support::test_initialize();
+        let vector = SPENSO_TAG.rank_one_tensor_symbol("spenso::analysis_power_vector");
+        assert!(vector.has_tag(&SPENSO_TAG.rank1));
+        let square = Atom::parse(
+            "analysis_power_vector(mink(4,a))^2",
+            "spenso",
+            ParseSettings::symbolica(),
+        )
+        .unwrap();
+        let AtomView::Pow(power) = square.as_view() else {
+            panic!("expected a vector square");
+        };
+        let AtomView::Fun(base) = power.get_base() else {
+            panic!("expected a vector function");
+        };
+        assert_eq!(base.get_symbol(), vector);
+        let expected = Atom::parse(
+            "g(analysis_power_vector(mink(4)),analysis_power_vector(mink(4)))",
+            "spenso",
+            ParseSettings::symbolica(),
+        )
+        .unwrap();
+        assert_ne!(square, expected);
+        assert_eq!(square.normalize_dots(), expected);
+        for source in ["(x+y)^8", "x^n", "unknown(x)^3", "(x+y)^(-2)"] {
+            let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
+            let candidates = SimplificationCandidates::scan(expression.as_view(), []);
+            assert!(!candidates.dots, "{source}");
+            assert_eq!(expression.normalize_dots(), expression, "{source}");
+        }
+        // Continue through bases, exponents, and the remainder after a repeated
+        // index. Hidden compound slot metadata retains the conservative fallback.
+        for source in [
+            "g(mink(4,a),mink(4,b))^2",
+            "g(mink(4,a),mink(4,b))^(-2)",
+            "g(mink(4,a),mink(4,b))^(2/3)",
+            "analysis_power_vector(mink(4,a))^2",
+            "analysis_power_vector(mink(4,a))^(-3)",
+            "(analysis_power_vector(mink(4,a))^2+x)^3",
+            "x^(g(mink(4,a),mink(4,b))^2)",
+            "scope(mink(4,a),mink(4,a),analysis_power_vector(mink(4,b))^2)",
+            "T(mink(4,opaque(analysis_power_vector(mink(4,a))^2)))",
+        ] {
+            let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
+            assert!(
+                SimplificationCandidates::scan(expression.as_view(), []).dots,
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
     fn completed_observations_preserve_heads_and_normalization_boundaries() {
         crate::test_support::test_initialize();
-        let _ = spenso::p!(spenso::mink!(4));
+        let vector = SPENSO_TAG.rank_one_tensor_symbol("spenso::analysis_observed_vector");
+        assert!(vector.has_tag(&SPENSO_TAG.rank1));
+        let square = Atom::parse(
+            "analysis_observed_vector(mink(4,a))^2",
+            "spenso",
+            ParseSettings::symbolica(),
+        )
+        .unwrap();
+        assert_ne!(square.normalize_dots(), square);
         let heads = [
             SPENSO_TAG.chain,
             SPENSO_TAG.trace,
@@ -143,13 +225,13 @@ mod tests {
             "T(dind(mink(4)))",
             "T(mink(spenso::trace(4),a))",
             "T(mink(4,f(spenso::epsilon)))",
-            "g(p(mink(4)),p(mink(4)))",
-            "p(mink(4,a))^2",
+            "g(analysis_observed_vector(mink(4)),analysis_observed_vector(mink(4)))",
+            "analysis_observed_vector(mink(4,a))^2",
             "(x+y)^6*g(mink(D,a),mink(D,b))",
-            "bracket(p(mink(4,a))^2)",
+            "bracket(analysis_observed_vector(mink(4,a))^2)",
             "g(mink(4,a),mink(4,b))*T(mink(4,b))*later(spenso::trace)",
-            "scope(mink(4,a),mink(4,a),bracket(p(mink(4,b))^2))",
-            "scope(mink(4,a),mink(4,a),p(q(mink(4))))",
+            "scope(mink(4,a),mink(4,a),bracket(analysis_observed_vector(mink(4,b))^2))",
+            "scope(mink(4,a),mink(4,a),analysis_observed_vector(q(mink(4))))",
             "scope(mink(4,a),mink(4,a),T(mink(4,f(spenso::epsilon))))",
         ] {
             let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
@@ -185,5 +267,66 @@ mod tests {
             Atom::parse("T(dind(bis(4,a)))", "spenso", ParseSettings::symbolica()).unwrap();
         let candidates = SimplificationCandidates::scan(expression.as_view(), [head]);
         assert!(!candidates.complete || candidates.symbols == [expression.contains_symbol(head)]);
+    }
+
+    #[test]
+    fn compact_vectors_do_not_request_dot_normalization() {
+        crate::test_support::test_initialize();
+        let vector = SPENSO_TAG.rank_one_tensor_symbol("spenso::analysis_compact_vector");
+        let callback = spenso::vector_symbol!(
+            "spenso::analysis_compact_callback",
+            norm = |_value, _out| {}
+        );
+        let heads = [vector, callback, SPENSO_TAG.trace];
+        for source in [
+            "analysis_compact_vector(mink(4))",
+            "g(analysis_compact_vector(mink(4)),analysis_compact_callback(mink(4)))",
+            "analysis_compact_vector(mink(4))^2",
+            "(analysis_compact_vector(mink(4))+analysis_compact_callback(mink(4)))^3",
+            "analysis_compact_vector(spenso::trace,mink(4))",
+        ] {
+            let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
+            let candidates = SimplificationCandidates::scan(expression.as_view(), heads);
+            assert!(candidates.complete, "{source}");
+            assert!(!candidates.dots, "{source}");
+            assert_eq!(
+                candidates.symbols,
+                heads.map(|head| expression.contains_symbol(head)),
+                "{source}"
+            );
+            assert_eq!(expression.normalize_dots(), expression, "{source}");
+        }
+    }
+
+    #[test]
+    fn compact_admission_preserves_nested_and_opaque_dot_candidates() {
+        crate::test_support::test_initialize();
+        let _ = SPENSO_TAG.rank_one_tensor_symbol("spenso::analysis_nested_vector");
+        for source in [
+            "analysis_nested_vector(analysis_nested_vector(mink(4)))",
+            "analysis_nested_vector(mink(4,a))^2",
+            "x^(analysis_nested_vector(mink(4,a))^2)",
+            "(x+analysis_nested_vector(mink(4,a))^2)^3",
+            "g(analysis_nested_vector(mink(4)),analysis_nested_vector(mink(4)))^2",
+            "analysis_nested_vector(mink(4,a,b))",
+            "analysis_nested_vector(dind(lor(4)))",
+            "analysis_nested_vector(mink(D+1))",
+            "analysis_nested_vector(meta(analysis_nested_vector(mink(4,a))^2),mink(4))",
+        ] {
+            let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
+            assert!(
+                SimplificationCandidates::scan(expression.as_view(), []).dots,
+                "{source}"
+            );
+        }
+        let expression = Atom::parse(
+            "analysis_nested_vector(mink(opaque(spenso::trace)))",
+            "spenso",
+            ParseSettings::symbolica(),
+        )
+        .unwrap();
+        let candidates = SimplificationCandidates::scan(expression.as_view(), [SPENSO_TAG.trace]);
+        assert!(!candidates.complete);
+        assert!(candidates.dots);
     }
 }

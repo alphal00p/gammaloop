@@ -93,11 +93,72 @@ impl Schoonschip for Atom {
     }
 }
 
-struct NetworkSchoonschip<'a> {
+pub(super) struct NetworkSchoonschip<'a> {
     settings: &'a SchoonschipSettings,
 }
 
 impl NetworkSchoonschip<'_> {
+    // Under opaque depth-one parsing, these index-free forms need no network
+    // work. Parser-owned syntax and malformed slots must still reach the parser;
+    // callers also require dot normalization to leave the expression unchanged.
+    pub(super) fn scalar_requires_network(expression: AtomView<'_>) -> bool {
+        use spenso::{
+            network::{library::symbolic::ETS, parsing::AtomStructureExt, tags::SPENSO_TAG},
+            structure::{
+                abstract_index::AIND_SYMBOLS,
+                representation::{LibraryRep, Representation},
+                slot::{SlotMatch, SlotMatcher},
+            },
+        };
+        let parser_heads = [
+            SPENSO_TAG.bracket,
+            SPENSO_TAG.pure_scalar,
+            SPENSO_TAG.dot,
+            SPENSO_TAG.chain,
+            SPENSO_TAG.trace,
+            AIND_SYMBOLS.aind,
+        ];
+        let mut slots = SlotMatcher::default();
+        let mut required = false;
+        expression.has_repeated_explicit_indices_with_observer(|node, slot| {
+            if required {
+                return;
+            }
+            match slot {
+                SlotMatch::Explicit(_) => required = true,
+                SlotMatch::Opaque => {
+                    required = slots.compact_representation(node).is_none()
+                        || Representation::<LibraryRep>::try_from(node).is_err();
+                }
+                SlotMatch::Other => {
+                    if let AtomView::Fun(function) = node {
+                        let head = function.get_symbol();
+                        required =
+                            parser_heads.contains(&head) || head.has_tag(&SPENSO_TAG.broadcast);
+                        if head == ETS.metric {
+                            let mut arguments = function.iter().map(|argument| {
+                                let AtomView::Fun(vector) = argument else {
+                                    return None;
+                                };
+                                if !vector.get_symbol().has_tag(&SPENSO_TAG.rank1) {
+                                    return None;
+                                }
+                                let argument = slots.vector_argument(vector)?;
+                                slots.compact_representation(argument)
+                            });
+                            required |= match (arguments.next(), arguments.next(), arguments.next())
+                            {
+                                (Some(Some(left)), Some(Some(right)), None) => !left.matches(right),
+                                _ => true,
+                            };
+                        }
+                    }
+                }
+            }
+        });
+        required
+    }
+
     fn run<const EXPANDSUMS: bool, Aind>(
         &self,
         view: AtomView<'_>,
@@ -130,24 +191,35 @@ impl NetworkSchoonschip<'_> {
             return Ok(sum);
         }
 
-        let new = match (self.settings.expand_contracted_sums, self.settings.mode) {
-            (true, SchoonschipMode::SinglePass) => self.run_once::<true, false, true, Aind>(view),
-            (true, SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst)) => {
-                self.run_once::<true, true, true, Aind>(view)
-            }
-            (true, SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst)) => {
-                self.run_once::<true, true, false, Aind>(view)
-            }
-            (false, SchoonschipMode::SinglePass) => {
-                self.run_once::<EXPANDSUMS, false, true, Aind>(view)
-            }
-            (false, SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst)) => {
-                self.run_once::<EXPANDSUMS, true, true, Aind>(view)
-            }
-            (false, SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst)) => {
-                self.run_once::<EXPANDSUMS, true, false, Aind>(view)
-            }
-        }?;
+        let scalar_shortcut =
+            self.settings.depth_limit == Some(1) && !Self::scalar_requires_network(view);
+        let normalized = view.normalize_dots();
+        let scalar_shortcut = scalar_shortcut && normalized.as_view() == view;
+        let new = if scalar_shortcut {
+            normalized
+        } else {
+            let view = normalized.as_view();
+            match (self.settings.expand_contracted_sums, self.settings.mode) {
+                (true, SchoonschipMode::SinglePass) => {
+                    self.run_once::<true, false, true, Aind>(view)
+                }
+                (true, SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst)) => {
+                    self.run_once::<true, true, true, Aind>(view)
+                }
+                (true, SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst)) => {
+                    self.run_once::<true, true, false, Aind>(view)
+                }
+                (false, SchoonschipMode::SinglePass) => {
+                    self.run_once::<EXPANDSUMS, false, true, Aind>(view)
+                }
+                (false, SchoonschipMode::Recursive(SchoonschipTraversal::DepthFirst)) => {
+                    self.run_once::<EXPANDSUMS, true, true, Aind>(view)
+                }
+                (false, SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst)) => {
+                    self.run_once::<EXPANDSUMS, true, false, Aind>(view)
+                }
+            }?
+        };
 
         if TRACE_SCHOONSCHIP {
             println!(
@@ -156,7 +228,11 @@ impl NetworkSchoonschip<'_> {
             );
         }
 
-        let normalized = new.normalize_dots();
+        let normalized = if scalar_shortcut {
+            new
+        } else {
+            new.normalize_dots()
+        };
         // Distribute signs and numerical coefficients after each local
         // contraction so equal terms cancel before the next network pass.
         // Symbolic coefficients and products of sums remain factorized.
@@ -174,9 +250,7 @@ impl NetworkSchoonschip<'_> {
     where
         Aind: AbsInd + DummyAind + ParseableAind + 'static,
     {
-        let normalized = view.normalize_dots();
-        let mut net = normalized
-            .as_view()
+        let mut net = view
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 depth_limit: self.settings.depth_limit,
                 take_first_term_from_sum: false,

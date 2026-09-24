@@ -22,6 +22,47 @@ svg[data-linnet-interactive][data-theme="light"] {
   --linnet-panel-bg: #fffdf9;
   --linnet-panel-ink: #302c35;
 }
+svg[data-linnet-interactive] .linnet-viewport,
+svg[data-linnet-interactive] .linnet-pan-surface {
+  cursor: grab;
+  touch-action: none;
+  overflow: hidden;
+}
+svg[data-linnet-interactive] .linnet-pan-surface {
+  fill: transparent;
+  pointer-events: all;
+}
+svg[data-linnet-interactive] .linnet-viewport.linnet-panning,
+svg[data-linnet-interactive] .linnet-panning [data-linnet-kind] {
+  cursor: grabbing;
+}
+svg[data-linnet-interactive] .linnet-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  color: var(--linnet-panel-ink);
+  font: 12px/1.4 system-ui, sans-serif;
+}
+svg[data-linnet-interactive] .linnet-toolbar button {
+  padding: 3px 9px;
+  border: 1px solid color-mix(in srgb, var(--linnet-panel-ink) 20%, transparent);
+  border-radius: 5px;
+  background: var(--linnet-panel-bg);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+svg[data-linnet-interactive] .linnet-toolbar output {
+  min-width: 4ch;
+  font-variant-numeric: tabular-nums;
+}
+svg[data-linnet-interactive] .linnet-navigation-hint {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--linnet-panel-ink) 65%, var(--linnet-panel-bg));
+}
 svg[data-linnet-interactive] [data-linnet-kind] {
   cursor: pointer;
   outline: none;
@@ -123,4 +164,9 @@ svg[data-linnet-interactive] .linnet-inspector-shortcuts {
   margin-top: 6px;
   font-size: 10px;
   color: color-mix(in srgb, var(--linnet-panel-ink) 65%, var(--linnet-panel-bg));
+}
+svg[data-linnet-interactive] .linnet-inspector-empty {
+  border-color: transparent;
+  box-shadow: none;
+  background: transparent;
 }

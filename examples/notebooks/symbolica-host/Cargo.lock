@@ -1389,6 +1389,7 @@ dependencies = [
 name = "idenso"
 version = "0.3.0"
 dependencies = [
+ "ahash 0.8.12",
  "base64",
  "blake3",
  "delegate 0.13.5",
@@ -3047,6 +3048,7 @@ dependencies = [
  "eyre",
  "idenso",
  "itertools 0.14.0",
+ "linnet",
  "pyo3",
  "pyo3-stub-gen-derive",
  "spenso",

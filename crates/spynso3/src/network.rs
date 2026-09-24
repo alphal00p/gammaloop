@@ -1,10 +1,12 @@
 use std::{collections::HashMap, ops::Deref};
 
+pub(crate) mod execution;
+
 use pyo3::{
     Borrowed,
     exceptions::{self, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
-    types::PyTuple,
+    types::{PyDict, PyTuple},
 };
 
 #[cfg(not(feature = "python_stubgen"))]
@@ -701,7 +703,7 @@ impl SpensoNet {
     pub(crate) fn index_network(
         &self,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: bool,
+        cook_indices: Option<&crate::simplification::PyCookSettings>,
     ) -> PyResult<Self> {
         let replacements =
             TensorExpression::index_replacements(&self.structure.interface, indices, cook_indices)?;
@@ -1510,16 +1512,93 @@ impl SpensoNet {
 
     /// Fill the unresolved external ports with `indices` in interface order.
     ///
-    /// Pass `AUTO` to leave a port unresolved. Set `cook_indices=True` to flatten nested
+    /// Pass `AUTO` to leave a port unresolved. Pass `cook_indices=CookSettings.indices()` to flatten nested
     /// symbolic index payloads before insertion.
-    #[pyo3(signature = (*indices, cook_indices = false))]
-    fn index(&self, indices: &Bound<'_, PyTuple>, cook_indices: bool) -> PyResult<Self> {
+    #[pyo3(signature = (*indices, cook_indices = None))]
+    fn index(
+        &self,
+        indices: &Bound<'_, PyTuple>,
+        cook_indices: Option<&crate::simplification::PyCookSettings>,
+    ) -> PyResult<Self> {
         self.index_network(indices, cook_indices)
     }
 
+    /// Assign all external ports, retaining data and execution progress. AUTO leaves a port unchanged.
+    #[pyo3(signature = (*indices, cook_indices=None))]
+    pub(crate) fn reindex(
+        &self,
+        indices: &Bound<'_, PyTuple>,
+        cook_indices: Option<&crate::simplification::PyCookSettings>,
+    ) -> PyResult<Self> {
+        let positions = (0..self.structure.rank()).collect::<Vec<_>>();
+        let replacements = TensorExpression::port_replacements(
+            &self.structure.interface,
+            &positions,
+            indices,
+            cook_indices,
+        )?;
+        self.set_port_indices(&replacements)
+    }
+
+    /// Rename external indices simultaneously without changing rank or capturing dummy indices.
+    #[pyo3(signature = (mapping, *, cook_indices=None))]
+    pub(crate) fn rename_indices(
+        &self,
+        mapping: &Bound<'_, PyDict>,
+        cook_indices: Option<&crate::simplification::PyCookSettings>,
+    ) -> PyResult<Self> {
+        let replacements =
+            TensorExpression::named_replacements(&self.structure.interface, mapping, cook_indices)?;
+        let result = self.set_port_indices(&replacements)?;
+        if result.structure.rank() != self.structure.rank() {
+            return Err(PyValueError::new_err(
+                "renaming would contract external ports; use reindex() to request a contraction",
+            ));
+        }
+        Ok(result)
+    }
+
+    /// Return a copy with reordered external axes and the same execution progress.
+    /// Unresolved ports acquire fresh identities; reindex() can assign preferred labels.
+    pub(crate) fn permute_axes(&self, axes: Vec<usize>) -> PyResult<Self> {
+        let structure = TensorExpression::permuted_structure(&self.structure, &axes)?;
+        let new_slots = structure.interface.logical_slots();
+        let old_slots = self.structure.interface.logical_slots();
+        let replacements = axes
+            .iter()
+            .enumerate()
+            .filter_map(|(new, &old)| {
+                if matches!(old_slots[old].aind, PartialIndex::Open(_)) {
+                    let PartialIndex::Explicit(index) = new_slots[new].aind else {
+                        unreachable!()
+                    };
+                    Some((old, index))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let mut result = self.set_port_indices(&replacements)?;
+        result.structure = structure;
+        let materialized = result.materialized.interface.logical_slots();
+        result.materialized.interface =
+            PartialStructure::from_logical_slots(axes.iter().map(|&axis| materialized[axis]));
+        result.validate_graph_interface()?;
+        Ok(result)
+    }
+
+    /// Copy the graph, values, and execution progress independently.
+    fn __copy__(&self) -> Self {
+        self.clone()
+    }
+
     /// Fill the unresolved external ports with `indices` in interface order.
-    #[pyo3(signature = (*indices, cook_indices = false))]
-    fn __call__(&self, indices: &Bound<'_, PyTuple>, cook_indices: bool) -> PyResult<Self> {
+    #[pyo3(signature = (*indices, cook_indices = None))]
+    fn __call__(
+        &self,
+        indices: &Bound<'_, PyTuple>,
+        cook_indices: Option<&crate::simplification::PyCookSettings>,
+    ) -> PyResult<Self> {
         self.index_network(indices, cook_indices)
     }
 

@@ -13,7 +13,7 @@ use spenso::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         partial::{PartialIndex, PartialSlot, PartialStructure, PartialStructureExt},
         representation::{LibraryRep, RepName, Representation},
-        slot::{DummyAind, IsAbstractSlot, ParseableAind, Slot},
+        slot::{DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotMatcher},
     },
 };
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
@@ -102,9 +102,15 @@ impl StructuredAtom {
 
     fn normalize_products(value: AtomView<'_>) -> Atom {
         match value {
-            AtomView::Add(sum) => sum
-                .iter()
-                .fold(Atom::Zero, |sum, term| sum + Self::normalize_products(term)),
+            AtomView::Add(sum) => {
+                let terms: Vec<_> = sum.iter().map(Self::normalize_products).collect();
+                if sum.iter().eq(terms.iter().map(Atom::as_view)) {
+                    return value.to_owned();
+                }
+                // Bracket removal can expose equal sums. Preserve their existing
+                // grouping while avoiding reconstruction of unchanged large sums.
+                terms.into_iter().fold(Atom::Zero, |sum, term| sum + term)
+            }
             AtomView::Mul(product) => product.iter().fold(Atom::num(1), |product, factor| {
                 product * Self::normalize_products(factor)
             }),
@@ -494,51 +500,88 @@ fn direct_structural_port(value: AtomView<'_>) -> bool {
         || Representation::<LibraryRep>::try_from(value).is_ok()
 }
 
-fn explicit_occurrences(value: AtomView<'_>, target: Slot<LibraryRep, AbstractIndex>) -> usize {
-    if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(value) {
-        return usize::from(
-            slot.aind() == target.aind()
-                && (slot.rep() == target.rep() || slot.rep().matches(&target.rep())),
-        );
+/// Maximum explicit multiplicities in any additive branch, capped at three.
+/// Opposite orientations share a key; representation dimensions remain distinct.
+#[derive(Default)]
+struct ExplicitIndexOccurrences(HashMap<Slot<LibraryRep, AbstractIndex>, usize>);
+
+impl ExplicitIndexOccurrences {
+    fn from_atom(value: AtomView<'_>, slots: &mut SlotMatcher) -> Self {
+        let mut occurrences = Self::default();
+        occurrences.collect(value, slots);
+        occurrences
     }
 
-    match value {
-        AtomView::Add(sum) => sum
-            .iter()
-            .map(|term| explicit_occurrences(term, target))
-            .max()
-            .unwrap_or_default(),
-        AtomView::Mul(product) => product.iter().fold(0, |occurrences, factor| {
-            occurrences
-                .saturating_add(explicit_occurrences(factor, target))
-                .min(3)
-        }),
-        AtomView::Pow(power) => {
-            let (base, exponent) = power.get_base_exp();
-            explicit_occurrences(base, target).max(explicit_occurrences(exponent, target))
-        }
-        AtomView::Fun(function) => function.iter().fold(0, |occurrences, argument| {
-            let structured = direct_structural_port(argument)
-                || argument.is_tensorial(StrictTensorFilter::Tagged)
-                || matches!(
-                    argument,
-                    AtomView::Fun(nested)
-                        if nested.get_symbol() == *shadowing::SYM
-                            || nested.get_symbol() == *shadowing::ANTISYM
-                            || nested.get_symbol() == *shadowing::CYCLIC
-                );
-            if (is_tensor_leaf_head(function.get_symbol())
-                || is_composite_head(function.get_symbol()))
-                && structured
-            {
-                occurrences
-                    .saturating_add(explicit_occurrences(argument, target))
-                    .min(3)
-            } else {
-                occurrences
+    fn count(&self, target: Slot<LibraryRep, AbstractIndex>) -> usize {
+        self.0
+            .get(&target.rep().base().slot(target.aind()))
+            .copied()
+            .unwrap_or_default()
+    }
+
+    fn add(&mut self, slot: Slot<LibraryRep, AbstractIndex>, count: usize) {
+        let occurrences = self.0.entry(slot).or_default();
+        *occurrences = occurrences.saturating_add(count).min(3);
+    }
+
+    fn collect_alternatives<'a>(
+        &mut self,
+        alternatives: impl IntoIterator<Item = AtomView<'a>>,
+        slots: &mut SlotMatcher,
+    ) {
+        let mut maximum = Self::default();
+        let mut branch = Self::default();
+        for value in alternatives {
+            branch.collect(value, slots);
+            for (slot, count) in branch.0.drain() {
+                let occurrences = maximum.0.entry(slot).or_default();
+                *occurrences = (*occurrences).max(count);
             }
-        }),
-        _ => 0,
+        }
+        for (slot, count) in maximum.0 {
+            self.add(slot, count);
+        }
+    }
+
+    fn collect(&mut self, value: AtomView<'_>, slots: &mut SlotMatcher) {
+        if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(value) {
+            self.add(slot.rep().base().slot(slot.aind()), 1);
+            return;
+        }
+
+        match value {
+            AtomView::Add(sum) => self.collect_alternatives(sum.iter(), slots),
+            AtomView::Mul(product) => {
+                for factor in product.iter() {
+                    self.collect(factor, slots);
+                }
+            }
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                self.collect_alternatives([base, exponent], slots);
+            }
+            AtomView::Fun(function)
+                if is_tensor_leaf_head(function.get_symbol())
+                    || is_composite_head(function.get_symbol()) =>
+            {
+                for argument in function.iter() {
+                    let structured = slots.parse::<LibraryRep, AbstractIndex>(argument).is_ok()
+                        || Representation::<LibraryRep>::try_from(argument).is_ok()
+                        || argument.is_tensorial(StrictTensorFilter::Tagged)
+                        || matches!(
+                            argument,
+                            AtomView::Fun(nested)
+                                if nested.get_symbol() == *shadowing::SYM
+                                    || nested.get_symbol() == *shadowing::ANTISYM
+                                    || nested.get_symbol() == *shadowing::CYCLIC
+                        );
+                    if structured {
+                        self.collect(argument, slots);
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 }
 
@@ -551,17 +594,12 @@ fn explicit_occurrences(value: AtomView<'_>, target: Slot<LibraryRep, AbstractIn
 pub(crate) fn validate_explicit_index_occurrences(
     atom: &Atom,
 ) -> Result<(), TensorCompositionError> {
-    let mut candidates = HashSet::new();
-    let _ = atom.replace_map(|value, _, _| {
-        if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(value) {
-            candidates.insert(slot);
-        }
-    });
-    for target in candidates {
-        let occurrences = explicit_occurrences(atom.as_view(), target);
+    let occurrences =
+        ExplicitIndexOccurrences::from_atom(atom.as_view(), &mut SlotMatcher::default());
+    for (slot, occurrences) in occurrences.0 {
         if occurrences > 2 {
             return Err(TensorCompositionError::InvalidExplicitMultiplicity {
-                index: target.aind(),
+                index: slot.aind(),
                 occurrences,
             });
         }
@@ -1307,9 +1345,13 @@ pub fn compose(
         },
     )?;
     if let Some(index) = shared {
+        let mut slots = SlotMatcher::default();
         let target = left_output.rep().slot(index);
-        let occurrences = explicit_occurrences(left.atom.as_view(), target)
-            .saturating_add(explicit_occurrences(right.atom.as_view(), target))
+        let occurrences = ExplicitIndexOccurrences::from_atom(left.atom.as_view(), &mut slots)
+            .count(target)
+            .saturating_add(
+                ExplicitIndexOccurrences::from_atom(right.atom.as_view(), &mut slots).count(target),
+            )
             .saturating_add(usize::from(matches!(
                 left_output.aind,
                 PartialIndex::Open(_)
@@ -1736,6 +1778,27 @@ mod tests {
         assert_eq!(
             StructuredAtom::normalize_products(flattened.as_view()),
             flattened
+        );
+    }
+
+    #[test]
+    fn bracket_removal_preserves_equal_sum_grouping_and_scalar_spectators() {
+        let x = Atom::var(symbolica::symbol!("sum_grouping::x"));
+        let y = Atom::var(symbolica::symbol!("sum_grouping::y"));
+        let s = Atom::var(symbolica::symbol!("sum_grouping::s"));
+        let t = Atom::var(symbolica::symbol!("sum_grouping::t"));
+        let sum = &x + &y;
+        let bracket = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(&sum)
+            .finish();
+        let spectator = (s + t).pow(8);
+        let input = &spectator * (&sum + bracket);
+        let expected = Atom::num(2) * &spectator * sum;
+        let output = StructuredAtom::new(input, PartialStructure::from_logical_slots([]));
+        assert_eq!(output.atom, expected);
+        assert_eq!(
+            StructuredAtom::new(output.atom.clone(), output.interface).atom,
+            expected
         );
     }
 
@@ -2610,6 +2673,93 @@ mod tests {
         let sum = terms.into_iter().fold(Atom::Zero, |sum, term| sum + term);
 
         validate_explicit_index_occurrences(&sum).unwrap();
+    }
+
+    #[test]
+    fn explicit_multiplicity_preserves_duality_dimensions_and_metadata() {
+        let base: Representation<LibraryRep> = ColorFundamental {}.new_rep(3).cast();
+        let index = AbstractIndex::Normal(39);
+        let base_slot = base.slot::<AbstractIndex, _>(index).to_atom();
+        let dual_slot = base.dual().slot::<AbstractIndex, _>(index).to_atom();
+        let metadata = FunctionBuilder::new(symbolica::symbol!("multiplicity_metadata"))
+            .add_args([&base_slot, &dual_slot, &base_slot])
+            .finish();
+        let pair = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("multiplicity_pair"))
+            .add_arg(&metadata)
+            .add_arg(&base_slot)
+            .add_arg(&dual_slot)
+            .finish();
+        let other_dimension: Representation<LibraryRep> = ColorFundamental {}.new_rep(4).cast();
+        let unrelated = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("multiplicity_other_dim"))
+            .add_arg(other_dimension.slot::<AbstractIndex, _>(index).to_atom())
+            .finish();
+        let valid = pair * metadata * unrelated;
+        validate_explicit_index_occurrences(&valid).unwrap();
+
+        let third = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("multiplicity_third"))
+            .add_arg(base_slot)
+            .finish();
+        assert!(matches!(
+            validate_explicit_index_occurrences(&(valid * third)),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity {
+                index: actual,
+                occurrences: 3
+            }) if actual == index
+        ));
+    }
+
+    #[test]
+    fn explicit_multiplicity_keeps_nested_sum_and_power_scopes() {
+        let index = AbstractIndex::Normal(41);
+        let slot = rep().slot(PartialIndex::Explicit(index));
+        let [a, b, c, d] = ["scope_a", "scope_b", "scope_c", "scope_d"]
+            .map(|name| partial_tensor(SPENSO_TAG.tensor_symbol(name), &[slot], &[slot]).atom);
+        let alternatives = (&a + &b) * &c;
+        validate_explicit_index_occurrences(&alternatives).unwrap();
+        assert!(matches!(
+            validate_explicit_index_occurrences(&(alternatives * d)),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+        ));
+
+        // This syntactic validator visits each power operand independently;
+        // it does not materialize powers as repeated tensor factors.
+        validate_explicit_index_occurrences(&(a.pow(3) * &b)).unwrap();
+        validate_explicit_index_occurrences(&(a.pow(&b) * &c)).unwrap();
+        let exponent = a * b * c;
+        let power = Atom::var(symbolica::symbol!("multiplicity_scalar_base")).pow(exponent);
+        assert!(matches!(
+            validate_explicit_index_occurrences(&power),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+        ));
+    }
+
+    #[test]
+    fn explicit_multiplicity_keeps_different_branch_indices_separate() {
+        let ports =
+            [43, 47].map(|index| rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
+        let [a, b, c, d] = [
+            ("branch_a", ports[0]),
+            ("branch_b", ports[1]),
+            ("branch_c", ports[0]),
+            ("branch_d", ports[1]),
+        ]
+        .map(|(name, port)| partial_tensor(SPENSO_TAG.tensor_symbol(name), &[port], &[port]).atom);
+        let alternatives = (&a + b) * (c + d);
+        validate_explicit_index_occurrences(&alternatives).unwrap();
+
+        // A third occurrence in only one possible branch still invalidates it.
+        let extra = partial_tensor(
+            SPENSO_TAG.tensor_symbol("branch_extra"),
+            &ports[..1],
+            &ports[..1],
+        );
+        assert!(matches!(
+            validate_explicit_index_occurrences(&(alternatives * extra.atom)),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity {
+                index: AbstractIndex::Normal(43),
+                occurrences: 3
+            })
+        ));
     }
 
     #[test]

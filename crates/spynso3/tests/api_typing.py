@@ -1,7 +1,7 @@
 """Static regressions: run `ty check` with the installed community Python environment."""
 
 from collections.abc import Iterator
-from typing import assert_type
+from typing import Literal, assert_type
 
 import linnet
 from symbolica import Expression, S
@@ -19,7 +19,7 @@ def check_types(
     compiled: sp.CompiledTensorEvaluator,
 ) -> None:
     settings = sp.DisplaySettings(tensor_view="matrix")
-    assert_type(settings.tensor_view, str)
+    assert_type(settings.tensor_view, Literal["interactive", "matrix"])
     assert_type(tensor.to_html(settings=settings), str)
     assert_type(representation("mu"), sp.Slot)
     assert_type(representation(1), sp.Slot)
@@ -85,6 +85,33 @@ def check_types(
     assert_type(expression.collect_factors(), sp.TensorExpression)
     assert_type(expression.simplify_gamma(), sp.TensorExpression)
     assert_type(expression.simplify_color(), sp.TensorExpression)
+    assert_type(expression.replace(scalar, 2), sp.TensorExpression)
+    assert_type(expression.derivative(scalar), sp.TensorExpression)
+    assert_type(expression.simplify(sp.SimplifySettings.hep()), sp.TensorExpression)
+    assert_type(expression.reindex("mu", sp.AUTO), sp.TensorExpression)
+    assert_type(expression.rename_indices({"mu": "nu"}), sp.TensorExpression)
+    assert_type(expression.permute_axes([1, 0]), sp.TensorExpression)
+    assert_type(tensor.permute_axes([1, 0]), sp.Tensor)
+    assert_type(network.permute_axes([1, 0]), sp.TensorNetwork)
+    assert_type(tensor.rename_indices({representation("mu"): "nu"}), sp.Tensor)
+    assert_type(
+        expression("mu", cook_indices=sp.CookSettings.indices()), sp.TensorExpression
+    )
+    assert_type(expression.to_tensor(library), sp.Tensor)
+    assert_type(network.to_tensor(library), sp.Tensor)
+    assert_type(network.step(library), sp.TensorNetwork)
+    assert_type(network.status, sp.ExecutionStatus)
+    assert_type(network.status.ready_operations, tuple[str, ...])
+    assert_type(network.status.complete, bool)
+    assert_type(tensor.dtype, type[float] | type[complex] | type[Expression])
+    assert_type(tensor.storage, Literal["dense", "sparse"])
+    assert_type(tensor.copy(), sp.Tensor)
+    assert_type(tensor.to_sparse(), sp.Tensor)
+    assert_type(tensor.to_dense(), sp.Tensor)
+    assert_type(tensor.map_components(lambda value: value * 2), sp.Tensor)
+    assert_type(expression.shape, tuple[int | Expression, ...])
+    assert_type(network.shape, tuple[int | Expression, ...])
+    assert_type(tensor.shape, tuple[int, ...])
     assert_type(expression.cook_indices(sp.CookSettings.indices()), sp.TensorExpression)
     assert_type(library["A"], sp.Tensor)
     assert_type(library[expression], sp.Tensor)
@@ -99,9 +126,17 @@ def check_types(
     assert_type(evaluator.evaluate([[2.0]]), list[sp.Tensor])
     assert_type(evaluator.evaluate_complex([[2j]]), list[sp.Tensor])
     assert_type(compiled.evaluate_complex([[2j]]), list[sp.Tensor])
+    assert_type(compiled.evaluate([[2.0]]), list[sp.Tensor])
+    assert_type(evaluator.parameters, list[Expression])
+    assert_type(compiled.parameters, list[Expression])
+    assert_type(evaluator.output_shape, tuple[int, ...])
+    assert_type(compiled.output_shape, tuple[int, ...])
     policy: sp.ExecutionMode = sp.ExecutionMode.All
     assert_type(int(policy), int)
-    settings = sp.GammaSimplifySettings(chain_ordering=sp.GammaChainOrdering.Canonical)
+    settings = sp.GammaSimplifySettings(
+        chain_ordering=sp.GammaChainOrdering.Canonical, expand_traces=True
+    )
+    assert_type(settings.expand_traces, bool)
     assert_type(settings.chain_ordering, sp.GammaChainOrdering)
     name = sp.TensorName("typing::Jbar", print={"typst": "macron(J)"})
     assert_type(name(representation), sp.TensorExpression)

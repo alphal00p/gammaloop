@@ -1,0 +1,20 @@
+--- a/src/state.rs
++++ b/src/state.rs
+@@ -457,6 +457,17 @@
+         state.initialize_builtin_symbols();
+ 
+         state
++    }
++
++    /// Returns whether all registered state initializers completed successfully.
++    ///
++    /// This query does not initialize the state. It returns `false` while an
++    /// initializer callback is running, including reentrant calls from that
++    /// callback, and after an initializer panics. Resetting user-defined symbols
++    /// with [`State::reset`] does not rerun the initializers or clear this status.
++    #[inline]
++    pub fn is_initialized() -> bool {
++        STATE_INITIALIZER.is_completed()
+     }
+ 
+     /// Initializes the state by running all registered state initializers in a topological order.

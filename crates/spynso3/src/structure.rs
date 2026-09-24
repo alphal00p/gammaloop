@@ -1329,6 +1329,14 @@ impl ModuleInit for SpensoSlot {}
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoSlot {
+    /// Slots are immutable typed index values and can be dictionary keys.
+    fn __hash__(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.slot.hash(&mut hasher);
+        hasher.finish()
+    }
+
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
         self.to_html(py, None)
     }

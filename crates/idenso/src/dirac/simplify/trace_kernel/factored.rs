@@ -189,6 +189,121 @@ impl Compiler {
 }
 
 impl FactoredTrace {
+    /// Build a runtime recipe without the square-free positional compiler.
+    pub(super) fn unit_recipe() -> Self {
+        Self {
+            nodes: vec![Node::Constant(1)],
+            root: 0,
+        }
+    }
+
+    pub(super) fn push_product(
+        &mut self,
+        factors: Vec<usize>,
+        coefficient: i32,
+        child: usize,
+    ) -> usize {
+        if factors.is_empty() && coefficient == 1 {
+            return child;
+        }
+        // Do not fuse integer coefficients here: generic words may exceed i32.
+        let id = self.nodes.len();
+        self.nodes.push(Node::Product {
+            factors,
+            coefficient,
+            child,
+        });
+        id
+    }
+
+    pub(super) fn push_sum(&mut self, children: Vec<usize>) -> usize {
+        if children.len() == 1 {
+            return children[0];
+        }
+        let id = self.nodes.len();
+        self.nodes.push(Node::Sum(children));
+        id
+    }
+
+    pub(super) fn recipe_leaf_count(&self, root: usize) -> usize {
+        let mut counts = Vec::with_capacity(self.nodes.len());
+        for node in &self.nodes {
+            counts.push(match node {
+                Node::Constant(c) => usize::from(*c != 0),
+                Node::Product {
+                    coefficient, child, ..
+                } => {
+                    if *coefficient == 0 {
+                        0
+                    } else {
+                        counts[*child]
+                    }
+                }
+                Node::Sum(children) => children.iter().map(|&child| counts[child]).sum(),
+            });
+        }
+        counts[root]
+    }
+
+    /// Visit each final monomial with one reusable factor stack. Repeated IDs
+    /// are retained, and exact coefficients multiply in the arbitrary-size domain.
+    pub(super) fn visit_recipe_leaves(
+        &self,
+        root: usize,
+        unit: &symbolica::domains::integer::Integer,
+        emit: &mut impl FnMut(&[usize], &symbolica::domains::integer::Integer),
+    ) {
+        use symbolica::domains::{
+            RingOps,
+            integer::{Integer, Z},
+        };
+        fn visit(
+            nodes: &[Node],
+            id: usize,
+            factors: &mut Vec<usize>,
+            coefficient: &Integer,
+            emit: &mut impl FnMut(&[usize], &Integer),
+        ) {
+            match &nodes[id] {
+                Node::Constant(c) => {
+                    if *c == 1 {
+                        emit(factors, coefficient);
+                    } else if *c != 0 {
+                        emit(factors, &Z.mul(coefficient, &Integer::from(*c)));
+                    }
+                }
+                Node::Product {
+                    factors: ids,
+                    coefficient: c,
+                    child,
+                } => {
+                    if *c == 0 {
+                        return;
+                    }
+                    let old_len = factors.len();
+                    factors.extend(ids);
+                    if *c == 1 {
+                        visit(nodes, *child, factors, coefficient, emit);
+                    } else {
+                        visit(
+                            nodes,
+                            *child,
+                            factors,
+                            &Z.mul(coefficient, &Integer::from(*c)),
+                            emit,
+                        );
+                    }
+                    factors.truncate(old_len);
+                }
+                Node::Sum(children) => {
+                    for &child in children {
+                        visit(nodes, child, factors, coefficient, emit);
+                    }
+                }
+            }
+        }
+        visit(&self.nodes, root, &mut Vec::new(), unit, emit);
+    }
     /// Compile square-free positional factor recipes, with IDs below `factor_count`.
     pub(super) fn new(terms: Polynomial, factor_count: usize) -> Self {
         if terms.is_empty() {

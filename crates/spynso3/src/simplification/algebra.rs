@@ -79,12 +79,14 @@ impl PyGammaSimplifySettings {
     pub(crate) fn new(
         chain_ordering: PyGammaChainOrdering,
         evaluate_traces: bool,
+        expand_traces: bool,
         expand_three_gamma_epsilon: bool,
     ) -> Self {
         Self {
             inner: GammaSimplifySettings {
                 chain_ordering: chain_ordering.into(),
                 evaluate_traces,
+                expand_traces,
                 expand_three_gamma_epsilon,
             },
         }
@@ -106,12 +108,13 @@ impl PyGammaSimplifySettings {
             &[
                 ("chain_ordering", "chain_ordering"),
                 ("evaluate_traces", "evaluate_traces"),
+                ("expand_traces", "expand_traces"),
                 ("expand_three_gamma_epsilon", "expand_three_gamma_epsilon"),
             ],
         )
     }
 
-    /// Configure gamma-chain ordering, trace evaluation, and the optional 4D three-gamma identity.
+    /// Configure gamma-chain ordering, trace evaluation and expansion, and the optional 4D identity.
     ///
     /// `chain_ordering=None` selects `GammaChainOrdering.RepeatedPairs`.
     #[new]
@@ -120,18 +123,21 @@ impl PyGammaSimplifySettings {
             *,
             chain_ordering = None,
             evaluate_traces = true,
+            expand_traces = false,
             expand_three_gamma_epsilon = false
         ),
-        text_signature = "(*, chain_ordering=None, evaluate_traces=True, expand_three_gamma_epsilon=False)"
+        text_signature = "(*, chain_ordering=None, evaluate_traces=True, expand_traces=False, expand_three_gamma_epsilon=False)"
     )]
     pub(crate) fn py_new(
         chain_ordering: Option<PyGammaChainOrdering>,
         evaluate_traces: bool,
+        expand_traces: bool,
         expand_three_gamma_epsilon: bool,
     ) -> Self {
         Self::new(
             chain_ordering.unwrap_or(PyGammaChainOrdering::RepeatedPairs),
             evaluate_traces,
+            expand_traces,
             expand_three_gamma_epsilon,
         )
     }
@@ -162,6 +168,13 @@ impl PyGammaSimplifySettings {
     #[getter]
     pub(crate) fn evaluate_traces(&self) -> bool {
         self.inner.evaluate_traces
+    }
+
+    /// Whether each evaluated trace body is expanded, preserving surrounding factors.
+    /// Ignored when `evaluate_traces` is false.
+    #[getter]
+    pub(crate) fn expand_traces(&self) -> bool {
+        self.inner.expand_traces
     }
 
     /// Whether three four-dimensional gammas expand into a gamma5-epsilon basis.
@@ -343,8 +356,16 @@ mod tests {
     #[test]
     fn python_settings_match_rust_defaults() {
         assert_eq!(
-            PyGammaSimplifySettings::new(PyGammaChainOrdering::RepeatedPairs, true, false).rust(),
+            PyGammaSimplifySettings::new(PyGammaChainOrdering::RepeatedPairs, true, false, false)
+                .rust(),
             GammaSimplifySettings::default()
+        );
+        let expanded =
+            PyGammaSimplifySettings::new(PyGammaChainOrdering::RepeatedPairs, true, true, false);
+        assert!(expanded.expand_traces());
+        assert_eq!(
+            expanded.rust(),
+            GammaSimplifySettings::default().with_expanded_traces()
         );
         assert_eq!(
             PyColorSimplifySettings::new(true, true, false).rust(),

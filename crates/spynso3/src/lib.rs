@@ -15,7 +15,7 @@ use pyo3::{
     PyClass,
     exceptions::{self, PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError},
     prelude::*,
-    types::{PyComplex, PyFloat, PySlice, PyTuple, PyType},
+    types::{PyComplex, PyDict, PyFloat, PySlice, PyTuple, PyType},
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -68,6 +68,7 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
 
 pub mod broadcast;
 mod composition;
+mod data;
 pub mod display;
 pub mod expression;
 pub mod library;
@@ -144,6 +145,9 @@ macro_rules! define_spenso_python_surface {
 
 pub struct SpensoModule;
 
+#[cfg(feature = "python_stubgen")]
+mod stubs;
+
 /// Policy for Rayon operations that manipulate Symbolica expressions.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(from_py_object, eq, eq_int, module = "symbolica.community.spenso")]
@@ -208,6 +212,7 @@ define_spenso_python_surface! {
     registered_classes: [
         SpensoNet,
         network::ExecutionMode,
+        network::execution::ExecutionStatus,
         SymbolicParallelism,
         SpensoExpressionEvaluator,
         #[cfg(feature = "native")]
@@ -232,7 +237,7 @@ define_spenso_python_surface! {
             "DiracAdjointError", "DotExpansionError", "GammaChainOrdering",
             "GammaConjugationError", "GammaSimplifySettings", "NetworkToolingError",
             "SchoonschipContractionOrder", "SchoonschipMode", "SchoonschipSettings",
-            "SchoonschipTraversal",
+            "SchoonschipTraversal", "SimplifySettings",
         ],
         display => [
             "DisplaySettings", "format_tensor", "to_typst", "to_html", "to_svg", "formatted",
@@ -434,6 +439,7 @@ pub enum SliceOrIntOrExpanded<'a> {
     Slice(Bound<'a, PySlice>),
     Int(usize),
     Expanded(Vec<usize>),
+    Selection(Bound<'a, PyAny>),
 }
 
 #[cfg(feature = "python_stubgen")]
@@ -667,7 +673,7 @@ impl Spensor {
     ///
     /// Convert this tensor to dense storage format.
     ///
-    /// Converts sparse tensors to dense format in-place. Dense tensors are unchanged.
+    /// Returns an independent dense tensor; the original storage is unchanged.
     /// This allocates memory for all tensor elements.
     ///
     /// Examples
@@ -677,9 +683,11 @@ impl Spensor {
     /// >>> structure = TensorName.vector("v")(rep("mu"))
     /// >>> tensor = Tensor.sparse(structure, float)
     /// >>> tensor[0] = 1.0
-    /// >>> tensor.to_dense()
-    fn to_dense(&mut self) {
-        self.tensor = self.tensor.clone().to_dense();
+    /// >>> tensor = tensor.to_dense()
+    fn to_dense(&self) -> Self {
+        let mut result = self.clone();
+        result.tensor = result.tensor.to_dense();
+        result
     }
 
     #[allow(clippy::wrong_self_convention)]
@@ -687,7 +695,7 @@ impl Spensor {
     ///
     /// Convert this tensor to sparse storage format.
     ///
-    /// Converts dense tensors to sparse format in-place, only storing non-zero elements.
+    /// Returns an independent sparse tensor, only storing non-zero elements.
     /// This can save memory for tensors with many zero elements.
     ///
     /// Examples
@@ -697,9 +705,11 @@ impl Spensor {
     /// >>> structure = TensorName("T")(rep("mu"), rep("nu"))
     /// >>> data = [1.0, 0.0, 0.0, 2.0]
     /// >>> tensor = Tensor.dense(structure, data)
-    /// >>> tensor.to_sparse()
-    fn to_sparse(&mut self) {
-        self.tensor = self.tensor.clone().to_sparse();
+    /// >>> tensor = tensor.to_sparse()
+    fn to_sparse(&self) -> Self {
+        let mut result = self.clone();
+        result.tensor = result.tensor.to_sparse();
+        result
     }
 
     fn __repr__(&self) -> String {
@@ -860,33 +870,19 @@ impl Spensor {
             }
             SliceOrIntOrExpanded::Slice(s) => {
                 let r = s.indices(size as isize)?;
-
-                let start = if r.start < 0 {
-                    (r.slicelength as isize + r.start) as usize
-                } else {
-                    r.start as usize
-                };
-
-                let end = if r.stop < 0 {
-                    (r.slicelength as isize + r.stop) as usize
-                } else {
-                    r.stop as usize
-                };
-
-                let (range, step) = if r.step < 0 {
-                    (end..start, -r.step as usize)
-                } else {
-                    (start..end, r.step as usize)
-                };
-
-                let slice = range
-                    .step_by(step)
-                    .map(|i| get_owned_linear(i).map(TensorElements::from))
+                let slice = (0..r.slicelength)
+                    .map(|i| {
+                        get_owned_linear((r.start + i as isize * r.step) as usize)
+                            .map(TensorElements::from)
+                    })
                     .collect::<PyResult<Vec<_>>>()?;
 
                 return Ok(
                     Python::attach(|py| slice.into_pyobject(py).map(|a| a.unbind()))?.into_any(),
                 );
+            }
+            SliceOrIntOrExpanded::Selection(selection) => {
+                return self.select_components(&selection);
             }
         };
 
@@ -940,14 +936,28 @@ impl Spensor {
                 "assigned coefficient kind must match tensor storage (float for real, complex for complex, Expression for parametric): {error}"
             )
         };
-        if let Ok(flat_index) = item.extract::<usize>() {
+        if let Ok(flat_index) = item.extract::<isize>() {
+            let flat_index = Self::normalized_component_index(flat_index, layout.size())?;
             let canonical = layout
                 .logical_flat_to_storage_flat(flat_index)
                 .map_err(tensor_data_layout_error)?;
             self.tensor
                 .set_flat(canonical.into(), value)
                 .map_err(coefficient_error)
-        } else if let Ok(expanded_idxs) = item.extract::<Vec<usize>>() {
+        } else if let Ok(indices) = item.extract::<Vec<isize>>() {
+            let shape = layout.logical_shape();
+            if indices.len() != shape.len() {
+                return Err(eyre!(
+                    "expected {} coordinates, got {}",
+                    shape.len(),
+                    indices.len()
+                ));
+            }
+            let expanded_idxs = indices
+                .iter()
+                .zip(shape)
+                .map(|(&index, &dimension)| Self::normalized_component_index(index, dimension))
+                .collect::<PyResult<Vec<_>>>()?;
             let canonical = layout
                 .logical_expanded_to_storage_flat(&expanded_idxs)
                 .map_err(tensor_data_layout_error)?;
@@ -1089,6 +1099,7 @@ impl Spensor {
                 .clone()
                 .map_coeff(&|x| Complex::new(x.re.to_f64(), x.im.to_f64())),
             eval_rat: linear,
+            parameters: params,
             descriptor: self.descriptor.clone(),
             descriptor_name: self.descriptor_name,
             descriptor_args: self.descriptor_args.clone(),
@@ -1124,14 +1135,56 @@ impl Spensor {
     }
 
     /// Reference this tensor with new abstract indices and return a lazy network.
-    #[pyo3(signature = (*indices, cook_indices = false))]
-    fn index(&self, indices: &Bound<'_, PyTuple>, cook_indices: bool) -> PyResult<SpensoNet> {
+    #[pyo3(signature = (*indices, cook_indices = None))]
+    fn index(
+        &self,
+        indices: &Bound<'_, PyTuple>,
+        cook_indices: Option<&crate::simplification::PyCookSettings>,
+    ) -> PyResult<SpensoNet> {
         SpensoNet::from_tensor_reference(self.clone())?.index_network(indices, cook_indices)
     }
 
+    /// Assign all external indices, producing a network if any contractions are requested.
+    #[pyo3(signature = (*indices, cook_indices=None))]
+    fn reindex(
+        &self,
+        indices: &Bound<'_, PyTuple>,
+        cook_indices: Option<&crate::simplification::PyCookSettings>,
+    ) -> PyResult<SpensoNet> {
+        SpensoNet::from_tensor_reference(self.clone())?.reindex(indices, cook_indices)
+    }
+
+    /// Rename external indices without changing component values or rank.
+    #[pyo3(signature = (mapping, *, cook_indices=None))]
+    fn rename_indices(
+        &self,
+        mapping: &Bound<'_, PyDict>,
+        cook_indices: Option<&crate::simplification::PyCookSettings>,
+    ) -> PyResult<Self> {
+        SpensoNet::from_tensor_reference(self.clone())?
+            .rename_indices(mapping, cook_indices)?
+            .result_tensor(None)
+    }
+
+    /// Return an independent tensor with permuted logical axes, preserving sparse storage.
+    fn permute_axes(&self, axes: Vec<usize>) -> PyResult<Self> {
+        SpensoNet::from_tensor_reference(self.clone())?
+            .permute_axes(axes)?
+            .result_tensor(None)
+    }
+
+    /// Copy component storage and metadata independently.
+    fn __copy__(&self) -> Self {
+        self.clone()
+    }
+
     /// Reference this tensor with new abstract indices and return a lazy network.
-    #[pyo3(signature = (*indices, cook_indices = false))]
-    fn __call__(&self, indices: &Bound<'_, PyTuple>, cook_indices: bool) -> PyResult<SpensoNet> {
+    #[pyo3(signature = (*indices, cook_indices = None))]
+    fn __call__(
+        &self,
+        indices: &Bound<'_, PyTuple>,
+        cook_indices: Option<&crate::simplification::PyCookSettings>,
+    ) -> PyResult<SpensoNet> {
         self.index(indices, cook_indices)
     }
 
@@ -1237,14 +1290,58 @@ pub struct SpensoExpressionEvaluator {
     pub eval_rat: LinearizedEvalTensor<SymComplex<Rational>, ShadowedStructure<AbstractIndex>>,
     pub eval: Option<LinearizedEvalTensor<f64, ShadowedStructure<AbstractIndex>>>,
     pub eval_complex: LinearizedEvalTensor<Complex<f64>, ShadowedStructure<AbstractIndex>>,
+    parameters: Vec<Atom>,
     descriptor: StructuredAtom,
     descriptor_name: Option<Symbol>,
     descriptor_args: Vec<Atom>,
 }
 
+impl SpensoExpressionEvaluator {
+    fn validate_inputs<T>(expected: usize, inputs: &[Vec<T>]) -> PyResult<()> {
+        if let Some((row, values)) = inputs
+            .iter()
+            .enumerate()
+            .find(|(_, row)| row.len() != expected)
+        {
+            return Err(exceptions::PyValueError::new_err(format!(
+                "input row {row} has {} parameters; expected {expected}",
+                values.len()
+            )));
+        }
+        Ok(())
+    }
+}
+
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoExpressionEvaluator {
+    /// Parameters in the exact order expected by each evaluation input row.
+    #[getter]
+    fn parameters(&self) -> Vec<PythonExpression> {
+        self.parameters.iter().cloned().map(Into::into).collect()
+    }
+
+    /// Number of parameter values required in each input row.
+    #[getter]
+    fn input_size(&self) -> usize {
+        self.parameters.len()
+    }
+
+    /// Shape of each returned tensor in logical axis order.
+    #[getter]
+    fn output_shape<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        PyTuple::new(
+            py,
+            tensor_data_layout(&self.descriptor.interface)?.logical_shape(),
+        )
+    }
+
+    /// Whether the exact coefficients admit a real-valued evaluator.
+    #[getter]
+    fn supports_real(&self) -> bool {
+        self.eval.is_some()
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "TensorEvaluator({}, real={}, complex=True)",
@@ -1276,6 +1373,7 @@ impl SpensoExpressionEvaluator {
     /// --------
     /// >>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]])
     fn evaluate(&mut self, inputs: Vec<Vec<f64>>) -> PyResult<Vec<Spensor>> {
+        Self::validate_inputs(self.parameters.len(), &inputs)?;
         let eval = self.eval.as_mut().ok_or(exceptions::PyValueError::new_err(
             "Evaluator contains complex coefficients. Use evaluate_complex instead.",
         ))?;
@@ -1294,10 +1392,11 @@ impl SpensoExpressionEvaluator {
     }
 
     /// Evaluate the expression for multiple inputs and return the results.
-    fn evaluate_complex(&mut self, inputs: Vec<Vec<Complex<f64>>>) -> Vec<Spensor> {
+    fn evaluate_complex(&mut self, inputs: Vec<Vec<Complex<f64>>>) -> PyResult<Vec<Spensor>> {
+        Self::validate_inputs(self.parameters.len(), &inputs)?;
         let eval = &mut self.eval_complex;
 
-        inputs
+        Ok(inputs
             .iter()
             .map(|s| {
                 Spensor::from_storage_with_descriptor(
@@ -1309,7 +1408,7 @@ impl SpensoExpressionEvaluator {
                     self.descriptor_args.clone(),
                 )
             })
-            .collect()
+            .collect())
     }
 }
 
@@ -1401,7 +1500,31 @@ impl SpensoExpressionEvaluator {
             }
         };
 
+        let real = self
+            .eval
+            .as_ref()
+            .map(|eval| -> PyResult<_> {
+                eval.export_cpp::<f64>(
+                    &format!("{filename}.real.cpp"),
+                    &format!("{function_name}_real"),
+                    ExportSettings::new()
+                        .include_header(true)
+                        .inline_asm(inline_asm)
+                        .custom_header(custom_header.clone()),
+                )
+                .map_err(|e| exceptions::PyValueError::new_err(format!("Export error: {e}")))?
+                .compile(&format!("{library_name}.real"), options.clone())
+                .map_err(|e| exceptions::PyValueError::new_err(format!("Compilation error: {e}")))?
+                .load()
+                .map_err(|e| {
+                    exceptions::PyValueError::new_err(format!("Library loading error: {e}"))
+                })
+            })
+            .transpose()?;
+
         Ok(SpensoCompiledExpressionEvaluator {
+            real,
+            parameters: self.parameters.clone(),
             eval: self
                 .eval_complex
                 .export_cpp::<Complex<f64>>(
@@ -1430,15 +1553,8 @@ impl SpensoExpressionEvaluator {
 
 /// A compiled and optimized evaluator for maximum performance tensor evaluation.
 ///
-/// This class wraps a compiled C++ shared library for extremely fast numerical
-/// evaluation of tensor expressions. It only supports complex-valued evaluation
-/// as this is the most general case.
-///
-/// A compiled and optimized evaluator for maximum performance tensor evaluation.
-///
-/// This class wraps a compiled C++ shared library for extremely fast numerical
-/// evaluation of tensor expressions. It only supports complex-valued evaluation
-/// as this is the most general case.
+/// Real coefficients produce both real and complex kernels. Complex coefficients
+/// produce only a complex kernel, with the same contract as TensorEvaluator.
 ///
 /// Create instances using the `TensorEvaluator.compile()` method.
 ///
@@ -1456,6 +1572,10 @@ impl SpensoExpressionEvaluator {
 #[derive(Clone)]
 pub struct SpensoCompiledExpressionEvaluator {
     pub eval: EvalTensor<CompiledComplexEvaluatorSpenso, ShadowedStructure<AbstractIndex>>,
+    real: Option<
+        EvalTensor<symbolica::evaluate::CompiledRealEvaluator, ShadowedStructure<AbstractIndex>>,
+    >,
+    parameters: Vec<Atom>,
     descriptor: StructuredAtom,
     descriptor_name: Option<Symbol>,
     descriptor_args: Vec<Atom>,
@@ -1465,10 +1585,58 @@ pub struct SpensoCompiledExpressionEvaluator {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoCompiledExpressionEvaluator {
+    /// Parameters in the exact order expected by each evaluation input row.
+    #[getter]
+    fn parameters(&self) -> Vec<PythonExpression> {
+        self.parameters.iter().cloned().map(Into::into).collect()
+    }
+
+    /// Number of parameter values required in each input row.
+    #[getter]
+    fn input_size(&self) -> usize {
+        self.parameters.len()
+    }
+
+    /// Shape of each returned tensor in logical axis order.
+    #[getter]
+    fn output_shape<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        PyTuple::new(
+            py,
+            tensor_data_layout(&self.descriptor.interface)?.logical_shape(),
+        )
+    }
+
+    /// Whether a real-valued native kernel was compiled.
+    #[getter]
+    fn supports_real(&self) -> bool {
+        self.real.is_some()
+    }
+
+    /// Evaluate batches with the native real kernel; reject complex coefficients.
+    fn evaluate(&mut self, inputs: Vec<Vec<f64>>) -> PyResult<Vec<Spensor>> {
+        SpensoExpressionEvaluator::validate_inputs(self.parameters.len(), &inputs)?;
+        let eval = self.real.as_mut().ok_or_else(|| {
+            exceptions::PyValueError::new_err(
+                "Evaluator contains complex coefficients. Use evaluate_complex instead.",
+            )
+        })?;
+        Ok(inputs
+            .iter()
+            .map(|row| {
+                Spensor::from_storage_with_descriptor(
+                    MixedTensor::Concrete(RealOrComplexTensor::Real(eval.evaluate(row))),
+                    self.descriptor.clone(),
+                    self.descriptor_name,
+                    self.descriptor_args.clone(),
+                )
+            })
+            .collect())
+    }
     fn __repr__(&self) -> String {
         format!(
-            "CompiledTensorEvaluator({}, complex=True)",
-            display::format_structured(&self.descriptor, false)
+            "CompiledTensorEvaluator({}, real={}, complex=True)",
+            display::format_structured(&self.descriptor, false),
+            if self.real.is_some() { "True" } else { "False" }
         )
     }
 
@@ -1497,8 +1665,9 @@ impl SpensoCompiledExpressionEvaluator {
     /// ...     [0.0+1.0j, 2.0+1.0j]
     /// ... ]
     /// >>> results = compiled_evaluator.evaluate_complex(complex_inputs)
-    fn evaluate_complex(&mut self, inputs: Vec<Vec<Complex<f64>>>) -> Vec<Spensor> {
-        inputs
+    fn evaluate_complex(&mut self, inputs: Vec<Vec<Complex<f64>>>) -> PyResult<Vec<Spensor>> {
+        SpensoExpressionEvaluator::validate_inputs(self.parameters.len(), &inputs)?;
+        Ok(inputs
             .iter()
             .map(|s| {
                 Spensor::from_storage_with_descriptor(
@@ -1510,7 +1679,7 @@ impl SpensoCompiledExpressionEvaluator {
                     self.descriptor_args.clone(),
                 )
             })
-            .collect()
+            .collect())
     }
 }
 
@@ -1843,6 +2012,7 @@ impl SpensoModule {
             );
             module.class.insert(id, class);
         }
+        stubs::refine(module);
     }
 }
 

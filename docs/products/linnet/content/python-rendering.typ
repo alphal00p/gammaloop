@@ -54,6 +54,9 @@ explicitly produces the same native drawing with hover labels, pinned click deta
 selection using Shift-, Ctrl-, or Meta-click. These interactions do not update Python graph
 selections automatically. In Marimo, direct rich display enables the embedded script; when
 embedding the SVG explicitly, use `mo.iframe(graph.to_svg())`.
+The viewer provides zoom buttons and Fit; drag the drawing to pan, or use Ctrl/Meta-scroll
+to zoom around the pointer. Hover previews details beside the graph when space permits,
+and below it in narrow outputs. Clicking pins the details until the panel is closed.
 The graph's `RenderConfig`
 combines layout options, drawing defaults, and Python selectors. Only topology and the selectors'
 typed drawing results pass to Typst; application payloads stay in Python.

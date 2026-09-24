@@ -90,7 +90,7 @@ class TensorExplorerTests(unittest.TestCase):
         self.assertEqual(len(payload["entries"]), 512)
         self.assertEqual(payload["entries"][0][0], [0])
         self.assertEqual(payload["entries"][-1][0], [1999])
-        dense.to_sparse()
+        dense = dense.to_sparse()
         payload, _ = explorer(dense)
         self.assertFalse(payload["complete"])
         self.assertLessEqual(len(payload["entries"]), 512)

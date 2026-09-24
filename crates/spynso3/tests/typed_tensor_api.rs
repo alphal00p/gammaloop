@@ -376,7 +376,7 @@ expr = name(bis, euc)
 lib = spenso.TensorLibrary()
 values = [float(i) for i in range(8)]
 tensor = spenso.Tensor.dense(expr, values)
-tensor.to_sparse()
+tensor = tensor.to_sparse()
 lib.register(tensor)
 assert expr.components(library=lib) == values
 assert name(bis('j'), euc('i')).components(library=lib) == values
