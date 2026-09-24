@@ -6,9 +6,8 @@
   --sm-soft:light-dark(#f4f6f8,#272e38);
   --sm-selected:light-dark(#e9f1fb,#293d55);
   --sm-accent:light-dark(#245b91,#a4cdf7);
-  box-sizing:border-box; color:var(--sm-text); background:var(--sm-bg);
-  font:14px/1.45 system-ui,sans-serif; border:1px solid var(--sm-border);
-  border-radius:7px; padding:14px; width:fit-content; max-width:100%;
+  box-sizing:border-box; color:var(--sm-text);
+  font:14px/1.45 system-ui,sans-serif; width:fit-content; max-width:100%;
 }
 [data-spenso-metadata] * { box-sizing:border-box; }
 [data-spenso-metadata] .sm-type { display:flex; flex-wrap:wrap; gap:6px 18px; justify-content:space-between; font-size:11px; color:var(--sm-muted); margin-bottom:11px; }
