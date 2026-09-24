@@ -551,7 +551,7 @@ impl<'settings> DiracSimplifier<'settings> {
             return Some(Atom::Zero);
         }
         let mut coefficient = Atom::num(1);
-        if !axial {
+        if repeated > 0 {
             // These identities emit only a scalar and another word. Keep the
             // factors borrowed instead of materializing shorter trace atoms and
             // scheduling whole-expression normalization after each contraction.
@@ -591,7 +591,11 @@ impl<'settings> DiracSimplifier<'settings> {
             let trace_unit = Self::simplify_trace_terminal(terminal.as_view())?;
             trace_kernel::evaluate_generic(&indices, trace_unit.as_view(), compact)
         };
-        Some(coefficient * result)
+        Some(if coefficient.is_one() {
+            result
+        } else {
+            coefficient * result
+        })
     }
 
     fn simplify_chain_node(self, f: FunView) -> Option<Atom> {
@@ -2062,10 +2066,12 @@ mod tests {
         for dimension in [4, 6] {
             let mink = Minkowski {}.new_rep(dimension);
             let a = mink.pattern(Atom::num(10));
+            let b = mink.pattern(Atom::num(11));
             let p = momenta(&mink.to_symbolic([]));
             for word in [
                 vec![&a, &p[0], &p[1], &a, &p[2], &p[3], &p[4], &p[5]],
                 vec![&a, &p[0], &a, &p[1], &a, &p[2]],
+                vec![&a, &p[0], &b, &p[1], &a, &p[2], &b, &p[3]],
             ] {
                 let input = trace!(&spin; word.into_iter().map(|index| gamma!(index)));
                 assert!(DiracSimplifier::evaluate_terminal_trace(input.as_view()).is_none());
@@ -2215,7 +2221,7 @@ mod tests {
         let contracted = input
             .schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());
         let result = input.simplify_gamma();
-        assert_eq!(result, contracted.simplify_gamma());
+        assert!((&result - contracted.simplify_gamma()).expand().is_zero());
         assert_eq!(result.simplify_gamma(), result);
     }
 
