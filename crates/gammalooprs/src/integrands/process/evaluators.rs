@@ -4323,7 +4323,7 @@ mod tests {
                     runtime.general.evaluator_method = method;
                     let actual = scalar_value(
                         stack
-                            .evaluate(make_input(), all, &runtime, &mut metadata, false)
+                            .evaluate(make_input(), all, &runtime, &mut metadata)
                             .unwrap(),
                     );
                     assert!(
@@ -4449,7 +4449,7 @@ mod tests {
                         runtime.general.evaluator_method = method;
                         let actual = scalar_value(
                             decoded
-                                .evaluate(make_input(), all, &runtime, &mut metadata, false)
+                                .evaluate(make_input(), all, &runtime, &mut metadata)
                                 .unwrap(),
                         );
                         assert!(
@@ -4590,7 +4590,7 @@ mod tests {
                 &FunctionMap::default(),
                 vec![],
                 settings.optimization_settings(),
-                dual_shape.clone(),
+                dual_shape.clone().map(|shape| (shape, Vec::new())),
                 &settings,
             )
             .unwrap();
@@ -4860,7 +4860,6 @@ mod tests {
                                 id: OrientationID(id),
                             },
                             &mut metadata,
-                            false,
                         )),
                         Complex::new_re(F(expected))
                     );
@@ -4881,7 +4880,7 @@ mod tests {
                     assert_eq!(
                         scalar_value(
                             stack
-                                .evaluate(make_input(), all, &runtime, &mut metadata, false,)
+                                .evaluate(make_input(), all, &runtime, &mut metadata)
                                 .unwrap()
                         ),
                         Complex::new_re(F(63.0))
@@ -5085,7 +5084,7 @@ mod tests {
             assert_eq!(
                 scalar_value(
                     stack
-                        .evaluate(make_input(), all, &runtime_settings, &mut metadata,)
+                        .evaluate(make_input(), all, &runtime_settings, &mut metadata)
                         .unwrap()
                 ),
                 Complex::new_re(F(17.0))
@@ -5299,7 +5298,7 @@ mod tests {
                         &builder.fn_map,
                         builder.reps.clone(),
                         settings.optimization_settings(),
-                        dual_shape.clone(),
+                        dual_shape.clone().map(|shape| (shape, Vec::new())),
                         &settings,
                     )
                     .unwrap();
@@ -5309,7 +5308,7 @@ mod tests {
                         &builder.fn_map,
                         builder.reps.clone(),
                         settings.optimization_settings(),
-                        dual_shape.clone(),
+                        dual_shape.clone().map(|shape| (shape, Vec::new())),
                         &settings,
                     )
                     .unwrap();
@@ -5331,7 +5330,7 @@ mod tests {
                             &function_map,
                             retained.fn_map_entries.clone(),
                             settings.optimization_settings(),
-                            dual_shape.clone(),
+                            dual_shape.clone().map(|shape| (shape, Vec::new())),
                             &EvaluatorSettings {
                                 do_fn_map_replacements: false,
                                 ..settings
@@ -5516,7 +5515,6 @@ mod tests {
                             make_input(),
                             selected,
                             &mut metadata,
-                            false
                         )),
                         Complex::new_re(F(expected))
                     );
@@ -5537,13 +5535,7 @@ mod tests {
                     assert_eq!(
                         scalar_value(
                             stack
-                                .evaluate(
-                                    make_input(),
-                                    all,
-                                    &runtime_settings,
-                                    &mut metadata,
-                                    false
-                                )
+                                .evaluate(make_input(), all, &runtime_settings, &mut metadata,)
                                 .unwrap()
                         ),
                         Complex::new_re(F(4.0 * weight_at_zero + 12.0))

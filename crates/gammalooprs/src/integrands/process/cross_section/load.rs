@@ -30,7 +30,7 @@ type RationalExpressionTree = (
     ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
 );
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 12;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 13;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -1532,11 +1532,10 @@ mod threshold_multiplier_tests {
         .unwrap();
         let error = load_bin(&path).err().unwrap();
         fs::remove_file(path).unwrap();
-        assert!(
-            error
-                .to_string()
-                .contains("Unsupported version 11 (expected 12)")
-        );
+        assert!(error.to_string().contains(&format!(
+            "Unsupported version {} (expected {STANDALONE_EVALUATORS_VERSION})",
+            STANDALONE_EVALUATORS_VERSION - 1,
+        )));
     }
 
     fn valid_archive() -> StandaloneThresholdMultiplierCollectionArchive<String> {
@@ -1713,7 +1712,7 @@ mod threshold_multiplier_tests {
 
     #[test]
     fn threshold_counterterm_metadata_archive_validates_ids_and_component_coverage() {
-        assert_eq!(STANDALONE_EVALUATORS_VERSION, 12);
+        assert_eq!(STANDALONE_EVALUATORS_VERSION, 13);
         let counterterms = vec![identity_counterterm()];
         let registry = identity_registry();
         validate_threshold_counterterm_metadata_archive(&registry, "graph", &counterterms).unwrap();

@@ -306,6 +306,32 @@ pub mod tracing;
 #[cfg(test)]
 mod tests {
     #[test]
+    fn native_hypot_preserves_finite_range() {
+        use super::{ArbPrec, F};
+
+        for scale in [1e-200, 1.0, 1e200] {
+            for sign in [-1.0, 1.0] {
+                let norm = F(sign * 3.0 * scale).hypot(&F(4.0 * scale)).0;
+                assert!(norm.is_finite());
+                assert!((norm / scale - 5.0).abs() < 1e-14);
+            }
+        }
+        assert_eq!(F(0.0).hypot(&F(-0.0)), F(0.0));
+        assert!(F(f64::NAN).hypot(&F(1.0)).0.is_nan());
+        assert!(F(1.0).hypot(&F(f64::NAN)).0.is_nan());
+        assert!(F(f64::INFINITY).hypot(&F(1.0)).0.is_infinite());
+        assert!(F(f64::MAX).hypot(&F(f64::MAX)).0.is_infinite());
+
+        // Native precision must not pass through binary64 for scaling/order.
+        let one = F::<ArbPrec>::default().one();
+        for exponent in [-2000, 2000] {
+            let scale = one.from_i64(2).powi(exponent);
+            let norm = (&scale * one.from_i64(3)).hypot(&(&scale * one.from_i64(4)));
+            assert!((norm / scale - one.from_i64(5)).abs() < one.from_i64(10).powi(-50));
+        }
+    }
+
+    #[test]
     fn canonical_arb_materialization_preserves_native_bits_and_checks_range() {
         use super::{ArbPrec, F, FloatLike, QuadFloat, SamplingEvaluationError};
         use rug::Float;
@@ -2762,6 +2788,18 @@ impl<T: FloatLike> F<T> {
 
     pub(crate) fn abs(&self) -> Self {
         F(self.0.norm())
+    }
+
+    /// Euclidean magnitude without squaring unscaled native components.
+    pub(crate) fn hypot(&self, other: &Self) -> Self {
+        if !self.0.is_finite() || !other.0.is_finite() {
+            return self.abs() + other.abs();
+        }
+        let scale = self.abs().max(other.abs());
+        if scale == scale.zero() {
+            return scale;
+        }
+        ((self / &scale).square() + (other / &scale).square()).sqrt() * scale
     }
 
     pub(crate) fn sqrt(&self) -> Self {

@@ -351,9 +351,9 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
                 graphs = "monte_carlo"
                 graph_names = []
                 orientations = "summed"
-                lmb_multichanneling = true
-                lmb_channels = "summed"
-                lmb_channel_weight = "ose"
+                sampling_multichanneling = true
+                sampling_channels = "summed"
+                sampling_channel_weight = "ose"
             '"#,
         ))?;
     }
@@ -471,9 +471,9 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
             r#"set process -p {process} -i {NLO} kv
                 sampling.graphs="summed"
                 sampling.orientations="summed"
-                sampling.lmb_multichanneling=true
-                sampling.lmb_channels="summed"
-                sampling.lmb_channel_weight="ose""#,
+                sampling.sampling_multichanneling=true
+                sampling.sampling_channels="summed"
+                sampling.sampling_channel_weight="ose""#,
         ))?;
     }
 
@@ -609,9 +609,9 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
         r#"set process -p {LO_PROCESS} -i {LO} kv
             sampling.graphs="summed"
             sampling.orientations="summed"
-            sampling.lmb_multichanneling=true
-            sampling.lmb_channels="summed"
-            sampling.lmb_channel_weight="ose""#,
+            sampling.sampling_multichanneling=true
+            sampling.sampling_channels="summed"
+            sampling.sampling_channel_weight="ose""#,
     ))?;
 
     let (_, lo_probe) = Inspect {
@@ -687,14 +687,14 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
                 sampling.graphs="monte_carlo"
                 sampling.graph_names=[]
                 sampling.orientations="summed"
-                sampling.lmb_multichanneling=true
-                sampling.lmb_channels="summed"
-                sampling.lmb_channel_weight="ose"
+                sampling.sampling_multichanneling=true
+                sampling.sampling_channels="summed"
+                sampling.sampling_channel_weight="ose"
                 integrator.integrated_phase="real"
                 integrator.min_samples_for_update=10000
                 integrator.n_start=10000
                 integrator.n_increase=10000
-                integrator.n_max=20000
+                integrator.n_max=60000
                 integrator.target_relative_accuracy=1.0e-12
                 integrator.seed=220311038
                 integrator.discrete_dim_learning_rate=0.0

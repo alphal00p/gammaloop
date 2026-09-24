@@ -134,8 +134,8 @@ fn raised_scalar_self_energy_uv_matches_across_local_uv_routes() -> Result<()> {
         ("projected_local_4d", true, true),
     ];
     let points = [
-        [0.11, 0.23, 0.37, 0.41, -0.29, 0.53],
-        [0.71, 0.43, 0.19, -0.31, 0.47, -0.59],
+        [0.11, 0.23, 0.37, 0.41, 0.29, 0.53],
+        [0.71, 0.43, 0.19, 0.31, 0.47, 0.59],
     ];
     let mut route_results = Vec::new();
 
@@ -770,6 +770,9 @@ fn inspect_json_preserves_retained_events_and_additional_weights() -> Result<()>
         let evaluation = &json["evaluation"];
         let actual = gammalooprs::integrands::evaluation::EvaluationResultOutput {
             integrand_result: serde_json::from_value(evaluation["integrand_result"].clone())?,
+            absolute_integrand_result: serde_json::from_value(
+                evaluation["absolute_integrand_result"].clone(),
+            )?,
             parameterization_jacobian: serde_json::from_value(
                 evaluation["parameterization_jacobian"].clone(),
             )?,
@@ -958,7 +961,7 @@ fn inspect_x_space_reports_missing_discrete_dimensions_cleanly() -> Result<()> {
     assert!(
         rendered.contains("This integrand uses discrete graph sampling")
             && rendered.contains("sample_orientations = true")
-            && rendered.contains("sampling_type = discrete_multi_channeling")
+            && rendered.contains("sampling_type = sampling_multi_channeling")
             && rendered.contains(
                 "requires 3 discrete dimensions [graph group, orientation, channel], but got 0."
             ),

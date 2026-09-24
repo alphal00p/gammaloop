@@ -797,7 +797,9 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                                 &MomentumSpaceEvaluationInput {
                                     loop_momenta: point
                                         .raw_coordinates
-                                        .chunks_exact(3)
+                                        .as_chunks::<3>()
+                                        .0
+                                        .iter()
                                         .map(|k| ThreeMomentum::new(F(k[0]), F(k[1]), F(k[2])))
                                         .collect(),
                                     integrator_weight: F(1.0),
@@ -1617,7 +1619,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                 let to_loops = |point: &[f64]| {
                     LoopMomenta::from_iter(
                         point
-                            .chunks_exact(3)
+                            .as_chunks::<3>().0.iter()
                             .map(|v| ThreeMomentum::new(F(v[0]), F(v[1]), F(v[2]))),
                     )
                 };

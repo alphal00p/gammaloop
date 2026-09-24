@@ -1732,7 +1732,7 @@ mod tests {
         graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
         momentum::sample::{BareMomentumSample, LoopMomenta},
-        utils::SamplingFloat,
+        utils::{ArbPrec, SamplingFloat},
     };
 
     #[test]

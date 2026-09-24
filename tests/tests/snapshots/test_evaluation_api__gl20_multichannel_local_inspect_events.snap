@@ -10,27 +10,27 @@ expression: snapshot
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 1.1136750482920433e+28
           },
           "original": {
-            "im": 0.000000000000000000000000000000000000000000000000046114324705727,
-            "re": -0.0000000000000000000000000000005260186338896942
+            "im": 8.387597570747712e-49,
+            "re": -2.1202965106634898e-30
           },
           "threshold_counterterm:0": {
-            "im": 0.0000000000000000000000000000000000000000000000000013817635060449816,
-            "re": -0.0000000000000000000000000000000012628761777701858
+            "im": 5.376262410942219e-51,
+            "re": -5.0904505912761246e-33
           }
         },
         "cut_info": {
           "cut_id": 1,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             6,
             8,
             9
           ],
-          "lmb_channel_id": 0,
+          "sampling_channel_id": 0,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -101,19 +101,19 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": 0.0000000000000000000022961063246395455,
-          "re": -0.025490402593435536
+          "im": 9.400932222658051e-21,
+          "re": -0.023669904267146807
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 1.1136750482920433e+28
           },
           "original": {
-            "im": 0.00000000000000000000000000000000000000000000000001346187136274745,
-            "re": 0.0000000000000000000000000000004060161333505399
+            "im": 0.0,
+            "re": 1.6363089189811883e-30
           },
           "threshold_counterterm:0": {
             "im": 0.0,
@@ -124,12 +124,12 @@ expression: snapshot
           "cut_id": 0,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             6,
             8,
             9
           ],
-          "lmb_channel_id": 0,
+          "sampling_channel_id": 0,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -211,35 +211,35 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": 0.00000000000000000000065078807837120635,
-          "re": 0.01962806300037161
+          "im": 0.0,
+          "re": 0.018223164143670763
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 1.1136750482920433e+28
           },
           "original": {
-            "im": -0.000000000000000000000000000000000000000000000000006183359654341411,
-            "re": 0.00000000000000000000000000000008052533818308001
+            "im": 0.0,
+            "re": 3.255742605011484e-31
           },
           "threshold_counterterm:0": {
-            "im": 0.0000000000000000000000000000000008242917026624976,
-            "re": -0.00000000000000000000000000000001592756943846231
+            "im": 3.332715580544133e-33,
+            "re": -6.439721293884174e-32
           }
         },
         "cut_info": {
           "cut_id": 2,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             6,
             8,
             9
           ],
-          "lmb_channel_id": 0,
+          "sampling_channel_id": 0,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -310,19 +310,19 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": 0.00003984878467027441,
-          "re": 0.0031228539224280216
+          "im": 3.7115621851061326e-05,
+          "re": 0.002908663610567252
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 1.1136750482920433e+28
           },
           "original": {
-            "im": 0.00000000000000000000000000000000000000000000000003764215670507701,
-            "re": 0.000000000000000000000000000000045196400764777174
+            "im": -5.422031981370258e-49,
+            "re": 1.8196660017620338e-31
           },
           "threshold_counterterm:0": {
             "im": 0.0,
@@ -333,12 +333,12 @@ expression: snapshot
           "cut_id": 3,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             6,
             8,
             9
           ],
-          "lmb_channel_id": 0,
+          "sampling_channel_id": 0,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -420,35 +420,35 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": 0.00000000000000000000181973710546921,
-          "re": 0.002184932392416003
+          "im": -6.038381728693526e-21,
+          "re": 0.0020265166223877224
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 1.463805452374534e+28
           },
           "original": {
-            "im": -0.0000000000000000000000000000000000000000000000011637753974197045,
-            "re": -0.0000000000000000000000000000007482999795143614
+            "im": 2.307829497797081e-49,
+            "re": -2.6418132518055313e-30
           },
           "threshold_counterterm:0": {
-            "im": 0.0000000000000000000000000000000000000000000000000047941775673123675,
-            "re": -0.0000000000000000000000000000000015682311507500352
+            "im": 2.8148766764208012e-52,
+            "re": -5.536515062766469e-33
           }
         },
         "cut_info": {
           "cut_id": 1,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             4,
             8,
             9
           ],
-          "lmb_channel_id": 1,
+          "sampling_channel_id": 1,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -519,19 +519,19 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": -0.00000000000000000005602870066217295,
-          "re": -0.03625092520203709
+          "im": 3.382333833852857e-21,
+          "re": -0.038752050230842654
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 1.463805452374534e+28
           },
           "original": {
-            "im": 0.00000000000000000000000000000000000000000000000006136068596766832,
-            "re": 0.000000000000000000000000000000564450340973455
+            "im": 2.4262726721218784e-51,
+            "re": 1.9931711521989935e-30
           },
           "threshold_counterterm:0": {
             "im": 0.0,
@@ -542,12 +542,12 @@ expression: snapshot
           "cut_id": 0,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             4,
             8,
             9
           ],
-          "lmb_channel_id": 1,
+          "sampling_channel_id": 1,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -629,35 +629,35 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": 0.0000000000000000000029663634298974596,
-          "re": 0.027287257680578273
+          "im": 3.551591166399336e-23,
+          "re": 0.029176148001045187
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 1.463805452374534e+28
           },
           "original": {
-            "im": -0.000000000000000000000000000000000000000000000000008180968736856777,
-            "re": 0.00000000000000000000000000000011192430906180802
+            "im": 1.1807686733902545e-50,
+            "re": 3.935514763115432e-31
           },
           "threshold_counterterm:0": {
-            "im": 0.0000000000000000000000000000000050204496001612036,
-            "re": -0.000000000000000000000000000000023425138094839674
+            "im": 1.7653048667354344e-32,
+            "re": -8.23681464084985e-32
           }
         },
         "cut_info": {
           "cut_id": 2,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             4,
             8,
             9
           ],
-          "lmb_channel_id": 1,
+          "sampling_channel_id": 1,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -728,19 +728,19 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": 0.00024270390496300095,
-          "re": 0.004278320885639761
+          "im": 0.0002584062889030629,
+          "re": 0.004555118550001402
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 1.463805452374534e+28
           },
           "original": {
-            "im": -0.00000000000000000000000000000000000000000000000005364985628754654,
-            "re": 0.00000000000000000000000000000007907410511877888
+            "im": 3.781806076279792e-51,
+            "re": 2.795307246913487e-31
           },
           "threshold_counterterm:0": {
             "im": 0.0,
@@ -751,12 +751,12 @@ expression: snapshot
           "cut_id": 3,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             4,
             8,
             9
           ],
-          "lmb_channel_id": 1,
+          "sampling_channel_id": 1,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -838,35 +838,35 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": -0.000000000000000000002593598314635657,
-          "re": 0.003822684345475
+          "im": 5.535828354281504e-23,
+          "re": 0.00409178598909401
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 9.736656060288446e+27
           },
           "original": {
-            "im": -0.000000000000000000000000000000000000000000000000020455566187369675,
-            "re": -0.000000000000000000000000000000751240630029713
+            "im": 1.848443656722332e-48,
+            "re": -3.430942994100261e-30
           },
           "threshold_counterterm:0": {
-            "im": -0.0000000000000000000000000000000000000000000000000009052258617082406,
-            "re": -0.0000000000000000000000000000000018646630995675317
+            "im": -3.723318048219438e-52,
+            "re": -8.515983347410576e-33
           }
         },
         "cut_info": {
           "cut_id": 1,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             6,
             7,
             9
           ],
-          "lmb_channel_id": 2,
+          "sampling_channel_id": 2,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -937,19 +937,19 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": -0.0000000000000000000010326460887581396,
-          "re": -0.03640741567944689
+          "im": 1.7994034865603372e-20,
+          "re": -0.03348882909687937
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 9.736656060288446e+27
           },
           "original": {
-            "im": -0.000000000000000000000000000000000000000000000000003532069061584484,
-            "re": 0.00000000000000000000000000000057617438887278885
+            "im": 2.314031332813804e-50,
+            "re": 2.630708666229253e-30
           },
           "threshold_counterterm:0": {
             "im": 0.0,
@@ -960,12 +960,12 @@ expression: snapshot
           "cut_id": 0,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             6,
             7,
             9
           ],
-          "lmb_channel_id": 2,
+          "sampling_channel_id": 2,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -1047,35 +1047,35 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": -0.00000000000000000000017075103269994602,
-          "re": 0.027854034051971427
+          "im": 2.2530927200338874e-22,
+          "re": 0.025614305477894395
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 9.736656060288446e+27
           },
           "original": {
-            "im": 0.000000000000000000000000000000000000000000000000008220338794985165,
-            "re": 0.0000000000000000000000000000001137925904035533
+            "im": -7.562793106548027e-52,
+            "re": 5.221833767612129e-31
           },
           "threshold_counterterm:0": {
-            "im": 0.0000000000000000000000000000000028133090305499653,
-            "re": -0.00000000000000000000000000000002307367550076451
+            "im": 1.291000379549171e-32,
+            "re": -1.0588291633256463e-31
           }
         },
         "cut_info": {
           "cut_id": 2,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             6,
             7,
             9
           ],
-          "lmb_channel_id": 2,
+          "sampling_channel_id": 2,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -1146,19 +1146,19 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": 0.00013600397214628482,
-          "re": 0.004385630103767209
+          "im": 0.0001257002666937212,
+          "re": 0.004053374400933469
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 9.736656060288446e+27
           },
           "original": {
-            "im": -0.000000000000000000000000000000000000000000000000008979832487518578,
-            "re": 0.00000000000000000000000000000006811237997102661
+            "im": 5.729796747891986e-50,
+            "re": 3.10512542244948e-31
           },
           "threshold_counterterm:0": {
             "im": 0.0,
@@ -1169,12 +1169,12 @@ expression: snapshot
           "cut_id": 3,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             6,
             7,
             9
           ],
-          "lmb_channel_id": 2,
+          "sampling_channel_id": 2,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -1256,35 +1256,35 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": -0.00000000000000000000043411259632292625,
-          "re": 0.0032927609899242984
+          "im": 5.578906022958353e-22,
+          "re": 0.003023353826244845
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 1.2797781768392706e+28
           },
           "original": {
-            "im": -0.00000000000000000000000000000000000000000000000001744316282506271,
-            "re": -0.0000000000000000000000000000010719148274319565
+            "im": 0.0,
+            "re": -4.249694289662101e-30
           },
           "threshold_counterterm:0": {
-            "im": 0.00000000000000000000000000000000000000000000000000019177114651133188,
-            "re": -0.000000000000000000000000000000002247584711595562
+            "im": 1.7160111114937195e-51,
+            "re": -8.910734695805752e-33
           }
         },
         "cut_info": {
           "cut_id": 1,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             4,
             7,
             9
           ],
-          "lmb_channel_id": 3,
+          "sampling_channel_id": 3,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -1355,19 +1355,19 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": -0.0000000000000000000008339850929478901,
-          "re": -0.05192829980473174
+          "im": 2.1961135717033625e-23,
+          "re": -0.054500697739513194
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 1.2797781768392706e+28
           },
           "original": {
-            "im": -0.00000000000000000000000000000000000000000000000018826990683186547,
-            "re": 0.0000000000000000000000000000008012414070518315
+            "im": 5.301909700174071e-52,
+            "re": 3.177071685468609e-30
           },
           "threshold_counterterm:0": {
             "im": 0.0,
@@ -1378,12 +1378,12 @@ expression: snapshot
           "cut_id": 0,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             4,
             7,
             9
           ],
-          "lmb_channel_id": 3,
+          "sampling_channel_id": 3,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -1465,35 +1465,35 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": -0.000000000000000000009101543729001267,
-          "re": 0.038734462806535246
+          "im": 6.785268329855216e-24,
+          "re": 0.040659470093166845
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 1.2797781768392706e+28
           },
           "original": {
-            "im": -0.000000000000000000000000000000000000000000000000012054607722006927,
-            "re": 0.00000000000000000000000000000015758780366963029
+            "im": 0.0,
+            "re": 6.229167622454481e-31
           },
           "threshold_counterterm:0": {
-            "im": 0.000000000000000000000000000000014468972480940083,
-            "re": -0.000000000000000000000000000000033100214978029785
+            "im": 5.719329328232235e-32,
+            "re": -1.308393054285861e-31
           }
         },
         "cut_info": {
           "cut_id": 2,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             4,
             7,
             9
           ],
-          "lmb_channel_id": 3,
+          "sampling_channel_id": 3,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -1564,19 +1564,19 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": 0.0006994744299023737,
-          "re": 0.006018111185482118
+          "im": 0.0007319472860428419,
+          "re": 0.006297499905487885
         }
       },
       {
         "additional_weights": {
           "full multiplicative factor": {
             "im": 0.0,
-            "re": 48343061735986340000000000000.0
+            "re": 1.2797781768392706e+28
           },
           "original": {
-            "im": 0.00000000000000000000000000000000000000000000000007664646706372641,
-            "re": 0.00000000000000000000000000000012026135462702628
+            "im": -8.352023674786218e-49,
+            "re": 4.7721639450610196e-31
           },
           "threshold_counterterm:0": {
             "im": 0.0,
@@ -1587,12 +1587,12 @@ expression: snapshot
           "cut_id": 3,
           "graph_group_id": 0,
           "graph_id": 0,
-          "lmb_channel_edge_ids": [
+          "sampling_channel_edge_ids": [
             4,
             7,
             9
           ],
-          "lmb_channel_id": 3,
+          "sampling_channel_id": 3,
           "orientation_id": null,
           "particle_pdgs": [
             [
@@ -1674,8 +1674,8 @@ expression: snapshot
           }
         ],
         "weight": {
-          "im": 0.000000000000000000003705324889106969,
-          "re": 0.005813802091187677
+          "im": -1.068873763143633e-20,
+          "re": 0.006107311273188292
         }
       }
     ]
@@ -1683,8 +1683,8 @@ expression: snapshot
   "graph": "GL38",
   "integrand": "NLO",
   "integrand_result": {
-    "im": 0.000000000000000000000000000004502592811820878,
-    "re": -0.000000000000000000000000000014716101189714316
+    "im": 0.0011531694634906873,
+    "re": -0.0036747694406999657
   },
   "integrator_weight": 1.0,
   "metadata": {
@@ -1692,7 +1692,7 @@ expression: snapshot
     "generated_event_count": 16,
     "is_nan": false
   },
-  "parameterization_jacobian": 248308283339926300000000000.0,
+  "parameterization_jacobian": 1.0,
   "point": [
     0.16580369091616945,
     0.5262578907417373,

@@ -38,7 +38,7 @@ use crate::processes::{
     ThresholdCountertermMetadataRegistry, ThresholdCountertermOrigin, ThresholdCountertermSide,
 };
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 9;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 10;
 pub const STANDALONE_MODE_RUST: u8 = 0;
 
 #[derive(
@@ -2647,5 +2647,93 @@ mod threshold_variant_archive_tests {
         let (_, _, evaluator, result) = &mut loaded.evaluators[0];
         evaluator.evaluate(&values, result);
         assert_eq!(result.as_slice(), &[Complex::new(8.25, 0.0)]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use linnet::half_edge::involution::EdgeIndex;
+    use symbolica::printer::PrintOptions;
+
+    use crate::utils::GS;
+
+    use super::*;
+
+    #[test]
+    fn standalone_roundtrip_restores_non_dense_residue_map_keys() -> Result<()> {
+        let residue_map_id = Atom::var(GS.residue_map_id);
+        let selector = |id: i64, coefficient: i64| {
+            Symbol::IF.call_args([
+                residue_map_id.clone() - Atom::num(id),
+                Atom::Zero,
+                Atom::num(coefficient),
+            ])
+        };
+        let expression = selector(4, 2) + selector(9, 3);
+        let print = |atom: &Atom| atom.printer(PrintOptions::file()).to_string();
+        let generic = StandaloneGenericEvaluatorArchive {
+            exprs: vec![print(&expression)],
+            additional_fn_map_entries: Vec::new(),
+            dual_shape: None,
+        };
+        let archive = StandaloneEvaluatorArchive {
+            version: STANDALONE_EVALUATORS_VERSION,
+            numeric_target: StandaloneNumericTarget::Double,
+            symbolica_state: (),
+            graph_terms: vec![StandaloneGraphTermArchive {
+                graph_name: "duplicate_orientations".to_string(),
+                orientations: vec![vec![1], vec![1]],
+                param_builder_params: vec![print(&residue_map_id), print(&GS.sign(EdgeIndex(0)))],
+                fn_map_entries: Vec::new(),
+                original_integrand: StandaloneEvaluatorStackArchive {
+                    explicit_orientation_sum_only: false,
+                    production_orientation_ids: vec![4, 9],
+                    single_parametric: generic,
+                    iterative: None,
+                    summed_function_map: None,
+                    summed: None,
+                    representative_input: vec![
+                        StandaloneComplexInput {
+                            re: "0".to_string(),
+                            im: "0".to_string(),
+                        },
+                        StandaloneComplexInput {
+                            re: "0".to_string(),
+                            im: "0".to_string(),
+                        },
+                    ],
+                    start: 1,
+                    residue_map_id_start: 0,
+                    mult_offset: 1,
+                },
+                threshold_counterterms: Vec::new(),
+                threshold_counterterms_are_variants: false,
+                threshold_variants: Vec::new(),
+                threshold_multipliers: None,
+                metadata_registry: None,
+            }],
+        };
+
+        let serialized = serde_json::to_vec(&archive)?;
+        let roundtripped: StandaloneEvaluatorArchive<(), String> =
+            serde_json::from_slice(&serialized)?;
+        let mut loaded = roundtripped.load()?;
+        let orientations = loaded.graph_terms[0].orientations.clone();
+        let stack = &mut loaded.graph_terms[0].original_integrand;
+
+        for (orientation_index, expected) in [(Some(0), 2.0), (Some(1), 3.0), (None, 5.0)] {
+            let result = stack.evaluate_with_backend(StandaloneEvaluationRequest {
+                backend: StandaloneBackend::Eager,
+                method: StandaloneMethod::SingleParametric,
+                orientations: &orientations,
+                orientation_index,
+                custom_input: None,
+                artifact_root: Path::new("."),
+                label: "standalone_residue_map_roundtrip",
+            })?;
+            assert_eq!(result, vec![Complex::new(expected, 0.0)]);
+        }
+
+        Ok(())
     }
 }

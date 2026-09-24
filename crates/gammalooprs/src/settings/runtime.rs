@@ -1426,22 +1426,22 @@ pub struct SamplingSettingsParser {
     /// Whether causal orientations are summed deterministically or sampled as a discrete axis.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientations: SumMode,
-    /// Enable multichannel sampling over loop-momentum bases.
+    /// Enable multichannel sampling over the resolved graph-aware channels.
     #[serde(skip_serializing_if = "is_false")]
     #[serde(rename = "sampling_multichanneling", alias = "lmb_multichanneling")]
     pub sampling_multichanneling: bool,
-    /// Whether loop-momentum-basis channels are summed or sampled discretely.
+    /// Whether resolved sampling channels are summed or sampled discretely.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     #[serde(rename = "sampling_channels", alias = "lmb_channels")]
     pub sampling_channels: SumMode,
-    /// Exponent controlling the sharpness of multichannel weights.
+    /// Exponent of each selected loop edge's on-shell energy in an OSE channel score.
     #[serde(
         deserialize_with = "deserialize_nonnegative_finite_f64",
         skip_serializing_if = "is_float::<3>"
     )]
     #[schemars(range(min = 0.0))]
     pub alpha: f64,
-    /// Rule used to construct the relative probability of each loop-momentum-basis channel.
+    /// Rule used to construct the relative probability of each resolved sampling channel.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     #[serde(rename = "sampling_channel_weight", alias = "lmb_channel_weight")]
     pub sampling_channel_weight: SamplingChannelWeight,
@@ -1460,10 +1460,13 @@ pub struct SamplingSettingsParser {
     /// Explicit loop-momentum-basis identifiers keyed by graph name.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub lmb_basis_ids: BTreeMap<String, Vec<usize>>,
+    /// Default channel selectors for graphs without a graph-specific selection.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub default_channel_selection: Vec<String>,
+    /// Channel selectors keyed by graph name, overriding the default selection.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub channel_selection: BTreeMap<String, Vec<String>>,
+    /// Named channel definitions keyed first by graph name, then by channel name.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub channel_definitions: BTreeMap<String, BTreeMap<String, SamplingChannelDefinition>>,
 }

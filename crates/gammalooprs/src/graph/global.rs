@@ -131,10 +131,10 @@ impl TryFrom<linnet::parser::GlobalData> for ParseData {
         }
 
         if let Some(threshold_counterterms) = value.statements.get("threshold_counterterms") {
-            let decoded = super::parse::string_utils::decode_dot_string(threshold_counterterms)
-                .context("threshold_counterterms DOT string")?;
+            // Linnet decodes the quoted-string layer. Unknown Graphviz escapes remain
+            // literal, preserving meaningful TOML backslashes for its own parser.
             parse_data.threshold_counterterms = Some(
-                ThresholdCountertermSpec::parse_toml(&decoded)
+                ThresholdCountertermSpec::parse_toml(threshold_counterterms)
                     .context("threshold_counterterms graph attribute")?,
             );
         }
@@ -195,7 +195,9 @@ impl Graph {
                 .expect("validated threshold_counterterms should serialize to TOML");
             g.statements.insert(
                 "threshold_counterterms".to_string(),
-                super::parse::string_utils::dot_multiline_statement_value(&threshold_counterterms),
+                // Keep line breaks literal for readable embedded text; Linnet supplies
+                // the outer quotes and escapes the semantic statement value.
+                format!("\n{threshold_counterterms}"),
             );
         }
 
@@ -243,7 +245,7 @@ impl ParseGraph {
                 .expect("validated threshold_counterterms should serialize to TOML");
             g.statements.insert(
                 "threshold_counterterms".to_string(),
-                super::parse::string_utils::dot_multiline_statement_value(&threshold_counterterms),
+                format!("\n{threshold_counterterms}"),
             );
         }
 

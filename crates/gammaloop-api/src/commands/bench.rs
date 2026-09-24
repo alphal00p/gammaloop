@@ -1093,4 +1093,51 @@ mod tests {
             "expected {expected:e}, got {actual:e}"
         );
     }
+
+    #[test]
+    fn minimal_integrand_settings_disable_benchmark_overhead_without_touching_subtraction() {
+        use gammalooprs::settings::runtime::{RotationSetting, StabilityRecordingSettings};
+
+        use super::{apply_minimal_integrand_settings, RuntimeSettings, StabilityLevelSetting};
+
+        let mut settings = RuntimeSettings::default();
+        settings.general.enable_cache = true;
+        settings.general.debug_cache = true;
+        settings.general.generate_events = true;
+        settings.general.store_additional_weights_in_event = true;
+        settings.stability.rotation_axis = vec![RotationSetting::Pi2X {}, RotationSetting::Pi2Y {}];
+        settings.stability.levels = vec![
+            StabilityLevelSetting::default_double(),
+            StabilityLevelSetting::default_quad(),
+            StabilityLevelSetting::default_arb(),
+        ];
+        settings.stability.check_on_norm = true;
+        settings.stability.escalate_if_exact_zero = true;
+        settings.stability.loop_momenta_norm_escalation_factor = 2.0;
+        settings.stability.recording = Some(StabilityRecordingSettings {
+            record_rotated_results: true,
+            record_all_stability_levels: true,
+            record_loop_momenta_escalation: true,
+        });
+        let original_subtraction = settings.subtraction.clone();
+
+        apply_minimal_integrand_settings(&mut settings);
+
+        assert!(!settings.general.enable_cache);
+        assert!(!settings.general.debug_cache);
+        assert!(!settings.general.generate_events);
+        assert!(!settings.general.store_additional_weights_in_event);
+        assert!(settings.observables.is_empty());
+        assert!(settings.selectors.values().all(|selector| !selector.active));
+        assert!(settings.stability.rotation_axis.is_empty());
+        assert_eq!(
+            settings.stability.levels,
+            vec![StabilityLevelSetting::default_double()]
+        );
+        assert!(!settings.stability.check_on_norm);
+        assert!(!settings.stability.escalate_if_exact_zero);
+        assert_eq!(settings.stability.loop_momenta_norm_escalation_factor, -1.0);
+        assert_eq!(settings.stability.recording, None);
+        assert_eq!(settings.subtraction, original_subtraction);
+    }
 }

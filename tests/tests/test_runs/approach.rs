@@ -238,7 +238,7 @@ fn plot_fixture(process: &str, kind: &str, scale: f64) -> JsonValue {
                         "orientation_id": 0,
                         "cut_id": event_index,
                         "cut_edges": if kind == "amplitude" { json!([]) } else { json!([1, 2]) },
-                        "lmb_channel_id": event_index,
+                        "sampling_channel_id": event_index,
                         "lmb_sample_id": event_index,
                         "weight": {"re": event_weight.0, "im": event_weight.1},
                         "full_multiplicative_factor": {"re": 2.0, "im": 0.0},
@@ -727,8 +727,8 @@ fn approach_sampling_modes_record_effective_lmb_sample_ids() -> Result<()> {
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "summed"
+sampling_multichanneling = true
+sampling_channels = "summed"
 '"#,
     )?;
     let (group_id, master_graph_name, channel_count) = multichannel_group(&cli)?;
@@ -758,8 +758,8 @@ lmb_channels = "summed"
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "monte_carlo"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
 '"#,
     )?;
     let monte_carlo_result = run_approach_command(
@@ -775,9 +775,9 @@ lmb_channels = "monte_carlo"
         .as_array()
         .unwrap()
         .iter()
-        .find(|event| event["lmb_channel_id"].is_number())
-        .expect("discrete LMB sampling should record an event with lmb_channel_id");
-    assert_eq!(event["lmb_channel_id"], 0);
+        .find(|event| event["sampling_channel_id"].is_number())
+        .expect("discrete LMB sampling should record an event with sampling_channel_id");
+    assert_eq!(event["sampling_channel_id"], 0);
     assert!(
         event["lmb_sample_id"].is_number(),
         "approach JSON should record the effective generated LMB basis id separately from the sampler channel id",
@@ -796,8 +796,8 @@ lmb_channels = "monte_carlo"
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
-lmb_channels = "monte_carlo"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
 lmb_basis_ids = {{ {master_graph_name} = [1, 0] }}
 '"#,
     ))?;

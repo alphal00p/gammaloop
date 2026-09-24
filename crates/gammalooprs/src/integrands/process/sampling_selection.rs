@@ -808,7 +808,13 @@ impl<T: FloatLike> SamplingChannelCompileContext<T> {
                 ));
             }
             let mut score = normalization.clone();
-            for ((momentum, mass), edge) in coordinates.chunks_exact(3).zip(&masses).zip(&edges) {
+            for ((momentum, mass), edge) in coordinates
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .zip(&masses)
+                .zip(&edges)
+            {
                 let energy = momentum
                     .iter()
                     .fold(mass.square(), |sum, value| sum + F(value.clone()).square())
@@ -1585,13 +1591,15 @@ impl<T: FloatLike> SamplingChannelBridgeEvaluation<T> {
         }
 
         let loop_momenta =
-            LoopMomenta::from_iter(self.raw_coordinates.chunks_exact(3).map(|components| {
-                ThreeMomentum::new(
-                    F(components[0].clone()),
-                    F(components[1].clone()),
-                    F(components[2].clone()),
-                )
-            }));
+            LoopMomenta::from_iter(self.raw_coordinates.as_chunks::<3>().0.iter().map(
+                |components| {
+                    ThreeMomentum::new(
+                        F(components[0].clone()),
+                        F(components[1].clone()),
+                        F(components[2].clone()),
+                    )
+                },
+            ));
         MomentumSample::new(
             loop_momenta,
             context.loop_mom_cache_id,

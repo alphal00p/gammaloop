@@ -2171,20 +2171,32 @@ fn stability_check_on_norm_components_with_estimate<T: FloatLike>(
     let component_magnitude = |x: &Complex<F<T>>| match (check_real, check_imag) {
         (true, false) => x.re.abs(),
         (false, true) => x.im.abs(),
-        (true, true) => x.norm_squared().sqrt(),
+        (true, true) => x.re.hypot(&x.im),
         (false, false) => x.re.zero(),
     };
-    let average = results
+    let magnitudes = results.iter().map(component_magnitude).collect_vec();
+    let count = F::<T>::from_f64(results.len() as f64);
+    // Divide before summing so finite near-MAX probes have a finite mean.
+    // A true norm overflow must trigger precision rescue, never a NaN accuracy
+    // whose comparison with the tolerance would silently accept the sample.
+    let average = magnitudes
         .iter()
-        .fold(F::<T>::from_f64(0.0), |acc, x| acc + component_magnitude(x))
-        / F::<T>::from_f64(results.len() as f64);
+        .fold(F::<T>::from_f64(0.0), |acc, x| acc + x / &count);
+    if !average.0.is_finite() || magnitudes.iter().any(|value| !value.0.is_finite()) {
+        return (
+            results[0].clone(),
+            None,
+            false,
+            Some(StabilityFailureReason::ErrorThreshold),
+        );
+    }
 
     // The norm owner returns the primary probe, so bound it as well as the
-    // average. Componentwise L1 magnitudes avoid squaring tiny weighted values.
-    let weighted_magnitude = |result: &Complex<F<T>>| &component_magnitude(result) * &wgt;
+    // average. Scaled component magnitudes avoid squaring tiny weighted values.
+    let weighted_magnitude = |result: &Complex<F<T>>| (component_magnitude(result) * &wgt).abs();
     let weighted_absolute_average = results.iter().fold(average.zero(), |sum, result| {
-        sum + weighted_magnitude(result)
-    }) / F::<T>::from_f64(results.len() as f64);
+        sum + weighted_magnitude(result) / &count
+    });
     let primary_magnitude = weighted_magnitude(&results[0]);
     let minimum_normal = F::<T>::from_f64(f64::MIN_POSITIVE);
     let underflow = weighted_absolute_average.0.is_finite()
@@ -2212,17 +2224,24 @@ fn stability_check_on_norm_components_with_estimate<T: FloatLike>(
                             <= F::<T>::from_f64(stability_settings.ecm_relative_tolerance_for_im)))
         });
 
-    let errors = results
+    let errors = magnitudes
         .iter()
         .map(|res| {
-            let res = component_magnitude(res);
-            if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
+            if IsZero::is_zero(res) && IsZero::is_zero(&average) {
                 (F::<T>::from_f64(0.0), true) // true zero is fishy -> upgrade to next precision
             } else {
-                (((res - average.clone()) / average.clone()).abs(), false)
+                (((res - &average) / &average).abs(), false)
             }
         })
         .collect::<Vec<_>>();
+    if errors.iter().any(|(error, _)| !error.0.is_finite()) {
+        return (
+            results[0].clone(),
+            None,
+            false,
+            Some(StabilityFailureReason::ErrorThreshold),
+        );
+    }
     let estimated_relative_accuracy = errors
         .iter()
         .fold(average.zero(), |max, (error, _)| max.max(error.clone()));
@@ -2291,7 +2310,7 @@ fn stability_check_on_norm_components_with_estimate<T: FloatLike>(
     let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > 0.
         && max_magnitude != max_magnitude.zero()
     {
-        average.abs() * wgt
+        average.abs() * wgt.abs()
             < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
                 * max_magnitude
     } else {
@@ -2335,7 +2354,10 @@ impl<T: FloatLike> PreciseStabilityLevelResult<T> {
             .map(|value| (-value.abs().log10()).into_ff64());
         StabilityResult {
             precision: self.stability_level_used,
-            estimated_relative_accuracy: self.estimated_relative_accuracy.as_ref().map(F::into_ff64),
+            estimated_relative_accuracy: self
+                .estimated_relative_accuracy
+                .as_ref()
+                .map(F::into_ff64),
             estimated_decimal_digits,
             status: if self.sample_count == 0 {
                 StabilityStatus::Unstable(0)
@@ -2487,7 +2509,7 @@ impl LmbMultiChannelingSetup {
         parameterization_settings: &ParameterizationSettings,
         surface_edges: &[Vec<usize>],
     ) -> Result<SamplingChannelCatalogue> {
-        let all_lmbs = self
+        let mut all_lmbs = self
             .all_bases
             .iter_enumerated()
             .map(|(basis_id, basis)| {
@@ -2497,16 +2519,23 @@ impl LmbMultiChannelingSetup {
                 )
             })
             .collect::<Vec<_>>();
-        let optimized_lmbs = parameterization_settings
+        let explicit_basis_ids = parameterization_settings
             .lmb_basis_ids
-            .get(&self.graph.name)
-            .cloned()
-            .unwrap_or_else(|| {
-                self.lmb_basis_ids
-                    .iter()
-                    .map(|basis| usize::from(*basis))
-                    .collect()
-            });
+            .get(&self.graph.name);
+        let optimized_lmbs = if let Some(basis_ids) = explicit_basis_ids {
+            for &basis_id in basis_ids {
+                self.validate_lmb_basis_id(basis_id, &self.graph.name)?;
+            }
+            // Explicit basis selection is exact and ordered. Automatic soft-coverage
+            // augmentation applies only when the user has not selected the bases.
+            all_lmbs = basis_ids.iter().map(|&id| all_lmbs[id].clone()).collect();
+            basis_ids.clone()
+        } else {
+            self.lmb_basis_ids
+                .iter()
+                .map(|basis| usize::from(*basis))
+                .collect()
+        };
         let parent_lmb = self
             .graph
             .loop_momentum_basis
@@ -2526,7 +2555,11 @@ impl LmbMultiChannelingSetup {
             &optimized_lmbs,
             surface_edges,
             &parent_lmb,
-            &massless_edges,
+            if explicit_basis_ids.is_some() {
+                &[]
+            } else {
+                &massless_edges
+            },
         ))
     }
 
@@ -4297,15 +4330,36 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
         // between different channel points must not hide an unstable absolute
         // contribution. Reuse the configured component/norm criterion, without
         // borrowing the signed integral's maximum-weight escalation scale.
+        // Helicity amplitudes acquire a common phase under rotation. Their
+        // cancellation guard therefore uses sum_c |z_c|, while the public
+        // |Re|/|Im| report remains the primary probe's physical components.
+        let check_channel_norm = graph_result.channel_norm_sum.is_some();
         let absolute_results = graph_results
             .iter()
             .map(|result| {
-                result.absolute_integrand_result.clone().ok_or_else(|| {
+                if check_channel_norm {
+                    result.channel_norm_sum.clone().map(Complex::new_re)
+                } else {
+                    result.absolute_integrand_result.clone()
+                }
+                .ok_or_else(|| {
                     eyre!("sampling-channel absolute contribution missing from a rotation")
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        let (absolute_check_real, absolute_check_imag) = (context.check_real, context.check_imag);
+        let (absolute_check_real, absolute_check_imag) = if check_channel_norm {
+            (true, false)
+        } else {
+            (context.check_real, context.check_imag)
+        };
+        let mut absolute_level = *context.stability_level;
+        if check_channel_norm {
+            // Either component can carry the norm after a phase rotation; a
+            // one-component absolute allowance must not relax this monitor.
+            absolute_level.ecm_relative_tolerance_for_re = absolute_level
+                .ecm_relative_tolerance_for_re
+                .min(absolute_level.ecm_relative_tolerance_for_im);
+        }
         let check = if context.check_on_norm {
             stability_check_on_norm_components_with_estimate::<T>
         } else {
@@ -4314,7 +4368,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
         let (absolute, accuracy, stable, _) = check(
             ecm_scale.as_ref(),
             &absolute_results,
-            context.stability_level,
+            &absolute_level,
             Complex::new_re(average_result.re.zero()),
             F::<T>::from_ff64(context.wgt),
             context.is_final_level,
@@ -4324,7 +4378,9 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             context.integral_estimate,
             context.min_abs_wgt_for_escalation,
         );
-        graph_result.absolute_integrand_result = Some(absolute);
+        if !check_channel_norm {
+            graph_result.absolute_integrand_result = Some(absolute);
+        }
         estimated_relative_accuracy = estimated_relative_accuracy
             .into_iter()
             .chain(accuracy)
@@ -4532,6 +4588,13 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
     };
     let mut result = GraphEvaluationResult::zero(zero.clone());
     let mut absolute = Complex::new_re(zero.clone());
+    let mut channel_norm_sum = (matches!(target, EvaluationTarget::Physical(_))
+        && settings.stability.check_on_norm
+        && !matches!(
+            integrand.get_dependent_momenta_constructor(),
+            DependentMomentaConstructor::CrossSection
+        ))
+    .then(|| zero.clone());
     let mut has_sampling_channels = false;
     for (group_index, (group_id, rows)) in gammaloop_sample.groups.iter().enumerate() {
         let mut grouped_events = crate::observables::GenericEventGroup::default();
@@ -4572,9 +4635,22 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
             result.event_groups.push(grouped_events);
         }
         for value in channel_values.into_values() {
+            if let Some(norm) = &mut channel_norm_sum {
+                *norm += value.re.hypot(&value.im);
+            }
             absolute += Complex::new(value.re.abs(), value.im.abs());
         }
     }
+    result.channel_norm_sum = channel_norm_sum.map(|norm| {
+        if has_sampling_channels {
+            norm
+        } else {
+            result
+                .integrand_result
+                .re
+                .hypot(&result.integrand_result.im)
+        }
+    });
     result.absolute_integrand_result = Some(if has_sampling_channels {
         absolute
     } else {
@@ -5310,6 +5386,15 @@ fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
             .recording
             .map(|recording| recording.record_rotated_results)
             .unwrap_or(false);
+        // A fixed-helicity amplitude changes by a global phase under spatial
+        // rotations. Norm stability therefore checks its full complex value,
+        // independently of which component the integrator accumulates.
+        let check_both_components = !matches!(target, EvaluationTarget::Physical(_))
+            || (integrand.get_settings().stability.check_on_norm
+                && !matches!(
+                    integrand.get_dependent_momenta_constructor(),
+                    DependentMomentaConstructor::CrossSection
+                ));
         let mut context = StabilityEvaluationContext {
             target,
             source: &source,
@@ -5326,12 +5411,12 @@ fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
                 Precision::Arb => "ArbPrec",
             },
             escalate_if_exact_zero,
-            check_real: !matches!(target, EvaluationTarget::Physical(_))
+            check_real: check_both_components
                 || !matches!(
                     integrand.get_settings().integrator.integrated_phase,
                     IntegratedPhase::Imag
                 ),
-            check_imag: !matches!(target, EvaluationTarget::Physical(_))
+            check_imag: check_both_components
                 || !matches!(
                     integrand.get_settings().integrator.integrated_phase,
                     IntegratedPhase::Real
@@ -5716,9 +5801,9 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 pub(crate) mod tests {
     use super::{
         GraphTerm, LmbMultiChannelingSetup, RuntimeCache, SamplingChannelCompileContext,
-        SamplingChannelId, create_stability_iterator, filtered_orientation_count, resolve_sampling_channel_selection,
-        resolve_visible_orientation_id, validate_orientation_catalog_group,
-        validate_process_runtime_settings,
+        SamplingChannelId, create_stability_iterator, filtered_orientation_count,
+        resolve_sampling_channel_selection, resolve_visible_orientation_id,
+        validate_orientation_catalog_group, validate_process_runtime_settings,
     };
     use crate::cff::expression::OrientationID;
     use crate::{
@@ -5738,8 +5823,9 @@ pub(crate) mod tests {
             global::OrientationPattern,
             runtime::{
                 DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, HFunctionSettings,
-                MultiChannelingSettings, ParameterizationSettings, SamplingChannelDefinition,
-                SamplingChannelSelection, SamplingSettings, Precision, StabilitySettings,
+                MultiChannelingSettings, ParameterizationSettings, Precision,
+                SamplingChannelDefinition, SamplingChannelSelection, SamplingSettings,
+                StabilitySettings,
             },
         },
         utils::F,
@@ -7154,7 +7240,7 @@ pub(crate) mod tests {
         use crate::{
             integrands::evaluation::{
                 EvaluationResult, GraphEvaluationResult, NumericalStabilityLevel,
-                NumericalStabilityMedian, StabilityResult, StabilityStatus, StatisticsCounter,
+                NumericalStabilityMedian, StatisticsCounter,
             },
             utils::ArbPrec,
         };
@@ -7172,12 +7258,8 @@ pub(crate) mod tests {
                 estimated_relative_accuracy: Some(one.from_usize(10).powi(-exponent)),
                 sample_count: 2,
                 total_time: Duration::ZERO,
-                parameterization_time: Duration::ZERO,
                 parameterization_jacobian: None,
-                integrand_evaluation_time: Duration::ZERO,
-                evaluator_evaluation_time: Duration::ZERO,
                 is_stable: true,
-                instability_reason: None,
                 rotated_results: Vec::new(),
             };
             let mut evaluation = EvaluationResult::zero();
@@ -8112,6 +8194,125 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn complex_norm_stability_retains_finite_extreme_scales() {
+        use spenso::algebra::complex::Complex;
+
+        let level = crate::settings::runtime::StabilityLevelSetting::default_double();
+        for scale in [1e-200, 1.0, 1e200] {
+            let primary = Complex::new_im(F(scale));
+            for (rotated_scale, weight, stable) in [
+                (scale, 1.0, true),
+                (scale, -1.0, true),
+                (2.0 * scale, 1.0, false),
+                (2.0 * scale, -1.0, false),
+            ] {
+                let (result, accuracy, actual_stable, _) = super::stability_check_on_norm(
+                    None,
+                    &[primary, Complex::new_re(F(rotated_scale))],
+                    &level,
+                    Complex::new_zero(),
+                    F(weight),
+                    false,
+                    false,
+                );
+                assert_eq!(result, primary);
+                assert_eq!(actual_stable, stable, "scale={scale}");
+                assert!(accuracy.unwrap().0.is_finite());
+                if !stable {
+                    // A tiny but normal binary64 contribution cannot pass merely
+                    // because squaring its components would underflow to zero.
+                    assert!(accuracy.unwrap().0 > 0.3);
+                }
+            }
+        }
+        for (probes, stable) in [
+            ([Complex::new_re(F(1e308)); 2], true),
+            (
+                [Complex::new_re(F(1e308)), Complex::new_re(F(9e307))],
+                false,
+            ),
+            ([Complex::new(F(f64::MAX), F(f64::MAX)); 2], false),
+        ] {
+            let (_, accuracy, actual_stable, _) = super::stability_check_on_norm(
+                None,
+                &probes,
+                &level,
+                Complex::new_zero(),
+                F(1.0),
+                false,
+                false,
+            );
+            assert_eq!(actual_stable, stable, "probes={probes:?}");
+            assert!(accuracy.is_none_or(|value| value.0.is_finite()));
+        }
+    }
+
+    #[test]
+    fn amplitude_channel_norm_preserves_helicity_phase_covariance() {
+        use spenso::algebra::complex::Complex;
+
+        let level = crate::settings::runtime::StabilityLevelSetting::default_double();
+        let mut signed = Vec::new();
+        let mut absolute = Vec::new();
+        let mut channel_norm = Vec::new();
+        for phase in [
+            Complex::new(F(1.0), F(0.0)),
+            Complex::new(
+                F(std::f64::consts::FRAC_1_SQRT_2),
+                F(std::f64::consts::FRAC_1_SQRT_2),
+            ),
+        ] {
+            // Orthogonal channels have a phase-dependent componentwise absolute
+            // sum: (1, 1) rotates to (sqrt(2), sqrt(2)), although both physical
+            // channel norms and their signed total norm remain unchanged.
+            let channels = [phase, Complex::new_im(F(1.0)) * phase];
+            signed.push(channels[0] + channels[1]);
+            absolute.push(channels.iter().fold(Complex::new_zero(), |sum, value| {
+                sum + Complex::new(value.re.abs(), value.im.abs())
+            }));
+            channel_norm.push(Complex::new_re(
+                channels
+                    .iter()
+                    .fold(F(0.0), |sum, value| sum + value.re.hypot(&value.im)),
+            ));
+        }
+        for (probes, stable) in [(&signed, true), (&channel_norm, true), (&absolute, false)] {
+            assert_eq!(
+                super::stability_check_on_norm(
+                    None,
+                    probes,
+                    &level,
+                    Complex::new_zero(),
+                    F(1.0),
+                    false,
+                    false,
+                )
+                .2,
+                stable
+            );
+        }
+        assert_eq!(absolute[0], Complex::new(F(1.0), F(1.0)));
+        assert_eq!(channel_norm[0], Complex::new_re(F(2.0)));
+
+        // A private norm monitor follows the same real map factor as the
+        // physical result, using its magnitude even for a negative factor.
+        let mut result = super::GraphEvaluationResult::zero(F(0.0));
+        result.integrand_result = signed[0];
+        result.absolute_integrand_result = Some(absolute[0]);
+        result.channel_norm_sum = Some(channel_norm[0].re);
+        result.apply_sampling_factor(F(-3.0));
+        assert_eq!(result.integrand_result, Complex::new(F(-3.0), F(-3.0)));
+        assert_eq!(
+            result.absolute_integrand_result,
+            Some(Complex::new(F(3.0), F(3.0)))
+        );
+        assert_eq!(result.channel_norm_sum, Some(F(6.0)));
+        let other = result.clone();
+        result.merge_in_place(other);
+        assert_eq!(result.channel_norm_sum, Some(F(12.0)));
+    }
+
+    #[test]
     fn absolute_channel_instability_cannot_hide_behind_signed_cancellation() {
         use crate::settings::runtime::StabilityLevelSetting;
         use spenso::algebra::complex::Complex;
@@ -8150,6 +8351,22 @@ pub(crate) mod tests {
                 .2
             );
         }
+        // Equal and opposite channels can keep the signed total exactly zero
+        // while their individual norms change. The private amplitude monitor
+        // must still reject this variation.
+        let channel_norm = [Complex::new_re(F(2.0)), Complex::new_re(F(3.0))];
+        assert!(
+            !super::stability_check_on_norm(
+                None,
+                &channel_norm,
+                &level,
+                Complex::new_zero(),
+                F(1.0),
+                false,
+                false,
+            )
+            .2
+        );
     }
 
     #[test]
@@ -8394,32 +8611,20 @@ pub(crate) mod tests {
             setup
                 .sampling_channel_ids(&setup.graph.name, &override_settings)
                 .unwrap(),
-            vec![
-                SamplingChannelId::from(0),
-                SamplingChannelId::from(1),
-                SamplingChannelId::from(2)
-            ]
+            vec![SamplingChannelId::from(0)]
         );
         // The canonical IDs retain their one-domain ordering while resolving
         // to the generated LMB basis shown in diagnostics.
         assert_eq!(
-            [
-                SamplingChannelId::from(0),
-                SamplingChannelId::from(1),
-                SamplingChannelId::from(2),
-            ]
-            .into_iter()
-            .map(|channel_id| {
-                setup
-                    .sampling_channel_lmb_id(channel_id, &setup.graph.name, &override_settings)
-                    .unwrap()
-            })
-            .collect::<Vec<_>>(),
-            vec![
-                Some(LmbIndex::from(1)),
-                Some(LmbIndex::from(0)),
-                Some(LmbIndex::from(2)),
-            ]
+            [SamplingChannelId::from(0)]
+                .into_iter()
+                .map(|channel_id| {
+                    setup
+                        .sampling_channel_lmb_id(channel_id, &setup.graph.name, &override_settings)
+                        .unwrap()
+                })
+                .collect::<Vec<_>>(),
+            vec![Some(LmbIndex::from(1))]
         );
         assert_eq!(
             setup
@@ -8447,6 +8652,34 @@ pub(crate) mod tests {
                 .selected_lmb_basis_id(&setup.graph.name, &out_of_range_settings)
                 .is_err()
         );
+
+        for preset in ["auto:lmb", "auto:optimized_lmb", "auto:surfaces"] {
+            let mut ordered_settings = ParameterizationSettings {
+                lmb_basis_ids: std::collections::BTreeMap::from([(
+                    setup.graph.name.clone(),
+                    vec![2, 1],
+                )]),
+                ..Default::default()
+            };
+            ordered_settings.sampling_channels.default_channel_selection = vec![preset.into()];
+            let ids = setup
+                .sampling_channel_ids(&setup.graph.name, &ordered_settings)
+                .unwrap();
+            let edges = ids
+                .into_iter()
+                .map(|id| {
+                    setup
+                        .sampling_channel_edge_ids(id, &setup.graph.name, &ordered_settings)
+                        .unwrap()
+                        .to_vec()
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                edges,
+                vec![vec![2], vec![1]],
+                "{preset} must preserve the exact user override"
+            );
+        }
 
         let mut physical_settings = ParameterizationSettings::default();
         let parent_lmb = setup

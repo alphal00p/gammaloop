@@ -104,9 +104,9 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
             graphs = "monte_carlo"
             graph_names = []
             orientations = "summed"
-            lmb_multichanneling = true
-            lmb_channels = "summed"
-            lmb_channel_weight = "ose"
+            sampling_multichanneling = true
+            sampling_channels = "summed"
+            sampling_channel_weight = "ose"
         '"#,
     ))?;
 
@@ -164,9 +164,9 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
         r#"set process -p {LO_PROCESS} -i {LO} kv
             sampling.graphs="summed"
             sampling.orientations="summed"
-            sampling.lmb_multichanneling=true
-            sampling.lmb_channels="summed"
-            sampling.lmb_channel_weight="ose""#,
+            sampling.sampling_multichanneling=true
+            sampling.sampling_channels="summed"
+            sampling.sampling_channel_weight="ose""#,
     ))?;
     let (_, lo_probe) = Inspect {
         process: Some(ProcessRef::Unqualified(LO_PROCESS.to_string())),
@@ -231,9 +231,9 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
             r#"set process -p {process} -i {NLO} kv
                 sampling.graphs="summed"
                 sampling.orientations="summed"
-                sampling.lmb_multichanneling=true
-                sampling.lmb_channels="summed"
-                sampling.lmb_channel_weight="ose""#,
+                sampling.sampling_multichanneling=true
+                sampling.sampling_channels="summed"
+                sampling.sampling_channel_weight="ose""#,
         ))?;
     }
     let phase_process = NLO_PROCESS;
@@ -346,9 +346,9 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
                 sampling.graphs="monte_carlo"
                 sampling.graph_names=["{graph}"]
                 sampling.orientations="summed"
-                sampling.lmb_multichanneling=true
-                sampling.lmb_channels="summed"
-                sampling.lmb_channel_weight="ose"
+                sampling.sampling_multichanneling=true
+                sampling.sampling_channels="summed"
+                sampling.sampling_channel_weight="ose"
                 integrator.integrated_phase="real"
                 integrator.min_samples_for_update=20000
                 integrator.n_start=20000

@@ -388,7 +388,11 @@ impl GaussianReferenceFunction {
         let normalization = (two.clone() * zero.PI()).sqrt().inv() / width;
         let normalization = (0..dimension).fold(zero.one(), |acc, _| acc * &normalization);
         let mut distance_squared = zero.zero();
-        for (momentum, center) in loop_momenta.0.iter().zip(self.center.chunks_exact(3)) {
+        for (momentum, center) in loop_momenta
+            .0
+            .iter()
+            .zip(self.center.as_chunks::<3>().0.iter())
+        {
             let dx = momentum.px.clone() - F::from_f64(center[0]);
             let dy = momentum.py.clone() - F::from_f64(center[1]);
             let dz = momentum.pz.clone() - F::from_f64(center[2]);

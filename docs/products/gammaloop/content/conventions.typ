@@ -73,10 +73,24 @@ For the public sample-evaluation contract, the exact weighting relation is
 
 $ w_"sample" = I_"returned" J_"parameterization" w_"MC". $
 
-`integrand_result` is the returned integrand before the parameterization Jacobian, and
-`integrator_weight` excludes that Jacobian. During integration, GammaLoop first multiplies by
-the parameterization Jacobian and then applies the Monte Carlo sample weight. For a cross
-section, the returned integrand already contains the enabled flux and reporting-unit factor.
+`integrand_result` includes the native map Jacobians and channel partition factors.
+For parameterized samples, the separately reported unapplied
+`parameterization_jacobian` is unity, including when distinct channel points are
+summed. Direct momentum inputs can report `None` instead, meaning no additional
+Jacobian factor. `integrator_weight` is the outer-grid Monte Carlo weight and remains
+separate until integration. For a cross section, the returned integrand also contains
+the enabled flux and reporting-unit factor.
+
+When available, `absolute_integrand_result` sums the componentwise absolute physical
+contributions over the distinct channel points of one outer draw. Its outer-grid
+weight likewise remains separate.
+
+For amplitudes, `stability.check_on_norm` compares the full complex magnitude
+independently of `integrator.integrated_phase`, since helicity phases can rotate
+the real and imaginary components. A private sum of channel-point magnitudes
+also checks stability when signed channels cancel; it does not replace the
+reported componentwise absolute values. Cross-section stability retains the
+selected integration components.
 
 An event group may retain an original contribution, threshold counterterms, and one full
 multiplicative factor. Its implemented reconstruction is
@@ -97,7 +111,7 @@ Python and Rust records.
   [Color sum or average], [Physicist / projector], [The projector or prefactor and its normalization; do not infer a universal automatic average.],
   [Graph multiplicity and signs], [Generated graph factor], [Automorphism, fermion-loop, external-ordering, and grouping contributions visible in the generated state.],
   [Flux and output units], [Runtime when enabled], [Incoming momenta and masses, the selected unit, and whether the flux branch was disabled.],
-  [Parameterization Jacobian], [Integration driver], [The parameterization and whether a reported value is before or after its Jacobian.],
+  [Parameterization Jacobian], [Native sampling map], [Map Jacobians and channel partitions are included in the returned value; parameterized samples report a unit unapplied Jacobian.],
   [Monte Carlo weight], [Integrator], [The sample weight, seed, component, and correlation boundary.],
   [Subtraction contributions], [Correlated event group], [Original and counterterm weights, signs, and the common multiplicative factor.],
   [Overall physical normalization], [Calculation definition], [Any remaining coupling, projector, color, symmetry, phase-space, or conventional factor used for comparison.],

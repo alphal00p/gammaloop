@@ -890,7 +890,7 @@ impl Esurface {
                 (0..lmb.loop_edges.len())
                     .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
             );
-            for (&index, point) in complement.iter().zip(context.chunks_exact(3)) {
+            for (&index, point) in complement.iter().zip(context.as_chunks::<3>().0.iter()) {
                 loops[index] = ThreeMomentum::new(
                     F(point[0].clone()),
                     F(point[1].clone()),
@@ -960,13 +960,14 @@ impl Esurface {
         );
         let evaluator = std::sync::Arc::new(move |direction: &[T], radius: T| {
             let radius = F(radius);
-            let unit_loops = LoopMomenta::from_iter(direction.chunks_exact(3).map(|components| {
-                ThreeMomentum::new(
-                    F(components[0].clone()),
-                    F(components[1].clone()),
-                    F(components[2].clone()),
-                )
-            }));
+            let unit_loops =
+                LoopMomenta::from_iter(direction.as_chunks::<3>().0.iter().map(|components| {
+                    ThreeMomentum::new(
+                        F(components[0].clone()),
+                        F(components[1].clone()),
+                        F(components[2].clone()),
+                    )
+                }));
             let (value, derivative) = surface.compute_self_and_r_derivative(
                 &radius,
                 &unit_loops,
@@ -1135,7 +1136,9 @@ impl Esurface {
                             .map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
                     );
                     let mut velocity = loops.clone();
-                    for (&index, components) in complement.iter().zip(context.chunks_exact(3)) {
+                    for (&index, components) in
+                        complement.iter().zip(context.as_chunks::<3>().0.iter())
+                    {
                         loops[index] = ThreeMomentum::new(
                             F(components[0].clone()),
                             F(components[1].clone()),
@@ -1144,8 +1147,8 @@ impl Esurface {
                     }
                     for ((&index, components), unit) in active
                         .iter()
-                        .zip(center.chunks_exact(3))
-                        .zip(direction.chunks_exact(3))
+                        .zip(center.as_chunks::<3>().0.iter())
+                        .zip(direction.as_chunks::<3>().0.iter())
                     {
                         loops[index] = ThreeMomentum::new(
                             F(components[0].clone()),
@@ -1187,7 +1190,7 @@ impl Esurface {
             let mut center = LoopMomenta::from_iter(
                 (0..n_loops).map(|_| ThreeMomentum::new(zero.clone(), zero.clone(), zero.clone())),
             );
-            for (&index, components) in complement.iter().zip(context.chunks_exact(3)) {
+            for (&index, components) in complement.iter().zip(context.as_chunks::<3>().0.iter()) {
                 center[index] = ThreeMomentum::new(
                     F(components[0].clone()),
                     F(components[1].clone()),
@@ -3922,7 +3925,9 @@ mod tests {
         assert_eq!(externals.len(), lmb.ext_edges.len());
         let momentum = LoopMomenta::from_iter(
             point
-                .chunks_exact(3)
+                .as_chunks::<3>()
+                .0
+                .iter()
                 .map(|v| ThreeMomentum::new(v[0].clone(), v[1].clone(), v[2].clone())),
         );
         let center = LoopMomenta::from_iter(
@@ -4181,7 +4186,9 @@ mod tests {
         let direction = point.iter().map(|x| x / &radius).collect_vec();
         let velocity = LoopMomenta::from_iter(
             direction
-                .chunks_exact(3)
+                .as_chunks::<3>()
+                .0
+                .iter()
                 .map(|v| ThreeMomentum::new(v[0].clone(), v[1].clone(), v[2].clone())),
         );
         let original = |r: &F<ArbPrec>| {

@@ -1516,7 +1516,9 @@ impl GraphTerm for AmplitudeGraphTerm {
                                 native_zero.clone(),
                             )
                         }));
-                        for (&index, point) in prior_indices.iter().zip(previous.chunks_exact(3)) {
+                        for (&index, point) in
+                            prior_indices.iter().zip(previous.as_chunks::<3>().0.iter())
+                        {
                             loops[index] = ThreeMomentum::new(
                                 F(point[0].clone()),
                                 F(point[1].clone()),
@@ -1833,6 +1835,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         )?;
         if !prepared_event.selectors_pass {
             return Ok(GraphEvaluationResult {
+                channel_norm_sum: None,
                 reference_moments: None,
                 absolute_integrand_result: None,
                 integrand_result: Complex::new_re(momentum_sample.zero()),
@@ -1902,6 +1905,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         }
 
         Ok(GraphEvaluationResult {
+            channel_norm_sum: None,
             reference_moments: None,
             absolute_integrand_result: None,
             integrand_result,
@@ -3545,7 +3549,9 @@ parent_lmb = [4]
             let loops = LoopMomenta::from_iter(
                 forward
                     .raw_coordinates
-                    .chunks_exact(3)
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
                     .map(|p| ThreeMomentum::new(F(p[0]), F(p[1]), F(p[2]))),
             );
             let externals = settings
@@ -4599,7 +4605,9 @@ parent_lmb = [4,6]
                 let mut raw_input = MomentumSpaceEvaluationInput {
                     loop_momenta: mapped
                         .raw_coordinates
-                        .chunks_exact(3)
+                        .as_chunks::<3>()
+                        .0
+                        .iter()
                         .map(|p| ThreeMomentum::new(F(p[0]), F(p[1]), F(p[2])))
                         .collect(),
                     integrator_weight: F(1.0),
@@ -5060,9 +5068,10 @@ parent_lmb = [4,6]
                     .0;
                 assert!(origin_value > zero);
                 if existing {
-                    let center = LoopMomenta::from_iter(center.chunks_exact(3).map(|p| {
-                        ThreeMomentum::new(F(p[0].clone()), F(p[1].clone()), F(p[2].clone()))
-                    }));
+                    let center =
+                        LoopMomenta::from_iter(center.as_chunks::<3>().0.iter().map(|p| {
+                            ThreeMomentum::new(F(p[0].clone()), F(p[1].clone()), F(p[2].clone()))
+                        }));
                     let value = surface
                         .compute_self_and_r_derivative(
                             &zero,

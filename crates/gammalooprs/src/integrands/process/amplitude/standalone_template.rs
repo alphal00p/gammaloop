@@ -27,7 +27,7 @@ use symbolica::{
     domains::rational::Fraction, evaluate::JITCompiledEvaluator, prelude::*, state::StateMap,
 };
 
-const STANDALONE_EVALUATORS_VERSION: u32 = 9;
+const STANDALONE_EVALUATORS_VERSION: u32 = 10;
 const ARB_PRECISION_BITS: u32 = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]

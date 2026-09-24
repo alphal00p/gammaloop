@@ -525,7 +525,10 @@ fn additional_event_weights_roundtrip_preserves_all_keys_and_values() -> Result<
     .into_iter()
     .collect();
     for weights in [BTreeMap::new(), weights] {
-        let original = gammalooprs::observables::GenericAdditionalWeightInfo::<f64> { weights };
+        let original = gammalooprs::observables::GenericAdditionalWeightInfo::<f64> {
+            weights,
+            ..Default::default()
+        };
         let json = serde_json::to_vec(&original)?;
         let restored: gammalooprs::observables::GenericAdditionalWeightInfo<f64> =
             serde_json::from_slice(&json)?;
@@ -567,24 +570,18 @@ fn graph_evaluation_result_merges_native_groups() {
         [(AdditionalWeightKey::Original, (2.0, -1.0))],
     );
 
-    let mut lhs = GraphEvaluationResult {
-        integrand_result: Complex::new(F::<f128>::from_f64(1.0), F::<f128>::from_f64(2.0)),
-        reference_moments: None,
-        absolute_integrand_result: None,
-        event_groups: GenericEventGroupList::<f128>::from_f64(&singleton_groups(first_event)),
-        event_processing_time: Duration::from_millis(5),
-        generated_event_count: 1,
-        accepted_event_count: 1,
-    };
-    let rhs = GraphEvaluationResult {
-        integrand_result: Complex::new(F::<f128>::from_f64(3.0), F::<f128>::from_f64(-4.0)),
-        reference_moments: None,
-        absolute_integrand_result: None,
-        event_groups: GenericEventGroupList::<f128>::from_f64(&singleton_groups(second_event)),
-        event_processing_time: Duration::from_millis(7),
-        generated_event_count: 2,
-        accepted_event_count: 1,
-    };
+    let mut lhs = GraphEvaluationResult::zero(F::<f128>::from_f64(0.0));
+    lhs.integrand_result = Complex::new(F::<f128>::from_f64(1.0), F::<f128>::from_f64(2.0));
+    lhs.event_groups = GenericEventGroupList::<f128>::from_f64(&singleton_groups(first_event));
+    lhs.event_processing_time = Duration::from_millis(5);
+    lhs.generated_event_count = 1;
+    lhs.accepted_event_count = 1;
+    let mut rhs = GraphEvaluationResult::zero(F::<f128>::from_f64(0.0));
+    rhs.integrand_result = Complex::new(F::<f128>::from_f64(3.0), F::<f128>::from_f64(-4.0));
+    rhs.event_groups = GenericEventGroupList::<f128>::from_f64(&singleton_groups(second_event));
+    rhs.event_processing_time = Duration::from_millis(7);
+    rhs.generated_event_count = 2;
+    rhs.accepted_event_count = 1;
 
     lhs.merge_in_place(rhs);
     let merged = lhs;

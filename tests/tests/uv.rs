@@ -73,7 +73,7 @@ const SUNRISE_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
         n_start: 50_000,
         n_increase: 0,
         n_max: 1_000_000,
-        n_cores: 1,
+        n_cores: 10,
     };
 
 const EPEM_A_BBX_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
@@ -2032,6 +2032,72 @@ fn epem_a_bbx_amp_uv() {
         integrated_ct_relative_error_limit: None,
         check_mu_r_dependence: true,
     });
+}
+
+#[test]
+fn helicity_amplitude_norm_stability_uses_both_components() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("uv/epem_a_bbx_amp.toml".into()),
+        get_tests_workspace_path().join("helicity_amplitude_norm_stability"),
+        None,
+        true,
+    )?;
+    cli.run_command("run generate")?;
+    cli.run_command("set process kv general.m_uv=0.2 general.mu_r=0.2 general.renormalization_localization_scale=0.2")?;
+    let points = Array2::from_shape_vec((1, 3), vec![0.31, 0.47, 0.63])?;
+    let discrete_dims = Array2::from_shape_vec((1, 2), vec![0, 0])?;
+    for multichanneling in [false, true] {
+        cli.run_command(&format!(
+            "set process kv sampling.sampling_multichanneling={multichanneling}"
+        ))?;
+        let mut primary_value: Option<Complex<F<f64>>> = None;
+        for phase in ["real", "both", "imag"] {
+            cli.run_command(&format!(
+                "set process kv integrator.integrated_phase={phase}"
+            ))?;
+            let result = evaluate_sample(
+                &mut cli.state,
+                &EvaluateSamples {
+                    process_id: Some(0),
+                    integrand_name: Some("epem_a_bbx".into()),
+                    use_arb_prec: false,
+                    minimal_output: false,
+                    return_generated_events: Some(false),
+                    momentum_space: false,
+                    points: points.view(),
+                    integrator_weights: None,
+                    discrete_dims: Some(discrete_dims.view()),
+                    graph_names: None,
+                    orientations: None,
+                },
+            )?;
+            let evaluation = result.sample.evaluation;
+            let levels = &evaluation.evaluation_metadata.unwrap().stability_results;
+            // The returned primary point is independent of the component selected
+            // for integration. The complex norm is invariant under helicity phases.
+            if let Some(primary) = &primary_value {
+                assert!((evaluation.integrand_result - *primary).norm_squared().0 < 1e-30);
+            } else {
+                primary_value = Some(evaluation.integrand_result);
+            }
+            assert_eq!(
+                levels.len(),
+                1,
+                "the complex norm needs no precision rescue"
+            );
+            assert_eq!(
+                levels[0].precision,
+                gammalooprs::settings::runtime::Precision::Double
+            );
+            assert!(matches!(
+                levels[0].status,
+                gammalooprs::integrands::evaluation::StabilityStatus::Stable(2)
+            ));
+            assert!(levels[0].estimated_relative_accuracy.unwrap().0 < 1e-12);
+        }
+    }
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }
 
 const AA_AA_2L_UV_RICH_INSPECT: GraphUvRichInspectCase = GraphUvRichInspectCase {

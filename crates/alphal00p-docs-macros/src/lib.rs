@@ -430,6 +430,14 @@ fn external_type_descriptor(
                 let variants = item
                     .variants
                     .iter_mut()
+                    .filter(|variant| {
+                        !variant.attrs.iter().any(|attribute| {
+                            attribute.path().is_ident("cfg")
+                                && attribute
+                                    .parse_args::<syn::Path>()
+                                    .is_ok_and(|path| path.is_ident("test"))
+                        })
+                    })
                     .map(|variant| {
                         let name = variant.ident.to_string();
                         let docs = prepare_member_docs(&mut variant.attrs, arguments, &format);
@@ -1139,6 +1147,14 @@ pub fn ty(arguments: TokenStream, input: TokenStream) -> TokenStream {
         let variants = item
             .variants
             .iter_mut()
+            .filter(|variant| {
+                !variant.attrs.iter().any(|attribute| {
+                    attribute.path().is_ident("cfg")
+                        && attribute
+                            .parse_args::<syn::Path>()
+                            .is_ok_and(|path| path.is_ident("test"))
+                })
+            })
             .map(|variant| {
                 let name = variant.ident.to_string();
                 let docs = prepare_member_docs(&mut variant.attrs, &arguments, &format);
@@ -1788,6 +1804,37 @@ mod tests {
         );
         assert_eq!(fields.len(), 1);
         assert!(fields[0].to_string().contains("inherited_public_field"));
+    }
+
+    #[test]
+    fn external_enum_members_exclude_test_only_variants() {
+        let source = r#"
+            pub enum Mode {
+                /// Always part of the public surface.
+                Production,
+                #[cfg(test)]
+                /// Available only to unit tests.
+                TestProbe,
+                #[cfg(not(test))]
+                /// Other conditional variants retain their source metadata.
+                MainOnly,
+            }
+        "#;
+        let parsed = syn::parse_file(source).unwrap();
+        let descriptor = super::external_type_descriptor(
+            &CommonArgs::default(),
+            &parsed.items,
+            source,
+            "fixture.rs",
+            "fixture::Mode",
+            "Mode",
+            &parse_quote!(mode_marker),
+        )
+        .unwrap()
+        .to_string();
+        assert!(descriptor.contains("Production"));
+        assert!(descriptor.contains("MainOnly"));
+        assert!(!descriptor.contains("TestProbe"));
     }
 
     #[test]

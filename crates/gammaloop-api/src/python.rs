@@ -893,10 +893,14 @@ pub struct PyIntegrandGraphInfo {
     pub name: String,
     /// Whether this graph is the representative graph of its group.
     pub is_master: bool,
+    /// Threshold directives requested for this graph, including implicit defaults.
     pub threshold_counterterm_directives: Vec<PyThresholdCountertermDirectiveInfo>,
+    /// Resolved graph-local threshold registry, when generated metadata is available.
     pub threshold_counterterms: Option<PyThresholdCountertermMetadataRegistry>,
 }
 
+/// Requested threshold variant, selected edges, and optional multiplier before generation.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ThresholdCountertermDirective", get_all)]
 #[derive(Clone)]
 pub struct PyThresholdCountertermDirectiveInfo {
@@ -910,6 +914,8 @@ pub struct PyThresholdCountertermDirectiveInfo {
     pub multiplier: Option<PyThresholdCountertermMultiplierMetadata>,
 }
 
+/// Association of a threshold surface with an eligible physical cut and its origin.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "ThresholdCountertermAssociationMetadata",
@@ -925,6 +931,8 @@ pub struct PyThresholdCountertermAssociationMetadata {
     pub origin: String,
 }
 
+/// Symbolic multiplier expression and its function definitions and derivative policy.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "ThresholdCountertermMultiplierMetadata",
@@ -938,6 +946,8 @@ pub struct PyThresholdCountertermMultiplierMetadata {
     pub opaque_derivatives: bool,
 }
 
+/// Requested and resolved subspaces, associations, and activation of one threshold variant.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ThresholdCountertermVariantMetadata", get_all)]
 #[derive(Clone)]
 pub struct PyThresholdCountertermVariantMetadata {
@@ -958,6 +968,8 @@ pub struct PyThresholdCountertermVariantMetadata {
     pub active: bool,
 }
 
+/// Compiled threshold expression and the variants sharing its graph-local evaluator.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "ThresholdCountertermEvaluatorMetadata",
@@ -972,6 +984,8 @@ pub struct PyThresholdCountertermEvaluatorMetadata {
     pub variant_ids: Vec<usize>,
 }
 
+/// Signed threshold component with its contributing variants and evaluator references.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "ThresholdCountertermComponentMetadata",
@@ -987,6 +1001,8 @@ pub struct PyThresholdCountertermComponentMetadata {
     pub sign: i8,
 }
 
+/// Graph-local threshold variants, compiled evaluators, and addable components.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ThresholdCountertermMetadataRegistry", get_all)]
 #[derive(Clone)]
 pub struct PyThresholdCountertermMetadataRegistry {
@@ -1151,9 +1167,12 @@ pub struct PyEvent {
     pub weight: PyComplexValue,
     /// Named auxiliary complex weights such as threshold-counterterm contributions.
     pub additional_weights: Vec<PyAdditionalWeight>,
+    /// Addable threshold decomposition with physical occurrence metadata, when retained.
     pub threshold_counterterms: Option<PyThresholdCountertermEventInfo>,
 }
 
+/// Physical amplitude or local-unitarity occurrence of a threshold component.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
     name = "ThresholdCountertermComponentOccurrence",
@@ -1169,6 +1188,8 @@ pub struct PyThresholdCountertermComponentOccurrence {
     pub lu_cut_order: Option<usize>,
 }
 
+/// Fully normalized threshold weight and its optional evaluation before the user multiplier.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ThresholdCountertermComponentWeight", get_all)]
 #[derive(Clone)]
 pub struct PyThresholdCountertermComponentWeight {
@@ -1181,6 +1202,8 @@ pub struct PyThresholdCountertermComponentWeight {
     pub evaluation_skipped: bool,
 }
 
+/// Original event contribution and the addable threshold-component decomposition.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "ThresholdCountertermEventInfo", get_all)]
 #[derive(Clone)]
 pub struct PyThresholdCountertermEventInfo {
@@ -1666,6 +1689,8 @@ pub struct PyComponentDiscreteBreakdown {
     pub im: Option<PyDiscreteBreakdown>,
 }
 
+/// Componentwise absolute estimates, maxima, and discrete breakdown for an integration slot.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "AbsoluteIntegrationResult", get_all)]
 #[derive(Clone)]
 pub struct PyAbsoluteIntegrationResult {
@@ -1689,6 +1714,7 @@ pub struct PySlotIntegrationResult {
     pub integration_statistics: PyIntegrationStatisticsSnapshot,
     pub max_weight_info: Vec<PyMaxWeightInfoEntry>,
     pub grid_breakdown: PyComponentDiscreteBreakdown,
+    /// Estimates of componentwise absolute physical contributions.
     pub absolute: PyAbsoluteIntegrationResult,
 }
 
@@ -1820,7 +1846,7 @@ pub struct PySampleEvaluationResult {
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySampleEvaluationResult {
-    /// Complex integrand value before applying the parameterization Jacobian.
+    /// Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
     #[getter]
     fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
         PyComplex::from_doubles(
@@ -1830,7 +1856,7 @@ impl PySampleEvaluationResult {
         )
     }
 
-    /// Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
+    /// Componentwise absolute physical contributions summed over channel points, before the outer-grid weight.
     #[getter]
     fn absolute_integrand_result<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyComplex>> {
         self.inner
@@ -1839,6 +1865,7 @@ impl PySampleEvaluationResult {
             .map(|value| PyComplex::from_doubles(py, value.re.0, value.im.0))
     }
 
+    /// Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
     #[getter]
     fn integrator_weight(&self) -> f64 {
         self.inner.evaluation.integrator_weight.0
@@ -1961,18 +1988,19 @@ impl PyEvaluationResult {
         }
     }
 
-    /// Complex integrand value before applying the parameterization Jacobian.
+    /// Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight.
     #[getter]
     fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
         self.sample().integrand_result(py)
     }
 
-    /// Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
+    /// Componentwise absolute physical contributions summed over channel points, before the outer-grid weight.
     #[getter]
     fn absolute_integrand_result<'py>(&self, py: Python<'py>) -> Option<Bound<'py, PyComplex>> {
         self.sample().absolute_integrand_result(py)
     }
 
+    /// Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
     #[getter]
     fn integrator_weight(&self) -> f64 {
         self.inner.sample.evaluation.integrator_weight.0
