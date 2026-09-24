@@ -52,7 +52,8 @@ button[aria-pressed=true] { outline:2px solid var(--blue); outline-offset:-2px; 
 .panels.single { grid-template-columns:minmax(0,1fr); }
 .panel { min-width:0; }
 .panel-heading { font-weight:500; margin-bottom:8px; }
-.grid { display:grid; gap:4px; align-items:center; }
+/* Auto rows can retain oversized hidden-frame measurements in WebKit. */
+.grid { display:grid; grid-auto-rows:max-content; gap:4px; align-items:center; }
 .grid .index { text-align:center; color:var(--muted); font-size:12px; }
 .tile { min-width:0; overflow-wrap:anywhere; font-size:12px; min-height:32px; }
 .tile.missing { background:repeating-linear-gradient(135deg,transparent,transparent 5px,var(--panel) 5px,var(--panel) 10px); }
