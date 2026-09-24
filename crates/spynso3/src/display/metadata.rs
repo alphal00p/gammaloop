@@ -34,7 +34,7 @@ pub(crate) fn representation_name(name: &SpensoRepresentationName) -> String {
     )
 }
 
-fn metric(rep: Representation<LibraryRep>) -> String {
+pub(super) fn metric(rep: Representation<LibraryRep>) -> String {
     let name = SpensoRepresentationName { rep: rep.rep };
     if !rep.rep.is_self_dual() {
         return "dual pairing".into();

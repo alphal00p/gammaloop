@@ -1,7 +1,9 @@
 """Linnest renders executable networks without evaluating their source formula."""
 
+import json
 import re
 import unittest
+import xml.etree.ElementTree as ET
 
 import linnet
 from symbolica import E
@@ -15,6 +17,52 @@ from symbolica.community.spenso import (
 
 
 class NetworkDisplayTests(unittest.TestCase):
+    def test_registered_names_and_typed_inspection(self):
+        spinor = Representation.bis(4)
+        jbar = TensorName("network_details::Jbar", print={"typst": "macron(J)"})(spinor)
+        gamma = TensorExpression.gamma(4)
+        network = (jbar(1) * gamma(1, 2, 1)).to_network()
+        self.assertIn("macron(J)", network.to_linnest())
+        root = ET.fromstring(network.render())
+        details = [
+            json.loads(node.attrib["data-linnet-detail"])
+            for node in root.iter()
+            if "data-linnet-detail" in node.attrib
+        ]
+        titles = {detail.get("title") for detail in details}
+        self.assertTrue(
+            {
+                "Product",
+                "Stored tensor",
+                "Library tensor",
+                "Tensor contraction",
+                "Free tensor slot",
+                "Expression dependency",
+                "Network output",
+            }
+            <= titles
+        )
+        tensor = next(
+            detail
+            for detail in details
+            if dict(detail.get("properties", [])).get("Tensor name")
+            == "network_details::Jbar"
+        )
+        properties = dict(tensor["properties"])
+        self.assertEqual(properties["Rank"], "1")
+        self.assertEqual(properties["Components"], "Symbolic")
+        self.assertIn("Rank: 1", tensor["summary"])
+        contraction = next(
+            detail for detail in details if detail.get("title") == "Tensor contraction"
+        )
+        self.assertEqual(dict(contraction["properties"])["Dimension"], "4")
+        self.assertTrue(
+            any(
+                "Stored tensor" in (node.text or "")
+                for node in root.iter("{http://www.w3.org/2000/svg}title")
+            )
+        )
+
     def test_brackets_protect_open_occurrences_and_disappear_after_indexing(self):
         rep = Representation.mink(4)
         p = TensorName("bracket_slots::p")(rep)

@@ -129,7 +129,8 @@
       dismiss.addEventListener('click', close);
       const header = html('div');
       header.className = 'linnet-inspector-header';
-      const title = `${kind === 'node' ? 'Node' : kind === 'halfedge' ? 'Half-edge' : 'Edge'} ${id}${detail.name ? ` · ${detail.name}` : ''}`;
+      const identity = `${kind === 'node' ? 'Node' : kind === 'halfedge' ? 'Half-edge' : 'Edge'} ${id}`;
+      const title = detail.title ? `${detail.title} · ${identity}` : `${identity}${detail.name ? ` · ${detail.name}` : ''}`;
       header.append(html('strong', title), dismiss);
       content.append(header);
       const details = html('div');
@@ -159,6 +160,14 @@
         if (detail.edges) details.append(html('span', `Edges: ${detail.edges.join(', ') || 'none'}`));
       }
       content.append(details);
+      if (Array.isArray(detail.properties) && detail.properties.length) {
+        const properties = html('dl');
+        properties.className = 'linnet-inspector-properties';
+        for (const [label, value] of detail.properties) {
+          properties.append(html('dt', String(label)), html('dd', String(value)));
+        }
+        content.append(properties);
+      }
       if (selected[kind].has(id)) {
         const current = selection();
         const construction = html('div');

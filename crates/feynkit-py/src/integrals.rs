@@ -55,6 +55,10 @@ impl PyIntegralFamily {
     /// Use ``diagram.propagator_family()`` to extract dependent propagators for
     /// partial fractioning before completing the resulting families.
     ///
+    /// Examples
+    /// --------
+    /// >>> family = fk.IntegralFamily.from_diagram(diagram)
+    ///
     /// Parameters
     /// ----------
     /// diagram : FeynmanDiagram

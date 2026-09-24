@@ -8,6 +8,7 @@ use std::{
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use symbolica::{
     atom::{Atom, AtomCore},
+    domains::rational::Rational,
     id::Replacement,
     parser::ParseSettings,
     printer::PrintOptions,
@@ -20,6 +21,7 @@ use crate::{
 };
 
 mod builtins;
+mod quantum_number;
 
 const fn default_true() -> bool {
     true
@@ -74,10 +76,16 @@ pub(crate) struct ParticleDefinition {
     pub width: String,
     pub texname: String,
     pub antitexname: String,
-    pub charge: f64,
+    #[serde(with = "quantum_number")]
+    pub charge: Rational,
     pub ghost_number: i64,
     pub lepton_number: i64,
-    pub y_charge: i64,
+    /// Hypercharge in Q = T3 + Y/2; the left-handed component for fermions.
+    #[serde(default, with = "quantum_number::optional")]
+    pub y_charge: Option<Rational>,
+    /// Right-handed fermion hypercharge. None means absent or unspecified.
+    #[serde(default, with = "quantum_number::optional")]
+    pub y_charge_right: Option<Rational>,
     #[serde(default = "default_true")]
     pub propagating: bool,
     #[serde(
@@ -282,10 +290,13 @@ pub struct Particle {
     pub width: ParameterId,
     pub texname: String,
     pub antitexname: String,
-    pub charge: f64,
+    pub charge: Rational,
     pub ghost_number: i64,
     pub lepton_number: i64,
-    pub y_charge: i64,
+    /// Hypercharge in Q = T3 + Y/2; the left-handed component for fermions.
+    pub y_charge: Option<Rational>,
+    /// Right-handed fermion hypercharge. None means absent or unspecified.
+    pub y_charge_right: Option<Rational>,
     pub propagating: bool,
     pub goldstone: bool,
     pub propagator: Option<PropagatorId>,
@@ -294,10 +305,27 @@ pub struct Particle {
 impl Particle {
     /// Symbolic UFO mass parameter, without substituting its numerical value.
     pub fn symbolic_mass(&self, model: &Model) -> Atom {
-        Atom::var(symbol!(&format!(
-            "UFO::{}",
-            model.parameter_by_id(self.mass).unwrap().name
-        )))
+        let mass = model.parameter_by_id(self.mass).unwrap();
+        if mass.name == "ZERO" {
+            Atom::num(0)
+        } else {
+            Atom::var(symbol!(&format!("UFO::{}", mass.name)))
+        }
+    }
+
+    /// Third weak-isospin component, derived in the convention Q = T3 + Y/2.
+    /// For fermions this is the left-handed component; missing metadata stays None.
+    pub fn weak_isospin(&self) -> Option<Rational> {
+        self.y_charge
+            .as_ref()
+            .map(|y| self.charge.clone() - y.clone() / Rational::from(2))
+    }
+
+    /// Third weak-isospin component of the right-handed fermion.
+    pub fn weak_isospin_right(&self) -> Option<Rational> {
+        self.y_charge_right
+            .as_ref()
+            .map(|y| self.charge.clone() - y.clone() / Rational::from(2))
     }
 
     /// Whether the model declares this particle's mass to be zero.
@@ -321,7 +349,7 @@ impl Particle {
         } else {
             "massive"
         };
-        let color = if self.charge.abs() > 0.0 {
+        let color = if !self.charge.is_zero() {
             "palette.accent"
         } else {
             "palette.ink"
@@ -333,9 +361,9 @@ impl Particle {
                 format!("source-stroke(c: {color}, thickness: {thickness}, dash: dotted)"),
                 format!("sink-stroke(c: {color}, thickness: {thickness}, dash: dotted)"),
             )
-        } else if self.is_vector() && self.charge == 0.0 && self.color == 1 {
+        } else if self.is_vector() && self.charge.is_zero() && self.color == 1 {
             (format!("{source} + wave"), format!("{sink} + wave"))
-        } else if self.is_vector() && self.charge == 0.0 && self.color == 8 {
+        } else if self.is_vector() && self.charge.is_zero() && self.color == 8 {
             (format!("{source} + coil"), format!("{sink} + coil"))
         } else if self.is_vector() {
             (format!("{source} + zigzag"), format!("{sink} + zigzag"))
@@ -594,10 +622,11 @@ impl Model {
                 width: indexes.parameters[&particle.width],
                 texname: particle.texname.clone(),
                 antitexname: particle.antitexname.clone(),
-                charge: particle.charge,
+                charge: particle.charge.clone(),
                 ghost_number: particle.ghost_number,
                 lepton_number: particle.lepton_number,
-                y_charge: particle.y_charge,
+                y_charge: particle.y_charge.clone(),
+                y_charge_right: particle.y_charge_right.clone(),
                 propagating: particle.propagating,
                 goldstone: particle.goldstone,
                 propagator: particle
@@ -934,10 +963,11 @@ impl Model {
                     width: self.parameters[particle.width.index()].name.clone(),
                     texname: particle.texname.clone(),
                     antitexname: particle.antitexname.clone(),
-                    charge: particle.charge,
+                    charge: particle.charge.clone(),
                     ghost_number: particle.ghost_number,
                     lepton_number: particle.lepton_number,
-                    y_charge: particle.y_charge,
+                    y_charge: particle.y_charge.clone(),
+                    y_charge_right: particle.y_charge_right.clone(),
                     propagating: particle.propagating,
                     goldstone: particle.goldstone,
                     propagator: particle

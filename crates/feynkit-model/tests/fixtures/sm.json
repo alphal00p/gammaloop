@@ -1,4 +1,9 @@
 {
+  "covariant_cut_multiplets": {
+    "23": [23, 250, 9000002, -9000002],
+    "24": [24, 251, 9000003, -9000004],
+    "-24": [-24, -251, 9000004, -9000003]
+  },
   "couplings": [{
     "expression": "-1𝑖/3*UFO::{}::ee",
     "name": "GC_1",
@@ -771,15 +776,15 @@
   }, {
     "name": "FFS1",
     "spins": [2, 2, 1],
-    "structure": "UFO::{}::ProjM(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
+    "structure": "1/2*UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+1/2*UFO::{}::Gamma5(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFS2",
     "spins": [2, 2, 1],
-    "structure": "-1*UFO::{}::ProjP(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::ProjM(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
+    "structure": "UFO::{}::Gamma5(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFS3",
     "spins": [2, 2, 1],
-    "structure": "UFO::{}::ProjP(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
+    "structure": "1/2*UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+-1/2*UFO::{}::Gamma5(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFS4",
     "spins": [2, 2, 1],
@@ -791,19 +796,19 @@
   }, {
     "name": "FFV2",
     "spins": [2, 2, 3],
-    "structure": "UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjM(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
+    "structure": "1/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::idx(1,2))+-1/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::Gamma5(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFV3",
     "spins": [2, 2, 3],
-    "structure": "-2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjP(UFO::{}::dummy(1),UFO::{}::idx(1,2))+UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjM(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
+    "structure": "-1/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::idx(1,2))+-3/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::Gamma5(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFV4",
     "spins": [2, 2, 3],
-    "structure": "2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjP(UFO::{}::dummy(1),UFO::{}::idx(1,2))+UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjM(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
+    "structure": "3/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::idx(1,2))+1/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::Gamma5(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
   }, {
     "name": "FFV5",
     "spins": [2, 2, 3],
-    "structure": "4*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjP(UFO::{}::dummy(1),UFO::{}::idx(1,2))+UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjM(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
+    "structure": "5/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::idx(1,2))+3/2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::Gamma5(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
   }, {
     "name": "VSS1",
     "spins": [3, 1, 1],
@@ -1435,7 +1440,7 @@
   "particles": [{
     "antiname": "a",
     "antitexname": "{\\gamma}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1445,11 +1450,11 @@
     "spin": 3,
     "texname": "{\\gamma}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "Z",
     "antitexname": "{Z}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1459,11 +1464,11 @@
     "spin": 3,
     "texname": "{Z}",
     "width": "WZ",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "W-",
     "antitexname": "{W^-}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1473,11 +1478,11 @@
     "spin": 3,
     "texname": "{W^+}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "W+",
     "antitexname": "{W^+}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1487,11 +1492,11 @@
     "spin": 3,
     "texname": "{W^-}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "g",
     "antitexname": "{g}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 8,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1501,11 +1506,11 @@
     "spin": 3,
     "texname": "{g}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghA~",
     "antitexname": "\\overline{\\tilde{\\gamma}}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1515,11 +1520,11 @@
     "spin": -1,
     "texname": "\\tilde{\\gamma}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghA",
     "antitexname": "\\tilde{\\gamma}",
-    "charge": -0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1529,11 +1534,11 @@
     "spin": -1,
     "texname": "\\overline{\\tilde{\\gamma}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghZ~",
     "antitexname": "\\bar{\\tilde{Z}}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1543,11 +1548,11 @@
     "spin": -1,
     "texname": "\\tilde{Z}",
     "width": "WZ",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghZ",
     "antitexname": "\\tilde{Z}",
-    "charge": -0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1557,11 +1562,11 @@
     "spin": -1,
     "texname": "\\bar{\\tilde{Z}}",
     "width": "WZ",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghWp~",
     "antitexname": "{\\bar{\\tilde{W}}^+}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1571,11 +1576,11 @@
     "spin": -1,
     "texname": "{\\tilde{W}^+}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghWp",
     "antitexname": "{\\tilde{W}^+}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1585,11 +1590,11 @@
     "spin": -1,
     "texname": "{\\bar{\\tilde{W}}^+}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghWm~",
     "antitexname": "{\\bar{\\tilde{W}}^-}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1599,11 +1604,11 @@
     "spin": -1,
     "texname": "{\\tilde{W}^-}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghWm",
     "antitexname": "{\\tilde{W}^-}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1613,11 +1618,11 @@
     "spin": -1,
     "texname": "{\\bar{\\tilde{W}}^-}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghG~",
     "antitexname": "{\\bar{\\tilde{g}}}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 8,
     "ghost_number": 1,
     "lepton_number": 0,
@@ -1627,11 +1632,11 @@
     "spin": -1,
     "texname": "{\\tilde{g}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ghG",
     "antitexname": "{\\tilde{g}}",
-    "charge": -0.0,
+    "charge": "0",
     "color": 8,
     "ghost_number": -1,
     "lepton_number": 0,
@@ -1641,11 +1646,11 @@
     "spin": -1,
     "texname": "{\\bar{\\tilde{g}}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "0"
   }, {
     "antiname": "ve~",
     "antitexname": "{\\overline{\\nu}_e}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1655,11 +1660,12 @@
     "spin": 2,
     "texname": "{\\nu_e}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-1",
+    "y_charge_right": null
   }, {
     "antiname": "ve",
     "antitexname": "{\\nu_e}",
-    "charge": -0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -1669,11 +1675,12 @@
     "spin": 2,
     "texname": "{\\overline{\\nu}_e}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": null,
+    "y_charge_right": "1"
   }, {
     "antiname": "vm~",
     "antitexname": "{\\overline{\\nu}_\\mu}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1683,11 +1690,12 @@
     "spin": 2,
     "texname": "{\\nu_\\mu}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-1",
+    "y_charge_right": null
   }, {
     "antiname": "vm",
     "antitexname": "{\\nu_\\mu}",
-    "charge": -0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -1697,11 +1705,12 @@
     "spin": 2,
     "texname": "{\\overline{\\nu}_\\mu}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": null,
+    "y_charge_right": "1"
   }, {
     "antiname": "vt~",
     "antitexname": "{\\overline{\\nu}_\\tau}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1711,11 +1720,12 @@
     "spin": 2,
     "texname": "{\\nu_\\tau}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-1",
+    "y_charge_right": null
   }, {
     "antiname": "vt",
     "antitexname": "{\\nu_\\tau}",
-    "charge": -0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -1725,11 +1735,12 @@
     "spin": 2,
     "texname": "{\\overline{\\nu}_\\tau}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": null,
+    "y_charge_right": "1"
   }, {
     "antiname": "u~",
     "antitexname": "{\\overline{u}}",
-    "charge": 0.6666666666666666,
+    "charge": "2/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1739,11 +1750,12 @@
     "spin": 2,
     "texname": "{u}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "4/3"
   }, {
     "antiname": "u",
     "antitexname": "{u}",
-    "charge": -0.6666666666666666,
+    "charge": "-2/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1753,11 +1765,12 @@
     "spin": 2,
     "texname": "{\\overline{u}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-4/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "c~",
     "antitexname": "{\\overline{c}}",
-    "charge": 0.6666666666666666,
+    "charge": "2/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1767,11 +1780,12 @@
     "spin": 2,
     "texname": "{c}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "4/3"
   }, {
     "antiname": "c",
     "antitexname": "{c}",
-    "charge": -0.6666666666666666,
+    "charge": "-2/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1781,11 +1795,12 @@
     "spin": 2,
     "texname": "{\\overline{c}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-4/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "t~",
     "antitexname": "{\\overline{t}}",
-    "charge": 0.6666666666666666,
+    "charge": "2/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1795,11 +1810,12 @@
     "spin": 2,
     "texname": "{t}",
     "width": "WT",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "4/3"
   }, {
     "antiname": "t",
     "antitexname": "{t}",
-    "charge": -0.6666666666666666,
+    "charge": "-2/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1809,11 +1825,12 @@
     "spin": 2,
     "texname": "{\\overline{t}}",
     "width": "WT",
-    "y_charge": 0
+    "y_charge": "-4/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "d~",
     "antitexname": "{\\overline{d}}",
-    "charge": -0.3333333333333333,
+    "charge": "-1/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1823,11 +1840,12 @@
     "spin": 2,
     "texname": "{d}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "-2/3"
   }, {
     "antiname": "d",
     "antitexname": "{d}",
-    "charge": 0.3333333333333333,
+    "charge": "1/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1837,11 +1855,12 @@
     "spin": 2,
     "texname": "{\\overline{d}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "s~",
     "antitexname": "{\\overline{s}}",
-    "charge": -0.3333333333333333,
+    "charge": "-1/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1851,11 +1870,12 @@
     "spin": 2,
     "texname": "{s}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "-2/3"
   }, {
     "antiname": "s",
     "antitexname": "{s}",
-    "charge": 0.3333333333333333,
+    "charge": "1/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1865,11 +1885,12 @@
     "spin": 2,
     "texname": "{\\overline{s}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "b~",
     "antitexname": "{\\overline{b}}",
-    "charge": -0.3333333333333333,
+    "charge": "-1/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1879,11 +1900,12 @@
     "spin": 2,
     "texname": "{b}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "1/3",
+    "y_charge_right": "-2/3"
   }, {
     "antiname": "b",
     "antitexname": "{b}",
-    "charge": 0.3333333333333333,
+    "charge": "1/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1893,11 +1915,12 @@
     "spin": 2,
     "texname": "{\\overline{b}}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2/3",
+    "y_charge_right": "-1/3"
   }, {
     "antiname": "H",
     "antitexname": "{H}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1907,53 +1930,56 @@
     "spin": 1,
     "texname": "{H}",
     "width": "WH",
-    "y_charge": 0
+    "y_charge": null
   }, {
     "antiname": "G0",
     "antitexname": "{G_0}",
-    "charge": 0.0,
+    "charge": "0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
+    "goldstone": true,
     "mass": "MZ",
     "name": "G0",
     "pdg_code": 250,
     "spin": 1,
     "texname": "{G_0}",
     "width": "WZ",
-    "y_charge": 0
+    "y_charge": null
   }, {
     "antiname": "G-",
     "antitexname": "{G^-}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
+    "goldstone": true,
     "mass": "MW",
     "name": "G+",
     "pdg_code": 251,
     "spin": 1,
     "texname": "{G^+}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "1"
   }, {
     "antiname": "G+",
     "antitexname": "{G^+}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
+    "goldstone": true,
     "mass": "MW",
     "name": "G-",
     "pdg_code": -251,
     "spin": 1,
     "texname": "{G^-}",
     "width": "WW",
-    "y_charge": 0
+    "y_charge": "-1"
   }, {
     "antiname": "e+",
     "antitexname": "{e^+}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1963,11 +1989,12 @@
     "spin": 2,
     "texname": "{e^-}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-1",
+    "y_charge_right": "-2"
   }, {
     "antiname": "e-",
     "antitexname": "{e^-}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -1977,11 +2004,12 @@
     "spin": 2,
     "texname": "{e^+}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2",
+    "y_charge_right": "1"
   }, {
     "antiname": "mu+",
     "antitexname": "{\\mu^+}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -1991,11 +2019,12 @@
     "spin": 2,
     "texname": "{\\mu^-}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "-1",
+    "y_charge_right": "-2"
   }, {
     "antiname": "mu-",
     "antitexname": "{\\mu^-}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -2005,11 +2034,12 @@
     "spin": 2,
     "texname": "{\\mu^+}",
     "width": "ZERO",
-    "y_charge": 0
+    "y_charge": "2",
+    "y_charge_right": "1"
   }, {
     "antiname": "ta+",
     "antitexname": "{\\tau^+}",
-    "charge": -1.0,
+    "charge": "-1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 1,
@@ -2019,11 +2049,12 @@
     "spin": 2,
     "texname": "{\\tau^-}",
     "width": "WTau",
-    "y_charge": 0
+    "y_charge": "-1",
+    "y_charge_right": "-2"
   }, {
     "antiname": "ta-",
     "antitexname": "{\\tau^-}",
-    "charge": 1.0,
+    "charge": "1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": -1,
@@ -2033,7 +2064,8 @@
     "spin": 2,
     "texname": "{\\tau^+}",
     "width": "WTau",
-    "y_charge": 0
+    "y_charge": "2",
+    "y_charge_right": "1"
   }],
   "propagators": [{
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
@@ -2043,17 +2075,17 @@
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MZ^2",
     "name": "Z_propFeynman",
-    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MZ^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*1𝑖",
+    "numerator": "-1𝑖*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "Z"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "W+_propFeynman",
-    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MW^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*1𝑖",
+    "numerator": "-1𝑖*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "W+"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "W-_propFeynman",
-    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MW^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*1𝑖",
+    "numerator": "-1𝑖*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "W-"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",

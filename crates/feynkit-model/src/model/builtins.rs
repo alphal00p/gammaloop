@@ -11,7 +11,7 @@ use super::{
 use crate::ComplexValue;
 
 impl Model {
-    /// Load a fresh copy of the embedded, unrestricted Standard Model (`sm`).
+    /// Load a fresh copy of the complete embedded Standard Model (`sm`).
     ///
     /// Includes 43 particles and 153 vertices with their default parameter
     /// values. The compressed data is decoded on demand, without file access
@@ -34,7 +34,7 @@ impl Model {
     /// including quarks. Keeps the Standard Model parameters and their defaults.
     pub fn qed() -> Self {
         Self::standard_model_sector("qed", |particle| {
-            particle.pdg_code == 22 || (particle.is_fermion() && particle.charge != 0.0)
+            particle.pdg_code == 22 || (particle.is_fermion() && !particle.charge.is_zero())
         })
     }
 
@@ -52,7 +52,7 @@ impl Model {
         Self::standard_model_sector("qcd_qed", |particle| {
             particle.is_qcd_charged()
                 || particle.pdg_code == 22
-                || (particle.is_fermion() && particle.charge != 0.0)
+                || (particle.is_fermion() && !particle.charge.is_zero())
         })
     }
 
@@ -77,6 +77,10 @@ impl Model {
         definition
             .particles
             .retain(|p| selected.contains(p.name.as_str()));
+        let pdgs: BTreeSet<_> = definition.particles.iter().map(|p| p.pdg_code).collect();
+        definition
+            .covariant_cut_multiplets
+            .retain(|_, members| members.iter().all(|pdg| pdgs.contains(pdg)));
         let particles: BTreeSet<_> = definition.particles.iter().map(|p| &p.name).collect();
         definition
             .propagators
@@ -188,10 +192,11 @@ impl Model {
                 width: "ZERO".to_owned(),
                 texname: "\\phi".to_owned(),
                 antitexname: "\\phi".to_owned(),
-                charge: 0.0,
+                charge: 0.into(),
                 ghost_number: 0,
                 lepton_number: 0,
-                y_charge: 0,
+                y_charge: None,
+                y_charge_right: None,
                 propagating: true,
                 goldstone: false,
                 propagator: Some("phi_prop".to_owned()),
@@ -251,7 +256,7 @@ impl Model {
                 name: name.to_owned(),
                 antiname: antiname.to_owned(),
                 pdg_code: sign * scalar.pdg_code,
-                charge: sign as f64,
+                charge: sign.into(),
                 texname: format!("\\phi^{{{}}}", if sign > 0 { "+" } else { "-" }),
                 antitexname: format!("\\phi^{{{}}}", if sign > 0 { "-" } else { "+" }),
                 propagator: Some(propagator_name.clone()),
@@ -334,6 +339,160 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::Model;
+    use symbolica::{atom::Atom, domains::rational::Rational};
+
+    #[test]
+    fn standard_model_quantum_numbers_and_antiparticles_are_exact() {
+        let model = Model::standard_model();
+        for (pdgs, charge, yl, yr, t3) in [
+            (
+                &[2, 4, 6][..],
+                Rational::from((2, 3)),
+                Rational::from((1, 3)),
+                Some(Rational::from((4, 3))),
+                Rational::from((1, 2)),
+            ),
+            (
+                &[1, 3, 5][..],
+                Rational::from((-1, 3)),
+                Rational::from((1, 3)),
+                Some(Rational::from((-2, 3))),
+                Rational::from((-1, 2)),
+            ),
+            (
+                &[11, 13, 15][..],
+                Rational::from(-1),
+                Rational::from(-1),
+                Some(Rational::from(-2)),
+                Rational::from((-1, 2)),
+            ),
+            (
+                &[12, 14, 16][..],
+                Rational::from(0),
+                Rational::from(-1),
+                None,
+                Rational::from((1, 2)),
+            ),
+        ] {
+            for &pdg in pdgs {
+                let p = model.particle_by_pdg(pdg).unwrap();
+                let anti = model.particle_by_id(p.antiparticle).unwrap();
+                assert_eq!(p.charge, charge);
+                assert_eq!(p.y_charge, Some(yl.clone()));
+                assert_eq!(p.y_charge_right, yr);
+                assert_eq!(p.weak_isospin(), Some(t3.clone()));
+                assert_eq!(
+                    p.weak_isospin_right(),
+                    yr.as_ref().map(|_| Rational::zero())
+                );
+                assert_eq!(anti.charge, -charge.clone());
+                assert_eq!(anti.y_charge, yr.as_ref().map(|y| -y.clone()));
+                assert_eq!(anti.y_charge_right, Some(-yl.clone()));
+                assert_eq!(anti.weak_isospin_right(), Some(-t3.clone()));
+                assert_eq!(p.mass, anti.mass);
+                assert_eq!(p.width, anti.width);
+                assert_eq!(p.spin, anti.spin);
+                assert_eq!(p.lepton_number, -anti.lepton_number);
+                assert_eq!(
+                    p.color,
+                    if p.color == 1 {
+                        anti.color
+                    } else {
+                        -anti.color
+                    }
+                );
+            }
+        }
+        for name in ["H", "G0"] {
+            assert!(model.particle(name).unwrap().weak_isospin().is_none());
+        }
+        for (name, sign) in [("G+", 1), ("G-", -1)] {
+            let p = model.particle(name).unwrap();
+            assert_eq!(p.y_charge, Some(sign.into()));
+            assert_eq!(p.weak_isospin(), Some(Rational::from((sign, 2))));
+            assert!(p.is_goldstone());
+        }
+        assert!(
+            model
+                .particle("ve")
+                .unwrap()
+                .symbolic_mass(&model)
+                .is_zero()
+        );
+        assert_eq!(
+            model.particle("c").unwrap().symbolic_mass(&model),
+            Atom::var(symbolica::symbol!("UFO::MC"))
+        );
+        for vertex in model.vertex_rules() {
+            let particles: Vec<_> = vertex
+                .particles
+                .iter()
+                .map(|&id| model.particle_by_id(id).unwrap())
+                .collect();
+            assert!(
+                particles
+                    .iter()
+                    .fold(Rational::zero(), |q, p| q + &p.charge)
+                    .is_zero(),
+                "{} violates charge conservation",
+                vertex.name
+            );
+            assert_eq!(
+                particles.iter().map(|p| p.ghost_number).sum::<i64>(),
+                0,
+                "{}",
+                vertex.name
+            );
+            assert_eq!(
+                particles.iter().map(|p| p.lepton_number).sum::<i64>(),
+                0,
+                "{}",
+                vertex.name
+            );
+        }
+    }
+
+    #[test]
+    fn quantum_number_json_preserves_exactness_and_unknowns() {
+        let model = Model::standard_model();
+        let mut json: serde_json::Value = serde_json::from_str(&model.to_json().unwrap()).unwrap();
+        let i = json["particles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|p| p["name"] == "c")
+            .unwrap();
+        assert_eq!(json["particles"][i]["charge"], "2/3");
+        for invalid in [
+            serde_json::json!(0.6666666666666666),
+            serde_json::json!(1e30),
+            serde_json::json!("1/0"),
+            serde_json::json!("not a charge"),
+        ] {
+            json["particles"][i]["charge"] = invalid;
+            assert!(Model::from_json(&json.to_string()).is_err());
+        }
+        json["particles"][i]["charge"] =
+            serde_json::json!("123456789012345678901234567891/999999999999999999999999999999");
+        json["particles"][i]
+            .as_object_mut()
+            .unwrap()
+            .remove("y_charge");
+        json["particles"][i]
+            .as_object_mut()
+            .unwrap()
+            .remove("y_charge_right");
+        let model = Model::from_json(&json.to_string()).unwrap();
+        let p = model.particle("c").unwrap();
+        assert_eq!(
+            p.charge.to_string(),
+            "123456789012345678901234567891/999999999999999999999999999999"
+        );
+        assert!(p.weak_isospin().is_none());
+        assert!(p.weak_isospin_right().is_none());
+        let reloaded = Model::from_json(&model.to_json().unwrap()).unwrap();
+        assert_eq!(model.fingerprint(), reloaded.fingerprint());
+    }
 
     #[test]
     fn builtin_models_validate_and_round_trip() {
@@ -361,6 +520,9 @@ mod tests {
     fn compressed_standard_model_matches_the_source_fixture() {
         let fixture = Model::from_json(include_str!("../../tests/fixtures/sm.json")).unwrap();
         assert_eq!(Model::standard_model().fingerprint(), fixture.fingerprint());
+        let disk =
+            Model::from_json(include_str!("../../../../assets/models/json/sm/sm.json")).unwrap();
+        assert_eq!(disk.fingerprint(), fixture.fingerprint());
         assert!(include_bytes!("../../data/sm.json.zlib").len() < 8 * 1024);
     }
 }

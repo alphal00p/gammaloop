@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::PyResult;
+use pyo3::exceptions::PyRuntimeError;
 
 use crate::PreparedRender;
 
@@ -38,11 +38,19 @@ impl PreparedRender {
                 "halfedge" => "Half-edge",
                 _ => "Edge",
             };
-            let title = format!("{label} {id}");
             let detail = serde_json::from_str::<serde_json::Value>(detail)
                 .ok()
                 .filter(serde_json::Value::is_object)
                 .unwrap_or_else(|| serde_json::json!({}));
+            let title = match detail.get("summary").and_then(serde_json::Value::as_str) {
+                Some(summary) => format!("{label} {id} · {summary}"),
+                None => format!("{label} {id}"),
+            };
+            let title = title
+                .replace('&', "&amp;")
+                .replace('"', "&quot;")
+                .replace('<', "&lt;")
+                .replace('>', "&gt;");
             // Attribute text is encoded, not interpreted as markup or executable source.
             let detail = detail
                 .to_string()
@@ -128,6 +136,32 @@ mod tests {
     }
 
     #[test]
+    fn svg_hover_summaries_are_escaped_and_preserve_domain_details() {
+        let summary = "Stored tensor · A<\"x\">\nRank: 2";
+        let details = serde_json::json!({"summary": summary, "properties": [["Rank", "2"]]});
+        let encoded = details
+            .to_string()
+            .replace('&', "&amp;")
+            .replace('"', "&quot;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
+        let svg = format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg"><a href="#linnet-node-0?{encoded}"><rect width="3" height="3"/></a></svg>"##
+        );
+        let output = PreparedRender::interactive_svg(&svg).unwrap();
+        let document = roxmltree::Document::parse(&output).unwrap();
+        let title = document
+            .descendants()
+            .find(|node| node.has_tag_name("title"))
+            .unwrap();
+        assert_eq!(title.text(), Some(format!("Node 0 · {summary}").as_str()));
+        let target = title.parent().unwrap();
+        let restored: serde_json::Value =
+            serde_json::from_str(target.attribute("data-linnet-detail").unwrap()).unwrap();
+        assert_eq!(restored, details);
+    }
+
+    #[test]
     fn svg_without_graph_targets_is_unchanged() {
         let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M0 0\"/></svg>";
         assert_eq!(PreparedRender::interactive_svg(svg).unwrap(), svg);
@@ -142,9 +176,11 @@ mod tests {
             .descendants()
             .find(|node| node.has_tag_name("a"))
             .unwrap();
-        assert!(target
-            .attributes()
-            .all(|attribute| attribute.name() != "href"));
+        assert!(
+            target
+                .attributes()
+                .all(|attribute| attribute.name() != "href")
+        );
         assert_eq!(target.attribute("data-linnet-kind"), Some("edge"));
     }
 }
