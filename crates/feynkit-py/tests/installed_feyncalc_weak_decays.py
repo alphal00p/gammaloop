@@ -161,7 +161,7 @@ for label, pdgs, masses, ckm_name in [
             if particle.color == 1:
                 continue
             matches = []
-            for slot in operator.interface:
+            for slot in operator.structure.slots:
                 original = slot.to_expression()
                 if original.replace(ports[position], zero) == original:
                     continue

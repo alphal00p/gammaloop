@@ -114,11 +114,32 @@ class ApiSurfaceTests(unittest.TestCase):
                         )
 
     def test_mathematical_values_have_rich_displays_without_mutation(self):
-        for name in ("rep", "slot", "A", "indexed", "tensor", "network"):
+        for name in (
+            "rep",
+            "rep_name",
+            "slot",
+            "structure",
+            "A",
+            "indexed",
+            "tensor",
+            "network",
+        ):
             value = self.values[name]
             with self.subTest(value=name):
                 before = repr(value)
                 html = value._repr_html_()
+                if isinstance(
+                    value,
+                    (
+                        sp.Representation,
+                        sp.RepresentationName,
+                        sp.Slot,
+                        sp.TensorStructure,
+                    ),
+                ):
+                    self.assertIn("data-spenso-metadata", html)
+                    self.assertEqual(repr(value), before)
+                    continue
                 if isinstance(value, sp.Tensor):
                     self.assertIn("data-spenso-explorer", html)
                     html = value.to_html(

@@ -1672,7 +1672,7 @@ def _(mo):
     A separate final profile uses five warm samples on CPU 7 and checks that
     every stage preserves the terminal expression. It measures **0.867 ms**
     for dot normalization, **5.330 ms** for Schoonschip and **6.722 ms** for
-    epsilon cleanup. Chain collection is now the largest measured stage:
+    epsilon cleanup. In that measurement, chain collection was the largest stage:
     `chainify` takes **20.957 ms** and `collect_gamma_chains` **24.475 ms**;
     simplifying the already-terminal expression takes **39.275 ms**. These
     stage measurements overlap and cannot be added to reconstruct full gamma
@@ -1749,6 +1749,102 @@ def _(mo):
     the candidate passes 22 payload tests against each of registry and
     pinned-main Symbolica, 21 Tydenso runtime checks, and two-way exchange with
     the rebuilt Tymbolica engine.
+
+    ### Further contraction and cleanup improvements
+
+    The next optimization keeps Symbolica pinned at `06906976` and changes how
+    Idenso schedules contractions and cleanup. A product finishes its local
+    contractions before rebuilding enclosing expressions, while preserving the
+    metric-first order. Compact vectors are constructed only after a compatible
+    partner is found. Borrowed visitors avoid rebuilding unchanged slot payloads;
+    chain, bracket and gamma passes skip work when their required symbols are absent.
+    Schoonschip repeats post-contraction cleanup only when a contraction changed
+    its input; its outer fixed point still handles initial normalization changes.
+
+    The existing terminal-trace shortcut now also accepts a standalone 4D spin
+    trace with exactly one gamma5 and at most fourteen ordinary gammas, whose
+    Lorentz indices are distinct explicit `mink(4,index)` slots. Each kernel
+    monomial uses every index once and contains at most one epsilon, so it needs
+    no further contraction cleanup. Repeated indices, compact slashes and
+    spectators retain the full pipeline. The ordinary free-trace shortcut is
+    unchanged in scope.
+
+    Full gamma medians below are milliseconds. These are five warm samples on
+    CPU 6, using the reversed after-before confirmation run. FORM 5.0.0 was
+    remeasured on CPU 3. Its amortized wall timing includes input preparation and
+    process overhead; its separate internal timer covers `trace4` plus sorting.
+    Rust input preparation is outside timing, and output destruction is included.
+    Our builds were quiet, but unrelated shared-host load was uncontrolled.
+
+    | Input | Before | After | FORM wall |
+    |:--|--:|--:|--:|
+    | Axial distinct indices, 8 | 1.112 | 0.119 | 0.021 |
+    | Axial distinct indices, 10 | 6.794 | 0.467 | 0.102 |
+    | Axial distinct indices, 12 | 46.343 | 2.512 | 0.646 |
+    | External metrics, 12 | 3.332 | 0.930 | 0.062 |
+    | Free indices, 8 | 0.162 | 0.166 | 0.060 |
+    | Free indices, 12 | 6.542 | 6.776 | 2.939 |
+
+    Axial twelve improves by **18.45 times**. FORM remains **3.89 times faster**
+    on that case, so this does not establish performance parity. Ordinary free
+    eight and twelve are 2.3% and 3.6% slower in this confirmation run; both were
+    slightly faster in the first pair. Those small mixed changes are consistent
+    with shared-host variation, rather than an established gain.
+
+    Productive public Schoonschip calls improve too; the following medians are
+    microseconds from the same confirmation run.
+
+    | Contraction | Before (µs) | After (µs) |
+    |:--|--:|--:|
+    | Vector into tensor | 5.115 | 3.356 |
+    | Metric into epsilon | 7.758 | 4.935 |
+    | Metric into chain | 9.294 | 6.129 |
+    | Metric into trace | 9.838 | 6.563 |
+    | Eight-metric chain | 26.562 | 23.753 |
+
+    The original before-after run is retained alongside the confirmation. It
+    measured axial twelve at **46.658 → 2.383 ms**. Unchanged parsing controls
+    exposed a localized timing disturbance in several small cases, which motivated
+    the reversed repeat; the confirmation resolves those apparent regressions.
+    No confirmation case above one microsecond regresses by more than 10%.
+
+    A separate public-stage profile covers **92 expression shapes and 860
+    case/method pairs**, including both original and already-terminal traces.
+    On the terminal axial-twelve output, chain collection takes **23.635 → 1.209 ms**,
+    Schoonschip **5.280 → 1.567 ms**, epsilon cleanup **6.168 → 2.537 ms**, and full
+    gamma simplification **37.017 → 7.038 ms**. These overlapping stage timings
+    cannot be added to reconstruct the original trace call. The shortcut explains
+    why simplifying the original axial trace is now faster than processing its
+    large terminal output through the general pipeline.
+
+    Both full comparisons cover **73 inputs and 641 case/method pairs**. All
+    **787 full-driver snapshots and 952 phase snapshots match exactly**. The fresh
+    FORM run covers fifteen cases; twelve full polynomials match the historical
+    records exactly. The additional axial-six/eight/ten cases have fresh
+    counts and timings, without a new FORM component certificate. Term counts
+    are never used as an equivalence test.
+
+    The current validation has **383 passing tests**: 344 Idenso tests and 39 HEP
+    component tests. The known Idenso parsing snapshot failure remains; 23 tests
+    are skipped. Spenso's separate suite was not rerun in this round. Both scoped
+    Clippy checks pass with warnings denied. The new HEP checks simplify explicit
+    axial traces before attaching spectators, then independently evaluate their
+    metric/epsilon tensors against the same vectors as the original gamma-matrix
+    network. Lengths four, eight and twelve, three full-rank samples, and several
+    gamma5 positions preserve exact Gaussian-integer values.
+
+    The first length-twelve oracle timed out while materializing a tensor with
+    twelve open Lorentz slots. Binding each vector inside its raw gamma before
+    HEP takes the matrix trace avoids that intermediate without using gamma
+    simplification in the oracle. The record retains the timeout and the final
+    passing checks.
+
+    The complete record is `examples/notebooks/contraction_performance.json`, including both run orders, raw samples, source identities, FORM programs and validation evidence. Reproduce the current Rust measurements with:
+
+    ```sh
+    cargo run --locked -p idenso --profile dev-optim --example metric_contraction_benchmark -- /tmp/contraction-full 5 8
+    cargo run --locked -p idenso --profile dev-optim --example contraction_phase_benchmark -- /tmp/contraction-full /tmp/contraction-phases 5 8
+    ```
     """)
     return
 

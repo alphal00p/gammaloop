@@ -78,7 +78,7 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
         for d in ((t, s - mass**2, u - mass**2) if count == 3 else (t,))
     )
     operator = TensorExpression(amplitude.expand())
-    assert len(operator.interface) == (8 if count == 3 else 6)
+    assert len(operator.structure.slots) == (8 if count == 3 else 6)
     adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
     adjoint = adjoint.replace(conjugate(P(a, b)), P(a, b))
     for real in (mass, gs, s, t, u):
@@ -95,7 +95,7 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
         if position < 2:
             initial_colors *= abs(particle.color)
         matches = []
-        for slot in operator.interface:
+        for slot in operator.structure.slots:
             original = slot.to_expression()
             if original.replace(ports[position], E("0")) == original:
                 continue

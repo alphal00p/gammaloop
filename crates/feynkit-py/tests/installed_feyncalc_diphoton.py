@@ -69,7 +69,7 @@ for diagram in generated.diagrams:
     )
 assert set(denominators) == {t - mass**2, u - mass**2}
 operator = TensorExpression(amplitude.expand())
-assert len(operator.interface) == 4
+assert len(operator.structure.slots) == 4
 adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
 adjoint = adjoint.replace(conjugate(P(a, b)), P(a, b))
 # Physical momenta and tree-level parameters are real; keep that assumption explicit.

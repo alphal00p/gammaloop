@@ -86,7 +86,7 @@ def calculate(outgoing, kin):
         if particle.color == 1:
             continue
         matches = []
-        for slot in operator.interface:
+        for slot in operator.structure.slots:
             original = slot.to_expression()
             if original.replace(ports[position], E("0")) == original:
                 continue

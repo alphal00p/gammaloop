@@ -54,10 +54,6 @@ impl Renderer<'_, '_> {
 
 impl ConcreteTensorView<'_> {
     fn axis_labels(&self) -> Vec<String> {
-        use spenso::structure::slot::{SlotMatch, SlotMatcher};
-
-        let mut matcher = SlotMatcher::default();
-
         let aliases =
             IndexAliases::for_descriptor(&self.tensor.descriptor, &self.settings.index_style);
         self.tensor
@@ -65,34 +61,7 @@ impl ConcreteTensorView<'_> {
             .interface
             .logical_slots()
             .into_iter()
-            .map(|slot| {
-                let port = composition::port_atom(slot);
-                let port = aliases.presentation_atom(&port, &self.settings.index_style);
-                let SlotMatch::Explicit(view) = matcher.classify(port.as_view()) else {
-                    return port.format_string(
-                        &display_options_with_settings(TensorDisplayMode::Plain, self.settings),
-                        PrintState::new(),
-                    );
-                };
-                let index = view.index();
-                let display = usize::try_from(index)
-                    .ok()
-                    .and_then(|position| {
-                        slot.rep_name().metadata()?.index_palette.resolve(position)
-                    })
-                    .or_else(|| match index {
-                        AtomView::Var(variable) => IndexDisplay::from_symbol(variable.get_symbol()),
-                        _ => None,
-                    });
-                display
-                    .map(|label| label.to_native_string())
-                    .unwrap_or_else(|| {
-                        index.to_owned().format_string(
-                            &display_options_with_settings(TensorDisplayMode::Plain, self.settings),
-                            PrintState::new(),
-                        )
-                    })
-            })
+            .map(|slot| aliases.port_label(slot, self.settings))
             .collect()
     }
 

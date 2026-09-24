@@ -75,7 +75,7 @@ for pdg in (11, -11):
         )
 
     operator = TensorExpression(amplitude.expand())
-    assert len(operator.interface) == 4
+    assert len(operator.structure.slots) == 4
     adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
     # Physical external momenta, the tree-level charge, masses and invariants
     # are real. Idenso retains these assumptions as explicit conjugations.

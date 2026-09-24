@@ -71,6 +71,7 @@ mod composition;
 pub mod display;
 pub mod expression;
 pub mod library;
+pub mod metadata;
 pub mod network;
 pub mod pattern;
 mod simplification;
@@ -215,6 +216,8 @@ define_spenso_python_surface! {
         structure::SpensoName,
         structure::SpensoSlot,
         structure::SpensoRepresentation,
+        metadata::SpensoRepresentationName,
+        metadata::SpensoTensorStructure,
         SpensorLibrary,
         SpensorFunctionLibrary,
         SpensoBroadcastFunction,
@@ -480,8 +483,8 @@ impl From<ConcreteOrParam<RealOrComplex<f64>>> for TensorElements {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl Spensor {
-    /// Return the exact structured expression describing this tensor's data.
-    pub fn structure(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
+    /// Return the symbolic descriptor of this tensor, independently of its component data.
+    pub fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_atom_interface_descriptor(
             py,
             self.descriptor.atom.clone(),
@@ -489,6 +492,16 @@ impl Spensor {
             self.descriptor_name,
             self.descriptor_args.clone(),
         )
+    }
+
+    /// Tensor identity, scalar arguments, and external ports in logical order.
+    #[getter]
+    fn structure(&self) -> metadata::SpensoTensorStructure {
+        metadata::SpensoTensorStructure {
+            interface: self.descriptor.interface.clone(),
+            name: self.descriptor_name,
+            arguments: self.descriptor_args.clone(),
+        }
     }
 
     /// Return a copy with a new data identity while preserving its expression and interface.
@@ -793,7 +806,7 @@ impl Spensor {
     /// Return tensor data in logical interface order.
     ///
     /// An integer is a flat logical row-major position. A list supplies one coordinate
-    /// per slot in `structure().interface`; slices likewise traverse flat logical order.
+    /// per slot in `structure.slots`; slices likewise traverse flat logical order.
     /// Canonical storage-axis order is never exposed through this API.
     #[gen_stub(skip)]
     fn __getitem__(&self, item: SliceOrIntOrExpanded) -> PyResult<Py<PyAny>> {
@@ -884,7 +897,7 @@ impl Spensor {
     /// ----------
     /// item : int or list of int
     ///     Logical index specification (int for flat row-major position, list of int
-    ///     for coordinates following `structure().interface`)
+    ///     for coordinates following `structure.slots`)
     /// value : float, complex, or Expression
     ///     The value to set. Its coefficient kind must match the tensor: `float` for
     ///     real storage, `complex` for complex storage, or `Expression` for parametric storage.
@@ -1626,7 +1639,7 @@ submit! {
                 r#return: Vec::<TensorElements>::type_output,
                 doc:r##"Get tensor elements at the specified range of indices.
 
-Slices traverse the flat logical row-major order shown by `Tensor.structure().interface`;
+Slices traverse the flat logical row-major order shown by `Tensor.structure.slots`;
 canonical storage-axis order is not exposed.
 
 Parameters
@@ -1659,7 +1672,7 @@ list of float, complex, or Expression
                 doc:r##"Get tensor element at the specified index or indices.
 
 Integers are flat logical row-major positions. Coordinate lists follow
-`Tensor.structure().interface`; canonical storage-axis order is not exposed.
+`Tensor.structure.slots`; canonical storage-axis order is not exposed.
 
 Parameters
 ----------
@@ -1698,7 +1711,7 @@ float, complex, or Expression
                 doc:r##"Set tensor element at the specified index.
 
 Integers are flat logical row-major positions. Coordinate lists follow
-`Tensor.structure().interface`; canonical storage-axis order is not exposed.
+`Tensor.structure.slots`; canonical storage-axis order is not exposed.
 
 Parameters
 ----------
@@ -1876,6 +1889,7 @@ mod tests {
             let tensor_type = py.get_type::<Spensor>();
             for name in [
                 "structure",
+                "expression",
                 "with_name",
                 "sparse",
                 "dense",

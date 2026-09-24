@@ -81,7 +81,7 @@ assert set(denominators) == {E("1"), s, t, u}
 amplitude = sum(terms, E("0"))
 operator = kin.apply(TensorExpression(amplitude).expand().simplify_metrics().to_dots())
 amplitude = operator.to_expression()
-assert len(operator.interface) == 8
+assert len(operator.structure.slots) == 8
 adjoint = operator.spenso_conjugate().to_expression().replace(conj(P(a, b)), P(a, b))
 for real in (s, t, u, D, gs):
     adjoint = adjoint.replace(conj(real), real)

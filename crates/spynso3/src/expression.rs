@@ -1784,32 +1784,14 @@ impl TensorExpression {
         self.interface.canonical().is_scalar()
     }
 
-    /// Ordered external interface as concrete `Slot` objects or unresolved `Representation`s.
+    /// Tensor identity, scalar arguments, and external ports in logical order.
     #[getter]
-    #[gen_stub(override_return_type(type_repr = "tuple[Representation | Slot, ...]", imports = ())) ]
-    fn interface(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
-        let values = self
-            .interface
-            .logical_slots()
-            .into_iter()
-            .map(|slot| match slot.aind {
-                PartialIndex::Explicit(index) => Py::new(
-                    py,
-                    SpensoSlot {
-                        slot: slot.rep().slot(index),
-                    },
-                )
-                .map(Py::into_any),
-                PartialIndex::Open(_) => Py::new(
-                    py,
-                    SpensoRepresentation {
-                        representation: slot.rep(),
-                    },
-                )
-                .map(Py::into_any),
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-        Ok(PyTuple::new(py, values)?.unbind())
+    fn structure(&self) -> crate::metadata::SpensoTensorStructure {
+        crate::metadata::SpensoTensorStructure {
+            interface: self.interface.clone(),
+            name: self.name,
+            arguments: self.name_args.clone(),
+        }
     }
 
     /// The optional identity used when this expression describes stored data.
@@ -4655,7 +4637,7 @@ mod tests {
                 "t",
                 "rank",
                 "is_scalar",
-                "interface",
+                "structure",
                 "name",
                 "with_name",
                 "to_expression",

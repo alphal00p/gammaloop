@@ -42,7 +42,7 @@ for tensor in (
 ):
     result = assumed.apply(tensor)
     assert isinstance(result, TensorExpression)
-    assert result.interface == tensor.interface
+    assert result.structure.slots == tensor.structure.slots
     plain = assumed.apply(tensor.to_expression())
     assert isinstance(plain, Expression) and not isinstance(plain, TensorExpression)
     assert result.to_expression() == plain

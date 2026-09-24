@@ -99,7 +99,7 @@ for name, expression, ports in (
     network = expression.to_network()
     network.execute()
     tensor = network.result_tensor()
-    assert tuple(slot.to_expression() for slot in tensor.structure().interface) == ports
+    assert tuple(slot.to_expression() for slot in tensor.structure.slots) == ports
     tensor.to_dense()
     values[name] = [complex(value) for value in tensor[:]]
     assert len(values[name]) == 4 ** len(ports)
