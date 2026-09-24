@@ -7,7 +7,6 @@
 
 use std::collections::HashMap;
 use std::io::Read;
-use std::time::Instant;
 
 use flate2::read::GzDecoder;
 use rustred::reduction::ReductionLimits;
@@ -22,6 +21,7 @@ use super::{acceptance_inputs, input::ParentInput, retained_parent_descriptor, t
 use acceptance_inputs::ParentDescriptor;
 #[path = "timing_metrics.rs"]
 mod metrics;
+use metrics::Observation;
 
 const PAIRED_SAMPLES: usize = 5;
 
@@ -124,54 +124,6 @@ impl Workload {
                 self.parent
             );
         }
-    }
-}
-
-struct Observation {
-    value: Atom,
-    wall_ns: u128,
-    cpu_seconds: Option<f64>,
-    rss_before_kib: Option<u64>,
-    rss_after_kib: Option<u64>,
-}
-
-impl Observation {
-    fn measure(
-        vakint: &Vakint,
-        settings: &VakintSettings,
-        scalar: &Atom,
-        ticks: Option<f64>,
-    ) -> Self {
-        let rss_before_kib = metrics::resident_kib();
-        let cpu_before = metrics::cpu_ticks();
-        let started = Instant::now();
-        let value = vakint
-            .evaluate_integral(settings, scalar.as_view())
-            .unwrap();
-        let wall_ns = started.elapsed().as_nanos();
-        let cpu_after = metrics::cpu_ticks();
-        let rss_after_kib = metrics::resident_kib();
-        let cpu_seconds =
-            cpu_before
-                .zip(cpu_after)
-                .zip(ticks)
-                .and_then(|((before, after), ticks)| {
-                    after.checked_sub(before).map(|delta| delta as f64 / ticks)
-                });
-        Self {
-            value,
-            wall_ns,
-            cpu_seconds,
-            rss_before_kib,
-            rss_after_kib,
-        }
-    }
-
-    fn report(&self, case: &str, phase: &str, lane: &str, repeat: usize) {
-        println!(
-            "PUBLIC_SCALAR_TIMING\t{case}\t{phase}\t{lane}\t{repeat}\t{}\t{:?}\t{:?}\t{:?}",
-            self.wall_ns, self.cpu_seconds, self.rss_before_kib, self.rss_after_kib
-        );
     }
 }
 

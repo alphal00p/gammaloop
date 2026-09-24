@@ -85,7 +85,7 @@ matrix, but initial cubed-parent reductions are still slower than FMFT and the
 smaller terminal set does not imply a proportional speedup. See the
 [complete timings and boundaries](data/rustred/four_loop/README.md#public-scalar-timing-probe).
 
-The current `8ad62b96` pin adds four native weighted-normalization sidecars.
+The previous `8ad62b96` pin added four native weighted-normalization sidecars.
 RustRed combines its exact U equivalences with authenticated support-symmetry
 projections of all 105 remaining quadratic numerators, producing 74 family-local
 positive outputs while preserving every raw candidate/catalog declaration.
@@ -100,6 +100,11 @@ passes all 54 numerical comparisons. First H/X cubed-parent calls change from
 so this is not a uniform speedup. Both process totals include FMFT as well as
 RustRed, and first cubed-parent calls remain slower than FMFT. See the
 [weighted sidecar contract](data/rustred/four_loop/README.md#weighted-vacuum-terminal-normalization).
+
+The `7b22f5bd` runtime pin supports the producer-aligned, unrestricted one-
+through four-loop packages, freshly generated from native IBPs rather than
+substituting bounded walker-control inputs. See the
+[refresh procedure and measured gates](rustred_package_refresh.typ).
 
 The [historical RustRed acceptance inventory](tests/RUSTRED_ACCEPTANCE.md) maps
 all existing single-common-mass inputs through three loops to native peers.

@@ -298,6 +298,8 @@ mod tests {
                 .into_family(),
         );
         let solution = SectorSolution {
+            max_numerator_rank: None,
+            finite_case_policy: Default::default(),
             rules: Vec::new(),
             finite_residuals: [[2, 1, 1], [1, 2, 1], [1, 1, 2]]
                 .into_iter()
@@ -433,6 +435,8 @@ mod tests {
             solutions
                 .entry(sector)
                 .or_insert_with(|| SectorSolution {
+                    max_numerator_rank: None,
+                    finite_case_policy: Default::default(),
                     rules: Vec::new(),
                     finite_residuals: Vec::new(),
                     stats: SectorStats::default(),

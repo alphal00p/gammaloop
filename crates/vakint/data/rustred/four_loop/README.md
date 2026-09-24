@@ -4,6 +4,14 @@ These assets supply the four-loop branch of the opt-in
 `EvaluationMethod::RustRed` / `EvaluationOrder::rustred_only()` backend.
 They do not change Vakint's default evaluation order or its FORM-backed modes.
 
+The current runtime pin is `7b22f5bda441588f2e437b15fa0872461c483708`.
+The September 24 equation-to-package refresh supplies 59,509 unrestricted
+candidate rules in 20,381,288 compressed bytes. All 1,155 raw terminals,
+74 catalog outputs and normalization sidecars are retained. See the
+[current producer recipe and measured validation](../../../rustred_package_refresh.typ).
+The migration and timing sections below retain their historical measurements;
+their 59,636-rule payload is not the current generated package.
+
 Each parent (H, FG, BMW and X) has:
 
 - a `.csv` ordered physical/auxiliary momentum descriptor;
@@ -151,7 +159,8 @@ disabled for that catalog-only milestone; the later activation is described belo
 
 ## Weighted vacuum terminal normalization
 
-The current RustRed pin is `8ad62b964de6f3a508fd165dc6ac2509f25839fe`.
+This normalization milestone used RustRed pin
+`8ad62b964de6f3a508fd165dc6ac2509f25839fe`.
 The four new sidecars retain the verified positive-power U equivalences and
 add exact weighted projections for quadratic numerator terminals. RustRed's
 generic service authenticates integer unit-Jacobian momentum symmetries of the
@@ -294,11 +303,12 @@ logger; it does not increase source accuracy. Missing Laurent orders are errors.
 
 ## Offline reproduction
 
-Use the matching RustRed runtime pin `8ad62b964de6f3a508fd165dc6ac2509f25839fe`
-for the offline example commands below, with the Symbolica license supplied
+The historical offline commands below use RustRed runtime pin
+`8ad62b964de6f3a508fd165dc6ac2509f25839fe`, with the Symbolica license supplied
 in the environment. These commands generate fresh programs when intentionally
 requested; the shipped migration itself converted the saved programs without
-generating new rules.
+generating new rules. To reproduce the current generated packages, use the
+[current producer recipe](../../../rustred_package_refresh.typ) instead.
 
 ```sh
 cargo run --release --locked --offline --no-default-features \
