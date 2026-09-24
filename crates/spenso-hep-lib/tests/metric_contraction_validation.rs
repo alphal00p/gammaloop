@@ -325,23 +325,37 @@ fn metric_substitution_preserves_antisymmetric_orientation_and_scalar_parameters
         let evaluation = MetricEvaluation::new(sample);
         let [mu, nu, rho, sigma] = MetricEvaluation::slots();
         for (source, target) in [(&mu, &rho), (&sigma, &mu)] {
-            // Close the free slots only after rewriting, so the metric must
-            // act on the antisymmetric tensor rather than a spectator vector.
-            let expression =
-                spenso::g!(source, target) * function!(evaluation.antisymmetric, source, &nu);
-            let simplified = expression.schoonschip_with_settings(&settings);
-            assert_ne!(expression, simplified);
-            let spectator = evaluation.vector(0, target) * evaluation.vector(1, &nu);
-            let before = evaluation.evaluate(&(&expression * &spectator));
-            let after = evaluation.evaluate(&(&simplified * &spectator));
-            assert_eq!(
-                before, after,
-                "orientation mismatch: {expression} -> {simplified}"
-            );
-            assert!(
-                !before.is_zero(),
-                "orientation test must not be a zero identity"
-            );
+            for length in [1, 16] {
+                let slots: Vec<_> = std::iter::once(source.clone())
+                    .chain((1..length).map(|index| {
+                        Minkowski {}
+                            .new_rep(4)
+                            .slot::<AbstractIndex, _>(symbol!(&format!("orientation_{index}")))
+                            .to_atom()
+                    }))
+                    .chain(std::iter::once(target.clone()))
+                    .collect();
+                let metrics: Atom = slots
+                    .windows(2)
+                    .map(|pair| spenso::g!(&pair[0], &pair[1]))
+                    .product();
+                // Close the free slots only after rewriting, so the metric must
+                // act on the antisymmetric tensor rather than a spectator vector.
+                let expression = metrics * function!(evaluation.antisymmetric, source, &nu);
+                let simplified = expression.schoonschip_with_settings(&settings);
+                assert_ne!(expression, simplified);
+                let spectator = evaluation.vector(0, target) * evaluation.vector(1, &nu);
+                let before = evaluation.evaluate(&(&expression * &spectator));
+                let after = evaluation.evaluate(&(&simplified * &spectator));
+                assert_eq!(
+                    before, after,
+                    "orientation mismatch: {expression} -> {simplified}"
+                );
+                assert!(
+                    !before.is_zero(),
+                    "orientation test must not be a zero identity"
+                );
+            }
         }
         let expression = spenso::g!(&mu, &nu) * function!(evaluation.labelled, symbol!("mu"), &mu);
         let simplified = expression.schoonschip_with_settings(&settings);
