@@ -9,6 +9,8 @@
 #import "content/tutorial.typ": tutorial
 #import "content/process-generation.typ": process-generation
 #import "content/dot-input.typ": dot-input
+#import "content/threshold-subtraction.typ": threshold-subtraction
+#import "content/sampling.typ": sampling
 #import "content/events.typ": events
 #import "content/diagnostics.typ": diagnostics
 #import "content/kurvst.typ": kurvst
@@ -31,6 +33,8 @@
     #tutorial
     #process-generation
     #dot-input
+    #threshold-subtraction
+    #sampling
     #events
     #api
     #diagnostics

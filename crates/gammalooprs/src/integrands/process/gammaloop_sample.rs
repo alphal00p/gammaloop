@@ -23,7 +23,7 @@ use symbolica::numerical_integration::Sample;
 
 use super::{
     ProcessIntegrandImpl, SamplingChannelId, SamplingChannelRuntimeContexts,
-    resolve_discrete_selection_for_sampling, sampling_context::PreparedLUHost,
+    resolve_discrete_selection_for_sampling, sampling::context::PreparedLUHost,
 };
 
 // discrete dimensions, continious dimensions
@@ -417,7 +417,7 @@ impl GammaLoopSample<ArbPrec> {
     /// earlier physical lane. The combined factor is not recomputed from
     /// separately rounded map and partition values.
     pub(crate) fn materialize<T: FloatLike>(&self, tolerance: f64) -> Result<GammaLoopSample<T>> {
-        use super::sampling_maps::SamplingEvaluationError;
+        use super::sampling::maps::SamplingEvaluationError;
         if !tolerance.is_finite() || tolerance <= 0.0 {
             return Err(eyre!(
                 "sampling materialization accuracy must be positive and finite"
@@ -1045,7 +1045,7 @@ mod tests {
     #[test]
     fn sampling_map_rejects_non_unit_original_coordinates() {
         use crate::integrands::process::{
-            SamplingMapComponent, SurfaceRadialMap, sampling_context::SamplingMapContext,
+            SamplingMapComponent, SurfaceRadialMap, sampling::context::SamplingMapContext,
         };
         let map = SurfaceRadialMap::new(3, vec![0.0; 3], None, 1.0, 1.0).unwrap();
         for coordinates in [[0.2, 1.2, 0.3], [0.2, f64::NAN, 0.3]] {

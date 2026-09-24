@@ -8,9 +8,9 @@
 # with `-D name=value`, for example `run integrate -D n_start=10000`.
 
 # Higgs-aware metadata: full-UV generation passes for all 936 orientations.
-# Exact coincident radial roots remain an evaluation limitation. The measured
-# hard H/Z corner also prevents a finite-variance claim for the current sampler;
-# see IR_SAFE_THRESHOL_UPDATE.md. Absolute-integral errors are diagnostic here.
+# Exact coincident radial roots remain an evaluation limitation. Focused channels
+# improve selected corners but do not establish global finite variance; see
+# docs/products/gammaloop/content/sampling.typ and threshold-subtraction.typ.
 # From the repository root: gammaloop THIS_CARD run all
 # Selected orientation: gammaloop -s NEW_STATE THIS_CARD run generate_o0
 # Steering: run pilot -D mapping=power -D radial_power=2 -D workspace=NEW_WORKSPACE
@@ -21,10 +21,8 @@
 # Keep separate states for all/o0/o1/o2/o3. Compilation or sum changes need regeneration.
 # Integration presets default to 5 cores and <=10 iterations; use
 # -D integration_cores=20 for longer runs and -D training_phase=imag to train Im.
-# Try -D radial_scale=0.3: the 300k-sample comparison reduced nominal Re/Im
-# errors by about 30%; this finite-run improvement does not certify variance.
-# If overriding n_start or n_max, keep n_max <= 10*n_start; use the validation
-# runner for enforced caps.
+# Tune the radial scale with -D radial_scale=0.3 and compare independent pilot runs.
+# Set -D n_max=POINTS explicitly for the intended run budget.
 # Symmetric local-CT localization: -D ct_gaussian_width=0.1 or
 # -D ct_sliver_width=0.1. Widths multiply Q, or r-star with ct_dynamic_width=true.
 # Add -D ct_smooth_sliver=true for a smooth compact boundary. A narrow hard

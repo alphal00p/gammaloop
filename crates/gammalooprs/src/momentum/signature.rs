@@ -117,7 +117,7 @@ impl LoopExtSignature {
         other: &Self,
         externals: &ExternalThreeMomenta<F<T>>,
     ) -> eyre::Result<bool> {
-        use crate::integrands::process::sampling_maps::SamplingEvaluationError;
+        use crate::integrands::process::sampling::maps::SamplingEvaluationError;
         use rug::{Float, float::Round};
         const PRECISION: u32 = 2048;
         if self.internal.len() != other.internal.len()
@@ -745,7 +745,7 @@ mod tests {
     #[test]
     fn spatial_routing_equality_certifies_native_external_frames() {
         use crate::{
-            integrands::process::sampling_maps::SamplingEvaluationError,
+            integrands::process::sampling::maps::SamplingEvaluationError,
             momentum::{ThreeMomentum, sample::ExternalThreeMomenta},
             utils::{ArbPrec, F, FloatLike, QuadFloat},
         };

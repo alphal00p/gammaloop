@@ -440,7 +440,10 @@
       "tests/resources/graphs/epemttbar.dot"
     ];
     # Unit and integration tests embed these graph fixtures and snapshots with include_str!.
-    "gammaloop-api" = ["tests/resources/graphs"];
+    "gammaloop-api" = [
+      "tests/resources/graphs"
+      "examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot"
+    ];
     gammalooprs = [
       "tests/resources/graphs"
       "crates/gammalooprs/tests/resources/uv_parametric_numerator"
@@ -480,6 +483,7 @@
     ];
     clinnet = ["docs/assets/typst/portal-graphs/edge-style.typ"];
     "gammaloop-api" = [
+      "tests/resources/graphs/scalar_box.dot"
       "tests/resources/graphs/scalar_bubble.dot"
     ];
     "gammaloop-tracing-filter" = [

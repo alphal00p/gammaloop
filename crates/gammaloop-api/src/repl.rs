@@ -5539,6 +5539,25 @@ mod tests {
     }
 
     #[test]
+    fn completion_offers_metadata_display_formats_and_plural_graph_selector() {
+        let state = generate_completion_state();
+        for flag in ["--show_sampling", "--show_threshold_subtraction"] {
+            let values = completion_values(
+                &format!("display integrands -p epem_xs -i subtracted {flag} "),
+                &state,
+            );
+            assert_eq!(values, vec!["pretty".to_string(), "toml".to_string()]);
+        }
+        let values = completion_values(
+            "display integrands -p epem_xs -i subtracted --show_sampling pretty --graph G",
+            &state,
+        );
+        assert!(values.contains(&"GL0".to_string()));
+        assert!(values.contains(&"GL2".to_string()));
+        assert!(!values.contains(&"GL1".to_string()));
+    }
+
+    #[test]
     fn completion_filters_display_integrand_categories_by_integrand_kind() {
         let completion_state = generate_completion_state();
 

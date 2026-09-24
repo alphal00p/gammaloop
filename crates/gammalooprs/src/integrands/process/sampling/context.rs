@@ -22,7 +22,7 @@ use color_eyre::eyre::{Result, WrapErr, eyre};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, sync::Arc};
 
-use super::{sampling_maps::SamplingEvaluationError, sampling_selection::SamplingChannelId};
+use super::{maps::SamplingEvaluationError, selection::SamplingChannelId};
 
 /// A component's discrete recipe is authenticated during canonical preparation.
 /// Physical retries consume the completed draw without selecting another recipe.

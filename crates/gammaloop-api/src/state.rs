@@ -23,7 +23,7 @@ use gammalooprs::{
     processes::{Amplitude, CrossSection},
     utils::serde_utils::IsDefault,
 };
-use linnet::half_edge::subgraph::SubGraphLike;
+use linnet::half_edge::subgraph::{SuBitGraph, SubGraphLike, SubSetLike};
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
@@ -1592,6 +1592,8 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
+// Version 10 records UFO and subgraph printer registrations, including symbols removed
+// from a restricted model. Older archives cannot restore those callbacks and must be regenerated.
 // Version 9 combines the Symbolica 3 evaluator/CFF payloads with advanced sampling
 // and multiplier layouts. Earlier states must be regenerated.
 // Version 8 adds multiplier function-map metadata and on-shell energy inputs to
@@ -1604,19 +1606,25 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 5 persists component-local generated-CFF ownership and prefactor
 // metadata. Older states use a previous positional bincode layout and must be
 // regenerated rather than decoded as the new expression type.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 9;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 10;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct StateManifest {
     version: u32,
+    #[serde(default)]
+    ufo_print_symbols: Vec<String>,
+    #[serde(default)]
+    linnet_subgraph_print_labels: Vec<String>,
 }
 
 impl Default for StateManifest {
     fn default() -> Self {
         Self {
             version: CURRENT_STATE_MANIFEST_VERSION,
+            ufo_print_symbols: Vec::new(),
+            linnet_subgraph_print_labels: Vec::new(),
         }
     }
 }
@@ -1743,7 +1751,32 @@ fn load_state_manifest(save_path: &Path) -> Result<StateManifest> {
 }
 
 fn save_state_manifest(save_path: &Path) -> Result<()> {
-    let manifest = StateManifest::default();
+    // Symbolica exports the entire symbol registry, including couplings removed from the
+    // active model by restrictions. Its archive cannot serialize their print callbacks.
+    let mut ufo_print_symbols: Vec<_> = symbolica::state::State::symbol_iter()
+        .filter(|(symbol, _)| {
+            symbol.get_namespace() == "UFO" && symbol.get_print_function().is_some()
+        })
+        .map(|(symbol, _)| symbol.get_stripped_name().to_owned())
+        .collect();
+    ufo_print_symbols.sort_unstable();
+    let mut linnet_subgraph_print_labels: Vec<_> = symbolica::state::State::symbol_iter()
+        .filter(|(symbol, _)| {
+            symbol.get_namespace() == "linnet" && symbol.get_print_function().is_some()
+        })
+        .filter_map(|(symbol, _)| {
+            symbol
+                .get_stripped_name()
+                .strip_prefix("S_")
+                .map(str::to_owned)
+        })
+        .collect();
+    linnet_subgraph_print_labels.sort_unstable();
+    let manifest = StateManifest {
+        ufo_print_symbols,
+        linnet_subgraph_print_labels,
+        ..StateManifest::default()
+    };
     let raw_manifest =
         toml::to_string_pretty(&manifest).context("Trying to serialize state manifest to TOML")?;
     fs::write(save_path.join(STATE_MANIFEST_FILE), raw_manifest).with_context(|| {
@@ -3280,6 +3313,15 @@ impl State {
         let mut loaded_state = State::new(&save_path, trace_logs_filename);
         debug!("Loading state manifest version {}", manifest.version);
 
+        // Restore even symbols absent from the restricted model before parsing expressions
+        // or importing the archive: Symbolica cannot attach callbacks to a plain symbol later.
+        for name in &manifest.ufo_print_symbols {
+            let _ = UFOSymbol::from(name);
+        }
+        for label in &manifest.linnet_subgraph_print_labels {
+            let _ = SuBitGraph::symbol_from_label(label.clone());
+        }
+
         // Load the model before importing Symbolica state so UFO symbols retain their custom print
         // callbacks; the import then remaps serialized symbol ids onto those definitions.
         let mut model = if let Some(model_path) = &model_path {
@@ -3502,13 +3544,27 @@ mod tests {
     #[test]
     fn state_load_preserves_ufo_custom_printer() {
         if let Some(state_path) = std::env::var_os(STATE_LOAD_ORDER_CHILD) {
-            let _state = State::load(state_path.into(), None, None).unwrap();
-            // A one-character symbol is unquoted by Symbolica's default Typst printer, so the
-            // quotes prove that loading the model installed GammaLoop's UFO callback first.
-            let rendered = Atom::from(UFOSymbol::from("G"))
-                .printer(SpensoPrintSettings::typst_options())
-                .to_string();
-            assert_eq!(rendered, r#""G""#);
+            for _ in 0..2 {
+                let _state = State::load(PathBuf::from(&state_path), None, None).unwrap();
+                for name in ["G", "orphan_ufo_printer"] {
+                    let symbol = UFOSymbol::from(name);
+                    assert!(symbol.0.get_print_function().is_some(), "{name}");
+                    let rendered = Atom::from(symbol)
+                        .printer(SpensoPrintSettings::typst_options())
+                        .to_string();
+                    assert_eq!(rendered, format!("\"{name}\""));
+                }
+                for label in ["Dd0E4", "1⦻2"] {
+                    let symbol = symbolica::get_symbol!(&format!("linnet::S_{label}")).unwrap();
+                    assert!(symbol.get_print_function().is_some(), "{label}");
+                    assert_eq!(
+                        Atom::var(symbol)
+                            .printer(SpensoPrintSettings::typst_options())
+                            .to_string(),
+                        format!("#S(g,\"{label}\")")
+                    );
+                }
+            }
             return;
         }
 
@@ -3516,13 +3572,28 @@ mod tests {
         let mut state = State::new(temp.path(), None);
         state.model = load_generic_model("sm");
         state.model_parameters = InputParamCard::default_from_model(&state.model);
+        // Reproduce a coupling removed by a restriction: it survives in Symbolica's
+        // global registry but has no declaration in the saved model.
+        let _ = UFOSymbol::from("orphan_ufo_printer");
+        for label in ["Dd0E4", "1⦻2"] {
+            let _ = SuBitGraph::symbol_from_label(label.to_owned());
+        }
         state.save(temp.path(), true, false).unwrap();
+        let manifest = load_state_manifest(temp.path()).unwrap();
+        assert!(manifest
+            .ufo_print_symbols
+            .contains(&"orphan_ufo_printer".to_owned()));
+        assert!(!fs::read_to_string(temp.path().join("model.json"))
+            .unwrap()
+            .contains("orphan_ufo_printer"));
 
         let output = Command::new(std::env::current_exe().unwrap())
             .arg(STATE_LOAD_ORDER_TEST)
             .arg("--exact")
             .arg("--nocapture")
             .env(STATE_LOAD_ORDER_CHILD, temp.path())
+            .env_remove("GL_ALL_LOG_FILTER")
+            .env("GL_DISPLAY_FILTER", "warn")
             .output()
             .unwrap();
         let transcript = format!(
@@ -3536,9 +3607,8 @@ mod tests {
             output.status
         );
         assert!(
-            !transcript.contains(
-                "Imported symbol UFO::G was previously defined with user-defined functions"
-            ),
+            !transcript.contains("Imported symbol UFO::")
+                && !transcript.contains("Imported symbol linnet::S_"),
             "{transcript}"
         );
     }
@@ -4581,6 +4651,8 @@ b = 1.0
                 categories,
                 hide_non_existing_thresholds,
                 show_threshold_functions,
+                show_sampling,
+                show_threshold_subtraction,
             }) => {
                 assert_eq!(process, Some(ProcessRef::Id(12)));
                 assert_eq!(integrand_name, None);
@@ -4588,6 +4660,8 @@ b = 1.0
                 assert!(categories.is_empty());
                 assert!(!hide_non_existing_thresholds);
                 assert!(!show_threshold_functions);
+                assert_eq!(show_sampling, None);
+                assert_eq!(show_threshold_subtraction, None);
             }
             other => panic!("Expected display integrand command, got {other:?}"),
         }
@@ -4838,6 +4912,7 @@ commands = ["quit -n"]
         let temp = tempdir().unwrap();
         let future_manifest = StateManifest {
             version: CURRENT_STATE_MANIFEST_VERSION + 1,
+            ..StateManifest::default()
         };
         fs::write(
             temp.path().join(STATE_MANIFEST_FILE),
@@ -5647,7 +5722,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
         // reconstructed raw point, including the nonzero external shift.
         use gammalooprs::{
             integrands::process::{
-                sampling_context::SamplingMapContext, GraphTerm, MomentumSpaceEvaluationInput,
+                sampling::context::SamplingMapContext, GraphTerm, MomentumSpaceEvaluationInput,
                 ProcessIntegrand, ProcessIntegrandImpl, SamplingMapComponent,
                 SamplingMapDefinition, SamplingMapKernel,
             },

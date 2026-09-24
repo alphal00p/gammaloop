@@ -90,7 +90,7 @@ commands = [
  "import model sm-default.json",
  "set model MT=173 MH=125 WT=0 ymt=173 aS=0.118 aEWM1=132.507 Gf=1.166390e-05 MZ=91.188",
  "run runtime",
- "import graphs ./examples/cli/epem_a_ttxh/NNLO_manual/graphs/GL134.dot --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]' -p epem_a_tth -i NNLO -o",
+ "import graphs ./examples/cli/epem_a_ttxh/NNLO/graphs/GL134.dot --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]' -p epem_a_tth -i NNLO -o",
  "generate existing -p epem_a_tth -i NNLO",
  "save state -o",
  "display integrand -p epem_a_tth -i NNLO --show-threshold-functions",

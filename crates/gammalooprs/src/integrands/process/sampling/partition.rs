@@ -13,7 +13,7 @@ use color_eyre::Result;
 use eyre::eyre;
 use symbolica::atom::Atom;
 
-use super::sampling_maps::SamplingEvaluationError;
+use super::maps::SamplingEvaluationError;
 use crate::utils::{F, FloatLike};
 
 use super::SamplingExpressionEvaluator;

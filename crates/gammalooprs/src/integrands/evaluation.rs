@@ -25,7 +25,7 @@ use crate::observables::{
 };
 use crate::{
     integrands::process::{
-        sampling_context::SamplingProposalPolicies, sampling_reference::ReferenceMoments,
+        sampling::context::SamplingProposalPolicies, sampling::reference::ReferenceMoments,
     },
     settings::runtime::{IntegrationStatisticsSnapshot, Precision},
     utils::{

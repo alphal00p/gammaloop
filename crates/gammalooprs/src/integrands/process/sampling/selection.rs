@@ -17,12 +17,16 @@ use crate::settings::runtime::{
 };
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use serde::{Deserialize, Serialize};
-use symbolica::{atom::Atom, symbol, try_parse};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    printer::PrintOptions,
+    symbol, try_parse,
+};
 
-use super::sampling_context::{
+use super::context::{
     PreparedLUHost, SamplingMapContext, SamplingProposalKey, SamplingProposalPolicies,
 };
-use super::sampling_maps::{SamplingEvaluationError, combine_contracts};
+use super::maps::{SamplingEvaluationError, combine_contracts};
 use super::{
     ImplicitSurfaceRadialMap, SamplingExpressionEvaluator, SamplingMapAffine, SamplingMapComponent,
     SamplingMapComposition, SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding,
@@ -74,6 +78,8 @@ impl SamplingChannelPreset {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SamplingChannelSelector {
     Preset(SamplingChannelPreset),
+    /// An exact ordered edge list identifying one admissible generated basis.
+    Lmb(Vec<usize>),
     Named(String),
 }
 
@@ -82,6 +88,23 @@ impl SamplingChannelSelector {
         let source = source.trim();
         if source.is_empty() {
             return Err(SamplingSelectionError::EmptySelector);
+        }
+        if source
+            .split_once('(')
+            .is_some_and(|(name, _)| name.trim().rsplit("::").next() == Some("lmb"))
+        {
+            return match SamplingMapDefinition::parse(source) {
+                Ok(SamplingMapDefinition::Lmb(edges)) => Ok(Self::Lmb(edges)),
+                Ok(_) => Err(SamplingSelectionError::InvalidSelector {
+                    selector: source.to_owned(),
+                    error: "an explicit generated basis requires a complete lmb(...) expression"
+                        .to_owned(),
+                }),
+                Err(error) => Err(SamplingSelectionError::InvalidSelector {
+                    selector: source.to_owned(),
+                    error: error.to_string(),
+                }),
+            };
         }
         match source {
             SamplingChannelPreset::LMB => Ok(Self::Preset(SamplingChannelPreset::Lmb)),
@@ -99,14 +122,14 @@ impl SamplingChannelSelector {
     pub const fn preset(&self) -> Option<SamplingChannelPreset> {
         match self {
             Self::Preset(preset) => Some(*preset),
-            Self::Named(_) => None,
+            Self::Lmb(_) | Self::Named(_) => None,
         }
     }
 
     pub fn name(&self) -> Option<&str> {
         match self {
             Self::Named(name) => Some(name),
-            Self::Preset(_) => None,
+            Self::Preset(_) | Self::Lmb(_) => None,
         }
     }
 }
@@ -115,6 +138,13 @@ impl fmt::Display for SamplingChannelSelector {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Preset(preset) => formatter.write_str(preset.as_str()),
+            Self::Lmb(edges) => write!(
+                formatter,
+                "{}",
+                SamplingMapDefinition::Lmb(edges.clone())
+                    .to_atom()
+                    .printer(PrintOptions::file_no_namespace())
+            ),
             Self::Named(name) => formatter.write_str(name),
         }
     }
@@ -644,7 +674,7 @@ pub enum SamplingCatalogueEntry {
     Lmb {
         basis_id: usize,
         edges: Vec<usize>,
-        preset: SamplingChannelPreset,
+        source: SamplingChannelSelector,
     },
     /// An automatically enumerated E-surface candidate. Its geometry is
     /// prepared later from the current cut/orientation kinematics.
@@ -1544,16 +1574,14 @@ impl<T: FloatLike> SamplingChannelBridgeEvaluation<T> {
             .iter()
             .any(|value| !value.0.is_finite() || **value <= value.zero())
         {
-            return Err(
-                super::sampling_maps::SamplingEvaluationError::Unrepresentable {
-                    operation: "selected sampling factor",
-                    detail: format!(
-                        "channel '{}' has a nonpositive or unrepresentable J*w product {factor}",
-                        self.channel_name
-                    ),
-                }
-                .into(),
-            );
+            return Err(super::maps::SamplingEvaluationError::Unrepresentable {
+                operation: "selected sampling factor",
+                detail: format!(
+                    "channel '{}' has a nonpositive or unrepresentable J*w product {factor}",
+                    self.channel_name
+                ),
+            }
+            .into());
         }
         Ok(factor.0)
     }
@@ -1999,7 +2027,7 @@ impl<T: FloatLike> SamplingChannelBridge<T> {
             || log_ratio > upper
             || lower.is_some_and(|lower| log_ratio < lower)
         {
-            return Err(super::sampling_maps::SamplingEvaluationError::Unrepresentable {
+            return Err(super::maps::SamplingEvaluationError::Unrepresentable {
                 operation: "sampling inverse density consistency",
                 detail: format!(
                     "channel '{}' has log(J_forward * q_inverse)={log_ratio}, outside relative tolerance {tolerance}",
@@ -2672,10 +2700,9 @@ impl SamplingChannelCatalogue {
                 SamplingCatalogueEntry::Lmb {
                     basis_id,
                     edges,
-                    preset,
+                    source,
                 } => format!(
-                    "{index}: lmb basis={basis_id} edges={edges:?} source={}",
-                    preset.as_str()
+                    "{index}: lmb basis={basis_id} edges={edges:?} source={source}"
                 ),
                 SamplingCatalogueEntry::Surface { edges, parent_lmb } => {
                     format!("{index}: surface edges={edges:?} parent_lmb={parent_lmb:?}")
@@ -2714,7 +2741,7 @@ pub fn build_sampling_channel_catalogue(
     resolved: &ResolvedSamplingChannelSelection,
     all_lmbs: &[(usize, Vec<usize>)],
     optimized_lmbs: &[usize],
-) -> SamplingChannelCatalogue {
+) -> Result<SamplingChannelCatalogue, SamplingSelectionError> {
     build_sampling_channel_catalogue_with_surfaces(resolved, all_lmbs, optimized_lmbs, &[], &[])
 }
 
@@ -2727,7 +2754,7 @@ pub fn build_sampling_channel_catalogue_with_surfaces(
     optimized_lmbs: &[usize],
     surface_edges: &[Vec<usize>],
     parent_lmb: &[usize],
-) -> SamplingChannelCatalogue {
+) -> Result<SamplingChannelCatalogue, SamplingSelectionError> {
     build_sampling_channel_catalogue_with_surfaces_and_coverage(
         resolved,
         all_lmbs,
@@ -2748,31 +2775,57 @@ pub fn build_sampling_channel_catalogue_with_surfaces_and_coverage(
     surface_edges: &[Vec<usize>],
     parent_lmb: &[usize],
     massless_edges: &[usize],
-) -> SamplingChannelCatalogue {
+) -> Result<SamplingChannelCatalogue, SamplingSelectionError> {
     let mut entries = Vec::new();
     for selector in &resolved.selectors {
-        let Some(preset) = selector.preset() else {
-            if let SamplingChannelSelector::Named(name) = selector
-                && let Some(channel) = resolved.named(name)
-            {
+        let mut basis_ids = match selector {
+            SamplingChannelSelector::Named(name) => {
+                let Some(channel) = resolved.named(name) else {
+                    continue;
+                };
                 let entry = SamplingCatalogueEntry::Named(channel.clone());
                 if !entries.contains(&entry) {
                     entries.push(entry);
                 }
+                continue;
             }
-            continue;
-        };
-        let mut basis_ids: Vec<usize> = match preset {
-            SamplingChannelPreset::Lmb => all_lmbs.iter().map(|(id, _)| *id).collect(),
-            SamplingChannelPreset::OptimizedLmb | SamplingChannelPreset::Surfaces => optimized_lmbs
+            SamplingChannelSelector::Lmb(edges) => {
+                let matches = all_lmbs
+                    .iter()
+                    .filter_map(|(id, candidate)| (candidate == edges).then_some(*id))
+                    .collect::<Vec<_>>();
+                match matches.as_slice() {
+                    [] => {
+                        return Err(SamplingSelectionError::MissingLmb {
+                            graph: resolved.graph_name.clone(),
+                            edges: edges.clone(),
+                            available: all_lmbs.to_vec(),
+                        });
+                    }
+                    [_] => matches,
+                    _ => {
+                        return Err(SamplingSelectionError::AmbiguousLmb {
+                            graph: resolved.graph_name.clone(),
+                            edges: edges.clone(),
+                            basis_ids: matches,
+                        });
+                    }
+                }
+            }
+            SamplingChannelSelector::Preset(SamplingChannelPreset::Lmb) => {
+                all_lmbs.iter().map(|(id, _)| *id).collect()
+            }
+            SamplingChannelSelector::Preset(
+                SamplingChannelPreset::OptimizedLmb | SamplingChannelPreset::Surfaces,
+            ) => optimized_lmbs
                 .iter()
                 .copied()
                 .filter(|id| all_lmbs.iter().any(|(candidate, _)| candidate == id))
                 .collect(),
         };
         if matches!(
-            preset,
-            SamplingChannelPreset::OptimizedLmb | SamplingChannelPreset::Surfaces
+            selector.preset(),
+            Some(SamplingChannelPreset::OptimizedLmb | SamplingChannelPreset::Surfaces)
         ) {
             // A surface-aware or optimized preset must retain at least one
             // ordinary full-domain channel when generated LMBs exist.  This
@@ -2810,7 +2863,7 @@ pub fn build_sampling_channel_catalogue_with_surfaces_and_coverage(
             let entry = SamplingCatalogueEntry::Lmb {
                 basis_id,
                 edges: edges.clone(),
-                preset,
+                source: selector.clone(),
             };
             let duplicate = entries.iter().any(|existing| {
                 matches!(
@@ -2826,7 +2879,7 @@ pub fn build_sampling_channel_catalogue_with_surfaces_and_coverage(
                 entries.push(entry);
             }
         }
-        if preset == SamplingChannelPreset::Surfaces {
+        if selector.preset() == Some(SamplingChannelPreset::Surfaces) {
             for edges in surface_edges {
                 if !edges.is_empty()
                     && !entries.iter().any(|entry| {
@@ -2843,11 +2896,11 @@ pub fn build_sampling_channel_catalogue_with_surfaces_and_coverage(
             }
         }
     }
-    SamplingChannelCatalogue {
+    Ok(SamplingChannelCatalogue {
         graph_name: resolved.graph_name.clone(),
         selectors: resolved.selectors.clone(),
         entries,
-    }
+    })
 }
 
 impl ResolvedSamplingChannelSelection {
@@ -2870,6 +2923,26 @@ pub enum SamplingSelectionError {
     EmptyGraphName,
     EmptySelector,
     UnknownPreset(String),
+    InvalidSelector {
+        selector: String,
+        error: String,
+    },
+    MissingLmb {
+        graph: String,
+        edges: Vec<usize>,
+        available: Vec<(usize, Vec<usize>)>,
+    },
+    ExcludedLmb {
+        graph: String,
+        edges: Vec<usize>,
+        basis_ids: Vec<usize>,
+        available: Vec<(usize, Vec<usize>)>,
+    },
+    AmbiguousLmb {
+        graph: String,
+        edges: Vec<usize>,
+        basis_ids: Vec<usize>,
+    },
     MissingChannelDefinition {
         graph: String,
         channel: String,
@@ -2902,6 +2975,34 @@ impl fmt::Display for SamplingSelectionError {
             Self::UnknownPreset(preset) => write!(
                 formatter,
                 "unknown sampling channel preset `{preset}`; expected auto:lmb, auto:optimized_lmb or auto:surfaces"
+            ),
+            Self::InvalidSelector { selector, error } => {
+                write!(formatter, "invalid sampling selector `{selector}`: {error}")
+            }
+            Self::MissingLmb {
+                graph,
+                edges,
+                available,
+            } => write!(
+                formatter,
+                "sampling graph '{graph}' has no admissible generated LMB with exact ordered edges {edges:?}; available (basis ID, ordered edges): {available:?}"
+            ),
+            Self::ExcludedLmb {
+                graph,
+                edges,
+                basis_ids,
+                available,
+            } => write!(
+                formatter,
+                "sampling graph '{graph}' has generated LMBs {basis_ids:?} with exact ordered edges {edges:?}, but sampling.lmb_basis_ids excludes them; admissible (basis ID, ordered edges): {available:?}"
+            ),
+            Self::AmbiguousLmb {
+                graph,
+                edges,
+                basis_ids,
+            } => write!(
+                formatter,
+                "sampling graph '{graph}' has ambiguous exact ordered edges {edges:?}, matching generated LMB basis IDs {basis_ids:?}; select an unambiguous basis with sampling.lmb_basis_ids"
             ),
             Self::MissingChannelDefinition {
                 graph,
@@ -3162,6 +3263,244 @@ mod tests {
     use crate::settings::runtime::ParameterizationSettings;
 
     #[test]
+    fn explicit_lmb_selectors_parse_and_round_trip_ordered_symbolica_expressions() -> Result<()> {
+        // Symbolica caches its own color setting and enables bracket colors on a TTY.
+        // A fresh process exercises that mode without mutating this test process's environment.
+        const CHILD: &str = "GAMMALOOP_SAMPLING_SELECTOR_COLOR_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe()?)
+                .args([
+                    "--exact",
+                    "integrands::process::sampling::selection::tests::explicit_lmb_selectors_parse_and_round_trip_ordered_symbolica_expressions",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .env("SYMBOLICA_COLOR", "1")
+                .output()?;
+            assert!(
+                output.status.success(),
+                "forced-color selector roundtrip failed:\nstdout:\n{}\nstderr:\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return Ok(());
+        }
+        test_initialise()?;
+        for (source, edges) in [
+            (" lmb(4, 2, 7) ", vec![4, 2, 7]),
+            ("gammalooprs::sampling_map::lmb(4,2,7)", vec![4, 2, 7]),
+            ("lmb()", vec![]),
+        ] {
+            let selector = SamplingChannelSelector::parse(source)?;
+            assert_eq!(selector, SamplingChannelSelector::Lmb(edges));
+            assert!(!selector.to_string().contains('\u{1b}'));
+            assert_eq!(
+                SamplingChannelSelector::parse(&selector.to_string())?,
+                selector
+            );
+        }
+        for source in [
+            "lmb(1,1)",
+            "lmb(-1)",
+            "lmb(x)",
+            "lmb(1",
+            "lmb(1)+surface(2)",
+            "lmb(1)^0*surface(2)",
+            "foreign::lmb(1)",
+        ] {
+            assert!(
+                matches!(
+                    SamplingChannelSelector::parse(source),
+                    Err(SamplingSelectionError::InvalidSelector { .. })
+                ),
+                "{source}"
+            );
+        }
+        assert_eq!(
+            SamplingChannelSelector::parse("ordinary")?,
+            SamplingChannelSelector::Named("ordinary".into())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_lmb_catalogue_preserves_mixed_order_and_deduplication() -> Result<()> {
+        test_initialise()?;
+        let selection = SamplingChannelSelection {
+            default_channel_selection: [
+                "named",
+                "lmb(2,4)",
+                "auto:optimized_lmb",
+                "lmb(2,4)",
+                "auto:lmb",
+            ]
+            .map(str::to_owned)
+            .into(),
+            channel_definitions: BTreeMap::from([(
+                "G".into(),
+                BTreeMap::from([("named".into(), definition("lmb(1,2)"))]),
+            )]),
+            ..Default::default()
+        };
+        let resolved = resolve_sampling_channel_selection("G", &selection)?;
+        let catalogue = build_sampling_channel_catalogue(
+            &resolved,
+            &[(7, vec![1, 2]), (3, vec![2, 4]), (11, vec![4, 1])],
+            &[7],
+        )?;
+        assert!(
+            matches!(&catalogue.entries[0], SamplingCatalogueEntry::Named(channel) if channel.name == "named")
+        );
+        assert_eq!(
+            catalogue.lmb_basis_entries().collect::<Vec<_>>(),
+            vec![(3, &[2, 4][..]), (7, &[1, 2][..]), (11, &[4, 1][..])]
+        );
+        assert!(
+            matches!(&catalogue.entries[1], SamplingCatalogueEntry::Lmb { source: SamplingChannelSelector::Lmb(edges), .. } if edges == &[2,4])
+        );
+        assert!(matches!(
+            &catalogue.entries[2],
+            SamplingCatalogueEntry::Lmb {
+                source: SamplingChannelSelector::Preset(SamplingChannelPreset::OptimizedLmb),
+                ..
+            }
+        ));
+        assert_eq!(catalogue.entries.len(), 4);
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_lmb_catalogue_requires_one_exact_ordered_match() -> Result<()> {
+        test_initialise()?;
+        let selection = SamplingChannelSelection {
+            default_channel_selection: vec!["lmb(2,1)".into()],
+            ..Default::default()
+        };
+        let resolved = resolve_sampling_channel_selection("G", &selection)?;
+        assert!(matches!(
+            build_sampling_channel_catalogue(&resolved, &[(5, vec![1,2])], &[]),
+            Err(SamplingSelectionError::MissingLmb { graph, edges, available })
+                if graph == "G" && edges == [2,1] && available == [(5, vec![1,2])]
+        ));
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(5, vec![1, 2]), (8, vec![2, 1])], &[])?;
+        assert_eq!(
+            catalogue.lmb_basis_entries().collect::<Vec<_>>(),
+            vec![(8, &[2, 1][..])]
+        );
+        assert!(matches!(
+            build_sampling_channel_catalogue(&resolved, &[(5, vec![2,1]), (8, vec![2,1])], &[]),
+            Err(SamplingSelectionError::AmbiguousLmb { graph, edges, basis_ids })
+                if graph == "G" && edges == [2,1] && basis_ids == [5,8]
+        ));
+        let empty = resolve_sampling_channel_selection(
+            "G",
+            &SamplingChannelSelection {
+                default_channel_selection: vec!["lmb()".into()],
+                ..Default::default()
+            },
+        )?;
+        let catalogue = build_sampling_channel_catalogue(&empty, &[(4, vec![])], &[])?;
+        assert_eq!(
+            catalogue.lmb_basis_entries().collect::<Vec<_>>(),
+            vec![(4, &[][..])]
+        );
+        assert!(
+            SamplingMapKernel::new(
+                SamplingMapDefinition::Lmb(vec![]),
+                ParameterizationSettings::default(),
+                1.0,
+                0
+            )
+            .is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_lmb_channels_preserve_generated_dispatch_precision_and_partition() -> Result<()> {
+        use spenso::algebra::complex::Complex;
+        test_initialise()?;
+        let all_lmbs = [(7, vec![1]), (3, vec![2])];
+        let automatic = resolve_sampling_channel_selection(
+            "G",
+            &SamplingChannelSelection {
+                default_channel_selection: vec!["auto:lmb".into()],
+                ..Default::default()
+            },
+        )?;
+        let explicit = resolve_sampling_channel_selection(
+            "G",
+            &SamplingChannelSelection {
+                default_channel_selection: vec!["lmb(1)".into(), "lmb(2)".into()],
+                ..Default::default()
+            },
+        )?;
+        let automatic = build_sampling_channel_catalogue(&automatic, &all_lmbs, &[])?;
+        let explicit = build_sampling_channel_catalogue(&explicit, &all_lmbs, &[])?;
+        assert!(automatic.supports_fixed_quad_source());
+        assert!(explicit.supports_fixed_quad_source());
+        let programs = automatic.compile_programs(3, &HFunctionSettings::default())?;
+        let explicit_programs = explicit.compile_programs(3, &HFunctionSettings::default())?;
+        for weight in [
+            SamplingChannelWeight::MapDensity,
+            SamplingChannelWeight::InverseJacobian,
+            SamplingChannelWeight::Ose,
+        ] {
+            let mut settings = ParameterizationSettings::default();
+            settings.sampling_channels.weight = weight;
+            let mut context =
+                SamplingChannelCompileContext::<f64>::new("G", vec![1], settings, 10.0, 1);
+            context.edge_masses =
+                BTreeMap::from([(1, Complex::new_re(F(2.0))), (2, Complex::new_re(F(3.0)))]);
+            context.lmb_frame_maps.insert(
+                3,
+                SamplingMapAffine::new(
+                    vec![
+                        vec![1.0, 0.0, 0.0],
+                        vec![0.0, 1.0, 0.0],
+                        vec![0.0, 0.0, 1.0],
+                    ],
+                    vec![-7.0, 2.0, -1.0],
+                )?,
+            );
+            let automatic = SamplingChannelBridge::new(automatic.compile(&context, &programs)?)?;
+            let explicit =
+                SamplingChannelBridge::new(explicit.compile(&context, &explicit_programs)?)?;
+            for id in [0, 1] {
+                let original = &automatic.channels()[id];
+                let exported = &explicit.channels()[id];
+                assert_eq!(original.basis_id, exported.basis_id);
+                assert_eq!(original.name, exported.name);
+                assert_eq!(original.definition, exported.definition);
+                assert_eq!(original.partition_mode, exported.partition_mode);
+                let original = automatic.forward(SamplingChannelId(id), &[0.27, 0.39, 0.64])?;
+                let exported = explicit.forward(SamplingChannelId(id), &[0.27, 0.39, 0.64])?;
+                assert_eq!(original.raw_coordinates, exported.raw_coordinates);
+                assert_eq!(original.map.jacobian, exported.map.jacobian);
+                assert_eq!(original.partition.weights, exported.partition.weights);
+                for inverse_id in [0, 1] {
+                    let original_inverse = automatic
+                        .inverse(SamplingChannelId(inverse_id), &original.raw_coordinates)?
+                        .unwrap();
+                    let exported_inverse = explicit
+                        .inverse(SamplingChannelId(inverse_id), &exported.raw_coordinates)?
+                        .unwrap();
+                    assert_eq!(
+                        original_inverse.map.coordinates,
+                        exported_inverse.map.coordinates
+                    );
+                    assert_eq!(
+                        original_inverse.map.inverse_jacobian,
+                        exported_inverse.map.inverse_jacobian
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn ose_partition_matches_energy_products_with_affine_shifts_and_alpha() -> Result<()> {
         use spenso::algebra::complex::Complex;
         test_initialise()?;
@@ -3170,7 +3509,8 @@ mod tests {
         settings.sampling_channels.default_channel_selection = vec!["auto:lmb".into()];
         let resolved = resolve_sampling_channel_selection("G", &settings.sampling_channels)?;
         let catalogue =
-            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![2])], &[0, 1]);
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![2])], &[0, 1])
+                .unwrap();
         let programs = catalogue.compile_programs(3, &HFunctionSettings::default())?;
         let mut context = SamplingChannelCompileContext::new("G", vec![1], settings, 10.0, 1);
         context.edge_masses =
@@ -3258,7 +3598,7 @@ mod tests {
             BTreeMap::from([("soft".into(), soft), ("surface".into(), surface)]),
         );
         let resolved = resolve_sampling_channel_selection("G", &settings.sampling_channels)?;
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let programs = catalogue.compile_programs(3, &HFunctionSettings::default())?;
         let mut reference_weights: Option<Vec<f64>> = None;
         let mut reference_logs: Option<Vec<Option<f64>>> = None;
@@ -3347,7 +3687,7 @@ mod tests {
         let ordinary = SamplingCatalogueEntry::Lmb {
             basis_id: 0,
             edges: vec![1, 2],
-            preset: SamplingChannelPreset::Lmb,
+            source: SamplingChannelSelector::Preset(SamplingChannelPreset::Lmb),
         };
         let mut catalogue = SamplingChannelCatalogue {
             graph_name: "any topology".into(),
@@ -3401,7 +3741,7 @@ mod tests {
 
     #[test]
     fn native_lu_host_reuses_exact_sources_without_replacing_selected_authority() -> Result<()> {
-        use super::super::sampling_context::SamplingLUHostPlan;
+        use super::super::context::SamplingLUHostPlan;
         use crate::{
             cff::{VertexSet, esurface::Esurface},
             dot,
@@ -4015,7 +4355,7 @@ mod tests {
 
     #[test]
     fn bridge_certifies_selected_inverse_density_in_both_partition_modes() {
-        use super::super::sampling_maps::SamplingEvaluationError;
+        use super::super::maps::SamplingEvaluationError;
         use crate::utils::{ArbPrec, QuadFloat};
         use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -4172,7 +4512,7 @@ mod tests {
 
     #[test]
     fn selected_sampling_factor_rejects_underflow_before_physical_cancellation() {
-        use super::super::sampling_maps::{SamplingEvaluationError, SamplingSupport};
+        use super::super::maps::{SamplingEvaluationError, SamplingSupport};
         use crate::utils::ArbPrec;
         let evaluation = SamplingChannelBridgeEvaluation {
             prepared_lu_hosts: Vec::new(),
@@ -4619,7 +4959,7 @@ mod tests {
             ..Default::default()
         };
         let resolved = resolve_sampling_channel_selection("G", &selection)?;
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let programs = std::thread::Builder::new()
             .stack_size(64 * 1024 * 1024)
             .spawn({
@@ -4763,7 +5103,7 @@ mod tests {
             .unwrap()
             .insert("ordinary".into(), ordinary);
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -4816,7 +5156,7 @@ mod tests {
                     .or_default()
                     .insert("cut".into(), channel);
                 let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-                let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+                let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
                 let mut context = SamplingChannelCompileContext::<f64>::new(
                     "G",
                     vec![1],
@@ -4850,10 +5190,8 @@ mod tests {
                     .compile(&context, &[(None, Some(program.clone()), None)])
                     .unwrap_err();
                 assert!(matches!(
-                    error.downcast_ref::<super::super::sampling_maps::SamplingEvaluationError>(),
-                    Some(
-                        super::super::sampling_maps::SamplingEvaluationError::Unrepresentable { .. }
-                    )
+                    error.downcast_ref::<super::super::maps::SamplingEvaluationError>(),
+                    Some(super::super::maps::SamplingEvaluationError::Unrepresentable { .. })
                 ));
                 let zero = F::<crate::utils::ArbPrec>::default().zero();
                 assert!(
@@ -4894,7 +5232,7 @@ mod tests {
                 .insert(name.into(), channel);
         }
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2, 4],
@@ -5009,7 +5347,7 @@ mod tests {
     fn proxy_bridge(selection: &SamplingChannelSelection) -> Result<SamplingChannelBridge> {
         test_initialise()?;
         let resolved = resolve_sampling_channel_selection("G", selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1],
@@ -5296,7 +5634,8 @@ mod tests {
             .insert("surface_hz".into(), definition("surface(2,4)"));
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue =
-            build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2]), (1, vec![2, 4])], &[1]);
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2]), (1, vec![2, 4])], &[1])
+                .unwrap();
         assert_eq!(catalogue.entries.len(), 2);
         assert_eq!(catalogue.lmb_basis_entries().next(), Some((1, &[2, 4][..])));
         assert_eq!(catalogue.named_entries().next().unwrap().name, "surface_hz");
@@ -5316,7 +5655,8 @@ mod tests {
             .or_default()
             .insert("threshold".into(), definition("surface(1,2)"));
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[(7, vec![1, 2])], &[7]);
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(7, vec![1, 2])], &[7]).unwrap();
 
         // The LMB basis number is metadata of the second catalogue entry. It
         // must not become a compacted positional channel number after the
@@ -5346,7 +5686,8 @@ mod tests {
         let mut selection = SamplingChannelSelection::default();
         selection.default_channel_selection = vec!["auto:optimized_lmb".into()];
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2])], &[0]);
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2])], &[0]).unwrap();
 
         let report = catalogue.inspection();
         assert_eq!(report.graph_name, "G");
@@ -5364,7 +5705,8 @@ mod tests {
         selection.default_channel_selection = vec!["auto:surfaces".into(), "auto:lmb".into()];
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue =
-            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![2])], &[0, 1]);
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![2])], &[0, 1])
+                .unwrap();
         assert_eq!(catalogue.lmb_basis_entries().count(), 2);
     }
 
@@ -5379,7 +5721,8 @@ mod tests {
             &[0],
             &[vec![1, 2], vec![2, 3]],
             &[1, 2],
-        );
+        )
+        .unwrap();
         assert!(catalogue.entries.iter().any(|entry| matches!(
             entry,
             SamplingCatalogueEntry::Surface { edges, parent_lmb }
@@ -5405,7 +5748,8 @@ mod tests {
                 &[],
                 &[4, 5],
                 &[1, 2, 99],
-            );
+            )
+            .unwrap();
             assert_eq!(
                 catalogue
                     .lmb_basis_entries()
@@ -5432,7 +5776,8 @@ mod tests {
             &[],
             &[1, 2],
             &[],
-        );
+        )
+        .unwrap();
         assert_eq!(
             catalogue.lmb_basis_entries().collect::<Vec<_>>(),
             vec![(7, &[1, 2][..])]
@@ -5456,7 +5801,8 @@ mod tests {
             .or_default()
             .insert("threshold".into(), definition("surface(1,2)"));
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2])], &[0]);
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2])], &[0]).unwrap();
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -5528,7 +5874,7 @@ mod tests {
                 .or_default()
                 .insert(name.to_owned(), definition(around));
             let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-            let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+            let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
             let context = SamplingChannelCompileContext::<f64>::new(
                 "G",
                 vec![1, 2],
@@ -5569,7 +5915,7 @@ mod tests {
             .or_default()
             .insert("threshold".into(), definition("surface(1,2)"));
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -5627,7 +5973,7 @@ mod tests {
             .or_default()
             .insert("conditional".into(), channel);
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -5708,7 +6054,7 @@ mod tests {
                 .insert(name.into(), channel);
         }
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -5793,7 +6139,7 @@ mod tests {
             .or_default()
             .extend([(String::from("h"), h), (String::from("z"), z)]);
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -5858,7 +6204,8 @@ mod tests {
         selection.default_channel_selection = vec!["auto:lmb".into()];
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue =
-            build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2]), (1, vec![2, 4])], &[0]);
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1, 2]), (1, vec![2, 4])], &[0])
+                .unwrap();
         let context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -5886,7 +6233,8 @@ mod tests {
         let mut selection = SamplingChannelSelection::default();
         selection.default_channel_selection = vec!["auto:lmb".into()];
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![2, 4])], &[0]);
+        let catalogue =
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![2, 4])], &[0]).unwrap();
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -6057,7 +6405,7 @@ mod tests {
                 },
             );
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -6111,7 +6459,7 @@ mod tests {
                 channel
             });
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -6168,7 +6516,7 @@ mod tests {
             .or_default()
             .insert("cut_chart".into(), definition("phase_space(cut(4,7))"));
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -6203,7 +6551,7 @@ mod tests {
             definitions.insert(name.into(), channel);
         }
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1],
@@ -6309,7 +6657,7 @@ mod tests {
             .or_default()
             .insert("threshold".into(), definition("surface(1,2)"));
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -6341,7 +6689,7 @@ mod tests {
             .or_default()
             .insert("joint".into(), definition("product(surface(1), lmb(1,2))"));
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -6393,7 +6741,7 @@ mod tests {
             .or_default()
             .insert("joint".into(), channel);
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -6464,7 +6812,7 @@ mod tests {
             .or_default()
             .insert("joint".into(), channel);
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[], &[]).unwrap();
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1, 2],
@@ -6577,7 +6925,8 @@ mod tests {
         selection.default_channel_selection = vec!["auto:lmb".into()];
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue =
-            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![1])], &[0, 1]);
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![1])], &[0, 1])
+                .unwrap();
         let context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1],
@@ -6635,7 +6984,8 @@ mod tests {
         selection.default_channel_selection = vec!["auto:lmb".into()];
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
         let catalogue =
-            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![1])], &[0, 1]);
+            build_sampling_channel_catalogue(&resolved, &[(0, vec![1]), (1, vec![1])], &[0, 1])
+                .unwrap();
         let context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1],
@@ -6692,7 +7042,7 @@ mod tests {
             .or_default()
             .insert("absent".into(), absent);
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1])], &[0]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1])], &[0]).unwrap();
         assert_eq!(catalogue.entries.len(), 2);
         let mut context = SamplingChannelCompileContext::<f64>::new(
             "G",
@@ -6750,7 +7100,7 @@ mod tests {
         let mut selection = SamplingChannelSelection::default();
         selection.default_channel_selection = vec!["auto:lmb".into()];
         let resolved = resolve_sampling_channel_selection("G", &selection).unwrap();
-        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1])], &[0]);
+        let catalogue = build_sampling_channel_catalogue(&resolved, &[(0, vec![1])], &[0]).unwrap();
         let context = SamplingChannelCompileContext::<f64>::new(
             "G",
             vec![1],

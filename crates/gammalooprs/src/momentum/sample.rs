@@ -129,7 +129,7 @@ impl SubspaceData {
     /// Canonical coordinates constrained by one threshold solve. Each defining edge is paired
     /// with its complete signed fundamental cycle, oriented positively along that edge. Parent
     /// basis slots and changes of the fixed complement do not change this physical identity.
-    pub(crate) fn solve_signature(
+    pub fn solve_signature(
         &self,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> Vec<(EdgeIndex, Vec<(EdgeIndex, SignOrZero)>)> {

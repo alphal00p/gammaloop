@@ -20,7 +20,7 @@ digraph GL638{
     // The candidate passes the sampled soft/ordinary-threshold checks and generates
     // all 936 orientations with full UV. Exact coincident A/P radial roots still need
     // a stable combined-residue limit; generation and pilot runs do not certify it.
-    // See IR_SAFE_THRESHOL_UPDATE.md for validation, weights and remaining limitations.
+    // See docs/products/gammaloop/content/threshold-subtraction.typ for the prescription and limits.
     threshold_counterterms = "
 schema_version = 1
 

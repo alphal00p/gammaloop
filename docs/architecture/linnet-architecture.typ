@@ -133,6 +133,11 @@ The `drawing` feature enables `cgmath` and the layout modules. The `symbolica` f
 the half-edge Symbolica adapter. These features extend data conversion or analysis; they do not
 change the involution and node-incidence contracts.
 
+`SubSetLike::symbol_from_label` restores the same custom printer used by a subset's `symbol`
+method from its textual label, including composite labels. Consumers can persist those labels
+and register the printers before importing a Symbolica archive; this restores display behavior
+without reconstructing graph topology or adding a persistence service to Linnet.
+
 == Maintained invariants
 
 - An internal edge is always represented by two mutually paired half-edges; an external edge is

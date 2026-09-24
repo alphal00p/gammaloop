@@ -93,8 +93,8 @@ use super::{
     GraphTerm, GraphTermEvaluationContext, LmbMultiChannelingSetup, ProcessIntegrandImpl,
     create_grid, evaluate_sample, filtered_orientation_count, format_orientation_label,
     format_sampling_channel_label, histogram_process_info_for_integrand, prepare_buffered_event,
-    resolve_visible_orientation_id, sampling_context::SamplingMapContext,
-    sampling_selection::SamplingCatalogueEntry, validate_group_orientation_catalogs,
+    resolve_visible_orientation_id, sampling::context::SamplingMapContext,
+    sampling::selection::SamplingCatalogueEntry, validate_group_orientation_catalogs,
     validate_process_runtime_settings,
 };
 
@@ -846,7 +846,7 @@ impl AmplitudeGraphTerm {
                     .map(|(id, surface)| {
                         let shift = surface.compute_shift_part_from_momenta(externals, lmb);
                         if !shift.0.is_finite() {
-                            return Err(super::sampling_maps::SamplingEvaluationError::Unrepresentable {
+                            return Err(super::sampling::maps::SamplingEvaluationError::Unrepresentable {
                                 operation: "amplitude sampling external shift",
                                 detail: format!("candidate {} with energy edges {:?} has nonfinite derived shift {shift}", id.0, surface.energies),
                             }.into());
@@ -1243,7 +1243,7 @@ impl GraphTerm for AmplitudeGraphTerm {
     fn bind_sampling_bridge<T: FloatLike>(
         &self,
         catalogue: &super::SamplingChannelCatalogue,
-        programs: &[super::sampling_selection::SamplingChannelPrograms],
+        programs: &[super::sampling::selection::SamplingChannelPrograms],
         parameterization_settings: &ParameterizationSettings,
         settings: &RuntimeSettings,
         external_momenta: &[[T; 4]],
@@ -1282,7 +1282,7 @@ impl GraphTerm for AmplitudeGraphTerm {
             .iter()
             .zip(programs)
             .filter_map(|(entry, programs)| match entry {
-                super::sampling_selection::SamplingCatalogueEntry::Named(channel) => {
+                super::sampling::selection::SamplingCatalogueEntry::Named(channel) => {
                     Some((channel, &programs.2))
                 }
                 _ => None,
@@ -1529,7 +1529,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                         let translation =
                             [-offset.px, -offset.py, -offset.pz].map(|x| x.0).to_vec();
                         if translation.iter().any(|x| !x.is_finite()) {
-                            return Err(super::sampling_maps::SamplingEvaluationError::Unrepresentable {
+                            return Err(super::sampling::maps::SamplingEvaluationError::Unrepresentable {
                                 operation: "joint affine offset", detail: "native shared-energy routing produced a nonfinite translation".into(),
                             }.into());
                         }
@@ -3426,7 +3426,7 @@ parent_lmb = [4]
                     process::{
                         EvaluationTarget, evaluate_single,
                         gammaloop_sample::{GammaLoopSample, parameterize},
-                        sampling_maps::SamplingEvaluationError,
+                        sampling::maps::SamplingEvaluationError,
                     },
                 },
                 settings::runtime::{Precision, StabilityLevelSetting},
@@ -3978,7 +3978,7 @@ parent_lmb = [4,6]
         {
             use crate::{
                 integrands::process::{
-                    GaussianReferenceFunction, sampling_maps::SamplingEvaluationError,
+                    GaussianReferenceFunction, sampling::maps::SamplingEvaluationError,
                 },
                 momentum::ExternalMomenta,
                 settings::runtime::{
@@ -4453,7 +4453,7 @@ parent_lmb = [4,6]
                     assert_eq!(sum, tiny_masses[EdgeIndex(4)]);
                     assert!(sum > zero);
                 } else {
-                    assert!(tiny_result.err().unwrap().downcast_ref::<crate::integrands::process::sampling_maps::SamplingEvaluationError>().is_some());
+                    assert!(tiny_result.err().unwrap().downcast_ref::<crate::integrands::process::sampling::maps::SamplingEvaluationError>().is_some());
                 }
                 let short = ExternalFourMomenta::from_iter(externals.iter().take(1).cloned());
                 assert!(
@@ -4704,7 +4704,7 @@ parent_lmb = [4,6]
             settings: &RuntimeSettings,
         ) -> Result<()> {
             use crate::graph::lmb::LMBwithEdges;
-            use crate::integrands::process::sampling_maps::SamplingEvaluationError;
+            use crate::integrands::process::sampling::maps::SamplingEvaluationError;
             use crate::integrands::process::{
                 PreparedSurfaceStatus, SamplingMapComponent, SamplingMapComposition,
                 SamplingMapEmbedding, SurfaceRadialMap,
@@ -5407,7 +5407,7 @@ parent_lmb = [4,6]
                 let mut seam = coordinates;
                 seam[0] = split + 1.0e-10;
                 let error = bridge.forward(SamplingChannelId(0), &seam).unwrap_err();
-                assert!(error.downcast_ref::<crate::integrands::process::sampling_maps::SamplingEvaluationError>().is_some(), "{error}");
+                assert!(error.downcast_ref::<crate::integrands::process::sampling::maps::SamplingEvaluationError>().is_some(), "{error}");
                 seam_coordinates = Some(seam);
             }
             let mut near_shell = coordinates;
@@ -5419,8 +5419,8 @@ parent_lmb = [4,6]
                 let error = bridge
                     .forward(SamplingChannelId(0), &near_shell)
                     .unwrap_err();
-                assert!(matches!(error.downcast_ref::<crate::integrands::process::sampling_maps::SamplingEvaluationError>(),
-                    Some(crate::integrands::process::sampling_maps::SamplingEvaluationError::Unrepresentable {
+                assert!(matches!(error.downcast_ref::<crate::integrands::process::sampling::maps::SamplingEvaluationError>(),
+                    Some(crate::integrands::process::sampling::maps::SamplingEvaluationError::Unrepresentable {
                         operation: "sampling inverse density consistency", ..
                     })));
             }
@@ -5654,8 +5654,8 @@ parent_lmb = [4,6]
             )
             .unwrap_err();
         assert!(matches!(
-            error.downcast_ref::<crate::integrands::process::sampling_maps::SamplingEvaluationError>(),
-            Some(crate::integrands::process::sampling_maps::SamplingEvaluationError::Unrepresentable {
+            error.downcast_ref::<crate::integrands::process::sampling::maps::SamplingEvaluationError>(),
+            Some(crate::integrands::process::sampling::maps::SamplingEvaluationError::Unrepresentable {
                 operation: "amplitude sampling external shift", ..
             })
         ), "{error:#}");

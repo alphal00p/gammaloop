@@ -1,6 +1,6 @@
 use crate::integrands::process::{
     GenericEvaluatorFloat, LmbMultiChannelingSetup, SamplingChannelBridge,
-    sampling_maps::SamplingEvaluationError,
+    sampling::maps::SamplingEvaluationError,
 };
 use crate::model::Model;
 use crate::momentum::sample::{
