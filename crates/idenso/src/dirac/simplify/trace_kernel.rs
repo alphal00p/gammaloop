@@ -184,7 +184,8 @@ impl<const N: usize> TraceKernel<N> {
 /// Repeated subwords share their result for this evaluation only.
 struct PairingTrace<'a> {
     width: usize,
-    metrics: Vec<Atom>,
+    arguments: Vec<AtomView<'a>>,
+    metrics: Vec<Option<Atom>>,
     trace_unit: AtomView<'a>,
     subwords: HashMap<Vec<usize>, Atom>,
     canonical_arguments: bool,
@@ -192,6 +193,16 @@ struct PairingTrace<'a> {
 }
 
 impl PairingTrace<'_> {
+    fn metric(&mut self, left: usize, right: usize) -> AtomView<'_> {
+        // Summed endpoints often disappear before any metric involving them is
+        // needed. In particular, do not construct indexed vector components for
+        // a dummy that a word identity is about to eliminate.
+        let (left, right) = (left.min(right), left.max(right));
+        self.metrics[left * self.width + right]
+            .get_or_insert_with(|| g!(self.arguments[left], self.arguments[right]))
+            .as_view()
+    }
+
     fn evaluate(&mut self, remaining: &[usize]) -> Atom {
         let Some(&first) = remaining.first() else {
             return self.trace_unit.to_owned();
@@ -228,8 +239,7 @@ impl PairingTrace<'_> {
                 continue;
             };
             let right = left + 1 + right;
-            let four_dimensional =
-                i64::try_from(self.metrics[index * self.width + index].as_view()) == Ok(4);
+            let four_dimensional = i64::try_from(self.metric(index, index)) == Ok(4);
             for (start, distance) in [(left, right - left), (right, word.len() - right + left)] {
                 let priority = if distance == 1 {
                     0
@@ -249,8 +259,17 @@ impl PairingTrace<'_> {
         rotated.rotate_left(start);
         let interior = &rotated[1..distance];
         let outside = &rotated[distance + 1..];
-        let dimension = self.metrics[rotated[0] * self.width + rotated[0]].clone();
-        match interior.len() {
+        let dimension = self.metric(rotated[0], rotated[0]).to_owned();
+        let position = self
+            .summed_indices
+            .iter()
+            .position(|&i| i == rotated[0])
+            .unwrap();
+        let contracted = self.summed_indices.swap_remove(position);
+        // Every child omits this pair. Suspend its classification while solving
+        // those children so free subwords skip the repeated-pair scan entirely.
+        // Memo keys remain valid: the removed ID is absent from every child.
+        let result = match interior.len() {
             0 => Some(dimension * self.evaluate(outside)),
             1 => Some(
                 (Atom::num(2) - dimension)
@@ -270,8 +289,8 @@ impl PairingTrace<'_> {
                 // gamma(mu) a/ b/ gamma(mu) = 4(a.b) + (D-4)a/b/.
                 // A metric with another summed index must stay in the word;
                 // the general permutation recurrence below owns that case.
-                let metric = self.metrics[interior[0] * self.width + interior[1]].clone();
-                let first = Atom::num(4) * metric * self.evaluate(outside);
+                let outside_trace = self.evaluate(outside);
+                let first = Atom::num(4) * self.metric(interior[0], interior[1]) * outside_trace;
                 let coefficient = dimension - Atom::num(4);
                 if coefficient.is_zero() {
                     Some(first)
@@ -308,7 +327,9 @@ impl PairingTrace<'_> {
                 }
                 Some(Atom::add_many(terms))
             }
-        }
+        };
+        self.summed_indices.push(contracted);
+        result
     }
 
     /// Compact slashes square to scalar norms. Keeping these identities inside
@@ -327,10 +348,7 @@ impl PairingTrace<'_> {
                     .copied()
                     .collect();
                 let trace = self.evaluate(&rest);
-                return Some(
-                    self.metrics[word[start] * self.width + word[start]].as_view()
-                        * trace.as_view(),
-                );
+                return Some(self.metric(word[start], word[start]) * trace.as_view());
             }
         }
         if word.len() >= 4 {
@@ -356,8 +374,7 @@ impl PairingTrace<'_> {
                 rest[0] = q;
                 let second = self.evaluate(&rest);
                 return Some(
-                    Atom::num(2) * self.metrics[p * self.width + q].as_view() * first
-                        - self.metrics[p * self.width + p].as_view() * second.as_view(),
+                    Atom::num(2) * self.metric(p, q) * first - self.metric(p, p) * second.as_view(),
                 );
             }
         }
@@ -373,8 +390,7 @@ impl PairingTrace<'_> {
                 .copied()
                 .collect();
             let subword = self.evaluate(&rest);
-            let product =
-                self.metrics[first * self.width + remaining[partner]].as_view() * subword.as_view();
+            let product = self.metric(first, remaining[partner]) * subword.as_view();
             terms.push(if partner % 2 == 1 { product } else { -product });
         }
         Atom::add_many(terms)
@@ -420,13 +436,10 @@ pub(super) fn evaluate_generic(
     } else {
         Vec::new()
     };
-    let metrics = (0..width)
-        .flat_map(|a| (0..width).map(move |b| (a, b)))
-        .map(|(a, b)| g!(arguments[a], arguments[b]))
-        .collect();
     PairingTrace {
         width,
-        metrics,
+        arguments,
+        metrics: vec![None; width * width],
         trace_unit,
         subwords: HashMap::new(),
         canonical_arguments,
@@ -718,6 +731,7 @@ mod tests {
             let unit = Atom::num(4);
             let mut trace = PairingTrace {
                 width: N,
+                arguments: Vec::new(),
                 metrics: (0..N)
                     .flat_map(|a| {
                         (0..N).map(move |b| {
@@ -730,6 +744,7 @@ mod tests {
                             )
                         })
                     })
+                    .map(Some)
                     .collect(),
                 trace_unit: unit.as_view(),
                 subwords: HashMap::new(),
@@ -792,7 +807,8 @@ mod tests {
             for word in &words {
                 let mut trace = PairingTrace {
                     width: 6,
-                    metrics: metrics.clone(),
+                    arguments: Vec::new(),
+                    metrics: metrics.iter().cloned().map(Some).collect(),
                     trace_unit: unit.as_view(),
                     subwords: HashMap::new(),
                     canonical_arguments: true,

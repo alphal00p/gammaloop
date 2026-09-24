@@ -110,10 +110,13 @@ Typst entrypoint; both accept `linnet.RenderConfig`, like Feynman diagrams.
 `to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.
 `expression()` retains the semantic source formula, `to_dot()` exports the operation
 graph, and `result_tensor()` shows evaluated component data. Rendering a network does
-not execute it. Symbolic multiplication and outer products flatten directly nested
-product brackets while preserving factor order and resolved contraction indices.
-A repeated product therefore becomes one n-ary network node before execution;
-sums, chains, and traces retain their boundaries.
+not execute it. Tensor expressions use ordinary multiplication when explicit indices
+identify the slots, or when canonical multiplication preserves unresolved factor
+occurrences in positional order. Brackets remain where sorting or combining factors
+would lose that information, as in `p.outer(p)` with unresolved slots. Assigning explicit
+indices removes brackets that are no longer needed. Nested product brackets flatten;
+sums are not distributed and chain/trace scopes remain intact. Repeated indexed products
+therefore become one n-ary network node before execution.
 Settings and filters
 print their full constructor arguments, and libraries and evaluators show concise summaries.
 The policy types expose named constants and integer conversion; they are PyO3 classes, not

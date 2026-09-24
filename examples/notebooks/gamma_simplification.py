@@ -1866,85 +1866,288 @@ def _(mo):
     ### Generic-dimensional traces and contraction progress
 
     The 2026-09-24 comparison uses **symbolic Lorentz dimension D** and
-    **Tr(1) = 4**. Idenso now memoizes the factored pairing recurrence within
-    each call. Canonical compact slashes also reduce adjacent squares and
-    $\not p\not q\not p=2(p\cdot q)\not p-p^2\not q$ inside that evaluator,
-    avoiding intermediate trace expressions and repeated cleanup.
+    **Tr(1) = 4**. Canonical ordinary traces now reduce summed pairs inside the
+    memoized pairing evaluator, including branches with two or more interior
+    gammas. Adjacent pairs contribute $D$; one-gamma sandwiches contribute
+    $2-D$. Longer sandwiches use the Clifford recurrence, with the existing
+    four-dimensional odd-interior Chisholm identity when applicable. The
+    branches share subword results and construct metrics only when needed.
+    This avoids intermediate trace atoms and repeated general cleanup.
+
+    The direct route requires canonical slots, a uniform dimension, and at most
+    two occurrences of each explicit index. Fixed components are not summed.
+    Remaining compact slashes reuse adjacent squares and
+    $\not p\not q\not p=2(p\cdot q)\not p-p^2\not q$. Scalar spectators retain
+    their factorization, and gamma-five remains strictly four-dimensional.
 
     The latest warm milliseconds use optimized Rust, Symbolica main `06906976`
-    and FORM 5.0.0, all pinned to CPU 9 on the same shared EPYC host. Idenso uses
+    and FORM 5.0.0, pinned to CPU 9 on the same shared EPYC host. Idenso uses
     in-process wall time including output destruction; FORM uses its internal
     `tracen`-plus-sort CPU timer, amortized over independent expressions.
-    Parsing and startup are excluded; other host activity is uncontrolled.
+    Parsing and startup are excluded. Idenso uses three processes per version
+    with five warm batches each, alternating before/after order; FORM uses
+    three processes with three retained batches each. Other host activity is
+    uncontrolled, so small differences are not established improvements.
 
     | Free gammas | Idenso, factored | FORM, expanded |
     |--:|--:|--:|
-    | 8 | 0.172 | 0.037 |
-    | 10 | 0.516 | 0.500 |
-    | 12 | 2.110 | 3.967 |
-    | 14 | 16.873 | 54.000 |
+    | 8 | 0.145 | 0.036 |
+    | 10 | 0.483 | 0.337 |
+    | 12 | 1.997 | 3.900 |
+    | 14 | 18.184 | 53.667 |
 
-    This does **not establish parity**: FORM constructs the full polynomial,
-    while Idenso retains sums inside products. The fourteen-gamma calculation
-    including expansion and destruction takes **776 ms**, about **14×** FORM's
-    time. Expansion alone takes **732 ms** and produces 135,135 terms. This
-    separate experiment has a different allocator state from the first-call
-    table; its trace-construction phase takes 44 ms. Diagnostic expansions
-    apply only to standalone trace polynomials, never to graph numerators or
-    spectators. FORM's length-ten samples span 0.337–0.503 ms, so its median
-    alone does not establish parity there either.
+    **Expanded-output performance is not at parity.** Idenso's factored results
+    defer substantial work. A separate five-sample experiment measures trace
+    construction, expansion, and destruction of both outputs:
 
-    Summed indices can now reduce directly inside a trace word: an adjacent
-    pair contributes $D$, and a one-gamma sandwich contributes $2-D$. This
-    avoids rebuilding intermediate trace expressions and running their cleanup.
-    The following paired measurements compare the preceding memoized evaluator
-    with this direct reduction, using compact slashes for the remaining gammas.
+    | Generic-D input | Trace, ms | Expansion, ms | Full lifecycle, ms | FORM, ms |
+    |:--|--:|--:|--:|--:|
+    | 8 gammas, branching pair | 0.058 | 0.050 | 0.109 | 0.0134 |
+    | Pair with four interior gammas | 0.441 | 1.295 | 1.731 | 0.173 |
+    | Pair with five interior gammas | 2.230 | 19.728 | 21.894 | 2.550 |
+    | 12 gammas, order-sensitive pairs | 1.064 | 4.892 | 5.895 | 0.763 |
+    | 14 free gammas | 39.047 | 739.466 | 789.138 | 53.667 |
+
+    The fourteen-gamma polynomial has 135,135 terms and takes about **15×**
+    FORM's time including expansion. Each column is a median of its own measured
+    quantity; the total includes destruction. This separate experiment has a
+    different allocator state from the first-call table. Diagnostic expansion
+    applies only to standalone trace polynomials, never to graph numerators or
+    spectators. The earlier checkpoint's 776 ms is comparable; the difference
+    is not an attributed optimization. FORM's earlier length-ten samples ranged
+    from 0.337 to 0.503 ms, another reason to avoid a parity claim there.
+
+    A separate six-case expansion profile isolates Symbolica's expression work.
+    At length 14, expansion alone takes **756.9 ms** with tensor slots,
+    **635.3 ms** with shallow metrics, and **580.2 ms** with scalar variables.
+    Polynomial expansion reduces the variable case to **414.2 ms**, but
+    converting it back to metrics takes another **353.6 ms**, before forward
+    substitution. All **1,080 inverse-substitution checks** pass. Removing tensor
+    syntax therefore does not provide an end-to-end improvement. The length-12
+    instruction profile attributes about 19.8% to normalization, 11.7% to
+    product/sum buffer extension, and 8.3% each to factor comparison and copying.
+    Pattern matching and slot parsing do not appear in this expansion capture.
+    These percentages count instructions, not wall time.
+
+    A direct-output prototype emits the final pairings without generic expansion.
+    Five samples on CPU 6 measure **266.0 ms** including destruction for length
+    14, with exact equality to the production expanded polynomial. Another
+    prototype builds an integer polynomial in **19.4 ms** but spends **248.8 ms**
+    converting it to an Atom. These are isolated experiments, not production
+    improvements, and still leave roughly a **5×** gap to FORM. Caching expanded
+    subexpressions regresses most smaller cases and was rejected. The pinned
+    standalone program in `examples/reproducers/symbolica-expansion` reproduces
+    the expansion bottleneck without Spenso or Idenso.
+
+    Direct branching contraction substantially improves the difficult summed
+    words. The baseline already contains the previous adjacent/one-gamma
+    reductions; remaining gammas are compact slashes.
 
     | Generic-D input | Before, ms | Current, ms | FORM, ms |
     |:--|--:|--:|--:|
-    | 12 gammas, cyclic endpoint pair | 3.069 | 0.606 | 0.340 |
-    | 8 gammas, one-gamma sandwich | 0.526 | 0.066 | 0.012 |
-    | 10 gammas, nested summed pairs | 0.572 | 0.068 | 0.013 |
-    | 8 gammas, branching two-gamma interior | 1.156 | 1.109 | 0.020 |
+    | 8 gammas, branching two-gamma interior | 1.142 | 0.053 | 0.0134 |
+    | Pair with three interior gammas | 2.085 | 0.096 | 0.018 |
+    | Pair with four interior gammas | 18.148 | 0.412 | 0.173 |
+    | Pair with five interior gammas | 228.236 | 1.851 | 2.550 |
+    | 8 gammas, crossing pairs | 1.876 | 0.042 | 0.0088 |
+    | 10 gammas, crossing pairs | 16.863 | 0.192 | 0.070 |
+    | 10 gammas, nested branching pairs | 8.794 | 0.112 | 0.0408 |
+    | 12 gammas, order-sensitive pairs | 160.308 | 0.964 | 0.763 |
 
-    The branching case still uses the general rewrite pipeline and trails FORM
-    by **55×**. Repeated compact words also remain slower: fourteen paired
-    slashes take **13.3 µs** versus **0.8 µs**, and alternating slashes take
-    **36.8 µs** versus **9.6 µs**.
+    The branching-eight case improves **21.5×**, with a remaining **4×** gap
+    before expansion. Its preceding checkpoint used general rewriting and was
+    about 55× slower than that checkpoint's FORM timing. The direct identities
+    now cover it and longer interiors. Short compact words still have appreciable
+    overhead: paired fourteen slashes take **11.6 µs** versus **0.8 µs**, and
+    alternating slashes take **36.0 µs** versus **9.4 µs**. A four-dimensional
+    five-interior control improves **0.626 → 0.527 ms**.
 
-    An unchanged rerun of the fourteen-gamma generic result takes **142.8 ms**,
-    versus FORM's **46.3 ms**. The result contains 2.68 million tree nodes.
-    One scan checks the symbols needed by several passes, and final dot
-    normalization is skipped when subsequent passes leave the already-normalized
-    result unchanged. Traversing the large result remains expensive.
+    At the shared-scan checkpoint, unchanged generic-D reruns measure:
 
-    The latest twenty case/dimension combinations pass **248 exact component
-    evaluations** against FORM and independent Clifford multiplication, using
-    four and six dimensions. All eleven symbolic-D cases additionally match
-    FORM's full polynomial exactly. The raw record includes free, compact,
-    mixed-index and branching controls, all samples and frozen build identities.
+    | Free gammas | Idenso, ms | FORM, ms |
+    |--:|--:|--:|
+    | 8 | 0.052 | 0.031 |
+    | 10 | 0.483 | 0.277 |
+    | 12 | 5.340 | 3.400 |
+    | 14 | 72.235 | 46.667 |
 
-    The preceding iteration also factors terminal 4D kernels and resolves metric paths
-    before rebuilding products. Full axial-twelve simplification improves
-    **2.356 → 0.621 ms**, ordinary free-twelve **6.422 → 2.794 ms**, and public
-    Schoonschip on a 64-metric chain **738.4 → 34.7 µs**. FORM's separately
-    measured metric-chain CPU time is **3.2 µs**. A single metric hit is slightly
-    slower (**2.90 → 3.11 µs**); the gains depend on expression shape.
+    The original fourteen-gamma rerun took about 142 ms. The shared scan first
+    reduced it to 81.6 ms; a final paired comparison of that build against the
+    leaner observer measures **83.3 → 72.2 ms**. The final check includes cached
+    slot metadata, uses three alternating process rounds, and preserves every
+    measured output exactly. The earlier 40 ms walker prototype is a separate
+    experiment and is not the production result.
 
-    Late external metrics now contract through factored trace sums too. A
+    The repeated-explicit-index walk also observes bracket, dot and
+    Dirac-operation candidates. It writes head flags only on a hit and avoids
+    observing an unwrapped representation head twice. The observer now finishes
+    this same syntactic walk after a repeated index, with further index
+    bookkeeping disabled. A metric chain can therefore establish that bracket
+    and dot normalization have no work. The boolean-only predicate still stops
+    at its first hit. Compound opaque payloads leave later passes enabled, and
+    any rewrite invalidates the observations. The fourteen-gamma result still
+    has 2.68 million tree nodes.
+
+    All **39 case/dimension combinations** pass **480 exact coordinate
+    assignments** comparing the previous output, current output and FORM against
+    independent Clifford multiplication in four and six dimensions. All
+    **21 symbolic-D cases** additionally match FORM's full polynomial exactly.
+    Tests cover interiors two through five, nested/crossing pairs, repeated
+    compact slashes, free slots and scalar spectators; eliminated summed labels
+    are absent from the results. The final scoped optimization preserves every
+    output hash from that complete certificate.
+
+    Earlier contraction checkpoints remain useful context: full axial-twelve
+    simplification improved **2.356 → 0.621 ms**, ordinary free-twelve
+    **6.422 → 2.794 ms**, and public Schoonschip on a 64-metric chain
+    **738.4 → 34.7 µs**. FORM's separately measured metric-chain CPU time was
+    **3.2 µs**. A single metric hit was slightly slower (**2.90 → 3.11 µs**).
+    These are historical measurements, not the branching comparison above.
+
+    A later isolated `SlotMatcher` comparison caches the representation tag and
+    variance-wrapper IDs once per matcher. This removes repeated Symbolica
+    initialization probes when many distinct tensor heads miss the small cache.
+    Public Schoonschip timings, including normalization, are:
+
+    | Input | Before, µs | Cached metadata, µs | FORM, µs |
+    |:--|--:|--:|--:|
+    | Metric applied to 8 tensor terms | 11.98 | 10.51 | 4.0 |
+    | Metric applied to 128 tensor terms | 176.65 | 141.68 | 66.7 |
+    | Vector applied to 8 tensor terms | 13.74 | 12.06 | 4.5 |
+    | Vector applied to 128 tensor terms | 196.85 | 166.19 | 73.3 |
+
+    These paired Idenso measurements use CPU 7; the separately measured FORM
+    reference uses CPU 3 and times contraction plus sorting after input setup.
+    Metric chains are essentially unchanged at about 33 µs for 64 metrics at
+    that checkpoint. Slot syntax is unchanged.
+
+    The subsequent metric-component change parses endpoints while building the
+    incidence map and interns exact representation/dimension pairs. Each metric
+    has at most two neighbors, so walking from both sides directly finds the
+    path boundaries or closes a loop, without DFS worklists. Private contractor
+    times on CPU 7 improve **18.85 → 14.89 µs** for a 64-metric path,
+    **16.56 → 12.58 µs** for a loop and **37.53 → 30.62 µs** for disjoint paths.
+    All **221 exact-output cases** pass, including shuffled labels, mixed
+    dimensions, duality, ambiguous incidences and factored spectators. These
+    times exclude public normalization and cannot be compared directly with
+    FORM's complete contraction time. Callgrind records **19.3% fewer
+    instructions**; endpoint decoding is unchanged and now accounts for 37.3%
+    of the private cost. All **36 Schoonschip unit tests** and **46 HEP integration
+    tests** pass, with Clippy clean.
+
+    The paired public API comparison, including normalization, improves
+    64-metric paths **32.86 → 28.63 µs**, loops **30.13 → 25.34 µs**, and
+    disjoint paths **64.17 → 55.64 µs**. All **41 outputs agree exactly** and the
+    dependency identities match; sum controls remain effectively unchanged.
+    These measurements use 11 alternating process pairs on CPU 7. FORM was not
+    rerun for this change: its earlier **3.2 µs** path reference still leaves
+    an approximate **9×** gap to the public contractor.
+
+    Completing the shared observer after its first repeated index subsequently
+    improves public 64-metric paths **28.09 → 23.44 µs**, loops
+    **25.46 → 20.58 µs**, and metrics over 128 tensor terms
+    **140.60 → 124.07 µs**. Vectors over sums remain effectively unchanged.
+    All **61 public outputs agree exactly** across 11 alternating process pairs
+    on CPU 7. Actual fourteen-gamma reruns measure **72.44 → 73.53 ms**, with
+    the paired variability interval including no change. This optimization
+    avoids unnecessary bracket and dot passes before metric contraction; it
+    does not reduce the free-trace scan. Scoped validation passes **12 parser/slot
+    tests, 36 Schoonschip tests, 46 HEP integration tests**, and Clippy.
+
+    A later cleanup experiment reuses the contractor's final traversal to detect
+    whether its changed output needs bracket or dot normalization. Input
+    observations alone are insufficient because tensor callbacks can introduce
+    either form. The copied-library trial matches all **249 fixtures under four
+    settings**, but is not retained: metrics over 128 terms show a plausible gain
+    of about **119 → 107 µs**, while paired runs are noisy and small unchanged
+    controls add measurable overhead. Trace controls show no regression. The
+    contraction record preserves the phase profile, callback counterexamples and
+    full timing ranges.
+
+    Isolated Symbolica patches improve conversion of the length-14 polynomial
+    back to an expression **199.0 → 104.1 ms**. Full polynomial expansion
+    improves **700.8 → 605.7 ms**, while ordinary expansion remains about
+    **670 ms**. A flat-sort addition prototype initially regresses existing-sum
+    inputs. Keeping the full merge cursors outside the heap resolves those
+    measured regressions: adding the final length-14 monomials takes
+    **158.2 → 35.7 ms**, and adding 512 existing sums takes
+    **595.3 → 572.5 µs**. All **1,017 raw input/output/rerun cases** and seven
+    upstream normalization tests pass. These are isolated primitive measurements;
+    the patches are not applied to the production dependency. Their boundaries,
+    regressions and paired measurements are recorded in
+    `examples/reproducers/symbolica-expansion/performance.typ` and its companion
+    `primitive_measurements.json`.
+
+    A separate one-pass dimension/index accessor trial does not survive the
+    public comparison. Despite isolated decoding gains, the 64-metric path
+    slows **23.24 → 24.28 µs**, with similar **4–5%** regressions in loops and
+    gamma reruns. All **61 outputs remain exact**, but the accessor change is
+    rejected and the preceding observer implementation is retained.
+
+    The final retained-build checkpoint refreshes three generic-D traces and
+    their FORM programs. Times below are **warm milliseconds**; factored tracing
+    and the full expanded lifecycle are separate measurements.
+
+    | Input | Idenso, factored | Idenso, fully expanded | FORM, fully expanded |
+    |:--|--:|--:|--:|
+    | Branching 8 | 0.0506 | 0.1165 | 0.0132 |
+    | Order-sensitive 12 | 0.9564 | 5.9803 | 0.7333 |
+    | Free 14 | 17.4870 | 798.5513 | 54.0000 |
+
+    The full-output gaps remain approximately **8.8×, 8.2× and 14.8×**. Rust
+    uses wall time on CPU 9, including trace construction, expansion and
+    destruction; FORM uses its internal tracing-plus-sort CPU timer on CPU 7.
+    Parsing and process startup are excluded. For free length fourteen,
+    expansion takes **753.20 ms**, about **94%** of the full lifecycle.
+    The retained build's
+    fourteen-gamma rerun takes **73.58 ms** against FORM's **46.67 ms**.
+    Three processes with five samples each pass all **nine comparisons with
+    historical factored outputs**, and all reruns are unchanged. Cold
+    first calls are retained separately in the record. Different allocator and
+    working set states mean the factored-only timing must not be added to an
+    independent expansion timing to estimate the full lifecycle.
+
+    A direct expanded constructor avoids converting the factored trace back
+    into a polynomial. Starting from an already classified free fourteen-gamma
+    word, it takes **256.79 ms** with the frozen production library. A separate
+    matched-library experiment improves **248.23 → 157.61 ms** with the
+    polynomial-emission patches. These timings include metric construction,
+    polynomial assembly, Atom emission and destruction, but exclude public gamma
+    recognition and cleanup. They do not replace the complete pipeline timings
+    above.
+
+    The direct representation also has mixed downstream effects. With actual
+    Spenso metric normalization, the order-sensitive twelve-gamma result shrinks
+    **133,818 → 52,401 Atom bytes**, improving its rerun **1.927 → 0.764 ms**.
+    The branching-eight result instead grows **1,852 → 3,398 bytes** and its
+    rerun slows **29.5 → 52.6 µs**. All **30 downstream comparison processes**
+    agree algebraically. These cases rule out expanding every contracted word
+    by default; scalar spectators retain their factorization in both routes.
+
+    A subsequent public-library prototype shares the word evaluator between
+    factored and sparse output algebras. Its order-sensitive-twelve full expanded
+    lifecycle improves **5.995 → 1.472 ms**, against the separate **0.733 ms**
+    FORM reference. However, its default first call slows **0.974 → 1.405 ms**,
+    and unselected controls also regress. The rerun improves **1.855 → 0.725 ms**.
+    The prototype is rejected; the retained timings above remain the production
+    checkpoint. These bare traces return directly from the terminal evaluator,
+    so an outer cleanup pass cannot explain the first-call regression.
+
+    Late external metrics also contract through factored trace sums. A
     compatible tensor can be carried through a sum when every branch can absorb
     it, including metrics inside the sum with an epsilon outside. Tagged vectors
     follow the same route when vector contraction is enabled; scalar spectators
     retain their factorization. Independent HEP checks cover ordinary, axial and
     symbolic-D traces simplified before the external metric is attached.
 
-    Final validation records **361 passing Idenso tests** and **46 passing HEP
-    trace/metric integration tests**. The existing tensor-display snapshot
-    failure remains, with 23 tests skipped. Both scoped Clippy checks pass with
-    warnings denied. Rechecking ten symbolic-D benchmarks after the final metric
-    cleanup gives identical outputs and timings within a few percent of the
-    preceding trace checkpoint; the full fourteen-gamma trace remains about
-    17–18 ms before expansion.
+    The broader trace/scan validation covers **363 passing Idenso tests** and **46 passing HEP
+    integration tests**. Three Idenso processes initially hit the host's open-file
+    limit; the targeted retry passed. The existing tensor-display snapshot
+    failure remains, with 23 tests skipped across the two suites. Both final
+    scoped Clippy checks pass with warnings denied. The Spenso follow-up passes
+    19 relevant tests; its remaining dual-wrapper filter test fails identically
+    with the matcher change removed. All final measured trace outputs match the
+    independent certificate.
 
     Raw samples, generated FORM programs, source hashes, validation and the
     standalone generic-D driver are preserved in

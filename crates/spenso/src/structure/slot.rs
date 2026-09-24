@@ -112,16 +112,10 @@ enum SlotHead {
 
 #[cfg(feature = "shadowing")]
 impl SlotHead {
-    fn from_symbol(head: Symbol) -> Self {
-        if head.has_tag(&SPENSO_TAG.representation) {
+    fn from_symbol(head: Symbol, representation_tag: &str, wrappers: &[u32; 3]) -> Self {
+        if head.has_tag(representation_tag) {
             Self::Representation
-        } else if [
-            AIND_SYMBOLS.dind,
-            AIND_SYMBOLS.uind,
-            AIND_SYMBOLS.selfdualind,
-        ]
-        .contains(&head)
-        {
+        } else if wrappers.contains(&head.get_id()) {
             Self::Wrapper
         } else {
             Self::Other
@@ -326,10 +320,27 @@ impl<'a> SlotView<'a> {
 ///
 /// The small, bounded caches avoid repeated tag lookups and representation
 /// resolution without making scans quadratic in the number of distinct heads.
-#[derive(Default)]
 pub struct SlotMatcher {
     heads: [Option<(u32, SlotHead)>; 16],
     resolved: Vec<(Symbol, Option<Symbol>, LibraryRep)>,
+    representation_tag: &'static str,
+    wrappers: [u32; 3],
+}
+
+#[cfg(feature = "shadowing")]
+impl Default for SlotMatcher {
+    fn default() -> Self {
+        // Force each symbol bundle once per scan, including when many distinct
+        // tensor heads miss the small recognition cache.
+        let wrappers = &*AIND_SYMBOLS;
+        Self {
+            heads: [None; 16],
+            resolved: Vec::new(),
+            representation_tag: &SPENSO_TAG.representation,
+            wrappers: [wrappers.dind, wrappers.uind, wrappers.selfdualind]
+                .map(|symbol| symbol.get_id()),
+        }
+    }
 }
 
 #[cfg(feature = "shadowing")]
@@ -349,7 +360,11 @@ impl SlotMatcher {
         {
             return kind;
         }
-        let kind = SlotHead::from_symbol(function.get_symbol());
+        let kind = SlotHead::from_symbol(
+            function.get_symbol(),
+            self.representation_tag,
+            &self.wrappers,
+        );
         *entry = Some((id, kind));
         kind
     }
@@ -443,10 +458,7 @@ impl<'a, T: RepName, Aind: ParseableAind> TryFrom<AtomView<'a>> for Slot<T, Aind
     type Error = SlotError;
 
     fn try_from(value: AtomView<'a>) -> Result<Self, Self::Error> {
-        let slot = SlotView::classify(value, |function| {
-            SlotHead::from_symbol(function.get_symbol())
-        })
-        .into_slot(value)?;
+        let slot = SlotMatcher::default().classify(value).into_slot(value)?;
         let head = slot.representation.head();
         let rep = match slot.representation.wrapper() {
             Some(wrapper) => T::try_from_symbol(head, wrapper)?,

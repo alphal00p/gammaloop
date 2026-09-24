@@ -3,7 +3,10 @@ use symbolica::atom::{Atom, AtomView};
 
 use crate::shorthands::bracket::BracketNormalizer;
 
-use super::{api::Schoonschip, settings::SchoonschipSettings, slot_contraction::SlotContraction};
+use super::{
+    SimplificationCandidates, api::Schoonschip, settings::SchoonschipSettings,
+    slot_contraction::SlotContraction,
+};
 
 pub(crate) struct SchoonschipWithSettings<'a> {
     pub(crate) settings: &'a SchoonschipSettings,
@@ -13,10 +16,28 @@ impl SchoonschipWithSettings<'_> {
     pub(crate) fn run(&self, view: AtomView<'_>) -> Atom {
         let mut current = view.to_owned();
         loop {
-            let normalized = BracketNormalizer::normalize(current.as_view()).normalize_dots();
+            let candidates = SimplificationCandidates::scan(current.as_view(), []);
+            if candidates.normalized() {
+                return current;
+            }
+            let bracketed = if candidates.brackets {
+                BracketNormalizer::normalize(current.as_view())
+            } else {
+                current.clone()
+            };
+            let normalized = if candidates.dots || bracketed != current {
+                bracketed.normalize_dots()
+            } else {
+                bracketed
+            };
             // Dot normalization stays outside this guard: compact vector
             // rewrites can require no repeated explicit index at all.
-            if normalized.has_repeated_explicit_indices() {
+            let repeated = if normalized == current {
+                candidates.repeated_indices
+            } else {
+                normalized.has_repeated_explicit_indices()
+            };
+            if repeated {
                 let contracted = SlotContraction::run(
                     normalized.as_view(),
                     self.settings.simplify_chain_like_functions,

@@ -1,0 +1,87 @@
+--- a/src/poly.rs
++++ b/src/poly.rs
+@@ -2393,20 +2393,56 @@
+             })
+             .collect();
+ 
++        // Distinct normalized atomic variables cannot merge in a square-free
++        // monomial. Establish their factor order once for all monomials.
++        let simple_variables = vars.iter().flatten().all(|variable| {
++            matches!(variable.as_view(), AtomView::Var(_) | AtomView::Fun(_))
++                && !variable.as_view().needs_normalization()
++        });
+         let mut sorted_vars = (0..vars.len()).collect::<Vec<_>>();
+-        sorted_vars.sort_by_key(|&i| vars[i].clone());
++        if simple_variables {
++            sorted_vars.sort_by(|&i, &j| match (&vars[i], &vars[j]) {
++                (Some(a), Some(b)) => a.as_view().cmp_factors(&b.as_view()),
++                (None, Some(_)) => Ordering::Less,
++                (Some(_), None) => Ordering::Greater,
++                (None, None) => Ordering::Equal,
++            });
++        } else {
++            sorted_vars.sort_by_key(|&i| vars[i].clone());
++        }
++        let distinct_variables = simple_variables
++            && sorted_vars
++                .windows(2)
++                .all(|pair| match (&vars[pair[0]], &vars[pair[1]]) {
++                    (Some(a), Some(b)) => a != b,
++                    _ => true,
++                });
+ 
+         for monomial in self {
++            monomial
++                .coefficient
++                .coefficient_to_expression(&self.ring(), &mut num_h);
++            let mut normalized = distinct_variables
++                && matches!(num_h.as_view(), AtomView::Num(_))
++                && num_h.is_finite();
++            if normalized && num_h.is_zero() {
++                continue;
++            }
++            let has_coefficient = !num_h.is_one();
+             let mul = mul_h.to_mul();
++            if has_coefficient {
++                // Normalized products encode their numerical coefficient first.
++                mul.extend(num_h.as_view());
++            }
+ 
+             for i in &sorted_vars {
+-                let var = &vars[*i];
+                 let pow = monomial.exponents[*i];
+                 if pow != E::zero() {
+-                    let var = var
++                    let var = vars[*i]
+                         .as_ref()
+                         .expect("an active polynomial variable must have an expression");
+                     if pow != E::one() {
++                        normalized = false;
+                         num_h.to_num(pow.to_i32());
+                         pow_h.to_pow(var.as_view(), num_h.as_view());
+                         mul.extend(pow_h.as_view());
+@@ -2416,11 +2452,19 @@
+                 }
+             }
+ 
+-            monomial
+-                .coefficient
+-                .coefficient_to_expression(&self.ring(), &mut num_h);
+-            mul.extend(num_h.as_view());
+-            add.extend(mul_h.as_view());
++            if normalized {
++                match mul.get_nargs() {
++                    0 => add.extend(workspace.new_num(1).as_view()),
++                    1 => add.extend(mul.to_mul_view().iter().next().unwrap()),
++                    _ => {
++                        mul.set_has_coefficient(has_coefficient);
++                        mul.set_normalized(true);
++                        add.extend(mul.as_view());
++                    }
++                }
++            } else {
++                add.extend(mul_h.as_view());
++            }
+         }
+ 
+         let mut norm = workspace.new_atom();
