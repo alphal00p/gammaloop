@@ -92,7 +92,9 @@ svg[data-linnet-interactive] .linnet-inspector-properties {
   margin: 10px 0 0;
 }
 svg[data-linnet-interactive] .linnet-inspector-properties dt {
-  opacity: .7;
+  /* WebKit misplaces opacity layers inside SVG foreignObject. Use text color
+     for muted labels so they stay in the same painting context as the values. */
+  color: color-mix(in srgb, var(--linnet-panel-ink) 70%, var(--linnet-panel-bg));
 }
 svg[data-linnet-interactive] .linnet-inspector-properties dd {
   margin: 0;
@@ -105,7 +107,7 @@ svg[data-linnet-interactive] .linnet-inspector-construction {
 svg[data-linnet-interactive] .linnet-inspector-construction > span {
   font-size: 10px;
   font-weight: 600;
-  opacity: .7;
+  color: color-mix(in srgb, var(--linnet-panel-ink) 70%, var(--linnet-panel-bg));
 }
 svg[data-linnet-interactive] .linnet-inspector code {
   display: block;
@@ -120,5 +122,5 @@ svg[data-linnet-interactive] .linnet-inspector code {
 svg[data-linnet-interactive] .linnet-inspector-shortcuts {
   margin-top: 6px;
   font-size: 10px;
-  opacity: .65;
+  color: color-mix(in srgb, var(--linnet-panel-ink) 65%, var(--linnet-panel-bg));
 }
