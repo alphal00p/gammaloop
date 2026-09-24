@@ -16,7 +16,13 @@ from symbolica.community.spenso import (
 
 
 def mathml(expression):
-    return "".join(re.findall(r"<math\b.*?</math>", expression.to_html(), re.DOTALL))
+    return "".join(
+        re.findall(
+            r"<math\b.*?</math>",
+            expression.to_html(settings=DisplaySettings(tensor_view="matrix")),
+            re.DOTALL,
+        )
+    )
 
 
 class TensorPrintTests(unittest.TestCase):
