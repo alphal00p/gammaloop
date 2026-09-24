@@ -7,6 +7,7 @@ use idenso::{
     dirac::GammaSimplifier,
     epsilon::EPSILON_SYMBOL,
     representations::{Bispinor, initialize},
+    shorthands::schoonschip::{Schoonschip, SchoonschipSettings},
 };
 use spenso::{
     network::{
@@ -17,6 +18,7 @@ use spenso::{
     structure::{
         abstract_index::AbstractIndex,
         representation::{Minkowski, RepName},
+        slot::IsAbstractSlot,
     },
     symbolic_parallelism::{SymbolicParallelism, set_symbolica_rayon_enabled},
     tensors::{
@@ -41,6 +43,38 @@ struct TraceEvaluation {
 
 impl TraceEvaluation {
     fn new(sample: usize) -> Self {
+        // Independent directions and signed integer components, including
+        // timelike and spacelike vectors. Every sample spans all four axes.
+        Self::with_components(|index, axis| {
+            if index < 4 {
+                if index == axis {
+                    1 + sample as i64
+                } else {
+                    sample as i64
+                }
+            } else {
+                ((index * index * 3 + index * (axis + 1) + axis * 2 + sample * (axis + 1)) % 7)
+                    as i64
+                    - 3
+            }
+        })
+    }
+
+    fn generic(sample: usize) -> Self {
+        // Generic signed integer vectors keep the ordering regressions nonzero;
+        // the orthogonal first four vectors above can annihilate these traces.
+        Self::with_components(|index, axis| {
+            ((index * 19
+                + axis * 23
+                + index * axis * 11
+                + sample * (index + axis * 7 + 3)
+                + index * index * (axis + 5))
+                % 19) as i64
+                - 9
+        })
+    }
+
+    fn with_components(component: impl Fn(usize, usize) -> i64) -> Self {
         static INITIALIZE: Once = Once::new();
         INITIALIZE.call_once(|| {
             initialize();
@@ -60,23 +94,8 @@ impl TraceEvaluation {
             )
             .unwrap();
             let key = ExplicitKey::from_iter([mink.to_lib()], name, None);
-            // Independent directions and signed integer components, including
-            // timelike and spacelike vectors. Every sample spans all four axes.
             let components = (0..4)
-                .map(|axis| {
-                    let value = if index < 4 {
-                        if index == axis {
-                            1 + sample as i64
-                        } else {
-                            sample as i64
-                        }
-                    } else {
-                        ((index * index * 3 + index * (axis + 1) + axis * 2 + sample * (axis + 1))
-                            % 7) as i64
-                            - 3
-                    };
-                    Atom::num(value)
-                })
+                .map(|axis| Atom::num(component(index, axis)))
                 .collect();
             library.insert_explicit(key.map_canonical(|structure| {
                 MixedTensor::Param(ParamTensor::param(
@@ -87,6 +106,27 @@ impl TraceEvaluation {
             }));
             momenta.push(function!(name, mink.to_symbolic([])));
         }
+        // Explicit metrics in the input must also stay exact: the mixed
+        // library's generic metric factory otherwise supplies f64 constants.
+        let key = ExplicitKey::from_iter([mink.to_lib(); 2], ETS.metric, None);
+        let components = (0..16)
+            .map(|flat| {
+                Atom::num(if flat / 4 != flat % 4 {
+                    0
+                } else if flat == 0 {
+                    1
+                } else {
+                    -1
+                })
+            })
+            .collect();
+        library.insert_explicit(key.map_canonical(|structure| {
+            MixedTensor::Param(ParamTensor::param(
+                DenseTensor::from_storage_data(components, structure)
+                    .unwrap()
+                    .into(),
+            ))
+        }));
         // Idenso's epsilon includes -i: epsilon(0,1,2,3) = -i for the
         // (+---) metric and HEP library's gamma5 = i gamma0 gamma1 gamma2 gamma3.
         let key = ExplicitKey::from_iter([mink.to_lib(); 4], *EPSILON_SYMBOL, None);
@@ -130,6 +170,35 @@ impl TraceEvaluation {
             factors.insert(0, idenso::gamma5!());
         }
         spenso::trace!(&Bispinor {}.new_rep(4); factors)
+    }
+
+    fn ordering_slots() -> [Atom; 4] {
+        ["order_a", "order_b", "order_c", "order_d"].map(|name| {
+            Minkowski {}
+                .new_rep(4)
+                .slot::<AbstractIndex, _>(symbolica::symbol!(name))
+                .to_atom()
+        })
+    }
+
+    fn ordering_factors(&self) -> Vec<Atom> {
+        let [a, b, _, _] = Self::ordering_slots();
+        // The a pair has four interior gammas; the b pair has five. Choosing
+        // the odd interior first avoids a two-word Chisholm expansion.
+        vec![
+            idenso::gamma!(&a),
+            idenso::gamma!(&self.momenta[0]),
+            idenso::gamma!(&b),
+            idenso::gamma!(&self.momenta[1]),
+            idenso::gamma!(&self.momenta[2]),
+            idenso::gamma!(&a),
+            idenso::gamma!(&self.momenta[3]),
+            idenso::gamma!(&self.momenta[4]),
+            idenso::gamma!(&b),
+            idenso::gamma!(&self.momenta[5]),
+            idenso::gamma!(&self.momenta[6]),
+            idenso::gamma!(&self.momenta[7]),
+        ]
     }
 
     fn evaluate(&self, expression: &Atom) -> Atom {
@@ -276,6 +345,106 @@ fn repeated_slashes_match_exact_hep_tensor_contractions() {
                 let simplified = expression.simplify_gamma();
                 let _ = evaluation.assert_simplification(&expression, &simplified, &label);
             }
+        }
+    }
+}
+
+#[test]
+fn repeated_pair_order_and_cyclic_cuts_match_exact_hep_contractions() {
+    let evaluations = [0, 1, 2].map(TraceEvaluation::generic);
+    let bis = Bispinor {}.new_rep(4);
+    let factors = evaluations[0].ordering_factors();
+    let original = spenso::trace!(&bis; factors.clone());
+    let mut cases = [0, 5, 8]
+        .map(|cut| {
+            let mut rotated = factors.clone();
+            rotated.rotate_left(cut);
+            spenso::trace!(&bis; rotated)
+        })
+        .to_vec();
+    // Contract b through its odd interior, then a through its odd interior.
+    // Each identity contributes -2, leaving four times this eight-gamma word.
+    let odd_first_factors =
+        [3, 4, 0, 2, 1, 5, 6, 7].map(|index| idenso::gamma!(&evaluations[0].momenta[index]));
+    cases.push(Atom::num(4) * spenso::trace!(&bis; odd_first_factors));
+    let simplified: Vec<_> = cases.iter().map(GammaSimplifier::simplify_gamma).collect();
+    for (sample, evaluation) in evaluations.iter().enumerate() {
+        let expected = evaluation.evaluate(&original);
+        assert!(
+            !expected.is_zero(),
+            "ordering sample {sample} must be nonzero"
+        );
+        for (case, (expression, simplified)) in cases.iter().zip(&simplified).enumerate() {
+            let label = format!("pair order/cyclic cut {case}, sample {sample}");
+            assert_eq!(
+                evaluation.assert_simplification(expression, simplified, &label),
+                expected
+            );
+        }
+    }
+}
+
+#[test]
+fn external_metric_trace_matches_exact_hep_contractions() {
+    let evaluations = [0, 1, 2].map(TraceEvaluation::generic);
+    let bis = Bispinor {}.new_rep(4);
+    let [a, b, c, d] = TraceEvaluation::ordering_slots();
+    let repeated = spenso::trace!(&bis; evaluations[0].ordering_factors());
+    let mut factors = evaluations[0].ordering_factors();
+    factors[5] = idenso::gamma!(&c);
+    factors[8] = idenso::gamma!(&d);
+    let original = spenso::g!(&a, &c) * spenso::g!(&b, &d) * spenso::trace!(&bis; factors);
+    let precontracted = original.schoonschip_with_settings(
+        &SchoonschipSettings::default()
+            .with_chain_like_functions()
+            .without_rank1_tensors(),
+    );
+    assert_ne!(
+        original, precontracted,
+        "external metrics must reach the trace body"
+    );
+    let cases = [original, precontracted];
+    let simplified = cases.each_ref().map(GammaSimplifier::simplify_gamma);
+    for (sample, evaluation) in evaluations.iter().enumerate() {
+        let expected = evaluation.evaluate(&repeated);
+        assert!(
+            !expected.is_zero(),
+            "metric sample {sample} must be nonzero"
+        );
+        for (case, (expression, simplified)) in cases.iter().zip(&simplified).enumerate() {
+            let label = format!("external metric route {case}, sample {sample}");
+            assert_eq!(
+                evaluation.assert_simplification(expression, simplified, &label),
+                expected
+            );
+        }
+    }
+}
+
+#[test]
+fn axial_pair_order_and_gamma5_positions_match_exact_hep_contractions() {
+    let evaluations = [0, 1, 2].map(TraceEvaluation::generic);
+    let bis = Bispinor {}.new_rep(4);
+    let positions = [0, 3, 6, 12];
+    let cases = positions.map(|position| {
+        let mut factors = evaluations[0].ordering_factors();
+        factors.insert(position, idenso::gamma5!());
+        spenso::trace!(&bis; factors)
+    });
+    let simplified = cases.each_ref().map(GammaSimplifier::simplify_gamma);
+    for (sample, evaluation) in evaluations.iter().enumerate() {
+        let expected = evaluation.evaluate(&cases[0]);
+        assert!(
+            !expected.is_zero(),
+            "axial ordering sample {sample} must be nonzero"
+        );
+        for ((position, expression), simplified) in positions.iter().zip(&cases).zip(&simplified) {
+            let label = format!("gamma5 position {position}, sample {sample}");
+            let value = evaluation.assert_simplification(expression, simplified, &label);
+            // Moving gamma5 past each ordinary gamma changes the sign; this
+            // also covers cuts with gamma5 inside a candidate contracted pair.
+            let sign = if position % 2 == 0 { 1 } else { -1 };
+            assert_eq!(value, Atom::num(sign) * &expected, "{label}");
         }
     }
 }

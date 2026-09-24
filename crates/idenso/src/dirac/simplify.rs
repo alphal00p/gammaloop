@@ -412,6 +412,9 @@ impl<'settings> DiracSimplifier<'settings> {
             return result;
         }
         let mut expr = expr.to_owned();
+        // A trace can emit metrics connected to surviving words. Contract those
+        // before each rewrite, so later iterations expose their repeated indices.
+        let metric_settings = SchoonschipSettings::default().with_chain_like_functions();
 
         loop {
             // Metric contraction can close a chain or connect separate chains.
@@ -419,7 +422,10 @@ impl<'settings> DiracSimplifier<'settings> {
             // Close metric-linked chains before rewriting, including inert traces.
             let next = self
                 .settings
-                .rewrite_expression(expr.schoonschip().collect_gamma_chains())
+                .rewrite_expression(
+                    expr.schoonschip_with_settings(&metric_settings)
+                        .collect_gamma_chains(),
+                )
                 .simplify_epsilon()
                 .normalize_dots();
 
@@ -729,7 +735,7 @@ impl DiracSimplifier<'_> {
         word: DiracWord<'_>,
         factors: &[DiracFactor<'_>],
     ) -> Option<Atom> {
-        let (left, right) = Self::shortest_repeated_four_dim_gamma_pair(factors)?;
+        let (left, right) = Self::repeated_four_dim_gamma_pair(word, factors)?;
         let parsed_interior = &factors[left + 1..right];
         let interior_mink_indices =
             Self::gamma_mink_index_sequence_for(FOUR_DIM_CHISHOLM, parsed_interior)?;
@@ -1023,10 +1029,15 @@ impl DiracSimplifier<'_> {
         best
     }
 
-    fn shortest_repeated_four_dim_gamma_pair(
+    fn repeated_four_dim_gamma_pair(
+        word: DiracWord<'_>,
         factors: &[DiracFactor<'_>],
     ) -> Option<(usize, usize)> {
         let mut best = None;
+        let priority = |(left, right)| match word {
+            DiracWord::Trace(_) => Self::trace_pair_priority(factors, left, right - left),
+            DiracWord::Chain(..) => (0, right - left),
+        };
 
         for i in 0..factors.len() {
             let Some(mu) = factors[i].gamma_mink_index(FOUR_DIM_CHISHOLM) else {
@@ -1041,13 +1052,16 @@ impl DiracSimplifier<'_> {
                     continue;
                 };
 
-                if mu == nu && best.is_none_or(|(a, b)| j - i < b - a) {
-                    best = Some((i, j));
+                if mu == nu {
+                    let score = priority((i, j));
+                    if best.is_none_or(|(_, best_score)| score < best_score) {
+                        best = Some(((i, j), score));
+                    }
                 }
             }
         }
 
-        best
+        best.map(|(pair, _)| pair)
     }
 
     /// Asks for the Minkowski indices of a gamma pair, checking that their
@@ -1282,8 +1296,8 @@ impl DiracSimplifier<'_> {
             return Some(Atom::Zero);
         }
 
-        // Cyclicity lets the shortest repeated pair cross the stored boundary.
-        // Rotate once, then apply exactly the same reductions as open chains.
+        // Cyclicity lets the preferred repeated pair cross the stored boundary.
+        // Prefer a one-word Chisholm reduction before a branching contraction.
         let rotated = Self::rotate_trace_to_repeated_pair(&factors);
         let word = DiracWord::Trace(rep);
         if let Some(reduced) = Self::contract_adjacent_gamma_pair(word, &rotated)
@@ -1331,24 +1345,52 @@ impl DiracSimplifier<'_> {
         Some(sum)
     }
 
+    /// Adjacent pairs remain cheapest. Among the rest, an explicit 4D pair
+    /// with an odd gamma-only interior reduces to one word instead of two.
+    /// Applicable even interiors also precede arcs crossing gamma5 or another
+    /// unsupported factor. Rotation and contraction use this same ordering.
+    fn trace_pair_priority(
+        factors: &[DiracFactor<'_>],
+        start: usize,
+        distance: usize,
+    ) -> (u8, usize) {
+        let priority = if distance == 1 {
+            0
+        } else if factors[start]
+            .gamma_mink_index(FOUR_DIM_CHISHOLM)
+            .is_some_and(is_minkowski_slot)
+            && factors
+                .iter()
+                .cycle()
+                .skip(start + 1)
+                .take(distance - 1)
+                .all(|factor| factor.gamma_mink_index(FOUR_DIM_CHISHOLM).is_some())
+        {
+            if distance.is_multiple_of(2) { 1 } else { 2 }
+        } else {
+            3
+        };
+        (priority, distance)
+    }
+
     fn rotate_trace_to_repeated_pair<'a>(factors: &[DiracFactor<'a>]) -> Vec<DiracFactor<'a>> {
-        let mut best = (0, factors.len());
+        let mut best = None;
         for (i, left) in factors.iter().enumerate() {
             for (j, right) in factors.iter().enumerate().skip(i + 1) {
                 if Self::mink_index_pair(GAMMA_ANTICOMMUTATION, left, right)
                     .is_some_and(|(a, b)| a == b)
                 {
                     let distance = j - i;
-                    if distance < best.1 {
-                        best = (i, distance);
-                    }
-                    if factors.len() - distance < best.1 {
-                        best = (j, factors.len() - distance);
+                    for candidate in [(i, distance), (j, factors.len() - distance)] {
+                        let score = Self::trace_pair_priority(factors, candidate.0, candidate.1);
+                        if best.is_none_or(|(_, best_score)| score < best_score) {
+                            best = Some((candidate, score));
+                        }
                     }
                 }
             }
         }
-        Self::cyclic_from_position(factors, best.0)
+        Self::cyclic_from_position(factors, best.map_or(0, |((start, _), _)| start))
     }
 
     fn simplify_special_trace_pair(rep: AtomView<'_>, factors: &[DiracFactor<'_>]) -> Option<Atom> {
@@ -1423,10 +1465,11 @@ impl DiracSimplifier<'_> {
             return Some(Atom::Zero);
         }
 
+        let rotated = Self::rotate_trace_to_repeated_pair(factors);
         let word = DiracWord::Trace(rep);
-        if let Some(reduced) = Self::contract_adjacent_gamma_pair(word, factors)
-            .or_else(|| Self::four_dim_chisholm_contraction(word, factors))
-            .or_else(|| Self::bubble_repeated_gamma_towards_contraction(word, factors))
+        if let Some(reduced) = Self::contract_adjacent_gamma_pair(word, &rotated)
+            .or_else(|| Self::four_dim_chisholm_contraction(word, &rotated))
+            .or_else(|| Self::bubble_repeated_gamma_towards_contraction(word, &rotated))
         {
             return Some(reduced);
         }
@@ -1509,5 +1552,299 @@ impl DiracSimplifier<'_> {
         let trace = trace.to_owned();
         let simplified = trace.replace_multiple_repeat(TRACE_TERMINALS.as_ref());
         (simplified != trace).then_some(simplified)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{gamma, gamma5, test_support::test_initialize};
+    use spenso::slot;
+
+    fn momenta(rep: &Atom) -> [Atom; 8] {
+        std::array::from_fn(|i| {
+            FunctionBuilder::new(T.rank_one_tensor_symbol(&format!("idenso::trace_order::p{i}")))
+                .add_arg(rep)
+                .finish()
+        })
+    }
+
+    #[test]
+    fn trace_prefers_an_odd_interior_over_a_shorter_branching_pair() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let (a, b) = (slot!(r.mink4, a).into_atom(), slot!(r.mink4, b).into_atom());
+        let p = momenta(&r.mink4.to_symbolic([]));
+        let factors = [
+            &a, &p[0], &b, &p[1], &p[2], &a, &p[3], &p[4], &b, &p[5], &p[6], &p[7],
+        ]
+        .map(|index| gamma!(index));
+        let expected_first = Atom::num(-2)
+            * trace!(&spin; [
+                &a, &p[0], &p[4], &p[3], &a, &p[2], &p[1], &p[5], &p[6], &p[7],
+            ].map(|index| gamma!(index)));
+        let parsed = factors
+            .iter()
+            .map(|factor| DiracFactor::parse(factor.as_view()))
+            .collect::<Vec<_>>();
+        let rotated = DiracSimplifier::rotate_trace_to_repeated_pair(&parsed);
+        assert_eq!(
+            DiracSimplifier::four_dim_chisholm_contraction(
+                DiracWord::Trace(spin.as_view()),
+                &rotated,
+            ),
+            Some(expected_first.clone()),
+        );
+        // Rotation and the actual selector must agree on the one-word route.
+        let input = trace!(&spin; factors.iter());
+        assert_eq!(input.simplify_gamma(), expected_first.simplify_gamma());
+        // Open chains retain their existing shortest-pair ordering.
+        let (start, end) = (slot!(r.bis4, i).into_atom(), slot!(r.bis4, j).into_atom());
+        assert_eq!(
+            DiracSimplifier::repeated_four_dim_gamma_pair(
+                DiracWord::Chain(start.as_view(), end.as_view()),
+                &parsed,
+            ),
+            Some((0, 5)),
+        );
+    }
+
+    #[test]
+    fn trace_keeps_cyclic_adjacent_pairs_ahead_of_odd_interiors() {
+        let r = test_initialize();
+        let (a, b) = (slot!(r.mink4, a).into_atom(), slot!(r.mink4, b).into_atom());
+        let p = momenta(&r.mink4.to_symbolic([]));
+        let factors =
+            [&a, &p[0], &b, &p[1], &p[2], &p[3], &b, &p[4], &p[5], &a].map(|index| gamma!(index));
+        let parsed = factors
+            .iter()
+            .map(|factor| DiracFactor::parse(factor.as_view()))
+            .collect::<Vec<_>>();
+        let rotated = DiracSimplifier::rotate_trace_to_repeated_pair(&parsed);
+        assert_eq!(rotated[0].as_view(), factors[9].as_view());
+        assert_eq!(rotated[1].as_view(), factors[0].as_view());
+    }
+
+    #[test]
+    fn trace_rotates_even_only_pairs_across_the_boundary() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let (a, b) = (slot!(r.mink4, a).into_atom(), slot!(r.mink4, b).into_atom());
+        let p = momenta(&r.mink4.to_symbolic([]));
+        let factors = [&b, &a, &p[1], &p[2], &p[3], &p[4], &p[5], &p[6], &a, &p[7]]
+            .map(|index| gamma!(index));
+        let parsed = factors
+            .iter()
+            .map(|factor| DiracFactor::parse(factor.as_view()))
+            .collect::<Vec<_>>();
+        let rotated = DiracSimplifier::rotate_trace_to_repeated_pair(&parsed);
+        let expected = 4 * g!(&p[7], &b) * trace!(&spin; p[1..7].iter().map(|index| gamma!(index)));
+        assert_eq!(
+            DiracSimplifier::four_dim_chisholm_contraction(
+                DiracWord::Trace(spin.as_view()),
+                &rotated,
+            ),
+            Some(expected),
+        );
+    }
+
+    #[test]
+    fn trace_pair_priority_preserves_symbolic_dimensions_and_slashes() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        for (rep, a, b) in [
+            (
+                r.mink_d.to_symbolic([]),
+                slot!(r.mink_d, a).into_atom(),
+                slot!(r.mink_d, b).into_atom(),
+            ),
+            (
+                r.mink4.to_symbolic([]),
+                spenso::p!(r.mink4.to_symbolic([])),
+                spenso::q!(r.mink4.to_symbolic([])),
+            ),
+        ] {
+            let p = momenta(&rep);
+            let factors = [
+                &a, &p[0], &b, &p[1], &p[2], &a, &p[3], &p[4], &b, &p[5], &p[6], &p[7],
+            ]
+            .map(|index| gamma!(index));
+            let parsed = factors
+                .iter()
+                .map(|factor| DiracFactor::parse(factor.as_view()))
+                .collect::<Vec<_>>();
+            let rotated = DiracSimplifier::rotate_trace_to_repeated_pair(&parsed);
+            assert_eq!(rotated[0].as_view(), factors[0].as_view());
+            assert_eq!(
+                DiracSimplifier::repeated_four_dim_gamma_pair(
+                    DiracWord::Trace(spin.as_view()),
+                    &rotated,
+                ),
+                None,
+            );
+        }
+    }
+
+    #[test]
+    fn axial_trace_can_contract_a_cyclic_odd_interior_without_crossing_gamma5() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let (a, b) = (slot!(r.mink4, a).into_atom(), slot!(r.mink4, b).into_atom());
+        let p = momenta(&r.mink4.to_symbolic([]));
+        let factors = [
+            gamma!(&a),
+            gamma!(&p[0]),
+            gamma5!(),
+            gamma!(&b),
+            gamma!(&p[1]),
+            gamma!(&p[2]),
+            gamma!(&b),
+            gamma!(&p[3]),
+            gamma!(&p[4]),
+            gamma!(&a),
+            gamma!(&p[5]),
+        ];
+        let parsed = factors
+            .iter()
+            .map(|factor| DiracFactor::parse(factor.as_view()))
+            .collect::<Vec<_>>();
+        let rotated = DiracSimplifier::rotate_trace_to_repeated_pair(&parsed);
+        assert_eq!(
+            DiracSimplifier::repeated_four_dim_gamma_pair(
+                DiracWord::Trace(spin.as_view()),
+                &rotated,
+            ),
+            Some((0, 2)),
+        );
+        assert!(
+            DiracSimplifier::four_dim_chisholm_contraction(
+                DiracWord::Trace(spin.as_view()),
+                &rotated,
+            )
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn external_metrics_contract_before_trace_expansion() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let (a, b, c, d) = (
+            slot!(r.mink4, a).into_atom(),
+            slot!(r.mink4, b).into_atom(),
+            slot!(r.mink4, c).into_atom(),
+            slot!(r.mink4, d).into_atom(),
+        );
+        let p = momenta(&r.mink4.to_symbolic([]));
+        let input = g!(&a, &c)
+            * g!(&b, &d)
+            * trace!(&spin; [
+                &a, &p[0], &b, &p[1], &p[2], &c, &p[3], &p[4], &d, &p[5], &p[6], &p[7],
+            ].map(|index| gamma!(index)));
+        let contracted = input
+            .schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());
+        let result = input.simplify_gamma();
+        assert_eq!(result, contracted.simplify_gamma());
+        assert_eq!(result.simplify_gamma(), result);
+    }
+
+    #[test]
+    fn initial_metric_contraction_preserves_inert_traces_and_open_chains() {
+        let r = test_initialize();
+        for rep in [&r.mink4, &r.mink_d] {
+            let (a, b, c) = (
+                slot!(rep, a).into_atom(),
+                slot!(rep, b).into_atom(),
+                slot!(rep, c).into_atom(),
+            );
+            let spin = r.bis4.to_symbolic([]);
+            let input = g!(&a, &b) * trace!(&spin; [gamma!(&b), gamma!(&c)]);
+            let expected = trace!(&spin; [gamma!(&a), gamma!(&c)]);
+            let settings = GammaSimplifySettings::default().without_trace_evaluation();
+            assert_eq!(input.simplify_gamma_with(settings), expected);
+
+            let (start, end) = (slot!(r.bis4, i).into_atom(), slot!(r.bis4, j).into_atom());
+            let input = g!(&a, &b) * chain!(&start, &end; [gamma!(&b), gamma!(&c)]);
+            let expected = chain!(&start, &end; [gamma!(&a), gamma!(&c)]);
+            assert_eq!(input.simplify_gamma(), expected);
+        }
+    }
+
+    #[test]
+    fn chisholm_metric_contraction_reaches_an_idempotent_result() {
+        let r = test_initialize();
+        let (start, end) = (slot!(r.bis4, i).into_atom(), slot!(r.bis4, j).into_atom());
+        let (a, b, c, d) = (
+            slot!(r.mink4, a).into_atom(),
+            slot!(r.mink4, b).into_atom(),
+            slot!(r.mink4, c).into_atom(),
+            slot!(r.mink4, d).into_atom(),
+        );
+        let input = chain!(&start, &end;
+            [&a, &b, &c, &a, &b, &d].map(|index| gamma!(index))
+        );
+        let expected = 4 * chain!(&start, &end; [gamma!(&c), gamma!(&d)]);
+        let result = input.simplify_gamma();
+        assert_eq!(result, expected);
+        assert_eq!(result.simplify_gamma(), result);
+    }
+
+    #[test]
+    fn evaluated_trace_metrics_contract_into_surviving_chains() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let (start, end) = (slot!(r.bis4, i).into_atom(), slot!(r.bis4, j).into_atom());
+        for rep in [&r.mink4, &r.mink_d] {
+            let (a, b, c) = (
+                slot!(rep, a).into_atom(),
+                slot!(rep, b).into_atom(),
+                slot!(rep, c).into_atom(),
+            );
+            let input = trace!(&spin; [gamma!(&a), gamma!(&b)])
+                * chain!(&start, &end; [gamma!(&a), gamma!(&c)]);
+            let expected = 4 * chain!(&start, &end; [gamma!(&b), gamma!(&c)]);
+            let result = input.simplify_gamma();
+            assert_eq!(result, expected);
+            assert_eq!(result.simplify_gamma(), result);
+        }
+    }
+
+    #[test]
+    fn axial_trace_prefers_an_applicable_arc_over_a_shorter_gamma5_crossing() {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let a = slot!(r.mink4, a).into_atom();
+        let p = momenta(&r.mink4.to_symbolic([]));
+        let factors = [
+            gamma5!(),
+            gamma!(&a),
+            gamma!(&p[0]),
+            gamma!(&p[1]),
+            gamma!(&p[2]),
+            gamma!(&p[3]),
+            gamma!(&p[4]),
+            gamma!(&p[5]),
+            gamma!(&a),
+            gamma!(&p[6]),
+            gamma!(&p[7]),
+        ];
+        let parsed = factors
+            .iter()
+            .map(|factor| DiracFactor::parse(factor.as_view()))
+            .collect::<Vec<_>>();
+        let rotated = DiracSimplifier::rotate_trace_to_repeated_pair(&parsed);
+        assert_eq!(
+            DiracSimplifier::repeated_four_dim_gamma_pair(
+                DiracWord::Trace(spin.as_view()),
+                &rotated,
+            ),
+            Some((0, 7)),
+        );
+        let reduced = DiracSimplifier::four_dim_chisholm_contraction(
+            DiracWord::Trace(spin.as_view()),
+            &rotated,
+        )
+        .unwrap();
+        assert_eq!(reduced.nterms(), 2);
     }
 }

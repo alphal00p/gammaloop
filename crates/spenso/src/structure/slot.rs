@@ -132,14 +132,15 @@ impl SlotHead {
 #[cfg(feature = "shadowing")]
 /// Borrowed slot syntax. Recognition leaves dimension and index payloads unvalidated.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct SlotView<'a> {
+pub struct SlotView<'a> {
     function: FunView<'a>,
     wrapper: Option<Symbol>,
     arguments: ListIterator<'a>,
 }
 
 #[cfg(feature = "shadowing")]
-pub(crate) enum SlotMatch<'a> {
+/// Classification of an expression for a structural tensor-index walk.
+pub enum SlotMatch<'a> {
     Explicit(SlotView<'a>),
     /// A compact or malformed slot: its payload is opaque to tensor-index scans.
     Opaque,
@@ -199,8 +200,15 @@ impl<'a> SlotView<'a> {
         })
     }
 
+    /// Borrow the dimension expression without requiring a number or symbol.
     #[inline]
-    pub(crate) fn index(mut self) -> AtomView<'a> {
+    pub fn dimension(mut self) -> AtomView<'a> {
+        self.arguments.next().unwrap()
+    }
+
+    #[inline]
+    /// Borrow the original explicit index payload without coercing its value.
+    pub fn index(mut self) -> AtomView<'a> {
         self.arguments.next();
         self.arguments.next().unwrap()
     }
@@ -224,7 +232,7 @@ impl<'a> SlotView<'a> {
 /// The small, bounded caches avoid repeated tag lookups and representation
 /// resolution without making scans quadratic in the number of distinct heads.
 #[derive(Default)]
-pub(crate) struct SlotMatcher {
+pub struct SlotMatcher {
     heads: [Option<(u32, SlotHead)>; 16],
     resolved: Vec<(Symbol, Option<Symbol>, LibraryRep)>,
 }
@@ -253,15 +261,27 @@ impl SlotMatcher {
 
     /// Identify a slot or an opaque slot payload in one classification pass.
     #[inline]
-    pub(crate) fn classify<'a>(&mut self, value: AtomView<'a>) -> SlotMatch<'a> {
+    pub fn classify<'a>(&mut self, value: AtomView<'a>) -> SlotMatch<'a> {
         SlotView::classify(value, |function| self.classify_head(function))
     }
 
-    pub(crate) fn parse<T: RepName, Aind: ParseableAind>(
+    /// Validate a recognized slot using the requested representation and index types.
+    /// Use [`SlotView::index`] when exact symbolic index identity must be preserved.
+    pub fn parse<T: RepName, Aind: ParseableAind>(
         &mut self,
         value: AtomView<'_>,
     ) -> Result<Slot<T, Aind>, SlotError> {
         let slot = self.classify(value).into_slot(value)?;
+        let rep = self.representation(slot)?;
+        slot.parse(T::from_library_rep(rep)?)
+    }
+
+    /// Resolve the representation and duality while retaining arbitrary dimension
+    /// and index expressions in the borrowed view.
+    pub fn representation(
+        &mut self,
+        slot: SlotView<'_>,
+    ) -> Result<LibraryRep, RepresentationError> {
         let head = slot.function.get_symbol();
         let rep = if let Some((_, _, rep)) = self
             .resolved
@@ -282,7 +302,7 @@ impl SlotMatcher {
             }
             rep
         };
-        slot.parse(T::from_library_rep(rep)?)
+        Ok(rep)
     }
 }
 

@@ -977,8 +977,9 @@ def _(mo):
     ```
 
     **Where do replacement passes cost us?** The fast ordinary case above is
-    only one route. Instrumenting the complete pipeline found these additional
-    costs in the same optimized build (three warm samples unless noted):
+    only one route. Before the metric-first contractor below, instrumenting
+    the complete pipeline found these additional costs in the same optimized
+    build (three warm samples unless noted):
 
     | Input | Full simplification | Main measured cost |
     |:--|--:|:--|
@@ -1009,10 +1010,69 @@ def _(mo):
     and sum merging remain. These separate experiments and their limitations
     are recorded in `examples/notebooks/gamma_trace_profile.json`.
 
-    Its CSV distinguishes first-call Idenso time, warm Idenso time, FORM
-    `trace4` process time and FORM `tracen` process time. First calls in a
-    fresh process expose the lazy table cost; repeated notebook runs may
+    The trace benchmark CSV distinguishes first-call Idenso time, warm Idenso
+    time, FORM `trace4` process time and FORM `tracen` process time. First calls
+    in a fresh process expose the lazy table cost; repeated notebook runs may
     already have populated those tables.
+
+    **Metric-first contraction.** Schoonschip now matches
+    `g(a_,b_)*remainder___`, then walks the remainder for one compatible
+    explicit tensor slot. The replacement joins that slot to the other metric
+    endpoint and removes the metric. Compatibility checks representation,
+    dimension and duality; scalar parameters and index payloads stay opaque.
+    Chain and trace bodies follow the chain-like setting. Substitutions do not
+    cross sums or powers, while independent contractions inside them can run.
+
+    The repeated-explicit-index check guards this metric stage. A negative
+    result skips metric substitution and chain/vector contraction rules;
+    dot normalization and ordinary vector compaction still run. The benchmark reports the raw contractor and
+    guarded contractor separately, alongside complete Schoonschip and gamma
+    timings. Exact HEP component tests compare evaluations before and after
+    rewriting, including antisymmetry and dual representations.
+
+    Five-sample medians on a pinned CPU of the shared host (2026-09-24),
+    **isolated contractor only, in microseconds**:
+
+    | Input | Previous tuple rules | Metric first | Speedup |
+    |:--|--:|--:|--:|
+    | One metric and tensor | 26.75 | 2.31 | 11.6× |
+    | Metric and chain body | 37.08 | 4.15 | 8.9× |
+    | Metric and cyclic trace | 39.73 | 4.69 | 8.5× |
+    | Eight connected metrics | 110.79 | 38.24 | 2.9× |
+    | Miss with 48 spectator factors | 58.08 | 43.08 | 1.35× |
+
+    On terminal axial-12 output, the raw failed pass improves from **58.11 to
+    23.28 ms**. The repeated-index guard brings the new metric stage to
+    **0.382 ms**; the same guard before the old rules takes **0.413 ms**.
+    This separates faster contraction from the benefit of avoiding unnecessary
+    work. Complete Schoonschip still takes **67.51 ms**, down from **125.44 ms**.
+
+    **Full gamma simplification versus FORM, in milliseconds:**
+
+    | Axial length | Previous full gamma | Current full gamma | FORM `trace4` wall |
+    |--:|--:|--:|--:|
+    | 6 | 5.79 | 4.78 | 0.00634 |
+    | 8 | 45.42 | 36.15 | 0.02023 |
+    | 10 | 332.40 | 254.64 | 0.09993 |
+    | 12 | 2444.34 | 1791.53 | 0.61944 |
+
+    FORM timings use three measured processes after warmup, six batches per
+    process, and include amortized startup, parsing, tracing, sorting and
+    cleanup. Rust input construction is outside timing. For axial 12, FORM's
+    internal trace-and-sort CPU estimate is **0.593 ms**. **We are still far
+    from FORM parity:** the full Idenso pipeline improves **1.36×**, while
+    surrounding normalization and epsilon processing remain expensive.
+
+    `examples/notebooks/metric_contraction.json` records all 25 cases, raw
+    samples, build/source identities and FORM programs. All **24 exact HEP
+    tests pass**. The broader suite has 589 passing tests and two preexisting
+    failures; complete validation commands and limitations are in that record.
+
+    ```sh
+    cargo run -p idenso --profile dev-optim --example metric_contraction_benchmark -- /tmp/metric-benchmark
+    cargo nextest run -p spenso-hep-lib --test metric_contraction_validation --cargo-profile dev-optim
+    ```
+
     """)
     return
 
@@ -1308,6 +1368,115 @@ def _(mo):
 
     The component assignments, outputs, timings and executable FORM program
     are recorded in `examples/notebooks/gamma_trace_axial_form.json`.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Contraction order and intermediate terms
+
+    This investigation records the behavior before the contraction-order
+    update described below.
+
+    Cold Idenso recipe generation and FORM emit the **same raw monomial
+    counts** for distinct indices. Warm Idenso uses the collected recipes:
+
+    | Trace | Generated in either engine | Collected recipes / FORM output |
+    |:--|:--|:--|
+    | Axial 6 / 8 / 10 / 12 | 6 / 33 / 180 / 1053 | 6 / 33 / 180 / 1029 |
+    | Ordinary 8 / 10 / 12 | 117 / 801 / 5139 | 105 / 693 / 4383 |
+
+    Axial twelve grows **1 → 1,029** at the first gamma rewrite. Every later
+    stage, including the entire second pass, leaves it unchanged. Its slow
+    cleanup is not extra trace branching. These are cumulative emissions,
+    not peak resident terms or memory.
+
+    **Repeated indices expose a different path.** Let `Tr` denote a 4D trace,
+    `a,b` summed Lorentz indices and `p0..p7` distinct slashed vectors:
+
+    ```text
+    Tr[a,p0,b,p1,p2,a,p3,p4,b,p5,p6,p7]
+      = -2 Tr[a,p0,p4,p3,a,p2,p1,p5,p6,p7]
+      =  4 Tr[p3,p4,p0,p2,p1,p5,p6,p7]
+    ```
+
+    Idenso selects the shortest cyclic pair, `a`, whose even interior
+    branches: ultimately **three length-eight kernels, 315 cached monomials**.
+    [FORM prioritizes odd-interior Chisholm contractions](https://github.com/form-dev/form/blob/v5.0.0/sources/opera.c#L828),
+    choosing `b` then `a`: **one kernel, 117 raw monomials → 105 collected**.
+    Manually taking the first odd reduction changes warm Idenso time from
+    **24.73 to 8.33 ms**. Preparing the shorter input is outside timing;
+    this preceded the production update below.
+
+    External metrics expose an earlier difference. For
+    `g(a,c)*g(b,d)*Tr[a,p0,b,p1,p2,c,p3,p4,d,p5,p6,p7]`, the default
+    prepass leaves trace bodies opaque and emits **4,383 cached monomials**.
+    Enabling the existing chain-like Schoonschip setting before tracing
+    reduces that to **315**, taking **26.64 ms including the prepass** versus
+    **656.42 ms** by default. FORM contracts these metrics before tracing,
+    then takes the odd-interior path. Timings are five-sample warm medians
+    on one pinned CPU of the shared host (2026-09-24).
+
+    Exact HEP network evaluations agree on three nonzero integer assignments
+    for the original trace, both odd reductions, the external-metric and
+    precontracted inputs, and the repeated-pair and odd-first simplified
+    outputs. The large default external-metric output was not HEP-evaluated.
+    All 24 instrumented outputs match linked production outputs exactly.
+    `examples/notebooks/gamma_trace_intermediates.json` records the counts,
+    exact assignments, raw timings, source identities and diagnostic drivers.
+    Counts preserve factorization; outer sum arity alone hides nested sums.
+
+    ### Applied contraction ordering
+
+    Gamma simplification now contracts metrics into chains and traces before
+    **every rewrite pass**, including metrics generated by a neighboring
+    trace. The repeated-index scan guards metric substitution and chain/vector
+    rules, so terminal expressions without repeated explicit indices skip
+    those operations without tensor parsing.
+
+    Cyclic rotation and Chisholm selection use the same priority: adjacent
+    pairs, applicable odd interiors, applicable even interiors, then other
+    repeated pairs. Chisholm priority requires explicit 4D indices and a
+    gamma-only interior. An interval crossing gamma5 cannot hide an applicable
+    interval on the other side. Open-chain and generic-dimensional pair
+    ordering retain their existing behavior.
+
+    The ordinary crossing example now has **315 → 105 arithmetic leaves**,
+    its external-metric version **4,383 → 105**, and the axial crossing
+    example **99 → 33**. Counts preserve factorization and do not collect
+    terms; they are neither peak-memory measurements nor equality checks.
+
+    The expanded native benchmark covers 35 inputs, including 16 complete
+    gamma pipelines and 12 matching FORM cases. Five warm Idenso samples
+    use the same optimized driver and one pinned CPU before/after; input
+    creation is excluded. FORM wall time includes amortized startup, parsing,
+    tracing, sorting and cleanup, with six batches in each of three measured
+    processes. The host is shared.
+
+    | Input | Before (ms) | After (ms) | FORM wall (ms) |
+    |:--|--:|--:|--:|
+    | Repeated-index trace, 12 | 19.52 | 6.62 | 0.06043 |
+    | External metrics, 12 | 508.55 | 6.74 | 0.06144 |
+    | Axial crossing, 12 | 105.96 | 32.22 | 0.02116 |
+    | Two-gamma interior, 8 | 0.269 | 0.286 | 0.00491 |
+    | Cyclic adjacent pair, 12 | 50.98 | 51.16 | 0.40266 |
+    | Free indices, 8 | 0.148 | 0.148 | 0.05719 |
+    | Free indices, 12 | 6.24 | 6.32 | 2.91050 |
+    | Axial distinct indices, 12 | 1769.61 | 1785.88 | 0.62148 |
+
+    The main ordinary cases improve by **2.95× and 75.4×**, and the axial
+    crossing case by **3.29×**. The small two-gamma-interior case costs about
+    **17 µs more**. Axial twelve with distinct indices remains dominated by
+    cleanup, and FORM remains substantially faster on the contracted cases.
+
+    Ten new unit regressions cover cyclic priority, gamma5 boundaries,
+    symbolic dimensions, inert traces and generated-metric idempotence.
+    Three new HEP regressions compare exact nonzero component evaluations,
+    including the production external-metric output. Raw timings, factorized
+    output counts, matching FORM programs, source identities and validation
+    results are recorded in `examples/notebooks/gamma_trace_ordering.json`.
     """)
     return
 
