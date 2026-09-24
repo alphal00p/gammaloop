@@ -2092,7 +2092,7 @@ impl TensorExpression {
     /// # Get HEP library with standard tensors
     /// hep_lib = TensorLibrary.hep_lib()
     /// # Access standard tensors like gamma matrices
-    /// gamma_structure = hep_lib[S("spenso::gamma")]
+    /// gamma_structure = hep_lib[S("spenso::gamma")].expression()
     /// print(gamma_structure)
     /// print(TensorExpression(gamma_structure(3, 4, 7) * gamma_structure(7, 4, 3)).simplify_gamma())
     /// ```

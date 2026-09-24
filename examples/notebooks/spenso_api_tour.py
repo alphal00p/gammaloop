@@ -63,7 +63,7 @@ def example_specification():
         (
             "TensorLibrary",
             "Resolves named tensors to stored data. Empty, constructed and HEP libraries have different contents; hep_lib_atom keeps exact symbolic entries.",
-            'library = sp.TensorLibrary()\nlibrary.register(tensor)\nreference = library["spenso_api_tour::M"]',
+            'library = sp.TensorLibrary()\nlibrary.register(tensor)\nstored = library["spenso_api_tour::M"]\nreference = stored.expression()',
             "library",
         ),
         (

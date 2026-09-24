@@ -5,7 +5,7 @@ use idenso::{IndexTooling, dirac::AGS};
 use pyo3::{
     FromPyObject, PyErr, exceptions,
     prelude::*,
-    types::{PyAny, PyComplex},
+    types::{PyAny, PyComplex, PyIterator, PyList},
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -38,7 +38,7 @@ use symbolica::{
 };
 
 use crate::{
-    Spensor,
+    Spensor, TensorDataDescriptor,
     broadcast::SpensoBroadcastFunction,
     expression::{TensorExpression, value_to_structured_atom},
     structure::SpensoName,
@@ -46,11 +46,14 @@ use crate::{
 
 use super::ModuleInit;
 
-/// A library for registering and managing tensor templates and structures.
+/// A mapping from tensor signatures to stored component data.
 ///
 /// The TensorLibrary provides a centralized registry for tensor definitions that can be
 /// reused across tensor networks and expressions. It manages tensor structures with their
 /// associated names and can resolve symbolic references to registered tensors.
+/// Lookup returns an independent Tensor snapshot; call its expression() method
+/// for a symbolic reference. keys(), values(), items() and iteration enumerate
+/// stored entries, excluding dimension-dependent factories.
 ///
 /// ```python
 /// from symbolica.community.spenso import Tensor, TensorLibrary, TensorName, Representation
@@ -61,7 +64,8 @@ use super::ModuleInit;
 /// structure = name(rep, rep)
 /// tensor = Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
 /// lib.register(tensor)
-/// tensor_ref = lib[name]
+/// stored = lib[structure]
+/// tensor_ref = stored.expression()
 /// ```
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(name = "TensorLibrary", module = "symbolica.community.spenso")]
@@ -414,8 +418,102 @@ fn storage_hep_references() -> HashMap<ExplicitKey<AbstractIndex>, PartialStruct
     .collect()
 }
 
+impl SpensorLibrary {
+    fn stored_reference(&self, key: &ExplicitKey<AbstractIndex>) -> ExactLibraryReference {
+        ExactLibraryReference {
+            key: Canonicalized::identity(key.clone()),
+            interface: self
+                .references
+                .get(key)
+                .cloned()
+                .unwrap_or_else(|| storage_interface(key)),
+            name: key.global_name.expect("library entries are named"),
+            args: key.additional_args.clone().unwrap_or_default(),
+        }
+    }
+
+    fn stored_references(&self) -> Vec<ExactLibraryReference> {
+        let mut references = self
+            .library
+            .explicit_keys()
+            .map(|key| self.stored_reference(key))
+            .collect::<Vec<_>>();
+        references.sort_by_cached_key(|reference| {
+            (reference.name.get_name().to_owned(), reference.signature())
+        });
+        references
+    }
+
+    fn resolve_reference(&self, key: LibraryReference) -> PyResult<ExactLibraryReference> {
+        match key {
+            LibraryReference::Exact(reference) => {
+                if [AGS.gamma, AGS.gammaadj, AGS.gammaconj].contains(&reference.name)
+                    && let Some(registered) = self.references.get(reference.key.canonical())
+                    && registered.logical_slots() != reference.interface.logical_slots()
+                {
+                    return Err(exceptions::PyKeyError::new_err(format!(
+                        "tensor library signature '{}' does not use the registered storage-order interface",
+                        reference.signature(),
+                    )));
+                }
+                Ok(*reference)
+            }
+            LibraryReference::Symbol(symbol) => {
+                let key = self.library.get_key_from_name(symbol).map_err(|error| {
+                    let variants = self
+                        .stored_references()
+                        .into_iter()
+                        .filter(|reference| reference.name == symbol)
+                        .map(|reference| reference.signature())
+                        .collect::<Vec<_>>();
+                    let message = if variants.len() > 1 {
+                        format!(
+                            "tensor name `{symbol}` is ambiguous; registered signatures: {}",
+                            variants.join(", ")
+                        )
+                    } else {
+                        error.to_string()
+                    };
+                    exceptions::PyKeyError::new_err(message)
+                })?;
+                Ok(self.stored_reference(&key))
+            }
+        }
+    }
+
+    fn stored_tensor(&self, reference: ExactLibraryReference) -> PyResult<Spensor> {
+        // Rebuild the public logical layout while retaining canonical component storage.
+        let key = ExplicitKey::from_iter(
+            reference
+                .interface
+                .logical_slots()
+                .into_iter()
+                .map(|slot| slot.rep()),
+            reference.name,
+            (!reference.args.is_empty()).then_some(reference.args.clone()),
+        );
+        let mut descriptor = value_to_structured_atom(&key)?;
+        descriptor.interface = reference.interface;
+        // Validate concrete dimensions before invoking dimension-dependent factories.
+        let descriptor = TensorDataDescriptor::new(descriptor, reference.name, reference.args)?;
+        let tensor = self
+            .library
+            .get_storage(key.canonical())
+            .map_err(|error| exceptions::PyKeyError::new_err(error.to_string()))?
+            .into_owned()
+            .map_structure(|_| descriptor.structure.canonical().clone());
+        Ok(Spensor::from_storage_with_descriptor(
+            tensor,
+            descriptor.descriptor,
+            Some(descriptor.name),
+            descriptor.args,
+        ))
+    }
+}
+
 #[allow(clippy::new_without_default)]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl SpensorLibrary {
     fn __repr__(&self) -> String {
@@ -489,7 +587,8 @@ impl SpensorLibrary {
     /// >>> structure = name(rep, rep)
     /// >>> tensor = Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
     /// >>> lib.register(tensor)
-    /// >>> tensor_ref = lib[name]
+    /// >>> stored = lib[structure]
+    /// >>> tensor_ref = stored.expression()
     pub fn register(&mut self, tensor: PyRef<'_, Spensor>) -> PyResult<()> {
         let name = tensor.descriptor_name.ok_or_else(|| {
             exceptions::PyValueError::new_err(
@@ -512,103 +611,74 @@ impl SpensorLibrary {
         Ok(())
     }
 
-    /// Retrieve a registered tensor structure by name.
+    /// Retrieve an independent copy of a tensor's stored component data.
     ///
-    /// Looks up a previously registered tensor by its name and returns
-    /// a reference structure that can be used to create new tensor instances.
+    /// Use a fully unresolved TensorExpression signature to select its name,
+    /// scalar arguments and representations. A TensorName, symbol or string is
+    /// a shortcut when exactly one stored signature has that name. Exact lookup
+    /// also supports the library's dimension-dependent factories.
     ///
-    /// Parameters
-    /// ----------
-    /// key : TensorExpression, TensorName, Expression, or str
-    ///     An exact unresolved tensor signature in registered storage order, or a
-    ///     symbol-only convenience key
+    /// The returned Tensor retains the requested logical axis order. Call
+    /// tensor.expression() for its symbolic reference. Edits to the Tensor do
+    /// not change the library; register it again to replace the stored value.
+    /// Missing or ambiguous keys raise KeyError.
     ///
-    /// Returns
-    /// -------
-    /// TensorExpression
-    ///     An atomic reference with the requested exact interface, or the registered
-    ///     logical interface for a symbol-only lookup
-    ///
-    /// Raises
-    /// ------
-    /// RuntimeError
-    ///     If the tensor name is not found in the library
-    ///
-    /// Examples
-    /// --------
-    /// >>> exact = lib[TensorName("T")(1, Representation.euc(3))]
-    /// >>> unique_by_name = lib["T"]
+    /// >>> stored = lib[TensorName("T")(1, Representation.euc(3))]
+    /// >>> reference = stored.expression()
     pub fn __getitem__(
         &self,
         py: Python<'_>,
         key: ConvertibleToLibraryReference,
-    ) -> PyResult<Py<TensorExpression>> {
-        match key.0 {
-            LibraryReference::Exact(reference) => {
-                self.library
-                    .get(reference.key.canonical())
-                    .map_err(|error| exceptions::PyKeyError::new_err(error.to_string()))?;
-                let interface = if [AGS.gamma, AGS.gammaadj, AGS.gammaconj]
-                    .contains(&reference.name)
-                {
-                    if let Some(registered) = self.references.get(reference.key.canonical()) {
-                        if registered.logical_slots() != reference.interface.logical_slots() {
-                            return Err(exceptions::PyKeyError::new_err(format!(
-                                "tensor library signature '{}' does not use the registered storage-order interface",
-                                reference.signature(),
-                            )));
-                        }
-                        registered.clone()
-                    } else {
-                        reference.interface
-                    }
-                } else {
-                    reference.interface
-                };
-                tensor_reference(py, reference.name, reference.args, interface)
-            }
-            LibraryReference::Symbol(symbol) => {
-                let key = self.library.get_key_from_name(symbol).map_err(|error| {
-                    let mut variants = self
-                        .references
-                        .iter()
-                        .filter(|(key, _)| key.global_name == Some(symbol))
-                        .map(|(key, interface)| ExactLibraryReference {
-                            key: Canonicalized::identity(key.clone()),
-                            interface: interface.clone(),
-                            name: symbol,
-                            args: key.additional_args.clone().unwrap_or_default(),
-                        })
-                        .map(|reference| reference.signature())
-                        .collect::<Vec<_>>();
-                    variants.sort();
-                    let message = if variants.len() > 1 {
-                        format!(
-                            "tensor name `{symbol}` is ambiguous; registered signatures: {}",
-                            variants.join(", ")
-                        )
-                    } else {
-                        error.to_string()
-                    };
-                    exceptions::PyKeyError::new_err(message)
-                })?;
-                if let Some(interface) = self.references.get(&key) {
-                    return tensor_reference(
-                        py,
-                        symbol,
-                        key.additional_args.clone().unwrap_or_default(),
-                        interface.clone(),
-                    );
-                }
-                let structure = self
-                    .library
-                    .get(&key)
-                    .map_err(|error| exceptions::PyKeyError::new_err(error.to_string()))?
-                    .into_owned()
-                    .map_canonical(|tensor| tensor.structure().clone());
-                TensorExpression::from_structure(py, &structure)
-            }
-        }
+    ) -> PyResult<Py<Spensor>> {
+        let reference = self.resolve_reference(key.0)?;
+        Py::new(py, self.stored_tensor(reference)?)
+    }
+
+    /// Number of stored tensors, excluding dimension-dependent factories.
+    fn __len__(&self) -> usize {
+        self.library.explicit_len()
+    }
+
+    /// Return a snapshot list of full, unresolved signatures in name/signature order.
+    /// Dimension-dependent factories are excluded because they have no stored value.
+    pub fn keys(&self, py: Python<'_>) -> PyResult<Vec<Py<TensorExpression>>> {
+        self.stored_references()
+            .into_iter()
+            .map(|reference| {
+                tensor_reference(py, reference.name, reference.args, reference.interface)
+            })
+            .collect()
+    }
+
+    /// Return independent Tensor snapshots in the same order as keys().
+    pub fn values(&self, py: Python<'_>) -> PyResult<Vec<Py<Spensor>>> {
+        self.stored_references()
+            .into_iter()
+            .map(|reference| Py::new(py, self.stored_tensor(reference)?))
+            .collect()
+    }
+
+    /// Return a snapshot list of (full signature, stored Tensor) pairs.
+    pub fn items(&self, py: Python<'_>) -> PyResult<Vec<(Py<TensorExpression>, Py<Spensor>)>> {
+        self.stored_references()
+            .into_iter()
+            .map(|reference| {
+                let key = tensor_reference(
+                    py,
+                    reference.name,
+                    reference.args.clone(),
+                    reference.interface.clone(),
+                )?;
+                let value = Py::new(py, self.stored_tensor(reference)?)?;
+                Ok((key, value))
+            })
+            .collect()
+    }
+
+    /// Iterate over a snapshot of stored signatures, as returned by keys().
+    #[gen_stub(override_return_type(type_repr = "typing.Iterator[TensorExpression]", imports = ("typing",)))]
+    fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyIterator>> {
+        PyList::new(py, self.keys(py)?)?.try_iter()
     }
 
     #[staticmethod]
@@ -628,7 +698,8 @@ impl SpensorLibrary {
     /// >>> import symbolica
     /// >>> from symbolica.community.spenso import TensorLibrary, TensorName
     /// >>> hep_lib = TensorLibrary.hep_lib()
-    /// >>> gamma_structure = hep_lib[symbolica.S("spenso::gamma")]
+    /// >>> gamma_tensor = hep_lib[symbolica.S("spenso::gamma")]
+    /// >>> gamma_structure = gamma_tensor.expression()
     pub fn hep_lib() -> Self {
         Self {
             library: spenso_hep_lib::hep_lib(1., 0.),
@@ -653,7 +724,8 @@ impl SpensorLibrary {
     /// >>> import symbolica
     /// >>> from symbolica.community.spenso import TensorLibrary, TensorName
     /// >>> hep_lib = TensorLibrary.hep_lib_atom()
-    /// >>> gamma_structure = hep_lib[symbolica.S("spenso::gamma")]
+    /// >>> gamma_tensor = hep_lib[symbolica.S("spenso::gamma")]
+    /// >>> gamma_structure = gamma_tensor.expression()
     pub fn hep_lib_atom() -> Self {
         Self {
             library: spenso_hep_lib::hep_lib_atom(),
@@ -825,8 +897,9 @@ mod tests {
                 py,
                 ConvertibleToLibraryReference(LibraryReference::Exact(Box::new(reference))),
             )?;
-            assert_ne!(stored.bind(py).borrow().as_super().expr, Atom::Zero);
-            let indexed = stored.bind(py).call1(("a", "b", "c"))?;
+            assert_ne!(stored.bind(py).borrow().descriptor.atom, Atom::Zero);
+            let expression = stored.bind(py).borrow().expression(py)?;
+            let indexed = expression.bind(py).call1(("a", "b", "c"))?;
             assert_eq!(indexed.getattr("rank")?.extract::<usize>()?, 3);
             assert_ne!(
                 indexed
@@ -882,6 +955,7 @@ mod tests {
                 exact
                     .bind(py)
                     .borrow()
+                    .descriptor
                     .interface
                     .logical_slots()
                     .into_iter()
@@ -898,6 +972,7 @@ mod tests {
                 by_name
                     .bind(py)
                     .borrow()
+                    .descriptor
                     .interface
                     .logical_slots()
                     .into_iter()
@@ -907,8 +982,11 @@ mod tests {
             );
 
             let library = Py::new(py, library)?;
-            let indexed = exact.bind(py).call1(("i", "j"))?;
-            let network = indexed.call_method1("to_network", (library.clone_ref(py),))?;
+            let values = (0..6)
+                .map(|index| exact.bind(py).get_item(index)?.extract::<f64>())
+                .collect::<PyResult<Vec<_>>>()?;
+            assert_eq!(values, vec![0., 3., 1., 4., 2., 5.]);
+            let network = exact.bind(py).call1(("i", "j"))?;
             network.call_method1("execute", (library.clone_ref(py),))?;
             let result = network.call_method1("result_tensor", (library,))?;
             let values = (0..6)
@@ -970,7 +1048,7 @@ mod tests {
                         let reference =
                             library.__getitem__(py, ConvertibleToLibraryReference(key))?;
                         let reference = reference.bind(py).borrow();
-                        let AtomView::Fun(function) = reference.as_super().expr.as_view() else {
+                        let AtomView::Fun(function) = reference.descriptor.atom.as_view() else {
                             panic!("a gamma library reference must remain an atomic tensor")
                         };
                         assert_eq!(function.get_symbol(), name);
@@ -986,7 +1064,7 @@ mod tests {
                             expected_representations
                         );
                         assert_eq!(
-                            reference.interface.logical_slots(),
+                            reference.descriptor.interface.logical_slots(),
                             storage_interface.logical_slots()
                         );
                     }

@@ -9,7 +9,7 @@ use spenso::{
     },
 };
 use symbolica::atom::{
-    Atom, AtomCore, AtomView, FunctionBuilder,
+    Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder,
     representation::{FunView, MulView},
 };
 
@@ -59,6 +59,10 @@ impl SlotContraction {
                     return next;
                 }
                 current = next;
+                // A tensor normalizer can expose another factor, for example
+                // the sign of a reordered epsilon. Recheck the normalized
+                // product before pruning the root from the nested walk.
+                continue;
             }
             // The root product was already checked. A visitor can prune slot
             // payloads without causing replace_map to rebuild their ancestors.
@@ -72,7 +76,7 @@ impl SlotContraction {
                 match atom {
                     AtomView::Mul(product) if !is_root => {
                         found =
-                            Self::contract_product_once(product, chain_like, rank_one, &mut slots)
+                            Self::find_contraction(product.iter(), chain_like, rank_one, &mut slots)
                                 .is_some();
                     }
                     AtomView::Fun(_) if !matches!(slots.classify(atom), SlotMatch::Other) => {
@@ -105,37 +109,45 @@ impl SlotContraction {
         }
     }
 
-    // Finish this product before rebuilding enclosing sums and functions. Each
-    // step still normalizes its factors and restarts metric-first selection.
+    // Normalize each changed tensor immediately, but rebuild the surrounding
+    // product only after its contractions finish. Unchanged factors remain
+    // borrowed, including potentially large scalar spectators.
     fn contract_product(
         product: MulView<'_>,
         chain_like: bool,
         rank_one: bool,
         slots: &mut SlotMatcher,
     ) -> Option<Atom> {
-        let mut current = Self::contract_product_once(product, chain_like, rank_one, slots)?;
-        while let AtomView::Mul(product) = current.as_view() {
-            let Some(next) = Self::contract_product_once(product, chain_like, rank_one, slots)
-            else {
-                break;
-            };
-            if next == current {
-                break;
+        let mut contraction = Self::find_contraction(product.iter(), chain_like, rank_one, slots)?;
+        let mut factors: Vec<_> = product.iter().map(AtomOrView::View).collect();
+        loop {
+            let (source, partner, replacement) = contraction;
+            if replacement.is_zero() {
+                return Some(Atom::Zero);
             }
-            current = next;
+            factors[partner] = AtomOrView::Atom(replacement);
+            factors.remove(source);
+            let Some(next) = Self::find_contraction(
+                factors.iter().map(AtomCore::as_atom_view),
+                chain_like,
+                rank_one,
+                slots,
+            ) else {
+                return Some(Atom::mul_many(factors));
+            };
+            contraction = next;
         }
-        Some(current)
     }
 
-    fn contract_product_once(
-        product: MulView<'_>,
+    fn find_contraction<'a>(
+        factors: impl Iterator<Item = AtomView<'a>> + Clone,
         chain_like: bool,
         rank_one: bool,
         slots: &mut SlotMatcher,
-    ) -> Option<Atom> {
+    ) -> Option<(usize, usize, Atom)> {
         // Preserve metric-first contraction. Canonical products already expose
         // their factors, so finding a source needs no commutative pattern search.
-        for (position, factor) in product.iter().enumerate() {
+        for (position, factor) in factors.clone().enumerate() {
             let AtomView::Fun(function) = factor else {
                 continue;
             };
@@ -161,7 +173,7 @@ impl SlotContraction {
             for (source, replacement) in [(first_slot, second), (second_slot, first)] {
                 if let Some(source) = source
                     && let Some(replaced) = Self::replace_partner(
-                        product,
+                        factors.clone(),
                         position,
                         source,
                         &|| replacement.to_owned(),
@@ -174,7 +186,7 @@ impl SlotContraction {
             }
         }
         if rank_one {
-            for (position, factor) in product.iter().enumerate() {
+            for (position, factor) in factors.clone().enumerate() {
                 let AtomView::Fun(function) = factor else {
                     continue;
                 };
@@ -183,7 +195,7 @@ impl SlotContraction {
                 };
                 // Construct the compact vector only after finding a partner.
                 if let Some(replaced) = Self::replace_partner(
-                    product,
+                    factors.clone(),
                     position,
                     source,
                     &|| {
@@ -213,15 +225,15 @@ impl SlotContraction {
         Endpoint::parse(argument, slots).map(|endpoint| (function.get_nargs() - 1, endpoint))
     }
 
-    fn replace_partner(
-        product: MulView<'_>,
+    fn replace_partner<'a>(
+        factors: impl Iterator<Item = AtomView<'a>>,
         source_position: usize,
         source: Endpoint<'_>,
         replacement: &impl Fn() -> Atom,
         chain_like: bool,
         slots: &mut SlotMatcher,
-    ) -> Option<Atom> {
-        for (position, factor) in product.iter().enumerate() {
+    ) -> Option<(usize, usize, Atom)> {
+        for (position, factor) in factors.enumerate() {
             if position == source_position {
                 continue;
             }
@@ -233,20 +245,7 @@ impl SlotContraction {
             if let Some(replaced) =
                 Self::replace_function(function, source, replacement, chain_like, slots)
             {
-                return Some(
-                    product
-                        .iter()
-                        .enumerate()
-                        .filter(|(i, _)| *i != source_position)
-                        .map(|(i, factor)| {
-                            if i == position {
-                                replaced.as_view()
-                            } else {
-                                factor
-                            }
-                        })
-                        .product(),
-                );
+                return Some((source_position, position, replaced));
             }
         }
         None
