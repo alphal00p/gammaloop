@@ -622,6 +622,11 @@ impl<T: HasStructure<Structure = ExplicitKey<Aind>>, Aind: AbsInd> TensorLibrary
         self.explicit_dimension.len()
     }
 
+    /// Signatures of stored tensors, excluding dimension-dependent factories.
+    pub fn explicit_keys(&self) -> impl Iterator<Item = &ExplicitKey<Aind>> {
+        self.explicit_dimension.keys()
+    }
+
     /// Number of factories accepting generic dimensions.
     pub fn generic_len(&self) -> usize {
         self.generic_dimension.len()
