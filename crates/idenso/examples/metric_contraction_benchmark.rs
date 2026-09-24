@@ -38,7 +38,7 @@ use spenso::{
     trace,
 };
 use symbolica::{
-    atom::{Atom, AtomView},
+    atom::{Atom, AtomCore, AtomView},
     function, symbol,
 };
 
@@ -373,10 +373,10 @@ impl Case {
             ("4", 12, true),
         ] {
             let mut factors: Vec<_> = (0..length)
-                .map(|i| format!("gamma(in,out,mink({dimension},late_mu{i}))"))
+                .map(|i| format!("spenso::gamma(in,out,mink({dimension},late_mu{i}))"))
                 .collect();
             if axial {
-                factors.insert(0, "gamma5(in,out)".into());
+                factors.insert(0, "spenso::gamma5(in,out)".into());
             }
             let trace =
                 Self::parse("", &format!("trace(bis(4),cyclic({}))", factors.join(","))).expression;
@@ -385,7 +385,12 @@ impl Case {
                 &format!("g(mink({dimension},late_mu0),mink({dimension},late_mu1))"),
             )
             .expression;
-            let input = metric * trace.simplify_gamma();
+            let evaluated = trace.simplify_gamma();
+            assert!(
+                !evaluated.contains_symbol(SPENSO_TAG.trace),
+                "late-metric fixture must start from an evaluated Dirac trace"
+            );
+            let input = metric * evaluated;
             cases.push(Self {
                 name: format!(
                     "late_metric_{dimension}_{length}_{}",

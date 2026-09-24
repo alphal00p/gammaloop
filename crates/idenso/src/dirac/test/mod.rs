@@ -669,7 +669,10 @@ fn gamma_alg() {
     .collect_metrics()
     .simplify_metrics();
 
-    assert_snapshot!(expr.to_bare_ordered_string(), @"-1*d+d^3");
+    // Metric substitution preserves factored scalar coefficients. Compare
+    // their exact polynomial value independently of that presentation.
+    let dimension = Atom::var(s!(d));
+    assert!((expr - (dimension.pow(3) - &dimension)).expand().is_zero());
 
     let expr = (p!(slot!(mink4, nu1))
         * (p!(slot!(mink4, nu3)) + q!(slot!(mink4, nu3)))

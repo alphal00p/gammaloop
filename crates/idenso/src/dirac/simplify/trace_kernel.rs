@@ -12,7 +12,7 @@ use itertools::Itertools;
 use spenso::g;
 use symbolica::atom::{Atom, AtomView};
 
-use super::THREE_GAMMA_METRIC_TERMS;
+use super::{THREE_GAMMA_METRIC_TERMS, is_minkowski_slot};
 use crate::epsilon::epsilon4;
 
 mod factored;
@@ -187,7 +187,8 @@ struct PairingTrace<'a> {
     metrics: Vec<Atom>,
     trace_unit: AtomView<'a>,
     subwords: HashMap<Vec<usize>, Atom>,
-    scalar_products: bool,
+    canonical_arguments: bool,
+    summed_indices: Vec<usize>,
 }
 
 impl PairingTrace<'_> {
@@ -199,7 +200,8 @@ impl PairingTrace<'_> {
             return result.clone();
         }
         let result = self
-            .reduce_scalar_word(remaining)
+            .contract_word(remaining)
+            .or_else(|| self.reduce_scalar_word(remaining))
             .unwrap_or_else(|| self.pair(remaining, first));
         // A long trace must not retain an unbounded number of large subwords.
         // These limits cover all reusable subwords through length fourteen.
@@ -209,10 +211,110 @@ impl PairingTrace<'_> {
         result
     }
 
+    /// Eliminate a summed explicit pair before evaluating the free pairing
+    /// polynomial. Reordering the interior keeps every other summed index in
+    /// its word, so each branch can contract independently without an external
+    /// tensor metric or a new symbolic trace node.
+    fn contract_word(&mut self, word: &[usize]) -> Option<Atom> {
+        if self.summed_indices.is_empty() {
+            return None;
+        }
+        let mut best = None;
+        for (left, &index) in word.iter().enumerate() {
+            if !self.summed_indices.contains(&index) {
+                continue;
+            }
+            let Some(right) = word[left + 1..].iter().position(|&i| i == index) else {
+                continue;
+            };
+            let right = left + 1 + right;
+            let four_dimensional =
+                i64::try_from(self.metrics[index * self.width + index].as_view()) == Ok(4);
+            for (start, distance) in [(left, right - left), (right, word.len() - right + left)] {
+                let priority = if distance == 1 {
+                    0
+                } else if distance == 2 || (four_dimensional && distance.is_multiple_of(2)) {
+                    1
+                } else {
+                    2
+                };
+                let score = (priority, distance);
+                if best.is_none_or(|(_, _, previous)| score < previous) {
+                    best = Some((start, distance, score));
+                }
+            }
+        }
+        let (start, distance, _) = best?;
+        let mut rotated = word.to_vec();
+        rotated.rotate_left(start);
+        let interior = &rotated[1..distance];
+        let outside = &rotated[distance + 1..];
+        let dimension = self.metrics[rotated[0] * self.width + rotated[0]].clone();
+        match interior.len() {
+            0 => Some(dimension * self.evaluate(outside)),
+            1 => Some(
+                (Atom::num(2) - dimension)
+                    * self.evaluate(
+                        &rotated[1..distance]
+                            .iter()
+                            .chain(outside)
+                            .copied()
+                            .collect::<Vec<_>>(),
+                    ),
+            ),
+            n if n % 2 == 1 && i64::try_from(dimension.as_view()) == Ok(4) => {
+                let reduced: Vec<_> = interior.iter().rev().chain(outside).copied().collect();
+                Some(Atom::num(-2) * self.evaluate(&reduced))
+            }
+            2 if interior.iter().all(|i| !self.summed_indices.contains(i)) => {
+                // gamma(mu) a/ b/ gamma(mu) = 4(a.b) + (D-4)a/b/.
+                // A metric with another summed index must stay in the word;
+                // the general permutation recurrence below owns that case.
+                let metric = self.metrics[interior[0] * self.width + interior[1]].clone();
+                let first = Atom::num(4) * metric * self.evaluate(outside);
+                let coefficient = dimension - Atom::num(4);
+                if coefficient.is_zero() {
+                    Some(first)
+                } else {
+                    let reduced: Vec<_> = interior.iter().chain(outside).copied().collect();
+                    Some(first + coefficient * self.evaluate(&reduced))
+                }
+            }
+            n => {
+                // Anticommute the left endpoint through the interior, then
+                // substitute its explicit index in each anticommutator term:
+                // (-1)^n(D-2) A + 2 sum_i (-1)^i A_without_i gamma(i).
+                // The final i=n-1 term is included in the D-2 coefficient.
+                let unchanged: Vec<_> = interior.iter().chain(outside).copied().collect();
+                let coefficient = if n % 2 == 0 {
+                    dimension - Atom::num(2)
+                } else {
+                    Atom::num(2) - dimension
+                };
+                let mut terms = Vec::with_capacity(n);
+                if !coefficient.is_zero() {
+                    terms.push(coefficient * self.evaluate(&unchanged));
+                }
+                for moved in 0..n - 1 {
+                    let reduced: Vec<_> = interior[..moved]
+                        .iter()
+                        .chain(&interior[moved + 1..])
+                        .chain(std::iter::once(&interior[moved]))
+                        .chain(outside)
+                        .copied()
+                        .collect();
+                    let trace = self.evaluate(&reduced);
+                    terms.push(Atom::num(if moved % 2 == 0 { 2 } else { -2 }) * trace);
+                }
+                Some(Atom::add_many(terms))
+            }
+        }
+    }
+
     /// Compact slashes square to scalar norms. Keeping these identities inside
     /// the word recurrence avoids constructing and revisiting shorter traces.
     fn reduce_scalar_word(&mut self, word: &[usize]) -> Option<Atom> {
-        if !self.scalar_products {
+        if !self.canonical_arguments {
             return None;
         }
         for start in 0..word.len() {
@@ -238,8 +340,9 @@ impl PairingTrace<'_> {
                 if p != word[(start + 2) % word.len()] {
                     continue;
                 }
-                // p/ q/ p/ = 2 (p.q) p/ - p^2 q/. Every dot is scalar
-                // because this mode is restricted to all-compact words.
+                // p/ q/ p/ = 2 (p.q) p/ - p^2 q/. All summed explicit
+                // pairs were eliminated first: p is compact and a free
+                // explicit q can occur only in this coefficient.
                 let mut rest: Vec<_> = std::iter::once(p)
                     .chain(
                         word.iter()
@@ -278,10 +381,13 @@ impl PairingTrace<'_> {
     }
 }
 
+/// `canonical_arguments` admits only canonical compact vectors and explicit
+/// slots with compatible dimensions and at most two occurrences. It enables
+/// word contractions; unrestricted arguments retain the plain pairing formula.
 pub(super) fn evaluate_generic(
     indices: &[AtomView<'_>],
     trace_unit: AtomView<'_>,
-    scalar_products: bool,
+    canonical_arguments: bool,
 ) -> Atom {
     if indices.len() % 2 == 1 {
         return Atom::Zero;
@@ -302,6 +408,18 @@ pub(super) fn evaluate_generic(
         })
         .collect();
     let width = arguments.len();
+    let summed_indices = if canonical_arguments {
+        arguments
+            .iter()
+            .enumerate()
+            .filter_map(|(index, &argument)| {
+                (is_minkowski_slot(argument) && word.iter().filter(|&&i| i == index).count() == 2)
+                    .then_some(index)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     let metrics = (0..width)
         .flat_map(|a| (0..width).map(move |b| (a, b)))
         .map(|(a, b)| g!(arguments[a], arguments[b]))
@@ -311,7 +429,8 @@ pub(super) fn evaluate_generic(
         metrics,
         trace_unit,
         subwords: HashMap::new(),
-        scalar_products,
+        canonical_arguments,
+        summed_indices,
     }
     .evaluate(&word)
 }
@@ -614,7 +733,8 @@ mod tests {
                     .collect(),
                 trace_unit: unit.as_view(),
                 subwords: HashMap::new(),
-                scalar_products: false,
+                canonical_arguments: false,
+                summed_indices: Vec::new(),
             };
             let result = trace.evaluate(&(0..N).collect::<Vec<_>>());
             assert_eq!(
@@ -675,7 +795,8 @@ mod tests {
                     metrics: metrics.clone(),
                     trace_unit: unit.as_view(),
                     subwords: HashMap::new(),
-                    scalar_products: true,
+                    canonical_arguments: true,
+                    summed_indices: Vec::new(),
                 };
                 let factors: Vec<_> = word.iter().map(|&index| vectors[index]).collect();
                 assert_eq!(
@@ -703,7 +824,7 @@ mod tests {
         let reps = crate::test_support::test_initialize();
         let mink = Minkowski {}.new_rep(D);
         let spin = reps.bis4.to_symbolic([]);
-        let arguments: Vec<_> = (0..8)
+        let arguments: Vec<_> = (0..12)
             .map(|i| {
                 FunctionBuilder::new(
                     SPENSO_TAG.rank_one_tensor_symbol(&format!("idenso::summed_trace::p{i}")),
@@ -717,19 +838,26 @@ mod tests {
             ])
             .collect();
         let mut words = vec![
-            vec![8, 0, 1, 2, 3, 8],
-            vec![8, 0, 8, 1, 2, 3],
-            vec![8, 0, 9, 9, 8, 1, 2, 3],
+            vec![12, 0, 1, 2, 3, 12],
+            vec![12, 0, 12, 1, 2, 3],
+            vec![12, 0, 13, 13, 12, 1, 2, 3],
+            vec![12, 0, 13, 1, 13, 2, 12, 3],
+            vec![12, 0, 13, 1, 12, 2, 13, 3],
+            vec![12, 0, 13, 1, 2, 12, 3, 4, 13, 5, 6, 7],
+            vec![12, 0, 1, 0, 1, 12, 0, 1],
         ];
-        if D == 4 {
-            words.extend([
-                vec![8, 0, 9, 1, 9, 2, 8, 3],
-                vec![8, 0, 9, 1, 2, 8, 3, 4, 9, 5, 6, 7],
-            ]);
+        for interior in 2..=5 {
+            words.push(
+                std::iter::once(12)
+                    .chain(0..interior)
+                    .chain(std::iter::once(12))
+                    .chain(interior..2 * interior)
+                    .collect(),
+            );
         }
         let mut seed = 43u64;
         for sample in 0..4 {
-            let vectors: [[i64; D]; 8] = std::array::from_fn(|_| {
+            let vectors: [[i64; D]; 12] = std::array::from_fn(|_| {
                 std::array::from_fn(|_| {
                     seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
                     ((seed >> 32) % 5) as i64 - 2
@@ -739,6 +867,13 @@ mod tests {
                 let input = trace!(&spin; word.iter().map(|&i| gamma!(&arguments[i])));
                 let reduced = DiracSimplifier::evaluate_terminal_trace(input.as_view())
                     .expect("scalar word contractions must finish within the terminal evaluator");
+                reduced.visitor(&mut |node| {
+                    assert!(
+                        node != arguments[12].as_view() && node != arguments[13].as_view(),
+                        "summed index remains in word {word:?}"
+                    );
+                    true
+                });
                 let result = reduced.replace_map(|atom, _, out| {
                     if let AtomView::Fun(metric) = atom
                         && metric.get_symbol() == ETS.metric
@@ -746,7 +881,7 @@ mod tests {
                         let args: Vec<_> = metric
                             .iter()
                             .map(|arg| {
-                                arguments[..8]
+                                arguments[..12]
                                     .iter()
                                     .position(|vector| vector.as_view() == arg)
                                     .expect("every explicit summed index must have been eliminated")
@@ -763,12 +898,12 @@ mod tests {
                 });
                 let mut expected = 0;
                 for a in 0..D {
-                    for b in 0..if word.contains(&9) { D } else { 1 } {
+                    for b in 0..if word.contains(&13) { D } else { 1 } {
                         let factors: Vec<_> = word
                             .iter()
                             .map(|&i| match i {
-                                8 => std::array::from_fn(|axis| i64::from(axis == a)),
-                                9 => std::array::from_fn(|axis| i64::from(axis == b)),
+                                12 => std::array::from_fn(|axis| i64::from(axis == a)),
+                                13 => std::array::from_fn(|axis| i64::from(axis == b)),
                                 _ => vectors[i],
                             })
                             .collect();

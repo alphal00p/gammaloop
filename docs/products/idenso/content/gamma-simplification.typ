@@ -823,32 +823,58 @@ polynomials within one call. Compact ordinary words also reuse adjacent squares
 and the repeated-slash identity inside this evaluator. Gamma-five stays strictly
 four-dimensional. Terminal 4D traces use cached factored integer recipes.
 
-The following warm times are milliseconds on the shared EPYC 9754 host, with
-`dev-optim` and Symbolica main `06906976`. Idenso measures in-process wall time
-including output destruction. FORM 5.0.0 measures internal `tracen` plus sorting
-CPU time over independent expressions. Both exclude parsing and startup.
+The latest warm times are milliseconds on the shared EPYC 9754 host, with
+`dev-optim` and Symbolica main `06906976`. Both programs are pinned to CPU 9.
+Idenso measures in-process wall time including output destruction. FORM 5.0.0
+measures internal `tracen` plus sorting CPU time over independent expressions.
+Both exclude parsing and startup; other host activity is uncontrolled.
 
 #table(
-  columns: 5,
-  [Free gammas], [Previous Idenso], [Idenso factored], [FORM expanded], [Idenso with expansion],
-  [8], [2.768], [0.178], [0.038], [0.364],
-  [10], [26.658], [0.530], [0.345], [3.250],
-  [12], [272.400], [2.222], [3.983], [44.122],
-  [14], [3441.666], [19.557], [52.667], [1123.733],
+  columns: 3,
+  [Free gammas], [Idenso factored], [FORM expanded],
+  [8], [0.172], [0.037],
+  [10], [0.516], [0.500],
+  [12], [2.110], [3.967],
+  [14], [16.873], [54.000],
 )
 
-The fourteen-gamma factored calculation improves by 176 times. This does not
-establish parity: full expansion remains substantially slower than FORM.
+This does not establish parity: the fourteen-gamma calculation including
+expansion and destruction takes 776 ms, about fourteen times FORM's time.
+Expansion alone takes 732 ms and produces 135,135 terms. This separate experiment
+has a different allocator state; its trace-construction phase takes 44 ms.
 Diagnostic expansion is restricted to standalone trace polynomials; graph
-numerators and spectators retain their factorization. Paired and alternating
-fourteen-slash words take 13.5 and 37.9 microseconds, compared with FORM's 0.77
-and 9.5 microseconds. Full symbolic generic-D outputs match FORM through length
-fourteen, independently of any four-dimensional identities.
+numerators and spectators retain their factorization. FORM's length-ten samples
+span 0.337--0.503 ms, so its median alone does not establish parity there.
 
-An unchanged fourteen-gamma rerun improves from 345.1 to 144.6 ms, against
-FORM's 46.2 ms. Its 2.68 million tree nodes still make traversal expensive.
+Direct contractions inside a trace word now apply the factors $D$ for an
+adjacent summed pair and $2-D$ for a one-gamma sandwich. They avoid rebuilding
+trace expressions and scheduling cleanup between these reductions. The
+following paired timings compare the preceding memoized evaluator with direct
+word reduction; the other gammas are compact slashes.
+
+#table(
+  columns: 4,
+  [Generic-D input], [Before, ms], [Current, ms], [FORM, ms],
+  [12 gammas, cyclic pair], [3.069], [0.606], [0.340],
+  [8 gammas, one-gamma sandwich], [0.526], [0.066], [0.012],
+  [10 gammas, nested summed pairs], [0.572], [0.068], [0.013],
+  [8 gammas, branching two-gamma interior], [1.156], [1.109], [0.020],
+)
+
+The branching case retains the general rewrite pipeline and trails FORM by
+55 times. Paired and alternating fourteen-slash words take 13.3 and 36.8
+microseconds, compared with FORM's 0.8 and 9.6 microseconds.
+
+An unchanged fourteen-gamma rerun takes 142.8 ms, against FORM's 46.3 ms.
+Its 2.68 million tree nodes still make traversal expensive.
 One shared symbol scan skips absent chain, trace and epsilon operations, while
 unchanged intermediate results avoid repeated dot normalization.
+
+All twenty measured case/dimension combinations pass 248 exact component
+evaluations against FORM and independent Clifford multiplication in four and
+six dimensions. All eleven symbolic-D cases additionally match FORM's complete
+polynomial exactly. The record retains free, compact, mixed-index and branching
+controls, every sample and frozen source/library identities.
 
 Full axial-twelve simplification improves from 2.356 to 0.621 ms and ordinary
 free-twelve from 6.422 to 2.794 ms. Public Schoonschip on a 64-metric chain
@@ -857,13 +883,19 @@ is 3.2 microseconds. Short metric hits do not show the same benefit. Metric path
 and closed loops are resolved through endpoint incidence before constructing
 replacement atoms; ambiguous incidence retains ordered substitution.
 
-The latest validation has 355 passing Idenso tests and 42 passing HEP tests,
-with the existing tensor-display snapshot failure and 23 skipped tests. Exact
-before/after polynomials, FORM metric certificates, and independent
-six-dimensional Clifford checks accompany the HEP network oracles. Scoped
-Clippy passes with warnings denied. A later external metric can still fail to
-contract through an already-evaluated factored trace sum; this is reproduced in
-both the archived baseline and current implementation.
+Late external metrics now contract through factored trace sums. A compatible
+tensor can pass through a sum when every branch can absorb it, including metrics
+inside the sum with an epsilon outside. Tagged vectors follow the same route
+when vector contraction is enabled; scalar spectators retain their factorization.
+Independent HEP checks cover ordinary, axial and symbolic-D traces simplified
+before an external metric is attached.
+
+Final validation records 361 passing Idenso tests and 46 passing HEP trace/metric
+integration tests, with the existing tensor-display snapshot failure and 23
+skipped tests. Both scoped Clippy checks pass with warnings denied. Rechecking
+ten symbolic-D benchmarks after the final cleanup gives identical outputs and
+timings within a few percent of the trace checkpoint. The free fourteen-gamma
+trace remains about 17--18 ms before expansion.
 
 The #source-link("examples/notebooks/tensor_contraction_parity.json", label: "contraction parity progress record")
 retains raw samples, generated FORM programs, the generic-D benchmark driver,

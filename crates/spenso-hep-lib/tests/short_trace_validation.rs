@@ -493,7 +493,7 @@ impl TraceEvaluation {
             assert_ne!(late, result);
             assert!(
                 !result.has_repeated_explicit_indices(),
-                "remaining contraction: {result}"
+                "remaining contraction at length {length}, axial {axial}, metric endpoints 0/{right}"
             );
             assert_eq!(result.simplify_gamma(), result);
             let result = specialize(&result);
@@ -546,6 +546,7 @@ fn late_metrics_contract_four_dimensional_trace_polynomials() {
 
 #[test]
 fn late_metrics_contract_axial_trace_polynomials() {
+    TraceEvaluation::assert_late_metric(10, true, false);
     TraceEvaluation::assert_late_metric(12, true, false);
 }
 
