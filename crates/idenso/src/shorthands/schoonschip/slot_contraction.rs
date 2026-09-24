@@ -180,7 +180,11 @@ impl SlotContraction {
         let mut neighbors = vec![[None::<usize>; 2]; metrics.len()];
         for (edge, (_, _, endpoints)) in metrics.iter().enumerate() {
             for (side, endpoint) in endpoints.iter().enumerate() {
-                let key = (endpoint.representation.base(), endpoint.dimension, endpoint.index);
+                let key = (
+                    endpoint.representation.base(),
+                    endpoint.dimension,
+                    endpoint.index,
+                );
                 if let Some((other_edge, other_side, repeated)) = occurrences.get_mut(&key) {
                     // More than two metric occurrences have no unambiguous
                     // path interpretation; retain ordered slot substitution.
@@ -211,7 +215,11 @@ impl SlotContraction {
                     return false;
                 }
                 if let Some(endpoint) = Endpoint::parse(atom, slots) {
-                    let key = (endpoint.representation.base(), endpoint.dimension, endpoint.index);
+                    let key = (
+                        endpoint.representation.base(),
+                        endpoint.dimension,
+                        endpoint.index,
+                    );
                     ambiguous = occurrences.get(&key).is_some_and(|entry| entry.2);
                     return false;
                 }

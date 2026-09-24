@@ -1,0 +1,67 @@
+"""Linnest renders executable networks without evaluating their source formula."""
+
+import unittest
+
+import linnet
+from symbolica import E
+from symbolica.community.spenso import (
+    Representation,
+    Tensor,
+    TensorExpression,
+    TensorName,
+    TensorNetwork,
+)
+
+
+class NetworkDisplayTests(unittest.TestCase):
+    def test_graph_tracks_execution_while_source_expression_is_preserved(self):
+        rep = Representation.euc(2)
+        tensor = Tensor.dense(
+            TensorName("network_display_tests::A")(rep, rep), [1.0, 2.0, 3.0, 4.0]
+        )
+        network = tensor("i", "j") * tensor("j", "k")
+        expression = network.expression().to_expression()
+        before = network.to_dot()
+        html = network.to_html()
+        self.assertIn("TensorNetwork", html)
+        self.assertIn('data-linnet-kind="node"', html)
+        self.assertIn('data-linnet-kind="edge"', html)
+        self.assertEqual(network.to_dot(), before)
+        network.execute()
+        self.assertNotEqual(network.to_dot(), before)
+        self.assertIn("<svg", network._repr_html_())
+        self.assertEqual(network.expression().to_expression(), expression)
+        self.assertEqual(list(network.result_tensor()), [7.0, 10.0, 15.0, 22.0])
+
+    def test_scalar_sum_and_library_nodes_render(self):
+        rep = Representation.mink(4)
+        p, q = (
+            TensorName(f"network_display_tests::{name}")(rep) for name in ("p", "q")
+        )
+        for network in (
+            TensorNetwork(E("2")),
+            (p("mu") + q("mu")).to_network(),
+            TensorExpression.gamma(4)("a", "b", "mu").to_network(),
+        ):
+            with self.subTest(network=repr(network)):
+                svg = network.render()
+                self.assertIn("data-linnet-interactive", svg)
+                self.assertIn("spenso-network-svg", svg)
+                self.assertIn("light-dark", svg)
+
+    def test_linnet_configuration_and_portable_source(self):
+        network = TensorExpression.gamma(4)("a", "b", "mu").to_network()
+        config = linnet.RenderConfig(title="Network preview")
+        source = network.to_linnest(config=config)
+        self.assertIn("Network preview", source)
+        self.assertIn("network-dot", source)
+        self.assertNotIn('read("network.dot")', source)
+        # The entrypoint contains its data; Linnet supplies the shared assets.
+        prepared = linnet.PreparedRender.from_sources({"main.typ": source.encode()})
+        self.assertIn("<svg", prepared.to_svg())
+        self.assertIn("<svg", network.render(config=config))
+        self.assertIn("<math", network.expression().to_html())
+
+
+if __name__ == "__main__":
+    unittest.main()

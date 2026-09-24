@@ -524,6 +524,24 @@ impl SpensorLibrary {
         )
     }
 
+    /// Browse stored tensors as a compact mathematical catalogue.
+    ///
+    /// Select a signature to inspect its components. The collapsed Python panel
+    /// shows exact lookup, symbolic-expression and printing examples. Large
+    /// libraries and component arrays use bounded previews without changing data.
+    #[pyo3(signature = (*, settings=None))]
+    fn to_html(
+        &self,
+        py: Python<'_>,
+        settings: Option<crate::display::DisplaySettings>,
+    ) -> PyResult<String> {
+        crate::display::library::to_html(py, self, &settings.unwrap_or_default())
+    }
+
+    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
+        self.to_html(py, None).ok()
+    }
+
     #[new]
     /// Create a new empty tensor library.
     ///

@@ -305,7 +305,7 @@ mod tests {
     }
 
     #[test]
-    fn evaluation_keeps_tensor_factors_and_normalizes_numeric_values() {
+    fn evaluation_respects_trace_unit_and_normalizes_numeric_values() {
         let terms = vec![(vec![0, 1], 2), (vec![0, 2], -3), (vec![1, 2], 1)];
         let factored = FactoredTrace::new(terms.clone(), 3);
         for sample in -2..=2 {
@@ -314,14 +314,16 @@ mod tests {
                 Atom::num(sample + 1),
                 Atom::num(2 - sample),
             ];
-            let unit = Atom::num(4);
-            let expected = Atom::add_many(terms.iter().map(|(ids, coefficient)| {
-                Atom::mul_many(
-                    std::iter::once(Atom::num(4 * coefficient))
-                        .chain(ids.iter().map(|&id| factors[id].clone())),
-                )
-            }));
-            assert_eq!(factored.evaluate(&factors, unit.as_view()), expected);
+            for unit in [Atom::num(4), Atom::var(symbolica::symbol!("trace_unit"))] {
+                let expected = &unit
+                    * Atom::add_many(terms.iter().map(|(ids, coefficient)| {
+                        Atom::mul_many(
+                            std::iter::once(Atom::num(*coefficient))
+                                .chain(ids.iter().map(|&id| factors[id].clone())),
+                        )
+                    }));
+                assert_eq!(factored.evaluate(&factors, unit.as_view()), expected);
+            }
         }
     }
 }

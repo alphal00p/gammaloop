@@ -48,3 +48,34 @@ pub(crate) fn html(svg: &str) -> String {
          <div style=\"max-width:100%;overflow:auto\">{svg}</div></figure>"
     )
 }
+
+pub(crate) fn svg_theme(svg: &str) -> String {
+    // Keep the example's light palette as the exported SVG fallback. Linnet's
+    // existing theme bridge sets data-theme on interactive notebook SVGs.
+    let mut css = String::from(
+        ".spenso-network-svg{color-scheme:light dark;max-width:100%;height:auto}\
+         .spenso-network-svg[data-theme=light]{color-scheme:light}\
+         .spenso-network-svg[data-theme=dark]{color-scheme:dark}",
+    );
+    for (light, dark) in [
+        ("#000000", "#e6ebf1"),
+        ("#ffffff", "#1c2025"),
+        ("#666666", "#a6b3c5"),
+        ("#555555", "#b4bdc9"),
+        ("#aeb4bd", "#566477"),
+        ("#7f95b8", "#a4cdf7"),
+        ("#d8dce3", "#596578"),
+        ("#737985", "#b2bdce"),
+        ("#fde8e8", "#482e35"),
+        ("#e7f6e9", "#263e30"),
+        ("#e7f0ff", "#293d55"),
+    ] {
+        for paint in ["fill", "stroke"] {
+            css.push_str(&format!(
+                ".spenso-network-svg [{paint}=\"{light}\"]{{{paint}:light-dark({light},{dark})}}"
+            ));
+        }
+    }
+    svg.replacen("<svg ", "<svg class=\"spenso-network-svg\" ", 1)
+        .replacen('>', &format!("><style>{css}</style>"), 1)
+}

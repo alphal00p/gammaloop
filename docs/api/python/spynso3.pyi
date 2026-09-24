@@ -3,10 +3,10 @@
 
 import builtins
 import decimal
+import linnet
 import symbolica.core
 import typing
-from symbolica import ComplexFloat, Float
-from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction
+from symbolica.core import ComplexFloat, Condition, Expression, Float, FormattedOutput, HeldExpression, PatternRestriction
 
 AUTO: _AutoIndex
 _: _AutoIndex
@@ -2651,6 +2651,15 @@ class TensorLibrary:
     ```
     """
     def __repr__(self) -> builtins.str: ...
+    def to_html(self, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+        r"""
+        Browse stored tensors as a compact mathematical catalogue.
+
+        Select a signature to inspect its components. The collapsed Python panel
+        shows exact lookup, symbolic-expression and printing examples. Large
+        libraries and component arrays use bounded previews without changing data.
+        """
+    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
     def __new__(cls) -> TensorLibrary:
         r"""
         Create a new empty tensor library.
@@ -2982,7 +2991,8 @@ class TensorNetwork:
     A network retains the semantic source expression and its public tensor interface
     separately from the executable graph and its stored values. Value specialization
     and graph execution therefore do not rewrite the source expression returned by
-    `structure()` or used by the semantic display methods.
+    `expression()` or used by the semantic display methods. The default rich
+    display draws the current executable graph through Linnest.
 
     Examples
     --------
@@ -3232,6 +3242,17 @@ class TensorNetwork:
         r"""
         Return the computational graph in Graphviz DOT format.
         """
+    def to_linnest(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
+        r"""
+        Return the exact Linnest/Typst entrypoint for the current executable graph.
+        Uses the same ``linnet.RenderConfig`` and asset pipeline as Feynman diagrams.
+        """
+    def render(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
+        r"""
+        Render the current graph as interactive SVG, using Linnest's network style.
+        Operator nodes, stored tensors, library references, and scalars retain
+        their identities. ``expression().to_svg()`` renders the source formula.
+        """
     def format_tensor(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
         r"""
         Format the exact semantic structure using compact Spenso notation.
@@ -3244,9 +3265,13 @@ class TensorNetwork:
         r"""
         Build Symbolica's rich display wrapper for the semantic source structure.
         """
-    def to_html(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str: ...
+    def to_html(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
+        r"""
+        Render the executable graph as a notebook figure. For the symbolic source
+        formula, use ``expression().to_html(settings=...)``.
+        """
     def to_svg(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str: ...
-    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_html_(self) -> builtins.str: ...
     def expression(self) -> TensorExpression:
         r"""
         Return the semantic source expression and its public tensor interface.
@@ -3592,4 +3617,3 @@ def trace(representation: Representation, *factors: Expression) -> TensorExpress
 
 @typing.overload
 def trace(representation: Representation, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork: ...
-

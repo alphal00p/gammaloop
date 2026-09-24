@@ -198,7 +198,7 @@
     }
   }
   function render() {
-    area('shape').textContent=`Rank ${rank} · shape ${shape.join(' × ')} · ${size.toLocaleString()} components${data.sparse ? ' · '+data.stored.toLocaleString()+' stored' : ''}`;
+    area('shape').textContent=`Rank ${rank} · ${shape.join(' × ')} · ${size.toLocaleString()} components${data.sparse ? ' · '+data.stored.toLocaleString()+' stored' : ''}`;
     controls();
     const plot=area('plot'); plot.replaceChildren();
     if (size===0) { detail(); area('status').textContent='No components'; return; }

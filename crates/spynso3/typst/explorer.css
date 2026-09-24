@@ -2,7 +2,9 @@
 * { box-sizing:border-box; }
 [hidden] { display:none!important; }
 body { margin:0; padding:8px; color:var(--fg); background:var(--bg); }
-.python-type { color:var(--muted); font:11px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; margin-bottom:11px; }
+.tensor-metadata { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:6px 18px; color:var(--muted); font-size:11px; margin-bottom:11px; }
+.python-type { font:11px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace; }
+#expression-label { color:var(--muted); font-size:12px; margin-bottom:6px; }
 .descriptor { max-width:100%; overflow:auto; margin-bottom:8px; }
 svg [fill="#000000"] { fill:currentColor; }
 svg > path[fill="#ffffff"] { fill:none; }

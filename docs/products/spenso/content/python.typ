@@ -101,9 +101,14 @@ community-module environment with marimo, Typst, and a C++ compiler on `PATH`:
 python -m marimo edit examples/notebooks/spenso_api_tour.py
 ```
 
-Mathematical objects expose notebook HTML and LaTeX displays. `TensorNetwork` prints its
-semantic source expression; `to_dot()` exports the operation graph, while `result_tensor()`
-shows evaluated component data. Printing a network does not execute it. Settings and filters
+Mathematical objects expose notebook HTML and LaTeX displays. `TensorNetwork` draws its
+current executable graph in notebooks, using Linnest's operator and typed-leaf styles.
+`render(config=...)` returns interactive SVG and `to_linnest(config=...)` returns its
+Typst entrypoint; both accept `linnet.RenderConfig`, like Feynman diagrams.
+`to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.
+`expression()` retains the semantic source formula, `to_dot()` exports the operation
+graph, and `result_tensor()` shows evaluated component data. Rendering a network does
+not execute it. Settings and filters
 print their full constructor arguments, and libraries and evaluators show concise summaries.
 The policy types expose named constants and integer conversion; they are PyO3 classes, not
 Python `enum.Enum` subclasses with `.name` and `.value` attributes.
@@ -360,6 +365,15 @@ tensors are independent copies: register an edited tensor again to replace the
 stored data. Dimension-dependent factories, such as metrics, can be accessed
 with an exact concrete signature but do not appear among stored entries.
 
+Displaying a library in a notebook opens a compact catalogue of mathematical
+signatures. Select a tensor to inspect its components in the usual Memory grid
+or Matrix view. The collapsed Python panel provides executable access and
+expression examples, including full namespaces, scalar arguments and custom
+representations. Its Print tab shows text, Typst and LaTeX output calls.
+`library.to_html()` returns the same standalone HTML; pass `settings` to use
+the existing display options. Large catalogues show a bounded preview while
+`keys()` and `items()` continue to expose every stored entry.
+
 `ExecutionMode.Single` selects the smallest-degree single-rewrite strategy, but execution still
 continues while work remains unless it is bounded; use `n_steps=1` to inspect exactly one step.
 `Scalar` processes scalar work while retaining tensor structure, and `All` attempts the complete
@@ -403,7 +417,8 @@ mathematical matrix/slice output. Symbolic tensor expressions retain their
 existing display and index alphabets. The explorer runs inside a self-contained
 sandboxed frame and requires no live Python callbacks or external assets.
 
-`TensorExpression`, `Tensor`, and `TensorNetwork` share semantic display methods.
+`TensorExpression` and `Tensor` expose semantic display methods. A network's
+`expression()` provides the same formula display separately from its graph.
 `DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
 commas, symbol scripts, component notation, and index/factor spacing. Positional calls such as `to_typst(True)`
 and `formatted(True)` still request dimensions. Rich Typst output collects inverse factors
@@ -513,8 +528,10 @@ rich = trace.formatted(settings=compact)
 Python uses the bundled Typst render/notation assets directly, without calling the Tydenso
 Wasm plugin. Explicit `to_html` and `to_svg` calls raise an install-guidance `ImportError`
 when the compiler is absent. Notebook `_repr_html_` and `formatted()` fall back to existing
-LaTeX or text. `TensorNetwork.__str__` remains Graphviz DOT; `to_dot()` makes that intention
-explicit. These display methods do not replace Symbolica's inherited `to_latex` API.
+LaTeX or text. `TensorNetwork.__str__` prints the source formula and `to_dot()` returns
+the current graph. Its graph renderer uses Linnet's prepared-render pipeline and reports
+rendering errors directly. These display methods do not replace Symbolica's inherited
+`to_latex` API.
 
 HTML output keeps selectable native MathML and embeds the same STIX Two Math font as
 the documentation site, including in standalone offline notebooks. Math defaults to

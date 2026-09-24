@@ -35,12 +35,24 @@ def _(Representation, TensorExpression, TensorName):
 
 @app.cell
 def _(TensorLibrary, current):
+    current.to_network(library=TensorLibrary.hep_lib_atom())
+    return
+
+
+@app.cell
+def _(TensorLibrary, current):
     library = TensorLibrary.hep_lib_atom()
     network = current.to_network(library=library)
     network.execute(library=library)
     kernel = network.result_tensor(library=library)
     kernel
-    return (kernel,)
+    return kernel, library
+
+
+@app.cell
+def _(library):
+    library
+    return
 
 
 @app.cell

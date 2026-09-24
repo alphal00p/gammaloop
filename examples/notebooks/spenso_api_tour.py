@@ -68,8 +68,8 @@ def example_specification():
         ),
         (
             "TensorNetwork",
-            "A graph of operations with a semantic source expression. execute evaluates the graph; result_tensor/result_scalar retrieve the answer. to_dot exports the graph itself.",
-            'network = tensor("i", "j") * tensor("j", "k")\nnetwork.execute()\nnetwork_result = network.result_tensor()',
+            "The default display draws the current executable graph through Linnest. render and to_linnest accept linnet.RenderConfig; expression() retains the source formula. execute evaluates the graph and result_tensor retrieves its data.",
+            'network = tensor("i", "j") * tensor("j", "k")\nexecuted_network = tensor("i", "j") * tensor("j", "k")\nexecuted_network.execute()\nnetwork_result = executed_network.result_tensor()',
             "network",
         ),
         (

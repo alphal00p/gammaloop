@@ -145,6 +145,10 @@ class ApiSurfaceTests(unittest.TestCase):
                     html = value.to_html(
                         settings=sp.DisplaySettings(tensor_view="matrix")
                     )
+                if isinstance(value, sp.TensorNetwork):
+                    self.assertIn("data-linnet-interactive", html)
+                    self.assertIn("TensorNetwork", html)
+                    html = value.expression().to_html()
                 self.assertIn("<math", html)
                 self.assertIn("data-spenso-math", html)
                 self.assertTrue(value._repr_latex_())
