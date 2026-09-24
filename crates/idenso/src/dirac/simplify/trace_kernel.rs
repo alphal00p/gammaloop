@@ -1,21 +1,34 @@
-//! Short trace recipes: signed pairings in arbitrary dimension, and the more
-//! compact four-dimensional reduction from the same three-gamma identity as
-//! open chains. Only integer index recipes are cached; no user atoms or dummy
-//! indices escape into the global cache.
+//! Dimension-generic traces reuse factored pairing polynomials within one call.
+//! Short four-dimensional traces use more compact integer recipes generated
+//! from the same three-gamma identity as open chains. No user atoms or dummy
+//! indices escape into the global recipe cache.
 
-use std::{collections::BTreeMap, sync::LazyLock};
+use std::{collections::{BTreeMap, HashMap}, sync::{LazyLock, OnceLock}};
 
 use itertools::Itertools;
 use spenso::g;
-use symbolica::atom::{Atom, AtomView};
+use symbolica::atom::{Atom, AtomCore, AtomView};
 
 use super::THREE_GAMMA_METRIC_TERMS;
 use crate::epsilon::epsilon4;
+
+mod factored;
+
+pub(super) enum TraceOutput {
+    Expanded,
+    Factored,
+}
 
 pub(super) struct TraceKernel<const N: usize> {
     // For axial traces, the first four entries belong to epsilon; the rest
     // are sorted metric pairs. Ordinary traces contain metric pairs only.
     terms: Vec<([u8; N], i32)>,
+    factored: OnceLock<FactoredKernel>,
+}
+
+struct FactoredKernel {
+    polynomial: factored::FactoredTrace,
+    epsilons: Vec<[u8; 4]>,
 }
 
 #[derive(Clone, Default)]
@@ -25,47 +38,12 @@ struct Monomial {
 }
 
 impl<const N: usize> TraceKernel<N> {
-    fn generate_pairings() -> Self {
-        let mut terms = Vec::with_capacity((1..N).step_by(2).product());
-        Self::pairings((1 << N) - 1, 0, &mut [0; N], 1, &mut terms);
-        Self { terms }
-    }
-
-    fn pairings(
-        remaining: u16,
-        position: usize,
-        recipe: &mut [u8; N],
-        mut sign: i32,
-        terms: &mut Vec<([u8; N], i32)>,
-    ) {
-        if remaining == 0 {
-            terms.push((*recipe, sign));
-            return;
-        }
-        let first = remaining.trailing_zeros();
-        let remaining = remaining & !(1 << first);
-        recipe[position] = first as u8;
-        let mut partners = remaining;
-        while partners != 0 {
-            let partner = partners.trailing_zeros();
-            recipe[position + 1] = partner as u8;
-            Self::pairings(
-                remaining & !(1 << partner),
-                position + 2,
-                recipe,
-                sign,
-                terms,
-            );
-            partners &= partners - 1;
-            sign = -sign;
-        }
-    }
-
     fn generate(axial: bool) -> Self {
         let mut terms = BTreeMap::new();
         Self::reduce_triples(0, 1, 1, Monomial::default(), axial, &mut terms);
         Self {
             terms: terms.into_iter().filter(|(_, c)| *c != 0).collect(),
+            factored: OnceLock::new(),
         }
     }
 
@@ -106,37 +84,139 @@ impl<const N: usize> TraceKernel<N> {
         Self::reduce_triples(dummy, position + 2, -sign, next, axial, terms);
     }
 
-    fn evaluate(&self, indices: &[AtomView<'_>], axial: bool, trace_unit: AtomView<'_>) -> Atom {
+    fn factored(&self, axial: bool) -> &FactoredKernel {
+        self.factored.get_or_init(|| {
+            let mut epsilons = Vec::new();
+            let terms = self
+                .terms
+                .iter()
+                .map(|(recipe, coefficient)| {
+                    let mut factors = Vec::with_capacity(N / 2);
+                    if axial {
+                        let key: [u8; 4] = recipe[..4].try_into().unwrap();
+                        // Recipes are sorted, so each epsilon's terms are a
+                        // contiguous group. Cache only its integer positions.
+                        if epsilons.last() != Some(&key) {
+                            epsilons.push(key);
+                        }
+                        factors.push(N * N + epsilons.len() - 1);
+                    }
+                    factors.extend(
+                        recipe[if axial { 4 } else { 0 }..]
+                            .as_chunks::<2>()
+                            .0
+                            .iter()
+                            .map(|pair| usize::from(pair[0]) * N + usize::from(pair[1])),
+                    );
+                    (factors, *coefficient)
+                })
+                .collect();
+            FactoredKernel {
+                polynomial: factored::FactoredTrace::new(terms, N * N + epsilons.len()),
+                epsilons,
+            }
+        })
+    }
+
+    fn evaluate(&self, indices: &[AtomView<'_>], axial: bool, output: TraceOutput) -> Atom {
         debug_assert_eq!(indices.len(), N);
         // Each scalar product is built once and shared by all template terms.
-        let metrics: Vec<_> = (0..N)
+        let mut metrics: Vec<_> = (0..N)
             .flat_map(|a| (0..N).map(move |b| g!(indices[a], indices[b])))
             .collect();
+        if matches!(output, TraceOutput::Factored) && N >= 10 {
+            let factored = self.factored(axial);
+            metrics.extend(factored.epsilons.iter().map(|&[a, b, c, d]| {
+                epsilon4(indices[a as usize], indices[b as usize], indices[c as usize], indices[d as usize])
+            }));
+            return factored.polynomial.evaluate(&metrics, Atom::num(4).as_view());
+        }
+        let max_coefficient = self.terms.iter().map(|(_, c)| c.abs()).max().unwrap_or(0);
+        let coefficients: Vec<_> = (-max_coefficient..=max_coefficient)
+            .map(|coefficient| Atom::num(4 * i64::from(coefficient)))
+            .collect();
+        let mut last_epsilon_key = [u8::MAX; 4];
+        let mut last_epsilon = Atom::Zero;
         Atom::add_many(self.terms.iter().map(|(indices_recipe, coefficient)| {
-            let mut factors = Vec::with_capacity(N / 2 + 1);
-            factors.push(Atom::num(i64::from(*coefficient)) * trace_unit);
-            let pairs = if axial {
-                let [a, b, c, d]: [u8; 4] = indices_recipe[..4].try_into().unwrap();
-                factors.push(epsilon4(
-                    indices[a as usize],
-                    indices[b as usize],
-                    indices[c as usize],
-                    indices[d as usize],
-                ));
-                &indices_recipe[4..]
+            let epsilon = if axial {
+                let key: [u8; 4] = indices_recipe[..4].try_into().unwrap();
+                if key != last_epsilon_key {
+                    last_epsilon_key = key;
+                    let [a, b, c, d] = key;
+                    last_epsilon = epsilon4(indices[a as usize], indices[b as usize], indices[c as usize], indices[d as usize]);
+                }
+                Some(last_epsilon.as_view())
             } else {
-                &indices_recipe[..]
+                None
             };
-            factors.extend(
+            let pairs = &indices_recipe[if axial { 4 } else { 0 }..];
+            Atom::mul_many(std::iter::once(coefficients[(*coefficient + max_coefficient) as usize].as_view())
+                .chain(epsilon)
+                .chain(
                 pairs
                     .as_chunks::<2>()
                     .0
                     .iter()
-                    .map(|p| metrics[usize::from(p[0]) * N + usize::from(p[1])].clone()),
-            );
-            Atom::mul_many(factors)
+                    .map(|p| metrics[usize::from(p[0]) * N + usize::from(p[1])].as_view()),
+            ))
         }))
     }
+}
+
+/// Build the ordinary pairing polynomial without intermediate trace nodes.
+/// Repeated subwords share their result for this evaluation only.
+struct PairingTrace<'a> {
+    width: usize,
+    metrics: Vec<Atom>,
+    trace_unit: AtomView<'a>,
+    subwords: HashMap<Vec<usize>, Atom>,
+}
+
+impl PairingTrace<'_> {
+    fn evaluate(&mut self, remaining: &[usize]) -> Atom {
+        let Some(&first) = remaining.first() else {
+            return self.trace_unit.to_owned();
+        };
+        if let Some(result) = self.subwords.get(remaining) {
+            return result.clone();
+        }
+        let mut terms = Vec::with_capacity(remaining.len() - 1);
+        for partner in 1..remaining.len() {
+            let rest: Vec<_> = remaining[1..partner]
+                .iter()
+                .chain(&remaining[partner + 1..])
+                .copied()
+                .collect();
+            let subword = self.evaluate(&rest);
+            let product = self.metrics[first * self.width + remaining[partner]].as_view()
+                * subword.as_view();
+            terms.push(if partner % 2 == 1 { product } else { -product });
+        }
+        let result = Atom::add_many(terms);
+        // A long trace must not retain an unbounded number of large subwords.
+        // These limits cover all reusable subwords through length fourteen.
+        if remaining.len() <= 14 && self.subwords.len() < 1024 {
+            self.subwords.insert(remaining.to_vec(), result.clone());
+        }
+        result
+    }
+}
+
+pub(super) fn evaluate_generic(indices: &[AtomView<'_>], trace_unit: AtomView<'_>) -> Atom {
+    if indices.len() % 2 == 1 {
+        return Atom::Zero;
+    }
+    let width = indices.len();
+    let metrics = (0..width)
+        .flat_map(|a| (0..width).map(move |b| g!(indices[a], indices[b])))
+        .collect();
+    PairingTrace {
+        width,
+        metrics,
+        trace_unit,
+        subwords: HashMap::new(),
+    }
+    .evaluate(&(0..width).collect::<Vec<_>>())
 }
 
 impl Monomial {
@@ -255,29 +335,18 @@ impl Monomial {
 // before constructing a kernel. Tables are initialized only when needed.
 macro_rules! short_trace_dispatch {
     ($($length:literal),* $(,)?) => {
-        pub(super) fn evaluate(indices: &[AtomView<'_>], axial: bool) -> Option<Atom> {
-            let trace_unit = Atom::num(4);
+        pub(super) fn evaluate(indices: &[AtomView<'_>], axial: bool, output: TraceOutput) -> Option<Atom> {
             match indices.len() {
                 1 | 3 | 5 | 7 | 9 | 11 | 13 => Some(Atom::Zero),
                 $($length => {
                     static ORDINARY: LazyLock<TraceKernel<$length>> = LazyLock::new(|| TraceKernel::generate(false));
                     static AXIAL: LazyLock<TraceKernel<$length>> = LazyLock::new(|| TraceKernel::generate(true));
-                    Some(if axial { AXIAL.evaluate(indices, true, trace_unit.as_view()) } else { ORDINARY.evaluate(indices, false, trace_unit.as_view()) })
+                    Some(if axial { AXIAL.evaluate(indices, true, output) } else { ORDINARY.evaluate(indices, false, output) })
                 },)*
                 _ => None,
             }
         }
 
-        pub(super) fn evaluate_generic(indices: &[AtomView<'_>], trace_unit: AtomView<'_>) -> Option<Atom> {
-            match indices.len() {
-                1 | 3 | 5 | 7 | 9 | 11 | 13 => Some(Atom::Zero),
-                $($length => {
-                    static GENERIC: LazyLock<TraceKernel<$length>> = LazyLock::new(TraceKernel::generate_pairings);
-                    Some(GENERIC.evaluate(indices, false, trace_unit))
-                },)*
-                _ => None,
-            }
-        }
     };
 }
 
@@ -393,15 +462,7 @@ mod tests {
         check::<14>(26931, 6042);
     }
 
-    fn check_generic<const N: usize>(expected_terms: usize) {
-        let kernel = TraceKernel::<N>::generate_pairings();
-        assert_eq!(kernel.terms.len(), expected_terms);
-        for (recipe, coefficient) in &kernel.terms {
-            assert!(coefficient.abs() == 1);
-            let mut indices = *recipe;
-            indices.sort_unstable();
-            assert_eq!(indices, std::array::from_fn(|index| index as u8));
-        }
+    fn check_generic<const N: usize>() {
         // Six independent axes distinguish the generic formula from a 4D
         // reduction. Keep the formal unit trace at four in both evaluations.
         let mut seed = 23u64;
@@ -412,42 +473,39 @@ mod tests {
                     ((seed >> 32) % 5) as i64 - 2
                 })
             });
-            let result: i64 = kernel
-                .terms
-                .iter()
-                .map(|(recipe, coefficient)| {
-                    4 * i64::from(*coefficient)
-                        * recipe
-                            .as_chunks::<2>()
-                            .0
-                            .iter()
-                            .map(|pair| {
-                                vectors[usize::from(pair[0])]
-                                    .iter()
-                                    .zip(vectors[usize::from(pair[1])])
-                                    .map(|(a, b)| a * b)
-                                    .sum::<i64>()
-                            })
-                            .product::<i64>()
-                })
-                .sum();
+            let unit = Atom::num(4);
+            let mut trace = PairingTrace {
+                width: N,
+                metrics: (0..N)
+                    .flat_map(|a| {
+                        (0..N).map(move |b| {
+                            Atom::num(vectors[a].iter().zip(vectors[b]).map(|(a, b)| a * b).sum::<i64>())
+                        })
+                    })
+                    .collect(),
+                trace_unit: unit.as_view(),
+                subwords: HashMap::new(),
+            };
+            let result = trace.evaluate(&(0..N).collect::<Vec<_>>());
             assert_eq!(
                 result,
-                clifford_trace(&vectors, false),
+                Atom::num(clifford_trace(&vectors, false)),
                 "generic length {N}, sample {sample}"
             );
+            assert!(trace.subwords.len() <= 1024);
         }
     }
 
     #[test]
     fn generic_kernels_match_independent_six_dimensional_clifford_products() {
-        check_generic::<2>(1);
-        check_generic::<4>(3);
-        check_generic::<6>(15);
-        check_generic::<8>(105);
-        check_generic::<10>(945);
-        check_generic::<12>(10395);
-        check_generic::<14>(135135);
+        check_generic::<2>();
+        check_generic::<4>();
+        check_generic::<6>();
+        check_generic::<8>();
+        check_generic::<10>();
+        check_generic::<12>();
+        check_generic::<14>();
+        check_generic::<16>();
     }
 
     #[test]

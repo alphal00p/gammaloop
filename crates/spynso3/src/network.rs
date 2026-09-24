@@ -70,7 +70,8 @@ use pyo3_stub_gen::{PyStubType, derive::*};
 /// A network retains the semantic source expression and its public tensor interface
 /// separately from the executable graph and its stored values. Value specialization
 /// and graph execution therefore do not rewrite the source expression returned by
-/// `structure()` or used by the semantic display methods.
+/// `expression()` or used by the semantic display methods. The default rich
+/// display draws the current executable graph through Linnest.
 ///
 /// Examples
 /// --------
@@ -1363,8 +1364,37 @@ impl SpensoNet {
     }
 
     /// Return the computational graph in Graphviz DOT format.
-    fn to_dot(&self) -> String {
+    pub(crate) fn to_dot(&self) -> String {
         self.network.dot_pretty()
+    }
+
+    /// Return the exact Linnest/Typst entrypoint for the current executable graph.
+    /// Uses the same ``linnet.RenderConfig`` and asset pipeline as Feynman diagrams.
+    #[pyo3(signature = (*, config=None))]
+    fn to_linnest(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        config: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<String> {
+        self.prepare_render(py, config)?
+            .getattr("typst_source")?
+            .extract()
+    }
+
+    /// Render the current graph as interactive SVG, using Linnest's network style.
+    /// Operator nodes, stored tensors, library references, and scalars retain
+    /// their identities. ``expression().to_svg()`` renders the source formula.
+    #[pyo3(signature = (*, config=None))]
+    fn render(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        config: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<String> {
+        self.prepare_render(py, config)?
+            .call_method0("to_svg")?
+            .extract()
     }
 
     /// Format the exact semantic structure using compact Spenso notation.
@@ -1415,16 +1445,16 @@ impl SpensoNet {
         )
     }
 
-    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    /// Render the executable graph as a notebook figure. For the symbolic source
+    /// formula, use ``expression().to_html(settings=...)``.
+    #[pyo3(signature = (*, config=None))]
     fn to_html(
         &self,
         py: Python<'_>,
-        show_dimensions: Option<bool>,
-        settings: Option<PyRef<'_, display::DisplaySettings>>,
-        notation_source: Option<String>,
+        #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
+        config: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
-        display::structured_to_html(py, &self.structure, &settings, notation_source.as_deref())
+        Ok(display::network::html(&self.render(py, config)?))
     }
 
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
@@ -1439,14 +1469,8 @@ impl SpensoNet {
         display::structured_to_svg(py, &self.structure, &settings, notation_source.as_deref())
     }
 
-    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
-        display::structured_to_html(
-            py,
-            &self.structure,
-            &display::DisplaySettings::default(),
-            None,
-        )
-        .ok()
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_html(py, None)
     }
 
     /// Return the semantic source expression and its public tensor interface.

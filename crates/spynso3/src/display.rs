@@ -60,6 +60,7 @@ const NOTEBOOK_STYLE: &str = include_str!("../typst/notebook.css");
 
 mod explorer;
 pub(crate) mod metadata;
+pub(crate) mod network;
 
 /// Presentation settings shared by Typst source, HTML, and SVG rendering.
 ///
