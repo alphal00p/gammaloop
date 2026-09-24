@@ -5,8 +5,7 @@ import builtins
 import decimal
 import symbolica.core
 import typing
-from symbolica import ComplexFloat, Float
-from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction
+from symbolica.core import ComplexFloat, Condition, Expression, Float, FormattedOutput, HeldExpression, PatternRestriction
 
 AUTO: _AutoIndex
 _: _AutoIndex
@@ -520,6 +519,11 @@ class Representation:
     ```
     """
     @property
+    def name(self) -> RepresentationName:
+        r"""
+        Dimension-independent representation identity, including duality.
+        """
+    @property
     def dimension(self) -> Expression:
         r"""
         Return the dimension carried by this representation.
@@ -571,7 +575,11 @@ class Representation:
         >>> rep = Representation.euc(3)
         >>> expr = rep(sp.E("cos(x)"))
         """
-    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_html_(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Compact name, dimension, duality, and canonical metric metadata.
+        """
     def _repr_latex_(self) -> builtins.str: ...
     def __new__(cls, name: builtins.str, dimension: builtins.int | Expression | str, is_self_dual: builtins.bool = True) -> Representation:
         r"""
@@ -712,6 +720,38 @@ class Representation:
         # Parameters:
         - dimension: The dimension of the sextet representation (e.g., 6 for SU(3))
         """
+
+@typing.final
+class RepresentationName:
+    r"""
+    A dimension-independent representation identity, including its duality.
+    """
+    @property
+    def name(self) -> builtins.str:
+        r"""
+        Exact registered symbol name, without dimension or index arguments.
+        """
+    @property
+    def duality(self) -> builtins.str:
+        r"""
+        Whether this is a self-dual, base, or dual representation.
+        """
+    def __eq__(self, other: builtins.object) -> builtins.bool: ...
+    def dual(self) -> RepresentationName:
+        r"""
+        Return the representation identity paired with this one.
+        """
+    def metric_sign(self, index: builtins.int) -> builtins.int:
+        r"""
+        Sign of the canonical contraction pairing at a nonnegative component index.
+        """
+    def __str__(self) -> builtins.str: ...
+    def __repr__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Compact metadata display with the registered name, duality, and metric rule.
+        """
+    def _repr_html_(self) -> builtins.str: ...
 
 @typing.final
 class SchoonschipContractionOrder:
@@ -909,12 +949,21 @@ class Slot:
     ```
     """
     @property
+    def index(self) -> Expression:
+        r"""
+        Exact symbolic index, independently of its presentation label.
+        """
+    @property
     def representation(self) -> Representation:
         r"""
         The representation carried by this slot, including its dimension and duality.
         """
     def __eq__(self, other: builtins.object) -> builtins.bool: ...
-    def _repr_html_(self) -> typing.Optional[builtins.str]: ...
+    def _repr_html_(self) -> builtins.str: ...
+    def to_html(self, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+        r"""
+        Display the index label beside its representation and exact stored index.
+        """
     def _repr_latex_(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -999,9 +1048,14 @@ class Tensor:
     >>> tensor = Tensor.dense(structure, data)
     >>> sparse_tensor = Tensor.sparse(structure, float)
     """
-    def structure(self) -> TensorExpression:
+    @property
+    def structure(self) -> TensorStructure:
         r"""
-        Return the exact structured expression describing this tensor's data.
+        Tensor identity, scalar arguments, and external ports in logical order.
+        """
+    def expression(self) -> TensorExpression:
+        r"""
+        Return the symbolic descriptor of this tensor, independently of its component data.
         """
     def with_name(self, name: TensorName | builtins.str | Expression | TensorExpression) -> Tensor:
         r"""
@@ -1248,7 +1302,7 @@ class Tensor:
         r"""
         Get tensor elements at the specified range of indices.
 
-        Slices traverse the flat logical row-major order shown by `Tensor.structure().interface`;
+        Slices traverse the flat logical row-major order shown by `Tensor.structure.slots`;
         canonical storage-axis order is not exposed.
 
         Parameters
@@ -1267,7 +1321,7 @@ class Tensor:
         Get tensor element at the specified index or indices.
 
         Integers are flat logical row-major positions. Coordinate lists follow
-        `Tensor.structure().interface`; canonical storage-axis order is not exposed.
+        `Tensor.structure.slots`; canonical storage-axis order is not exposed.
 
         Parameters
         ----------
@@ -1284,7 +1338,7 @@ class Tensor:
         Set tensor element at the specified index.
 
         Integers are flat logical row-major positions. Coordinate lists follow
-        `Tensor.structure().interface`; canonical storage-axis order is not exposed.
+        `Tensor.structure.slots`; canonical storage-axis order is not exposed.
 
         Parameters
         ----------
@@ -1427,9 +1481,9 @@ class TensorExpression(Expression):
         Whether the expression has no external tensor ports.
         """
     @property
-    def interface(self) -> tuple[Representation | Slot, ...]:
+    def structure(self) -> TensorStructure:
         r"""
-        Ordered external interface as concrete `Slot` objects or unresolved `Representation`s.
+        Tensor identity, scalar arguments, and external ports in logical order.
         """
     @property
     def name(self) -> typing.Optional[TensorName]:
@@ -2939,6 +2993,11 @@ class TensorNetwork:
     >>> len(result)
     4
     """
+    @property
+    def structure(self) -> TensorStructure:
+        r"""
+        Source tensor identity and ordered external ports, independent of execution.
+        """
     def __new__(cls, expr: typing.Any, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:
         r"""
         Create a tensor network by parsing an arithmetic expression.
@@ -3171,7 +3230,7 @@ class TensorNetwork:
     def to_html(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str: ...
     def to_svg(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str: ...
     def _repr_html_(self) -> typing.Optional[builtins.str]: ...
-    def structure(self) -> TensorExpression:
+    def expression(self) -> TensorExpression:
         r"""
         Return the semantic source expression and its public tensor interface.
 
@@ -3385,6 +3444,49 @@ class TensorPattern(Expression):
         """
 
 @typing.final
+class TensorStructure:
+    r"""
+    Immutable tensor metadata: optional identity and arguments, plus ordered ports.
+
+    Explicit ports are `Slot`s; unresolved ports are `Representation`s. This object
+    carries no algebraic expression or component data. Inspect `.expression()` on
+    a Tensor or TensorNetwork for its symbolic descriptor/source computation.
+    """
+    @property
+    def name(self) -> typing.Optional[TensorName]:
+        r"""
+        Optional tensor data identity; unnamed expressions have no name.
+        """
+    @property
+    def arguments(self) -> tuple[Expression, ...]:
+        r"""
+        Scalar arguments belonging to the tensor identity, in their original order.
+        """
+    @property
+    def slots(self) -> tuple[Slot | Representation, ...]:
+        r"""
+        External slots in logical order, including unresolved representations.
+        """
+    @property
+    def rank(self) -> builtins.int:
+        r"""
+        Number of external slots, including unresolved ports.
+        """
+    @property
+    def shape(self) -> tuple[int | Expression, ...]:
+        r"""
+        Dimensions in logical order; symbolic dimensions remain symbolic.
+        """
+    def __eq__(self, other: builtins.object) -> builtins.bool: ...
+    def __new__(cls, slots: typing.Sequence[Slot | Representation], *, name: typing.Optional[TensorName] = None, arguments: typing.Optional[typing.Sequence[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]]] = None) -> TensorStructure: ...
+    def __repr__(self) -> builtins.str: ...
+    def to_html(self, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:
+        r"""
+        Inspect the tensor identity and ordered slots without changing its algebra.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+
+@typing.final
 class _AutoIndex:
     r"""
     The local placeholder used to leave a tensor port unresolved.
@@ -3473,4 +3575,3 @@ def trace(representation: Representation, *factors: Expression) -> TensorExpress
 
 @typing.overload
 def trace(representation: Representation, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork: ...
-

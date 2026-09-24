@@ -378,7 +378,7 @@ def _():
     from symbolica import PrintMode
 
     spinor = Representation.bis(4)
-    Jbar = TensorName("Jbarrr", print={"typst":"macron(J)"})(spinor)
+    Jbar = TensorName("Jbarrr", print={"typst": "macron(J)"})(spinor)
     J = TensorName("J")(spinor)
     gamma = TensorExpression.gamma(4)
 
@@ -388,7 +388,7 @@ def _():
     network = current.to_network(library=library)
     network.execute(library=library)
     kernel = network.result_tensor(library=library)
-    kernel# Components in the order mu = 0, 1, 2, 3.
+    kernel  # Components in the order mu = 0, 1, 2, 3.
     return Representation, TensorExpression, kernel, network
 
 
@@ -397,7 +397,7 @@ def _(kernel, mo, network):
     mo.vstack(
         [
             mo.md("## The indexed rule and its four component expressions"),
-            mo.Html(network.structure().to_html()),
+            mo.Html(network.expression().to_html()),
             mo.Html(kernel.to_html()),
             mo.md(
                 "`kernel[:]` reads the components in logical order, μ = 0, 1, 2, 3. "
@@ -425,7 +425,7 @@ def _(mo):
 
 @app.cell
 def _(Expression, Representation, bar_components, components, kernel):
-    assert kernel.structure().interface == (Representation.mink(4)("mu"),)
+    assert kernel.structure.slots == (Representation.mink(4)("mu"),)
     assert len(kernel) == 4
     _i = Expression.I
     _weyl = (

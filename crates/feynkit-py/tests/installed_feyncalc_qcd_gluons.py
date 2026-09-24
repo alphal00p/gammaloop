@@ -62,7 +62,7 @@ for diagram in generated.diagrams:
     )
 assert all(d in denominators for d in (s, t - mass**2, u - mass**2))
 operator = TensorExpression(amplitude.expand())
-assert len(operator.interface) == 8
+assert len(operator.structure.slots) == 8
 adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
 adjoint = adjoint.replace(conjugate(P(a, b)), P(a, b))
 for real in (mass, gs, s, t, u):
@@ -79,7 +79,7 @@ for position, pdg in enumerate((5, -5, 21, 21)):
     if position < 2:
         initial_colors *= abs(particle.color)
     matches = []
-    for slot in operator.interface:
+    for slot in operator.structure.slots:
         original = slot.to_expression()
         if original.replace(ports[position], E("0")) == original:
             continue

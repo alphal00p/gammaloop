@@ -1266,7 +1266,7 @@ submit! {
                 Examples
                 --------
                 >>> routed = basis.route_expression(diagram.numerator_expression())
-                >>> assert routed.interface == diagram.numerator_expression().interface
+                >>> assert routed.structure.slots == diagram.numerator_expression().structure.slots
 
                 Parameters
                 ----------

@@ -19,6 +19,12 @@ def example_specification():
             "rep",
         ),
         (
+            "RepresentationName",
+            "Dimension-independent representation identity, duality and canonical metric rule.",
+            "rep_name = rep.name",
+            "rep_name",
+        ),
+        (
             "Slot",
             "One labelled port in an index space. dual() changes its variance; representation exposes its space.",
             'slot = rep("mu")',
@@ -37,6 +43,12 @@ def example_specification():
             "indexed",
         ),
         (
+            "TensorStructure",
+            "Immutable metadata: optional name, scalar arguments, ordered slots, rank and shape. Unresolved ports retain their Representation.",
+            "structure = indexed.structure",
+            "structure",
+        ),
+        (
             "_AutoIndex",
             "AUTO leaves a port unresolved when other ports are indexed. The underscore alias denotes the same singleton.",
             'placeholder = sp.AUTO\npartially_indexed = expression(placeholder, "nu")',
@@ -44,7 +56,7 @@ def example_specification():
         ),
         (
             "Tensor",
-            "Actual dense or sparse component data. Integer indexing is flat row-major indexing; a coordinate sequence follows structure().interface. with_name gives stored data a library identity.",
+            "Actual dense or sparse component data. Integer indexing is flat row-major indexing; a coordinate sequence follows structure.slots. expression() gives its symbolic descriptor; with_name gives stored data a library identity.",
             'tensor = sp.Tensor.dense(expression, [x, E("1"), E("0"), x + 1]).with_name("spenso_api_tour::M")',
             "tensor",
         ),
@@ -321,7 +333,7 @@ def _(mo, namespace):
             mo.as_html(namespace["evaluated"]),
             mo.as_html(namespace["compiled_result"]),
             mo.md(
-                "`network.structure()` keeps the source tensor expression; execution results live in `result_tensor()` or `result_scalar()`. The two numerical results above agree."
+                "`network.expression()` keeps the source tensor expression; execution results live in `result_tensor()` or `result_scalar()`. The two numerical results above agree."
             ),
         ]
     )

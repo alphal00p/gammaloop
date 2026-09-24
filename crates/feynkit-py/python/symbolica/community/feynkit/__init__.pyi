@@ -3950,7 +3950,7 @@ class Kinematics:
         Examples
         --------
         >>> result = kin.apply(contracted_tensor)
-        >>> assert result.interface == contracted_tensor.interface
+        >>> assert result.structure.slots == contracted_tensor.structure.slots
 
         Parameters
         ----------
@@ -4175,7 +4175,7 @@ class LoopMomentumBasis:
         Examples
         --------
         >>> routed = basis.route_expression(diagram.numerator_expression())
-        >>> assert routed.interface == diagram.numerator_expression().interface
+        >>> assert routed.structure.slots == diagram.numerator_expression().structure.slots
 
         Parameters
         ----------

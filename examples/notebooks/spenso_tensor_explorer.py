@@ -10,6 +10,8 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
+    import marimo as mo
+    from symbolica import S
     from symbolica.community.spenso import (
         Representation,
         TensorExpression,
@@ -17,7 +19,7 @@ def _():
         TensorName,
     )
 
-    return Representation, TensorExpression, TensorLibrary, TensorName
+    return Representation, S, TensorExpression, TensorLibrary, TensorName, mo
 
 
 @app.cell
@@ -38,6 +40,36 @@ def _(TensorLibrary, current):
     network.execute(library=library)
     kernel = network.result_tensor(library=library)
     kernel
+    return (kernel,)
+
+
+@app.cell
+def _(Representation, mo):
+    _lorentz = Representation.mink(4)
+    mo.hstack(
+        [mo.as_html(_lorentz.name), mo.as_html(_lorentz), mo.as_html(_lorentz(1))],
+        wrap=True,
+    )
+    return
+
+
+@app.cell
+def _(TensorExpression):
+    TensorExpression.gamma(4)(1, 2, 1).structure
+    return
+
+
+@app.cell
+def _(Representation, S, TensorName):
+    TensorName("explorer::A")(
+        S("x"), 7, Representation.mink(4)(1), Representation.bis(4)
+    ).structure
+    return
+
+
+@app.cell
+def _(kernel):
+    kernel.structure
     return
 
 

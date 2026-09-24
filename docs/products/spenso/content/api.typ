@@ -65,7 +65,26 @@ operations are `TensorExpression` methods, so symbolic pipelines can chain
 `expression.simplify_gamma().simplify_color().simplify_metrics()` while retaining the
 tensor interface.
 
-For indexed tensors, `expression.interface` exposes the external `Slot` objects.
+`Tensor`, `TensorNetwork`, and `TensorExpression` expose an immutable
+`TensorStructure` through the `.structure` property. It records an optional
+`TensorName`, scalar `.arguments`, and the ordered `.slots`, `.rank`, and `.shape`.
+Shape entries are Python integers or symbolic expressions. Unresolved ports stay
+as `Representation` objects; assigning indices produces new metadata rather than
+mutating an earlier structure snapshot.
+
+`tensor.expression()` returns its symbolic descriptor, independently of stored
+component values. `network.expression()` returns its source computation, which
+execution does not replace with the result. These replace the former expression-returning
+`structure()` methods; the former `.interface` tuple is now `.structure.slots`.
+
+The metadata displays separate presentation labels from exact index expressions.
+`rep.name` is a `RepresentationName` with dimension-independent identity and
+duality; its `metric_sign(i)` queries the canonical contraction sign. Dualizable
+representations display a dual pairing rather than claiming a metric signature on
+one space. Structure displays put the named head and ordered ports in selectable
+boxes. Ordinary `TensorExpression` outputs retain their mathematical rendering.
+
+For indexed tensors, `expression.structure.slots` exposes the external `Slot` objects.
 The read-only `slot.representation` property returns their typed `Representation`,
 including dimension and duality. Filter slots with `slot.representation == rep`
 when constructing a projector for a particular representation.

@@ -34,7 +34,7 @@ diagram = generated.diagrams[0]
 color = TensorExpression(
     diagram.numerator_expression().to_expression().replace(S("UFO::GC_69"), E("1"))
 )
-assert len(color.interface) == 3
+assert len(color.structure.slots) == 3
 assert color.spenso_conjugate().to_expression() == color.to_expression()
 # The Symbolica product contracts all three matching explicit adjoint indices.
 norm = (

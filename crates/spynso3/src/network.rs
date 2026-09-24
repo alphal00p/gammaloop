@@ -1455,7 +1455,7 @@ impl SpensoNet {
     /// provenance. It is not reconstructed from the current execution store, so
     /// `replace()`, `evaluate()`, and `execute()` leave it unchanged. Use
     /// `result_scalar()` or `result_tensor()` to inspect the current computed value.
-    fn structure(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
+    fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_atom_interface_descriptor(
             py,
             self.structure.atom.clone(),
@@ -1466,6 +1466,20 @@ impl SpensoNet {
                 .map(|(_, args)| args.clone())
                 .unwrap_or_default(),
         )
+    }
+
+    /// Source tensor identity and ordered external ports, independent of execution.
+    #[getter]
+    fn structure(&self) -> crate::metadata::SpensoTensorStructure {
+        crate::metadata::SpensoTensorStructure {
+            interface: self.structure.interface.clone(),
+            name: self.descriptor.as_ref().map(|(name, _)| *name),
+            arguments: self
+                .descriptor
+                .as_ref()
+                .map(|(_, args)| args.clone())
+                .unwrap_or_default(),
+        }
     }
 
     /// Fill the unresolved external ports with `indices` in interface order.

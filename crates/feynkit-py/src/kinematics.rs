@@ -327,7 +327,7 @@ submit! {
                 Examples
                 --------
                 >>> result = kin.apply(contracted_tensor)
-                >>> assert result.interface == contracted_tensor.interface
+                >>> assert result.structure.slots == contracted_tensor.structure.slots
 
                 Parameters
                 ----------

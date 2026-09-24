@@ -30,7 +30,8 @@ fn logical_representations(
     expression: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<Representation<LibraryRep>>> {
     expression
-        .getattr("interface")?
+        .getattr("structure")?
+        .getattr("slots")?
         .extract::<Vec<SpensoRepresentation>>()
         .map(|representations| {
             representations
@@ -44,7 +45,8 @@ fn logical_slot_representations(
     expression: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<Representation<LibraryRep>>> {
     expression
-        .getattr("interface")?
+        .getattr("structure")?
+        .getattr("slots")?
         .extract::<Vec<SpensoSlot>>()
         .map(|slots| slots.into_iter().map(|slot| slot.slot.rep()).collect())
 }
@@ -325,7 +327,7 @@ bis = spenso.Representation.bis(4)
 name = spenso.TensorName('component_identity_matrix')
 expr = name(bis, euc)
 before = expr.to_expression()
-interface = expr.interface
+interface = expr.structure.slots
 components = expr.components()
 assert len(components) == 8
 assert len(set(str(x) for x in components)) == 8
@@ -333,7 +335,7 @@ assert components == expr.components()
 assert components == name(bis('j'), euc('i')).components()
 assert components == name(bis('l'), euc('k')).components()
 assert expr.to_expression() == before
-assert expr.interface == interface
+assert expr.structure.slots == interface
 
 # Contracting one axis must select the same component identities and order.
 selector = spenso.Tensor.dense(

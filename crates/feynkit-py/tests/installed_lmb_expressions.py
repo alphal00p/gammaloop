@@ -86,7 +86,7 @@ for selected_basis in (basis, alternate):
     ):
         routed = selected_basis.route_expression(tensor)
         assert isinstance(routed, TensorExpression)
-        assert routed.interface == tensor.interface
+        assert routed.structure.slots == tensor.structure.slots
         plain = selected_basis.route_expression(tensor.to_expression())
         assert isinstance(plain, Expression) and not isinstance(plain, TensorExpression)
         assert routed.to_expression() == plain
@@ -112,7 +112,7 @@ for expression in (diagram.numerator_expression, diagram.denominator_expression)
     ):
         routed = expression(**options)
         assert isinstance(routed, TensorExpression)
-        assert routed.interface == raw.interface
+        assert routed.structure.slots == raw.structure.slots
         assert routed == selected_basis.route_expression(raw)
         assert routed != raw
 
@@ -206,7 +206,7 @@ for selected_basis in (basis, alternate, two_loop.loop_momentum_basis):
     zero = 0 * Q(selected_basis.loop_edges[0], mu)
     routed_zero = selected_basis.route_expression(zero, **options)
     assert isinstance(routed_zero, TensorExpression)
-    assert routed_zero == 0 and routed_zero.interface == zero.interface
+    assert routed_zero == 0 and routed_zero.structure.slots == zero.structure.slots
     for edge, signature in selected_basis.edge_signatures.items():
         for port in (mu, lorentz):
             raw = Q(edge, port)
@@ -225,7 +225,7 @@ for selected_basis in (basis, alternate, two_loop.loop_momentum_basis):
             )
             named = selected_basis.route_expression(raw, **options)
             assert isinstance(named, TensorExpression)
-            assert named.interface == raw.interface
+            assert named.structure.slots == raw.structure.slots
             assert named.to_expression() == expected
             assert selected_basis.route_expression(named, **options) == named
             assert (

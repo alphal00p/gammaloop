@@ -909,14 +909,21 @@ impl PyStubType for ConvertibleToInvariantDegree {
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
 impl SpensoRepresentation {
-    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
-        crate::display::atom_to_html(
-            py,
-            &self.to_expression().expr,
-            &crate::display::DisplaySettings::default(),
-            None,
-        )
-        .ok()
+    fn _repr_html_(&self) -> String {
+        self.to_html()
+    }
+
+    /// Compact name, dimension, duality, and canonical metric metadata.
+    fn to_html(&self) -> String {
+        crate::display::metadata::representation(self.representation)
+    }
+
+    /// Dimension-independent representation identity, including duality.
+    #[getter]
+    fn name(&self) -> crate::metadata::SpensoRepresentationName {
+        crate::metadata::SpensoRepresentationName {
+            rep: self.representation.rep,
+        }
     }
 
     fn _repr_latex_(&self) -> String {
@@ -1283,14 +1290,24 @@ impl ModuleInit for SpensoSlot {}
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl SpensoSlot {
-    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
-        crate::display::atom_to_html(
-            py,
-            &self.to_expression().expr,
-            &crate::display::DisplaySettings::default(),
-            None,
-        )
-        .ok()
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_html(py, None)
+    }
+
+    /// Display the index label beside its representation and exact stored index.
+    #[pyo3(signature = (*, settings=None))]
+    fn to_html(
+        &self,
+        py: Python<'_>,
+        settings: Option<crate::display::DisplaySettings>,
+    ) -> PyResult<String> {
+        crate::display::metadata::slot(py, self.slot, &settings.unwrap_or_default())
+    }
+
+    /// Exact symbolic index, independently of its presentation label.
+    #[getter]
+    fn index(&self) -> PythonExpression {
+        Atom::from(self.slot.aind).into()
     }
 
     fn _repr_latex_(&self) -> String {
