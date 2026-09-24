@@ -48,6 +48,9 @@ def _(Representation, mo):
     _lorentz = Representation.mink(4)
     mo.hstack(
         [mo.as_html(_lorentz.name), mo.as_html(_lorentz), mo.as_html(_lorentz(1))],
+        justify="start",
+        align="start",
+        gap=2,
         wrap=True,
     )
     return
