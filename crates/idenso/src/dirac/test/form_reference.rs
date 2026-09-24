@@ -242,7 +242,7 @@ fn short_trace_terminal_shortcut_preserves_surrounding_contractions() {
     let coefficient = parse_lit!((x + y) ^ 8);
     assert_eq!(
         (&coefficient * &expr).simplify_gamma(),
-        &coefficient * expr.simplify_gamma()
+        &coefficient * expr.simplify_gamma().expand()
     );
 
     let mu = r.mink4.pattern(s!(mu));

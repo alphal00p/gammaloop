@@ -196,6 +196,32 @@ impl SlotContraction {
                 }
             }
         }
+        // A tensor occurrence in addition to two metric endpoints makes the
+        // incidence ambiguous. Do not turn that into a path contraction; the
+        // ordered substitution below continues to own such expressions.
+        let mut metric_positions = metrics.iter().map(|metric| metric.0).peekable();
+        for (position, factor) in product.iter().enumerate() {
+            if metric_positions.peek() == Some(&position) {
+                metric_positions.next();
+                continue;
+            }
+            let mut ambiguous = false;
+            factor.visitor(&mut |atom| {
+                if ambiguous {
+                    return false;
+                }
+                if let Some(endpoint) = Endpoint::parse(atom, slots) {
+                    let key = (endpoint.representation.base(), endpoint.dimension, endpoint.index);
+                    ambiguous = occurrences.get(&key).is_some_and(|entry| entry.2);
+                    return false;
+                }
+                !matches!(atom, AtomView::Fun(f) if f.get_symbol().is_scalar())
+                    && matches!(slots.classify(atom), SlotMatch::Other)
+            });
+            if ambiguous {
+                return None;
+            }
+        }
         let mut visited = vec![false; metrics.len()];
         let mut removed = vec![false; product.iter().len()];
         let mut replacements = Vec::new();
@@ -560,14 +586,19 @@ mod tests {
     #[test]
     fn ambiguous_metric_incidence_keeps_ordered_substitution() {
         crate::representations::initialize();
-        let expression = parse("g(mink(4,a),mink(4,b))*g(mink(4,a),mink(4,c))*g(mink(4,a),mink(4,d))*g(mink(4,x),mink(4,y))");
-        let AtomView::Mul(product) = expression.as_view() else {
-            panic!("expected product");
-        };
-        assert!(
-            SlotContraction::contract_metric_components(product, &mut SlotMatcher::default())
-                .is_none()
-        );
+        for source in [
+            "g(mink(4,a),mink(4,b))*g(mink(4,a),mink(4,c))*g(mink(4,a),mink(4,d))*g(mink(4,x),mink(4,y))",
+            "g(mink(4,a),mink(4,b))*g(mink(4,b),mink(4,c))*g(mink(4,c),mink(4,d))*T(mink(4,b))",
+        ] {
+            let expression = parse(source);
+            let AtomView::Mul(product) = expression.as_view() else {
+                panic!("expected product");
+            };
+            assert!(
+                SlotContraction::contract_metric_components(product, &mut SlotMatcher::default())
+                    .is_none()
+            );
+        }
     }
 
     #[test]
