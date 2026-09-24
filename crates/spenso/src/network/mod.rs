@@ -1123,6 +1123,13 @@ where
             .included_iter()
             .map(|axis| axis.0)
             .collect::<Vec<_>>();
+        // Storage order groups base and dual slots separately, so matched
+        // coordinates need not occupy corresponding positions in both tensors.
+        // Align the right-hand keys with the left-hand matched-slot order.
+        let (permutation, _, _) = left_structure
+            .match_indices(right_structure)
+            .expect("merged structures contain matching slots");
+        let right_match_axes = permutation.apply_slice(&right_match_axes);
         let (sum_match_axes, numeric_match_axes) = if terms_on_left {
             (left_match_axes.clone(), right_match_axes.clone())
         } else {

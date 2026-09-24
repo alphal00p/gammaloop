@@ -346,7 +346,10 @@ anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
 # Reviewed 2026-09-14: the note now assigns live indices to graph edges;
 # graph/store separation and network execution ownership remain unchanged.
 # Reviewed 2026-09-17: Documented fallible materialization, retained sum boundaries, odd powers, and live store ownership.
-digest = "05af10834a130a86836b75a7c696108f4a30ffd9"
+# No-impact attestation 2026-09-24: fused numeric contractions now align matched
+# coordinates by dual slot identity, restoring the documented contraction semantics
+# without changing network ownership, scheduling, or factor preservation.
+digest = "324b64b163daf96819c0cdac4164f1203c3c4593"
 
 [[section.note.scope]]
 path = "crates/spenso/src/network/parsing/mod.rs"
