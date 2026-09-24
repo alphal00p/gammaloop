@@ -12,10 +12,8 @@
 # Override `orientation_pattern` and set `explicit_sum=true` only after regenerating
 # a separate state for an all-orientation study. Integration defaults to 50 cores
 # and 81920-point iterations; use `run pilot` for a one-iteration check.
-# Try -D radial_scale=0.3: the 300k-sample comparison reduced nominal Re/Im
-# errors by about 30%; this finite-run improvement does not certify variance.
-# If overriding n_start or n_max, keep n_max <= 10B; use the validation
-# runner for enforced caps.
+# Tune the radial scale with -D radial_scale=0.3 and compare independent pilot runs.
+# Set -D n_max=POINTS explicitly for the intended run budget.
 
 [cli_settings.state]
 folder = "./examples/cli/epem_a_ttxh/NNLO/gammaloop_state_GL297_optimized_lmbs"

@@ -4,7 +4,7 @@
 //! acceptance run can replace the physical graph value while retaining the real
 //! graph routing, parameterization and Jacobian.
 
-use super::ProcessIntegrand;
+use super::super::ProcessIntegrand;
 use crate::graph::FeynmanGraph;
 use crate::integrands::evaluation::{EvaluationResult, PreciseEvaluationResult};
 use crate::momentum::sample::LoopMomenta;

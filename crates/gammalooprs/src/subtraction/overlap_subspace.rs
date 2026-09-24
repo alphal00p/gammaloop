@@ -8,7 +8,7 @@ use crate::graph::FeynmanGraph;
 use crate::graph::Graph;
 use crate::graph::LmbIndex;
 use crate::graph::LoopMomentumBasis;
-use crate::integrands::process::sampling_maps::SamplingEvaluationError;
+use crate::integrands::process::sampling::maps::SamplingEvaluationError;
 use crate::momentum::sample::ExternalFourMomenta;
 use crate::momentum::sample::LoopIndex;
 use crate::momentum::sample::LoopMomenta;

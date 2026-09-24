@@ -28,7 +28,7 @@ pub use crate::cff::surface::EsurfaceID;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::{GammaLoopContext, define_index};
 
-use crate::integrands::process::sampling_maps::SamplingEvaluationError;
+use crate::integrands::process::sampling::maps::SamplingEvaluationError;
 use crate::integrands::process::{GenericEvaluator, ImplicitSurfaceRadialMap};
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
@@ -713,11 +713,11 @@ impl Esurface {
         external_momenta: &ExternalFourMomenta<F<T>>,
         complement: &[LoopIndex],
     ) -> Result<(
-        crate::integrands::process::sampling_joint::SharedEnergyJointGeometryEvaluator<T>,
+        crate::integrands::process::sampling::joint::SharedEnergyJointGeometryEvaluator<T>,
         crate::momentum::signature::LoopExtSignature,
     )> {
         use crate::integrands::process::{
-            SharedEnergyJointGeometry, sampling_maps::SamplingEvaluationError,
+            SharedEnergyJointGeometry, sampling::maps::SamplingEvaluationError,
         };
         use crate::momentum::{SignOrZero, signature::LoopExtSignature};
         use std::sync::Arc;
@@ -1004,7 +1004,7 @@ impl Esurface {
         power: f64,
     ) -> Result<ImplicitSurfaceRadialMap<T>> {
         use crate::integrands::process::PreparedSurfaceStatus;
-        use crate::integrands::process::sampling_maps::SamplingEvaluationError;
+        use crate::integrands::process::sampling::maps::SamplingEvaluationError;
         use crate::momentum::SignOrZero;
         use crate::subtraction::overlap_subspace::{OverlapInput, find_center};
         use std::sync::Arc;
@@ -3294,7 +3294,7 @@ mod tests {
     fn retained_lu_candidate_requires_directed_native_agreement() {
         use super::EsurfaceRay;
         use crate::{
-            integrands::process::sampling_maps::SamplingEvaluationError,
+            integrands::process::sampling::maps::SamplingEvaluationError,
             momentum::{Rotatable, Rotation, RotationMethod},
         };
         fn check<T: FloatLike>() {

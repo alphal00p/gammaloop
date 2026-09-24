@@ -1880,7 +1880,7 @@ fn validate_sampling_channel_selection(
 }
 
 impl SamplingSettings {
-    fn as_parser(&self) -> SamplingSettingsParser {
+    pub fn as_parser(&self) -> SamplingSettingsParser {
         let mut parser = SamplingSettingsParser::default();
         match self {
             Self::Default(_) => {}

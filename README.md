@@ -4,8 +4,9 @@
   <img src="https://github.com/alphal00p/gammaloop/blob/2ee2ec575fa575c26bdaf89a3e7df41428b879dc/assets/gammalooplogo-light.svg" width="300">
 </picture>
 
-[![Nix-CI](https://nix-ci.com/badge/gh:alphal00p:gammaloop/main?v=2)](https://nix-ci.com/gh:alphal00p:gammaloop/main)
-[![GitHub Actions](https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml/badge.svg?branch=main)](https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml)
+<a href="https://nix-ci.com/gh:alphal00p:gammaloop/main"><img src="https://nix-ci.com/badge/gh:alphal00p:gammaloop/main?v=2" alt="Nix-CI" height="20"></a>
+<a href="https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml"><img src="https://github.com/alphal00p/gammaloop/actions/workflows/continuous-integration.yml/badge.svg?branch=main" alt="GitHub Actions" height="20"></a>
+<a href="https://www.alphaloop.ch/"><img src="https://img.shields.io/badge/docs-alphaloop.ch-blue" alt="Documentation" height="20"></a>
 <!--[![crates.io](https://img.shields.io/crates/v/spenso.svg)](https://crates.io/crates/spenso)
 [![Build Status](https://github.com/alphal00p/spenso/actions/workflows/ci.yml/badge.svg)](https://github.com/alphal00p/spenso/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/github/alphal00p/spenso/graph/badge.svg?token=ST0XA54QSF)](https://codecov.io/github/alphal00p/spenso)
@@ -34,7 +35,7 @@ For a source checkout, the supported environment and a quick smoke test are:
 
 ```bash
 nix develop
-just build-cli
+just build-cli-release
 ./gammaloop --help
 ```
 

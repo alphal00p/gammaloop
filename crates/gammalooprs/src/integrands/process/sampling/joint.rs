@@ -20,9 +20,9 @@ use symbolica::{
 use crate::utils::{F, FloatLike};
 
 use super::{
-    sampling_context::{SamplingMapContext, SamplingProposalDecision},
-    sampling_evaluator::SamplingExpressionEvaluator,
-    sampling_maps::{
+    context::{SamplingMapContext, SamplingProposalDecision},
+    evaluator::SamplingExpressionEvaluator,
+    maps::{
         SamplingEvaluationError, SamplingJacobian, SamplingMapComponent, SamplingMapContract,
         SamplingMapEvaluation, SamplingSupport, SurfaceRadialMap,
     },

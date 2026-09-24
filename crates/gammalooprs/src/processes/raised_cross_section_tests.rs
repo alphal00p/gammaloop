@@ -1490,7 +1490,7 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
                 integrands::process::{
                     GaussianReferenceFunction, GraphTerm, MomentumSpaceEvaluationInput,
                     SamplingChannelBridge, SamplingChannelBridgeAcceptanceReport, SamplingChannelId,
-                    sampling_maps::{SamplingEvaluationError, SamplingMapAffine},
+                    sampling::maps::{SamplingEvaluationError, SamplingMapAffine},
                 },
                 momentum::{
                     ThreeMomentum,
@@ -2276,7 +2276,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                 graph::LmbIndex,
                 integrands::process::{
                     GaussianReferenceFunction, GraphTerm, ProcessIntegrandImpl, SamplingChannelId, SamplingExpressionEvaluator,
-                    SamplingMapComponent, SharedEnergyJointMap, sampling_context::SamplingMapContext,
+                    SamplingMapComponent, SharedEnergyJointMap, sampling::context::SamplingMapContext,
                 },
                 momentum::{
                     ThreeMomentum,
@@ -2749,7 +2749,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                 }
             }
             let full_det =
-                crate::integrands::process::sampling_maps::SamplingMapAffine::new(full_j, vec![0.0; 6])?
+                crate::integrands::process::sampling::maps::SamplingMapAffine::new(full_j, vec![0.0; 6])?
                     .determinant();
             assert!((full_det / mapped.map.jacobian - 1.0).abs() < 3e-5);
             let native = frame.inverse(&mapped.raw_coordinates, &[])?.coordinates;
@@ -2787,7 +2787,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                 &mut SamplingMapContext::detached(&physical_prior),
             )?;
             let active_det =
-                crate::integrands::process::sampling_maps::SamplingMapAffine::new(active_j, vec![0.0; 3])?
+                crate::integrands::process::sampling::maps::SamplingMapAffine::new(active_j, vec![0.0; 3])?
                     .determinant();
             assert!((active_det / (inner.jacobian / tau.powi(3)) - 1.0).abs() < 3e-5);
             for i in 0..3 {

@@ -35,7 +35,7 @@ use crate::{
                 evaluate_evaluator_single,
             },
             param_builder::LUParams,
-            sampling_maps::SamplingEvaluationError,
+            sampling::maps::SamplingEvaluationError,
             threshold_multiplier::{
                 ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierInputWorkspace,
             },

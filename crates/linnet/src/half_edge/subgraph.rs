@@ -496,6 +496,12 @@ pub trait SubSetLike<ID = Hedge>:
     /// Returns a Symbolica symbol whose name and formatter encode this selection's label.
     #[cfg(feature = "symbolica")]
     fn symbol(&self) -> symbolica::atom::Symbol {
+        Self::symbol_from_label(self.string_label())
+    }
+
+    /// Restore a selection's display symbol without reconstructing its topology.
+    #[cfg(feature = "symbolica")]
+    fn symbol_from_label(label: String) -> symbolica::atom::Symbol {
         use symbolica::{
             atom::{AtomCore, AtomView},
             get_symbol,
@@ -504,7 +510,6 @@ pub trait SubSetLike<ID = Hedge>:
         };
         use symbolica_utils::{PrintSettingsExt, TypstMode};
 
-        let label = self.string_label();
         let name = format!("S_{label}");
 
         get_symbol!(&name).unwrap_or_else(|| {

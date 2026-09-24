@@ -111,9 +111,12 @@ let
           + "/examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_unfiltered_pre_network.sym"
         )
         (workspaceRoot + "/examples/cli/BNL/profiling/bnl_scalar_alias_captures.ansi.txt")
+        (workspaceRoot + "/examples/cli/epem_a_ttxh/NNLO/graphs/GL297.dot")
+        (workspaceRoot + "/examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot")
         (workspaceRoot + "/examples/cli/gg_hhh/3L/3L_graph.dot")
         (workspaceRoot + "/tests/resources/graphs/double_triangle.dot")
         (workspaceRoot + "/tests/resources/graphs/gghhh.dot")
+        (workspaceRoot + "/tests/resources/graphs/massive_kite.dot")
         (workspaceRoot + "/tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot")
         (workspaceRoot + "/tests/resources/graphs/raised_cut_numerator_cancellation.dot")
         (workspaceRoot + "/tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot")

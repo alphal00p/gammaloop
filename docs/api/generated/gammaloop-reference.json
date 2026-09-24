@@ -978,7 +978,13 @@
       "generated_help": false,
       "short_flag": null,
       "long_flag": null,
-      "aliases": [],
+      "aliases": [
+        {
+          "name": "integrands",
+          "kind": "name",
+          "visible": true
+        }
+      ],
       "arguments": [
         {
           "id": "process",
@@ -1176,6 +1182,96 @@
             "false"
           ],
           "possible_values": []
+        },
+        {
+          "id": "show_sampling",
+          "long": "show_sampling",
+          "short": null,
+          "aliases": [
+            {
+              "name": "show-sampling",
+              "kind": "long_flag",
+              "visible": true
+            }
+          ],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "MODE"
+          ],
+          "help": "Show only resolved sampling channels; omit --graph to include all master graphs",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [
+            "show_threshold_subtraction"
+          ],
+          "requires": [
+            "integrand_name",
+            "process"
+          ],
+          "defaults": [],
+          "possible_values": [
+            "pretty",
+            "toml"
+          ]
+        },
+        {
+          "id": "show_threshold_subtraction",
+          "long": "show_threshold_subtraction",
+          "short": null,
+          "aliases": [
+            {
+              "name": "show-threshold-subtraction",
+              "kind": "long_flag",
+              "visible": true
+            }
+          ],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "MODE"
+          ],
+          "help": "Show only generation-time threshold metadata; TOML requires one master graph",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [
+            "show_sampling"
+          ],
+          "requires": [
+            "integrand_name",
+            "process"
+          ],
+          "defaults": [],
+          "possible_values": [
+            "pretty",
+            "toml"
+          ]
         },
         {
           "id": "help",

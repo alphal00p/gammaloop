@@ -22,7 +22,7 @@ use crate::{
 };
 use symbolica::evaluate::OptimizationSettings;
 
-use super::sampling_maps::SamplingEvaluationError;
+use super::maps::SamplingEvaluationError;
 
 /// Values and first partial derivatives of one evaluated expression.
 #[derive(Clone, Debug, PartialEq)]

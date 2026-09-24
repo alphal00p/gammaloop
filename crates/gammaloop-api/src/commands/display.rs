@@ -7,6 +7,7 @@ use serde_json::Value as JsonValue;
 use std::{
     ffi::OsStr,
     fs,
+    io::{self, Write},
     path::{Path, PathBuf},
 };
 use tabled::{
@@ -41,6 +42,17 @@ use crate::{
     state::{CommandsBlock, IntegrandGenerationSummary, ProcessRef, RunHistory, State},
     CLISettings,
 };
+
+mod sampling_metadata;
+mod threshold_metadata;
+
+/// Output representation for a dedicated graph metadata view.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ValueEnum, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MetadataDisplayFormat {
+    Pretty,
+    Toml,
+}
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Display {
@@ -83,7 +95,7 @@ pub enum Display {
     /// List processes currently stored in the active state.
     Processes,
     /// Show generated integrands, graph groups, resources, and selected detail tables.
-    #[command(name = "integrand")]
+    #[command(name = "integrand", visible_alias = "integrands")]
     Integrands {
         /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
         #[arg(
@@ -137,6 +149,28 @@ pub enum Display {
         )]
         #[serde(default)]
         show_threshold_functions: bool,
+        /// Show only resolved sampling channels; omit --graph to include all master graphs.
+        #[arg(
+            long = "show_sampling",
+            visible_alias = "show-sampling",
+            value_name = "MODE",
+            cli_requires("integrand_name"),
+            cli_requires("process"),
+            conflicts_with = "show_threshold_subtraction"
+        )]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        show_sampling: Option<MetadataDisplayFormat>,
+        /// Show only generation-time threshold metadata; TOML requires one master graph.
+        #[arg(
+            long = "show_threshold_subtraction",
+            visible_alias = "show-threshold-subtraction",
+            value_name = "MODE",
+            cli_requires("integrand_name"),
+            cli_requires("process"),
+            conflicts_with = "show_sampling"
+        )]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        show_threshold_subtraction: Option<MetadataDisplayFormat>,
     },
     /// List configured named quantities, or inspect one quantity in a selected process.
     Quantities {
@@ -217,14 +251,56 @@ impl Display {
                 categories,
                 hide_non_existing_thresholds,
                 show_threshold_functions,
+                show_sampling,
+                show_threshold_subtraction,
             } => {
+                if show_sampling.is_some() && show_threshold_subtraction.is_some() {
+                    return Err(eyre!(
+                        "--show_sampling and --show_threshold_subtraction are mutually exclusive"
+                    ));
+                }
+                if let Some(format) = show_sampling.or(*show_threshold_subtraction) {
+                    let process_ref = process.as_ref().ok_or_else(|| {
+                        eyre!(
+                            "Metadata display requires an explicit --process and --integrand-name"
+                        )
+                    })?;
+                    let integrand_name = integrand_name.as_deref().ok_or_else(|| {
+                        eyre!(
+                            "Metadata display requires an explicit --process and --integrand-name"
+                        )
+                    })?;
+                    if *show_threshold_subtraction == Some(MetadataDisplayFormat::Toml)
+                        && graphs.len() != 1
+                    {
+                        return Err(eyre!(
+                            "Threshold TOML display requires exactly one --graph master name"
+                        ));
+                    }
+                    let process_id = state.resolve_process_ref(Some(process_ref))?;
+                    let render = if show_sampling.is_some() {
+                        sampling_metadata::render
+                    } else {
+                        threshold_metadata::render
+                    };
+                    let output = render(state, process_id, integrand_name, graphs, format)?;
+                    match format {
+                        MetadataDisplayFormat::Pretty => info!("\n{output}"),
+                        MetadataDisplayFormat::Toml => {
+                            let mut stdout = io::stdout().lock();
+                            stdout.write_all(output.as_bytes())?;
+                            stdout.flush()?;
+                        }
+                    }
+                    return Ok(());
+                }
                 let process_id = process
                     .as_ref()
                     .map(|process_ref| state.resolve_process_ref(Some(process_ref)))
                     .transpose()?;
                 if let Some(integrand_name) = integrand_name.as_deref() {
-                    let process_id =
-                        process_id.expect("clap requires --process when --integrand-name is set");
+                    let process_id = process_id
+                        .ok_or_else(|| eyre!("--integrand-name requires an explicit --process"))?;
                     let detail = state.get_integrand_info(
                         Some(&ProcessRef::Id(process_id)),
                         Some(&integrand_name.to_string()),
@@ -1965,7 +2041,7 @@ mod test {
             IntegrandKind, IntegrandThresholdCountertermDirectiveInfo,
             IntegrandThresholdEsurfaceInfo, IntegrandThresholdStatus,
         },
-        state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory},
+        state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory, State},
         CLISettings, Repl,
     };
     use gammalooprs::{
@@ -1981,7 +2057,7 @@ mod test {
         command_block_contents, format_bytes, render_command_blocks_table,
         render_integrand_thresholds_table, render_threshold_counterterm_directives,
         render_threshold_counterterms, serialize_settings_with_defaults, value_at_path, Display,
-        DisplaySettingsTarget, IntegrandDisplayCategory,
+        DisplaySettingsTarget, IntegrandDisplayCategory, MetadataDisplayFormat,
     };
 
     #[test]
@@ -2510,6 +2586,8 @@ mod test {
                 categories,
                 hide_non_existing_thresholds,
                 show_threshold_functions,
+                show_sampling,
+                show_threshold_subtraction,
             }) => {
                 assert_eq!(process, None);
                 assert_eq!(integrand_name, None);
@@ -2517,6 +2595,8 @@ mod test {
                 assert!(categories.is_empty());
                 assert!(!hide_non_existing_thresholds);
                 assert!(!show_threshold_functions);
+                assert_eq!(show_sampling, None);
+                assert_eq!(show_threshold_subtraction, None);
             }
             other => panic!("Expected display integrand command, got {other:?}"),
         }
@@ -2531,6 +2611,8 @@ mod test {
             categories: Vec::new(),
             hide_non_existing_thresholds: false,
             show_threshold_functions: false,
+            show_sampling: None,
+            show_threshold_subtraction: None,
         })
         .unwrap();
         value
@@ -2550,6 +2632,8 @@ mod test {
             Display::Integrands {
                 hide_non_existing_thresholds: false,
                 show_threshold_functions: false,
+                show_sampling: None,
+                show_threshold_subtraction: None,
                 ..
             }
         ));
@@ -2576,6 +2660,8 @@ mod test {
                 categories,
                 hide_non_existing_thresholds,
                 show_threshold_functions,
+                show_sampling,
+                show_threshold_subtraction,
             }) => {
                 assert_eq!(
                     process,
@@ -2586,6 +2672,8 @@ mod test {
                 assert!(categories.is_empty());
                 assert!(!hide_non_existing_thresholds);
                 assert!(!show_threshold_functions);
+                assert_eq!(show_sampling, None);
+                assert_eq!(show_threshold_subtraction, None);
             }
             other => panic!("Expected display integrand command, got {other:?}"),
         }
@@ -2621,6 +2709,8 @@ mod test {
                 categories,
                 hide_non_existing_thresholds,
                 show_threshold_functions,
+                show_sampling,
+                show_threshold_subtraction,
             }) => {
                 assert_eq!(
                     process,
@@ -2628,6 +2718,8 @@ mod test {
                 );
                 assert!(hide_non_existing_thresholds);
                 assert!(show_threshold_functions);
+                assert_eq!(show_sampling, None);
+                assert_eq!(show_threshold_subtraction, None);
                 assert_eq!(integrand_name.as_deref(), Some("LO"));
                 assert_eq!(graphs, vec!["GL0".to_string(), "GL2".to_string()]);
                 assert_eq!(
@@ -2640,6 +2732,159 @@ mod test {
                 );
             }
             other => panic!("Expected display integrand command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn metadata_display_parses_formats_aliases_and_graph_lists() {
+        for command in ["integrand", "integrands"] {
+            for (flag, sampling) in [
+                ("--show_sampling", true),
+                ("--show-sampling", true),
+                ("--show_threshold_subtraction", false),
+                ("--show-threshold-subtraction", false),
+            ] {
+                for (value, format) in [
+                    ("pretty", MetadataDisplayFormat::Pretty),
+                    ("toml", MetadataDisplayFormat::Toml),
+                ] {
+                    let mut args = vec![
+                        "gammaloop",
+                        "display",
+                        command,
+                        "-p",
+                        "ttH",
+                        "-i",
+                        "NNLO",
+                        flag,
+                        value,
+                    ];
+                    if sampling || format == MetadataDisplayFormat::Pretty {
+                        args.extend(["--graph", "GL297", "GL638"]);
+                    } else {
+                        args.extend(["--graph", "GL638"]);
+                    }
+                    let Commands::Display(display) = Repl::try_parse_from(args).unwrap().command
+                    else {
+                        panic!("expected display");
+                    };
+                    let Display::Integrands {
+                        show_sampling,
+                        show_threshold_subtraction,
+                        ..
+                    } = &display
+                    else {
+                        panic!("expected integrand display");
+                    };
+                    assert_eq!(*show_sampling, sampling.then_some(format));
+                    assert_eq!(*show_threshold_subtraction, (!sampling).then_some(format));
+                    let serialized = toml::to_string(&display).unwrap();
+                    assert_eq!(toml::from_str::<Display>(&serialized).unwrap(), display);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn metadata_display_rejects_invalid_cli_options() {
+        for tail in [
+            vec!["--show_sampling"],
+            vec!["--show_sampling", "json"],
+            vec!["--show_threshold_subtraction", "json"],
+            vec![
+                "--show_sampling",
+                "pretty",
+                "--show_threshold_subtraction",
+                "toml",
+            ],
+        ] {
+            let mut args = vec![
+                "gammaloop",
+                "display",
+                "integrands",
+                "-p",
+                "ttH",
+                "-i",
+                "NNLO",
+            ];
+            args.extend(tail);
+            assert!(Repl::try_parse_from(args).is_err());
+        }
+        for flag in ["--show_sampling", "--show_threshold_subtraction"] {
+            for context in [vec![], vec!["-p", "ttH"], vec!["-i", "NNLO"]] {
+                let mut args = vec!["gammaloop", "display", "integrands", flag, "pretty"];
+                args.extend(context);
+                assert!(Repl::try_parse_from(args).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn metadata_display_validates_structured_requests_before_reading_state() {
+        let state = State::new_test();
+        for (process, integrand, graphs, sampling, thresholds, expected) in [
+            (
+                None,
+                Some("NNLO"),
+                vec![],
+                Some(MetadataDisplayFormat::Pretty),
+                None,
+                "explicit --process and --integrand-name",
+            ),
+            (
+                Some(ProcessRef::Id(0)),
+                None,
+                vec![],
+                None,
+                Some(MetadataDisplayFormat::Pretty),
+                "explicit --process and --integrand-name",
+            ),
+            (
+                Some(ProcessRef::Id(0)),
+                Some("NNLO"),
+                vec![],
+                Some(MetadataDisplayFormat::Pretty),
+                Some(MetadataDisplayFormat::Toml),
+                "mutually exclusive",
+            ),
+            (
+                Some(ProcessRef::Id(0)),
+                Some("NNLO"),
+                vec![],
+                None,
+                Some(MetadataDisplayFormat::Toml),
+                "exactly one --graph",
+            ),
+            (
+                Some(ProcessRef::Id(0)),
+                Some("NNLO"),
+                vec!["GL297".to_string(), "GL638".to_string()],
+                None,
+                Some(MetadataDisplayFormat::Toml),
+                "exactly one --graph",
+            ),
+        ] {
+            let command = Display::Integrands {
+                process,
+                integrand_name: integrand.map(str::to_string),
+                graphs,
+                categories: vec![IntegrandDisplayCategory::Cuts],
+                hide_non_existing_thresholds: true,
+                show_threshold_functions: true,
+                show_sampling: sampling,
+                show_threshold_subtraction: thresholds,
+            };
+            let command =
+                serde_json::from_value::<Display>(serde_json::to_value(command).unwrap()).unwrap();
+            let error = command
+                .run(
+                    &state,
+                    &CLISettings::default(),
+                    &RuntimeSettings::default(),
+                    &RunHistory::default(),
+                )
+                .unwrap_err();
+            assert!(error.to_string().contains(expected), "{error:?}");
         }
     }
 

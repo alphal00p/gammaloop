@@ -22,12 +22,12 @@ use crate::{
             graph_to_group_id_for_group_structure,
             param_builder::LUParams,
             prepare_buffered_event,
-            sampling_context::{SamplingLUHostPlan, SamplingMapContext},
-            sampling_maps::{
+            sampling::context::{SamplingLUHostPlan, SamplingMapContext},
+            sampling::maps::{
                 ImplicitSurfaceRadialMap, SamplingEvaluationError, SamplingMapAffine,
                 SamplingMapComposition, SamplingMapEmbedding,
             },
-            sampling_selection::{CompiledSamplingMap, SamplingCatalogueEntry},
+            sampling::selection::{CompiledSamplingMap, SamplingCatalogueEntry},
             threshold_multiplier::{
                 ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierExpression,
                 ThresholdMultiplierLayout,
@@ -1699,7 +1699,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     fn bind_sampling_bridge<T: FloatLike>(
         &self,
         catalogue: &super::SamplingChannelCatalogue,
-        programs: &[super::sampling_selection::SamplingChannelPrograms],
+        programs: &[super::sampling::selection::SamplingChannelPrograms],
         parameterization_settings: &ParameterizationSettings,
         settings: &RuntimeSettings,
         external_momenta: &[[T; 4]],

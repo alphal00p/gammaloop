@@ -291,6 +291,73 @@ fn ufo_symbol_typst_quoting_requires_typst_mode() {
     assert_eq!(atom.printer(symbolica).to_string(), "typst_mode_probe");
 }
 
+#[test]
+fn model_forward_references_preserve_ufo_symbol_printers() -> Result<()> {
+    crate::initialisation::test_initialise()?;
+    let mut serialized = Model::default().to_serializable();
+    serialized.parameters = [
+        ("forward_parameter", "UFO::later_parameter"),
+        ("later_parameter", "1"),
+        ("ZERO", "0"),
+    ]
+    .into_iter()
+    .map(|(name, expression)| SerializableParameter {
+        name: name.into(),
+        lhablock: None,
+        lhacode: None,
+        nature: ParameterNature::Internal,
+        parameter_type: ParameterType::Real,
+        value: None,
+        expression: Some(expression.into()),
+    })
+    .collect();
+    serialized.couplings = [
+        ("forward_coupling", "UFO::later_coupling"),
+        ("later_coupling", "UFO::later_parameter"),
+    ]
+    .into_iter()
+    .map(|(name, expression)| SerializableCoupling {
+        name: name.into(),
+        expression: expression.into(),
+        orders: BTreeMap::new(),
+        value: None,
+    })
+    .collect();
+
+    let model = Model::from_serializable_model(serialized);
+    for name in ["later_parameter", "later_coupling"] {
+        let symbol = UFOSymbol::from(name);
+        assert!(symbol.0.get_print_function().is_some(), "{name}");
+        let atom = Atom::from(symbol);
+        assert_eq!(
+            atom.printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            format!("\"{name}\"")
+        );
+        let mut plain = SpensoPrintSettings::typst().nice_symbolica();
+        plain.color_builtin_symbols = false;
+        assert_eq!(atom.printer(plain).to_string(), name);
+    }
+    assert_eq!(
+        model.parameters[&ParameterName(UFOSymbol::from("forward_parameter"))]
+            .expression
+            .as_ref(),
+        Some(&Atom::from(UFOSymbol::from("later_parameter")))
+    );
+    assert_eq!(
+        model.couplings[&CouplingName(UFOSymbol::from("forward_coupling"))].expression,
+        Atom::from(UFOSymbol::from("later_coupling"))
+    );
+    assert!(
+        model.parameters[&ParameterName(UFOSymbol::zero())]
+            .name
+            .is_zero()
+    );
+    assert_eq!(UFOSymbol::from("ZERO"), UFOSymbol::zero());
+    assert!(UFOSymbol::zero().0.get_normalization_function().is_some());
+    Ok(())
+}
+
 impl<T> From<T> for UFOSymbol
 where
     T: AsRef<str>,
@@ -2390,6 +2457,22 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 
         // let _ = *UFO;
         let _ = *ETS;
+
+        // Expression parsing can create forward references without their UFO print callbacks.
+        // Register every declared name first; Symbolica cannot attach callbacks afterward.
+        for name in serializable_model
+            .parameters
+            .iter()
+            .map(|parameter| &parameter.name)
+            .chain(
+                serializable_model
+                    .couplings
+                    .iter()
+                    .map(|coupling| &coupling.name),
+            )
+        {
+            let _ = UFOSymbol::from(name);
+        }
 
         let mut model: Model = Model::default();
         model.name = serializable_model.name;

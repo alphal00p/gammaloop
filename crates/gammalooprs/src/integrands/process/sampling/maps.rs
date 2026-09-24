@@ -8,8 +8,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use super::sampling_context::{PreparedSurfaceStatus, SamplingMapContext};
-use super::sampling_evaluator::{SamplingDualValue, SamplingExpressionEvaluator};
+use super::context::{PreparedSurfaceStatus, SamplingMapContext};
+use super::evaluator::{SamplingDualValue, SamplingExpressionEvaluator};
 use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::LoopMomenta;
 use crate::settings::runtime::{
@@ -238,9 +238,8 @@ impl SamplingMapDefinition {
     }
 
     fn ordered_edges(arguments: Vec<AtomView<'_>>, constructor: &str) -> Result<Vec<usize>> {
-        if arguments.is_empty() {
-            return Err(eyre!("{constructor} expects at least one edge"));
-        }
+        // An empty generated basis has the diagnostic selector lmb(). Numerical
+        // map construction still enforces its own nonzero-dimensional domain.
         let edges = arguments
             .into_iter()
             .map(|argument| parse_edge(argument, constructor))
@@ -3719,7 +3718,7 @@ mod tests {
 
     #[test]
     fn surface_radial_profiles_match_eager_branch_derivatives() {
-        use crate::integrands::process::sampling_evaluator::SamplingExpressionEvaluator;
+        use crate::integrands::process::sampling::evaluator::SamplingExpressionEvaluator;
 
         crate::initialisation::test_initialise().unwrap();
         let coordinate = try_parse!("radial_profile_test::u").unwrap();

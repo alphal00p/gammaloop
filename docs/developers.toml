@@ -35,7 +35,14 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
 # No architecture impact 2026-09-23: test momentum chunks use fixed-size arrays;
 # state loading and persistence behavior are unchanged.
-digest = "87f2460cf66cf84e6bbc1bfdd6d1df74c00866f2"
+# No architecture impact 2026-09-24: the legacy-command test asserts absent
+# optional metadata-display flags; state loading and persistence are unchanged.
+# Reviewed 2026-09-24: state version 10 persists and restores UFO and Linnet
+# printer registrations before model/archive parsing; regeneration and callback
+# ownership are documented in architecture-current.typ.
+# Reviewed 2026-09-25: sampling files now share process::sampling ownership;
+# only module/import paths changed, with numerical and persistence contracts unchanged.
+digest = "c2c7f88951d6467295977b12f17861b2e866a42e"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -59,7 +66,9 @@ anchor = "pub struct EvaluationResult {"
 # Reviewed 2026-09-23: Amplitude norm stability uses phase-invariant complex
 # magnitudes and a private channel norm sum; public absolute components and
 # cross-section phase checks retain their documented meaning.
-digest = "c6b180ec3dc1c5c2031b004213342e8872c2dbf3"
+# Reviewed 2026-09-25: sampling files now share process::sampling ownership;
+# only module/import paths changed, with numerical and persistence contracts unchanged.
+digest = "c8f88a5d709900a7f5c45dd5061e27be80238904"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/process/mod.rs"
@@ -75,7 +84,12 @@ anchor = "pub fn warm_up(&mut self, model"
 # Reviewed 2026-09-23: Amplitude norm stability uses phase-invariant complex
 # magnitudes and a private channel norm sum; public absolute components and
 # cross-section phase checks retain their documented meaning.
-digest = "32533b14f9d34bbe45254764db14a0796e873328"
+# Reviewed 2026-09-24: explicit generated LMB selectors and read-only metadata
+# share the canonical catalogue owner documented in architecture-current.typ;
+# warm-up and numerical preparation retain their existing ownership.
+# Reviewed 2026-09-25: sampling files now share process::sampling ownership;
+# only module/import paths changed, with numerical and persistence contracts unchanged.
+digest = "175b2d6e4d117b737887425692af2a433ff748b5"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -514,7 +528,9 @@ digest = "2c3b0f19a5d4a991b493c75e3b0bb3294be302d6"
 path = "crates/linnet/src/half_edge/subgraph.rs"
 symbol = "linnet::half_edge::subgraph::SubGraphLike"
 anchor = "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {"
-digest = "05983dad9fdb3db00351c9e536a439ce48efd94b"
+# Reviewed 2026-09-24: the existing subset printer can be restored from its
+# label, as documented in linnet-architecture.typ; topology ownership is unchanged.
+digest = "1a5c8409404365debe91a930a4c464b4e0a5c327"
 
 [[section.note.scope]]
 # Documentation-impact attestation 2026-08-21: malformed DOT endpoint,
@@ -935,7 +951,9 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # No-impact attestation 2026-09-22: stage the three graph fixtures linked by
 # the CFF architecture note. The terminal documentation source gains those
 # files; Cargo producer inputs and the documented cache boundaries are unchanged.
-digest = "270e978a3a6565a3c88cf370aead34009350d307"
+# Reviewed 2026-09-25: include the three graph inputs linked by the sampling and
+# threshold guides in the existing hermetic documentation source set.
+digest = "e122d9de5ddc9d9aea5994792a648553db25eb77"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -956,7 +974,9 @@ symbol = "workspace package source ownership"
 anchor = "documentationCatalogAnnotatedItemSourcePaths ="
 end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-09-17: No cache architecture impact: only compile-time graph and parametric numerator fixture roots were added to existing package source selections.
-digest = "e797c9caa3351e63c9999f97b06ad5ba829e76c0"
+# No cache architecture impact 2026-09-24: the GL638 embedded fixture and scalar
+# box subprocess fixture extend existing compile-time and runtime test inputs.
+digest = "2c98c08201e1a25ece06f9abdcf7ef826621b47c"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

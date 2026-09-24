@@ -304,7 +304,7 @@ pub fn file_log_boot_disabled_reason() -> Option<String> {
 pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     let user_spec = if let Some(file) = log_filter_env_override(ENV_FILE_LOG_FILTER) {
         if std::env::var(ENV_NO_GL_HARD_WARNINGS).is_err() {
-            println!(
+            eprintln!(
                 "WARNING, file log filter is set to {file}, will override settings {}",
                 user_spec.as_ref()
             );
@@ -372,7 +372,7 @@ pub fn clear_file_log_filter_override_on_settings_change() -> Result<()> {
 pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     let user_spec = if let Some(display) = log_filter_env_override(ENV_DISPLAY_LOG_FILTER) {
         if std::env::var(ENV_NO_GL_HARD_WARNINGS).is_err() {
-            println!(
+            eprintln!(
                 "WARNING, display log filter is set to {display}, will override settings {}",
                 user_spec.as_ref()
             );

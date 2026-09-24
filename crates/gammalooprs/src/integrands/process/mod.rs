@@ -48,12 +48,7 @@ pub mod cache_debugging;
 pub mod cross_section;
 pub mod gammaloop_sample;
 pub mod ir;
-pub mod sampling_context;
-pub mod sampling_joint;
-pub mod sampling_maps;
-pub mod sampling_partition;
-pub mod sampling_reference;
-pub mod sampling_selection;
+pub mod sampling;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext,
     settings::RuntimeSettings,
@@ -67,47 +62,38 @@ use crate::{
     settings::runtime::{IntegratedPhase, SamplingChannelWeight, SamplingSettings},
 };
 use color_eyre::Result;
-use sampling_context::PreparedLUHost;
-use sampling_selection::SamplingChannelPrograms;
-
-pub mod evaluators;
-pub use evaluators::ActiveF64Backend;
-pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
-pub mod sampling_evaluator;
-pub use sampling_evaluator::{SamplingDualValue, SamplingExpressionEvaluator};
-
-pub mod param_builder;
-pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
-pub use sampling_context::{PreparedSurfaceStatus, SamplingCutSide};
-pub use sampling_joint::{SharedEnergyJointGeometry, SharedEnergyJointMap};
-pub use sampling_maps::{
+use sampling::context::PreparedLUHost;
+use sampling::selection::SamplingChannelPrograms;
+pub use sampling::{
+    CompiledSamplingChannel, CompiledSamplingMap, GaussianReferenceFunction,
     ImplicitSurfaceContextPreparer, ImplicitSurfaceRadialContextEvaluator,
-    ImplicitSurfaceRadialEvaluator, ImplicitSurfaceRadialMap, SamplingJacobian,
+    ImplicitSurfaceRadialEvaluator, ImplicitSurfaceRadialMap, PreparedSurfaceStatus,
+    ReferenceMoments, ReferenceSampleEvaluation, ReferenceSamplingReport,
+    ResolvedNamedSamplingChannel, ResolvedSamplingBlock, ResolvedSamplingChannelSelection,
+    SamplingCatalogueEntry, SamplingChannelBridge, SamplingChannelBridgeAcceptanceReport,
+    SamplingChannelBridgeError, SamplingChannelBridgeEvaluation, SamplingChannelCatalogue,
+    SamplingChannelCompileContext, SamplingChannelCompileError, SamplingChannelId,
+    SamplingChannelInspection, SamplingChannelPreset, SamplingChannelRuntimeContexts,
+    SamplingChannelScore, SamplingChannelSelector, SamplingCoverageReport, SamplingCutSide,
+    SamplingDualValue, SamplingExpressionEvaluator, SamplingGeometryKey, SamplingJacobian,
     SamplingMapAcceptanceReport, SamplingMapAffine, SamplingMapComponent, SamplingMapComposition,
     SamplingMapContextTransform, SamplingMapContract, SamplingMapDefinition, SamplingMapEmbedding,
-    SamplingMapEvaluation, SamplingMapKernel, SamplingMapPoint, SamplingSupport, SurfaceRadialMap,
-    SurfaceRadialPoint,
-};
-pub use sampling_partition::{
-    SamplingChannelScore, SamplingPartition, SamplingPartitionMode, SamplingScoreFunction,
-};
-pub use sampling_reference::{
-    GaussianReferenceFunction, ReferenceMoments, ReferenceSampleEvaluation, ReferenceSamplingReport,
-};
-pub use sampling_selection::{
-    CompiledSamplingChannel, CompiledSamplingMap, ResolvedNamedSamplingChannel,
-    ResolvedSamplingBlock, ResolvedSamplingChannelSelection, SamplingCatalogueEntry,
-    SamplingChannelBridge, SamplingChannelBridgeAcceptanceReport, SamplingChannelBridgeError,
-    SamplingChannelBridgeEvaluation, SamplingChannelCatalogue, SamplingChannelCompileContext,
-    SamplingChannelCompileError, SamplingChannelId, SamplingChannelInspection,
-    SamplingChannelPreset, SamplingChannelRuntimeContexts, SamplingChannelSelector,
-    SamplingCoverageReport, SamplingGeometryKey, SamplingMomentumSampleContext,
-    SamplingSelectionError, build_sampling_channel_catalogue,
+    SamplingMapEvaluation, SamplingMapKernel, SamplingMapPoint, SamplingMomentumSampleContext,
+    SamplingPartition, SamplingPartitionMode, SamplingScoreFunction, SamplingSelectionError,
+    SamplingSupport, SharedEnergyJointGeometry, SharedEnergyJointMap, SurfaceRadialMap,
+    SurfaceRadialPoint, build_sampling_channel_catalogue,
     build_sampling_channel_catalogue_with_surfaces,
     build_sampling_channel_catalogue_with_surfaces_and_coverage, explicitly_selected_graphs,
     graph_channel_definitions, resolve_sampling_channel_selection,
     resolve_sampling_channel_selection_replacing_default,
 };
+
+pub mod evaluators;
+pub use evaluators::ActiveF64Backend;
+pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
+
+pub mod param_builder;
+pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
 
 pub mod threshold_multiplier;
 
@@ -2380,14 +2366,14 @@ pub struct LmbMultiChannelingSetup {
     /// Current masses of the master graph; member masses never define its partition.
     pub(crate) master_edge_masses: RuntimeCache<EdgeVec<Complex<F<f64>>>>,
     pub(crate) sampling_bridge:
-        RuntimeCache<Result<SamplingChannelBridge, sampling_maps::SamplingEvaluationError>>,
+        RuntimeCache<Result<SamplingChannelBridge, sampling::maps::SamplingEvaluationError>>,
     pub(crate) sampling_bridge_quad:
-        RuntimeCache<Result<SamplingChannelBridge<f128>, sampling_maps::SamplingEvaluationError>>,
+        RuntimeCache<Result<SamplingChannelBridge<f128>, sampling::maps::SamplingEvaluationError>>,
     pub(crate) sampling_bridge_fixed256: RuntimeCache<
-        Result<SamplingChannelBridge<SamplingFloat>, sampling_maps::SamplingEvaluationError>,
+        Result<SamplingChannelBridge<SamplingFloat>, sampling::maps::SamplingEvaluationError>,
     >,
     pub(crate) sampling_bridge_arb: RuntimeCache<
-        Result<SamplingChannelBridge<ArbPrec>, sampling_maps::SamplingEvaluationError>,
+        Result<SamplingChannelBridge<ArbPrec>, sampling::maps::SamplingEvaluationError>,
     >,
     /// One fixed source precision and strictest accuracy budget for the whole
     /// integrand epoch. RuntimeCache contributes no bytes to saved states.
@@ -2529,6 +2515,33 @@ impl LmbMultiChannelingSetup {
             // Explicit basis selection is exact and ordered. Automatic soft-coverage
             // augmentation applies only when the user has not selected the bases.
             all_lmbs = basis_ids.iter().map(|&id| all_lmbs[id].clone()).collect();
+            for selector in &resolved.selectors {
+                if let SamplingChannelSelector::Lmb(edges) = selector
+                    && !all_lmbs.iter().any(|(_, candidate)| candidate == edges)
+                {
+                    let matching_ids = self
+                        .all_bases
+                        .iter_enumerated()
+                        .filter_map(|(id, basis)| {
+                            basis
+                                .loop_edges
+                                .iter()
+                                .map(|edge| edge.0)
+                                .eq(edges.iter().copied())
+                                .then_some(usize::from(id))
+                        })
+                        .collect::<Vec<_>>();
+                    if !matching_ids.is_empty() {
+                        return Err(SamplingSelectionError::ExcludedLmb {
+                            graph: resolved.graph_name.clone(),
+                            edges: edges.clone(),
+                            basis_ids: matching_ids,
+                            available: all_lmbs,
+                        }
+                        .into());
+                    }
+                }
+            }
             basis_ids.clone()
         } else {
             self.lmb_basis_ids
@@ -2560,7 +2573,7 @@ impl LmbMultiChannelingSetup {
             } else {
                 &massless_edges
             },
-        ))
+        )?)
     }
 
     /// Compile the selected catalogue against prepared master-graph
@@ -2690,7 +2703,7 @@ impl LmbMultiChannelingSetup {
     /// lookup helpers during the runtime migration.  The old generated basis
     /// list is only input data for this catalogue; it is never enumerated as a
     /// second channel universe.
-    fn canonical_sampling_catalogue(
+    pub fn canonical_sampling_catalogue(
         &self,
         graph_name: &str,
         parameterization_settings: &ParameterizationSettings,
@@ -3323,7 +3336,7 @@ pub trait ProcessIntegrandImpl {
                 .and_then(|bridge| bridge.with_relative_density_tolerance(density_tolerance));
             match bridge {
                 Ok(bridge) => Ok(Some(Ok(bridge))),
-                Err(error) => match error.downcast_ref::<sampling_maps::SamplingEvaluationError>() {
+                Err(error) => match error.downcast_ref::<sampling::maps::SamplingEvaluationError>() {
                     Some(error) => Ok(Some(Err(error.clone()))),
                     None => Err(error),
                 },
@@ -4236,10 +4249,10 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
             Err(error)
                 if matches!(context.target, EvaluationTarget::Physical(_))
                     && matches!(
-                        error.downcast_ref::<sampling_maps::SamplingEvaluationError>(),
+                        error.downcast_ref::<sampling::maps::SamplingEvaluationError>(),
                         Some(
-                            sampling_maps::SamplingEvaluationError::UncertifiedOverlap { .. }
-                                | sampling_maps::SamplingEvaluationError::UncertifiedRoot { .. }
+                            sampling::maps::SamplingEvaluationError::UncertifiedOverlap { .. }
+                                | sampling::maps::SamplingEvaluationError::UncertifiedRoot { .. }
                         )
                     ) =>
             {
@@ -5338,10 +5351,10 @@ fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
         Err(error)
             if matches!(target, EvaluationTarget::Physical(_))
                 && matches!(
-                    error.downcast_ref::<sampling_maps::SamplingEvaluationError>(),
+                    error.downcast_ref::<sampling::maps::SamplingEvaluationError>(),
                     Some(
-                        sampling_maps::SamplingEvaluationError::UncertifiedOverlap { .. }
-                            | sampling_maps::SamplingEvaluationError::UncertifiedRoot { .. }
+                        sampling::maps::SamplingEvaluationError::UncertifiedOverlap { .. }
+                            | sampling::maps::SamplingEvaluationError::UncertifiedRoot { .. }
                     )
                 ) =>
         {
@@ -5462,7 +5475,7 @@ fn evaluate_from_source_precise_with_estimate<I: ProcessIntegrandImpl>(
             Ok(result) => result,
             Err(error)
                 if error
-                    .downcast_ref::<sampling_maps::SamplingEvaluationError>()
+                    .downcast_ref::<sampling::maps::SamplingEvaluationError>()
                     .is_some() =>
             {
                 stability_results.push(StabilityResult {
@@ -5801,9 +5814,10 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 pub(crate) mod tests {
     use super::{
         GraphTerm, LmbMultiChannelingSetup, RuntimeCache, SamplingChannelCompileContext,
-        SamplingChannelId, create_stability_iterator, filtered_orientation_count,
-        resolve_sampling_channel_selection, resolve_visible_orientation_id,
-        validate_orientation_catalog_group, validate_process_runtime_settings,
+        SamplingChannelId, SamplingSelectionError, create_stability_iterator,
+        filtered_orientation_count, resolve_sampling_channel_selection,
+        resolve_visible_orientation_id, validate_orientation_catalog_group,
+        validate_process_runtime_settings,
     };
     use crate::cff::expression::OrientationID;
     use crate::{
@@ -5910,10 +5924,12 @@ pub(crate) mod tests {
                 .as_mut()
                 .unwrap()
                 .entries
-                .push(super::sampling_selection::SamplingCatalogueEntry::Surface {
-                    edges: vec![1, 2],
-                    parent_lmb: vec![1],
-                });
+                .push(
+                    super::sampling::selection::SamplingCatalogueEntry::Surface {
+                        edges: vec![1, 2],
+                        parent_lmb: vec![1],
+                    },
+                );
             assert_eq!(
                 integrand.sampling_source_policy()?.0,
                 SamplingPrecision::Fixed256
@@ -6270,7 +6286,7 @@ pub(crate) mod tests {
             // generated physical cut without requiring a platform-dependent
             // Clarabel termination status. The original proposal stays fixed.
             let healthy_setup = integrand.get_graph(0).sampling_setup().clone();
-            let overlap_failure = super::sampling_maps::SamplingEvaluationError::UncertifiedOverlap {
+            let overlap_failure = super::sampling::maps::SamplingEvaluationError::UncertifiedOverlap {
                 detail: "Threshold SOCP returned AlmostPrimalInfeasible without a strictly interior center".into(),
             };
             let setup = integrand.get_graph_mut(0).sampling_setup_mut();
@@ -6362,7 +6378,7 @@ pub(crate) mod tests {
             assert!(format!("{malformed:#}").contains("fixed sampling source is not initialized"));
             *integrand.get_graph_mut(0).sampling_setup_mut() = healthy_setup;
 
-            let unavailable = super::sampling_maps::SamplingEvaluationError::Unrepresentable {
+            let unavailable = super::sampling::maps::SamplingEvaluationError::Unrepresentable {
                 operation: "test-only fixed source poison",
                 detail: "cannot redraw at Arb".into(),
             };
@@ -6728,7 +6744,7 @@ pub(crate) mod tests {
         .unwrap_err();
         assert!(
             error
-                .downcast_ref::<super::sampling_maps::SamplingEvaluationError>()
+                .downcast_ref::<super::sampling::maps::SamplingEvaluationError>()
                 .is_some(),
             "{error:?}"
         );
@@ -6955,7 +6971,7 @@ pub(crate) mod tests {
             calls: std::array::from_fn(|_| AtomicUsize::new(0)),
         };
         for graph in amplitude.get_terms_mut() {
-            let unavailable = super::sampling_maps::SamplingEvaluationError::Unrepresentable {
+            let unavailable = super::sampling::maps::SamplingEvaluationError::Unrepresentable {
                 operation: "test-only native map poison",
                 detail: "physical retry must consume the canonical draw".into(),
             };
@@ -7171,7 +7187,7 @@ pub(crate) mod tests {
             .sampling_setup_mut()
             .sampling_bridge_fixed256
             .set(Err(
-                super::sampling_maps::SamplingEvaluationError::Unrepresentable {
+                super::sampling::maps::SamplingEvaluationError::Unrepresentable {
                     operation: "test-only canonical map poison",
                     detail: "fixed proposal unavailable".into(),
                 },
@@ -7947,7 +7963,7 @@ pub(crate) mod tests {
             integrands::evaluation::{
                 EvaluationMetaData, GraphEvaluationResult, PreciseEvaluationResult,
             },
-            integrands::process::sampling_reference::ReferenceMoments,
+            integrands::process::sampling::reference::ReferenceMoments,
             observables::{GenericEvent, GenericEventGroup, GenericEventGroupList},
             settings::runtime::Precision,
             utils::ArbPrec,
@@ -8456,10 +8472,10 @@ pub(crate) mod tests {
         // Cached preparation failures are as transient as compiled bridges;
         // neither payload needs a codec or may enter a saved state.
         let mut failure: RuntimeCache<
-            Result<super::SamplingChannelBridge, super::sampling_maps::SamplingEvaluationError>,
+            Result<super::SamplingChannelBridge, super::sampling::maps::SamplingEvaluationError>,
         > = RuntimeCache::default();
         failure.set(Err(
-            super::sampling_maps::SamplingEvaluationError::UncertainGeometry {
+            super::sampling::maps::SamplingEvaluationError::UncertainGeometry {
                 detail: "numeric binding fixture".into(),
             },
         ));
@@ -8680,6 +8696,52 @@ pub(crate) mod tests {
                 "{preset} must preserve the exact user override"
             );
         }
+
+        let mut explicit_settings = override_settings.clone();
+        explicit_settings
+            .sampling_channels
+            .default_channel_selection = vec!["lmb(1)".into()];
+        assert_eq!(
+            setup
+                .selected_lmb_basis_id(&setup.graph.name, &explicit_settings)
+                .unwrap(),
+            LmbIndex::from(1)
+        );
+        explicit_settings
+            .sampling_channels
+            .default_channel_selection = vec!["lmb(2)".into()];
+        let error = setup
+            .canonical_sampling_catalogue(&setup.graph.name, &explicit_settings)
+            .unwrap_err();
+        assert!(
+            matches!(error.downcast_ref::<SamplingSelectionError>(), Some(SamplingSelectionError::ExcludedLmb { edges, basis_ids, .. }) if edges == &[2] && basis_ids == &[2])
+        );
+        explicit_settings
+            .sampling_channels
+            .default_channel_selection = vec!["lmb(99)".into()];
+        let error = setup
+            .canonical_sampling_catalogue(&setup.graph.name, &explicit_settings)
+            .unwrap_err();
+        assert!(
+            matches!(error.downcast_ref::<SamplingSelectionError>(), Some(SamplingSelectionError::MissingLmb { edges, .. }) if edges == &[99])
+        );
+
+        explicit_settings
+            .lmb_basis_ids
+            .insert(setup.graph.name.clone(), vec![2, 1]);
+        explicit_settings
+            .sampling_channels
+            .default_channel_selection = vec!["lmb(1)".into(), "lmb(2)".into()];
+        let catalogue = setup
+            .canonical_sampling_catalogue(&setup.graph.name, &explicit_settings)
+            .unwrap();
+        assert_eq!(
+            catalogue
+                .lmb_basis_entries()
+                .map(|(id, _)| id)
+                .collect::<Vec<_>>(),
+            vec![1, 2]
+        );
 
         let mut physical_settings = ParameterizationSettings::default();
         let parent_lmb = setup

@@ -11,6 +11,7 @@ use linnet::{
 use serde::{Deserialize, Serialize};
 
 use super::{Graph, lmb::LMBwithEdges};
+use crate::utils::serde_utils::{IsDefault, is_false, is_true};
 
 pub const THRESHOLD_COUNTERTERM_SCHEMA_VERSION: u32 = 1;
 
@@ -24,7 +25,7 @@ pub const THRESHOLD_COUNTERTERM_SCHEMA_VERSION: u32 = 1;
 pub struct ThresholdCountertermSpec {
     pub schema_version: u32,
     /// Definitions shared by all multiplier expressions in this graph.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub function_map: BTreeMap<String, String>,
     #[serde(default)]
     pub cuts: Vec<ThresholdCountertermCut>,
@@ -44,7 +45,7 @@ impl Default for ThresholdCountertermSpec {
 #[serde(deny_unknown_fields)]
 pub struct ThresholdCountertermCut {
     pub edges: Vec<EdgeIndex>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub thresholds: Vec<ThresholdCountertermThreshold>,
 }
 
@@ -52,7 +53,7 @@ pub struct ThresholdCountertermCut {
 #[serde(deny_unknown_fields)]
 pub struct ThresholdCountertermThreshold {
     pub edges: Vec<EdgeIndex>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub counterterms: Vec<ThresholdCountertermVariant>,
 }
 
@@ -79,7 +80,7 @@ pub struct ThresholdCountertermVariant {
 pub struct ThresholdCountertermMultiplier {
     pub expression: String,
     /// Definitions local to this multiplier, overriding shared definitions.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub function_map: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub symmetrize: bool,
@@ -92,14 +93,6 @@ pub struct ThresholdCountertermMultiplier {
 
 fn default_opaque_derivatives() -> bool {
     true
-}
-
-fn is_true(value: &bool) -> bool {
-    *value
-}
-
-fn is_false(value: &bool) -> bool {
-    !*value
 }
 
 impl ThresholdCountertermSpec {
@@ -503,6 +496,46 @@ mod tests {
         THRESHOLD_COUNTERTERM_SCHEMA_VERSION, ThresholdCountertermCut, ThresholdCountertermSpec,
         ThresholdCountertermThreshold, ThresholdCountertermVariant,
     };
+
+    #[test]
+    fn verbose_threshold_settings_preserve_optional_semantics() {
+        use crate::utils::serde_utils::ShowDefaultsGuard;
+
+        let spec = ThresholdCountertermSpec::parse_toml(
+            r#"
+schema_version = 1
+[[cuts]]
+edges = []
+[[cuts.thresholds]]
+edges = [1, 2]
+[[cuts.thresholds.counterterms]]
+parent_lmb = [1]
+[cuts.thresholds.counterterms.multiplier]
+expression = "f(1)"
+"#,
+        )
+        .unwrap();
+        let compact = {
+            let _defaults = ShowDefaultsGuard::new(false);
+            spec.to_toml().unwrap()
+        };
+        assert!(!compact.contains("disable ="));
+        assert!(!compact.contains("symmetrize ="));
+        assert!(!compact.contains("opaque_derivatives ="));
+        let verbose = {
+            let _defaults = ShowDefaultsGuard::new(true);
+            spec.to_toml().unwrap()
+        };
+        assert!(verbose.contains("disable = false"));
+        assert!(verbose.contains("symmetrize = false"));
+        assert!(verbose.contains("opaque_derivatives = true"));
+        assert!(verbose.contains("[function_map]"));
+        assert!(!verbose.contains("group_id"));
+        assert_eq!(
+            ThresholdCountertermSpec::parse_toml(&verbose).unwrap(),
+            spec
+        );
+    }
 
     #[test]
     fn parses_and_canonicalizes_compact_document() {
