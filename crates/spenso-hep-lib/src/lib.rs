@@ -805,6 +805,63 @@ mod tests {
     use super::*;
 
     #[test]
+    fn su3_color_traces_are_independent_of_contraction_order() {
+        use spenso::network::{MinIntermediateCost, MinResultRank, library::function_lib::Wrap};
+
+        initialize();
+        type Net = Network<
+            NetworkStore<ParamTensor<ShadowedStructure<AbstractIndex>>, Atom>,
+            ExplicitKey<AbstractIndex>,
+            Symbol,
+        >;
+        let lib: TensorLibrary<ParamTensor<ExplicitKey<AbstractIndex>>, AbstractIndex> =
+            hep_lib_atom();
+        let functions: SymbolLib<ParamTensor<ShadowedStructure<AbstractIndex>>, Wrap> =
+            Wrap::new_lib();
+        for (expression, expected) in [
+            // The two crossed cyclic orderings used to give -1/6 rather than -2/3.
+            (
+                "g(coad(8,a),coad(8,b))*g(coad(8,c),coad(8,d))*trace(cof(3),t(coad(8,a),in,out),t(coad(8,c),in,out),t(coad(8,b),in,out),t(coad(8,d),in,out))",
+                parse!("-2/3"),
+            ),
+            (
+                "1/8*(2+g(coad(8,a),coad(8,b))*g(coad(8,c),coad(8,d))*trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out),t(coad(8,d),in,out))))",
+                parse!("2/3"),
+            ),
+        ] {
+            let expression = parse!(expression, default_namespace = "spenso");
+            let original =
+                Net::try_from_view(expression.as_view(), &lib, &ParseSettings::default()).unwrap();
+            for prepare in [false, true] {
+                let mut prepared = original.clone();
+                if prepare {
+                    prepared.graph.contract_ready_sum_boundaries();
+                }
+                macro_rules! check {
+                    ($strategy:ty) => {{
+                        let mut network = prepared.clone();
+                        network
+                            .execute::<Sequential, $strategy, _, _, _>(&lib, &functions)
+                            .unwrap();
+                        let ExecutionResult::Val(actual) = network.result_scalar().unwrap() else {
+                            panic!("expected a scalar color trace");
+                        };
+                        assert_eq!(
+                            actual.as_ref(),
+                            &expected,
+                            "strategy={}, prepare={prepare}",
+                            stringify!($strategy)
+                        );
+                    }};
+                }
+                check!(SmallestDegree);
+                check!(MinIntermediateCost);
+                check!(MinResultRank);
+            }
+        }
+    }
+
+    #[test]
     fn scalar_conjugation_execution_preserves_exact_coefficients() {
         initialize();
         let mut network =
