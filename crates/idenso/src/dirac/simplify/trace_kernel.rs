@@ -3,11 +3,14 @@
 //! from the same three-gamma identity as open chains. No user atoms or dummy
 //! indices escape into the global recipe cache.
 
-use std::{collections::{BTreeMap, HashMap}, sync::{LazyLock, OnceLock}};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::{LazyLock, OnceLock},
+};
 
 use itertools::Itertools;
 use spenso::g;
-use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::atom::{Atom, AtomView};
 
 use super::THREE_GAMMA_METRIC_TERMS;
 use crate::epsilon::epsilon4;
@@ -127,9 +130,16 @@ impl<const N: usize> TraceKernel<N> {
         if matches!(output, TraceOutput::Factored) && N >= 10 {
             let factored = self.factored(axial);
             metrics.extend(factored.epsilons.iter().map(|&[a, b, c, d]| {
-                epsilon4(indices[a as usize], indices[b as usize], indices[c as usize], indices[d as usize])
+                epsilon4(
+                    indices[a as usize],
+                    indices[b as usize],
+                    indices[c as usize],
+                    indices[d as usize],
+                )
             }));
-            return factored.polynomial.evaluate(&metrics, Atom::num(4).as_view());
+            return factored
+                .polynomial
+                .evaluate(&metrics, Atom::num(4).as_view());
         }
         let max_coefficient = self.terms.iter().map(|(_, c)| c.abs()).max().unwrap_or(0);
         let coefficients: Vec<_> = (-max_coefficient..=max_coefficient)
@@ -143,22 +153,29 @@ impl<const N: usize> TraceKernel<N> {
                 if key != last_epsilon_key {
                     last_epsilon_key = key;
                     let [a, b, c, d] = key;
-                    last_epsilon = epsilon4(indices[a as usize], indices[b as usize], indices[c as usize], indices[d as usize]);
+                    last_epsilon = epsilon4(
+                        indices[a as usize],
+                        indices[b as usize],
+                        indices[c as usize],
+                        indices[d as usize],
+                    );
                 }
                 Some(last_epsilon.as_view())
             } else {
                 None
             };
             let pairs = &indices_recipe[if axial { 4 } else { 0 }..];
-            Atom::mul_many(std::iter::once(coefficients[(*coefficient + max_coefficient) as usize].as_view())
-                .chain(epsilon)
-                .chain(
-                pairs
-                    .as_chunks::<2>()
-                    .0
-                    .iter()
-                    .map(|p| metrics[usize::from(p[0]) * N + usize::from(p[1])].as_view()),
-            ))
+            Atom::mul_many(
+                std::iter::once(coefficients[(*coefficient + max_coefficient) as usize].as_view())
+                    .chain(epsilon)
+                    .chain(
+                        pairs
+                            .as_chunks::<2>()
+                            .0
+                            .iter()
+                            .map(|p| metrics[usize::from(p[0]) * N + usize::from(p[1])].as_view()),
+                    ),
+            )
         }))
     }
 }
@@ -188,8 +205,8 @@ impl PairingTrace<'_> {
                 .copied()
                 .collect();
             let subword = self.evaluate(&rest);
-            let product = self.metrics[first * self.width + remaining[partner]].as_view()
-                * subword.as_view();
+            let product =
+                self.metrics[first * self.width + remaining[partner]].as_view() * subword.as_view();
             terms.push(if partner % 2 == 1 { product } else { -product });
         }
         let result = Atom::add_many(terms);
@@ -404,6 +421,32 @@ mod tests {
                 indices.sort_unstable();
                 assert_eq!(indices, std::array::from_fn(|index| index as u8));
             }
+            if N >= 10 {
+                let factored = kernel.factored(axial);
+                let mut expected = BTreeMap::<Vec<usize>, i32>::new();
+                for (recipe, coefficient) in &kernel.terms {
+                    let mut factors: Vec<_> = recipe[if axial { 4 } else { 0 }..]
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|pair| usize::from(pair[0]) * N + usize::from(pair[1]))
+                        .collect();
+                    if axial {
+                        let epsilon: [u8; 4] = recipe[..4].try_into().unwrap();
+                        factors.push(
+                            N * N
+                                + factored
+                                    .epsilons
+                                    .iter()
+                                    .position(|key| *key == epsilon)
+                                    .unwrap(),
+                        );
+                    }
+                    factors.sort_unstable();
+                    *expected.entry(factors).or_default() += coefficient;
+                }
+                assert_eq!(factored.polynomial.coefficient_map(), expected);
+            }
             let mut seed = 17u64;
             for sample in 0..8 {
                 let vectors: [[i64; 4]; N] = std::array::from_fn(|_| {
@@ -479,7 +522,13 @@ mod tests {
                 metrics: (0..N)
                     .flat_map(|a| {
                         (0..N).map(move |b| {
-                            Atom::num(vectors[a].iter().zip(vectors[b]).map(|(a, b)| a * b).sum::<i64>())
+                            Atom::num(
+                                vectors[a]
+                                    .iter()
+                                    .zip(vectors[b])
+                                    .map(|(a, b)| a * b)
+                                    .sum::<i64>(),
+                            )
                         })
                     })
                     .collect(),

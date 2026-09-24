@@ -59,6 +59,7 @@ const NOTATION_TYP: &str = include_str!("../typst/notation.typ");
 const NOTEBOOK_STYLE: &str = include_str!("../typst/notebook.css");
 
 mod explorer;
+pub(crate) mod library;
 pub(crate) mod metadata;
 pub(crate) mod network;
 

@@ -3,6 +3,7 @@
 from collections.abc import Iterator
 from typing import assert_type
 
+import linnet
 from symbolica import Expression, S
 from symbolica.community import spenso as sp
 
@@ -27,6 +28,10 @@ def check_types(
     assert_type(expression.structure, sp.TensorStructure)
     assert_type(tensor.structure, sp.TensorStructure)
     assert_type(network.structure, sp.TensorStructure)
+    config = linnet.RenderConfig()
+    assert_type(network.render(config=config), str)
+    assert_type(network.to_linnest(config=config), str)
+    assert_type(network.to_html(config=config), str)
     assert_type(expression.structure.name, sp.TensorName | None)
     assert_type(expression.structure.arguments, tuple[Expression, ...])
     assert_type(expression.structure.shape, tuple[int | Expression, ...])
@@ -87,6 +92,8 @@ def check_types(
     assert_type(library.values(), list[sp.Tensor])
     assert_type(library.items(), list[tuple[sp.TensorExpression, sp.Tensor]])
     assert_type(iter(library), Iterator[sp.TensorExpression])
+    assert_type(library.to_html(), str)
+    assert_type(library.to_html(settings=settings), str)
     assert_type(tensor.expression(), sp.TensorExpression)
     assert_type(network.expression(), sp.TensorExpression)
     assert_type(evaluator.evaluate([[2.0]]), list[sp.Tensor])

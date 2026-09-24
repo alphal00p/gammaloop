@@ -1392,9 +1392,11 @@ impl SpensoNet {
         #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
         config: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        self.prepare_render(py, config)?
+        let svg: String = self
+            .prepare_render(py, config)?
             .call_method0("to_svg")?
-            .extract()
+            .extract()?;
+        Ok(display::network::svg_theme(&svg))
     }
 
     /// Format the exact semantic structure using compact Spenso notation.

@@ -93,7 +93,7 @@
     "scalar"
   } else if value.starts-with("L:") {
     "library"
-  } else if value.starts-with("T:") {
+  } else if ("T:", "TS:", "TT:", "TTS:").any(prefix => value.starts-with(prefix)) {
     "tensor"
   } else {
     "leaf"
@@ -335,7 +335,7 @@
 #let render(dot, config: (:)) = {
   set page(width: auto, height: auto, margin: 4pt, fill: none)
   set text(size: 8pt)
-  for g in graph.parse(dot) {
+  context for g in graph.parse(dot) {
     let tree = subgraph.label(g, tree-label(g))
     let tree-hedges = tree-hedge-set(tree)
     let depths = subgraph.node-depths(g, tree)
@@ -368,7 +368,7 @@
       subgraph: tree,
       layout-roots: (0,),
       tree-dx: 0.35,
-      tree-dy: 14.,
+      tree-dy: 2.2,
       route-label-width-cap: 0.,
       label-steps: 40,
       internal-label-length-scale: 0.35,

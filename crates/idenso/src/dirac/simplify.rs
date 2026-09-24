@@ -504,7 +504,10 @@ impl<'settings> DiracSimplifier<'settings> {
         } else {
             let terminal = trace!(rep; std::iter::empty::<Atom>());
             let trace_unit = Self::simplify_trace_terminal(terminal.as_view())?;
-            Some(trace_kernel::evaluate_generic(&indices, trace_unit.as_view()))
+            Some(trace_kernel::evaluate_generic(
+                &indices,
+                trace_unit.as_view(),
+            ))
         }
     }
 
@@ -1531,11 +1534,9 @@ impl DiracSimplifier<'_> {
         {
             return Some(reduced);
         }
-        if let Some(result) = trace_kernel::evaluate(
-            &mink_indices,
-            true,
-            trace_kernel::TraceOutput::Expanded,
-        ) {
+        if let Some(result) =
+            trace_kernel::evaluate(&mink_indices, true, trace_kernel::TraceOutput::Expanded)
+        {
             return Some(result);
         }
 
@@ -1772,6 +1773,35 @@ mod tests {
         // The 4D kernel fixes Tr(1)=4. A symbolic spin dimension must instead
         // multiply the dimension-generic pairing formula.
         assert_eq!(symbolic_spin.simplify_gamma().expand().nterms(), 945);
+    }
+
+    #[test]
+    fn generic_trace_kernel_keeps_external_metric_and_vector_contractions_complete() {
+        use spenso::network::parsing::AtomStructureExt;
+
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let slots: Vec<_> = (0..10)
+            .map(|index| r.mink_d.pattern(Atom::num(index)))
+            .collect();
+        let input = g!(&slots[0], &slots[1]) * trace!(&spin; slots.iter().map(|slot| gamma!(slot)));
+        let result = input.simplify_gamma();
+        let tail = trace!(&spin; slots[2..].iter().map(|slot| gamma!(slot)));
+        let expected = tail.simplify_gamma() * mink_slot_dimension(slots[0].as_view()).unwrap();
+        assert!((&result - expected).expand().is_zero());
+        assert!(!result.has_repeated_explicit_indices());
+
+        let p = spenso::p!(r.mink_d.to_symbolic([]));
+        let q = spenso::q!(r.mink_d.to_symbolic([]));
+        let input = spenso::p!(&slots[0])
+            * spenso::q!(&slots[1])
+            * trace!(&spin; slots[..4].iter().map(|slot| gamma!(slot)));
+        let expected: Atom = 4
+            * (g!(&p, &q) * g!(&slots[2], &slots[3]) - g!(&p, &slots[2]) * g!(&q, &slots[3])
+                + g!(&p, &slots[3]) * g!(&q, &slots[2]));
+        let result = input.simplify_gamma();
+        assert!((&result - expected).expand().is_zero());
+        assert!(!result.has_repeated_explicit_indices());
     }
 
     fn momenta(rep: &Atom) -> [Atom; 8] {
