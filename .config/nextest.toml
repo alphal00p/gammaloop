@@ -163,6 +163,13 @@ slow-timeout = { period = "5m", terminate-after = 2 }
 filter = "test(integration) or test(heavy) or test(memory) or test(large)"
 
 [[profile.ci.overrides]]
+# These single-worker numerical tests can exceed four minutes on hosted runners
+# while their fixed-statistics integrations keep advancing. Preserve the sample
+# budgets and assertions, with bounded headroom for the complete integrations.
+filter = "test(=scalar_virtual_phase_conventions::scalar_virtual_triangle_mirrors_match_signed_born_interference) or test(=scalar_phase_conventions::scalar_born_six_body_mc_matches_phase_space) or test(/^dod[012]_bubble_uv$/) or test(=epem_a_bbx_amp_uv) or test(=se1l_uv)"
+slow-timeout = { period = "5m", terminate-after = 2 }
+
+[[profile.ci.overrides]]
 # The numerical acceptances launch ten internal integration workers. Reserve the same
 # resources explicitly and allow the fixed-statistics numerical integrations to
 # complete; profile.default still supplies other matching per-test settings.
@@ -202,6 +209,13 @@ slow-timeout = { period = "5m", terminate-after = 2 }
 # Custom profile inheritance carries ordinary settings, but per-test overrides
 # use only the selected profile and profile.default. Keep these resource and
 # timeout policies in sync with profile.ci for both CI entry points.
+[[profile.ci_gammaloop.overrides]]
+# These single-worker numerical tests can exceed four minutes on hosted runners
+# while their fixed-statistics integrations keep advancing. Preserve the sample
+# budgets and assertions, with bounded headroom for the complete integrations.
+filter = "test(=scalar_virtual_phase_conventions::scalar_virtual_triangle_mirrors_match_signed_born_interference) or test(=scalar_phase_conventions::scalar_born_six_body_mc_matches_phase_space) or test(/^dod[012]_bubble_uv$/) or test(=epem_a_bbx_amp_uv) or test(=se1l_uv)"
+slow-timeout = { period = "5m", terminate-after = 2 }
+
 [[profile.ci_gammaloop.overrides]]
 # The numerical acceptances launch ten internal integration workers. Reserve the same
 # resources explicitly and allow the fixed-statistics numerical integrations to
