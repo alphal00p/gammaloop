@@ -355,6 +355,24 @@ and #link("reference/python/spynso3/ExecutionMode/")[`ExecutionMode`].
 
 == Mathematical display
 
+Concrete tensors open an interactive component explorer by default in notebooks.
+Choose two displayed axes, fix the other coordinates, compare slices, or select
+*Matrix* to see the actual component formulas in a matrix. Selecting a grid cell
+shows its formula through the same tensor printer, including custom names.
+Deeper blue indicates a larger component payload: encoded Symbolica expression
+bytes, or fixed-width numeric storage. Sparse implicit entries share one default;
+they do not each occupy a stored component. Counts exclude allocation overhead
+and shared symbol metadata. Large tensors carry a bounded preview without
+densifying sparse storage; unloaded cells are explicitly marked rather than
+shown as zero. Heaviest-first ordering applies to the included components.
+
+For a static notebook matrix, use
+`tensor.formatted(settings=DisplaySettings(tensor_view="matrix"))`.
+The same setting works with `to_html`. SVG, Typst and LaTeX retain their
+mathematical matrix/slice output. Symbolic tensor expressions retain their
+existing display and index alphabets. The explorer runs inside a self-contained
+sandboxed frame and requires no live Python callbacks or external assets.
+
 `TensorExpression`, `Tensor`, and `TensorNetwork` share semantic display methods.
 `DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
 commas, symbol scripts, component notation, and index/factor spacing. Positional calls such as `to_typst(True)`

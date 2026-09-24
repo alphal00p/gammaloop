@@ -58,6 +58,8 @@ const RENDER_TYP: &str = include_str!("../typst/render.typ");
 const NOTATION_TYP: &str = include_str!("../typst/notation.typ");
 const NOTEBOOK_STYLE: &str = include_str!("../typst/notebook.css");
 
+mod explorer;
+
 /// Presentation settings shared by Typst source, HTML, and SVG rendering.
 ///
 /// ``index_style="alphabet"`` assigns representation-specific letters to graph
@@ -67,6 +69,8 @@ const NOTEBOOK_STYLE: &str = include_str!("../typst/notebook.css");
 /// ``component_style="superscript"`` displays concrete components as A(x,7)^{0,1}.
 /// Use ``component_style="array"`` for A(x,7)[0,1]; ordinary arguments remain in
 /// parentheses in both styles.
+/// Concrete tensors use an interactive component explorer in notebooks.
+/// ``tensor_view="matrix"`` selects the static mathematical display instead.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -82,6 +86,8 @@ pub struct DisplaySettings {
     index_style: String,
     #[pyo3(get)]
     component_style: String,
+    #[pyo3(get)]
+    tensor_view: String,
     #[pyo3(get)]
     show_dimensions: bool,
     #[pyo3(get)]
@@ -102,6 +108,7 @@ impl Default for DisplaySettings {
             tensor_layout: "ports".to_owned(),
             index_style: "alphabet".to_owned(),
             component_style: "superscript".to_owned(),
+            tensor_view: "interactive".to_owned(),
             show_dimensions: false,
             parentheses: true,
             commas: None,
@@ -142,6 +149,7 @@ impl DisplaySettings {
         factor_gap = "0.12em",
         index_style = "alphabet",
         component_style = "superscript",
+        tensor_view = "interactive",
     ))]
     #[allow(clippy::too_many_arguments)] // Each Python display setting is independently optional.
     fn new(
@@ -154,6 +162,7 @@ impl DisplaySettings {
         factor_gap: &str,
         index_style: &str,
         component_style: &str,
+        tensor_view: &str,
     ) -> PyResult<Self> {
         if !matches!(tensor_layout, "ports" | "schoonschip" | "call") {
             return Err(PyValueError::new_err(
@@ -171,11 +180,17 @@ impl DisplaySettings {
             ));
         }
         validate_typst_length(index_gap, "index_gap")?;
+        if !matches!(tensor_view, "interactive" | "matrix") {
+            return Err(PyValueError::new_err(
+                "tensor_view must be 'interactive' or 'matrix'",
+            ));
+        }
         validate_typst_length(factor_gap, "factor_gap")?;
         Ok(Self {
             tensor_layout: tensor_layout.to_owned(),
             index_style: index_style.to_owned(),
             component_style: component_style.to_owned(),
+            tensor_view: tensor_view.to_owned(),
             show_dimensions,
             parentheses,
             commas,
@@ -222,6 +237,7 @@ impl DisplaySettings {
                 ("factor_gap", "factor_gap"),
                 ("index_style", "index_style"),
                 ("component_style", "component_style"),
+                ("tensor_view", "tensor_view"),
             ],
         )
     }
@@ -1859,6 +1875,11 @@ pub(crate) fn concrete_tensor_to_html(
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PyResult<String> {
+    if settings.tensor_view == "interactive"
+        && !tensor.descriptor.interface.logical_slots().is_empty()
+    {
+        return explorer::to_html(py, tensor, settings, notation_source);
+    }
     let (source, tree) = concrete_render_project(tensor, settings)?;
     let html = compile_typst(py, &source, "html", notation_source, Some(&tree))?;
     let html = String::from_utf8(html).map_err(|error| {
@@ -2089,6 +2110,7 @@ mod tests {
                 "0.12em",
                 style,
                 "superscript",
+                "interactive",
             )
             .unwrap();
             assert_eq!(settings.index_style, style);
@@ -2113,7 +2135,8 @@ mod tests {
                 "0.08em",
                 "0.12em",
                 "invalid",
-                "superscript"
+                "superscript",
+                "interactive",
             )
             .is_err()
         );
@@ -2124,7 +2147,16 @@ mod tests {
     fn component_styles_are_validated_and_reported_in_settings() {
         for style in ["superscript", "array"] {
             let settings = DisplaySettings::new(
-                "ports", false, true, None, true, "0.08em", "0.12em", "alphabet", style,
+                "ports",
+                false,
+                true,
+                None,
+                true,
+                "0.08em",
+                "0.12em",
+                "alphabet",
+                style,
+                "interactive",
             )
             .unwrap();
             assert_eq!(settings.component_style, style);
@@ -2145,7 +2177,16 @@ mod tests {
         }
         assert!(
             DisplaySettings::new(
-                "ports", false, true, None, true, "0.08em", "0.12em", "alphabet", "invalid",
+                "ports",
+                false,
+                true,
+                None,
+                true,
+                "0.08em",
+                "0.12em",
+                "alphabet",
+                "invalid",
+                "interactive",
             )
             .is_err()
         );
@@ -2643,6 +2684,7 @@ mod tests {
                 "0.1em",
                 "alphabet",
                 "superscript",
+                "interactive",
             )
             .unwrap();
             let source = typst_settings_source(&settings, &Atom::Zero);

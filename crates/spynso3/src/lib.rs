@@ -738,7 +738,11 @@ impl Spensor {
         display::format_concrete_tensor_output_rich(py, self, &settings, notation_source.as_deref())
     }
 
-    /// Compile this concrete tensor to semantic HTML with the optional Typst renderer.
+    /// Display concrete components in a self-contained interactive HTML explorer.
+    ///
+    /// Select matrix slices in the view control, or pass
+    /// `DisplaySettings(tensor_view="matrix")` for static mathematical HTML.
+    /// Uses the optional Typst renderer for symbolic component formulas.
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn to_html(
         &self,

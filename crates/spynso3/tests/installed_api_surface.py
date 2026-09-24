@@ -118,8 +118,14 @@ class ApiSurfaceTests(unittest.TestCase):
             value = self.values[name]
             with self.subTest(value=name):
                 before = repr(value)
-                self.assertIn("<math", value._repr_html_())
-                self.assertIn("data-spenso-math", value._repr_html_())
+                html = value._repr_html_()
+                if isinstance(value, sp.Tensor):
+                    self.assertIn("data-spenso-explorer", html)
+                    html = value.to_html(
+                        settings=sp.DisplaySettings(tensor_view="matrix")
+                    )
+                self.assertIn("<math", html)
+                self.assertIn("data-spenso-math", html)
                 self.assertTrue(value._repr_latex_())
                 self.assertEqual(repr(value), before)
         network = self.values["network"]

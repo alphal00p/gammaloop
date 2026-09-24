@@ -17,6 +17,9 @@ def check_types(
     evaluator: sp.TensorEvaluator,
     compiled: sp.CompiledTensorEvaluator,
 ) -> None:
+    settings = sp.DisplaySettings(tensor_view="matrix")
+    assert_type(settings.tensor_view, str)
+    assert_type(tensor.to_html(settings=settings), str)
     assert_type(representation("mu"), sp.Slot)
     assert_type(representation(1), sp.Slot)
     assert_type(representation(scalar), Expression | sp.Slot)

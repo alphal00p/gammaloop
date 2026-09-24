@@ -305,6 +305,8 @@ class DisplaySettings:
     ``component_style="superscript"`` displays concrete components as A(x,7)^{0,1}.
     Use ``component_style="array"`` for A(x,7)[0,1]; ordinary arguments remain in
     parentheses in both styles.
+    Concrete tensors use an interactive component explorer in notebooks.
+    ``tensor_view="matrix"`` selects the static mathematical display instead.
     """
     @property
     def tensor_layout(self) -> builtins.str: ...
@@ -312,6 +314,8 @@ class DisplaySettings:
     def index_style(self) -> builtins.str: ...
     @property
     def component_style(self) -> builtins.str: ...
+    @property
+    def tensor_view(self) -> builtins.str: ...
     @property
     def show_dimensions(self) -> builtins.bool: ...
     @property
@@ -324,7 +328,7 @@ class DisplaySettings:
     def index_gap(self) -> builtins.str: ...
     @property
     def factor_gap(self) -> builtins.str: ...
-    def __new__(cls, tensor_layout: builtins.str = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em', index_style: builtins.str = 'alphabet', component_style: builtins.str = 'superscript') -> DisplaySettings: ...
+    def __new__(cls, tensor_layout: builtins.str = 'ports', show_dimensions: builtins.bool = False, parentheses: builtins.bool = True, commas: typing.Optional[builtins.bool] = None, symbol_scripts: builtins.bool = True, index_gap: builtins.str = '0.08em', factor_gap: builtins.str = '0.12em', index_style: builtins.str = 'alphabet', component_style: builtins.str = 'superscript', tensor_view: builtins.str = 'interactive') -> DisplaySettings: ...
     @staticmethod
     def ports() -> DisplaySettings: ...
     @staticmethod
@@ -1121,7 +1125,11 @@ class Tensor:
         """
     def to_html(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
-        Compile this concrete tensor to semantic HTML with the optional Typst renderer.
+        Display concrete components in a self-contained interactive HTML explorer.
+
+        Select matrix slices in the view control, or pass
+        `DisplaySettings(tensor_view="matrix")` for static mathematical HTML.
+        Uses the optional Typst renderer for symbolic component formulas.
         """
     def to_svg(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
