@@ -747,7 +747,7 @@
             "source": {
               "identifier": "spenso::network::Network",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 1759,
+              "line": 1766,
               "column": 1
             }
           },
@@ -857,7 +857,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionStrategy",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 3207,
+              "line": 3214,
               "column": 1
             }
           },
@@ -934,7 +934,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionMode",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 4077,
+              "line": 4084,
               "column": 1
             }
           },
@@ -1009,7 +1009,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionResult",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 2701,
+              "line": 2708,
               "column": 1
             }
           },
@@ -1634,7 +1634,7 @@
             "source": {
               "identifier": "spenso::network::TensorNetworkError",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 2554,
+              "line": 2561,
               "column": 1
             }
           },

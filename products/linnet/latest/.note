@@ -2,5 +2,5 @@ alphal00p documentation
 product=linnet
 channel=latest
 tag=
-commit=4c84f3cdc68ac184f986c1cb2bc1e00446882950
+commit=90bc0ffd3a0d0eb5bfbcfb15bd95a02dad0e70d2
 route=/products/linnet/latest/
