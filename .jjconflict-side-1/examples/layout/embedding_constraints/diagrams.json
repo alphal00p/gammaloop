@@ -1,0 +1,614 @@
+[
+  {
+    "id": "paper-b1",
+    "letter": "B.1",
+    "title": "Double triangle with quark self-energy",
+    "vertices": [
+      {
+        "name": "a"
+      },
+      {
+        "name": "b"
+      },
+      {
+        "name": "c"
+      },
+      {
+        "name": "d"
+      },
+      {
+        "name": "e"
+      },
+      {
+        "name": "f"
+      }
+    ],
+    "edges": [
+      {
+        "id": 0,
+        "source": null,
+        "target": 1,
+        "state": "incoming"
+      },
+      {
+        "id": 1,
+        "source": 0,
+        "target": null,
+        "state": "outgoing"
+      },
+      {
+        "id": 2,
+        "source": 1,
+        "target": 3,
+        "state": null
+      },
+      {
+        "id": 3,
+        "source": 3,
+        "target": 0,
+        "state": null
+      },
+      {
+        "id": 4,
+        "source": 0,
+        "target": 2,
+        "state": null
+      },
+      {
+        "id": 5,
+        "source": 2,
+        "target": 1,
+        "state": null
+      },
+      {
+        "id": 6,
+        "source": 2,
+        "target": 4,
+        "state": null
+      },
+      {
+        "id": 7,
+        "source": 5,
+        "target": 3,
+        "state": null
+      },
+      {
+        "id": 8,
+        "source": 4,
+        "target": 5,
+        "state": null
+      },
+      {
+        "id": 9,
+        "source": 5,
+        "target": 4,
+        "state": null
+      }
+    ]
+  },
+  {
+    "id": "qed-compton",
+    "letter": "B",
+    "title": "Compton scattering",
+    "vertices": [
+      {
+        "name": "a"
+      },
+      {
+        "name": "b"
+      }
+    ],
+    "edges": [
+      {
+        "id": 0,
+        "source": 0,
+        "target": 1,
+        "state": null
+      },
+      {
+        "id": 1,
+        "source": 1,
+        "target": null,
+        "state": "outgoing"
+      },
+      {
+        "id": 2,
+        "source": 1,
+        "target": null,
+        "state": "outgoing"
+      },
+      {
+        "id": 3,
+        "source": null,
+        "target": 0,
+        "state": "incoming"
+      },
+      {
+        "id": 4,
+        "source": null,
+        "target": 0,
+        "state": "incoming"
+      }
+    ]
+  },
+  {
+    "id": "qcd-radiation",
+    "letter": "K",
+    "title": "Gluon emission",
+    "vertices": [
+      {
+        "name": "a"
+      },
+      {
+        "name": "b"
+      },
+      {
+        "name": "c"
+      }
+    ],
+    "edges": [
+      {
+        "id": 0,
+        "source": 0,
+        "target": 1,
+        "state": null
+      },
+      {
+        "id": 1,
+        "source": 0,
+        "target": 2,
+        "state": null
+      },
+      {
+        "id": 2,
+        "source": 1,
+        "target": null,
+        "state": "outgoing"
+      },
+      {
+        "id": 3,
+        "source": 2,
+        "target": null,
+        "state": "outgoing"
+      },
+      {
+        "id": 4,
+        "source": 2,
+        "target": null,
+        "state": "outgoing"
+      },
+      {
+        "id": 5,
+        "source": null,
+        "target": 0,
+        "state": "incoming"
+      },
+      {
+        "id": 6,
+        "source": null,
+        "target": 1,
+        "state": "incoming"
+      }
+    ]
+  },
+  {
+    "id": "higgs-sunset",
+    "letter": "S",
+    "title": "Higgs sunset",
+    "vertices": [
+      {
+        "name": "left"
+      },
+      {
+        "name": "right"
+      }
+    ],
+    "edges": [
+      {
+        "id": 0,
+        "source": null,
+        "target": 0,
+        "state": "incoming"
+      },
+      {
+        "id": 1,
+        "source": 0,
+        "target": 1,
+        "state": null
+      },
+      {
+        "id": 2,
+        "source": 0,
+        "target": 1,
+        "state": null
+      },
+      {
+        "id": 3,
+        "source": 0,
+        "target": 1,
+        "state": null
+      },
+      {
+        "id": 4,
+        "source": 1,
+        "target": null,
+        "state": "outgoing"
+      }
+    ]
+  },
+  {
+    "id": "electron-rainbow",
+    "letter": "T",
+    "title": "Electron rainbow",
+    "vertices": [
+      {
+        "name": "innerLeft"
+      },
+      {
+        "name": "innerRight"
+      },
+      {
+        "name": "left"
+      },
+      {
+        "name": "right"
+      }
+    ],
+    "edges": [
+      {
+        "id": 0,
+        "source": null,
+        "target": 2,
+        "state": "incoming"
+      },
+      {
+        "id": 1,
+        "source": 0,
+        "target": 1,
+        "state": null
+      },
+      {
+        "id": 2,
+        "source": 0,
+        "target": 1,
+        "state": null
+      },
+      {
+        "id": 3,
+        "source": 1,
+        "target": 3,
+        "state": null
+      },
+      {
+        "id": 4,
+        "source": 2,
+        "target": 0,
+        "state": null
+      },
+      {
+        "id": 5,
+        "source": 2,
+        "target": 3,
+        "state": null
+      },
+      {
+        "id": 6,
+        "source": 3,
+        "target": null,
+        "state": "outgoing"
+      }
+    ]
+  },
+  {
+    "id": "crossed-higgs-double-box",
+    "letter": "U",
+    "title": "Crossed Higgs double box",
+    "vertices": [
+      {
+        "name": "left"
+      },
+      {
+        "name": "lowerLeft"
+      },
+      {
+        "name": "lowerRight"
+      },
+      {
+        "name": "right"
+      },
+      {
+        "name": "upperLeft"
+      },
+      {
+        "name": "upperRight"
+      }
+    ],
+    "edges": [
+      {
+        "id": 0,
+        "source": null,
+        "target": 2,
+        "state": "incoming"
+      },
+      {
+        "id": 1,
+        "source": null,
+        "target": 4,
+        "state": "incoming"
+      },
+      {
+        "id": 2,
+        "source": 0,
+        "target": 1,
+        "state": null
+      },
+      {
+        "id": 3,
+        "source": 0,
+        "target": 3,
+        "state": null
+      },
+      {
+        "id": 4,
+        "source": 0,
+        "target": 4,
+        "state": null
+      },
+      {
+        "id": 5,
+        "source": 1,
+        "target": null,
+        "state": "outgoing"
+      },
+      {
+        "id": 6,
+        "source": 1,
+        "target": 2,
+        "state": null
+      },
+      {
+        "id": 7,
+        "source": 2,
+        "target": 3,
+        "state": null
+      },
+      {
+        "id": 8,
+        "source": 4,
+        "target": 5,
+        "state": null
+      },
+      {
+        "id": 9,
+        "source": 5,
+        "target": null,
+        "state": "outgoing"
+      },
+      {
+        "id": 10,
+        "source": 5,
+        "target": 3,
+        "state": null
+      }
+    ]
+  },
+  {
+    "id": "nonplanar-higgs-k33",
+    "letter": "V",
+    "title": "Nonplanar Higgs scattering",
+    "vertices": [
+      {
+        "name": "a0"
+      },
+      {
+        "name": "a1"
+      },
+      {
+        "name": "a2"
+      },
+      {
+        "name": "b0"
+      },
+      {
+        "name": "b1"
+      },
+      {
+        "name": "b2"
+      }
+    ],
+    "edges": [
+      {
+        "id": 0,
+        "source": 0,
+        "target": 3,
+        "state": null
+      },
+      {
+        "id": 1,
+        "source": 0,
+        "target": 4,
+        "state": null
+      },
+      {
+        "id": 2,
+        "source": 0,
+        "target": 5,
+        "state": null
+      },
+      {
+        "id": 3,
+        "source": 1,
+        "target": 3,
+        "state": null
+      },
+      {
+        "id": 4,
+        "source": 1,
+        "target": 4,
+        "state": null
+      },
+      {
+        "id": 5,
+        "source": 1,
+        "target": 5,
+        "state": null
+      },
+      {
+        "id": 6,
+        "source": 2,
+        "target": 3,
+        "state": null
+      },
+      {
+        "id": 7,
+        "source": 2,
+        "target": 4,
+        "state": null
+      },
+      {
+        "id": 8,
+        "source": 2,
+        "target": 5,
+        "state": null
+      },
+      {
+        "id": 9,
+        "source": 3,
+        "target": null,
+        "state": "outgoing"
+      },
+      {
+        "id": 10,
+        "source": 4,
+        "target": null,
+        "state": "outgoing"
+      },
+      {
+        "id": 11,
+        "source": null,
+        "target": 0,
+        "state": "incoming"
+      },
+      {
+        "id": 12,
+        "source": null,
+        "target": 1,
+        "state": "incoming"
+      }
+    ]
+  },
+  {
+    "id": "nonplanar-gluon-k5",
+    "letter": "W",
+    "title": "Nonplanar gluon self-energy",
+    "vertices": [
+      {
+        "name": "a"
+      },
+      {
+        "name": "b"
+      },
+      {
+        "name": "c"
+      },
+      {
+        "name": "d"
+      },
+      {
+        "name": "e"
+      },
+      {
+        "name": "incoming"
+      },
+      {
+        "name": "outgoing"
+      }
+    ],
+    "edges": [
+      {
+        "id": 0,
+        "source": 0,
+        "target": 2,
+        "state": null
+      },
+      {
+        "id": 1,
+        "source": 0,
+        "target": 3,
+        "state": null
+      },
+      {
+        "id": 2,
+        "source": 0,
+        "target": 4,
+        "state": null
+      },
+      {
+        "id": 3,
+        "source": 0,
+        "target": 5,
+        "state": null
+      },
+      {
+        "id": 4,
+        "source": 1,
+        "target": 2,
+        "state": null
+      },
+      {
+        "id": 5,
+        "source": 1,
+        "target": 3,
+        "state": null
+      },
+      {
+        "id": 6,
+        "source": 1,
+        "target": 4,
+        "state": null
+      },
+      {
+        "id": 7,
+        "source": 2,
+        "target": 4,
+        "state": null
+      },
+      {
+        "id": 8,
+        "source": 2,
+        "target": 6,
+        "state": null
+      },
+      {
+        "id": 9,
+        "source": 3,
+        "target": 4,
+        "state": null
+      },
+      {
+        "id": 10,
+        "source": null,
+        "target": 5,
+        "state": "incoming"
+      },
+      {
+        "id": 11,
+        "source": 5,
+        "target": 1,
+        "state": null
+      },
+      {
+        "id": 12,
+        "source": 6,
+        "target": 3,
+        "state": null
+      },
+      {
+        "id": 13,
+        "source": 6,
+        "target": null,
+        "state": "outgoing"
+      }
+    ]
+  }
+]
