@@ -103,16 +103,25 @@ impl EpsilonSimplifierPass {
         let mut current = expr.schoonschip();
 
         loop {
-            let next = current
-                .replace_map(|term, _context, out| {
-                    if let Some(rewritten) = Self::simplify_power(term.schoonschip().as_view())
-                        .or_else(|| Self::simplify_pair_product(term))
-                    {
-                        **out = rewritten;
-                    }
-                })
-                .schoonschip();
+            let mut changed = false;
+            let next = current.replace_map(|term, _context, out| {
+                let rewritten = match term {
+                    AtomView::Pow(_) => Self::simplify_power(term),
+                    AtomView::Mul(_) => Self::simplify_pair_product(term),
+                    _ => None,
+                };
+                if let Some(rewritten) = rewritten {
+                    changed = true;
+                    **out = rewritten;
+                }
+            });
+            if !changed {
+                return next;
+            }
 
+            // Epsilon identities introduce determinants whose metrics may now
+            // contract. Unchanged visits need no further tensor normalization.
+            let next = next.schoonschip();
             if next == current {
                 return next;
             }
@@ -143,9 +152,12 @@ impl EpsilonSimplifierPass {
             return None;
         };
         let (base, exponent) = pow.get_base_exp();
-        let (epsilon_args, representation) = Self::epsilon_args(base)?;
         let exponent = Self::positive_integer(exponent)?;
-        if exponent < 2 || !representation.rep.is_self_dual() {
+        if exponent < 2 {
+            return None;
+        }
+        let (epsilon_args, representation) = Self::epsilon_args(base)?;
+        if !representation.rep.is_self_dual() {
             return None;
         }
 
@@ -160,18 +172,26 @@ impl EpsilonSimplifierPass {
     ///
     /// Extra multiplicative factors are preserved around the determinant.
     fn simplify_pair_product(expr: AtomView<'_>) -> Option<Atom> {
-        let factors = Self::multiplicative_factors(expr);
-        if factors.len() < 2 {
+        let AtomView::Mul(product) = expr else {
             return None;
-        }
+        };
+        let mut epsilons = product
+            .iter()
+            .enumerate()
+            .filter(|(_, factor)| {
+                matches!(factor, AtomView::Fun(fun) if fun.get_symbol() == *EPSILON_SYMBOL)
+            })
+            .peekable();
 
-        for (left_index, left) in factors.iter().enumerate() {
-            let Some((left_args, left_rep)) = Self::epsilon_args(*left) else {
+        while let Some((left_index, left)) = epsilons.next() {
+            // A lone epsilon needs no representation parsing or owned arguments.
+            epsilons.peek()?;
+            let Some((left_args, left_rep)) = Self::epsilon_args(left) else {
                 continue;
             };
 
-            for (right_index, right) in factors.iter().enumerate().skip(left_index + 1) {
-                let Some((right_args, right_rep)) = Self::epsilon_args(*right) else {
+            for (right_index, right) in epsilons.clone() {
+                let Some((right_args, right_rep)) = Self::epsilon_args(right) else {
                     continue;
                 };
                 // A determinant pairs a representation with its dual. In
@@ -181,10 +201,11 @@ impl EpsilonSimplifierPass {
                 }
 
                 let determinant = Self::metric_determinant(&left_args, &right_args);
-                let mut excluded = vec![false; factors.len()];
-                excluded[left_index] = true;
-                excluded[right_index] = true;
-                return Some(Self::product_excluding(&factors, &excluded) * determinant);
+                let spectators =
+                    Atom::mul_many(product.iter().enumerate().filter_map(|(index, factor)| {
+                        (index != left_index && index != right_index).then_some(factor)
+                    }));
+                return Some(spectators * determinant);
             }
         }
 
@@ -300,30 +321,16 @@ impl EpsilonSimplifierPass {
         }
         Some((args, representation))
     }
-
-    fn multiplicative_factors<'a>(expr: AtomView<'a>) -> Vec<AtomView<'a>> {
-        match expr {
-            AtomView::Mul(mul) => mul.iter().collect(),
-            _ => vec![expr],
-        }
-    }
-
-    fn product_excluding(factors: &[AtomView<'_>], excluded: &[bool]) -> Atom {
-        factors
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| !excluded[*index])
-            .fold(Atom::num(1), |product, (_, factor)| {
-                product * factor.to_owned()
-            })
-    }
 }
 
 #[cfg(test)]
 mod test {
     use insta::assert_snapshot;
-    use spenso::{g, mink, p, q};
-    use symbolica::{atom::AtomCore, parse};
+    use spenso::{g, mink, network::parsing::AtomStructureExt, p, q};
+    use symbolica::{
+        atom::{Atom, AtomCore},
+        parse,
+    };
     use symbolica_utils::AtomPrintExt;
 
     use crate::{epsilon as eps, test_support::test_initialize};
@@ -461,5 +468,81 @@ mod test {
         let right = eps!(c, d);
 
         assert_snapshot!((left * right).simplify_epsilon().to_bare_ordered_string(), @"-1*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,c))+g(mink(4,a),mink(4,c))*g(mink(4,b),mink(4,d))");
+    }
+
+    #[test]
+    fn epsilon_powers_reach_a_fixed_point() {
+        test_initialize();
+        let epsilon = eps!(mink!(4, a), mink!(4, b), mink!(4, c), mink!(4, d));
+        for exponent in [2, 3, 4, 5] {
+            let expression = epsilon.clone().pow(Atom::num(exponent));
+            let expected = Atom::num(24_i64.pow((exponent / 2) as u32))
+                * epsilon.clone().pow(Atom::num(exponent % 2));
+            let result = expression.simplify_epsilon();
+            assert_eq!(result, expected);
+            assert_eq!(result.simplify_epsilon(), result);
+        }
+        for exponent in ["-1", "1/2", "n"] {
+            let expression = epsilon.clone().pow(parse!(exponent));
+            assert_eq!(expression.simplify_epsilon(), expression);
+        }
+    }
+
+    #[test]
+    fn epsilon_cleanup_preserves_lone_epsilon_and_compact_spectator_normalization() {
+        test_initialize();
+        let tags = &spenso::network::tags::SPENSO_TAG;
+        tags.rank_one_tensor_symbol("spenso::epsilon_cleanup_p");
+        tags.rank_one_tensor_symbol("spenso::epsilon_cleanup_q");
+        for (source, expected) in [
+            (
+                "g(mink(4,a),mink(4,x))*g(mink(4,x),mink(4,y))*epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d))",
+                "epsilon(mink(4,y),mink(4,b),mink(4,c),mink(4,d))",
+            ),
+            (
+                "g(mink(4,a),epsilon_cleanup_p(mink(4)))*epsilon(mink(4,b),mink(4,c),mink(4,d),mink(4,e))",
+                "epsilon_cleanup_p(mink(4,a))*epsilon(mink(4,b),mink(4,c),mink(4,d),mink(4,e))",
+            ),
+            (
+                "epsilon_cleanup_p(epsilon_cleanup_q(mink(4)))*epsilon(mink(4,b),mink(4,c),mink(4,d),mink(4,e))",
+                "g(epsilon_cleanup_p(mink(4)),epsilon_cleanup_q(mink(4)))*epsilon(mink(4,b),mink(4,c),mink(4,d),mink(4,e))",
+            ),
+            (
+                "g(mink(4,a),mink(4,x))*epsilon(mink(4,a),mink(4,b))*epsilon(mink(4,x),mink(4,c))",
+                "3*g(mink(4,b),mink(4,c))",
+            ),
+        ] {
+            let input = parse!(source, default_namespace = "spenso");
+            let expected = parse!(expected, default_namespace = "spenso");
+            let result = input.simplify_epsilon();
+            assert_eq!(result, expected, "{source}");
+            assert_eq!(result.simplify_epsilon(), result, "{source}");
+        }
+    }
+
+    #[test]
+    fn distinct_epsilon_pairs_simplify_without_expanding_surrounding_factors() {
+        test_initialize();
+        let pair = parse!(
+            "epsilon(mink(4,a),mink(4,b))*epsilon(mink(4,c),mink(4,d))",
+            default_namespace = "spenso"
+        );
+        assert!(!pair.has_repeated_explicit_indices());
+        // Preserve the determinant's own extracted antisymmetry sign rather
+        // than distributing it through a surrounding factorized expression.
+        let determinant = pair.simplify_epsilon();
+        assert_ne!(determinant, pair);
+        let spectator = parse!(
+            "epsilon(cof(3,i),cof(3,j),cof(3,k))*(x+y)^5",
+            default_namespace = "spenso"
+        );
+        let input = &spectator * &pair;
+        assert_eq!(input.simplify_epsilon(), &spectator * &determinant);
+
+        let scalar = parse!("z", default_namespace = "spenso");
+        let input = (scalar.clone() + pair).pow(Atom::num(2));
+        let expected = (scalar + determinant).pow(Atom::num(2));
+        assert_eq!(input.simplify_epsilon(), expected);
+        assert_eq!(expected.simplify_epsilon(), expected);
     }
 }

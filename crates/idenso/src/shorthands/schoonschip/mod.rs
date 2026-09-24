@@ -1,8 +1,8 @@
 mod api;
 mod contraction;
-mod metric_contraction;
 mod normalize_dots;
 mod settings;
+mod slot_contraction;
 mod utils;
 mod with_settings;
 
