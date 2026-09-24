@@ -1,0 +1,2829 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-24",
+  "purpose": "Compare contraction order and intermediate trace generation with FORM 5.0.0; investigation only, no production algorithm changes.",
+  "counting_limits": [
+    "Generated counts are cumulative emitted monomials before collection, not peak resident terms or memory.",
+    "Warm Idenso materialization counts already collected cached recipes; compare cold Idenso generation with FORM generated terms.",
+    "Arithmetic leaf counts preserve factorization: Add counts sum and Mul counts multiply, without distributing expressions or entering functions/powers. They are not collected polynomial term counts."
+  ],
+  "production_source_sha256": {
+    "crates/idenso/src/dirac/simplify.rs": "76adb67a6061a4b1293f55ea73a5ae774bd775016de5740977ecb9ab8468acad",
+    "crates/idenso/src/dirac/simplify/trace_kernel.rs": "bf1df312af6e6adc238e30c878270ef790007b96fde6f31510d68f0038ac4b5c",
+    "crates/idenso/src/shorthands/schoonschip/metric_contraction.rs": "8141d806f303ff0f4545a8f84f4d55945bb71cb49ec060196dc05bec773f7f68",
+    "crates/idenso/src/shorthands/schoonschip/with_settings.rs": "41eaeab838d60052e4b976c7abf4799b1df520e21dfcb8e2cc660e6999bee20e",
+    "crates/spenso/src/structure/slot.rs": "6e8a8b34dfad3b2f586e574e46f6913cde08089aae7a220ba43dbd0461926cd8"
+  },
+  "form": {
+    "schema_version": 1,
+    "date": "2026-09-24",
+    "form_version": "FORM 5.0.0 (Jan  1 1980)",
+    "form_executable": "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+    "source_url": "https://github.com/form-dev/form/blob/v5.0.0/sources/opera.c",
+    "source_archive_url": "https://codeload.github.com/form-dev/form/tar.gz/refs/tags/v5.0.0",
+    "source_sha256": "b01c0c93e4b502e04b58e5e40b1d6c250c4b442dbff5b7efa7e4b4c7104aae9a",
+    "source_archive_sha256": "ca1608ca47a1a8059c8113c444de55d745221aa716f7e5e11423bdaec8920bd5",
+    "statistics_semantics": {
+      "generated_terms": "Cumulative StoreTerm submissions to the sorting buffer (sources/sort.c:4641); includes terms later combined or cancelled. It is not recursion count or peak resident terms.",
+      "sorted_terms": "Terms remaining in F immediately after trace4 plus .sort.",
+      "bytes_used": "FORM-reported sorted output storage size, not peak process memory.",
+      "peak_resident_terms": "Not measured; neither Generated terms nor Terms in output is a peak-memory counter."
+    },
+    "source_strategy": {
+      "trace4_normal_order": "For ordinary chains of length>=10 or gamma5 chains longer than4, choose the lexicographically smallest cyclic/reversed word before recursive reduction (opera.c:746-819).",
+      "contraction_priority": "Trace4Gen: lengths0/2; adjacent equal objects incl cyclic ends; odd-interior explicit4D Chisholm; special two-interior4D; other even-interior4D; shortest-distance repeated generic objects; all-distinct Trace4no (opera.c:858-1245).",
+      "all_distinct": "Trick applies the4D three-gamma identity, filters gamma5 parity, contracts epsilon pairs with3-index permutations before4-index permutations, and yields one monomial at a time (opera.c:331-665).",
+      "scratch": "Trace4 reserves19*n WORD scratch for this trace (opera.c:734), excluding the sorter, parent term, and other FORM state. Count is an allocation bound, not total peak memory."
+    },
+    "statistics": [
+      {
+        "case": "axial_6",
+        "word": "5_,mu0,mu1,mu2,mu3,mu4,mu5",
+        "input_generated": 1,
+        "trace4_generated": 6,
+        "trace4_sorted": 6,
+        "trace4_output_bytes": 296,
+        "final_terms": 6
+      },
+      {
+        "case": "axial_8",
+        "word": "5_,mu0,mu1,mu2,mu3,mu4,mu5,mu6,mu7",
+        "input_generated": 1,
+        "trace4_generated": 33,
+        "trace4_sorted": 33,
+        "trace4_output_bytes": 1464,
+        "final_terms": 33
+      },
+      {
+        "case": "axial_10",
+        "word": "5_,mu0,mu1,mu2,mu3,mu4,mu5,mu6,mu7,mu8,mu9",
+        "input_generated": 1,
+        "trace4_generated": 180,
+        "trace4_sorted": 180,
+        "trace4_output_bytes": 7400,
+        "final_terms": 180
+      },
+      {
+        "case": "axial_12",
+        "word": "5_,mu0,mu1,mu2,mu3,mu4,mu5,mu6,mu7,mu8,mu9,mu10,mu11",
+        "input_generated": 1,
+        "trace4_generated": 1053,
+        "trace4_sorted": 1029,
+        "trace4_output_bytes": 40568,
+        "final_terms": 1029
+      },
+      {
+        "case": "free_8",
+        "word": "mu0,mu1,mu2,mu3,mu4,mu5,mu6,mu7",
+        "input_generated": 1,
+        "trace4_generated": 117,
+        "trace4_sorted": 105,
+        "trace4_output_bytes": 3708,
+        "final_terms": 105
+      },
+      {
+        "case": "free_10",
+        "word": "mu0,mu1,mu2,mu3,mu4,mu5,mu6,mu7,mu8,mu9",
+        "input_generated": 1,
+        "trace4_generated": 801,
+        "trace4_sorted": 693,
+        "trace4_output_bytes": 25284,
+        "final_terms": 693
+      },
+      {
+        "case": "free_12",
+        "word": "mu0,mu1,mu2,mu3,mu4,mu5,mu6,mu7,mu8,mu9,mu10,mu11",
+        "input_generated": 1,
+        "trace4_generated": 5139,
+        "trace4_sorted": 4383,
+        "trace4_output_bytes": 163948,
+        "final_terms": 4383
+      },
+      {
+        "case": "paired_6",
+        "word": "p,p,q,q,q,q",
+        "input_generated": 1,
+        "trace4_generated": 1,
+        "trace4_sorted": 1,
+        "trace4_output_bytes": 52,
+        "final_terms": 1
+      },
+      {
+        "case": "paired_8",
+        "word": "p,p,q,q,q,q,q,q",
+        "input_generated": 1,
+        "trace4_generated": 1,
+        "trace4_sorted": 1,
+        "trace4_output_bytes": 52,
+        "final_terms": 1
+      },
+      {
+        "case": "paired_10",
+        "word": "p,p,q,q,q,q,q,q,q,q",
+        "input_generated": 1,
+        "trace4_generated": 1,
+        "trace4_sorted": 1,
+        "trace4_output_bytes": 52,
+        "final_terms": 1
+      },
+      {
+        "case": "paired_12",
+        "word": "p,p,q,q,q,q,q,q,q,q,q,q",
+        "input_generated": 1,
+        "trace4_generated": 1,
+        "trace4_sorted": 1,
+        "trace4_output_bytes": 52,
+        "final_terms": 1
+      },
+      {
+        "case": "alternating_6",
+        "word": "p,q,p,q,p,q",
+        "input_generated": 1,
+        "trace4_generated": 3,
+        "trace4_sorted": 2,
+        "trace4_output_bytes": 100,
+        "final_terms": 2
+      },
+      {
+        "case": "alternating_8",
+        "word": "p,q,p,q,p,q,p,q",
+        "input_generated": 1,
+        "trace4_generated": 5,
+        "trace4_sorted": 3,
+        "trace4_output_bytes": 148,
+        "final_terms": 3
+      },
+      {
+        "case": "alternating_10",
+        "word": "p,q,p,q,p,q,p,q,p,q",
+        "input_generated": 1,
+        "trace4_generated": 8,
+        "trace4_sorted": 3,
+        "trace4_output_bytes": 148,
+        "final_terms": 3
+      },
+      {
+        "case": "alternating_12",
+        "word": "p,q,p,q,p,q,p,q,p,q,p,q",
+        "input_generated": 1,
+        "trace4_generated": 13,
+        "trace4_sorted": 4,
+        "trace4_output_bytes": 196,
+        "final_terms": 4
+      },
+      {
+        "case": "odd_chisholm_8",
+        "word": "mu0,mu1,mu0,mu2,mu3,mu4,mu5,mu6",
+        "input_generated": 1,
+        "trace4_generated": 15,
+        "trace4_sorted": 15,
+        "trace4_output_bytes": 532,
+        "final_terms": 15
+      },
+      {
+        "case": "even2_chisholm_8",
+        "word": "mu0,mu1,mu2,mu0,mu3,mu4,mu5,mu6",
+        "input_generated": 1,
+        "trace4_generated": 3,
+        "trace4_sorted": 3,
+        "trace4_output_bytes": 116,
+        "final_terms": 3
+      },
+      {
+        "case": "even4_chisholm_10",
+        "word": "mu0,mu1,mu2,mu3,mu4,mu0,mu5,mu6,mu7,mu8",
+        "input_generated": 1,
+        "trace4_generated": 234,
+        "trace4_sorted": 33,
+        "trace4_output_bytes": 1244,
+        "final_terms": 33
+      },
+      {
+        "case": "cyclic_pair_8",
+        "word": "mu0,mu1,mu2,mu3,mu4,mu5,mu6,mu0",
+        "input_generated": 1,
+        "trace4_generated": 15,
+        "trace4_sorted": 15,
+        "trace4_output_bytes": 532,
+        "final_terms": 15
+      },
+      {
+        "case": "order_sensitive_12",
+        "word": "mu0,p0,mu1,p1,p2,mu0,p3,p4,mu1,p5,p6,p7",
+        "input_generated": 1,
+        "trace4_generated": 117,
+        "trace4_sorted": 105,
+        "trace4_output_bytes": 4716,
+        "final_terms": 105
+      },
+      {
+        "case": "external_metrics_order_sensitive_12",
+        "expression": "d_(a,c)*d_(b,d)*g_(1,a,p0,b,p1,p2,c,p3,p4,d,p5,p6,p7)",
+        "input_generated": 1,
+        "trace4_generated": 117,
+        "trace4_sorted": 105,
+        "trace4_output_bytes": 4716,
+        "final_terms": 105
+      }
+    ],
+    "internal_counters": [
+      {
+        "case": "free_4",
+        "yielded_leaves": 3,
+        "epsilon_leaves": 0,
+        "epsilon_duplicate_zero_leaves": 0,
+        "trick_calls": 5,
+        "completed_triple_paths": 4,
+        "surviving_gamma_parity_paths": 3,
+        "epf3_calls": 0,
+        "epf4_calls": 0,
+        "no_calls": 4,
+        "scratch_words": 76
+      },
+      {
+        "case": "free_6",
+        "yielded_leaves": 15,
+        "epsilon_leaves": 0,
+        "epsilon_duplicate_zero_leaves": 0,
+        "trick_calls": 25,
+        "completed_triple_paths": 16,
+        "surviving_gamma_parity_paths": 10,
+        "epf3_calls": 7,
+        "epf4_calls": 0,
+        "no_calls": 16,
+        "scratch_words": 114
+      },
+      {
+        "case": "free_8",
+        "yielded_leaves": 117,
+        "epsilon_leaves": 0,
+        "epsilon_duplicate_zero_leaves": 0,
+        "trick_calls": 105,
+        "completed_triple_paths": 64,
+        "surviving_gamma_parity_paths": 36,
+        "epf3_calls": 49,
+        "epf4_calls": 50,
+        "no_calls": 118,
+        "scratch_words": 152
+      },
+      {
+        "case": "free_10",
+        "yielded_leaves": 801,
+        "epsilon_leaves": 0,
+        "epsilon_duplicate_zero_leaves": 0,
+        "trick_calls": 425,
+        "completed_triple_paths": 256,
+        "surviving_gamma_parity_paths": 136,
+        "epf3_calls": 287,
+        "epf4_calls": 500,
+        "no_calls": 802,
+        "scratch_words": 190
+      },
+      {
+        "case": "free_12",
+        "yielded_leaves": 5139,
+        "epsilon_leaves": 0,
+        "epsilon_duplicate_zero_leaves": 0,
+        "trick_calls": 1705,
+        "completed_triple_paths": 1024,
+        "surviving_gamma_parity_paths": 528,
+        "epf3_calls": 1561,
+        "epf4_calls": 3800,
+        "no_calls": 5140,
+        "scratch_words": 228
+      },
+      {
+        "case": "free_14",
+        "yielded_leaves": 31599,
+        "epsilon_leaves": 0,
+        "epsilon_duplicate_zero_leaves": 0,
+        "trick_calls": 6825,
+        "completed_triple_paths": 4096,
+        "surviving_gamma_parity_paths": 2080,
+        "epf3_calls": 8225,
+        "epf4_calls": 25700,
+        "no_calls": 31600,
+        "scratch_words": 266
+      },
+      {
+        "case": "axial_4",
+        "yielded_leaves": 1,
+        "epsilon_leaves": 1,
+        "epsilon_duplicate_zero_leaves": 0,
+        "trick_calls": 5,
+        "completed_triple_paths": 4,
+        "surviving_gamma_parity_paths": 1,
+        "epf3_calls": 0,
+        "epf4_calls": 0,
+        "no_calls": 2,
+        "scratch_words": 76
+      },
+      {
+        "case": "axial_6",
+        "yielded_leaves": 6,
+        "epsilon_leaves": 6,
+        "epsilon_duplicate_zero_leaves": 0,
+        "trick_calls": 25,
+        "completed_triple_paths": 16,
+        "surviving_gamma_parity_paths": 6,
+        "epf3_calls": 0,
+        "epf4_calls": 0,
+        "no_calls": 7,
+        "scratch_words": 114
+      },
+      {
+        "case": "axial_8",
+        "yielded_leaves": 33,
+        "epsilon_leaves": 33,
+        "epsilon_duplicate_zero_leaves": 0,
+        "trick_calls": 105,
+        "completed_triple_paths": 64,
+        "surviving_gamma_parity_paths": 28,
+        "epf3_calls": 7,
+        "epf4_calls": 0,
+        "no_calls": 34,
+        "scratch_words": 152
+      },
+      {
+        "case": "axial_10",
+        "yielded_leaves": 180,
+        "epsilon_leaves": 180,
+        "epsilon_duplicate_zero_leaves": 0,
+        "trick_calls": 425,
+        "completed_triple_paths": 256,
+        "surviving_gamma_parity_paths": 120,
+        "epf3_calls": 84,
+        "epf4_calls": 0,
+        "no_calls": 181,
+        "scratch_words": 190
+      },
+      {
+        "case": "axial_12",
+        "yielded_leaves": 1053,
+        "epsilon_leaves": 1053,
+        "epsilon_duplicate_zero_leaves": 0,
+        "trick_calls": 1705,
+        "completed_triple_paths": 1024,
+        "surviving_gamma_parity_paths": 496,
+        "epf3_calls": 651,
+        "epf4_calls": 100,
+        "no_calls": 1054,
+        "scratch_words": 228
+      },
+      {
+        "case": "axial_14",
+        "yielded_leaves": 6354,
+        "epsilon_leaves": 6354,
+        "epsilon_duplicate_zero_leaves": 0,
+        "trick_calls": 6825,
+        "completed_triple_paths": 4096,
+        "surviving_gamma_parity_paths": 2016,
+        "epf3_calls": 4270,
+        "epf4_calls": 1400,
+        "no_calls": 6355,
+        "scratch_words": 266
+      }
+    ],
+    "instrumentation": {
+      "description": "Temporary standalone extraction of v5.0.0 EpfGen, Trick, Trace4no and TRACES definition; same algorithm and int32 WORD, instrumented with counters only. No Generator, Normalizer or sorter. Not a performance benchmark.",
+      "matched_installed_form_cases": [
+        "free_8",
+        "free_10",
+        "free_12",
+        "axial_6",
+        "axial_8",
+        "axial_10",
+        "axial_12"
+      ],
+      "source_file": "no_contraction_counts.c",
+      "source_sha256": "0853c69f2186fd0582c5a00cc7fb5a9658fd3a31d02f4ccfa6c328a7608c77a0",
+      "compiler": "gcc (GCC) 15.3.0",
+      "build_command": "gcc -O2 -Wall -Wextra no_contraction_counts.c -o no_contraction_counts",
+      "run_command": "taskset -c 3 ./no_contraction_counts > no_contraction_counts.jsonl"
+    },
+    "order_example": {
+      "original": "Tr[a,p0,b,p1,p2,a,p3,p4,b,p5,p6,p7]",
+      "first_odd": "-2 Tr[a,p0,p4,p3,a,p2,p1,p5,p6,p7]",
+      "second_odd": "+4 Tr[p3,p4,p0,p2,p1,p5,p6,p7]",
+      "selection": "b is the unique pair with odd interior (5 matrices). FORM searches odd contractions before even contractions, so it selects b before a (a has4interior matrices along its shorter cyclic direction).",
+      "form_exact_checks": [
+        "Original+2*First=0",
+        "Original-4*Reduced=0"
+      ],
+      "proof_log": "order_sensitive_proof.log",
+      "generated_terms": 117,
+      "sorted_terms": 105
+    },
+    "external_metrics": {
+      "input": "d_(a,c)*d_(b,d)*g_(1,a,p0,b,p1,p2,c,p3,p4,d,p5,p6,p7)",
+      "normalized_before_trace": "g_(1,c,p0,d,p1,p2,c,p3,p4,d,p5,p6,p7)",
+      "generated_terms": 117,
+      "sorted_terms": 105,
+      "log": "external_metrics_order_sensitive_12.log"
+    },
+    "artifacts_directory": "/tmp/trace-intermediate-form",
+    "reproduction_script": "#!/usr/bin/env bash\nset -euo pipefail\ncd \"$(dirname \"$0\")\"\n# FORM5 executable used in the saved run; replace only to reproduce on another host.\nform_bin=/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form\ngcc -O2 -Wall -Wextra no_contraction_counts.c -o no_contraction_counts\n./no_contraction_counts > no_contraction_counts.reproduced.jsonl\nfor program in *.frm; do \"$form_bin\" \"$program\" > \"${program%.frm}.reproduced.log\"; done\n"
+  },
+  "idenso": {
+    "notes": [
+      "Counters preserve Symbolica factorization. top_terms is only outer Add arity.",
+      "distributed_leaf_count_before_collection recursively sums Add and multiplies Mul arities without expanding, sorting, cancelling, or entering functions/powers. It is a syntactic count, not a final polynomial term count.",
+      "cold_events means first run of that case in this process. A cold_kernel event appears only on first initialization of that arity/parity table across all cases. warm_events always runs after that case has completed once.",
+      "Instrumented stage durations are diagnostics, not competitive timings. Instrumentation adds counter and shape walks.",
+      "FORM generated terms are streamed output terms before final sorting. Idenso collected_leaf_calls are cold recipe insertion calls, and warm materialized_recipe_monomials are already merged cached recipes.",
+      "All 24 copied simplifier outputs exactly equal the linked current production output. No production source was edited."
+    ],
+    "cold_kernels": [
+      {
+        "axial": 1,
+        "collect_calls": 6,
+        "collected_leaf_calls": 6,
+        "dummy_metric_eliminations": 6,
+        "final_map_entries": 6,
+        "final_nonzero_recipes": 6,
+        "length": 6,
+        "parity_accepted_terminals": 6,
+        "peak_map_entries": 6,
+        "peak_nonzero_entries": 6,
+        "reduce_triples_calls": 21,
+        "triple_terminal_calls": 16
+      },
+      {
+        "axial": 1,
+        "collect_calls": 34,
+        "collected_leaf_calls": 33,
+        "dummy_metric_eliminations": 34,
+        "epsilon_permutation_children": 6,
+        "final_map_entries": 33,
+        "final_nonzero_recipes": 33,
+        "length": 8,
+        "parity_accepted_terminals": 28,
+        "peak_map_entries": 33,
+        "peak_nonzero_entries": 33,
+        "reduce_triples_calls": 85,
+        "shared_epsilon_pair_expansions": 1,
+        "triple_terminal_calls": 64
+      },
+      {
+        "axial": 1,
+        "collect_calls": 192,
+        "collected_leaf_calls": 180,
+        "dummy_metric_eliminations": 172,
+        "epsilon_permutation_children": 72,
+        "final_map_entries": 180,
+        "final_nonzero_recipes": 180,
+        "length": 10,
+        "parity_accepted_terminals": 120,
+        "peak_map_entries": 180,
+        "peak_nonzero_entries": 180,
+        "reduce_triples_calls": 341,
+        "shared_epsilon_pair_expansions": 12,
+        "triple_terminal_calls": 256
+      },
+      {
+        "axial": 1,
+        "cancellation_to_zero_events": 12,
+        "collect_calls": 1150,
+        "collected_leaf_calls": 1053,
+        "dummy_metric_eliminations": 842,
+        "epsilon_permutation_children": 654,
+        "existing_key_additions": 24,
+        "final_map_entries": 1029,
+        "final_nonzero_recipes": 1029,
+        "length": 12,
+        "parity_accepted_terminals": 496,
+        "peak_map_entries": 1029,
+        "peak_nonzero_entries": 1029,
+        "reduce_triples_calls": 1365,
+        "shared_epsilon_pair_expansions": 93,
+        "triple_terminal_calls": 1024,
+        "unshared_epsilon_pair_expansions": 4,
+        "zero_key_reactivations": 12
+      },
+      {
+        "axial": 0,
+        "cancellation_to_zero_events": 6,
+        "collect_calls": 126,
+        "collected_leaf_calls": 117,
+        "dummy_metric_eliminations": 11,
+        "epsilon_permutation_children": 90,
+        "existing_key_additions": 12,
+        "final_map_entries": 105,
+        "final_nonzero_recipes": 105,
+        "length": 8,
+        "parity_accepted_terminals": 36,
+        "peak_map_entries": 105,
+        "peak_nonzero_entries": 105,
+        "reduce_triples_calls": 85,
+        "shared_epsilon_pair_expansions": 7,
+        "triple_terminal_calls": 64,
+        "unshared_epsilon_pair_expansions": 2,
+        "zero_key_reactivations": 6
+      },
+      {
+        "axial": 0,
+        "cancellation_to_zero_events": 48,
+        "collect_calls": 862,
+        "collected_leaf_calls": 801,
+        "dummy_metric_eliminations": 81,
+        "epsilon_permutation_children": 726,
+        "existing_key_additions": 108,
+        "final_map_entries": 693,
+        "final_nonzero_recipes": 693,
+        "length": 10,
+        "parity_accepted_terminals": 136,
+        "peak_map_entries": 693,
+        "peak_nonzero_entries": 693,
+        "reduce_triples_calls": 341,
+        "shared_epsilon_pair_expansions": 41,
+        "triple_terminal_calls": 256,
+        "unshared_epsilon_pair_expansions": 20,
+        "zero_key_reactivations": 48
+      },
+      {
+        "axial": 0,
+        "cancellation_to_zero_events": 300,
+        "collect_calls": 5514,
+        "collected_leaf_calls": 5139,
+        "dummy_metric_eliminations": 497,
+        "epsilon_permutation_children": 4986,
+        "existing_key_additions": 756,
+        "final_map_entries": 4383,
+        "final_nonzero_recipes": 4383,
+        "length": 12,
+        "parity_accepted_terminals": 528,
+        "peak_map_entries": 4383,
+        "peak_nonzero_entries": 4383,
+        "reduce_triples_calls": 1365,
+        "shared_epsilon_pair_expansions": 223,
+        "triple_terminal_calls": 1024,
+        "unshared_epsilon_pair_expansions": 152,
+        "zero_key_reactivations": 300
+      },
+      {
+        "axial": 0,
+        "collect_calls": 1,
+        "collected_leaf_calls": 1,
+        "final_map_entries": 1,
+        "final_nonzero_recipes": 1,
+        "length": 2,
+        "parity_accepted_terminals": 1,
+        "peak_map_entries": 1,
+        "peak_nonzero_entries": 1,
+        "reduce_triples_calls": 1,
+        "triple_terminal_calls": 1
+      },
+      {
+        "axial": 0,
+        "collect_calls": 16,
+        "collected_leaf_calls": 15,
+        "dummy_metric_eliminations": 1,
+        "epsilon_permutation_children": 6,
+        "final_map_entries": 15,
+        "final_nonzero_recipes": 15,
+        "length": 6,
+        "parity_accepted_terminals": 10,
+        "peak_map_entries": 15,
+        "peak_nonzero_entries": 15,
+        "reduce_triples_calls": 21,
+        "shared_epsilon_pair_expansions": 1,
+        "triple_terminal_calls": 16
+      },
+      {
+        "axial": 0,
+        "collect_calls": 3,
+        "collected_leaf_calls": 3,
+        "final_map_entries": 3,
+        "final_nonzero_recipes": 3,
+        "length": 4,
+        "parity_accepted_terminals": 3,
+        "peak_map_entries": 3,
+        "peak_nonzero_entries": 3,
+        "reduce_triples_calls": 5,
+        "triple_terminal_calls": 4
+      }
+    ],
+    "cases": [
+      {
+        "case": "axial_6",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 6,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 6,
+          "epsilon_nodes": 6,
+          "nodes": 133,
+          "top_terms": 6,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 6,
+        "kernels": [
+          {
+            "length": 6,
+            "axial": true,
+            "recipes": 6
+          }
+        ],
+        "full_passes": 2,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 6,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 6,
+            "epsilon_nodes": 6,
+            "nodes": 133,
+            "top_terms": 6,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 6,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 6,
+            "epsilon_nodes": 6,
+            "nodes": 133,
+            "top_terms": 6,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 6,
+          "trace4_sorted": 6,
+          "final_terms": 6
+        }
+      },
+      {
+        "case": "axial_8",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 33,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 33,
+          "epsilon_nodes": 33,
+          "nodes": 958,
+          "top_terms": 33,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 33,
+        "kernels": [
+          {
+            "length": 8,
+            "axial": true,
+            "recipes": 33
+          }
+        ],
+        "full_passes": 2,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 33,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 33,
+            "epsilon_nodes": 33,
+            "nodes": 958,
+            "top_terms": 33,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 33,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 33,
+            "epsilon_nodes": 33,
+            "nodes": 958,
+            "top_terms": 33,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 33,
+          "trace4_sorted": 33,
+          "final_terms": 33
+        }
+      },
+      {
+        "case": "axial_10",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 180,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 180,
+          "epsilon_nodes": 180,
+          "nodes": 6481,
+          "top_terms": 180,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 180,
+        "kernels": [
+          {
+            "length": 10,
+            "axial": true,
+            "recipes": 180
+          }
+        ],
+        "full_passes": 2,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 180,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 180,
+            "epsilon_nodes": 180,
+            "nodes": 6481,
+            "top_terms": 180,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 180,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 180,
+            "epsilon_nodes": 180,
+            "nodes": 6481,
+            "top_terms": 180,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 180,
+          "trace4_sorted": 180,
+          "final_terms": 180
+        }
+      },
+      {
+        "case": "axial_12",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 1029,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 1029,
+          "epsilon_nodes": 1029,
+          "nodes": 44248,
+          "top_terms": 1029,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 1029,
+        "kernels": [
+          {
+            "length": 12,
+            "axial": true,
+            "recipes": 1029
+          }
+        ],
+        "full_passes": 2,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 1029,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 1029,
+            "epsilon_nodes": 1029,
+            "nodes": 44248,
+            "top_terms": 1029,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 1029,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 1029,
+            "epsilon_nodes": 1029,
+            "nodes": 44248,
+            "top_terms": 1029,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 1053,
+          "trace4_sorted": 1029,
+          "final_terms": 1029
+        }
+      },
+      {
+        "case": "free_8",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 105,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 105,
+          "epsilon_nodes": 0,
+          "nodes": 3151,
+          "top_terms": 105,
+          "trace_nodes": 0
+        },
+        "fast_path": true,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 105,
+        "kernels": [
+          {
+            "length": 8,
+            "axial": false,
+            "recipes": 105
+          }
+        ],
+        "full_passes": 0,
+        "unchanged_passes": 0,
+        "rewrite_stage_shapes": [],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 117,
+          "trace4_sorted": 105,
+          "final_terms": 105
+        }
+      },
+      {
+        "case": "free_10",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 693,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 693,
+          "epsilon_nodes": 0,
+          "nodes": 25642,
+          "top_terms": 693,
+          "trace_nodes": 0
+        },
+        "fast_path": true,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 693,
+        "kernels": [
+          {
+            "length": 10,
+            "axial": false,
+            "recipes": 693
+          }
+        ],
+        "full_passes": 0,
+        "unchanged_passes": 0,
+        "rewrite_stage_shapes": [],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 801,
+          "trace4_sorted": 693,
+          "final_terms": 693
+        }
+      },
+      {
+        "case": "free_12",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 4383,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 4383,
+          "epsilon_nodes": 0,
+          "nodes": 192853,
+          "top_terms": 4383,
+          "trace_nodes": 0
+        },
+        "fast_path": true,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 4383,
+        "kernels": [
+          {
+            "length": 12,
+            "axial": false,
+            "recipes": 4383
+          }
+        ],
+        "full_passes": 0,
+        "unchanged_passes": 0,
+        "rewrite_stage_shapes": [],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 5139,
+          "trace4_sorted": 4383,
+          "final_terms": 4383
+        }
+      },
+      {
+        "case": "paired_6",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 0,
+          "add_nodes": 0,
+          "distributed_leaf_count_before_collection": 1,
+          "epsilon_nodes": 0,
+          "nodes": 18,
+          "top_terms": 1,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 0,
+        "materialized_recipe_monomials": 0,
+        "kernels": [],
+        "full_passes": 4,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 36,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 31,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 18,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 3,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 18,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 1,
+          "trace4_sorted": 1,
+          "final_terms": 1
+        }
+      },
+      {
+        "case": "paired_8",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 0,
+          "add_nodes": 0,
+          "distributed_leaf_count_before_collection": 1,
+          "epsilon_nodes": 0,
+          "nodes": 18,
+          "top_terms": 1,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 0,
+        "materialized_recipe_monomials": 0,
+        "kernels": [],
+        "full_passes": 5,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 48,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 43,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 33,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 3,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 18,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 4,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 18,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 1,
+          "trace4_sorted": 1,
+          "final_terms": 1
+        }
+      },
+      {
+        "case": "paired_10",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 0,
+          "add_nodes": 0,
+          "distributed_leaf_count_before_collection": 1,
+          "epsilon_nodes": 0,
+          "nodes": 18,
+          "top_terms": 1,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 0,
+        "materialized_recipe_monomials": 0,
+        "kernels": [],
+        "full_passes": 6,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 60,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 55,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 45,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 3,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 33,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 4,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 18,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 5,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 18,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 1,
+          "trace4_sorted": 1,
+          "final_terms": 1
+        }
+      },
+      {
+        "case": "paired_12",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 0,
+          "add_nodes": 0,
+          "distributed_leaf_count_before_collection": 1,
+          "epsilon_nodes": 0,
+          "nodes": 18,
+          "top_terms": 1,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 0,
+        "materialized_recipe_monomials": 0,
+        "kernels": [],
+        "full_passes": 7,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 72,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 67,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 57,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 3,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 45,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 4,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 33,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 5,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 18,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 6,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 18,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 1,
+          "trace4_sorted": 1,
+          "final_terms": 1
+        }
+      },
+      {
+        "case": "alternating_6",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 4,
+          "add_nodes": 2,
+          "distributed_leaf_count_before_collection": 3,
+          "epsilon_nodes": 0,
+          "nodes": 61,
+          "top_terms": 2,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 2,
+        "materialized_recipe_monomials": 2,
+        "kernels": [
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          }
+        ],
+        "full_passes": 5,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 2,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 2,
+            "epsilon_nodes": 0,
+            "nodes": 80,
+            "top_terms": 2,
+            "trace_nodes": 2,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 4,
+            "add_nodes": 2,
+            "distributed_leaf_count_before_collection": 3,
+            "epsilon_nodes": 0,
+            "nodes": 103,
+            "top_terms": 2,
+            "trace_nodes": 3,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 4,
+            "add_nodes": 2,
+            "distributed_leaf_count_before_collection": 3,
+            "epsilon_nodes": 0,
+            "nodes": 79,
+            "top_terms": 2,
+            "trace_nodes": 2,
+            "unchanged": false
+          },
+          {
+            "pass": 3,
+            "add_children": 4,
+            "add_nodes": 2,
+            "distributed_leaf_count_before_collection": 3,
+            "epsilon_nodes": 0,
+            "nodes": 61,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 4,
+            "add_children": 4,
+            "add_nodes": 2,
+            "distributed_leaf_count_before_collection": 3,
+            "epsilon_nodes": 0,
+            "nodes": 61,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 3,
+          "trace4_sorted": 2,
+          "final_terms": 2
+        }
+      },
+      {
+        "case": "alternating_8",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 8,
+          "add_nodes": 4,
+          "distributed_leaf_count_before_collection": 5,
+          "epsilon_nodes": 0,
+          "nodes": 115,
+          "top_terms": 2,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 3,
+        "materialized_recipe_monomials": 3,
+        "kernels": [
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          }
+        ],
+        "full_passes": 7,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 2,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 2,
+            "epsilon_nodes": 0,
+            "nodes": 104,
+            "top_terms": 2,
+            "trace_nodes": 2,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 4,
+            "add_nodes": 2,
+            "distributed_leaf_count_before_collection": 3,
+            "epsilon_nodes": 0,
+            "nodes": 139,
+            "top_terms": 2,
+            "trace_nodes": 3,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 6,
+            "add_nodes": 3,
+            "distributed_leaf_count_before_collection": 4,
+            "epsilon_nodes": 0,
+            "nodes": 157,
+            "top_terms": 2,
+            "trace_nodes": 4,
+            "unchanged": false
+          },
+          {
+            "pass": 3,
+            "add_children": 8,
+            "add_nodes": 4,
+            "distributed_leaf_count_before_collection": 5,
+            "epsilon_nodes": 0,
+            "nodes": 161,
+            "top_terms": 2,
+            "trace_nodes": 4,
+            "unchanged": false
+          },
+          {
+            "pass": 4,
+            "add_children": 8,
+            "add_nodes": 4,
+            "distributed_leaf_count_before_collection": 5,
+            "epsilon_nodes": 0,
+            "nodes": 124,
+            "top_terms": 2,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 5,
+            "add_children": 8,
+            "add_nodes": 4,
+            "distributed_leaf_count_before_collection": 5,
+            "epsilon_nodes": 0,
+            "nodes": 115,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 6,
+            "add_children": 8,
+            "add_nodes": 4,
+            "distributed_leaf_count_before_collection": 5,
+            "epsilon_nodes": 0,
+            "nodes": 115,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 5,
+          "trace4_sorted": 3,
+          "final_terms": 3
+        }
+      },
+      {
+        "case": "alternating_10",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 14,
+          "add_nodes": 7,
+          "distributed_leaf_count_before_collection": 8,
+          "epsilon_nodes": 0,
+          "nodes": 202,
+          "top_terms": 2,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 5,
+        "materialized_recipe_monomials": 5,
+        "kernels": [
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          }
+        ],
+        "full_passes": 8,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 2,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 2,
+            "epsilon_nodes": 0,
+            "nodes": 128,
+            "top_terms": 2,
+            "trace_nodes": 2,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 4,
+            "add_nodes": 2,
+            "distributed_leaf_count_before_collection": 3,
+            "epsilon_nodes": 0,
+            "nodes": 175,
+            "top_terms": 2,
+            "trace_nodes": 3,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 6,
+            "add_nodes": 3,
+            "distributed_leaf_count_before_collection": 4,
+            "epsilon_nodes": 0,
+            "nodes": 205,
+            "top_terms": 2,
+            "trace_nodes": 4,
+            "unchanged": false
+          },
+          {
+            "pass": 3,
+            "add_children": 10,
+            "add_nodes": 5,
+            "distributed_leaf_count_before_collection": 6,
+            "epsilon_nodes": 0,
+            "nodes": 263,
+            "top_terms": 2,
+            "trace_nodes": 6,
+            "unchanged": false
+          },
+          {
+            "pass": 4,
+            "add_children": 14,
+            "add_nodes": 7,
+            "distributed_leaf_count_before_collection": 8,
+            "epsilon_nodes": 0,
+            "nodes": 290,
+            "top_terms": 2,
+            "trace_nodes": 7,
+            "unchanged": false
+          },
+          {
+            "pass": 5,
+            "add_children": 14,
+            "add_nodes": 7,
+            "distributed_leaf_count_before_collection": 8,
+            "epsilon_nodes": 0,
+            "nodes": 229,
+            "top_terms": 2,
+            "trace_nodes": 3,
+            "unchanged": false
+          },
+          {
+            "pass": 6,
+            "add_children": 14,
+            "add_nodes": 7,
+            "distributed_leaf_count_before_collection": 8,
+            "epsilon_nodes": 0,
+            "nodes": 202,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 7,
+            "add_children": 14,
+            "add_nodes": 7,
+            "distributed_leaf_count_before_collection": 8,
+            "epsilon_nodes": 0,
+            "nodes": 202,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 8,
+          "trace4_sorted": 3,
+          "final_terms": 3
+        }
+      },
+      {
+        "case": "alternating_12",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 24,
+          "add_nodes": 12,
+          "distributed_leaf_count_before_collection": 13,
+          "epsilon_nodes": 0,
+          "nodes": 343,
+          "top_terms": 2,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 8,
+        "materialized_recipe_monomials": 8,
+        "kernels": [
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          },
+          {
+            "length": 2,
+            "axial": false,
+            "recipes": 1
+          }
+        ],
+        "full_passes": 10,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 2,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 2,
+            "epsilon_nodes": 0,
+            "nodes": 152,
+            "top_terms": 2,
+            "trace_nodes": 2,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 4,
+            "add_nodes": 2,
+            "distributed_leaf_count_before_collection": 3,
+            "epsilon_nodes": 0,
+            "nodes": 211,
+            "top_terms": 2,
+            "trace_nodes": 3,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 6,
+            "add_nodes": 3,
+            "distributed_leaf_count_before_collection": 4,
+            "epsilon_nodes": 0,
+            "nodes": 253,
+            "top_terms": 2,
+            "trace_nodes": 4,
+            "unchanged": false
+          },
+          {
+            "pass": 3,
+            "add_children": 10,
+            "add_nodes": 5,
+            "distributed_leaf_count_before_collection": 6,
+            "epsilon_nodes": 0,
+            "nodes": 335,
+            "top_terms": 2,
+            "trace_nodes": 6,
+            "unchanged": false
+          },
+          {
+            "pass": 4,
+            "add_children": 16,
+            "add_nodes": 8,
+            "distributed_leaf_count_before_collection": 9,
+            "epsilon_nodes": 0,
+            "nodes": 428,
+            "top_terms": 2,
+            "trace_nodes": 9,
+            "unchanged": false
+          },
+          {
+            "pass": 5,
+            "add_children": 22,
+            "add_nodes": 11,
+            "distributed_leaf_count_before_collection": 12,
+            "epsilon_nodes": 0,
+            "nodes": 473,
+            "top_terms": 2,
+            "trace_nodes": 11,
+            "unchanged": false
+          },
+          {
+            "pass": 6,
+            "add_children": 24,
+            "add_nodes": 12,
+            "distributed_leaf_count_before_collection": 13,
+            "epsilon_nodes": 0,
+            "nodes": 416,
+            "top_terms": 2,
+            "trace_nodes": 7,
+            "unchanged": false
+          },
+          {
+            "pass": 7,
+            "add_children": 24,
+            "add_nodes": 12,
+            "distributed_leaf_count_before_collection": 13,
+            "epsilon_nodes": 0,
+            "nodes": 352,
+            "top_terms": 2,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 8,
+            "add_children": 24,
+            "add_nodes": 12,
+            "distributed_leaf_count_before_collection": 13,
+            "epsilon_nodes": 0,
+            "nodes": 343,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 9,
+            "add_children": 24,
+            "add_nodes": 12,
+            "distributed_leaf_count_before_collection": 13,
+            "epsilon_nodes": 0,
+            "nodes": 343,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 13,
+          "trace4_sorted": 4,
+          "final_terms": 4
+        }
+      },
+      {
+        "case": "odd_chisholm_8",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 15,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 15,
+          "epsilon_nodes": 0,
+          "nodes": 348,
+          "top_terms": 1,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 15,
+        "kernels": [
+          {
+            "length": 6,
+            "axial": false,
+            "recipes": 15
+          }
+        ],
+        "full_passes": 3,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 42,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 15,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 15,
+            "epsilon_nodes": 0,
+            "nodes": 348,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 15,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 15,
+            "epsilon_nodes": 0,
+            "nodes": 348,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [
+          1
+        ],
+        "form": {
+          "trace4_generated": 15,
+          "trace4_sorted": 15,
+          "final_terms": 15
+        }
+      },
+      {
+        "case": "even2_chisholm_8",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 3,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 3,
+          "epsilon_nodes": 0,
+          "nodes": 58,
+          "top_terms": 1,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 3,
+        "kernels": [
+          {
+            "length": 4,
+            "axial": false,
+            "recipes": 3
+          }
+        ],
+        "full_passes": 3,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 37,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 3,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 3,
+            "epsilon_nodes": 0,
+            "nodes": 58,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 3,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 3,
+            "epsilon_nodes": 0,
+            "nodes": 58,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [
+          2
+        ],
+        "form": {
+          "trace4_generated": 3,
+          "trace4_sorted": 3,
+          "final_terms": 3
+        }
+      },
+      {
+        "case": "even4_chisholm_10",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 212,
+          "add_nodes": 3,
+          "distributed_leaf_count_before_collection": 210,
+          "epsilon_nodes": 0,
+          "nodes": 6307,
+          "top_terms": 2,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 2,
+        "materialized_recipe_monomials": 210,
+        "kernels": [
+          {
+            "length": 8,
+            "axial": false,
+            "recipes": 105
+          },
+          {
+            "length": 8,
+            "axial": false,
+            "recipes": 105
+          }
+        ],
+        "full_passes": 3,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 2,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 2,
+            "epsilon_nodes": 0,
+            "nodes": 109,
+            "top_terms": 2,
+            "trace_nodes": 2,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 212,
+            "add_nodes": 3,
+            "distributed_leaf_count_before_collection": 210,
+            "epsilon_nodes": 0,
+            "nodes": 6307,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 212,
+            "add_nodes": 3,
+            "distributed_leaf_count_before_collection": 210,
+            "epsilon_nodes": 0,
+            "nodes": 6307,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [
+          4
+        ],
+        "form": {
+          "trace4_generated": 234,
+          "trace4_sorted": 33,
+          "final_terms": 33
+        }
+      },
+      {
+        "case": "cyclic_pair_8",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 15,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 15,
+          "epsilon_nodes": 0,
+          "nodes": 348,
+          "top_terms": 1,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 15,
+        "kernels": [
+          {
+            "length": 6,
+            "axial": false,
+            "recipes": 15
+          }
+        ],
+        "full_passes": 3,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 48,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 15,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 15,
+            "epsilon_nodes": 0,
+            "nodes": 348,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 15,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 15,
+            "epsilon_nodes": 0,
+            "nodes": 348,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [],
+        "form": {
+          "trace4_generated": 15,
+          "trace4_sorted": 15,
+          "final_terms": 15
+        }
+      },
+      {
+        "case": "order_sensitive_12",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 319,
+          "add_nodes": 5,
+          "distributed_leaf_count_before_collection": 315,
+          "epsilon_nodes": 0,
+          "nodes": 9463,
+          "top_terms": 2,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 3,
+        "materialized_recipe_monomials": 315,
+        "kernels": [
+          {
+            "length": 8,
+            "axial": false,
+            "recipes": 105
+          },
+          {
+            "length": 8,
+            "axial": false,
+            "recipes": 105
+          },
+          {
+            "length": 8,
+            "axial": false,
+            "recipes": 105
+          }
+        ],
+        "full_passes": 4,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 2,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 2,
+            "epsilon_nodes": 0,
+            "nodes": 133,
+            "top_terms": 2,
+            "trace_nodes": 2,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 4,
+            "add_nodes": 2,
+            "distributed_leaf_count_before_collection": 3,
+            "epsilon_nodes": 0,
+            "nodes": 166,
+            "top_terms": 2,
+            "trace_nodes": 3,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 319,
+            "add_nodes": 5,
+            "distributed_leaf_count_before_collection": 315,
+            "epsilon_nodes": 0,
+            "nodes": 9463,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 3,
+            "add_children": 319,
+            "add_nodes": 5,
+            "distributed_leaf_count_before_collection": 315,
+            "epsilon_nodes": 0,
+            "nodes": 9463,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [
+          4,
+          4,
+          3
+        ],
+        "form": {
+          "trace4_generated": 117,
+          "trace4_sorted": 105,
+          "final_terms": 105
+        }
+      },
+      {
+        "case": "order_manual_b_first",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 105,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 105,
+          "epsilon_nodes": 0,
+          "nodes": 3153,
+          "top_terms": 1,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 105,
+        "kernels": [
+          {
+            "length": 8,
+            "axial": false,
+            "recipes": 105
+          }
+        ],
+        "full_passes": 3,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 0,
+            "add_nodes": 0,
+            "distributed_leaf_count_before_collection": 1,
+            "epsilon_nodes": 0,
+            "nodes": 54,
+            "top_terms": 1,
+            "trace_nodes": 1,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 105,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 105,
+            "epsilon_nodes": 0,
+            "nodes": 3153,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 105,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 105,
+            "epsilon_nodes": 0,
+            "nodes": 3153,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [
+          3
+        ]
+      },
+      {
+        "case": "order_manual_two_odd",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 105,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 105,
+          "epsilon_nodes": 0,
+          "nodes": 3153,
+          "top_terms": 1,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 105,
+        "kernels": [
+          {
+            "length": 8,
+            "axial": false,
+            "recipes": 105
+          }
+        ],
+        "full_passes": 2,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 105,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 105,
+            "epsilon_nodes": 0,
+            "nodes": 3153,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 105,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 105,
+            "epsilon_nodes": 0,
+            "nodes": 3153,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": []
+      },
+      {
+        "case": "external_metrics_default",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 4383,
+          "add_nodes": 1,
+          "distributed_leaf_count_before_collection": 4383,
+          "epsilon_nodes": 0,
+          "nodes": 154636,
+          "top_terms": 1,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 1,
+        "materialized_recipe_monomials": 4383,
+        "kernels": [
+          {
+            "length": 12,
+            "axial": false,
+            "recipes": 4383
+          }
+        ],
+        "full_passes": 2,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 4383,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 4383,
+            "epsilon_nodes": 0,
+            "nodes": 192868,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 4383,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 4383,
+            "epsilon_nodes": 0,
+            "nodes": 154636,
+            "top_terms": 1,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": []
+      },
+      {
+        "case": "external_metrics_precontracted",
+        "copied_matches_production": true,
+        "output": {
+          "add_children": 319,
+          "add_nodes": 5,
+          "distributed_leaf_count_before_collection": 315,
+          "epsilon_nodes": 0,
+          "nodes": 9463,
+          "top_terms": 2,
+          "trace_nodes": 0
+        },
+        "fast_path": false,
+        "materialization_calls": 3,
+        "materialized_recipe_monomials": 315,
+        "kernels": [
+          {
+            "length": 8,
+            "axial": false,
+            "recipes": 105
+          },
+          {
+            "length": 8,
+            "axial": false,
+            "recipes": 105
+          },
+          {
+            "length": 8,
+            "axial": false,
+            "recipes": 105
+          }
+        ],
+        "full_passes": 4,
+        "unchanged_passes": 1,
+        "rewrite_stage_shapes": [
+          {
+            "pass": 0,
+            "add_children": 2,
+            "add_nodes": 1,
+            "distributed_leaf_count_before_collection": 2,
+            "epsilon_nodes": 0,
+            "nodes": 133,
+            "top_terms": 2,
+            "trace_nodes": 2,
+            "unchanged": false
+          },
+          {
+            "pass": 1,
+            "add_children": 4,
+            "add_nodes": 2,
+            "distributed_leaf_count_before_collection": 3,
+            "epsilon_nodes": 0,
+            "nodes": 166,
+            "top_terms": 2,
+            "trace_nodes": 3,
+            "unchanged": false
+          },
+          {
+            "pass": 2,
+            "add_children": 319,
+            "add_nodes": 5,
+            "distributed_leaf_count_before_collection": 315,
+            "epsilon_nodes": 0,
+            "nodes": 9463,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": false
+          },
+          {
+            "pass": 3,
+            "add_children": 319,
+            "add_nodes": 5,
+            "distributed_leaf_count_before_collection": 315,
+            "epsilon_nodes": 0,
+            "nodes": 9463,
+            "top_terms": 2,
+            "trace_nodes": 0,
+            "unchanged": true
+          }
+        ],
+        "chisholm_interior_lengths": [
+          4,
+          4,
+          3
+        ]
+      }
+    ]
+  },
+  "order_reproducer": {
+    "notation": "Tr is an ordinary four-dimensional trace; a,b,c,d are Lorentz indices and p0..p7 distinct slashed vectors. Repeated indices are summed.",
+    "original": "Tr[a,p0,b,p1,p2,a,p3,p4,b,p5,p6,p7]",
+    "odd_first": "-2 Tr[a,p0,p4,p3,a,p2,p1,p5,p6,p7]",
+    "two_odd_reductions": "4 Tr[p3,p4,p0,p2,p1,p5,p6,p7]",
+    "external_metrics": "g(a,c)*g(b,d)*Tr[a,p0,b,p1,p2,c,p3,p4,d,p5,p6,p7]",
+    "first_difference": "Idenso selects the shortest cyclic repeated pair (a, even interior); FORM prioritizes the odd-interior four-dimensional Chisholm contraction (b).",
+    "external_first_difference": "Default Idenso Schoonschip leaves trace bodies opaque, so the 12-gamma kernel runs before external metric contraction; FORM contracts these metrics before tracing."
+  },
+  "warm_timings": {
+    "method": "Five samples per case, interleaved rotating order after all cases are warmed; shared host pinned to CPU 6, Rust opt-level=2/dev-optim dependencies. Input construction and lazy initialization excluded; output destruction included. External_prepass_included times chain-aware Schoonschip plus simplify_gamma; precontracted times gamma only. Manual identities are applied outside the timed region, so these are equivalent-input diagnostics, not timings of an implemented order-selection change.",
+    "samples": [
+      {
+        "case": "original_shortest",
+        "input_terms": 1,
+        "top_level_terms": 2,
+        "byte_equal_original_result": true,
+        "samples_ms": [
+          24.764183,
+          24.704233,
+          24.656741999999998,
+          24.785293,
+          24.731482
+        ],
+        "median_ms": 24.731482
+      },
+      {
+        "case": "manual_b_first",
+        "input_terms": 1,
+        "top_level_terms": 1,
+        "byte_equal_original_result": false,
+        "samples_ms": [
+          8.313657000000001,
+          8.303187,
+          8.327938,
+          8.347048,
+          8.328878
+        ],
+        "median_ms": 8.327938
+      },
+      {
+        "case": "manual_two_odd",
+        "input_terms": 1,
+        "top_level_terms": 1,
+        "byte_equal_original_result": false,
+        "samples_ms": [
+          8.159975999999999,
+          8.158537,
+          8.167727,
+          8.178196999999999,
+          8.153486999999998
+        ],
+        "median_ms": 8.159975999999999
+      },
+      {
+        "case": "manual_a_first",
+        "input_terms": 2,
+        "top_level_terms": 2,
+        "byte_equal_original_result": true,
+        "samples_ms": [
+          24.664493,
+          24.510752,
+          24.683031,
+          24.559091000000002,
+          24.589591000000002
+        ],
+        "median_ms": 24.589591000000002
+      },
+      {
+        "case": "external_metrics_default",
+        "input_terms": 1,
+        "top_level_terms": 1,
+        "byte_equal_original_result": false,
+        "samples_ms": [
+          657.578714,
+          656.4206,
+          656.7785120000001,
+          654.820615,
+          654.3603730000001
+        ],
+        "median_ms": 656.4206
+      },
+      {
+        "case": "external_prepass_included",
+        "input_terms": 1,
+        "top_level_terms": 2,
+        "byte_equal_original_result": true,
+        "samples_ms": [
+          26.478978,
+          26.694408,
+          26.636488,
+          26.603498,
+          26.680909
+        ],
+        "median_ms": 26.636488
+      },
+      {
+        "case": "external_metrics_precontracted",
+        "input_terms": 1,
+        "top_level_terms": 2,
+        "byte_equal_original_result": true,
+        "samples_ms": [
+          24.770472,
+          24.771912999999998,
+          24.708312,
+          24.737872,
+          24.701781999999998
+        ],
+        "median_ms": 24.737872
+      }
+    ],
+    "build_command": [
+      "rustc",
+      "--edition=2024",
+      "-C",
+      "opt-level=2",
+      "-C",
+      "debuginfo=2",
+      "-L",
+      "dependency=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps",
+      "--extern",
+      "idenso=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps/libidenso-4e984ef598e83cf1.rlib",
+      "--extern",
+      "spenso=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps/libspenso-43f6d5a1452bb1de.rlib",
+      "--extern",
+      "symbolica=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps/libsymbolica-0c0d2c7b699a1419.rlib",
+      "--extern",
+      "symbolica_utils=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps/libsymbolica_utils-0b900acdce8e1430.rlib",
+      "--extern",
+      "itertools=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps/libitertools-983651445182ffda.rlib",
+      "/tmp/trace-order-root/probe.rs",
+      "-o",
+      "/tmp/trace-order-root/probe"
+    ],
+    "driver": "\nuse std::{hint::black_box,time::Instant};\nuse idenso::{gamma,dirac::GammaSimplifier,representations::Bispinor};\nuse idenso::shorthands::schoonschip::{Schoonschip,SchoonschipSettings};\nuse spenso::{g,trace,network::tags::SPENSO_TAG,structure::representation::{Minkowski,RepName}};\nuse symbolica::{atom::{Atom,AtomCore},symbol,function};\nfn run(name:&str,input:&Atom)->Atom{\n if name==\"external_prepass_included\"{input.schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions()).simplify_gamma()}else{input.simplify_gamma()}\n}\nfn main(){\n idenso::representations::initialize();\n let rep=Minkowski{}.new_rep(4); let spin=Bispinor{}.new_rep(4).to_symbolic([]);\n let a=rep.pattern(symbol!(\"order_probe::a\")); let b=rep.pattern(symbol!(\"order_probe::b\"));\n let p:Vec<_>=(0..8).map(|i|function!(SPENSO_TAG.rank_one_tensor_symbol(&format!(\"order_probe::p{i}\")),rep.to_symbolic([]))).collect();\n let original=trace!(&spin;[&a,&p[0],&b,&p[1],&p[2],&a,&p[3],&p[4],&b,&p[5],&p[6],&p[7]].map(|x|gamma!(x)));\n let b_first=-2*trace!(&spin;[&a,&p[0],&p[4],&p[3],&a,&p[2],&p[1],&p[5],&p[6],&p[7]].map(|x|gamma!(x)));\n let reduced=4*trace!(&spin;[3,4,0,2,1,5,6,7].map(|i|gamma!(&p[i])));\n let a_first=2*trace!(&spin;[&p[1],&b,&p[0],&p[2],&p[3],&p[4],&b,&p[5],&p[6],&p[7]].map(|x|gamma!(x)))+2*trace!(&spin;[&p[2],&p[0],&b,&p[1],&p[3],&p[4],&b,&p[5],&p[6],&p[7]].map(|x|gamma!(x)));\n let c=rep.pattern(symbol!(\"order_probe::c\")); let d=rep.pattern(symbol!(\"order_probe::d\"));\n let external=g!(&a,&c)*g!(&b,&d)*trace!(&spin;[&a,&p[0],&b,&p[1],&p[2],&c,&p[3],&p[4],&d,&p[5],&p[6],&p[7]].map(|x|gamma!(x)));\n let precontracted=external.schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());\n let cases=[(\"original_shortest\",original),(\"manual_b_first\",b_first),(\"manual_two_odd\",reduced),(\"manual_a_first\",a_first),(\"external_metrics_default\",external.clone()),(\"external_prepass_included\",external),(\"external_metrics_precontracted\",precontracted)];\n let baseline=cases[0].1.simplify_gamma(); let mut times:Vec<Vec<f64>>=vec![vec![];cases.len()];\n for (name,input) in &cases {\n  let output=run(name,input);\n  std::fs::write(format!(\"/tmp/trace-order-root/{name}.input\"),input.to_plain_string()).unwrap();\n  std::fs::write(format!(\"/tmp/trace-order-root/{name}.output\"),output.to_plain_string()).unwrap();\n }\n for sample in 0..5 { for offset in 0..cases.len(){let i=(sample+offset)%cases.len();let t=Instant::now();let output=black_box(run(cases[i].0,black_box(&cases[i].1)));drop(output);times[i].push(t.elapsed().as_secs_f64()*1000.);}}\n for (i,(name,input)) in cases.iter().enumerate(){let result=run(name,input);let mut sorted=times[i].clone();sorted.sort_by(f64::total_cmp);println!(\"{{\\\"case\\\":{name:?},\\\"input_terms\\\":{},\\\"top_level_terms\\\":{},\\\"byte_equal_original_result\\\":{},\\\"samples_ms\\\":{:?},\\\"median_ms\\\":{}}}\",input.nterms(),result.nterms(),result==baseline,times[i],sorted[2]);}\n}\n"
+  },
+  "hep_validation": {
+    "method": "Exact Atom-valued tensor networks using hep_lib_atom, with exact Minkowski metric registered. Three signed-integer assignments; no symbolic expansion or common normal form imposed.",
+    "component_formula": "((index*19 + axis*23 + index*axis*11 + sample*(index + axis*7 + 3) + index*index*(axis+5)) % 19) - 9, sample=0..2, index=0..7, axis=0..3",
+    "assignments": [
+      [
+        [
+          -9,
+          -5,
+          -1,
+          3
+        ],
+        [
+          -4,
+          -7,
+          9,
+          6
+        ],
+        [
+          -8,
+          3,
+          -5,
+          6
+        ],
+        [
+          -2,
+          6,
+          -5,
+          3
+        ],
+        [
+          -5,
+          2,
+          9,
+          -3
+        ],
+        [
+          2,
+          -9,
+          -1,
+          7
+        ],
+        [
+          0,
+          -8,
+          3,
+          -5
+        ],
+        [
+          8,
+          5,
+          2,
+          -1
+        ]
+      ],
+      [
+        [
+          -6,
+          5,
+          -3,
+          8
+        ],
+        [
+          0,
+          4,
+          8,
+          -7
+        ],
+        [
+          -3,
+          -4,
+          -5,
+          -6
+        ],
+        [
+          4,
+          0,
+          -4,
+          -8
+        ],
+        [
+          2,
+          -3,
+          -8,
+          6
+        ],
+        [
+          -9,
+          6,
+          2,
+          -2
+        ],
+        [
+          9,
+          8,
+          7,
+          6
+        ],
+        [
+          -1,
+          3,
+          7,
+          -8
+        ]
+      ],
+      [
+        [
+          -3,
+          -4,
+          -5,
+          -6
+        ],
+        [
+          4,
+          -4,
+          7,
+          -1
+        ],
+        [
+          2,
+          8,
+          -5,
+          1
+        ],
+        [
+          -9,
+          -6,
+          -3,
+          0
+        ],
+        [
+          9,
+          -8,
+          -6,
+          -4
+        ],
+        [
+          -1,
+          2,
+          5,
+          8
+        ],
+        [
+          -1,
+          5,
+          -8,
+          -2
+        ],
+        [
+          9,
+          1,
+          -7,
+          4
+        ]
+      ]
+    ],
+    "exact_values": [
+      "-1357141056",
+      "3270056448",
+      "655026432"
+    ],
+    "scope": "Checks original, first odd reduction, second odd reduction, external-metric input, chain-aware precontracted input, and both the repeated-pair and odd-first simplified outputs. The large default external-metric simplified output was not HEP-evaluated. Finite exact evaluations support equivalence; FORM also proves original minus the reduced expression equals zero.",
+    "log": "sample 0: original=-1357141056 first_odd=-1357141056 second_odd=-1357141056 external=-1357141056 precontracted=-1357141056 simplified_outputs=equal\nsample 1: original=3270056448 first_odd=3270056448 second_odd=3270056448 external=3270056448 precontracted=3270056448 simplified_outputs=equal\nsample 2: original=655026432 first_odd=655026432 second_odd=655026432 external=655026432 precontracted=655026432 simplified_outputs=equal\n",
+    "driver": "//! Compare scalar values after contracting actual HEP gamma matrices. Four-\n//! dimensional metric/epsilon expressions need not have a unique normal form.\n\nuse std::{cell::RefCell, collections::HashMap, sync::Once};\n\nuse idenso::{\n    dirac::GammaSimplifier,\n    epsilon::EPSILON_SYMBOL,\n    representations::{Bispinor, initialize},\n};\nuse spenso::{\n    network::{\n        ExecutionResult, Sequential, SmallestDegree,\n        library::symbolic::{ETS, ExplicitKey, TensorLibrary},\n        parsing::{ParseSettings, StrictTensorFilter},\n    },\n    structure::{\n        abstract_index::AbstractIndex,\n        representation::{Minkowski, RepName},\n    },\n    symbolic_parallelism::{SymbolicParallelism, set_symbolica_rayon_enabled},\n    tensors::{\n        data::DenseTensor,\n        parametric::{MixedTensor, ParamTensor},\n    },\n};\nuse spenso_hep_lib::{FUN_LIB, HepNet, hep_lib_atom};\nuse symbolica::{\n    atom::{Atom, AtomCore, AtomView},\n    coefficient::CoefficientView,\n    function,\n};\n\ntype Library = TensorLibrary<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>;\n\nstruct TraceEvaluation {\n    library: Library,\n    momenta: Vec<Atom>,\n    scalar_tensors: RefCell<HashMap<Atom, Atom>>,\n}\n\nimpl TraceEvaluation {\n    fn new(sample: usize) -> Self {\n        static INITIALIZE: Once = Once::new();\n        INITIALIZE.call_once(|| {\n            initialize();\n            // Tiny component contractions do not benefit from waking the\n            // machine-wide Rayon pool for each metric or epsilon tensor.\n            set_symbolica_rayon_enabled(SymbolicParallelism::Serial);\n        });\n        let mut library =\n            hep_lib_atom::<AbstractIndex, MixedTensor<f64, ExplicitKey<AbstractIndex>>>();\n        let mink = Minkowski {}.new_rep(4);\n        let metric = ExplicitKey::from_iter([mink.to_lib(); 2], ETS.metric, None);\n        let components = (0..16).map(|flat| {\n            Atom::num(if flat / 4 != flat % 4 { 0 } else if flat == 0 { 1 } else { -1 })\n        }).collect();\n        library.insert_explicit(metric.map_canonical(|structure| {\n            MixedTensor::Param(ParamTensor::param(DenseTensor::from_storage_data(components, structure).unwrap().into()))\n        }));\n        let mut momenta = Vec::new();\n        for index in 0..14 {\n            let name = spenso::network::tags::register_tensor_symbol(\n                symbolica::wrap_symbol!(format!(\"trace_validation_p{index}\")),\n                Vec::new(),\n                true,\n            )\n            .unwrap();\n            let key = ExplicitKey::from_iter([mink.to_lib()], name, None);\n            // Independent directions and signed integer components, including\n            // timelike and spacelike vectors. Every sample spans all four axes.\n            let components = (0..4)\n                .map(|axis| {\n                    let value = ((index * 19 + axis * 23 + index * axis * 11\n                        + sample * (index + axis * 7 + 3) + index * index * (axis + 5)) % 19) as i64 - 9;\n                    Atom::num(value)\n                })\n                .collect();\n            library.insert_explicit(key.map_canonical(|structure| {\n                MixedTensor::Param(ParamTensor::param(\n                    DenseTensor::from_storage_data(components, structure)\n                        .unwrap()\n                        .into(),\n                ))\n            }));\n            momenta.push(function!(name, mink.to_symbolic([])));\n        }\n        // Idenso's epsilon includes -i: epsilon(0,1,2,3) = -i for the\n        // (+---) metric and HEP library's gamma5 = i gamma0 gamma1 gamma2 gamma3.\n        let key = ExplicitKey::from_iter([mink.to_lib(); 4], *EPSILON_SYMBOL, None);\n        let components = (0..256)\n            .map(|flat| {\n                let indices = [flat / 64, flat / 16 % 4, flat / 4 % 4, flat % 4];\n                if (0..4).any(|i| indices[i + 1..].contains(&indices[i])) {\n                    Atom::Zero\n                } else {\n                    let inversions = (0..4)\n                        .map(|i| indices[i + 1..].iter().filter(|&&j| indices[i] > j).count())\n                        .sum::<usize>();\n                    if inversions % 2 == 0 {\n                        -Atom::i()\n                    } else {\n                        Atom::i()\n                    }\n                }\n            })\n            .collect();\n        library.insert_explicit(key.map_canonical(|structure| {\n            MixedTensor::Param(ParamTensor::param(\n                DenseTensor::from_storage_data(components, structure)\n                    .unwrap()\n                    .into(),\n            ))\n        }));\n        Self {\n            library,\n            momenta,\n            scalar_tensors: RefCell::default(),\n        }\n    }\n\n    fn trace(&self, length: usize, axial: bool) -> Atom {\n        let mut factors: Vec<_> = self.momenta[..length]\n            .iter()\n            .map(|p| idenso::gamma!(p))\n            .collect();\n        if axial {\n            factors.insert(0, idenso::gamma5!());\n        }\n        spenso::trace!(&Bispinor {}.new_rep(4); factors)\n    }\n\n    fn evaluate(&self, expression: &Atom) -> Atom {\n        let settings =\n            ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);\n        let mut network =\n            HepNet::<AbstractIndex>::try_from_view(expression.as_view(), &self.library, &settings)\n                .unwrap();\n        network\n            .execute::<Sequential, SmallestDegree, _, _, _>(&self.library, &*FUN_LIB)\n            .unwrap();\n        let value = match network.result_scalar().unwrap() {\n            ExecutionResult::One => Atom::one(),\n            ExecutionResult::Zero => Atom::Zero,\n            ExecutionResult::Val(value) => value.into_owned(),\n        };\n        assert!(\n            matches!(value.as_view(), AtomView::Num(number)\n            if matches!(number.get_coeff_view(), CoefficientView::Natural(_, 1, _, 1))),\n            \"component contraction must produce an exact Gaussian integer, got {value}\"\n        );\n        value\n    }\n\n    #[track_caller]\n    fn assert_simplification(&self, expression: &Atom, simplified: &Atom, label: &str) -> Atom {\n        let original = self.evaluate(expression);\n        // Each closed metric/epsilon subnetwork is independent. Contract it\n        // once through HEP and reuse its exact value across the polynomial,\n        // avoiding thousands of duplicate network constructions.\n        let simplified = simplified.replace_map(|atom, _, output| {\n            let AtomView::Fun(function) = atom else {\n                return;\n            };\n            if ![ETS.metric, *EPSILON_SYMBOL].contains(&function.get_symbol()) {\n                return;\n            }\n            let mut tensors = self.scalar_tensors.borrow_mut();\n            let value = tensors\n                .entry(atom.to_owned())\n                .or_insert_with(|| self.evaluate(&atom.to_owned()));\n            **output = value.clone();\n        });\n        let simplified = self.evaluate(&simplified);\n        assert_eq!(original, simplified, \"HEP component mismatch for {label}\");\n        original\n    }\n}\n\nimpl TraceEvaluation {\n    fn assert_trace_length(length: usize) {\n        let evaluations = [0, 1, 2].map(Self::new);\n        for axial in [false, true] {\n            let expression = evaluations[0].trace(length, axial);\n            let simplified = expression.simplify_gamma();\n            let mut nonzero_samples = 0;\n            for (sample, evaluation) in evaluations.iter().enumerate() {\n                let label = format!(\"sample {sample}, length {length}, gamma5 {axial}\");\n                let value = evaluation.assert_simplification(&expression, &simplified, &label);\n                nonzero_samples += usize::from(!value.is_zero());\n                if sample == 0 && axial && length == 4 {\n                    assert_eq!(\n                        value,\n                        Atom::num(4) * Atom::i(),\n                        \"gamma5 orientation in the (+---) basis\"\n                    );\n                }\n            }\n            if length.is_multiple_of(2) && (!axial || length >= 4) {\n                assert!(\n                    nonzero_samples > 0,\n                    \"all samples were trivial at length {length}, gamma5 {axial}\"\n                );\n            }\n        }\n    }\n\n    fn assert_repeated_indices([left, right]: [usize; 2]) {\n        let evaluations = [0, 1, 2].map(Self::new);\n        let repeated = Minkowski {}\n            .new_rep(4)\n            .slot::<AbstractIndex, _>(symbolica::symbol!(\"trace_repeated_mu\"));\n        for gamma5_position in [None, Some(0), Some(3), Some(14)] {\n            let mut factors: Vec<_> = evaluations[0]\n                .momenta\n                .iter()\n                .map(|p| idenso::gamma!(p))\n                .collect();\n            factors[left] = idenso::gamma!(repeated);\n            factors[right] = idenso::gamma!(repeated);\n            if let Some(position) = gamma5_position {\n                factors.insert(position, idenso::gamma5!());\n            }\n            let expression = spenso::trace!(&Bispinor {}.new_rep(4); factors);\n            let simplified = expression.simplify_gamma();\n            for (sample, evaluation) in evaluations.iter().enumerate() {\n                let label = format!(\n                    \"sample {sample}, repeated indices {left}/{right}, gamma5 at {gamma5_position:?}\"\n                );\n                let _ = evaluation.assert_simplification(&expression, &simplified, &label);\n            }\n        }\n    }\n}\n\n// Keep each arity/pattern below the integration runner's timeout, without\n// changing the sample count or repeating algebra generation for every sample.\nmacro_rules! trace_cases {\n    ($method:ident; $( $name:ident: $case:expr ),* $(,)?) => {\n        $( #[test] fn $name() { TraceEvaluation::$method($case); } )*\n    };\n}\n\ntrace_cases!(assert_trace_length;\n    gamma_trace_1: 1, gamma_trace_2: 2, gamma_trace_3: 3, gamma_trace_4: 4,\n    gamma_trace_5: 5, gamma_trace_6: 6, gamma_trace_7: 7, gamma_trace_8: 8,\n    gamma_trace_9: 9, gamma_trace_10: 10, gamma_trace_11: 11, gamma_trace_12: 12,\n    gamma_trace_13: 13, gamma_trace_14: 14,\n);\ntrace_cases!(assert_repeated_indices;\n    cyclic_contraction: [0, 13], short_chisholm: [2, 5],\n    odd_long_chisholm: [0, 6], even_long_chisholm: [0, 7],\n);\n\n#[test]\nfn repeated_slashes_match_exact_hep_tensor_contractions() {\n    for sample in 0..3 {\n        let evaluation = TraceEvaluation::new(sample);\n        for order in [\n            [0, 0, 1, 2, 3, 4, 5, 6],\n            [0, 1, 2, 3, 4, 5, 6, 0],\n            [0, 1, 0, 2, 3, 4, 5, 6],\n        ] {\n            for axial in [false, true] {\n                let mut factors: Vec<_> = order\n                    .iter()\n                    .map(|&index| idenso::gamma!(&evaluation.momenta[index]))\n                    .collect();\n                if axial {\n                    factors.insert(3, idenso::gamma5!());\n                }\n                let expression = spenso::trace!(&Bispinor {}.new_rep(4); factors);\n                let label = format!(\"sample {sample}, repeated slashes {order:?}, gamma5 {axial}\");\n                let simplified = expression.simplify_gamma();\n                let _ = evaluation.assert_simplification(&expression, &simplified, &label);\n            }\n        }\n    }\n}\n\nfn main() {\n    let bis = Bispinor {}.new_rep(4);\n    for sample in 0..3 {\n        let evaluation = TraceEvaluation::new(sample);\n        let mink = Minkowski {}.new_rep(4);\n        let [a, b, c, d] = [\"order_a\", \"order_b\", \"order_c\", \"order_d\"].map(|name| mink.slot::<AbstractIndex, _>(symbolica::symbol!(name)));\n        let build = |word: &[i32]| {\n            let factors = word.iter().map(|&index| match index {\n                -1 => idenso::gamma!(a),\n                -2 => idenso::gamma!(b),\n                -3 => idenso::gamma!(c),\n                -4 => idenso::gamma!(d),\n                n => idenso::gamma!(&evaluation.momenta[n as usize]),\n            }).collect::<Vec<_>>();\n            spenso::trace!(&bis; factors)\n        };\n        let original = build(&[-1,0,-2,1,2,-1,3,4,-2,5,6,7]);\n        let first_odd = Atom::num(-2) * build(&[-1,0,4,3,-1,2,1,5,6,7]);\n        let second_odd = Atom::num(4) * build(&[3,4,0,2,1,5,6,7]);\n        let values = [&original, &first_odd, &second_odd].map(|expression| evaluation.evaluate(expression));\n        assert_eq!(values[0],values[1]);\n        assert_eq!(values[0],values[2]);\n        assert!(!values[0].is_zero(), \"nontrivial sample required\");\n        let original_result = original.simplify_gamma();\n        let reduced_result = second_odd.simplify_gamma();\n        let _ = evaluation.assert_simplification(&original, &original_result, \"current pair order\");\n        let _ = evaluation.assert_simplification(&original, &reduced_result, \"odd-first pair order\");\n        use idenso::shorthands::schoonschip::{Schoonschip, SchoonschipSettings};\n        let external = spenso::g!(a,c) * spenso::g!(b,d) * build(&[-1,0,-2,1,2,-3,3,4,-4,5,6,7]);\n        let precontracted = external.schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions().without_rank1_tensors());\n        let external_value = evaluation.evaluate(&external);\n        let precontracted_value = evaluation.evaluate(&precontracted);\n        assert_eq!(values[0],external_value);\n        assert_eq!(values[0],precontracted_value);\n        println!(\"sample {sample}: original={} first_odd={} second_odd={} external={} precontracted={} simplified_outputs=equal\",values[0],values[1],values[2],external_value,precontracted_value);\n    }\n}\n",
+    "build_metadata": "Crate info:\nname spenso_hep_lib-6ea8c53ff9c5c505\nhash 5b94122e7bd882875821ae2b618a40ac stable_crate_id StableCrateId(11479599594677512645)\nproc_macro false\ntriple x86_64-unknown-linux-gnu\nedition 2024\nsymbol_mangling_version V0\nrequired_panic_strategy None panic_in_drop_strategy Unwind\nhas_global_allocator false has_alloc_error_handler false has_panic_handler false has_default_lib_allocator false\ncompiler_builtins false needs_allocator false needs_panic_runtime false no_builtins false panic_runtime false profiler_runtime false\n=External Dependencies=\n1 std-64f5f36fb0927694 hash 32c61de8c7366ead82c3de471236156d host_hash None kind Unconditional public\n2 core-df1bddb45adbe94b hash 4c6a77fa41db53e52ef11c4c52cdc6ca host_hash None kind Unconditional public\n3 alloc-1ad4f876c768bda9 hash 2a8e72d3dd58ba9ba2020c95ebda31aa host_hash None kind Unconditional public\n4 compiler_builtins-2d2ab9fb0fe1def5 hash 6056cb873436b83e895a25e53c89f207 host_hash None kind Unconditional private\n5 libc-06449a08aaab5e30 hash d746ab69ed3328eb7b67d81e0c47f3c4 host_hash None kind Unconditional public\n6 rustc_std_workspace_core-cb0d4d77988d81b5 hash 4725cfde80a569134522e460f97bfb80 host_hash None kind Unconditional public\n7 unwind-3ec41d3a5a80a4a4 hash 4597cd4570d5dbf0c90e8919ce29c622 host_hash None kind Unconditional private\n8 miniz_oxide-e44eaef1807e5fc0 hash 4a13b0a8c64c0d9ec262f082f8b038d0 host_hash None kind Unconditional private\n9 adler2-dca52f01a59c33e7 hash 9f425524442f50364179a9ed6c1b391f host_hash None kind Unconditional private\n10 hashbrown-143c77bb957d9940 hash 657bfdf985160df715aef35819c8b899 host_hash None kind Unconditional public\n11 rustc_std_workspace_alloc-145a318e0772276c hash ed257a5fb7f2fadcf7b68f0dc0a885f0 host_hash None kind Unconditional public\n12 std_detect-f99feda5ce9e492a hash 3f0444b20538dbe3072aec301783284b host_hash None kind Unconditional public\n13 rustc_demangle-cfd0ab54bb33760e hash 95acbdee12d3d58a5672e5658e6a25b5 host_hash None kind Unconditional private\n14 cfg_if-360da4ba13154744 hash 6fd79543a79ed58ca907971bbbce7dcd host_hash None kind Unconditional public\n15 addr2line-09755979c57b7e64 hash 2df60317f7f6de47c85c59fa8eb2638b host_hash None kind Unconditional private\n16 gimli-9a1fede77fbbf2f0 hash 0779acf9e5de44a7aa60cd1fc451b1a2 host_hash None kind Unconditional private\n17 object-7ff85ea729a864ff hash edcb7a2efa76cbe2bbce09468202f61f host_hash None kind Unconditional private\n18 memchr-0e3477fb2664a277 hash f94f9dfd8f550e3db6f53c31b25d989e host_hash None kind Unconditional public\n19 panic_unwind-549498e8b2e4d924 hash 47994b966f54be0fae8b6c6a978e15ff host_hash None kind Conditional private\n20 idenso-a97303dc01e6f34b hash 4e7d7b2ce11c272f27515cb76fa1fb6d host_hash None kind Unconditional public\n21 linnet-686dca8a07b54d08 hash fdc6aa2ec47602ee48dacff2c07ce2ae host_hash None kind Unconditional public\n22 ahash-0eb54791a540fbe5 hash 92607cab046a20ba820014b83b3d2815 host_hash None kind Unconditional public\n23 zerocopy-60e564eee5edd0db hash 22396e3f4cec824ebddc374e081b5bd5 host_hash None kind Unconditional public\n24 zerocopy_derive-c887c7a601466f12 hash 35294804307b8825ed09a88b10a95e81 host_hash None kind MacrosOnly public\n25 cfg_if-8759eca559d2b6c9 hash 67b8da2206b6700d84861a0b5ebad9e2 host_hash None kind Unconditional public\n26 serde-31f63b52732f3990 hash 8a318cb8a931b0133e498a1ce416364e host_hash None kind Unconditional public\n27 serde_derive-74d9d4650f1e5df5 hash c3f0cd95b2981f1aa34b62dbd12cc728 host_hash None kind MacrosOnly public\n28 serde_core-7c258c29241d311f hash 5ece6cf9e57178484864b994cededbb7 host_hash None kind Unconditional public\n29 once_cell-3e9446a1d4517142 hash a629df4e47a0d15db351275f2517e971 host_hash None kind Unconditional public\n30 getrandom-0c2e23f19fb42a09 hash bffdf394cf4298d81f1879a1244856d1 host_hash None kind Unconditional public\n31 libc-f682f68d8e09aa77 hash e3d60af347e194786cf24a0f4cb029f1 host_hash None kind Unconditional public\n32 bitvec-92d75c7144c6996d hash 5a52ed4b5fd772a466d15a9cb3a92bef host_hash None kind Unconditional public\n33 funty-e21f909d3e947930 hash bc2cb17d4efe3d59bca533253c0beeb4 host_hash None kind Unconditional public\n34 radium-70da571433b02e9d hash 5f18394b64165f47f8b76608c7e90400 host_hash None kind Unconditional public\n35 tap-830d91b99912400d hash 58b022eb3f9a52bf5b390a8b377e4386 host_hash None kind Unconditional public\n36 wyz-0c6eb7a051e15c8e hash 66f8349a5c3fc17273c7d9e25f643836 host_hash None kind Unconditional public\n37 indexmap-7f32bbed951d4919 hash 0292485a30c1998a85f65a5c5c5dc9d3 host_hash None kind Unconditional public\n38 hashbrown-4bc9b3533ee97c8f hash 91991b8c81b0da441c9e6b2267a4af21 host_hash None kind Unconditional public\n39 equivalent-051cc01eba8f4332 hash dfd3552b1af58fdecf4e34f1067cfe4d host_hash None kind Unconditional public\n40 itertools-0fab2e5d54cf5f83 hash b020c2e6bfb45b57a2e53fad9ec62624 host_hash None kind Unconditional public\n41 either-506086f37f4d7e29 hash 1e1cca3713003f63fd8dbf4edce9b9ba host_hash None kind Unconditional public\n42 rand-cf1ee2e9af6125fd hash f5a86fee3586f057c76ccf0dd40f992c host_hash None kind Unconditional public\n43 rand_core-205c8c365940fcc0 hash 1f5a0b25c5e7f9c5fc0323653541c555 host_hash None kind Unconditional public\n44 getrandom-de7fbf189e50f111 hash 4d1f49cd0374e7b888e636eeecda320f host_hash None kind Unconditional public\n45 rand_chacha-860c87a44a47f893 hash ba958ca0b55f010063e9b65e6309ead2 host_hash None kind Unconditional public\n46 ppv_lite86-428ce4a1c2edaeed hash 7422ad7c3beb7a728c75157f9fac0e79 host_hash None kind Unconditional public\n47 thiserror-29265df45a97290f hash 6a45c282e5609462fad2c3ac127be406 host_hash None kind Unconditional public\n48 thiserror_impl-665e9fff7342a1b9 hash f5eab202ccbf484e53c2d5bc3132e335 host_hash None kind MacrosOnly public\n49 indenter-1650241c365ac8bb hash 18791e3c156e2bd5784d3b0629d28ca2 host_hash None kind Unconditional public\n50 symbolica-27395b4e74afab36 hash 4c1960c50e002751acf3d3326d54772d host_hash None kind Unconditional public\n51 smartstring-0a105ee440c802b4 hash 3774b9443f1052f96262002c8e1bbbef host_hash None kind Unconditional public\n52 static_assertions-15c88a2b0c7c27e3 hash cd4616caa60b45c33b736f10a59eaba9 host_hash None kind Unconditional public\n53 bytes-f1bdaf8b95e03689 hash a10295669234d3643fa609d0b6e4d8b4 host_hash None kind Unconditional public\n54 rayon-9bcefc79cfc2d0d2 hash 4c8232adc5530fcb22d66b2132c4fb64 host_hash None kind Unconditional public\n55 rayon_core-c5fb5ff976137d74 hash 2f8104025278c560112b1a15d73cdcb6 host_hash None kind Unconditional public\n56 crossbeam_deque-109ca9f4c728bd53 hash 319937f06bb6856cebfffa36cb488d77 host_hash None kind Unconditional public\n57 crossbeam_epoch-892a5d17bd8e26cd hash db9f2d1c4d35d65461a5ee2ddc7da7ed host_hash None kind Unconditional public\n58 crossbeam_utils-7adf07c7a273bf99 hash 5c2a09f4d23c8c79e72bf56824292aad host_hash None kind Unconditional public\n59 byteorder-9451672a7a2c0d1b hash d0d4bc5c49d238a48aa10f615436ca24 host_hash None kind Unconditional public\n60 bincode-c02c93603e5a6be7 hash f4d680dd3c7f96f4f3e4f264e3df2e2b host_hash None kind Unconditional public\n61 bincode_derive-a754f589162a8413 hash 1eceeae8365a43cee20f5b94621b281f host_hash None kind MacrosOnly public\n62 unty-d52f108203939622 hash 136fc5bb715aaf126f1075f13ac288ae host_hash None kind Unconditional public\n63 numerica-e3af28958d471d02 hash f5c1a32762ca36b5f499d283f113cd70 host_hash None kind Unconditional public\n64 smallvec-37e88cd5d19e6a4a hash f319919a80b1dcea157fad8c6457161f host_hash None kind Unconditional public\n65 rug-15b321037bd436cb hash 37c8e358e421a1d515b45899a73a58dc host_hash None kind Unconditional public\n66 az-ec6ac3e08c131e6a hash e6fa8d880f24feeb40aa28cb803776e4 host_hash None kind Unconditional public\n67 gmp_mpfr_sys-b10c557e7e27676e hash 2450fe52b411ed71b76790052f7ad281 host_hash None kind Unconditional public\n68 rand-522b14017acea736 hash 83f12c064839c3091bad2e0d49aa4d5f host_hash None kind Unconditional public\n69 rand_core-91cc92803c74b088 hash f1df5f48fbcac33aa5199319d2b58833 host_hash None kind Unconditional public\n70 rand_chacha-b3ac00d37e67577b hash 4c63600ae728f05fafadf27683b5264a host_hash None kind Unconditional public\n71 num_traits-41775a40e9a833f9 hash 186f683fee1d7bf2e199be4f21ef4f77 host_hash None kind Unconditional public\n72 simba-3900c400d2e65851 hash 09ec886dd8cae4442819ea441305a5d1 host_hash None kind Unconditional public\n73 approx-339fb7f8baf52521 hash 9f7ed9aa254ed25f0c5d0ed3b76d2ed7 host_hash None kind Unconditional public\n74 num_complex-70e1daaeeac3292f hash de53c561d6892263c1d3e0e9eaac2722 host_hash None kind Unconditional public\n75 wide-17bb57db8f5323c0 hash 4c0878fa8e171d1be04f92ea7e84a5cc host_hash None kind Unconditional public\n76 safe_arch-1916b5cb9fd18e25 hash 99cac7166ef1b53873c23d72eaa6f763 host_hash None kind Unconditional public\n77 bytemuck-9cf81fd889248c8e hash 610d8f085fb01dc6c2c8cba405d33d9c host_hash None kind Unconditional public\n78 paste-36a3a3c4a64cf9c3 hash 0772dc2b27ba09d0b4e4e66800849d5e host_hash None kind MacrosOnly public\n79 xprec-cc8d61b246a87032 hash ce49836f715b54a3c0679d4ac13e7be6 host_hash None kind Unconditional public\n80 libm-a0c7131e0977dd2e hash 72b19a46412e7e26653015269ef0bce1 host_hash None kind Unconditional public\n81 wide-924a9f398ddfabb9 hash cae033e5ef0b953ba01afedad6c3bded host_hash None kind Unconditional public\n82 safe_arch-ae298b649c95d577 hash 3a288007380509c79e856c7fe431bf11 host_hash None kind Unconditional public\n83 colored-c8847544ed3c7a9e hash b32aa38347e0009a348e5b169bdb0ded host_hash None kind Unconditional public\n84 dyn_clone-108b2c6c2e89d166 hash a0c31ba5ffa83748b10e1ebd5a6dc15d host_hash None kind Unconditional public\n85 self_cell-649d20c60295d9f2 hash c00f51fabf2932a58ed09257289828ef host_hash None kind Unconditional public\n86 symjit-6377a1063e683573 hash 5093587fd2d17c91ab21e9090674ba16 host_hash None kind Unconditional public\n87 anyhow-54c08ca499d83f8c hash 687b8a2aff184d3915d7d32ec5b7ee85 host_hash None kind Unconditional public\n88 spec_math-93a60b1826154fa5 hash e91536e6a8a7ce942452ab3e05920f1b host_hash None kind Unconditional public\n89 num_rational-fa6ce33fe50d0b95 hash d39a1be4f27947c28719b4fc4ff9d7a6 host_hash None kind Unconditional public\n90 num_bigint-baed1f22bd2393d9 hash 33bd7455092f28ec34991dbfa51ae2a7 host_hash None kind Unconditional public\n91 num_integer-810e01aea16ad79a hash c125c0a0bf4d87b60e8ea4da53b8f34a host_hash None kind Unconditional public\n92 lazy_static-d8b46f3f16484aba hash 2858ab538aa16286d06c021d6aefbc20 host_hash None kind Unconditional public\n93 wasmtime_jit_icache_coherence-f2cf4776d5248b64 hash 8f3addf619b172a5d7d015ea940abfdc host_hash None kind Unconditional public\n94 hugepage_rs-575543ef7b143c17 hash d47543dddc1e8b9915a384ad00919dbb host_hash None kind Unconditional public\n95 serde_json-3cc461f97890d39a hash 5c2c7cddb507a75d13f69ef2b37fb9cf host_hash None kind Unconditional public\n96 itoa-edfdbb4138d631b9 hash 76e0b96b0f890c76efff30d5ab459c5b host_hash None kind Unconditional public\n97 zmij-3462bcb5d26511f6 hash 91ac9de7cef0b62ef0612d610a500cbb host_hash None kind Unconditional public\n98 memchr-e8645a818477aaa7 hash f9835161d070521fc2bfab3e1e72c480 host_hash None kind Unconditional public\n99 toml-d8662842d3779ed0 hash faca82e4a3a84c8a5ff605007b22e66e host_hash None kind Unconditional public\n100 toml_datetime-1341cd2ef9996cec hash 9a13a715131ba234d001c7412433e023 host_hash None kind Unconditional public\n101 serde_spanned-5cb06181442cb48b hash 834c6e9f04fd34aef8e98685d8cf54ce host_hash None kind Unconditional public\n102 toml_parser-a06b85a982b70034 hash 28f04c5280bfeddc27dea5badd1e619d host_hash None kind Unconditional public\n103 winnow-c0a860ba489eae14 hash 4b5d9c8656f4ca00ec8ef97911f7b1f0 host_hash None kind Unconditional public\n104 toml_writer-2dcc8d016aae6d05 hash 49803e7e599aa5a91d062b02af78d5cd host_hash None kind Unconditional public\n105 region-417e9dadbc0f988d hash c426abaa604752864d78b4d2d9ef8c34 host_hash None kind Unconditional public\n106 bitflags-7dde9e092bacf1bd hash f38744bc0d45a9955eca7ef1a32e4583 host_hash None kind Unconditional public\n107 data_encoding-e4ce9dac3e1cae81 hash 37481fa7f3499a2fe371ad2350f5971d host_hash None kind Unconditional public\n108 directories-dfa0d1a3d0211786 hash 378b1f72c8dcc52150a28c7b899dd033 host_hash None kind Unconditional public\n109 dirs_sys-9025bf425f4b8b40 hash fb2e88e34358bd901e82cfac949e7e56 host_hash None kind Unconditional public\n110 option_ext-46ba8fe30e808495 hash d92e8323e8428320f7e7b77432922f38 host_hash None kind Unconditional public\n111 ed25519_compact-6b94be58f0d892d8 hash ea929f50ddcb55dae6bb1f621ce2e173 host_hash None kind Unconditional public\n112 tinyjson-36e19f3942d2867c hash e26eab769defa308fb9d73d77fc00ec8 host_hash None kind Unconditional public\n113 tracing-5f79461ef39af21a hash a930e3d49241566fe60b16d689e88169 host_hash None kind Unconditional public\n114 tracing_core-6c3a04d08f18ef77 hash bea12a6d72f9a7ed6c2b8dfcc322c0f3 host_hash None kind Unconditional public\n115 tracing_attributes-b9e188f364c25435 hash 187369a3a0a2561fab9d6c4b6928d4b4 host_hash None kind MacrosOnly public\n116 pin_project_lite-6039552e5d78d5bd hash 277b216e4272e196746877312aaab280 host_hash None kind Unconditional public\n117 append_only_vec-db4d4d6d822e0785 hash 7534ad6a911f93bced39194cd5646054 host_hash None kind Unconditional public\n118 brotli-c292e356d804826f hash 3bf27807fa71950fe21c91de15acca9a host_hash None kind Unconditional public\n119 alloc_no_stdlib-943b643b8cf2b1f0 hash 0c874102ac1ed3f12793cffcbff6c33e host_hash None kind Unconditional public\n120 alloc_stdlib-4700c66c8a26bb5d hash 7968a95dde045d6c231579b173f8c3e7 host_hash None kind Unconditional public\n121 brotli_decompressor-3dc16598ae224b87 hash 9954b4e51bb7fe323e4cfa0850c7e180 host_hash None kind Unconditional public\n122 graphica-7be38c34fadb2e3a hash af13537d6e080be388792b031040b827 host_hash None kind Unconditional public\n123 inventory-61722c4edcd8f448 hash c28427133fb6551adf7eac2a7e12656e host_hash None kind Unconditional public\n124 bincode_trait_derive-d3612774000b4057 hash cf026720004a2983da61063844078aa7 host_hash None kind MacrosOnly public\n125 tracing_subscriber-50ca2551987610db hash f4af73797838b4c0644943b1b099822d host_hash None kind Unconditional public\n126 tracing_log-d4a438fb6816dcff hash 29151486b60d0506afcf6fba0e46051c host_hash None kind Unconditional public\n127 log-267863236955b83c hash 2d3d49e0d81961861be0d10f205781b9 host_hash None kind Unconditional public\n128 thread_local-0d155b78bbc9c7e3 hash f0160cf38d350f7bcc93b57407df00a1 host_hash None kind Unconditional public\n129 nu_ansi_term-9578fadedbd013a1 hash 6ddd564c7914bfcfdcfe9aab69fc263d host_hash None kind Unconditional public\n130 matchers-ce4b8f24c144e8b1 hash 88d569a62fcd0703af11463b86d63bf0 host_hash None kind Unconditional public\n131 regex_automata-266489b70ef49298 hash c4ea17f1c1b796909d76b5236690e8dc host_hash None kind Unconditional public\n132 regex_syntax-7f86eff52119a984 hash 1e36d7b3c70ba3f6c97fd6b7aaf14e62 host_hash None kind Unconditional public\n133 aho_corasick-58558cd5c6b6af07 hash 9180fa82872e952127669dad7228a7aa host_hash None kind Unconditional public\n134 sharded_slab-359c03c0fa0fd1e6 hash 9673a64811633c8effb5272ee15a1b12 host_hash None kind Unconditional public\n135 tracing_serde-bc854c77f3e3cef5 hash 2b912af55278c8bd01872873f0889915 host_hash None kind Unconditional public\n136 time-2add06918045f527 hash 5efab0fc0e0aed6045a557d34d0c5d34 host_hash None kind Unconditional public\n137 deranged-dae2143c8ee04e5e hash 96cfe211c321055db50300502ac7ebb2 host_hash None kind Unconditional public\n138 powerfmt-c0881c302d2c1cd4 hash b3a74cca6e69e2da2758f79220a88133 host_hash None kind Unconditional public\n139 num_conv-0741944dec6519e3 hash 679763f280e372081425446fe205374f host_hash None kind Unconditional public\n140 time_core-0f6416798371853c hash 4067d286bc653bd6856fbbdf1130ac6c host_hash None kind Unconditional public\n141 num_threads-cce3bd26f5eb770b hash 46700f71175632a1fada55255f1ffbdd host_hash None kind Unconditional public\n142 libloading-558364c00c8690fb hash 024c4422c37b8ef46b1fae3fe45be701 host_hash None kind Unconditional public\n143 symbolica_utils-47187f98ec0bc593 hash 3937e9af66ed9d72eeb849c3822e82ec host_hash None kind Unconditional public\n144 duplicate-c1178c4e9af9c588 hash ffc38e3d1866ca8e719a051239f9db84 host_hash None kind MacrosOnly public\n145 figment-ddb521470f49efcb hash 6318e293fa54c94fe7d542d17f628d4a host_hash None kind Unconditional public\n146 uncased-95863a8a4f925c2d hash 9d0bfccbf152ccc86ec1a1d8e52783c0 host_hash None kind Unconditional public\n147 dot_parser-6015a90669c41e0c hash 785d397903aa3d7f41731a15288c2ae0 host_hash None kind Unconditional public\n148 pest-1108273b750f0735 hash 6c84b47137b5a0b942286d7a8c07fc20 host_hash None kind Unconditional public\n149 ucd_trie-e0e1ae93a78f1631 hash 6baf3aac55d36055df90c9f95a32583c host_hash None kind Unconditional public\n150 pest_derive-bd55755807fb4e6a hash fc5f6511de6b1d4ec77840ab82ae2884 host_hash None kind MacrosOnly public\n151 serde_repr-e0bc2f6afd5aa12d hash f1260bb6129fd5619b42fa8cc1a57088 host_hash None kind MacrosOnly public\n152 spenso-50f23b483918f732 hash d33eba630fa4034d1741a14514ec3bf8 host_hash None kind Unconditional public\n153 derive_more-990797362bcbfae4 hash a53a3b263528410a027fa5ee55f03db2 host_hash None kind MacrosOnly public\n154 gat_lending_iterator-2af4b125e1aeb855 hash 8bd1cbb0d43b4d5b8232b6c60467454c host_hash None kind Unconditional public\n155 duplicate-ae4b46bfb2c00390 hash f5cd10127f1ebcfe15db3b272a5424be host_hash None kind MacrosOnly public\n156 enum_try_as_inner-0668d16735c524bd hash 51a7d78c96816b137aba46e8e63dd179 host_hash None kind MacrosOnly public\n157 num-ca1ad7bf9f514c9d hash aca12dfb64efbe7b0da107f966179aa1 host_hash None kind Unconditional public\n158 num_iter-272e8d823e683876 hash 1c0a1cf0aa66aa32e3930bb1641887a9 host_hash None kind Unconditional public\n159 ref_ops-ff37402c23ebfef8 hash ce507d0ec5f230b5b3eeaf600b1310d3 host_hash None kind Unconditional public\n160 eyre-709c6998fd0f366c hash 02f8921ae3d90d8cc18ba1469b6df673 host_hash None kind Unconditional public\n161 delegate-87a93997baac9eaf hash 1aaadfd38b5dbc10f8f953e5135fbd57 host_hash None kind MacrosOnly public\n162 tabled-87745bb2acbd8f7a hash bee0fcd42b87ecfedc914c654cada5af host_hash None kind Unconditional public\n163 testing_table-6748edaf77f923c2 hash cea424b2bea8b7896f8c13771200ea93 host_hash None kind Unconditional public\n164 unicode_width-5bd0ea9527e80e18 hash 67f074524e5ad07f201d1c3fa49092ee host_hash None kind Unconditional public\n165 tabled_derive-69d43049fc5e958f hash a3b934537258c2ddf94a9fb4570e16e6 host_hash None kind MacrosOnly public\n166 papergrid-0d006fc48e0f17bf hash c170ca02659815cd02f38843991d9e48 host_hash None kind Unconditional public\n167 fnv-6e4bf2752bd31594 hash a3f785a581ad17d1071636c8135c788b host_hash None kind Unconditional public\n168 bytecount-02b7e63f6db9402a hash 3ccdc7399e9a24721d01923da49a6880 host_hash None kind Unconditional public\n169 spenso_macros-4c253a31e078b72a hash 59951c8b25f95d9eb88c42a60fa54c2e host_hash None kind MacrosOnly public\n170 delegate-9927789431995c55 hash 6f017ebd0a40095d8dac2478a6689347 host_hash None kind MacrosOnly public\n171 blake3-e762f9a38c8e337c hash 19e7dd72ed3894795ed6e1fdb740253b host_hash None kind Unconditional public\n172 arrayref-85c039296b9005bf hash 669c382d2436f6df9d1005484bf78243 host_hash None kind Unconditional public\n173 arrayvec-ee905608763cb534 hash 76be18cb1299192cad49ab2b6d31f2bb host_hash None kind Unconditional public\n174 cpufeatures-91edb8cff87cd37f hash ce4c1db3b317b6fdfdf8b6c306ffbd18 host_hash None kind Unconditional public\n175 constant_time_eq-c259be9b1de734ad hash 05e35db50e17fc9db81e3a4918d3636b host_hash None kind Unconditional public\n\n=Lang items=\n\n=Lib features=\n\n=Items=\nPublic Mod crate {\n    Public Const { is_type_const: false } CHARGE_CONJUGATION_WEYL_COMPONENTS {}\n    Restricted(\"crate\") Struct LogicalSparseInput {}\n    Restricted(\"crate\") Fn sparse_from_logical {}\n    Public Fn gamma_data_dirac {}\n    Public Fn gamma_data_weyl {}\n    Public Fn gamma_transpose_weyl {}\n    Public Fn gamma_conj_data_weyl {}\n    Public Fn gamma_adj_data_weyl {}\n    Public Fn gamma0_weyl {}\n    Public Fn gamma5_dirac_data {}\n    Public Fn gamma5_weyl_data {}\n    Public Fn proj_m_data_dirac {}\n    Public Fn proj_m_data_weyl {}\n    Public Fn proj_p_data_dirac {}\n    Public Fn proj_p_data_weyl {}\n    Public Fn su3_generator_data {}\n    Public Fn su3_structure_f_data {}\n    Public Fn su3_generator_data_atom {}\n    Public Fn su3_structure_f_data_atom {}\n    Public Fn sigma_data {}\n    Public Fn hep_lib {}\n    Public Fn insert_su3_color_tensors {}\n    Public Fn hep_lib_su3 {}\n    Public Fn hep_lib_atom {}\n    Public TyAlias HepTensor {}\n    Public TyAlias HepNet {}\n    Public Static { safety: Safe, mutability: Not, nested: false } HEP_LIB {}\n    Public Static { safety: Safe, mutability: Not, nested: false } FUN_LIB {}\n}\n\n\n"
+  },
+  "instrumentation": {
+    "certification": "All 24 instrumented simplifier outputs equal the linked production outputs byte for byte.",
+    "driver": "#![allow(dead_code)]\nuse std::{cell::RefCell, collections::BTreeMap};\nuse idenso::{gamma,gamma5,dirac::GammaSimplifier,representations::Bispinor};\nuse spenso::{trace,structure::representation::{Minkowski,RepName}};\nuse symbolica::{atom::{Atom,AtomView,AtomCore},symbol};\nuse serde_json::{Value,json};\npub use idenso::{W_,epsilon,representations,shorthands,dirac};\npub use idenso::dirac::{AGS,id_atom};\nmod simplify;\nthread_local! {\n static EVENTS:RefCell<Vec<Value>>=const{RefCell::new(Vec::new())};\n static COUNTS:RefCell<BTreeMap<String,usize>>=const{RefCell::new(BTreeMap::new())};\n}\nfn record(v:Value){EVENTS.with_borrow_mut(|e|e.push(v));}\nfn tick(k:&str,v:usize){COUNTS.with_borrow_mut(|c|*c.entry(k.into()).or_default()+=v);}\nfn peak(k:&str,v:usize){COUNTS.with_borrow_mut(|c|{let x=c.entry(k.into()).or_default();*x=(*x).max(v);});}\nfn begin_kernel(n:usize,axial:bool){COUNTS.with_borrow_mut(|c|c.clear());tick(\"length\",n);tick(\"axial\",axial as usize);}\nfn finish_kernel(entries:usize,nonzero:usize){tick(\"final_map_entries\",entries);tick(\"final_nonzero_recipes\",nonzero);record(json!({\"kind\":\"cold_kernel\",\"counters\":COUNTS.with_borrow(|c|c.clone())}));}\nfn shape(a:AtomView)->Value{\n fn walk(a:AtomView,c:&mut [usize;5]){\n  c[0]+=1;\n  match a{\n   AtomView::Add(x)=>{c[1]+=1;c[2]+=x.get_nargs();for t in x.iter(){walk(t,c)}},\n   AtomView::Mul(x)=>for t in x.iter(){walk(t,c)},\n   AtomView::Pow(x)=>{let (b,e)=x.get_base_exp();walk(b,c);walk(e,c)},\n   AtomView::Fun(x)=>{if x.get_symbol()==spenso::network::tags::SPENSO_TAG.trace{c[3]+=1;}if x.get_symbol()==*idenso::epsilon::EPSILON_SYMBOL{c[4]+=1;}for t in x.iter(){walk(t,c)}},\n   _=>{}\n  }\n }\n fn distributed_leaves(a:AtomView)->u128 {\n  match a {AtomView::Add(x)=>x.iter().map(distributed_leaves).sum(),AtomView::Mul(x)=>x.iter().map(distributed_leaves).product(),_=>if a==Atom::Zero.as_view(){0}else{1}}\n }\n let mut c=[0;5];walk(a,&mut c);\n json!({\"distributed_leaf_count_before_collection\":distributed_leaves(a),\"top_terms\":a.nterms(),\"nodes\":c[0],\"add_nodes\":c[1],\"add_children\":c[2],\"trace_nodes\":c[3],\"epsilon_nodes\":c[4]})\n}\nfn stage(pass:usize,name:&str,a:AtomView,change:Option<(u128,bool)>){record(json!({\"kind\":\"stage\",\"pass\":pass,\"stage\":name,\"shape\":shape(a),\"instrumented_ns\":change.map(|x|x.0),\"unchanged\":change.map(|x|x.1)}));}\nfn main(){\n idenso::representations::initialize();\n let mut cases:Value=serde_json::from_str(&std::fs::read_to_string(\"/tmp/trace-intermediate-idenso/form-statistics.json\").unwrap()).unwrap();\n cases[\"records\"].as_array_mut().unwrap().retain(|v|v[\"word\"].is_string());\n cases[\"records\"].as_array_mut().unwrap().extend([\n  json!({\"case\":\"order_manual_b_first\",\"word\":\"mu0,p0,p4,p3,mu0,p2,p1,p5,p6,p7\",\"coefficient\":-2}),\n  json!({\"case\":\"order_manual_two_odd\",\"word\":\"p3,p4,p0,p2,p1,p5,p6,p7\",\"coefficient\":4}),\n  json!({\"case\":\"external_metrics_default\",\"word\":\"a,p0,b,p1,p2,c,p3,p4,d,p5,p6,p7\",\"input_path\":\"/tmp/trace-order-root/external_metrics_default.input\"}),\n  json!({\"case\":\"external_metrics_precontracted\",\"word\":\"a,p0,b,p1,p2,a,p3,p4,b,p5,p6,p7\",\"input_path\":\"/tmp/trace-order-root/external_metrics_precontracted.input\"})\n ]);\n let mink=Minkowski{}.new_rep(4);let spin=Bispinor{}.new_rep(4).to_symbolic([]);\n let settings=simplify::GammaSimplifySettings::default();\n for i in 0..8 {spenso::network::tags::SPENSO_TAG.rank_one_tensor_symbol(&format!(\"order_probe::p{i}\"));}\n for case in cases[\"records\"].as_array().unwrap(){\n  let name=case[\"case\"].as_str().unwrap();\n  if let Some(filter)=std::env::args().nth(1){if name!=filter{continue}}\n  let word=case[\"word\"].as_str().unwrap();\n  let factors:Vec<_>=word.split(',').map(|label| {\n    if label==\"5_\"{gamma5!()}\n    else if label.starts_with(\"mu\"){gamma!(mink.pattern(symbol!(&format!(\"trace_count::{label}\"))))}\n    else {gamma!(spenso::vector!(symbol!(&format!(\"trace_count::{label}\")),mink.to_symbolic([])))}\n  }).collect();\n  let input=if let Some(path)=case[\"input_path\"].as_str() {Atom::parse(&std::fs::read_to_string(path).unwrap(),\"spenso\",symbolica::parser::ParseSettings::symbolica()).unwrap()}else{Atom::num(case[\"coefficient\"].as_i64().unwrap_or(1))*trace!(&spin;factors)};\n  EVENTS.with_borrow_mut(|e|e.clear());\n  let cold=simplify::DiracSimplifier::new(&settings).simplify(input.as_view());\n  let cold_events=EVENTS.with_borrow_mut(std::mem::take);\n  let warm=simplify::DiracSimplifier::new(&settings).simplify(input.as_view());\n  let warm_events=EVENTS.with_borrow_mut(std::mem::take);\n  assert_eq!(cold,warm);\n  let production=input.simplify_gamma();assert_eq!(cold,production,\"{name}: copied simplifier differs\");\n  std::fs::write(format!(\"/tmp/trace-intermediate-idenso/{name}.input\"),input.to_string()).unwrap();\n  std::fs::write(format!(\"/tmp/trace-intermediate-idenso/{name}.output\"),cold.to_string()).unwrap();\n  println!(\"{}\",json!({\"case\":name,\"word\":word,\"coefficient\":case[\"coefficient\"].as_i64().unwrap_or(1),\"input_shape\":shape(input.as_view()),\"output_shape\":shape(cold.as_view()),\"copied_matches_production\":true,\"cold_events\":cold_events,\"warm_events\":warm_events}));\n }\n}\n",
+    "build_command": [
+      "rustc",
+      "--edition=2024",
+      "-C",
+      "opt-level=2",
+      "-C",
+      "debuginfo=2",
+      "-L",
+      "dependency=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps",
+      "--extern",
+      "idenso=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps/libidenso-4e984ef598e83cf1.rlib",
+      "--extern",
+      "spenso=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps/libspenso-43f6d5a1452bb1de.rlib",
+      "--extern",
+      "symbolica=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps/libsymbolica-0c0d2c7b699a1419.rlib",
+      "--extern",
+      "symbolica_utils=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps/libsymbolica_utils-0b900acdce8e1430.rlib",
+      "--extern",
+      "itertools=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps/libitertools-983651445182ffda.rlib",
+      "--extern",
+      "serde_json=/common/dev/gammaloop/feynkit-rich-display/target/dev-optim/deps/libserde_json-1435e5ff1c31dd59.rlib",
+      "/tmp/trace-intermediate-idenso/driver.rs",
+      "-o",
+      "/tmp/trace-intermediate-idenso/driver"
+    ],
+    "simplifier_patch": "--- crates/idenso/src/dirac/simplify.rs\n+++ instrumented/simplify.rs\n@@ -29,6 +29,7 @@\n \n use super::{AGS, id_atom};\n \n+#[path=\"simplify/trace_kernel.rs\"]\n mod trace_kernel;\n \n // gamma(a) gamma(b) gamma(c): the metric part of the 4D decomposition.\n@@ -149,6 +150,7 @@\n             && f.get_symbol() == T.trace\n             && let Some(rewritten) = simplifier.simplify_trace_node(f)\n         {\n+            crate::record(serde_json::json!({\"kind\":\"trace_rewrite\",\"input\":arg.to_string(),\"output\":crate::shape(rewritten.as_view())}));\n             **out = rewritten;\n         }\n     }\n@@ -409,19 +411,34 @@\n         if self.settings.evaluate_traces\n             && let Some(result) = Self::evaluate_short_free_trace(expr)\n         {\n+            crate::record(serde_json::json!({\"kind\":\"fast_path\",\"output\":crate::shape(result.as_view())}));\n             return result;\n         }\n         let mut expr = expr.to_owned();\n+        let mut pass = 0;\n \n         loop {\n             // Metric contraction can close a chain or connect separate chains.\n             // Include their collection in the fixed point of the complete pass.\n             // Close metric-linked chains before rewriting, including inert traces.\n-            let next = self\n-                .settings\n-                .rewrite_expression(expr.schoonschip().collect_gamma_chains())\n-                .simplify_epsilon()\n-                .normalize_dots();\n+            crate::stage(pass, \"input\", expr.as_view(), None);\n+            let t = std::time::Instant::now();\n+            let metric = expr.schoonschip();\n+            crate::stage(pass, \"schoonschip\", metric.as_view(), Some((t.elapsed().as_nanos(),metric==expr)));\n+            let t = std::time::Instant::now();\n+            let chains = metric.collect_gamma_chains();\n+            crate::stage(pass, \"collect_gamma_chains\", chains.as_view(), Some((t.elapsed().as_nanos(),chains==metric)));\n+            let t = std::time::Instant::now();\n+            let rewritten = self.settings.rewrite_expression(chains.clone());\n+            crate::stage(pass, \"gamma_rewrite\", rewritten.as_view(), Some((t.elapsed().as_nanos(),rewritten==chains)));\n+            let t = std::time::Instant::now();\n+            let epsilon = rewritten.simplify_epsilon();\n+            crate::stage(pass, \"epsilon\", epsilon.as_view(), Some((t.elapsed().as_nanos(),epsilon==rewritten)));\n+            let t = std::time::Instant::now();\n+            let next = epsilon.normalize_dots();\n+            crate::stage(pass, \"normalize_dots\", next.as_view(), Some((t.elapsed().as_nanos(),next==epsilon)));\n+            crate::record(serde_json::json!({\"kind\":\"pass_end\",\"pass\":pass,\"unchanged\":next==expr}));\n+            pass += 1;\n \n             if next == expr {\n                 return next;\n@@ -734,6 +751,7 @@\n         let interior_mink_indices =\n             Self::gamma_mink_index_sequence_for(FOUR_DIM_CHISHOLM, parsed_interior)?;\n \n+        crate::record(serde_json::json!({\"kind\":\"chisholm\",\"length\":factors.len(),\"left\":left,\"right\":right,\"interior\":parsed_interior.len(),\"word\":factors.iter().map(|f|f.as_view().to_string()).collect::<Vec<_>>()}));\n         match parsed_interior.len() {\n             0 => None,\n             2 => Some(\n@@ -1348,6 +1366,7 @@\n                 }\n             }\n         }\n+        crate::record(serde_json::json!({\"kind\":\"cyclic_pair_selection\",\"length\":factors.len(),\"start\":best.0,\"distance\":best.1}));\n         Self::cyclic_from_position(factors, best.0)\n     }\n \n",
+    "kernel_patch": "--- crates/idenso/src/dirac/simplify/trace_kernel.rs\n+++ instrumented/simplify/trace_kernel.rs\n@@ -25,8 +25,10 @@\n \n impl<const N: usize> TraceKernel<N> {\n     fn generate(axial: bool) -> Self {\n+        crate::begin_kernel(N, axial);\n         let mut terms = BTreeMap::new();\n         Self::reduce_triples(0, 1, 1, Monomial::default(), axial, &mut terms);\n+        crate::finish_kernel(terms.len(), terms.values().filter(|&&c|c!=0).count());\n         Self {\n             terms: terms.into_iter().filter(|(_, c)| *c != 0).collect(),\n         }\n@@ -40,8 +42,11 @@\n         axial: bool,\n         terms: &mut BTreeMap<[u8; N], i32>,\n     ) {\n+        crate::tick(\"reduce_triples_calls\",1);\n         if usize::from(position) == N - 1 {\n+            crate::tick(\"triple_terminal_calls\",1);\n             if monomial.epsilons.len() % 2 == usize::from(axial) {\n+                crate::tick(\"parity_accepted_terminals\",1);\n                 let mut monomial = monomial;\n                 monomial.metrics.push([current, position]);\n                 // An axial odd prefix is gamma(current) gamma5. Moving its\n@@ -75,7 +80,7 @@\n         let metrics: Vec<_> = (0..N)\n             .flat_map(|a| (0..N).map(move |b| g!(indices[a], indices[b])))\n             .collect();\n-        Atom::add_many(self.terms.iter().map(|(indices_recipe, coefficient)| {\n+        let result = Atom::add_many(self.terms.iter().map(|(indices_recipe, coefficient)| {\n             let mut factors = Vec::with_capacity(N / 2 + 1);\n             factors.push(Atom::num(4 * i64::from(*coefficient)));\n             let pairs = if axial {\n@@ -98,12 +103,15 @@\n                     .map(|p| metrics[usize::from(p[0]) * N + usize::from(p[1])].clone()),\n             );\n             Atom::mul_many(factors)\n-        }))\n+        }));\n+        crate::record(serde_json::json!({\"kind\":\"materialize\",\"length\":N,\"axial\":axial,\"recipe_monomials\":self.terms.len(),\"output\":crate::shape(result.as_view())}));\n+        result\n     }\n }\n \n impl Monomial {\n     fn collect<const N: usize>(mut self, mut sign: i32, terms: &mut BTreeMap<[u8; N], i32>) {\n+        crate::tick(\"collect_calls\",1);\n         // Eliminate temporary metric-linked indices before expanding epsilon\n         // pairs, so two epsilons sharing a dummy use a 3x3 determinant.\n         while let Some(position) = self\n@@ -111,6 +119,7 @@\n             .iter()\n             .position(|p| p.iter().any(|&i| usize::from(i) >= N))\n         {\n+            crate::tick(\"dummy_metric_eliminations\",1);\n             let [mut a, mut b] = self.metrics.swap_remove(position);\n             if a == b {\n                 sign *= 4;\n@@ -135,6 +144,7 @@\n             .iter()\n             .any(|e| (0..4).any(|i| e[i + 1..].contains(&e[i])))\n         {\n+            crate::tick(\"degenerate_epsilon_returns\",1);\n             return;\n         }\n         if self.epsilons.len() > 1 {\n@@ -149,6 +159,7 @@\n                         })\n                     })\n             });\n+            crate::tick(if shared.is_some() {\"shared_epsilon_pair_expansions\"} else {\"unshared_epsilon_pair_expansions\"},1);\n             let (i, j) = shared.map_or((0, 1), |(i, j, _, _)| (i, j));\n             let right = self.epsilons.remove(j);\n             let left = self.epsilons.remove(i);\n@@ -171,6 +182,7 @@\n                 (left.to_vec(), right.to_vec())\n             };\n             for permutation in (0..left.len()).permutations(left.len()) {\n+                crate::tick(\"epsilon_permutation_children\",1);\n                 let inversions = permutation\n                     .iter()\n                     .enumerate()\n@@ -209,7 +221,16 @@\n             debug_assert!(usize::from(*index) < N);\n             *destination = *index;\n         }\n+        crate::tick(\"collected_leaf_calls\",1);\n+        let old = terms.get(&key).copied();\n+        if let Some(value)=old {\n+            crate::tick(\"existing_key_additions\",1);\n+            if value != 0 && value + sign == 0 {crate::tick(\"cancellation_to_zero_events\",1);}\n+            if value == 0 && sign != 0 {crate::tick(\"zero_key_reactivations\",1);}\n+        }\n         *terms.entry(key).or_default() += sign;\n+        crate::peak(\"peak_map_entries\",terms.len());\n+        crate::peak(\"peak_nonzero_entries\",terms.values().filter(|&&c|c!=0).count());\n     }\n }\n \n@@ -234,179 +255,3 @@\n \n short_trace_dispatch!(2, 4, 6, 8, 10, 12, 14);\n \n-#[cfg(test)]\n-mod tests {\n-    use super::*;\n-\n-    // Independent Clifford-algebra oracle in a Euclidean orthonormal basis.\n-    // Store all sixteen blades and multiply by each vector, without trace\n-    // recurrences or epsilon contraction identities from the implementation.\n-    fn clifford_trace(vectors: &[[i64; 4]], axial: bool) -> i64 {\n-        let mut blades = [0; 16];\n-        blades[0] = 1;\n-        for vector in vectors {\n-            let mut next = [0; 16];\n-            for (mask, coefficient) in blades.into_iter().enumerate() {\n-                for (axis, component) in vector.iter().enumerate() {\n-                    let sign = if (mask >> (axis + 1)).count_ones() % 2 == 0 {\n-                        1\n-                    } else {\n-                        -1\n-                    };\n-                    next[mask ^ (1 << axis)] += sign * coefficient * component;\n-                }\n-            }\n-            blades = next;\n-        }\n-        4 * blades[if axial { 15 } else { 0 }]\n-    }\n-\n-    fn determinant(rows: [[i64; 4]; 4]) -> i64 {\n-        (0..4)\n-            .permutations(4)\n-            .map(|p| {\n-                let inversions = (0..4)\n-                    .map(|i| (i + 1..4).filter(|&j| p[i] > p[j]).count())\n-                    .sum::<usize>();\n-                let sign = if inversions % 2 == 0 { 1 } else { -1 };\n-                sign * (0..4).map(|i| rows[i][p[i]]).product::<i64>()\n-            })\n-            .sum()\n-    }\n-\n-    fn check<const N: usize>(ordinary_terms: usize, axial_terms: usize) {\n-        for (axial, expected_terms) in [(false, ordinary_terms), (true, axial_terms)] {\n-            let kernel = TraceKernel::<N>::generate(axial);\n-            assert_eq!(kernel.terms.len(), expected_terms);\n-            let mut seed = 17u64;\n-            for sample in 0..8 {\n-                let vectors: [[i64; 4]; N] = std::array::from_fn(|_| {\n-                    std::array::from_fn(|_| {\n-                        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);\n-                        ((seed >> 32) % 5) as i64 - 2\n-                    })\n-                });\n-                let result: i64 = kernel\n-                    .terms\n-                    .iter()\n-                    .map(|(recipe, coefficient)| {\n-                        let (epsilon, pairs) = if axial {\n-                            (\n-                                determinant(std::array::from_fn(|i| {\n-                                    vectors[usize::from(recipe[i])]\n-                                })),\n-                                &recipe[4..],\n-                            )\n-                        } else {\n-                            (1, &recipe[..])\n-                        };\n-                        4 * i64::from(*coefficient)\n-                            * epsilon\n-                            * pairs\n-                                .as_chunks::<2>()\n-                                .0\n-                                .iter()\n-                                .map(|pair| {\n-                                    vectors[usize::from(pair[0])]\n-                                        .iter()\n-                                        .zip(vectors[usize::from(pair[1])])\n-                                        .map(|(a, b)| a * b)\n-                                        .sum::<i64>()\n-                                })\n-                                .product::<i64>()\n-                    })\n-                    .sum();\n-                assert_eq!(\n-                    result,\n-                    clifford_trace(&vectors, axial),\n-                    \"length {N}, axial {axial}, sample {sample}\"\n-                );\n-            }\n-        }\n-    }\n-\n-    #[test]\n-    fn short_kernels_match_independent_clifford_products() {\n-        check::<2>(1, 0);\n-        check::<4>(3, 1);\n-        check::<6>(15, 6);\n-        check::<8>(105, 33);\n-        check::<10>(693, 180);\n-        check::<12>(4383, 1029);\n-        check::<14>(26931, 6042);\n-    }\n-    #[test]\n-    fn long_axial_fallback_matches_a_clifford_component() {\n-        use super::super::{DiracFactor, DiracSimplifier};\n-        use crate::{\n-            dirac::GammaSimplifier, epsilon::EpsilonSimplifier, gamma, gamma5,\n-            shorthands::schoonschip::Schoonschip,\n-        };\n-        use spenso::{network::library::symbolic::ETS, p, q, vector};\n-        use symbolica::{atom::AtomCore, symbol};\n-\n-        let reps = crate::test_support::test_initialize();\n-        let spin = reps.bis4.to_symbolic([]);\n-        let indices: Vec<_> = (0..16)\n-            .map(|i| reps.mink4.pattern(symbol!(&format!(\"long_axial_mu{i}\"))))\n-            .collect();\n-        let factors: Vec<_> = [gamma5!()]\n-            .into_iter()\n-            .chain(indices.iter().map(|mu| gamma!(mu)))\n-            .collect();\n-        let parsed: Vec<_> = factors\n-            .iter()\n-            .map(|factor| DiracFactor::parse(factor.as_view()))\n-            .collect();\n-        // Force one long-trace step before projection so the fallback is\n-        // exercised. Projecting first would only test repeated-pair reductions.\n-        let mut reduced =\n-            DiracSimplifier::simplify_single_gamma5_trace(spin.as_view(), &parsed, 0).unwrap();\n-        let basis = [\n-            p!(reps.mink4.to_symbolic([])),\n-            q!(reps.mink4.to_symbolic([])),\n-            vector!(long_axial_r, reps.mink4.to_symbolic([])),\n-            vector!(long_axial_s, reps.mink4.to_symbolic([])),\n-        ];\n-        let axes = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 0, 1, 1];\n-        for (index, axis) in indices.iter().zip(axes) {\n-            reduced = reduced\n-                .replace(index.to_pattern())\n-                .with(basis[axis].to_pattern());\n-        }\n-        let result = reduced\n-            .simplify_gamma()\n-            .expand()\n-            .simplify_epsilon()\n-            .schoonschip()\n-            .replace_map(|atom, _, out| {\n-                if let AtomView::Fun(f) = atom\n-                    && (f.get_symbol() == ETS.metric\n-                        || f.get_symbol() == *crate::epsilon::EPSILON_SYMBOL)\n-                {\n-                    let axes: Vec<_> = f\n-                        .iter()\n-                        .map(|arg| {\n-                            basis\n-                                .iter()\n-                                .position(|vector| vector.as_view() == arg)\n-                                .expect(\"all dummy indices must contract\")\n-                        })\n-                        .collect();\n-                    **out = if axes.len() == 2 {\n-                        Atom::num(i64::from(axes[0] == axes[1]))\n-                    } else {\n-                        Atom::num(determinant(std::array::from_fn(|i| {\n-                            std::array::from_fn(|j| i64::from(axes[i] == j))\n-                        })))\n-                    };\n-                }\n-            });\n-        let vectors: Vec<_> = axes\n-            .iter()\n-            .map(|&axis| std::array::from_fn(|i| i64::from(i == axis)))\n-            .collect();\n-        assert_eq!(result, Atom::num(clifford_trace(&vectors, true)));\n-        assert_eq!(result, Atom::num(4));\n-    }\n-}\n",
+    "manifest": {
+      "created_utc": "2026-09-24T08:09:06.344184+00:00",
+      "case_count": 24,
+      "build_environment": "source /tmp/feynkit-docs-dev-env.sh; CARGO_CRATE_NAME=trace_count",
+      "cpu": 4,
+      "files": {
+        "free_10.output": "4ed962570c7a0ce3e33bf2d7c3653bfa6e902d4b826ce6e1032bb3e3df1588e4",
+        "axial_8.input": "42e5e80b99e2b277b2405db594f11aefc1123588e0bc4fa142ad0017f0f2a8a3",
+        "even4_chisholm_10.output": "a510a455f8e0aa7279b9e4a964825f6841b360d79cc852ddd030c1731b185a9d",
+        "axial_6.output": "ba7a5db39c5cd22b3b36794aacb89be7bb2c3c37b4982bf94c7aa09afdfed49a",
+        "order_manual_b_first.input": "cbbfe91cdf910c65a8e0597da3a2c4b7aa3fa24ef5f02898bcddc42770ba8997",
+        "simplify.rs": "0a0c0555c8aee7c289aed0e230308512f8a2ecd40b1f3a7c27a7c1d06d2e674a",
+        "even2_chisholm_8.input": "9f57eefb843cad0d2e3548f356fc134eae636b844bfe595a074388d4835cfd30",
+        "free_12.output": "00b269b0ae9274b3659f3241afce281eb24c14dd6f92bdc057f048227e3c1b34",
+        "external_metrics_default.input": "9b85bc7ef2d83800ad301b7914fa4ca71c3a3900829bbcc1aad1bc8a753d8902",
+        "even4_chisholm_10.input": "fae70698fe64469ca69398d05e6144b80d131780b330e90d5aa796a3d812b78c",
+        "odd_chisholm_8.output": "123ffed3d7919ca0e9dc7f5b14220e6d149c1d41a9cef78e0ebb361cde2e354f",
+        "axial_12.input": "1263f97404b3616b2fe612d92a9a8cdad2ef01166f784e33fca6012827ce6227",
+        "external_metrics_default.original-input": "be54b556786033d8dd87906cd1bfd2ee27a94c8c5a897accf72bb992e2e3ba75",
+        "summarize.py": "6de3fbae4a48698bb358c600fb6c41eda84a880bc0fc863b9e3ef75a9a3b9dc4",
+        "free_8.input": "c061aa2091e45b5c9d898778b73a717e48cc3186a3a07cfb01e21cb09f9f7e06",
+        "cyclic_pair_8.output": "cc8f0339e17e2f4c0e20467b78b751727b740fdfdf84ac425bc6dff430815c67",
+        "alternating_6.input": "61a693ec336f98eae91bf1b183f5536a6fbe5946d6eddf10496c293d619737aa",
+        "external_metrics_precontracted.original-input": "a8fa8934baab24009fba8bbf583ce529ce71148bf256f45b8b64151bec795c26",
+        "raw.jsonl": "3f3cd83a7043a3837d395e209b50b50c71ca0c6a587551df757e86868bc1022d",
+        "axial_6.input": "c44b09f88d3c9a5e5c7cf0eef46c20fb8b09021a757586d29019750717937bcf",
+        "odd_chisholm_8.input": "3b611a04f810a21dfb50d1157739c46ca412f431feacf5e764d7418c752d3ee9",
+        "paired_12.output": "e5ffc04f0507cc24553ab6a44d04409b4de7735a5b808cb2d122cd8aab6101eb",
+        "run.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "free_8.output": "14cb5e6cd7e7d430d36862dc076efd3d34a14dffa31c48a384f32b88249b46c1",
+        "order_manual_two_odd.input": "70a0702448c9ea11c1ace0dbcc6e21b613a87445c8a8df8250c908c79e243ffb",
+        "alternating_10.output": "e87ba2a75c960e429829afa301e191e2d3f8f37f9bcfe057057c486cbe81aa93",
+        "simplify.patch": "707213d7741215b7c325d42f368cd508eb8d14f19b9b34fecfe05e6105fb521a",
+        "paired_8.output": "a7ef8e44ce0ea762d071dba5f7accc5865d370a060ecbcd850c1b96e1f98951e",
+        "paired_10.output": "a8df5c495ab64d532c946213d69f1373ef8728f4eca20ec92ad6f940f13db392",
+        "alternating_8.output": "ac99d6c63e5362e539c25ae8ea4cfa5705c034d35d48e6abe4df0e4a73ee7e28",
+        "trace_kernel.patch": "1e81f29ee4dbb304313afc791b60b9778267ad1f71106ec8f235db50e8701d7d",
+        "alternating_8.input": "1180fed9b769c5d1db1c4dc898824be968eb64c2b28db19c0703c7462d1acc9e",
+        "cyclic_pair_8.input": "cae7be9d99416e9019cd94079cc48bed4ad1dacb21871525d86a5e1f7edf0f34",
+        "order_manual_b_first.output": "0c0fea831960b07a6f1772afa5615e0990fb915f2306550104555b354b1e2ea1",
+        "axial_10.input": "4086b36890bec4f3804b9c1126580f413cce4b4aecb4a87c4dc162efab3e3fbd",
+        "alternating_12.output": "b6050a02dee6d0e602de3622a298bb01f8b584505f18dc4f05483724da76f3b7",
+        "alternating_6.output": "4f8dab6de33849be5c99b4bb748995d9f6ac43fe0dce441e9d3e7f0afc7dcba4",
+        "external_metrics_default.output": "5d642ee53db0d6a17cd31289179802b45b650b245fec77681ed1a5e0f57c0e46",
+        "alternating_12.input": "b65b10c28e02afab841d26a439ae5cf260f1cf3262b0392b5eca768886ba225a",
+        "free_12.input": "77798dc965027e3ebb97a14d6ea54bb112bc474bcb69ec75b3685a3623685d1c",
+        "form-statistics.json": "c2438f90c587ed2725875a6dbe34e9b2f331fd81e38d8ca17d63748e0f5e5de8",
+        "even2_chisholm_8.output": "51078480ddc816483f4f7f7a3b6b591fa6add1eb36737628b0bb8be33dd0d5d4",
+        "order_manual_two_odd.output": "0c0fea831960b07a6f1772afa5615e0990fb915f2306550104555b354b1e2ea1",
+        "paired_6.output": "63fddecdd9a874aef96d33631328d4613452da4d82c396c03981cdc51c165700",
+        "README.md": "4824e204dd494f8aec5f45b2266dc697a7b70aab627211958ad0b087251c7ec3",
+        "source-hashes.json": "ffeac4911757accb5de5001df4f3f664c0d8d54b1d4893487004324c2bfab79c",
+        "order_sensitive_12.input": "b4449d615d018fc0707ee8e3f83360faf761718f6d166966cd8f9b832823bf08",
+        "paired_6.input": "3724d2ece3801134b68be85c0b53a7a0af4cbe3fdd8e5e4e52a473fb6992033f",
+        "paired_12.input": "44c27ee7fccd294e2e00147823ab354f046cfeee69608bed3e101285661564d5",
+        "build-command.json": "54ac8b272137099643ee6336d729b88a21b67ef02cf22699bd9e6ee744d9c10c",
+        "axial_12.output": "8589f85ed9cb238fc4052c2c2ef18097b00f58539a95f59757e737e033bab8d0",
+        "axial_8.output": "f401082af0d715d8c385e1d7468037730ab92ca2060b9e7e722a7b7d70788605",
+        "order_sensitive_12.output": "87cad2581c7846ac5a6dcf07815e2ee00b635c10d891439dce56a48c94c6150c",
+        "alternating_10.input": "e1659a132e107f9f6d510bf7016d948168ea7450c0ffb1a947ae66ab49c5b1df",
+        "external_metrics_precontracted.input": "4ab1f674a9d6fac308674b3a32992e48f95e6106e6a5ce25178d1de251bf0418",
+        "summary.json": "ba66cbb7151b8a16ce148c3c0cedd8d937a5b6adad6213fdb732d8a7c8f3aa7e",
+        "external_metrics_precontracted.output": "87cad2581c7846ac5a6dcf07815e2ee00b635c10d891439dce56a48c94c6150c",
+        "free_10.input": "12752dc33f80c64ed9bb5de1cb7e0c82aff6eacb129944f9d460922c9c262cb1",
+        "driver.rs": "336c3f11c25bc2d0cafdee79c27729832cf6a1bf09621b86e05f3bb8789041bd",
+        "instrument.py": "98b06f08cadad28069c689ff45e998aaf58dc38888576de868bd7e75d844236c",
+        "axial_10.output": "25b3cccea56a3ccda2ff8c4eeeecb075c264070bc09f7ab410350d12fb8d94f9",
+        "paired_10.input": "fa4eabbaf0fb7d72fc4c425385950d8d00386d16b1d82e9f9a5a6876898a87b1",
+        "paired_8.input": "395c3720f9f9927a02dd72a778f04dfef9ca1bb618c0510f1724b5ec62240754",
+        "simplify/trace_kernel.rs": "6599e632fbd0ec0b27e0cb559d876899b3316c716979b0d0b61fa1ca7ff8dcf3",
+        "original-source/crates/idenso/src/dirac/simplify.rs": "76adb67a6061a4b1293f55ea73a5ae774bd775016de5740977ecb9ab8468acad",
+        "original-source/crates/idenso/src/dirac/simplify/trace_kernel.rs": "bf1df312af6e6adc238e30c878270ef790007b96fde6f31510d68f0038ac4b5c"
+      }
+    },
+    "temporary_artifact_directory": "/tmp/trace-intermediate-idenso"
+  }
+}

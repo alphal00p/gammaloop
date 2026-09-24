@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use spenso::{
     chain,
-    network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
+    network::{library::symbolic::ETS, parsing::AtomStructureExt, tags::SPENSO_TAG as T},
     shadowing, trace, trace_sym,
 };
 use symbolica::{
@@ -17,133 +17,10 @@ use crate::{
     shorthands::{bracket::BracketNormalizer, metric::not_slot},
 };
 
-use super::{api::Schoonschip, settings::SchoonschipSettings};
+use super::{
+    api::Schoonschip, metric_contraction::MetricContraction, settings::SchoonschipSettings,
+};
 
-static METRIC_FUNCTION_CONTRACTIONS: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
-    let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-    let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-    let function_with_replacement = function!(W_.a_, W_.a___, W_.c_, W_.b___);
-
-    // Ordered antisymmetric matching preserves orientation in these direct slot replacements.
-    [
-        // g(i,j)*T(...,j,...)->T(...,i,...)
-        Replacement::new(
-            (function!(ETS.metric, &self_dual, W_.c_)
-                * function!(W_.a_, W_.a___, &self_dual, W_.b___))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
-        // g(i,j)*T(...,d(j),...)->T(...,i,...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable)
-                * function!(W_.a_, W_.a___, &dualizable_dual, W_.b___))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
-        // g(i,d(j))*T(...,j,...)->T(...,i,...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable_dual)
-                * function!(W_.a_, W_.a___, &dualizable, W_.b___))
-            .to_pattern(),
-            function_with_replacement,
-        ),
-    ]
-});
-
-static METRIC_FUNCTION_CONTRACTIONS_ON_CHAIN: LazyLock<[Replacement; 3]> = LazyLock::new(|| {
-    let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-    let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-
-    fn chain_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
-        chain!(W_.x_, W_.y_, W_.x___, a.into(), W_.y___)
-    }
-    let function_with_replacement = chain_(function!(W_.a_, W_.a___, W_.c_, W_.b___));
-
-    [
-        // g(i,j)*chain(x,y,...,T(...,j,...),...)->chain(x,y,...,T(...,i,...),...)
-        Replacement::new(
-            (function!(ETS.metric, &self_dual, W_.c_)
-                * chain_(function!(W_.a_, W_.a___, &self_dual, W_.b___)))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
-        // g(i,j)*chain(x,y,...,T(...,d(j),...),...)->chain(x,y,...,T(...,i,...),...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable)
-                * chain_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
-        // g(i,d(j))*chain(x,y,...,T(...,j,...),...)->chain(x,y,...,T(...,i,...),...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable_dual)
-                * chain_(function!(W_.a_, W_.a___, &dualizable, W_.b___)))
-            .to_pattern(),
-            function_with_replacement.clone(),
-        ),
-    ]
-});
-static METRIC_FUNCTION_CONTRACTIONS_ON_TRACE: LazyLock<[Replacement; 6]> = LazyLock::new(|| {
-    let self_dual = T.self_dual_::<0, _>([W_.d_, W_.i_]);
-    let dualizable = T.dualizable_::<0, _>([W_.d_, W_.i_]);
-    let dualizable_dual = T.dualizable_dual_::<0, _>([W_.d_, W_.i_]);
-
-    fn trace_cyclic_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
-        trace!(W_.y_, a.into(), W_.x___)
-    }
-    fn trace_sym_<'a>(a: impl Into<AtomOrView<'a>>) -> Atom {
-        trace_sym!(W_.y_, a.into(), W_.x___)
-    }
-    let cyclic_function_with_replacement = trace_cyclic_(function!(W_.a_, W_.a___, W_.c_, W_.b___));
-    let sym_function_with_replacement = trace_sym_(function!(W_.a_, W_.a___, W_.c_, W_.b___));
-
-    [
-        // g(i,j)*trace(y,...,T(...,j,...),...)->trace(y,...,T(...,i,...),...)
-        Replacement::new(
-            (function!(ETS.metric, &self_dual, W_.c_)
-                * trace_cyclic_(function!(W_.a_, W_.a___, &self_dual, W_.b___)))
-            .to_pattern(),
-            cyclic_function_with_replacement.clone(),
-        ),
-        // g(i,j)*trace(y,...,T(...,d(j),...),...)->trace(y,...,T(...,i,...),...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable)
-                * trace_cyclic_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)))
-            .to_pattern(),
-            cyclic_function_with_replacement.clone(),
-        ),
-        // g(i,d(j))*trace(y,...,T(...,j,...),...)->trace(y,...,T(...,i,...),...)
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable_dual)
-                * trace_cyclic_(function!(W_.a_, W_.a___, &dualizable, W_.b___)))
-            .to_pattern(),
-            cyclic_function_with_replacement.clone(),
-        ),
-        // g(i,j)*trace(y,sym(...,T(...,j,...),...))->trace(y,sym(...,T(...,i,...),...))
-        Replacement::new(
-            (function!(ETS.metric, &self_dual, W_.c_)
-                * trace_sym_(function!(W_.a_, W_.a___, &self_dual, W_.b___)))
-            .to_pattern(),
-            sym_function_with_replacement.clone(),
-        ),
-        // g(i,j)*trace(y,sym(...,T(...,d(j),...),...))->trace(y,sym(...,T(...,i,...),...))
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable)
-                * trace_sym_(function!(W_.a_, W_.a___, &dualizable_dual, W_.b___)))
-            .to_pattern(),
-            sym_function_with_replacement.clone(),
-        ),
-        // g(i,d(j))*trace(y,sym(...,T(...,j,...),...))->trace(y,sym(...,T(...,i,...),...))
-        Replacement::new(
-            (function!(ETS.metric, W_.c_, &dualizable_dual)
-                * trace_sym_(function!(W_.a_, W_.a___, &dualizable, W_.b___)))
-            .to_pattern(),
-            sym_function_with_replacement,
-        ),
-    ]
-});
 /// f(...,i)*g(...,i)->g(f(...,rep)*g(...,rep)) but only when ... is not a slot.
 /// This is more costly than just using the rank1 tag on f and g, so should be an optional setting.
 static _DOT_PRODUCT: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
@@ -394,10 +271,16 @@ impl SchoonschipWithSettings<'_> {
     }
 
     fn apply_once(&self, view: AtomView<'_>) -> Atom {
-        let metric_simplified = BracketNormalizer::normalize(view)
-            .normalize_dots()
-            .to_owned()
-            .replace_multiple_repeat(&*METRIC_FUNCTION_CONTRACTIONS);
+        let normalized = BracketNormalizer::normalize(view).normalize_dots();
+        let repeated_indices = normalized.has_repeated_explicit_indices();
+        let metric_simplified = if repeated_indices {
+            MetricContraction::run(
+                normalized.as_view(),
+                self.settings.simplify_chain_like_functions,
+            )
+        } else {
+            normalized
+        };
 
         let simplified = if self.settings.schoonschip_rank1_tensors {
             metric_simplified
@@ -407,8 +290,13 @@ impl SchoonschipWithSettings<'_> {
             metric_simplified
         };
 
-        let simplified = if self.settings.simplify_chain_like_functions {
-            self.apply_chain_like_rules(simplified)
+        // These rules also need two occurrences of an explicit slot. Reuse the
+        // input scan: preceding contractions cannot create one when none existed.
+        let simplified = if repeated_indices
+            && self.settings.simplify_chain_like_functions
+            && self.settings.schoonschip_rank1_tensors
+        {
+            self.apply_chain_like_vector_rules(simplified)
         } else {
             simplified
         };
@@ -416,30 +304,14 @@ impl SchoonschipWithSettings<'_> {
         BracketNormalizer::normalize(simplified.normalize_dots().as_view())
     }
 
-    fn apply_chain_like_rules(&self, expression: Atom) -> Atom {
-        let (metric_trace_rules, metric_trace_sym_rules) =
-            METRIC_FUNCTION_CONTRACTIONS_ON_TRACE.split_at(3);
-        let (vector_trace_rules, vector_trace_sym_rules) = SCHOONSCHIP_VECTOR_ON_TRACE.split_at(3);
-
+    fn apply_chain_like_vector_rules(&self, expression: Atom) -> Atom {
+        let (trace_rules, symmetric_trace_rules) = SCHOONSCHIP_VECTOR_ON_TRACE.split_at(3);
         let simplified = expression
-            .replace_multiple_repeat(&*METRIC_FUNCTION_CONTRACTIONS_ON_CHAIN)
-            .replace_multiple_repeat(metric_trace_rules);
-
-        let simplified = if self.settings.schoonschip_rank1_tensors {
-            simplified
-                .replace_multiple_repeat(&*SCHOONSCHIP_VECTOR_ON_CHAIN)
-                .replace_multiple_repeat(vector_trace_rules)
-        } else {
-            simplified
-        };
+            .replace_multiple_repeat(&*SCHOONSCHIP_VECTOR_ON_CHAIN)
+            .replace_multiple_repeat(trace_rules);
 
         if Self::contains_symmetric_projector(simplified.as_view()) {
-            let simplified = simplified.replace_multiple_repeat(metric_trace_sym_rules);
-            if self.settings.schoonschip_rank1_tensors {
-                simplified.replace_multiple_repeat(vector_trace_sym_rules)
-            } else {
-                simplified
-            }
+            simplified.replace_multiple_repeat(symmetric_trace_rules)
         } else {
             simplified
         }
