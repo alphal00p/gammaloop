@@ -1,5 +1,7 @@
 //! Contract a metric or tagged vector by replacing one compatible tensor slot.
 
+use std::collections::HashMap;
+
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     shadowing,
@@ -75,9 +77,13 @@ impl SlotContraction {
                 }
                 match atom {
                     AtomView::Mul(product) if !is_root => {
-                        found =
-                            Self::find_contraction(product.iter(), chain_like, rank_one, &mut slots)
-                                .is_some();
+                        found = Self::find_contraction(
+                            product.iter(),
+                            chain_like,
+                            rank_one,
+                            &mut slots,
+                        )
+                        .is_some();
                     }
                     AtomView::Fun(_) if !matches!(slots.classify(atom), SlotMatch::Other) => {
                         return false;
@@ -118,6 +124,9 @@ impl SlotContraction {
         rank_one: bool,
         slots: &mut SlotMatcher,
     ) -> Option<Atom> {
+        if let Some(contracted) = Self::contract_metric_components(product, slots) {
+            return Some(contracted);
+        }
         let mut contraction = Self::find_contraction(product.iter(), chain_like, rank_one, slots)?;
         let mut factors: Vec<_> = product.iter().map(AtomOrView::View).collect();
         loop {
@@ -137,6 +146,108 @@ impl SlotContraction {
             };
             contraction = next;
         }
+    }
+
+    /// Internal indices in a metric path only transport its two boundary slots;
+    /// a closed path contributes its dimension. Resolve those connections before
+    /// constructing any new metric, without parsing unrelated tensor payloads.
+    fn contract_metric_components(product: MulView<'_>, slots: &mut SlotMatcher) -> Option<Atom> {
+        if product.iter().len() < 4 {
+            return None;
+        }
+        let mut metrics = Vec::new();
+        for (position, factor) in product.iter().enumerate() {
+            let AtomView::Fun(function) = factor else {
+                continue;
+            };
+            if function.get_symbol() != ETS.metric || function.get_nargs() != 2 {
+                continue;
+            }
+            let mut arguments = function.iter();
+            let arguments = [arguments.next().unwrap(), arguments.next().unwrap()];
+            let [Some(first), Some(second)] = arguments.map(|a| Endpoint::parse(a, slots)) else {
+                continue;
+            };
+            if first.compatible(&second) && !first.matches(&second) {
+                metrics.push((position, arguments, [first, second]));
+            }
+        }
+        if metrics.len() < 3 {
+            return None;
+        }
+        let mut occurrences: HashMap<_, (usize, usize, bool)> =
+            HashMap::with_capacity(2 * metrics.len());
+        let mut neighbors = vec![[None::<usize>; 2]; metrics.len()];
+        for (edge, (_, _, endpoints)) in metrics.iter().enumerate() {
+            for (side, endpoint) in endpoints.iter().enumerate() {
+                let key = (endpoint.representation.base(), endpoint.dimension, endpoint.index);
+                if let Some((other_edge, other_side, repeated)) = occurrences.get_mut(&key) {
+                    // More than two metric occurrences have no unambiguous
+                    // path interpretation; retain ordered slot substitution.
+                    if std::mem::replace(repeated, true) {
+                        return None;
+                    }
+                    if endpoint.matches(&metrics[*other_edge].2[*other_side]) {
+                        neighbors[edge][side] = Some(*other_edge);
+                        neighbors[*other_edge][*other_side] = Some(edge);
+                    }
+                } else {
+                    occurrences.insert(key, (edge, side, false));
+                }
+            }
+        }
+        let mut visited = vec![false; metrics.len()];
+        let mut removed = vec![false; product.iter().len()];
+        let mut replacements = Vec::new();
+        let mut pending = Vec::new();
+        let mut component = Vec::new();
+        let mut boundary = Vec::with_capacity(2);
+        for start in 0..metrics.len() {
+            if visited[start] {
+                continue;
+            }
+            pending.push(start);
+            component.clear();
+            boundary.clear();
+            while let Some(edge) = pending.pop() {
+                if std::mem::replace(&mut visited[edge], true) {
+                    continue;
+                }
+                component.push(edge);
+                for (side, neighbor) in neighbors[edge].iter().enumerate() {
+                    if let Some(neighbor) = neighbor {
+                        pending.push(*neighbor);
+                    } else {
+                        boundary.push(metrics[edge].1[side]);
+                    }
+                }
+            }
+            if component.len() < 2 {
+                continue;
+            }
+            let contracted = match boundary.as_slice() {
+                [] => metrics[start].2[0].dimension.to_owned(),
+                [first, second] => FunctionBuilder::new(ETS.metric)
+                    .add_arg(*first)
+                    .add_arg(*second)
+                    .finish(),
+                _ => unreachable!("a metric component is a path or a cycle"),
+            };
+            for &edge in &component {
+                removed[metrics[edge].0] = true;
+            }
+            replacements.push(contracted);
+        }
+        if replacements.is_empty() {
+            return None;
+        }
+        Some(Atom::mul_many(
+            product
+                .iter()
+                .enumerate()
+                .filter_map(|(i, factor)| (!removed[i]).then_some(AtomOrView::View(factor)))
+                .chain(replacements.into_iter().map(AtomOrView::Atom)),
+        ))
     }
 
     fn find_contraction<'a>(

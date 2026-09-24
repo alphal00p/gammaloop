@@ -5,7 +5,8 @@ import builtins
 import decimal
 import symbolica.core
 import typing
-from symbolica.core import ComplexFloat, Condition, Expression, Float, FormattedOutput, HeldExpression, PatternRestriction
+from symbolica import ComplexFloat, Float
+from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction
 
 AUTO: _AutoIndex
 _: _AutoIndex
@@ -1698,7 +1699,7 @@ class TensorExpression(Expression):
         # Get HEP library with standard tensors
         hep_lib = TensorLibrary.hep_lib()
         # Access standard tensors like gamma matrices
-        gamma_structure = hep_lib[S("spenso::gamma")]
+        gamma_structure = hep_lib[S("spenso::gamma")].expression()
         print(gamma_structure)
         print(TensorExpression(gamma_structure(3, 4, 7) * gamma_structure(7, 4, 3)).simplify_gamma())
         ```
@@ -2627,11 +2628,14 @@ class TensorFunctionLibrary:
 @typing.final
 class TensorLibrary:
     r"""
-    A library for registering and managing tensor templates and structures.
+    A mapping from tensor signatures to stored component data.
 
     The TensorLibrary provides a centralized registry for tensor definitions that can be
     reused across tensor networks and expressions. It manages tensor structures with their
     associated names and can resolve symbolic references to registered tensors.
+    Lookup returns an independent Tensor snapshot; call its expression() method
+    for a symbolic reference. keys(), values(), items() and iteration enumerate
+    stored entries, excluding dimension-dependent factories.
 
     ```python
     from symbolica.community.spenso import Tensor, TensorLibrary, TensorName, Representation
@@ -2642,7 +2646,8 @@ class TensorLibrary:
     structure = name(rep, rep)
     tensor = Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
     lib.register(tensor)
-    tensor_ref = lib[name]
+    stored = lib[structure]
+    tensor_ref = stored.expression()
     ```
     """
     def __repr__(self) -> builtins.str: ...
@@ -2703,36 +2708,46 @@ class TensorLibrary:
         >>> structure = name(rep, rep)
         >>> tensor = Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
         >>> lib.register(tensor)
-        >>> tensor_ref = lib[name]
+        >>> stored = lib[structure]
+        >>> tensor_ref = stored.expression()
         """
-    def __getitem__(self, key: TensorExpression | TensorName | Expression | builtins.str) -> TensorExpression:
+    def __getitem__(self, key: TensorExpression | TensorName | Expression | builtins.str) -> Tensor:
         r"""
-        Retrieve a registered tensor structure by name.
+        Retrieve an independent copy of a tensor's stored component data.
 
-        Looks up a previously registered tensor by its name and returns
-        a reference structure that can be used to create new tensor instances.
+        Use a fully unresolved TensorExpression signature to select its name,
+        scalar arguments and representations. A TensorName, symbol or string is
+        a shortcut when exactly one stored signature has that name. Exact lookup
+        also supports the library's dimension-dependent factories.
 
-        Parameters
-        ----------
-        key : TensorExpression, TensorName, Expression, or str
-            An exact unresolved tensor signature in registered storage order, or a
-            symbol-only convenience key
+        The returned Tensor retains the requested logical axis order. Call
+        tensor.expression() for its symbolic reference. Edits to the Tensor do
+        not change the library; register it again to replace the stored value.
+        Missing or ambiguous keys raise KeyError.
 
-        Returns
-        -------
-        TensorExpression
-            An atomic reference with the requested exact interface, or the registered
-            logical interface for a symbol-only lookup
-
-        Raises
-        ------
-        RuntimeError
-            If the tensor name is not found in the library
-
-        Examples
-        --------
-        >>> exact = lib[TensorName("T")(1, Representation.euc(3))]
-        >>> unique_by_name = lib["T"]
+        >>> stored = lib[TensorName("T")(1, Representation.euc(3))]
+        >>> reference = stored.expression()
+        """
+    def __len__(self) -> builtins.int:
+        r"""
+        Number of stored tensors, excluding dimension-dependent factories.
+        """
+    def keys(self) -> builtins.list[TensorExpression]:
+        r"""
+        Return a snapshot list of full, unresolved signatures in name/signature order.
+        Dimension-dependent factories are excluded because they have no stored value.
+        """
+    def values(self) -> builtins.list[Tensor]:
+        r"""
+        Return independent Tensor snapshots in the same order as keys().
+        """
+    def items(self) -> builtins.list[tuple[TensorExpression, Tensor]]:
+        r"""
+        Return a snapshot list of (full signature, stored Tensor) pairs.
+        """
+    def __iter__(self) -> typing.Iterator[TensorExpression]:
+        r"""
+        Iterate over a snapshot of stored signatures, as returned by keys().
         """
     @staticmethod
     def hep_lib() -> TensorLibrary:
@@ -2753,7 +2768,8 @@ class TensorLibrary:
         >>> import symbolica
         >>> from symbolica.community.spenso import TensorLibrary, TensorName
         >>> hep_lib = TensorLibrary.hep_lib()
-        >>> gamma_structure = hep_lib[symbolica.S("spenso::gamma")]
+        >>> gamma_tensor = hep_lib[symbolica.S("spenso::gamma")]
+        >>> gamma_structure = gamma_tensor.expression()
         """
     @staticmethod
     def hep_lib_atom() -> TensorLibrary:
@@ -2774,7 +2790,8 @@ class TensorLibrary:
         >>> import symbolica
         >>> from symbolica.community.spenso import TensorLibrary, TensorName
         >>> hep_lib = TensorLibrary.hep_lib_atom()
-        >>> gamma_structure = hep_lib[symbolica.S("spenso::gamma")]
+        >>> gamma_tensor = hep_lib[symbolica.S("spenso::gamma")]
+        >>> gamma_structure = gamma_tensor.expression()
         """
 
 @typing.final
@@ -3575,3 +3592,4 @@ def trace(representation: Representation, *factors: Expression) -> TensorExpress
 
 @typing.overload
 def trace(representation: Representation, *factors: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal] | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork: ...
+

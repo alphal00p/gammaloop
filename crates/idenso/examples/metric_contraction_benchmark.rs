@@ -3,8 +3,8 @@
 //! `cargo run -p idenso --profile dev-optim --example metric_contraction_benchmark
 //! -- OUTPUT_DIRECTORY [samples=5] [target_batch_ms=15]`
 //!
-//! The isolated metric-only contractor is compiled from its production source so this example
-//! can time the private operation without a new public API. The two public
+//! The isolated metric-only and shared metric/vector contractors are compiled from production
+//! source so this example can time the private operation without a new public API. The two public
 //! Schoonschip methods and gamma simplification call the linked production library.
 //! The repeated-index check is timed separately; it never guards the contractor.
 //! Input creation, validation and output snapshots are outside timing except for
@@ -20,8 +20,6 @@
 use std::{hint::black_box, path::Path, time::Instant};
 
 pub use idenso::W_;
-#[cfg(test)]
-use idenso::representations;
 use idenso::{
     dirac::GammaSimplifier,
     epsilon::EpsilonSimplifier,
@@ -29,6 +27,8 @@ use idenso::{
     representations::Bispinor,
     shorthands::schoonschip::{Schoonschip, SchoonschipSettings},
 };
+#[cfg(test)]
+use idenso::{representations, shorthands};
 use spenso::{
     g,
     network::parsing::AtomStructureExt,
@@ -358,6 +358,7 @@ enum Method {
     ParseAndNormalizeDots,
     Repeated,
     MetricCore,
+    SlotCore,
     GuardedMetricCore,
     MetricSettings,
     FullSchoonschip,
@@ -365,12 +366,13 @@ enum Method {
     FullGamma,
 }
 impl Method {
-    const ALL: [Self; 10] = [
+    const ALL: [Self; 11] = [
         Self::NormalizeDots,
         Self::ParseOnly,
         Self::ParseAndNormalizeDots,
         Self::Repeated,
         Self::MetricCore,
+        Self::SlotCore,
         Self::GuardedMetricCore,
         Self::MetricSettings,
         Self::FullSchoonschip,
@@ -384,6 +386,7 @@ impl Method {
             Self::ParseAndNormalizeDots => "parse_and_normalize_dots",
             Self::Repeated => "repeated_indices_only",
             Self::MetricCore => "metric_contractor_only",
+            Self::SlotCore => "slot_contractor",
             Self::GuardedMetricCore => "guarded_metric_contractor",
             Self::MetricSettings => "metric_schoonschip",
             Self::FullSchoonschip => "full_schoonschip",
@@ -418,6 +421,7 @@ impl Method {
             }
             Self::Repeated => Atom::num(i64::from(expression.has_repeated_explicit_indices())),
             Self::MetricCore => slot_contraction::SlotContraction::run(expression, true, false),
+            Self::SlotCore => slot_contraction::SlotContraction::run(expression, true, true),
             Self::GuardedMetricCore => {
                 if expression.has_repeated_explicit_indices() {
                     slot_contraction::SlotContraction::run(expression, true, false)
@@ -501,6 +505,7 @@ fn main() {
                 method,
                 Method::NormalizeDots
                     | Method::MetricCore
+                    | Method::SlotCore
                     | Method::GuardedMetricCore
                     | Method::MetricSettings
                     | Method::FullSchoonschip

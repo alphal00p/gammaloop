@@ -246,6 +246,37 @@ impl TraceEvaluation {
         assert_eq!(original, simplified, "HEP component mismatch for {label}");
         original
     }
+
+    fn evaluate_free_trace_result(
+        &self,
+        simplified: &Atom,
+        slots: &[Atom],
+        closing_vectors: &[Atom],
+    ) -> Atom {
+        // Each output slot occurs in one metric or epsilon per term. Close
+        // those subnetworks independently to avoid a rank-length intermediate
+        // tensor, preserving the polynomial's factorization.
+        let closed = simplified.replace_map(|atom, _, output| {
+            let AtomView::Fun(tensor) = atom else {
+                return;
+            };
+            if ![ETS.metric, *EPSILON_SYMBOL].contains(&tensor.get_symbol()) {
+                return;
+            }
+            let mut tensors = self.scalar_tensors.borrow_mut();
+            let value = tensors.entry(atom.to_owned()).or_insert_with(|| {
+                let vectors = tensor.iter().map(|slot| {
+                    &closing_vectors[slots
+                        .iter()
+                        .position(|expected| expected.as_view() == slot)
+                        .expect("kernel tensor arguments retain the explicit slots")]
+                });
+                self.evaluate(&(atom * Atom::mul_many(vectors).as_view()))
+            });
+            **output = value.clone();
+        });
+        self.evaluate(&closed)
+    }
 }
 
 impl TraceEvaluation {
@@ -348,33 +379,9 @@ impl TraceEvaluation {
             let original = spenso::trace!(&Bispinor {}.new_rep(4); original_factors);
             for (sample, evaluation) in evaluations.iter().enumerate() {
                 let expected = evaluation.evaluate(&original);
-                // Each output slot occurs in one metric or epsilon per term.
-                // Close those subnetworks with the same explicit vectors and
-                // contract actual HEP components independently. This preserves
-                // the polynomial's factorization and avoids a rank-length
-                // intermediate tensor; no gamma/epsilon identity is used here.
-                let closed = simplified.replace_map(|atom, _, output| {
-                    let AtomView::Fun(tensor) = atom else {
-                        return;
-                    };
-                    if ![ETS.metric, *EPSILON_SYMBOL].contains(&tensor.get_symbol()) {
-                        return;
-                    }
-                    let mut tensors = evaluation.scalar_tensors.borrow_mut();
-                    let value = tensors.entry(atom.to_owned()).or_insert_with(|| {
-                        let vectors = tensor.iter().map(|slot| {
-                            &closing_vectors[slots
-                                .iter()
-                                .position(|expected| expected.as_view() == slot)
-                                .expect("kernel tensor arguments retain the explicit slots")]
-                        });
-                        evaluation.evaluate(&(atom * Atom::mul_many(vectors).as_view()))
-                    });
-                    **output = value.clone();
-                });
                 assert_eq!(
                     expected,
-                    evaluation.evaluate(&closed),
+                    evaluation.evaluate_free_trace_result(&simplified, &slots, &closing_vectors),
                     "free axial length {length}, gamma5 position {position}, sample {sample}"
                 );
                 if position == 0 {
@@ -393,6 +400,64 @@ impl TraceEvaluation {
         if length == 4 {
             assert_eq!(reference[0], Atom::num(4) * Atom::i());
         }
+    }
+
+    fn assert_symbolic_dimension_free_trace(length: usize) {
+        let evaluations = [0, 1, 2].map(Self::generic);
+        let dimension = Atom::var(symbolica::symbol!("spenso::trace_validation_dimension"));
+        let slots: Vec<_> = (0..length)
+            .map(|index| {
+                function!(
+                    symbolica::symbol!("spenso::mink"),
+                    &dimension,
+                    Atom::var(symbolica::symbol!(format!("generic_free_mu{index}")))
+                )
+            })
+            .collect();
+        let trace =
+            spenso::trace!(&Bispinor {}.new_rep(4); slots.iter().map(|slot| idenso::gamma!(slot)));
+        // Keep D symbolic until after simplification, so the generic trace
+        // recurrence is exercised independently of the four-dimensional kernel.
+        let simplified = trace.simplify_gamma();
+        assert_ne!(trace, simplified);
+        assert_eq!(simplified.simplify_gamma(), simplified);
+        let specialize = |expression: &Atom| {
+            expression.replace_map(|atom, _, output| {
+                if atom == dimension.as_view() {
+                    **output = Atom::num(4);
+                }
+            })
+        };
+        let simplified = specialize(&simplified);
+        let slots: Vec<_> = slots.iter().map(specialize).collect();
+        let closing_vectors: Vec<_> = evaluations[0]
+            .momenta
+            .iter()
+            .zip(&slots)
+            .map(|(momentum, slot)| {
+                let AtomView::Fun(momentum) = momentum.as_view() else {
+                    unreachable!("test momenta are vector functions")
+                };
+                function!(momentum.get_symbol(), slot)
+            })
+            .collect();
+        // HEP evaluates raw 4x4 gamma matrices with the same vectors contracted
+        // at their original gammas; it does not simplify the gamma expression.
+        let original = evaluations[0].trace(length, false);
+        let mut nonzero_samples = 0;
+        for (sample, evaluation) in evaluations.iter().enumerate() {
+            let expected = evaluation.evaluate(&original);
+            assert_eq!(
+                expected,
+                evaluation.evaluate_free_trace_result(&simplified, &slots, &closing_vectors),
+                "symbolic dimension specialized to 4, length {length}, sample {sample}"
+            );
+            nonzero_samples += usize::from(!expected.is_zero());
+        }
+        assert!(
+            nonzero_samples > 0,
+            "the component comparison must be nontrivial"
+        );
     }
 }
 
@@ -418,6 +483,11 @@ trace_cases!(assert_free_axial_trace;
     explicit_free_axial_trace_4: 4,
     explicit_free_axial_trace_8: 8,
     explicit_free_axial_trace_12: 12,
+);
+trace_cases!(assert_symbolic_dimension_free_trace;
+    symbolic_dimension_free_trace_4: 4,
+    symbolic_dimension_free_trace_8: 8,
+    symbolic_dimension_free_trace_12: 12,
 );
 
 #[test]

@@ -1722,7 +1722,7 @@ mod tests {
         for spin in [r.bis4.to_symbolic([]), r.bis_d.to_symbolic([])] {
             let input = trace!(&spin; slots.iter().map(|slot| gamma!(slot)));
             let unit = bispinor_dimension(spin.as_view()).unwrap();
-            let expected = (&pairing * unit).expand();
+            let expected = (pairing.as_view() * unit).expand();
             let result = input.simplify_gamma();
             assert_eq!(result, expected);
             assert_eq!(

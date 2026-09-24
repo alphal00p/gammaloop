@@ -16,10 +16,10 @@
   const remaining = () => shape.map((_,i) => i).filter(i => i !== state.row && i !== state.column);
   const state = {
     view:rank === 3 && shape[0] <= 4 ? 'atlas' : 'slice',
-    display:'grid',
+    display:'grid', expanded:false,
     row:Math.max(0,rank-2), column:rank > 1 ? rank-1 : -1,
     fixed:Array(rank).fill(0), starts:Array(rank).fill(0),
-    selected:entries[0]?.index.slice() || Array(rank).fill(0), shade:true,
+    selected:entries[0]?.index.slice() || Array(rank).fill(0),
   };
   const allBytes = entries.map(cell => cell.bytes);
   if (data.sparse && size > data.stored) allBytes.push(0);
@@ -47,24 +47,34 @@
     const control = el('select'); control.dataset.control = name;
     for (const [key,text] of options) { const option=el('option',text); option.value=key; control.append(option); }
     control.value = value;
-    control.addEventListener('change',() => { change(control.value); render(); });
+    control.addEventListener('change',() => {
+      change(control.value); render();
+      area('controls').querySelector(`[data-control="${name}"]`).focus();
+    });
     return control;
   }
   function coordinate(axis, value, change) {
+    if (shape[axis]<=16) {
+      const control=select(`coordinate-${axis}`,Array.from({length:shape[axis]},(_,i)=>[i,i]),value,next=>change(Number(next)));
+      control.dataset.axis=axis;
+      return control;
+    }
     const input = el('input'); input.type='number'; input.min=0; input.max=Math.max(0,shape[axis]-1); input.step=1;
     input.value=value; input.dataset.axis=axis;
     input.addEventListener('change',() => {
       const parsed = input.valueAsNumber;
       if (!Number.isInteger(parsed) || parsed < 0 || parsed >= shape[axis]) { input.value=value; return; }
       change(parsed); render();
+      area('controls').querySelector(`[data-axis="${axis}"]`).focus();
     });
     return input;
   }
   function controls() {
     const host=area('controls'); host.replaceChildren();
-    const toolbar=el('div',undefined,'toolbar-top');
+    const toolbar=el('div',undefined,'control-bar');
     const fields=el('div',undefined,'control-fields');
-    host.append(toolbar,fields);
+    fields.id='control-fields'; fields.hidden=!state.expanded;
+    host.append(toolbar);
     const views=[['slice','One slice'],['heaviest','Heaviest first']];
     if (rank>2) views.splice(1,0,['atlas','All slices']);
     const display=el('div',undefined,'display-toggle');
@@ -80,17 +90,30 @@
       });
       display.append(toggle);
     }
-    toolbar.append(display);
-    if (state.display==='grid' && state.view!=='heaviest') {
-      const check=el('input'); check.type='checkbox'; check.checked=state.shade; check.dataset.control='shade';
-      check.addEventListener('change',() => { state.shade=check.checked; render(); });
-      const wrapper=el('label',undefined,'check'); wrapper.append(check,el('span','Shade by component bytes')); toolbar.append(wrapper);
+    const summary=el('output',undefined,'control-summary'); summary.hidden=state.expanded;
+    summary.setAttribute('aria-live','polite');
+    const description=[views.find(([value])=>value===state.view)[1]];
+    if (state.view!=='heaviest') {
+      description.push(`Rows ${axisName(state.row)}${state.column<0 ? '' : ' · columns '+axisName(state.column)}`);
+      remaining().forEach((axis,i)=>description.push(`${data.axes[axis]} ${state.view==='atlas' && i===0 ? '≥' : '='} ${state.fixed[axis]}`));
+      [state.row,state.column].filter(axis=>axis>=0 && state.starts[axis]>0)
+        .forEach(axis=>description.push(`Start ${axisName(axis)} = ${state.starts[axis]}`));
     }
+    summary.textContent=description.join(' · ');
+    const expand=el('button',undefined,'controls-expand'); expand.type='button';
+    const action=state.expanded ? 'Collapse controls' : 'Expand controls';
+    expand.setAttribute('aria-label',action); expand.title=action;
+    expand.setAttribute('aria-expanded',String(state.expanded)); expand.setAttribute('aria-controls',fields.id);
+    expand.addEventListener('click',()=> {
+      state.expanded=!state.expanded; controls();
+      area('controls').querySelector('.controls-expand').focus();
+    });
+    toolbar.append(display,fields,summary,expand);
     fields.append(label('View',select('view',views,state.view,value => {
       state.view=value;
       if (value==='heaviest') state.display='grid';
     })));
-    if (state.view==='heaviest') return;
+    if (state.view==='heaviest') { fields.classList.add('single'); return; }
     if (rank>1) {
       const axes=shape.map((_,i) => [i,axisName(i)]);
       fields.append(label('Rows',select('row',axes,state.row,value => {
@@ -108,6 +131,9 @@
     for (const axis of [state.row,state.column].filter(axis => axis>=0 && shape[axis]>8)) {
       fields.append(label(`Start ${axisName(axis)}`,coordinate(axis,state.starts[axis],value => { state.starts[axis]=value; })));
     }
+    fields.style.setProperty('--other-fields',fields.children.length-1);
+    fields.classList.toggle('single',fields.children.length===1);
+    fields.classList.toggle('many',fields.children.length>4);
   }
   function detail() {
     const host=area('detail'); host.replaceChildren();
@@ -128,7 +154,7 @@
     if (matrix && cell) button.innerHTML=cell.html;
     else button.textContent=cell ? index.join(',') : '…';
     if (!cell) button.classList.add('missing');
-    if (!matrix && cell && state.shade) {
+    if (!matrix && cell) {
       const fraction=high===low ? (high===0 ? 0 : 1) : (cell.bytes-low)/(high-low);
       button.style.backgroundColor=`color-mix(in srgb,var(--blue) ${8+54*fraction}%,var(--bg))`;
     }
@@ -196,7 +222,7 @@
       plot.append(panels);
     }
     const legend=area('legend'); legend.replaceChildren();
-    if (state.shade && state.display==='grid' && state.view!=='heaviest') {
+    if (state.display==='grid' && state.view!=='heaviest') {
       legend.append(el('span',low+' B'),el('span',undefined,'ramp'),el('span',high+' B'),el('span','Deeper shade = larger payload · shared scale'));
     }
     area('status').textContent=[

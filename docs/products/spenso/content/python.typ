@@ -381,7 +381,10 @@ and #link("reference/python/spynso3/ExecutionMode/")[`ExecutionMode`].
 Concrete tensors open an interactive component explorer by default in notebooks.
 Choose two displayed axes, fix the other coordinates, and compare slices.
 The visible *Memory grid / Matrix* toggle switches the current display for either
-one slice or all slices. Selecting a component
+one slice or all slices. Axis and slice controls start collapsed into a settings
+summary; expand the chevron to edit them. The soft fields share one row when
+space permits and wrap into two columns in narrow notebook outputs.
+Memory-grid shading always reflects component bytes. Selecting a component
 shows its formula through the same tensor printer, including custom names.
 The explorer follows the notebook's light or dark theme and fills its output
 width. Matrix formulas scale to fit their cells; select a cell to inspect the
