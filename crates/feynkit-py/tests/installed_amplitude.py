@@ -17,6 +17,17 @@ assert [leg.particle.name for leg in amplitude.legs] == ["e-", "e+", "a", "a"]
 assert [leg.state for leg in amplitude.legs] == ["incoming"] * 2 + ["outgoing"] * 2
 assert isinstance(amplitude.expression(), TensorExpression)
 assert amplitude.expression().rank == 4
+assert amplitude.expression().structure.slots == [
+    slot for leg in amplitude.legs for slot in leg.slots
+]
+for diagram in generated.diagrams:
+    assert set(diagram.numerator_expression().structure.slots) == set(
+        amplitude.expression().structure.slots
+    )
+assert [leg.tensor_index for leg in amplitude.legs] == [
+    E(f"gammalooprs::hedge({i},1)") for i in range(4)
+]
+assert "term_0_dummy" not in str(amplitude.expression())
 assert amplitude.conjugate().is_conjugated
 assert not amplitude.conjugate().conjugate().is_conjugated
 assert "conj" not in str(amplitude.conjugate().expression().to_expression())
@@ -24,6 +35,8 @@ assert amplitude._repr_html_()
 
 squared = amplitude.squared()
 assert squared.expression().rank == 8
+assert "index_scope" in str(squared.expression().to_expression())
+assert "′" in squared._repr_html_()
 assert squared.spin_summed == []
 fermions = squared.sum_spins([0, 1], average_initial=True)
 assert fermions.expression().rank == 4

@@ -26,6 +26,7 @@ use spenso::{
     structure::{
         abstract_index::AbstractIndex,
         dimension::Dimension,
+        partial::{PartialIndex, PartialStructure, PartialStructureExt},
         representation::{LibrarySlot, Minkowski, RepName},
         slot::{DualSlotTo, IsAbstractSlot, ParseableAind},
     },
@@ -95,6 +96,7 @@ pub struct AmplitudeLeg {
     pub particle: ParticleId,
     pub state: ExternalState,
     pub slots: Vec<LibrarySlot<AbstractIndex>>,
+    pub tensor_index: AbstractIndex,
 }
 
 impl AmplitudeLeg {
@@ -105,18 +107,7 @@ impl AmplitudeLeg {
 
     /// Common bare label for this leg's spin and color ports.
     pub fn index_atom(&self) -> Atom {
-        self.scoped_index("external").to_atom()
-    }
-
-    fn scoped_index(&self, scope: &str) -> AbstractIndex {
-        AbstractIndex::try_from(
-            Atom::var(symbol!(&format!(
-                "feynkit_amplitude::{scope}_{}",
-                self.index
-            )))
-            .as_view(),
-        )
-        .expect("a symbol is an abstract index")
+        self.tensor_index.to_atom()
     }
 
     fn color_slot(&self) -> Option<LibrarySlot<AbstractIndex>> {
@@ -160,15 +151,15 @@ impl Amplitude {
         let fingerprint = first.model().fingerprint();
         let mut terms = Vec::with_capacity(diagrams.len());
         let mut legs = Vec::new();
-        for (index, diagram) in diagrams.iter().enumerate() {
+        for diagram in &diagrams {
             diagram.validate()?;
             if !Arc::ptr_eq(&first.model_arc(), &diagram.model_arc())
                 && diagram.model().fingerprint() != fingerprint
             {
                 return Err(AmplitudeError::DifferentModel(diagram.name().to_owned()));
             }
-            let (term, external) = Self::diagram_term(diagram, index, &options)?;
-            if index == 0 {
+            let (term, external) = Self::diagram_term(diagram, &options)?;
+            if terms.is_empty() {
                 legs = external;
             } else if legs != external {
                 return Err(AmplitudeError::DifferentExternals(
@@ -207,6 +198,16 @@ impl Amplitude {
 
     pub fn expression(&self) -> Atom {
         Atom::add_many(&self.terms)
+    }
+
+    /// Open tensor slots in physical external-leg order, retaining graph identities.
+    pub fn structure(&self) -> PartialStructure {
+        PartialStructure::from_logical_slots(
+            self.legs
+                .iter()
+                .flat_map(|leg| &leg.slots)
+                .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind))),
+        )
     }
 
     /// Dirac adjunction preserves physical leg identities, including across
@@ -251,14 +252,16 @@ impl Amplitude {
         // Loop variables in two independent loop integrals must not be identified.
         let loop_index = symbol!("feynkit_amplitude::loop_");
         let args = symbol!("feynkit_amplitude::loop_args___");
-        let bra = Self::scope_indices(&adjoint.expression(), &adjoint.legs, "bra")
+        let bra = adjoint
+            .expression()
+            .wrap_indices(Self::bra())
             .replace(function!(symbols::loop_momentum(), loop_index, args))
             .with(function!(
                 symbols::loop_momentum(),
                 Self::bra().call(loop_index),
                 args
             ));
-        let expression = Self::scope_indices(&amplitude.expression(), &amplitude.legs, "ket") * bra;
+        let expression = amplitude.expression() * bra;
         Ok(SquaredAmplitude {
             amplitude,
             expression,
@@ -269,34 +272,6 @@ impl Amplitude {
 
     fn bra() -> Symbol {
         symbol!("feynkit_amplitude::bra")
-    }
-
-    fn scope_indices(expression: &Atom, legs: &[AmplitudeLeg], scope: &str) -> Atom {
-        let mapping = legs
-            .iter()
-            .map(|leg| (leg.index_atom(), leg.scoped_index(scope)))
-            .collect();
-        Self::rename_indices(expression, mapping, scope)
-    }
-
-    fn rename_indices(
-        expression: &Atom,
-        mut mapping: BTreeMap<Atom, AbstractIndex>,
-        scope: &str,
-    ) -> Atom {
-        expression.replace_map(|atom, _, out| {
-            if let Ok(mut slot) = LibrarySlot::<AbstractIndex>::try_from(atom) {
-                let next = mapping.len();
-                slot.aind = *mapping.entry(slot.aind.to_atom()).or_insert_with(|| {
-                    AbstractIndex::try_from(
-                        Atom::var(symbol!(&format!("feynkit_amplitude::{scope}_dummy_{next}")))
-                            .as_view(),
-                    )
-                    .expect("a symbol is an abstract index")
-                });
-                **out = slot.to_atom();
-            }
-        })
     }
 
     fn apply_reality(&self, expression: &Atom) -> Atom {
@@ -345,7 +320,6 @@ impl Amplitude {
 
     fn diagram_term(
         diagram: &FeynmanDiagram,
-        term: usize,
         options: &AmplitudeOptions,
     ) -> Result<(Atom, Vec<AmplitudeLeg>), AmplitudeError> {
         if !diagram.cuts().is_empty() {
@@ -365,7 +339,6 @@ impl Amplitude {
                     .map_err(|e| AmplitudeError::Tensor(e.to_string()))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let mut renaming = BTreeMap::new();
         let mut legs = BTreeMap::new();
         let mut identified = 0;
         for (pair, _, edge) in diagram.underlying().iter_edges() {
@@ -381,13 +354,11 @@ impl Amplitude {
                 particle: edge.data.particle,
                 state: external.state,
                 slots: Vec::new(),
+                tensor_index: AbstractIndex::try_from(old_index.as_view())
+                    .map_err(|e| AmplitudeError::Tensor(e.to_string()))?,
             };
             for slot in ports.iter().filter(|s| s.aind.to_atom() == old_index) {
-                let mut renamed = *slot;
-                renamed.aind = AbstractIndex::try_from(leg.index_atom().as_view())
-                    .map_err(|e| AmplitudeError::Tensor(e.to_string()))?;
-                renaming.insert(slot.aind.to_atom(), renamed.aind);
-                leg.slots.push(renamed);
+                leg.slots.push(*slot);
                 identified += 1;
             }
             leg.slots.sort();
@@ -406,7 +377,6 @@ impl Amplitude {
                 "unassigned open tensor slots".into(),
             ));
         }
-        let numerator = Self::rename_indices(&numerator, renaming, &format!("term_{term}"));
         let basis = diagram.loop_momentum_basis();
         let mut momentum_rules = Vec::new();
         let args = symbol!("feynkit_amplitude::momentum_args___");
@@ -496,8 +466,8 @@ impl SquaredAmplitude {
                 .with_dimension(&self.amplitude.dimension().to_symbolic())?
                 .averaged(average_initial && leg.state == ExternalState::Incoming);
             let [ket, bra] = [
-                leg.scoped_index("ket").to_atom(),
-                leg.scoped_index("bra").to_atom(),
+                leg.index_atom(),
+                leg.tensor_index.scoped(Amplitude::bra()).to_atom(),
             ];
             let column = (leg.state == ExternalState::Incoming) != particle.is_antiparticle();
             let indices = if column { [ket, bra] } else { [bra, ket] };
@@ -531,9 +501,9 @@ impl SquaredAmplitude {
             ColorSum::new(particle)?;
             if let Some(slot) = leg.color_slot() {
                 let mut left = slot.dual();
-                left.aind = leg.scoped_index("ket");
+                left.aind = leg.tensor_index;
                 let mut right = slot;
-                right.aind = leg.scoped_index("bra");
+                right.aind = leg.tensor_index.scoped(Amplitude::bra());
                 result.expression *= ETS.metric(left.to_atom(), right.to_atom());
                 if average_initial && leg.state == ExternalState::Incoming {
                     result.expression /= Atom::num(particle.color.unsigned_abs());

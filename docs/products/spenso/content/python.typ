@@ -402,7 +402,13 @@ Both conventions conjugate scalar coefficients and retain the required boundary
 factors. The physical-leg convention distributes those factors across sums
 before canceling them. The default keeps its existing factored output. To form
 a squared amplitude, distinguish the adjoint's indices with `wrap_indices` and
-supply the appropriate shared completeness tensors. Keeping labels attached to
+supply the appropriate shared completeness tensors. `tensor.wrap_indices(S("bra"))`
+returns a `TensorExpression` with native scoped indices, preserving both its
+logical interface and internal contractions. The original and scoped indices
+remain distinct until a completeness tensor connects them. Alphabet display
+uses the same base letters with primes for the scoped copy; raw display retains
+`spenso::index_scope(scope, index)`. Repeating the same outer scope is idempotent,
+and different scopes can nest. No index cooking is required. Keeping labels attached to
 legs does not itself perform a spin sum. The new keyword requires a community
 assembly built with this Spynso version; changing a stub file does not update
 the native extension.

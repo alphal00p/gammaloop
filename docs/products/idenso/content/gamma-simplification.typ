@@ -2288,6 +2288,75 @@ result and verifies rank-loss rejection without replaying its normalizer.
 releases, samples, FORM programs, source snapshots, profiles, and the rejected
 endpoint trial.
 
+== Axial scalar contexts and corrected conversion
+
+The next comparison starts from the preceding `43942853` build. Two changes are
+measured separately against it; no combined speedup is inferred.
+
+The retained Idenso change admits free four-dimensional axial traces in the
+existing exact-scalar context shortcut. It keeps the prior expanded result,
+including under default settings. One gamma5, distinct explicit symbolic
+indices, supported dimensions and length, and function-free exact spectators
+are required. These words emit one epsilon per term and have no contracted
+metric left to simplify. Repeated indices, compact vectors, rounded coefficients
+and callback-bearing spectators retain the full pass. The shared tensor owner
+continues to validate callback-sensitive interfaces.
+
+The separate Symbolica experiment applies the corrected emission and variable
+presence patches to a copied `06906976` dependency. The first emission prototype
+changed floating-point multiplication and callback order in its general fallback.
+Two permanent regression tests now catch those errors; the corrected patch keeps
+the original fallback order. Production still uses unpatched Symbolica.
+
+#table(
+  columns: 4,
+  table.header([Change and input], [Before], [After], [Speedup]),
+  [Idenso: axial trace4, length 12], [9.164 ms], [1.369 ms], [6.69×],
+  [Symbolica experiment: tracen, length 10], [1.525 ms], [1.114 ms], [1.37×],
+  [Symbolica experiment: tracen, length 12], [18.508 ms], [13.088 ms], [1.41×],
+  [Symbolica experiment: tracen, length 14], [363.202 ms], [265.865 ms], [1.37×],
+)
+
+The full host timings include dispatch, result construction and wrapping, with
+`(x+y)^8` kept factored. Source construction and exact checks are untimed.
+Length-14 reruns remain about 184 ms. Trace4 length 8 stays near 0.23 ms.
+The complete typed ladder stays near 8.8 s; one axial-comparison pair has a
+17.8% slowdown despite nearly flat other pairs, so no ladder gain is claimed.
+The raw route remains near 17 s; the conversion experiment observes a small
+0.7% median slowdown, with paired increases of 0.35–2.90%. All outputs agree
+exactly, including the ladder's 9,652-term FORM-certified result.
+
+Fresh FORM trace-body CPU medians are 4.167 ms for tracen length 12,
+53.667 ms for length 14, and 0.592 ms for axial length 12. They exclude the
+scalar spectator and Python wrapping; their remaining gaps are approximately
+3.1× and 5.0× for the conversion experiment and 2.3× for the retained axial
+change. The ladder's fresh FORM process median is 1.111 s, versus 0.753 s at
+the preceding checkpoint with the same source. This shared-host variability
+leaves an approximate 8–12× ladder gap, not an improvement in our contractor.
+
+Here expression construction means emitting the already computed polynomial
+(coefficients and exponents) as Symbolica product and sum Atoms, including
+canonical normalization. Constructing the tensor wrapper and validating its
+interface are separate operations.
+
+Even with the corrected Symbolica patches, conversion accounts for 76.61% of
+sampled tracen cycles: final Atom normalization takes 38.31%, other conversion
+work 38.30%, and coefficient-list construction separately takes 14.33%.
+In the axial profile, the trace kernel takes 76.23% and result wrapping/source
+interface validation 17.22%; the previous epsilon-cleanup pass is absent.
+These are sampled CPU-cycle shares, not precise wall-time phases. No wrapper
+sample appears in the 290-sample conversion capture; that does not prove zero
+wrapper cost.
+
+Both candidates pass 207 exact Python records and 117 HEP component checks.
+The axial regression compares 234 word/settings cases at every gamma5 position
+through length 14, plus 936 scalar-decorated results and their reruns, against
+the full pass. The corrected conversion passes both new regression tests,
+ten previous boundaries and the Laurent case on the actual host library;
+the original patch fails both new regressions. The parity archive's
+`shared_tensor_axial_and_conversion_followup` entry preserves the separate
+releases, exact sources, FORM programs, raw timings, profiles and validation.
+
 == Run locally
 
 Use an interpreter containing the combined Symbolica community host with Spenso and Idenso,

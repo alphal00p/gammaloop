@@ -195,11 +195,11 @@ pub trait IndexTooling {
     ) -> Result<Atom, CanonicalizationError>;
     /// Wraps all abstract indices within the expression using a specified header symbol.
     ///
-    /// This transforms indices like `mink(dim,idx)` into `mink(dim,header(idx))`. Useful for distinguishing
+    /// This transforms `mink(dim,idx)` into `mink(dim,spenso::index_scope(header,idx))`, retaining a valid abstract index. Useful for distinguishing
     /// between different copies of an expression, e.g., an amplitude and its complex conjugate.
     ///
     /// # Arguments
-    /// * `header` - The [`Symbol`] to use as the wrapping function name.
+    /// * `header` - The [`Symbol`] identifying the independent index scope.
     ///
     /// # Returns
     /// A new [`Atom`] with all indices wrapped.

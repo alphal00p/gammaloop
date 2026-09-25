@@ -39,6 +39,11 @@ use thiserror::Error;
 use super::slot::AbsInd;
 use super::slot::DummyAind;
 
+#[cfg(feature = "shadowing")]
+mod scoped;
+#[cfg(feature = "shadowing")]
+pub use scoped::ScopedIndex;
+
 pub const ABSTRACTIND: &str = "aind";
 
 pub const UPIND: &str = "uind";
@@ -224,6 +229,33 @@ mod test {
             AbstractIndex::try_from(atom.as_view()),
             Err(AbstractIndexError::NotIndex(_))
         ));
+    }
+
+    #[test]
+    fn scoped_indices_retain_identity_and_round_trip() {
+        let hedge = symbol!("scope_tests::hedge", tags = [SPENSO_TAG.index.clone()]);
+        let bra = symbol!("scope_tests::bra");
+        let outer = symbol!("scope_tests::outer");
+        for base in [
+            AbstractIndex::Normal(3),
+            AbstractIndex::from(symbol!("mu")),
+            AbstractIndex::Named(hedge.into(), 7, 1),
+            AbstractIndex::Open { owner: 2, axis: 1 },
+        ] {
+            let scoped = base.scoped(bra);
+            assert_ne!(base, scoped);
+            assert_eq!(scoped.scoped(bra), scoped);
+            assert_ne!(scoped.scoped(outer), scoped);
+            assert_ne!(scoped.scoped(outer), base.scoped(outer).scoped(bra));
+            for value in [scoped, scoped.scoped(outer)] {
+                assert_eq!(
+                    AbstractIndex::try_from(value.to_atom().as_view()).unwrap(),
+                    value
+                );
+                let json = serde_json::to_string(&value).unwrap();
+                assert_eq!(serde_json::from_str::<AbstractIndex>(&json).unwrap(), value);
+            }
+        }
     }
 }
 
@@ -448,6 +480,9 @@ pub enum AbstractIndex {
     /// A tagged index call with an owner and a local index, preserving its head.
     #[cfg(feature = "shadowing")]
     Named(SerializableSymbol, usize, usize),
+    /// An index in an independent copy of a tensor, retaining its original identity.
+    #[cfg(feature = "shadowing")]
+    Scoped(ScopedIndex),
 }
 
 impl AbsInd for AbstractIndex {}
@@ -456,6 +491,36 @@ impl AbstractIndex {
     /// Allocate an occurrence identity shared by symbolic and concrete open ports.
     pub fn fresh_open_owner() -> usize {
         OPEN_OWNER.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Put this index in a named scope. Reapplying the outer scope is idempotent.
+    #[cfg(feature = "shadowing")]
+    pub fn scoped(self, scope: Symbol) -> Self {
+        if let Self::Scoped(index) = self
+            && index.scope() == scope
+        {
+            return self;
+        }
+        Self::Scoped(ScopedIndex::new(scope, self))
+    }
+
+    #[cfg(feature = "shadowing")]
+    pub fn scope_symbol() -> Symbol {
+        symbol!("spenso::index_scope", tags = [SPENSO_TAG.index.clone()])
+    }
+
+    /// Scope explicit tensor slots, leaving scalar function arguments opaque.
+    #[cfg(feature = "shadowing")]
+    pub fn wrap_expression(expression: AtomView<'_>, scope: Symbol) -> Atom {
+        use super::{representation::LibrarySlot, slot::IsAbstractSlot};
+        expression.replace_map(|value, _, output| {
+            if value.get_symbol().is_some_and(|symbol| symbol.is_scalar()) {
+                **output = value.to_owned();
+            } else if let Ok(mut slot) = LibrarySlot::<Self>::try_from(value) {
+                slot.aind = slot.aind.scoped(scope);
+                **output = slot.to_atom();
+            }
+        })
     }
 }
 
@@ -498,6 +563,10 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
             #[cfg(feature = "shadowing")]
             (AbstractIndex::Named(..), _) | (_, AbstractIndex::Named(..)) => {
                 panic!("cannot add named index")
+            }
+            #[cfg(feature = "shadowing")]
+            (AbstractIndex::Scoped(..), _) | (_, AbstractIndex::Scoped(..)) => {
+                panic!("cannot add scoped index")
             }
             (left, right) => AbstractIndex::Added(usize::from(left) + usize::from(right)),
         }
@@ -572,6 +641,8 @@ impl std::fmt::Display for AbstractIndex {
             }
             #[cfg(feature = "shadowing")]
             AbstractIndex::Named(name, owner, local) => write!(f, "{name}({owner},{local})"),
+            #[cfg(feature = "shadowing")]
+            AbstractIndex::Scoped(index) => write!(f, "{}({})", index.scope(), index.index()),
             AbstractIndex::Open { owner, axis } => write!(f, "open({owner},{axis})"),
         }
     }
@@ -596,6 +667,11 @@ impl From<AbstractIndex> for Atom {
             AbstractIndex::Named(name, owner, local) => {
                 symbolica::function!(Symbol::from(name), Atom::num(owner), Atom::num(local))
             }
+            AbstractIndex::Scoped(index) => symbolica::function!(
+                AbstractIndex::scope_symbol(),
+                index.scope(),
+                Atom::from(index.index())
+            ),
             AbstractIndex::Open { owner, axis } => {
                 symbolica::function!(AIND_SYMBOLS.openind, Atom::num(owner), Atom::num(axis))
             }
@@ -634,6 +710,8 @@ impl From<AbstractIndex> for usize {
             AbstractIndex::Symbol(v) => v.get_id() as usize,
             #[cfg(feature = "shadowing")]
             AbstractIndex::Named(..) => panic!("a named index has no numeric identity"),
+            #[cfg(feature = "shadowing")]
+            AbstractIndex::Scoped(..) => panic!("a scoped index has no numeric identity"),
             AbstractIndex::Open { axis, .. } => axis,
         }
     }
@@ -683,6 +761,13 @@ impl TryFrom<AtomView<'_>> for AbstractIndex {
                 _ => Err(AbstractIndexError::NotNatural),
             },
             AtomView::Var(v) => Ok(AbstractIndex::Symbol(v.get_symbol().into())),
+            AtomView::Fun(function) if function.get_symbol() == Self::scope_symbol() => {
+                let args = function.iter().collect::<Vec<_>>();
+                let [AtomView::Var(scope), index] = args.as_slice() else {
+                    return Err(AbstractIndexError::NotIndex(view.to_string()));
+                };
+                Ok(Self::try_from(*index)?.scoped(scope.get_symbol()))
+            }
             AtomView::Fun(function) if function.get_symbol() == AIND_SYMBOLS.openind => {
                 let args = function.iter().collect::<Vec<_>>();
                 let [owner, axis] = args.as_slice() else {
