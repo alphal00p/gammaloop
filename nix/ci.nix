@@ -264,6 +264,7 @@
       "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
       "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
       "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
+      "packages.${system}.nix-ci-check-alphal00p-docs" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
       "packages.${system}.nix-ci-check-gammaloop-doctest" = ["packages.${system}.cargoCheckArtifacts"];
       "packages.${system}.nix-ci-check-gammaloop-nextest" =
         nextestBinaryChecks
@@ -335,6 +336,7 @@
       "checks.${system}.gammaloop-clippy"
       "checks.${system}.gammaloop-fmt"
       "checks.${system}.gammaloop-guppy-workspace-graph"
+      "packages.${system}.nix-ci-check-alphal00p-docs"
       "packages.${system}.nix-ci-check-gammaloop-doctest"
       "packages.${system}.nix-ci-passed"
     ]
@@ -434,7 +436,7 @@ in {
         # Keep the legacy repository key available to branches on older Symbolica.
         secrets = ["SYMBOLICA_LICENSE_SIGNED"];
       };
-    }) (["gammaloop-doctest"] ++ map (group: "gammaloop-nextest-${group.name}") groups));
+    }) (["alphal00p-docs" "gammaloop-doctest"] ++ map (group: "gammaloop-nextest-${group.name}") groups));
     deploy = {
       ci-passed = {
         package = "packages.${system}.nix-ci-passed";

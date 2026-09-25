@@ -3,7 +3,7 @@ name: Mirror Typst packages
 on:
   push:
     branches:
-      - '**'
+      - main
     paths:
       - '.github/workflows/mirror-typst-packages.yml'
       - 'crates/kurvst/typst/**'

@@ -368,12 +368,12 @@ Before requesting final review:
 + Push the validated code, mark the PR non-draft, then apply `final-review`.
 
 When returning to development, remove `final-review` and commit
-`enable = false`. Removing the label or returning to draft cancels superseded
-runs of the Nix and Continuous integration Actions workflows. It does not cancel
-already-running NixCI jobs: the committed toggle controls subsequent NixCI work.
-Those two Actions workflows run automatically for non-draft, labeled PRs to
-`main`; main pushes, merge-group runs, and manual dispatch remain available.
-Other workflows retain their own triggers.
+`enable = false`. The label gates merging; the committed toggle controls NixCI
+work independently, and changing either does not cancel already-running NixCI
+jobs. GitHub Actions build workflows run automatically on pushes to `main`, not
+on PRs, merge groups, or feature-branch pushes. Existing manual runs, schedules,
+and release-tag publishing remain available. The lightweight NixCI readiness
+check still runs on PR and merge-group events because it is required to merge.
 
 Edit only the top-level toggle manually: `just ci-update` preserves it while
 regenerating the scheduling configuration. Missing or nonboolean toggles and
@@ -400,11 +400,14 @@ and build tools. Stage newly added files first so the Git-backed flake sees them
 just ci-checks
 ```
 
-This runs the selected Rust and Python tests, Clippy, doctests, formatting and
-workspace/CI graph checks. Licensed checks require `SYMBOLICA_LICENSE` in your
-local environment. An unchanged successful Nix check can be reused without
-executing its tests again. `nix flake check --impure` additionally builds the CLI,
-documentation and WASM checks exported by the flake.
+This runs the selected Rust and Python tests, Clippy, doctests, formatting,
+workspace/CI graph checks, and the full five-product documentation check. The
+documentation check validates generated inputs, renders latest and snapshot
+sites, checks their HTML, and exercises publication behavior. Licensed checks,
+including documentation, require `SYMBOLICA_LICENSE` in your local environment.
+An unchanged successful Nix check can be reused without executing its tests again.
+`nix flake check --impure` additionally builds the CLI, standalone Rustdoc,
+persistent Typst renderer and WASM checks exported by the flake.
 
 On `itphlies`, run the following before pushing CI-enabled work, including
 updates to a PR already in final review. The host's Nix daemon is configured to
@@ -452,7 +455,7 @@ The upload command first requires successful checks, then realizes the outputs
 selected by `nix/ci.nix` and publishes their runtime closures. These explicit
 producer targets retain the binaries and compiler artifacts that test-result
 outputs alone would omit. Existing local outputs are published too. It does not
-select packaging, documentation, WASM, dev shells or unrelated repositories.
+select packaging, WASM, dev shells or unrelated repositories.
 Required shared dependencies can still be part of the uploaded closures.
 
 Check time, publication preparation and upload time are reported separately.

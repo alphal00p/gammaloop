@@ -36,6 +36,7 @@ coverage-nix:
 
 # Run all CI checks locally (same as CI)
 ci-checks: clippy-nix fmt-check-nix ci-graph-check doctest-nix test-nix
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').alphal00p-docs
 
 # Build selected CI outputs explicitly so NixCI can reuse matching local results.
 # See https://nix-ci.com/documentation/nix-ci-cache

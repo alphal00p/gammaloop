@@ -819,7 +819,9 @@ review_triggers = ["flake.nix", "flake.lock", "nix/**", "nix-ci.nix", "just/ci.j
 path = "just/ci.just"
 symbol = "CI checks, uploads and reporting commands"
 anchor = "ci-checks-and-upload:"
-digest = "6d071c5b21aa0364e7aa97aecfbdb3ccf1f5bdc1"
+# Reviewed 2026-09-25: the local suite now includes the licensed five-product
+# documentation check, matching the NixCI selection described in the guide.
+digest = "e2ff6282c56e44cb44ee45def2f538f8097a98f4"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"

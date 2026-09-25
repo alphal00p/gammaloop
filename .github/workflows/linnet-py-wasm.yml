@@ -1,18 +1,6 @@
 name: Linnet Python WebAssembly
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/linnet-py-wasm.yml'
-      - '.cargo/**'
-      - 'Cargo.lock'
-      - 'Cargo.toml'
-      - 'crates/kurvst/**'
-      - 'crates/linnest/**'
-      - 'crates/linnet/**'
-      - 'crates/linnet-py/**'
   push:
     branches:
       - main

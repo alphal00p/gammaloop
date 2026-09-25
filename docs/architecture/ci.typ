@@ -27,8 +27,13 @@ forcing rebuilds.
 )
 
 Automatic NixCI work covers tests, Clippy, doctests, formatting, graph validation,
-necessary producers and final success. Packaging, documentation and WASM remain
-available through the flake; `nix flake check --impure` includes those extra checks.
+the full five-product documentation check, necessary producers and final success.
+The documentation check validates generated references and examples, renders
+latest and snapshot sites, checks their HTML, and exercises publication behavior.
+It uses the existing licensed-check runner with `SYMBOLICA_LICENSE_SIGNED`; its
+reusable Cargo artifacts are scheduled separately. Local checks and uploads select
+the same documentation check. Packaging, standalone Rustdoc, the persistent Typst
+renderer and WASM remain additional checks in `nix flake check --impure`.
 
 Compilation stays per crate. Source filtering preserves unaffected packages;
 manifest and lockfile changes still invalidate broadly. Test dependencies avoid
@@ -71,13 +76,14 @@ and top-level `enable = true`. Draft and unlabeled PRs fail this merge gate whil
 remaining usable for development and feedback. Main pushes and merge-group
 commits require enabled configuration without a label condition.
 
-The Nix and Continuous integration Actions workflows also wait for non-draft,
-`final-review` PRs to `main`. They react to PR updates, label changes, retargeting,
-and draft/readiness transitions, retaining main pushes, manual dispatch and
-merge-group coverage. PR concurrency cancels superseded Actions runs, including
-when the label is removed or the PR returns to draft. Other workflows retain
-their existing behavior. Labels do not alter committed NixCI configuration or
-cancel already-running NixCI jobs.
+GitHub Actions builds run automatically on pushes to `main`, not on PRs,
+merge groups, or feature-branch pushes. This includes Nix, Continuous integration,
+Documentation Pages, Linnet Python WebAssembly, and Typst package mirroring.
+Existing manual dispatch, scheduled maintenance/acceptance checks, and release-tag
+publishing remain available. The lightweight NixCI readiness workflow retains
+its PR and merge-group triggers because it is required to merge. The
+`final-review` label gates readiness, not build workflows or NixCI itself; labels
+do not alter committed NixCI configuration or cancel already-running NixCI jobs.
 
 Agents disable NixCI during implementation unless instructed otherwise. Before
 final review, enable it, validate/upload the final code, push, and then apply the
