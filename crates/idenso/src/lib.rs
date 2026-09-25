@@ -433,6 +433,47 @@ impl IndexTooling for AtomView<'_> {
 
         let external = net.graph.dangling_indices();
         let expr = net.simple_execute::<()>()?;
+        // Symbolica rejects tensor-containing negative powers even when their
+        // base is a closed scalar network. Canonicalize those independent
+        // contractions recursively, then keep them opaque during outer labeling.
+        let mut aliases = BTreeMap::new();
+        let mut used = expr.get_all_symbols(true);
+        let mut serial = 0;
+        let mut failure = None;
+        let expr = expr.replace_map(|atom, _, out| {
+            let AtomView::Pow(power) = atom else {
+                return;
+            };
+            let (base, exponent) = power.get_base_exp();
+            if i64::try_from(exponent).is_ok_and(|n| n > 0) {
+                return;
+            }
+            let canonical =
+                match base.canonize::<Aind>(&mut new_dummy as &mut dyn FnMut(usize) -> Aind) {
+                    Ok(canonical) => canonical.pow(exponent),
+                    Err(error) => {
+                        failure = Some(error);
+                        return;
+                    }
+                };
+            let alias = aliases.entry(canonical).or_insert_with(|| {
+                loop {
+                    let name = symbol!(&format!("idenso::canonical_scalar_{serial}"));
+                    serial += 1;
+                    if used.insert(name) {
+                        break Atom::var(name);
+                    }
+                }
+            });
+            **out = alias.clone();
+        });
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        let mut scalar_definitions = AliasedAtom::from(Atom::Zero);
+        for (original, alias) in aliases {
+            scalar_definitions.register_alias(alias, original);
+        }
         // Spenso owns contraction and external-slot validation. Symbolica
         // canonizes the complete expression, including contractions completed
         // inside nested sums, without distributing any products of sums.
@@ -476,10 +517,14 @@ impl IndexTooling for AtomView<'_> {
             reps.push(Replacement::new(d.to_pattern(), target));
         }
 
-        Ok(canonical
-            .canonical_form
-            .replace_multiple(&reps)
-            .replace_multiple(&redual_reps))
+        Ok(scalar_definitions
+            .map_root(|_| {
+                canonical
+                    .canonical_form
+                    .replace_multiple(&reps)
+                    .replace_multiple(&redual_reps)
+            })
+            .into_inner())
     }
     fn spenso_conj(&self) -> Atom {
         let conjugate = self

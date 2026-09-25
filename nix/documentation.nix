@@ -555,7 +555,7 @@ let
         test -s "$out/products/spenso/latest/reference/rust/spenso_hep_lib/index.html"
         test -s "$out/products/idenso/latest/reference/rust/idenso/index.html"
         test -s "$out/products/vakint/latest/reference/rust/vakint/index.html"
-        for component in feynkit feynkit_model feynkit_ufo feynkit_kinematics feynkit_graph feynkit_generator feynkit_cff feynkit_tensor; do
+        for component in feynkit feynkit_amplitude feynkit_model feynkit_ufo feynkit_kinematics feynkit_graph feynkit_generator feynkit_cff feynkit_tensor; do
           test -s "$out/products/feynkit/latest/reference/rust/$component/index.html"
         done
         test -s "$out/products/feynkit/latest/reference/python/feynkit-community/index.html"

@@ -2754,6 +2754,71 @@ def _(mo):
     scoped-substitution experiment below. Full records are retained under
     `full_gluon_ladder_refresh` in the contraction parity archive.
 
+    **Fast constructor inference:** the constructor now shares Spenso's cached
+    slot matcher, borrows Atom views, and reads ordinary compact-vector ports
+    directly, avoiding temporary dummy-index materialization. All-summand
+    validation and custom normalization behavior are retained. Constructor-only
+    medians (three calls on each saved, parsed input) are:
+
+    | Input terms | Before | After | Speedup |
+    | ---: | ---: | ---: | ---: |
+    | 6 | 0.128 ms | 0.095 ms | 1.35× |
+    | 36 | 1.230 ms | 0.771 ms | 1.60× |
+    | 204 | 8.213 ms | 5.140 ms | 1.60× |
+    | 1,152 | 57.788 ms | 35.181 ms | 1.64× |
+    | 6,503 | 419.630 ms | 241.470 ms | 1.74× |
+    | 50,684 | 3.922 s | 2.242 s | 1.75× |
+    | 92,341 | 8.151 s | 4.451 s | 1.83× |
+    | 186,516 | 18.917 s | 9.875 s | 1.92× |
+
+    The full ladder's operation sum improves **47.506 → 25.340 s (1.88×)**:
+    constructor calls take **36.420 → 16.941 s**, and Schoonschip including
+    result wrapping takes **10.291 → 7.648 s**. This harness serializes fixtures
+    between operation clocks; its sum is separate from the contiguous run above.
+    Fresh FORM takes **0.727 s** process wall (three-run median; **0.70 s** CPU),
+    leaving an observed **34.8×** ratio. These are shared-host observations.
+    All intermediate Atoms/interfaces and the FORM-certified final polynomial
+    agree, as do the **68** adversarial constructor cases and **11** metric/trace
+    controls. The `retained_fast_constructor_inference` archive entry retains
+    the sources, builds, timings, validation and measurement limits.
+
+    Five-call constructor medians on separate controls improve a 32-metric chain
+    **458.7 → 378.4 µs**, compact dot sums **45.2 → 24.2 µs**, and a free-six
+    D-dimensional trace **78.5 → 67.7 µs**. At that checkpoint, a native profile
+    showed why large
+    constructors remain slow: interface/syntax analysis owns **44.7%** of sampled
+    cycles, product normalization **20.3%**, multiplicity/placeholder/nesting
+    checks **25.3%**, and power lowering **9.4%**. These are sample proportions,
+    not exact wall-time phases. Leaf-port extraction is only part of construction.
+
+    **Borrowed product storage and scalar-interface reuse:** the next retained
+    change keeps unchanged products/powers in their existing Atom storage and
+    reuses inferred scalar dots when their operands are already known to be
+    reusable. A fresh before/after comparison improves the full operation sum
+    **25.160 → 17.740 s (1.42×)**, with constructors **16.851 → 10.155 s** and
+    Schoonschip including wrapping **7.547 → 6.801 s**. The largest standalone
+    constructor improves **10.362 → 7.134 s** (three-call medians). Fresh FORM
+    takes **0.719 s** process wall, leaving a **24.7×** ratio with the phase-sum
+    caveat above. All intermediate Atoms/interfaces and final coefficients agree.
+
+    Complete first trace transformations also improve:
+
+    | Expanded trace | Python before | Python after | FORM body CPU |
+    | --- | ---: | ---: | ---: |
+    | Free 6, D | 0.398 ms | 0.342 ms | 0.0054 ms |
+    | Free 10, D | 29.130 ms | 24.011 ms | 0.3433 ms |
+    | Free 12, D | 387.388 ms | 316.376 ms | 4.0667 ms |
+    | Free 8, 4D | 2.608 ms | 2.133 ms | 0.0480 ms |
+    | Repeated 8, 4D | 0.119 ms | 0.103 ms | 0.0020 ms |
+    | Repeated 8, D | 0.651 ms | 0.543 ms | 0.0140 ms |
+
+    Python includes a factored scalar spectator and result construction; FORM
+    excludes the spectator. These are different timing boundaries. All **24**
+    fresh FORM processes pass exact polynomial checks. Tiny constructor controls
+    are mixed: a 32-metric chain improves **378 → 268 µs**, while compact dots
+    move **24.2 → 25.8 µs**. Reruns are mostly unchanged. Full records are under
+    `retained_unchanged_products_and_scalar_interfaces` in the parity archive.
+
     **Partial-network follow-up:** a closed subcase with vertices **1, 2, 8**
     produces **64 scalar terms**. The baseline expand-first route takes about
     **5.56 ms**; network contraction with local sum distribution takes

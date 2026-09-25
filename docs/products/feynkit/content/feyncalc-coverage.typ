@@ -32,13 +32,13 @@ not treat the presence of a primitive as an end-to-end validation.
    symbolic Lorentz dimension, open-current factorization and arbitrary-reference
    gluon polarization sums. The leading unintegrated soft function matches the
    reference; integrated SCET soft functions are not covered.],
-  [External spin sums], [`feynkit-generator::SpinSum`],
+  [External spin sums], [`feynkit-amplitude::SpinSum`],
   [Scalar, Dirac and vector completeness tensors and external wavefunction-pair
    replacements. GammaLoop delegates both formulas and replacement construction
    here. Massive Dirac density matrices select a physical spin vector through
    the same owner. Higher-spin states and massless helicity projectors remain
    outstanding.],
-  [External color sums], [`feynkit-generator::ColorSum`],
+  [External color sums], [`feynkit-amplitude::ColorSum`],
   [Singlet, fundamental, sextet and adjoint completeness tensors reuse the
    generator's representation mapping and Spenso metrics. The Python particle
    API exposes optional initial-state averaging. Different-flavor QCD

@@ -3409,7 +3409,7 @@ mod tests {
 
     #[test]
     fn shared_polarized_density_matches_runtime_spinors() {
-        use feynkit_generator::SpinSum;
+        use feynkit_amplitude::SpinSum;
         use spenso::{
             network::{
                 ExecutionResult, Sequential, SmallestDegree,

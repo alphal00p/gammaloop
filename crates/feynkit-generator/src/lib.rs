@@ -2,16 +2,10 @@
 
 #![forbid(unsafe_code)]
 
-mod color;
 mod generation;
 mod grouping;
 mod options;
 mod process;
-mod spin;
-
-pub use color::{ColorRepresentation, ColorSum, ColorSumError};
-
-pub use spin::{AxialReference, SpinSum, SpinSumError};
 
 use feynkit_graph::momentum_symbol;
 

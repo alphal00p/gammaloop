@@ -38,9 +38,9 @@ use spenso::{
         Canonicalized, HasName, OrderedStructure, StructureError, TensorStructure,
         abstract_index::AbstractIndex,
         dimension::Dimension,
-        partial::{PartialIndex, PartialStructure, PartialStructureExt},
+        partial::{PartialIndex, PartialSlot, PartialStructure, PartialStructureExt},
         representation::{LibraryRep, Minkowski, RepName, Representation},
-        slot::{IsAbstractSlot, Slot},
+        slot::{IsAbstractSlot, Slot, SlotMatch, SlotMatcher},
     },
 };
 use symbolica::{
@@ -167,11 +167,7 @@ impl TensorExpression {
         name_args: Vec<Atom>,
     ) -> PyResult<Py<Self>> {
         let original_rank = interface.canonical().order();
-        atom.validate_chain_like_nesting()
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        validate_placeholder_scope(atom.as_view(), false).map_err(PyValueError::new_err)?;
-        composition::validate_explicit_index_occurrences(&atom)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Self::validate_atom(&atom)?;
         let value = composition::normalize_closed_root_chain(StructuredAtom::new(atom, interface))
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
         let atom = value.atom;
@@ -183,11 +179,37 @@ impl TensorExpression {
         } else {
             (None, Vec::new())
         };
+        Self::from_validated_atom(
+            py,
+            atom,
+            interface.canonicalize_open_ports(),
+            name,
+            name_args,
+        )
+    }
+
+    fn validate_atom(atom: &Atom) -> PyResult<()> {
+        atom.validate_chain_like_nesting()
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        validate_placeholder_scope(atom.as_view(), false).map_err(PyValueError::new_err)?;
+        composition::validate_explicit_index_occurrences(atom)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Ok(())
+    }
+
+    /// Finish construction after the atom and ordered interface have been validated.
+    fn from_validated_atom(
+        py: Python<'_>,
+        atom: Atom,
+        interface: PartialStructure,
+        name: Option<Symbol>,
+        name_args: Vec<Atom>,
+    ) -> PyResult<Py<Self>> {
         Py::new(
             py,
             (
                 Self {
-                    interface: interface.canonicalize_open_ports(),
+                    interface,
                     name,
                     name_args,
                 },
@@ -237,18 +259,7 @@ impl TensorExpression {
         py: Python<'_>,
         atom: Atom,
     ) -> PyResult<Py<Self>> {
-        let inferred = if atom.as_view().is_zero() {
-            self_.interface.clone()
-        } else if !has_structured_syntax(atom.as_view()) {
-            PartialStructure::from_logical_slots([])
-        } else {
-            merge_explicit_interface_sequence(&[infer_interface(&atom)?])?.canonicalize_open_ports()
-        };
-        if !additive_interfaces_match(&self_.interface, &inferred) {
-            return Err(PyValueError::new_err(
-                "transformed expression does not preserve a compatible tensor interface",
-            ));
-        }
+        InterfaceInference::default().validate_interface(&atom, &self_.interface)?;
         let (name, args) = Self::transformed_descriptor(self_, &atom);
         Self::from_atom_interface_descriptor(py, atom, self_.interface.clone(), name, args)
     }
@@ -467,82 +478,195 @@ fn additive_interfaces_match(left: &PartialStructure, right: &PartialStructure) 
             && left.canonical() == right.canonical())
 }
 
-fn builtin_tensor_structure(
-    symbol: Symbol,
-    arguments: &[AtomView<'_>],
-) -> PyResult<Option<Canonicalized<ExplicitKey<AbstractIndex>>>> {
-    let builtin = symbol == *EPSILON_SYMBOL
-        || symbol == ETS.metric
-        || symbol == ETS.flat
-        || symbol == AGS.gamma
-        || symbol == AGS.gamma5
-        || symbol == AGS.projm
-        || symbol == AGS.projp
-        || symbol == AGS.sigma
-        || symbol == CS.f
-        || symbol == CS.t;
-    if !builtin {
-        return Ok(None);
+impl InterfaceInference {
+    fn validate_interface(&mut self, atom: &Atom, interface: &PartialStructure) -> PyResult<()> {
+        let inferred = if atom.as_view().is_zero() {
+            interface.clone()
+        } else if !has_structured_syntax(atom.as_view()) {
+            PartialStructure::from_logical_slots([])
+        } else {
+            merge_explicit_interface_sequence(&[self.infer_validated(atom.as_view())?])?
+                .canonicalize_open_ports()
+        };
+        if !additive_interfaces_match(interface, &inferred) {
+            return Err(PyValueError::new_err(
+                "transformed expression does not preserve a compatible tensor interface",
+            ));
+        }
+        Ok(())
     }
 
-    let compact_metric = symbol == ETS.metric
-        && arguments.len() == 2
-        && arguments.iter().all(|argument| {
-            Slot::<LibraryRep, AbstractIndex>::try_from(*argument).is_err()
-                && Representation::<LibraryRep>::try_from(*argument).is_err()
-                && !is_chain_placeholder(*argument)
-                && has_structured_syntax(*argument)
-        });
-    if compact_metric {
-        return Ok(None);
-    }
-
-    let ports = arguments
-        .iter()
-        .map(|argument| {
-            if is_chain_placeholder(*argument) {
-                Ok(None)
-            } else {
-                Slot::<LibraryRep, AbstractIndex>::try_from(*argument)
-                    .map(|slot| Some(slot.rep()))
-                    .or_else(|_| Representation::<LibraryRep>::try_from(*argument).map(Some))
-                    .map_err(|_| ())
-                    .or_else(|_| {
-                        // A compact vector consumes this port, while its representation
-                        // still participates in the predefined tensor's signature.
-                        let interface = infer_interface(&argument.to_owned()).map_err(|_| ())?;
-                        let slots = interface.logical_slots();
-                        match slots.as_slice() {
-                            [slot] if matches!(slot.aind, PartialIndex::Open(_)) => {
-                                Ok(Some(slot.rep()))
-                            }
-                            _ => Err(()),
-                        }
+    /// Ordinary expansion copies function leaves. Reuse their interfaces only
+    /// when inference cannot materialize callbacks or change power semantics.
+    fn expansion_preserves_leaf_interfaces(&mut self, value: AtomView<'_>) -> bool {
+        match value {
+            AtomView::Add(sum) => sum
+                .iter()
+                .all(|term| self.expansion_preserves_leaf_interfaces(term)),
+            AtomView::Mul(product) => product
+                .iter()
+                .all(|factor| self.expansion_preserves_leaf_interfaces(factor)),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                // Existing occurrence validation does not multiply power counts.
+                // Only opaque dots of compact vectors expose no repeated indices.
+                let scalar_dot = matches!(base, AtomView::Fun(function)
+                if self.direct_dot_ports(function).is_some_and(|ports| {
+                    ports.iter().all(|slot| matches!(slot.aind, PartialIndex::Open(_)))
+                }));
+                !has_structured_syntax(exponent)
+                    && (!has_structured_syntax(base) || scalar_dot)
+                    && self.expansion_preserves_leaf_interfaces(base)
+                    && self.expansion_preserves_leaf_interfaces(exponent)
+            }
+            AtomView::Fun(function) if has_structured_syntax(value) => {
+                let symbol = function.get_symbol();
+                let arguments = function.iter().collect::<Vec<_>>();
+                if self.direct_dot_ports(function).is_some() {
+                    // Compact dots consume their operands' ports inside the
+                    // opaque function. Full inference still checks compatibility.
+                    return true;
+                }
+                if arguments.iter().all(|argument| {
+                    self.slots
+                        .parse::<LibraryRep, AbstractIndex>(*argument)
+                        .is_ok_and(|slot| {
+                            !matches!(slot.aind(), AbstractIndex::Open { .. })
+                                && slot.rep().rep.is_self_dual()
+                        })
+                }) && self
+                    .builtin_tensor_structure(symbol, &arguments)
+                    .is_ok_and(|structure| structure.is_some())
+                {
+                    return true;
+                }
+                self.direct_leaf_interface(function)
+                    .is_some_and(|interface| {
+                        interface.logical_slots().iter().all(|slot| {
+                            matches!(slot.aind, PartialIndex::Explicit(_))
+                                && slot.rep().rep.is_self_dual()
+                        })
                     })
             }
-        })
-        .collect::<Result<Vec<_>, _>>();
-    let dimension = |representation: LibraryRep| {
-        ports
-            .as_ref()
-            .ok()
-            .and_then(|ports| {
-                ports
-                    .iter()
-                    .flatten()
-                    .find(|port| port.rep == representation)
-            })
-            .map(|port| port.dim)
-    };
-    let invalid = |factory: &str, signature: &str| {
-        PyValueError::new_err(format!(
-            "predefined tensor `{factory}` requires {signature}; use \
-             TensorExpression.{factory}(...) to construct it"
-        ))
-    };
+            // Scalar functions own their metadata, so expansion leaves it opaque.
+            _ => true,
+        }
+    }
 
-    let (factory, signature, expected): (_, _, Option<Canonicalized<ExplicitKey<AbstractIndex>>>) =
-        if symbol == ETS.metric || symbol == ETS.flat {
+    fn direct_dot_ports(
+        &mut self,
+        function: symbolica::atom::representation::FunView<'_>,
+    ) -> Option<[PartialSlot; 2]> {
+        if !(function.get_symbol() == ETS.metric || function.get_symbol() == SPENSO_TAG.dot)
+            || function.get_nargs() != 2
+        {
+            return None;
+        }
+        let mut ports = Vec::with_capacity(2);
+        for operand in function.iter() {
+            let AtomView::Fun(operand) = operand else {
+                return None;
+            };
+            let interface = self.direct_leaf_interface(operand)?;
+            let slots = interface.logical_slots();
+            let [slot] = slots.as_slice() else {
+                return None;
+            };
+            ports.push(*slot);
+        }
+        ports.try_into().ok()
+    }
+
+    fn builtin_tensor_structure(
+        &mut self,
+        symbol: Symbol,
+        arguments: &[AtomView<'_>],
+    ) -> PyResult<Option<Canonicalized<ExplicitKey<AbstractIndex>>>> {
+        let builtin = symbol == *EPSILON_SYMBOL
+            || symbol == ETS.metric
+            || symbol == ETS.flat
+            || symbol == AGS.gamma
+            || symbol == AGS.gamma5
+            || symbol == AGS.projm
+            || symbol == AGS.projp
+            || symbol == AGS.sigma
+            || symbol == CS.f
+            || symbol == CS.t;
+        if !builtin {
+            return Ok(None);
+        }
+
+        let compact_metric = symbol == ETS.metric
+            && arguments.len() == 2
+            && arguments.iter().all(|argument| {
+                self.slots
+                    .parse::<LibraryRep, AbstractIndex>(*argument)
+                    .is_err()
+                    && self
+                        .slots
+                        .parse_representation::<LibraryRep>(*argument)
+                        .is_err()
+                    && !is_chain_placeholder(*argument)
+                    && has_structured_syntax(*argument)
+            });
+        if compact_metric {
+            return Ok(None);
+        }
+
+        let ports = arguments
+            .iter()
+            .map(|argument| {
+                if is_chain_placeholder(*argument) {
+                    Ok(None)
+                } else {
+                    self.slots
+                        .parse::<LibraryRep, AbstractIndex>(*argument)
+                        .map(|slot| Some(slot.rep()))
+                        .or_else(|_| {
+                            self.slots
+                                .parse_representation::<LibraryRep>(*argument)
+                                .map(Some)
+                        })
+                        .map_err(|_| ())
+                        .or_else(|_| {
+                            // A compact vector consumes this port, while its representation
+                            // still participates in the predefined tensor's signature.
+                            let interface = self.infer_validated(*argument).map_err(|_| ())?;
+                            let slots = interface.logical_slots();
+                            match slots.as_slice() {
+                                [slot] if matches!(slot.aind, PartialIndex::Open(_)) => {
+                                    Ok(Some(slot.rep()))
+                                }
+                                _ => Err(()),
+                            }
+                        })
+                }
+            })
+            .collect::<Result<Vec<_>, _>>();
+        let dimension = |representation: LibraryRep| {
+            ports
+                .as_ref()
+                .ok()
+                .and_then(|ports| {
+                    ports
+                        .iter()
+                        .flatten()
+                        .find(|port| port.rep == representation)
+                })
+                .map(|port| port.dim)
+        };
+        let invalid = |factory: &str, signature: &str| {
+            PyValueError::new_err(format!(
+                "predefined tensor `{factory}` requires {signature}; use \
+             TensorExpression.{factory}(...) to construct it"
+            ))
+        };
+
+        let (factory, signature, expected): (
+            _,
+            _,
+            Option<Canonicalized<ExplicitKey<AbstractIndex>>>,
+        ) = if symbol == ETS.metric || symbol == ETS.flat {
             let factory = if symbol == ETS.metric { "g" } else { "flat" };
             let ports = ports
                 .as_ref()
@@ -634,118 +758,123 @@ fn builtin_tensor_structure(
             unreachable!("every predefined tensor symbol was handled")
         };
 
-    let ports = ports.map_err(|_| invalid(factory, signature))?;
-    let placeholders = arguments
-        .iter()
-        .enumerate()
-        .filter_map(|(position, argument)| {
-            let AtomView::Var(variable) = *argument else {
-                return None;
-            };
-            let symbol = variable.get_symbol();
-            is_chain_placeholder(*argument).then_some((position, symbol))
-        })
-        .collect::<Vec<_>>();
-    if !placeholders.is_empty()
-        && (!matches!(placeholders.as_slice(), [(_, input), (_, output)] if *input != *output)
-            || !placeholders
-                .iter()
-                .any(|(_, symbol)| *symbol == SPENSO_TAG.chain_in)
-            || !placeholders
-                .iter()
-                .any(|(_, symbol)| *symbol == SPENSO_TAG.chain_out))
-    {
-        return Err(invalid(factory, signature));
-    }
-    let Some(expected) = expected else {
-        return Ok(None);
-    };
-    let expected_ports = expected
-        .canonical()
-        .external_reps_iter()
-        .collect::<Vec<_>>();
-    if ports.len() != expected_ports.len()
-        || ports
+        let ports = ports.map_err(|_| invalid(factory, signature))?;
+        let placeholders = arguments
             .iter()
-            .zip(&expected_ports)
-            .any(|(actual, expected)| actual.is_some_and(|actual| actual != *expected))
-    {
-        return Err(invalid(factory, signature));
-    }
-    if !placeholders.is_empty() {
-        let input = placeholders
-            .iter()
-            .find(|(_, symbol)| *symbol == SPENSO_TAG.chain_in)
-            .expect("placeholder names were validated")
-            .0;
-        let output = placeholders
-            .iter()
-            .find(|(_, symbol)| *symbol == SPENSO_TAG.chain_out)
-            .expect("placeholder names were validated")
-            .0;
-        let input = expected_ports[input];
-        let output = expected_ports[output];
-        let oriented = input.rep.is_self_dual() || (input.rep.is_base() && output.rep.is_dual());
-        if !input.matches(&output) || !oriented {
+            .enumerate()
+            .filter_map(|(position, argument)| {
+                let AtomView::Var(variable) = *argument else {
+                    return None;
+                };
+                let symbol = variable.get_symbol();
+                is_chain_placeholder(*argument).then_some((position, symbol))
+            })
+            .collect::<Vec<_>>();
+        if !placeholders.is_empty()
+            && (!matches!(placeholders.as_slice(), [(_, input), (_, output)] if *input != *output)
+                || !placeholders
+                    .iter()
+                    .any(|(_, symbol)| *symbol == SPENSO_TAG.chain_in)
+                || !placeholders
+                    .iter()
+                    .any(|(_, symbol)| *symbol == SPENSO_TAG.chain_out))
+        {
             return Err(invalid(factory, signature));
         }
-    }
-    Ok(Some(expected))
-}
-
-fn validate_builtin_placeholder_channels(
-    value: AtomView<'_>,
-    input: Representation<LibraryRep>,
-    output: Representation<LibraryRep>,
-) -> PyResult<()> {
-    match value {
-        AtomView::Add(add) => {
-            for term in add.iter() {
-                validate_builtin_placeholder_channels(term, input, output)?;
-            }
-        }
-        AtomView::Mul(mul) => {
-            for factor in mul.iter() {
-                validate_builtin_placeholder_channels(factor, input, output)?;
-            }
-        }
-        AtomView::Pow(power) => {
-            let (base, exponent) = power.get_base_exp();
-            validate_builtin_placeholder_channels(base, input, output)?;
-            validate_builtin_placeholder_channels(exponent, input, output)?;
-        }
-        AtomView::Fun(function) => {
-            let arguments = function.iter().collect::<Vec<_>>();
-            if arguments
+        let Some(expected) = expected else {
+            return Ok(None);
+        };
+        let expected_ports = expected
+            .canonical()
+            .external_reps_iter()
+            .collect::<Vec<_>>();
+        if ports.len() != expected_ports.len()
+            || ports
                 .iter()
-                .any(|argument| is_chain_placeholder(*argument))
-            {
-                let resolved = arguments
-                    .iter()
-                    .map(|argument| match *argument {
-                        AtomView::Var(variable) if variable.get_symbol() == SPENSO_TAG.chain_in => {
-                            input.to_symbolic([])
-                        }
-                        AtomView::Var(variable)
-                            if variable.get_symbol() == SPENSO_TAG.chain_out =>
-                        {
-                            output.to_symbolic([])
-                        }
-                        argument => argument.to_owned(),
-                    })
-                    .collect::<Vec<_>>();
-                let resolved = resolved.iter().map(Atom::as_view).collect::<Vec<_>>();
-                builtin_tensor_structure(function.get_symbol(), &resolved)?;
+                .zip(&expected_ports)
+                .any(|(actual, expected)| actual.is_some_and(|actual| actual != *expected))
+        {
+            return Err(invalid(factory, signature));
+        }
+        if !placeholders.is_empty() {
+            let input = placeholders
+                .iter()
+                .find(|(_, symbol)| *symbol == SPENSO_TAG.chain_in)
+                .expect("placeholder names were validated")
+                .0;
+            let output = placeholders
+                .iter()
+                .find(|(_, symbol)| *symbol == SPENSO_TAG.chain_out)
+                .expect("placeholder names were validated")
+                .0;
+            let input = expected_ports[input];
+            let output = expected_ports[output];
+            let oriented =
+                input.rep.is_self_dual() || (input.rep.is_base() && output.rep.is_dual());
+            if !input.matches(&output) || !oriented {
+                return Err(invalid(factory, signature));
             }
-            for argument in arguments {
-                if !is_chain_placeholder(argument) {
-                    validate_builtin_placeholder_channels(argument, input, output)?;
+        }
+        Ok(Some(expected))
+    }
+
+    fn validate_builtin_placeholder_channels(
+        &mut self,
+        value: AtomView<'_>,
+        input: Representation<LibraryRep>,
+        output: Representation<LibraryRep>,
+    ) -> PyResult<()> {
+        match value {
+            AtomView::Add(add) => {
+                for term in add.iter() {
+                    self.validate_builtin_placeholder_channels(term, input, output)?;
                 }
             }
+            AtomView::Mul(mul) => {
+                for factor in mul.iter() {
+                    self.validate_builtin_placeholder_channels(factor, input, output)?;
+                }
+            }
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                self.validate_builtin_placeholder_channels(base, input, output)?;
+                self.validate_builtin_placeholder_channels(exponent, input, output)?;
+            }
+            AtomView::Fun(function) => {
+                let arguments = function.iter().collect::<Vec<_>>();
+                if arguments
+                    .iter()
+                    .any(|argument| is_chain_placeholder(*argument))
+                {
+                    let resolved = arguments
+                        .iter()
+                        .map(|argument| match *argument {
+                            AtomView::Var(variable)
+                                if variable.get_symbol() == SPENSO_TAG.chain_in =>
+                            {
+                                input.to_symbolic([])
+                            }
+                            AtomView::Var(variable)
+                                if variable.get_symbol() == SPENSO_TAG.chain_out =>
+                            {
+                                output.to_symbolic([])
+                            }
+                            argument => argument.to_owned(),
+                        })
+                        .collect::<Vec<_>>();
+                    let resolved = resolved.iter().map(Atom::as_view).collect::<Vec<_>>();
+                    self.builtin_tensor_structure(function.get_symbol(), &resolved)?;
+                }
+                for argument in arguments {
+                    if !is_chain_placeholder(argument) {
+                        self.validate_builtin_placeholder_channels(argument, input, output)?;
+                    }
+                }
+            }
+            _ => {}
         }
-        _ => {}
+        Ok(())
     }
-    Ok(())
 }
 
 pub(crate) enum TensorOperand {
@@ -977,13 +1106,18 @@ fn validate_placeholder_scope(value: AtomView<'_>, inside_factor: bool) -> Resul
 }
 
 fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
-    atom.validate_chain_like_nesting()
-        .map_err(|error| PyValueError::new_err(error.to_string()))?;
-    validate_placeholder_scope(atom.as_view(), false).map_err(PyValueError::new_err)?;
+    InterfaceInference::default().infer_validated(atom.as_view())
+}
 
-    let mut syntax_error = None;
-    let mut checked_functions = HashSet::new();
-    atom.visitor(&mut |value| {
+impl InterfaceInference {
+    fn infer_validated(&mut self, atom: AtomView<'_>) -> PyResult<PartialStructure> {
+        atom.validate_chain_like_nesting()
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        validate_placeholder_scope(atom, false).map_err(PyValueError::new_err)?;
+
+        let mut syntax_error = None;
+        let mut checked_functions = HashSet::new();
+        atom.visitor(&mut |value| {
         if syntax_error.is_some() {
             return false;
         }
@@ -1013,7 +1147,7 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                 if symbol.has_tag(&SPENSO_TAG.representation)
                     && arguments.len() > 1
                     && (arguments.len() != 2
-                        || Slot::<LibraryRep, AbstractIndex>::try_from(value).is_err())
+                        || self.slots.parse::<LibraryRep, AbstractIndex>(value).is_err())
                 {
                     syntax_error = Some(format!(
                         "invalid indexed representation `{value}`; cook nested indices before constructing a TensorExpression"
@@ -1037,7 +1171,7 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                         syntax_error = Some("trace requires a representation".into());
                         return false;
                     };
-                    if Representation::<LibraryRep>::try_from(*representation).is_err() {
+                    if self.slots.parse_representation::<LibraryRep>(*representation).is_err() {
                         syntax_error =
                             Some("trace metadata is not a Spenso representation".into());
                         return false;
@@ -1056,11 +1190,11 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                 let compact_metric = symbol == ETS.metric
                     && arguments.len() == 2
                     && arguments.iter().all(|argument| {
-                        Slot::<LibraryRep, AbstractIndex>::try_from(*argument).is_err()
-                            && Representation::<LibraryRep>::try_from(*argument).is_err()
+                        self.slots.parse::<LibraryRep, AbstractIndex>(*argument).is_err()
+                            && self.slots.parse_representation::<LibraryRep>(*argument).is_err()
                             && has_structured_syntax(*argument)
                     });
-                let builtin = match builtin_tensor_structure(symbol, &arguments) {
+                let builtin = match self.builtin_tensor_structure(symbol, &arguments) {
                     Ok(builtin) => builtin,
                     Err(error) => {
                         syntax_error = Some(error.to_string());
@@ -1072,8 +1206,8 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                     .iter()
                     .enumerate()
                     .filter(|(_, argument)| {
-                        Slot::<LibraryRep, AbstractIndex>::try_from(**argument).is_ok()
-                            || Representation::<LibraryRep>::try_from(**argument).is_ok()
+                        self.slots.parse::<LibraryRep, AbstractIndex>(**argument).is_ok()
+                            || self.slots.parse_representation::<LibraryRep>(**argument).is_ok()
                             || matches!(
                                 **argument,
                                 AtomView::Var(variable)
@@ -1096,17 +1230,17 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                         "rank-one tensor function `{symbol}` requires exactly one final structural port"
                     ));
                 }
-                // Explicit built-in leaves cannot materialize fresh ports or run
-                // normalization callbacks during validation. The first visit
-                // still checks their children before a later occurrence is skipped.
+                // Explicit built-ins and directly readable leaves have no
+                // materialization effects during syntax validation. The first
+                // visit still checks every child before a later occurrence is skipped.
                 if syntax_error.is_none()
-                    && builtin.is_some()
                     && checked_functions.len() < InterfaceInference::CACHE_ENTRIES
                     && value.get_byte_size() <= InterfaceInference::CACHE_KEY_BYTES
-                    && arguments.iter().all(|argument| {
-                        Slot::<LibraryRep, AbstractIndex>::try_from(*argument)
-                            .is_ok_and(|slot| !matches!(slot.aind(), AbstractIndex::Open { .. }))
-                    })
+                    && ((builtin.is_some() && arguments.iter().all(|argument| {
+                            self.slots.parse::<LibraryRep, AbstractIndex>(*argument)
+                                .is_ok_and(|slot| !matches!(slot.aind(), AbstractIndex::Open { .. }))
+                        }))
+                        || self.direct_leaf_interface(function).is_some())
                 {
                     checked_functions.insert(value);
                 }
@@ -1115,103 +1249,214 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
         }
         true
     });
-    if let Some(error) = syntax_error {
-        return Err(PyValueError::new_err(error));
-    }
+        if let Some(error) = syntax_error {
+            return Err(PyValueError::new_err(error));
+        }
 
-    InterfaceInference::default().infer(atom)
+        self.infer_view(atom)
+    }
 }
 
-fn lower_tensor_powers(value: AtomView<'_>) -> PyResult<Atom> {
-    match value {
-        // Symbolica's n-way operations normalize once, avoiding repeated merges
-        // of growing expressions when importing expanded tensor amplitudes.
-        AtomView::Add(sum) => sum.iter().map(lower_tensor_powers).sum(),
-        AtomView::Mul(product) => product.iter().map(lower_tensor_powers).product(),
+/// Lower tensor powers, returning no replacement when the normalized atom is unchanged.
+fn lower_tensor_powers(value: AtomView<'_>) -> PyResult<Option<Atom>> {
+    let lowered = match value {
+        AtomView::Add(sum) => {
+            let terms = sum
+                .iter()
+                .map(lower_tensor_powers)
+                .collect::<PyResult<Vec<_>>>()?;
+            if terms.iter().all(Option::is_none) {
+                return Ok(None);
+            }
+            sum.iter()
+                .zip(&terms)
+                .map(|(old, new)| new.as_ref().map_or(old, Atom::as_view))
+                .sum()
+        }
+        AtomView::Mul(product) => {
+            let factors = product
+                .iter()
+                .map(lower_tensor_powers)
+                .collect::<PyResult<Vec<_>>>()?;
+            if factors.iter().all(Option::is_none) {
+                return Ok(None);
+            }
+            product
+                .iter()
+                .zip(&factors)
+                .map(|(old, new)| new.as_ref().map_or(old, Atom::as_view))
+                .product()
+        }
         AtomView::Pow(power) => {
             let (base, exponent) = power.get_base_exp();
-            let base = lower_tensor_powers(base)?;
-            let exponent = lower_tensor_powers(exponent)?;
-            if !has_structured_syntax(base.as_view()) {
-                return Ok(base.pow(exponent));
+            let lowered_base = lower_tensor_powers(base)?;
+            let lowered_exponent = lower_tensor_powers(exponent)?;
+            let base = lowered_base.as_ref().map_or(base, Atom::as_view);
+            let exponent = lowered_exponent.as_ref().map_or(exponent, Atom::as_view);
+            if !has_structured_syntax(base) {
+                if lowered_base.is_none() && lowered_exponent.is_none() {
+                    return Ok(None);
+                }
+                base.pow(exponent)
+            } else {
+                // Validate multiplicity before lowering through tensor-aware multiplication.
+                let mut inference = InterfaceInference::default();
+                inference.infer_view(base.pow(exponent).as_view())?;
+                let raw_interface = inference.infer_validated(base)?;
+                let interface = merge_explicit_interface_sequence(&[raw_interface])?;
+                if interface.canonical().is_scalar() {
+                    base.pow(exponent)
+                } else {
+                    let exponent = Rational::try_from(exponent).map_err(|_| {
+                        PyValueError::new_err(
+                            "a non-scalar tensor power requires an integer exponent",
+                        )
+                    })?;
+                    if exponent.denominator() != 1 || exponent.numerator().is_negative() {
+                        return Err(PyValueError::new_err(
+                            "a non-scalar tensor power requires a non-negative integer exponent",
+                        ));
+                    }
+                    let repetitions =
+                        usize::try_from(exponent.numerator().clone()).map_err(|_| {
+                            PyValueError::new_err(
+                                "tensor power exponent is too large to materialize",
+                            )
+                        })?;
+                    if repetitions == 0 {
+                        Atom::num(1)
+                    } else if interface.open_positions().is_empty() {
+                        // Explicit labels already identify the contractions; only open
+                        // ports need the pair selection of tensor multiplication.
+                        base.pow(Atom::num(repetitions))
+                    } else {
+                        let factor = StructuredAtom::new(base.to_owned(), interface);
+                        let mut result = factor.clone();
+                        for _ in 1..repetitions {
+                            result = composition::multiply(&result, &factor)
+                                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+                        }
+                        result.atom
+                    }
+                }
             }
-
-            // Validate multiplicity and exponent constraints against the
-            // unexpanded spelling before lowering it through tensor-aware
-            // multiplication.
-            InterfaceInference::default().infer(&base.as_ref().pow(exponent.as_ref()))?;
-            let raw_interface = infer_interface(&base)?;
-            let interface = merge_explicit_interface_sequence(&[raw_interface])?;
-            if interface.canonical().is_scalar() {
-                return Ok(base.pow(exponent));
-            }
-
-            let exponent = Rational::try_from(exponent.as_view()).map_err(|_| {
-                PyValueError::new_err("a non-scalar tensor power requires an integer exponent")
-            })?;
-            if exponent.denominator() != 1 || exponent.numerator().is_negative() {
-                return Err(PyValueError::new_err(
-                    "a non-scalar tensor power requires a non-negative integer exponent",
-                ));
-            }
-            let repetitions = usize::try_from(exponent.numerator().clone()).map_err(|_| {
-                PyValueError::new_err("tensor power exponent is too large to materialize")
-            })?;
-            if repetitions == 0 {
-                return Ok(Atom::num(1));
-            }
-            // Explicit Einstein labels already identify every contraction. Only unresolved
-            // ports need the automatic pair selection performed by tensor multiplication.
-            if interface.open_positions().is_empty() {
-                return Ok(base.pow(Atom::num(repetitions)));
-            }
-
-            let factor = StructuredAtom::new(base, interface);
-            let mut result = factor.clone();
-            for _ in 1..repetitions {
-                result = composition::multiply(&result, &factor)
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
-            }
-            Ok(result.atom)
         }
         AtomView::Fun(function) => {
-            if function.get_symbol().is_scalar() {
-                return Ok(value.to_owned());
+            let symbol = function.get_symbol();
+            if symbol.is_scalar() {
+                return Ok(None);
             }
-            let mut result = FunctionBuilder::new(function.get_symbol());
-            for argument in function.iter() {
-                result = result.add_arg(lower_tensor_powers(argument)?);
+            let arguments = function
+                .iter()
+                .map(lower_tensor_powers)
+                .collect::<PyResult<Vec<_>>>()?;
+            if arguments.iter().all(Option::is_none)
+                && symbol.get_normalization_function().is_none()
+                && symbol.get_evaluation_info().is_none()
+            {
+                return Ok(None);
             }
-            Ok(result.finish())
+            // Preserve existing callback invocation when rebuilding is observable.
+            FunctionBuilder::new(symbol)
+                .add_args(
+                    function
+                        .iter()
+                        .zip(&arguments)
+                        .map(|(old, new)| new.as_ref().map_or(old, Atom::as_view)),
+                )
+                .finish()
         }
-        _ => Ok(value.to_owned()),
-    }
+        _ => return Ok(None),
+    };
+    Ok((lowered.as_view() != value).then_some(lowered))
 }
 
 fn reinfer_structured(atom: Atom) -> PyResult<StructuredAtom> {
-    let atom = lower_tensor_powers(atom.as_view())?;
+    let atom = lower_tensor_powers(atom.as_view())?.unwrap_or(atom);
     let interface = infer_interface(&atom)?;
     Ok(StructuredAtom::new(atom, interface))
 }
 
 #[derive(Default)]
 struct InterfaceInference {
-    explicit_leaves: HashMap<Atom, PartialStructure>,
+    reusable_interfaces: HashMap<Vec<u8>, PartialStructure>,
+    slots: SlotMatcher,
 }
 
 impl InterfaceInference {
     const CACHE_ENTRIES: usize = 256;
     const CACHE_KEY_BYTES: usize = 256;
 
+    /// Call only for interfaces independent of materialization callbacks and
+    /// fresh dummy identities. Open ports remain occurrence-local positions.
+    fn cache_interface(&mut self, atom: AtomView<'_>, interface: &PartialStructure) {
+        if self.reusable_interfaces.len() < Self::CACHE_ENTRIES
+            && atom.get_byte_size() <= Self::CACHE_KEY_BYTES
+        {
+            self.reusable_interfaces
+                .insert(atom.get_data().to_vec(), interface.clone());
+        }
+    }
+
+    #[cfg(test)]
     fn infer(&mut self, atom: &Atom) -> PyResult<PartialStructure> {
-        if matches!(atom.as_view(), AtomView::Fun(_))
-            && atom.as_view().get_byte_size() <= Self::CACHE_KEY_BYTES
-            && let Some(interface) = self.explicit_leaves.get(atom)
+        self.infer_view(atom.as_view())
+    }
+
+    /// Read ordinary leaf ports in their existing syntactic order. Compact
+    /// representations denote occurrence-local open ports; no dummy atom or
+    /// function reconstruction is needed to discover their representation.
+    fn direct_leaf_interface(
+        &mut self,
+        function: symbolica::atom::representation::FunView<'_>,
+    ) -> Option<PartialStructure> {
+        let symbol = function.get_symbol();
+        if !matches!(self.slots.classify(function.as_view()), SlotMatch::Other)
+            || symbol.get_normalization_function().is_some()
+            || symbol.get_evaluation_info().is_some()
+            || symbol.is_symmetric()
+            || symbol.is_antisymmetric()
+            || symbol.is_cyclesymmetric()
+            || symbol.is_linear()
+        {
+            return None;
+        }
+        let mut logical = Vec::new();
+        for argument in function.iter() {
+            if let Ok(slot) = self.slots.parse::<LibraryRep, AbstractIndex>(argument) {
+                let index = match slot.aind() {
+                    AbstractIndex::Open { axis, .. } => PartialIndex::open(axis),
+                    index => PartialIndex::Explicit(index),
+                };
+                logical.push(slot.rep().slot(index));
+            } else if let Ok(rep) = self.slots.parse_representation::<LibraryRep>(argument) {
+                logical.push(rep.slot(PartialIndex::open(logical.len())));
+            } else {
+                // Nested function metadata may contain compact representations,
+                // bundles, or callbacks affected by legacy materialization.
+                // Keep that existing owner for those forms.
+                let mut contains_function = false;
+                argument.visitor(&mut |node| {
+                    contains_function |= matches!(node, AtomView::Fun(_));
+                    !contains_function
+                });
+                if contains_function {
+                    return None;
+                }
+            }
+        }
+        Some(PartialStructure::from_logical_slots(logical))
+    }
+
+    fn infer_view(&mut self, atom: AtomView<'_>) -> PyResult<PartialStructure> {
+        if matches!(atom, AtomView::Fun(_))
+            && atom.get_byte_size() <= Self::CACHE_KEY_BYTES
+            && let Some(interface) = self.reusable_interfaces.get(atom.get_data())
         {
             return Ok(interface.clone());
         }
 
-        if let AtomView::Add(sum) = atom.as_view() {
+        if let AtomView::Add(sum) = atom {
             let mut expected = None;
             let mut has_scalar_term = false;
             for term in sum.iter() {
@@ -1219,7 +1464,7 @@ impl InterfaceInference {
                     has_scalar_term = true;
                     continue;
                 }
-                let actual = merge_explicit_interface_sequence(&[self.infer(&term.to_owned())?])?;
+                let actual = merge_explicit_interface_sequence(&[self.infer_view(term)?])?;
                 let Some(current) = &expected else {
                     expected = Some(actual);
                     continue;
@@ -1243,13 +1488,13 @@ impl InterfaceInference {
             return Ok(expected);
         }
 
-        if let AtomView::Mul(product) = atom.as_view() {
+        if let AtomView::Mul(product) = atom {
             let mut interfaces = Vec::new();
             for factor in product.iter() {
                 if !has_structured_syntax(factor) {
                     continue;
                 }
-                interfaces.push(self.infer(&factor.to_owned())?);
+                interfaces.push(self.infer_view(factor)?);
             }
             if interfaces.is_empty() {
                 return Err(PyValueError::new_err(
@@ -1259,16 +1504,16 @@ impl InterfaceInference {
             return merge_explicit_interface_sequence(&interfaces);
         }
 
-        if let AtomView::Pow(power) = atom.as_view() {
+        if let AtomView::Pow(power) = atom {
             let (base, exponent) = power.get_base_exp();
             if !has_structured_syntax(base) {
                 return Err(PyValueError::new_err(
                     "expression does not contain valid tagged Spenso tensor syntax",
                 ));
             }
-            let interface = self.infer(&base.to_owned())?;
+            let interface = self.infer_view(base)?;
             if has_structured_syntax(exponent)
-                && !self.infer(&exponent.to_owned())?.canonical().is_scalar()
+                && !self.infer_view(exponent)?.canonical().is_scalar()
             {
                 return Err(PyValueError::new_err("a tensor exponent must be scalar"));
             }
@@ -1322,10 +1567,10 @@ impl InterfaceInference {
             return Ok(interface);
         }
 
-        if let AtomView::Fun(function) = atom.as_view() {
+        if let AtomView::Fun(function) = atom {
             let symbol = function.get_symbol();
             let arguments = function.iter().collect::<Vec<_>>();
-            let unmaterialized_tensor_leaf = is_unmaterialized_tensor_leaf(atom.as_view());
+            let unmaterialized_tensor_leaf = is_unmaterialized_tensor_leaf(atom);
             if symbol == *shadowing::SYM
                 || symbol == *shadowing::ANTISYM
                 || symbol == *shadowing::CYCLIC
@@ -1335,7 +1580,7 @@ impl InterfaceInference {
                     if !has_structured_syntax(argument) {
                         continue;
                     }
-                    interfaces.push(self.infer(&argument.to_owned())?);
+                    interfaces.push(self.infer_view(argument)?);
                 }
                 if interfaces.is_empty() {
                     return Err(PyValueError::new_err(
@@ -1351,7 +1596,7 @@ impl InterfaceInference {
                     if !has_structured_syntax(argument) {
                         continue;
                     }
-                    interfaces.push(self.infer(&argument.to_owned())?);
+                    interfaces.push(self.infer_view(argument)?);
                 }
                 if interfaces.is_empty() {
                     return Err(PyValueError::new_err(
@@ -1364,8 +1609,13 @@ impl InterfaceInference {
             let compact_metric = symbol == ETS.metric
                 && arguments.len() == 2
                 && arguments.iter().all(|argument| {
-                    Slot::<LibraryRep, AbstractIndex>::try_from(*argument).is_err()
-                        && Representation::<LibraryRep>::try_from(*argument).is_err()
+                    self.slots
+                        .parse::<LibraryRep, AbstractIndex>(*argument)
+                        .is_err()
+                        && self
+                            .slots
+                            .parse_representation::<LibraryRep>(*argument)
+                            .is_err()
                         && !is_chain_placeholder(*argument)
                         && has_structured_syntax(*argument)
                 });
@@ -1380,8 +1630,11 @@ impl InterfaceInference {
                         "inner products require rank-one tensor operands",
                     ));
                 }
-                let left = self.infer(&left.to_owned())?;
-                let right = self.infer(&right.to_owned())?;
+                let left = self.infer_view(*left)?;
+                let right = self.infer_view(*right)?;
+                let reusable = arguments
+                    .iter()
+                    .all(|argument| self.reusable_interfaces.contains_key(argument.get_data()));
                 if left.canonical().order() != 1 || right.canonical().order() != 1 {
                     return Err(PyValueError::new_err(format!(
                         "inner products require rank-one operands, got ranks {} and {}",
@@ -1404,7 +1657,13 @@ impl InterfaceInference {
                         "inner-product operands carry unequal explicit indices",
                     ));
                 }
-                return Ok(PartialStructure::from_logical_slots([]));
+                let interface = PartialStructure::from_logical_slots([]);
+                if reusable {
+                    // A dot consumes both ports. Cached operands establish that
+                    // repeating their inference has no materialization effects.
+                    self.cache_interface(atom, &interface);
+                }
+                return Ok(interface);
             }
 
             if symbol.has_tag(&SPENSO_TAG.broadcast) {
@@ -1414,32 +1673,33 @@ impl InterfaceInference {
                         "broadcast function `{symbol}` does not contain a structured tensor argument"
                     )));
                 }
-                return self.infer(&argument.to_owned());
+                return self.infer_view(argument);
             }
 
-            if let Some(structure) = builtin_tensor_structure(symbol, &arguments)? {
+            if let Some(structure) = self.builtin_tensor_structure(symbol, &arguments)? {
                 let canonical_ports = arguments
                     .iter()
                     .enumerate()
                     .map(|(position, argument)| {
-                        if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(*argument) {
+                        if let Ok(slot) = self.slots.parse::<LibraryRep, AbstractIndex>(*argument) {
                             let index = match slot.aind() {
                                 AbstractIndex::Open { axis, .. } => PartialIndex::open(axis),
                                 index => PartialIndex::Explicit(index),
                             };
                             Some(slot.rep().slot(index))
                         } else {
-                            Representation::<LibraryRep>::try_from(*argument).ok().map(
-                                |representation| representation.slot(PartialIndex::open(position)),
-                            )
+                            self.slots
+                                .parse_representation::<LibraryRep>(*argument)
+                                .ok()
+                                .map(|representation| {
+                                    representation.slot(PartialIndex::open(position))
+                                })
                         }
                     })
                     .collect::<Vec<_>>();
                 // Only fully explicit built-in leaves are independent of fresh
                 // port materialization and normalization callbacks.
-                let reusable = self.explicit_leaves.len() < Self::CACHE_ENTRIES
-                && atom.as_view().get_byte_size() <= Self::CACHE_KEY_BYTES
-                && canonical_ports.iter().all(|port| {
+                let reusable = canonical_ports.iter().all(|port| {
                     matches!(port, Some(slot) if matches!(slot.aind, PartialIndex::Explicit(_)))
                 });
                 // Compact arguments are contracted vectors, and chain placeholders
@@ -1454,7 +1714,7 @@ impl InterfaceInference {
                 if reusable {
                     // Keep repeated indices and logical ordering intact: enclosing
                     // products still own contraction and multiplicity validation.
-                    self.explicit_leaves.insert(atom.clone(), interface.clone());
+                    self.cache_interface(atom, &interface);
                 }
                 return Ok(interface);
             }
@@ -1463,10 +1723,10 @@ impl InterfaceInference {
                 let endpoints = arguments[..2]
                     .iter()
                     .map(|argument| {
-                        if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(*argument) {
+                        if let Ok(slot) = self.slots.parse::<LibraryRep, AbstractIndex>(*argument) {
                             Ok(slot.rep().slot(PartialIndex::Explicit(slot.aind())))
                         } else if let Ok(representation) =
-                            Representation::<LibraryRep>::try_from(*argument)
+                            self.slots.parse_representation::<LibraryRep>(*argument)
                         {
                             Ok(representation.slot(PartialIndex::open(0)))
                         } else {
@@ -1492,16 +1752,18 @@ impl InterfaceInference {
                             "chain factors must contain structured tensors",
                         ));
                     }
-                    validate_builtin_placeholder_channels(*factor, input, output)?;
-                    interfaces.push(self.infer(&factor.to_owned())?);
+                    self.validate_builtin_placeholder_channels(*factor, input, output)?;
+                    interfaces.push(self.infer_view(*factor)?);
                 }
                 let spectators = merge_explicit_interface_sequence(&interfaces)?;
                 return Ok(PartialStructure::from_logical_slots(
                     endpoints.into_iter().chain(spectators.logical_slots()),
                 ));
             } else if symbol == SPENSO_TAG.trace {
-                let representation =
-                    Representation::<LibraryRep>::try_from(arguments[0]).map_err(|_| {
+                let representation = self
+                    .slots
+                    .parse_representation::<LibraryRep>(arguments[0])
+                    .map_err(|_| {
                         PyValueError::new_err("trace metadata is not a Spenso representation")
                     })?;
                 let dual = representation.dual();
@@ -1512,14 +1774,20 @@ impl InterfaceInference {
                             "trace factors must contain structured tensors",
                         ));
                     }
-                    validate_builtin_placeholder_channels(factor, representation, dual)?;
-                    interfaces.push(self.infer(&factor.to_owned())?);
+                    self.validate_builtin_placeholder_channels(factor, representation, dual)?;
+                    interfaces.push(self.infer_view(factor)?);
                 }
                 return merge_explicit_interface_sequence(&interfaces);
             } else if symbol.has_tag(&SPENSO_TAG.tensor) {
                 for argument in arguments {
-                    if Slot::<LibraryRep, AbstractIndex>::try_from(argument).is_ok()
-                        || Representation::<LibraryRep>::try_from(argument).is_ok()
+                    if self
+                        .slots
+                        .parse::<LibraryRep, AbstractIndex>(argument)
+                        .is_ok()
+                        || self
+                            .slots
+                            .parse_representation::<LibraryRep>(argument)
+                            .is_ok()
                         || matches!(
                             argument,
                             AtomView::Var(variable)
@@ -1530,7 +1798,7 @@ impl InterfaceInference {
                     {
                         continue;
                     }
-                    if !self.infer(&argument.to_owned())?.canonical().is_scalar() {
+                    if !self.infer_view(argument)?.canonical().is_scalar() {
                         return Err(PyValueError::new_err(format!(
                             "tensor metadata for `{symbol}` must be scalar"
                         )));
@@ -1542,20 +1810,30 @@ impl InterfaceInference {
             }
         }
 
-        if !has_structured_syntax(atom.as_view()) {
+        if !has_structured_syntax(atom) {
             return Err(PyValueError::new_err(
                 "expression does not contain valid tagged Spenso tensor syntax",
             ));
         }
 
+        if let AtomView::Fun(function) = atom
+            && let Some(interface) = self.direct_leaf_interface(function)
+        {
+            // OpenPortIds are local positions, canonicalized when interfaces are
+            // combined. Direct parsing allocates no dummy or callback-sensitive state.
+            self.cache_interface(atom, &interface);
+            return Ok(interface);
+        }
+
+        let atom = atom.to_owned();
         let mut open_markers = HashSet::new();
         let materialized = atom.replace_map(|value, _, output| {
-            if Slot::<LibraryRep, AbstractIndex>::try_from(value).is_ok() {
+            if self.slots.parse::<LibraryRep, AbstractIndex>(value).is_ok() {
                 return;
             }
-            if let Ok(representation) = Representation::<LibraryRep>::try_from(value) {
+            if let Ok(representation) = self.slots.parse_representation::<LibraryRep>(value) {
                 let marker = loop {
-                    let marker = composition::fresh_dummy_index([atom], std::iter::empty());
+                    let marker = composition::fresh_dummy_index([&atom], std::iter::empty());
                     if open_markers.insert(marker) {
                         break marker;
                     }
@@ -2115,6 +2393,16 @@ impl TensorExpression {
         var: Option<ConvertibleToExpression>,
         via_poly: Option<bool>,
     ) -> PyResult<Py<Self>> {
+        let original = &self_.as_super().expr;
+        let mut inference = InterfaceInference::default();
+        let preserve_interface = var.is_none()
+            && !via_poly.unwrap_or(false)
+            && !original.as_view().needs_normalization()
+            && inference.expansion_preserves_leaf_interfaces(original.as_view())
+            && Self::validate_atom(original).is_ok()
+            && inference
+                .validate_interface(original, &self_.interface)
+                .is_ok();
         let atom = if let Some(var) = var {
             let var = var.to_expression();
             if !matches!(var.expr, Atom::Var(_) | Atom::Fun(_)) {
@@ -2144,6 +2432,12 @@ impl TensorExpression {
         } else {
             self_.as_super().expr.expand()
         };
+        if preserve_interface {
+            // Validate the smaller factored input once. The admitted leaf domain
+            // preserves its exact ordered interface under ordinary distribution.
+            let (name, args) = Self::transformed_descriptor(&self_, &atom);
+            return Self::from_validated_atom(py, atom, self_.interface.clone(), name, args);
+        }
         Self::preserving_interface(&self_, py, atom)
     }
 
@@ -5920,7 +6214,197 @@ mod tests {
     }
 
     #[test]
-    fn reused_explicit_leaves_preserve_interface_and_multiplicity_validation() {
+    fn expansion_preserves_checked_logical_ports_names_and_scalar_dots() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let rep = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+            let slots = [31, 37]
+                .map(|index| rep.slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
+            let tensor = FunctionBuilder::new(spenso::tensor_symbol!("expansion_checked_tensor"))
+                .add_args(slots.map(composition::port_atom))
+                .finish();
+            let p = FunctionBuilder::new(spenso::vector_symbol!("expansion_checked_p"))
+                .add_arg(rep.to_symbolic([]))
+                .finish();
+            let q = FunctionBuilder::new(spenso::vector_symbol!("expansion_checked_q"))
+                .add_arg(rep.to_symbolic([]))
+                .finish();
+            let x = Atom::var(symbol!("expansion_checked_x"));
+            let coefficient = (&x + Atom::one()) * ETS.metric(p, q).pow(2);
+            let name = symbol!("expansion_checked_data");
+            let metric = FunctionBuilder::new(ETS.metric)
+                .add_args(slots.map(composition::port_atom))
+                .finish();
+            for leaf in [tensor, metric] {
+                let atom = &coefficient * leaf;
+                assert!(
+                    InterfaceInference::default()
+                        .expansion_preserves_leaf_interfaces(atom.as_view())
+                );
+                // An explicit interface may carry a different logical ordering
+                // from the encoded leaf. Expansion must retain the supplied order.
+                let interface = PartialStructure::from_logical_slots(slots.into_iter().rev());
+                let original = TensorExpression::from_atom_interface_descriptor(
+                    py,
+                    atom.clone(),
+                    interface.clone(),
+                    Some(name),
+                    vec![Atom::num(7)],
+                )?;
+                let var = PythonExpression { expr: x.clone() }
+                    .into_pyobject(py)?
+                    .extract::<ConvertibleToExpression>()?;
+                for (var, via_poly) in [(None, None), (None, Some(true)), (Some(var), None)] {
+                    let expanded =
+                        TensorExpression::expand(original.borrow(py), py, var, via_poly)?;
+                    let expanded = expanded.borrow(py);
+                    assert_eq!(expanded.as_super().expr, atom.expand());
+                    assert_eq!(expanded.interface, interface);
+                    assert_eq!(expanded.name, Some(name));
+                    assert_eq!(expanded.name_args, vec![Atom::num(7)]);
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn expansion_retains_checked_errors_for_powers_open_ports_and_cancellation() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let rep = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+            let explicit = rep
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(41))
+                .to_atom();
+            let directed = ColorFundamental {}
+                .new_rep(3)
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(43))
+                .to_atom();
+            let vector = |name: &str, port: &Atom| {
+                FunctionBuilder::new(SPENSO_TAG.tensor_symbol(name))
+                    .add_arg(port)
+                    .finish()
+            };
+            let [p, q, r, s] = [
+                "expansion_error_p",
+                "expansion_error_q",
+                "expansion_error_r",
+                "expansion_error_s",
+            ]
+            .map(|name| vector(name, &explicit));
+            let open = rep.to_symbolic([]);
+            let [op, oq, or] = [
+                "expansion_error_p",
+                "expansion_error_q",
+                "expansion_error_r",
+            ]
+            .map(|name| vector(name, &open));
+            let [dp, dq, dr] = [
+                "expansion_error_p",
+                "expansion_error_q",
+                "expansion_error_r",
+            ]
+            .map(|name| vector(name, &directed));
+            let x = Atom::var(symbol!("expansion_error_x"));
+            let cases = [
+                ((&p * &q + &r * &s).pow(2), None, false),
+                ((&op + &oq) * (&op + &or), None, false),
+                ((&dp + &dq) * (&dp + &dr), None, false),
+                ((p.clone().pow(2) + &x) * &p, None, false),
+                // Supplied interfaces are validated against the expanded output:
+                // incompatible input terms may cancel to a valid tensor zero.
+                (
+                    (&p + &x) * (&p - &x) - p.pow(2) + x.clone().pow(2),
+                    Some(PartialStructure::from_logical_slots([])),
+                    true,
+                ),
+                (
+                    x,
+                    Some(PartialStructure::from_logical_slots([
+                        rep.slot(PartialIndex::open(0))
+                    ])),
+                    false,
+                ),
+                (
+                    Atom::Zero,
+                    Some(PartialStructure::from_logical_slots([
+                        rep.slot(PartialIndex::open(0))
+                    ])),
+                    true,
+                ),
+            ];
+            for (atom, interface, succeeds) in cases {
+                let original = TensorExpression::from_atom_interface(py, atom.clone(), interface)?;
+                let expected =
+                    TensorExpression::preserving_interface(&original.borrow(py), py, atom.expand());
+                let actual = TensorExpression::expand(original.borrow(py), py, None, None);
+                assert_eq!(actual.is_ok(), succeeds, "{atom}: {actual:?}");
+                match (actual, expected) {
+                    (Ok(actual), Ok(expected)) => {
+                        let actual = actual.borrow(py);
+                        let expected = expected.borrow(py);
+                        assert_eq!(actual.as_super().expr, expected.as_super().expr);
+                        assert_eq!(actual.interface, expected.interface);
+                        assert_eq!(actual.name, expected.name);
+                        assert_eq!(actual.name_args, expected.name_args);
+                    }
+                    (Err(actual), Err(expected)) => {
+                        assert_eq!(actual.to_string(), expected.to_string())
+                    }
+                    _ => panic!("expansion changed checked behavior for {atom}"),
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn expansion_preserves_materialization_callback_count() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let observed = Arc::clone(&calls);
+            let callback = spenso::tensor_symbol!(
+                "expansion_materialization_callback",
+                norm = move |_, _| {
+                    observed.fetch_add(1, Ordering::Relaxed);
+                }
+            );
+            let rep = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+            let tensor = FunctionBuilder::new(callback)
+                .add_arg(rep.to_symbolic([]))
+                .finish();
+            let x = Atom::var(symbol!("expansion_callback_x"));
+            let atom = (x + Atom::one()) * tensor;
+            let original = TensorExpression::from_atom_interface(
+                py,
+                atom.clone(),
+                PartialStructure::from_logical_slots([rep.slot(PartialIndex::open(0))]),
+            )?;
+            calls.store(0, Ordering::Relaxed);
+            let expected =
+                TensorExpression::preserving_interface(&original.borrow(py), py, atom.expand())?;
+            let expected_calls = calls.swap(0, Ordering::Relaxed);
+            let actual = TensorExpression::expand(original.borrow(py), py, None, None)?;
+            assert!(expected_calls > 0);
+            assert_eq!(calls.load(Ordering::Relaxed), expected_calls);
+            let actual = actual.borrow(py);
+            let expected = expected.borrow(py);
+            assert_eq!(actual.as_super().expr, expected.as_super().expr);
+            assert_eq!(actual.interface, expected.interface);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn reused_reusable_interfaces_preserve_interface_and_multiplicity_validation() {
         Python::initialize();
         let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
         let [a, b, c] = [71, 73, 79].map(|index| {
@@ -5942,7 +6426,11 @@ mod tests {
             inference.infer(&ab).unwrap().logical_slots(),
             expected.logical_slots()
         );
-        assert!(inference.explicit_leaves.contains_key(&ab));
+        assert!(
+            inference
+                .reusable_interfaces
+                .contains_key(ab.as_view().get_data())
+        );
 
         let contracted = inference.infer(&(ab.as_ref() * ac.as_ref())).unwrap();
         assert_eq!(contracted.canonical().order(), 2);
@@ -5989,17 +6477,228 @@ mod tests {
                     .to_atom()
             }))
             .finish();
-        let generic = FunctionBuilder::new(spenso::tensor_symbol!("inference_reuse_open"))
-            .add_arg(compact)
-            .finish();
         let mut inference = InterfaceInference::default();
-        for (atom, rank) in [(implicit, 2), (materialized, 2), (generic, 1)] {
+        for (atom, rank) in [(implicit, 2), (materialized, 2)] {
             for _ in 0..2 {
                 let interface = inference.infer(&atom).unwrap();
                 assert_eq!(interface.open_positions(), (0..rank).collect::<Vec<_>>());
-                assert!(inference.explicit_leaves.is_empty());
+                assert!(inference.reusable_interfaces.is_empty());
             }
         }
+    }
+
+    #[test]
+    fn direct_leaf_inference_preserves_open_occurrences_and_logical_order() {
+        Python::initialize();
+        let euclidean = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
+        let minkowski = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let leaf = FunctionBuilder::new(spenso::tensor_symbol!("direct_open_leaf"))
+            .add_arg(7)
+            .add_arg(minkowski.to_symbolic([]))
+            .add_arg(euclidean.to_symbolic([]))
+            .finish();
+        let mut inference = InterfaceInference::default();
+        let interface = inference.infer_validated(leaf.as_view()).unwrap();
+        assert_eq!(
+            interface
+                .logical_slots()
+                .iter()
+                .map(IsAbstractSlot::rep)
+                .collect::<Vec<_>>(),
+            vec![minkowski, euclidean],
+        );
+        assert!(
+            inference
+                .reusable_interfaces
+                .contains_key(leaf.as_view().get_data())
+        );
+        let repeated = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(&leaf)
+            .add_arg(&leaf)
+            .finish();
+        let interface = inference.infer_validated(repeated.as_view()).unwrap();
+        assert_eq!(interface.open_positions(), vec![0, 1, 2, 3]);
+        assert_eq!(
+            interface
+                .logical_slots()
+                .into_iter()
+                .map(|slot| slot.aind)
+                .collect::<Vec<_>>(),
+            (0..4).map(PartialIndex::open).collect::<Vec<_>>(),
+        );
+        let incompatible = FunctionBuilder::new(spenso::tensor_symbol!("direct_other_leaf"))
+            .add_arg(euclidean.to_symbolic([]))
+            .add_arg(minkowski.to_symbolic([]))
+            .finish();
+        assert!(
+            inference
+                .infer_validated((&leaf + incompatible).as_view())
+                .is_err()
+        );
+
+        let p = FunctionBuilder::new(spenso::vector_symbol!("direct_compact_p"))
+            .add_arg(minkowski.to_symbolic([]))
+            .finish();
+        let q = FunctionBuilder::new(spenso::vector_symbol!("direct_compact_q"))
+            .add_arg(minkowski.to_symbolic([]))
+            .finish();
+        assert!(
+            inference
+                .infer_validated(ETS.metric(p, q).as_view())
+                .unwrap()
+                .canonical()
+                .is_scalar()
+        );
+    }
+
+    #[test]
+    fn direct_leaf_inference_retains_materialization_callback_semantics() {
+        Python::initialize();
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
+        let callback = spenso::tensor_symbol!(
+            "materialized_leaf_callback",
+            norm = |node, output| {
+                if let AtomView::Fun(function) = node
+                    && function.iter().any(|argument| {
+                        Slot::<LibraryRep, AbstractIndex>::try_from(argument).is_ok()
+                    })
+                {
+                    **output = Atom::Zero;
+                }
+            }
+        );
+        let leaf = FunctionBuilder::new(callback)
+            .add_arg(representation.to_symbolic([]))
+            .finish();
+        assert!(matches!(leaf.as_view(), AtomView::Fun(_)));
+        let mut inference = InterfaceInference::default();
+        assert!(
+            inference
+                .infer_validated(leaf.as_view())
+                .unwrap()
+                .canonical()
+                .is_scalar()
+        );
+        assert!(inference.reusable_interfaces.is_empty());
+    }
+
+    #[test]
+    fn repeated_scalar_dot_inference_preserves_external_ports_and_errors() {
+        let representation = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let p = FunctionBuilder::new(spenso::vector_symbol!("cached_dot_p"))
+            .add_arg(representation.to_symbolic([]))
+            .finish();
+        let q = FunctionBuilder::new(spenso::vector_symbol!("cached_dot_q"))
+            .add_arg(representation.to_symbolic([]))
+            .finish();
+        let incompatible = FunctionBuilder::new(spenso::vector_symbol!("cached_dot_q"))
+            .add_arg(ExtendibleReps::EUCLIDEAN.new_rep(4).to_symbolic([]))
+            .finish();
+        let mut inference = InterfaceInference::default();
+        for head in [SPENSO_TAG.dot, ETS.metric] {
+            let dot = FunctionBuilder::new(head).add_arg(&p).add_arg(&q).finish();
+            for _ in 0..2 {
+                assert!(
+                    inference
+                        .infer_validated(dot.as_view())
+                        .unwrap()
+                        .canonical()
+                        .is_scalar()
+                );
+            }
+            assert!(
+                inference
+                    .reusable_interfaces
+                    .contains_key(dot.as_view().get_data())
+            );
+            let external = inference.infer_validated((&dot * &p).as_view()).unwrap();
+            assert_eq!(
+                external.logical_slots(),
+                vec![representation.slot(PartialIndex::open(0))]
+            );
+
+            let invalid = FunctionBuilder::new(head)
+                .add_arg(&p)
+                .add_arg(&incompatible)
+                .finish();
+            assert!(inference.infer_validated(invalid.as_view()).is_err());
+            assert!(
+                !inference
+                    .reusable_interfaces
+                    .contains_key(invalid.as_view().get_data())
+            );
+        }
+    }
+
+    #[test]
+    fn scalar_dot_inference_retains_operand_materialization_callbacks() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let callback = spenso::tensor_symbol!(
+            "cached_dot_materialization_callback",
+            norm = move |node, _| {
+                if let AtomView::Fun(function) = node
+                    && function.iter().any(|argument| {
+                        Slot::<LibraryRep, AbstractIndex>::try_from(argument).is_ok()
+                    })
+                {
+                    observed.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        );
+        let representation = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let p = FunctionBuilder::new(callback)
+            .add_arg(representation.to_symbolic([]))
+            .finish();
+        let q = FunctionBuilder::new(spenso::vector_symbol!("cached_dot_plain_operand"))
+            .add_arg(representation.to_symbolic([]))
+            .finish();
+        let dot = FunctionBuilder::new(SPENSO_TAG.dot)
+            .add_arg(p)
+            .add_arg(q)
+            .finish();
+        let mut inference = InterfaceInference::default();
+        calls.store(0, Ordering::Relaxed);
+        for _ in 0..2 {
+            let previous = calls.load(Ordering::Relaxed);
+            assert!(
+                inference
+                    .infer_validated(dot.as_view())
+                    .unwrap()
+                    .canonical()
+                    .is_scalar()
+            );
+            assert!(calls.load(Ordering::Relaxed) > previous);
+            assert!(
+                !inference
+                    .reusable_interfaces
+                    .contains_key(dot.as_view().get_data())
+            );
+        }
+    }
+
+    #[test]
+    fn tensor_power_lowering_preserves_normalizer_calls_on_unchanged_functions() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let head = symbolica::symbol!(
+            "power_lowering_callback",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let atom = FunctionBuilder::new(head).add_arg(3).finish();
+        calls.store(0, Ordering::Relaxed);
+        assert!(lower_tensor_powers(atom.as_view()).unwrap().is_none());
+        assert!(calls.load(Ordering::Relaxed) > 0);
     }
 
     #[test]

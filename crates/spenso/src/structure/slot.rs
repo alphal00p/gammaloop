@@ -421,14 +421,36 @@ impl SlotMatcher {
         slot.parse(T::from_library_rep(rep)?)
     }
 
+    /// Parse a compact representation with the same recognition and resolution
+    /// caches used for explicit slots. Indexed or malformed arguments are not
+    /// compact ports.
+    pub fn parse_representation<T: RepName>(
+        &mut self,
+        value: AtomView<'_>,
+    ) -> Result<Representation<T>, SlotError> {
+        let representation = self
+            .compact_representation(value)
+            .ok_or(SlotError::NotRepresentation)?;
+        let rep = T::from_library_rep(self.resolve_representation(representation)?)?;
+        let dim = Dimension::try_from(representation.dimension())?;
+        Ok(Representation { dim, rep })
+    }
+
     /// Resolve the representation and duality while retaining arbitrary dimension
     /// and index expressions in the borrowed view.
     pub fn representation(
         &mut self,
         slot: SlotView<'_>,
     ) -> Result<LibraryRep, RepresentationError> {
-        let head = slot.representation.head();
-        let wrapper = slot.representation.wrapper();
+        self.resolve_representation(slot.representation)
+    }
+
+    fn resolve_representation(
+        &mut self,
+        representation: RepresentationView<'_>,
+    ) -> Result<LibraryRep, RepresentationError> {
+        let head = representation.head();
+        let wrapper = representation.wrapper();
         let rep = if let Some((_, _, rep)) = self
             .resolved
             .iter()
@@ -860,6 +882,66 @@ mod shadowing_tests {
             matcher
                 .parse::<DualLorentz, AbstractIndex>(dual.as_view())
                 .is_ok()
+        );
+    }
+
+    #[test]
+    fn cached_compact_representations_preserve_variance_and_reject_extra_arguments() {
+        let head = LibraryRep::from(Lorentz {}).symbol();
+        let compact = function!(head, 4);
+        let explicit = function!(head, 4, symbol!("slot_match_tests::compact_mu"));
+        let mut matcher = SlotMatcher::default();
+        for atom in [
+            compact.clone(),
+            function!(AIND_SYMBOLS.dind, &compact),
+            function!(AIND_SYMBOLS.uind, &compact),
+            // Symbolica removes a double dual before the matcher sees it.
+            function!(AIND_SYMBOLS.dind, function!(AIND_SYMBOLS.dind, &compact)),
+            function!(head, symbol!("slot_match_tests::compact_D")),
+            function!(LibraryRep::from(Minkowski {}).symbol(), 4),
+        ] {
+            let expected = Representation::<LibraryRep>::try_from(atom.as_view()).unwrap();
+            for _ in 0..2 {
+                assert_eq!(
+                    matcher
+                        .parse_representation::<LibraryRep>(atom.as_view())
+                        .unwrap(),
+                    expected,
+                    "{atom}"
+                );
+                // Explicit and compact parsing share the cache; alternating them
+                // must not confuse the variance or the argument count.
+                assert_eq!(
+                    matcher
+                        .parse::<LibraryRep, AbstractIndex>(explicit.as_view())
+                        .unwrap()
+                        .rep(),
+                    Representation::<LibraryRep>::try_from(compact.as_view()).unwrap()
+                );
+            }
+        }
+        for atom in [
+            explicit,
+            function!(head),
+            function!(head, -1),
+            function!(
+                head,
+                function!(symbol!("slot_match_tests::compact_dimension"), 4)
+            ),
+            function!(AIND_SYMBOLS.dind, &compact, 1),
+            function!(symbol!("slot_match_tests::compact_unknown"), 4),
+        ] {
+            assert!(
+                matcher
+                    .parse_representation::<LibraryRep>(atom.as_view())
+                    .is_err(),
+                "{atom}"
+            );
+        }
+        assert!(
+            matcher
+                .parse_representation::<Lorentz>(function!(AIND_SYMBOLS.dind, &compact).as_view())
+                .is_err()
         );
     }
 

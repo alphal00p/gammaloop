@@ -118,7 +118,7 @@ impl PyParticle {
         right: &PythonExpression,
         average: bool,
     ) -> PyResult<PythonExpression> {
-        let sum = feynkit_generator::ColorSum::new(self.inner())
+        let sum = feynkit_amplitude::ColorSum::new(self.inner())
             .map_err(|error| PyValueError::new_err(error.to_string()))?
             .averaged(average);
         Ok(PythonExpression {
@@ -199,7 +199,7 @@ impl PyParticle {
         spin_vector: Option<&PythonExpression>,
         dimension: Option<ConvertibleToExpression>,
     ) -> PyResult<PythonExpression> {
-        let sum = feynkit_generator::SpinSum::new(self.inner(), &self.model)
+        let sum = feynkit_amplitude::SpinSum::new(self.inner(), &self.model)
             .map_err(|error| PyValueError::new_err(error.to_string()))?
             .with_dimension(
                 &dimension
@@ -283,7 +283,7 @@ impl PyParticle {
         spin_vector: Option<&PythonExpression>,
         dimension: Option<ConvertibleToExpression>,
     ) -> PyResult<PythonExpression> {
-        feynkit_generator::SpinSum::new(self.inner(), &self.model)
+        feynkit_amplitude::SpinSum::new(self.inner(), &self.model)
             .map_err(|error| PyValueError::new_err(error.to_string()))?
             .with_dimension(
                 &dimension

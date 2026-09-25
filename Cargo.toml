@@ -21,6 +21,7 @@ dirs = "6.0.0"
 dot-parser = "0.5"
 eyre = "0.6.12"
 feynkit = { version = "0.1.0", path = "crates/feynkit/" }
+feynkit-amplitude = { version = "0.1.0", path = "crates/feynkit-amplitude/" }
 feynkit-cff = { version = "0.1.0", path = "crates/feynkit-cff/" }
 feynkit-generator = { version = "0.1.0", path = "crates/feynkit-generator/" }
 feynkit-graph = { version = "0.1.0", path = "crates/feynkit-graph/" }

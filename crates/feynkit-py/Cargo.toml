@@ -15,6 +15,7 @@ path = "src/bin/stubgen.rs"
 required-features = ["python_stubgen"]
 
 [dependencies]
+feynkit-amplitude = { version = "0.1.0", path = "../feynkit-amplitude", default-features = false }
 feynkit-cff = { version = "0.1.0", path = "../feynkit-cff", default-features = false }
 feynkit-generator = { version = "0.1.0", path = "../feynkit-generator", default-features = false }
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features = false }
@@ -39,7 +40,7 @@ features = ["python_export"]
 
 [features]
 default = ["ufo", "native"]
-native = ["spynso3/native", "feynkit-cff/native", "feynkit-generator/native", "feynkit-graph/native", "feynkit-tensor/native", "feynkit-kinematics/native"]
-wasm = ["spynso3/wasm", "feynkit-cff/wasm", "feynkit-generator/wasm", "feynkit-graph/wasm", "feynkit-tensor/wasm", "feynkit-kinematics/wasm"]
+native = ["feynkit-amplitude/native", "spynso3/native", "feynkit-cff/native", "feynkit-generator/native", "feynkit-graph/native", "feynkit-tensor/native", "feynkit-kinematics/native"]
+wasm = ["feynkit-amplitude/wasm", "spynso3/wasm", "feynkit-cff/wasm", "feynkit-generator/wasm", "feynkit-graph/wasm", "feynkit-tensor/wasm", "feynkit-kinematics/wasm"]
 python_stubgen = ["spynso3/python_stubgen", "dep:pyo3-stub-gen", "symbolica/python_stubgen"]
 ufo = ["dep:feynkit-ufo"]

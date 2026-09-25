@@ -246,3 +246,25 @@ fn cyclic_symmetry_preserves_only_rotations() {
     // A four-cycle is odd. Reflections are not part of cyclic symmetry.
     assert!(canonicalize(&rank_four).is_zero());
 }
+
+#[test]
+fn inverse_scalar_contractions_preserve_their_boundary_during_canonicalization() {
+    test_initialize();
+    let p = spenso::vector_symbol!("inverse_scalar_canon::p");
+    let q = spenso::vector_symbol!("inverse_scalar_canon::q");
+    let minkowski = spenso::structure::representation::Minkowski {};
+    use spenso::structure::representation::RepName;
+    let denominator = minkowski.new_rep(4).inner_product(p, q) - Atom::one();
+    let numerator = tensor!(inverse_scalar_a, mink!(4, inverse_scalar_i))
+        * tensor!(inverse_scalar_b, mink!(4, inverse_scalar_i));
+    let expression = numerator / denominator;
+    let canonical = canonicalize(&expression);
+    assert_eq!(canonical, canonicalize(&canonical));
+    assert!(
+        canonical
+            .list_dangling::<AbstractIndex>()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(!canonical.to_plain_string().contains("scalar_store"));
+}

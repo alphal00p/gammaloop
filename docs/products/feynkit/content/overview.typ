@@ -42,7 +42,7 @@ FeynKit builds on #product-link("linnet", label: "Linnet") graphs and uses
 numerator-reduction backend in #product-link("vakint", label: "Vakint"); scalar-integral
 matching and evaluation remain Vakint's responsibility.
 
-The #link("reference/interfaces/")[interface guide] links all eight Rust components and the
+The #link("reference/interfaces/")[interface guide] links all Rust components and the
 Python reference. Contributors can follow the
 #developer-link("gammaloop-architecture", "architecture-current.typ", "ownership architecture")
 and #developer-link("cff-surface-cache-ownership", "cff-surface-cache-ownership.typ", "CFF arena invariants").

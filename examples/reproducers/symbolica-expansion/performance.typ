@@ -95,6 +95,27 @@ FeynKit workspace dependency remains separate. Build both revisions with the
 same release settings and compare several sizes and payloads. The earlier
 isolated patches in `patches/` are not applied to the default pinned build.
 
+The unpatched focused binary was measured on 2026-09-25, on CPU 10 of the same
+shared host, with three processes per size/payload and five samples per process.
+Median conversion-only times are:
+
+#table(
+  columns: 5,
+  [Length], [Terms], [Tensor, ms], [Shallow, ms], [Variables, ms],
+  [8], [105], [0.0670], [0.0639], [0.0610],
+  [10], [945], [0.7389], [0.6585], [0.6412],
+  [12], [10,395], [10.7384], [8.8399], [8.3021],
+  [14], [135,135], [235.6720], [142.2364], [131.1368],
+)
+
+All 36 processes and 180 timed-output comparisons pass. The small-input inverse
+roundtrips pass; larger inputs use the documented warmup comparison. The
+Callgrind toggle command was also checked on length eight and collected only
+the profiled conversion. Build, formatting and scoped Clippy pass. Raw samples,
+source identities, the setup timeout and validation limits are retained under
+`focused_polynomial_emission_mre` in `primitive_measurements.json`. These figures
+are a fresh MRE baseline, not an attributed improvement over historical tables.
+
 == Measured bottleneck
 
 The companion #link("../../notebooks/tensor_contraction_parity.json")[benchmark

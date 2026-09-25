@@ -437,6 +437,7 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "feynkit-amplitude" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-generator" = ["crates/feynkit-model/tests/fixtures"];

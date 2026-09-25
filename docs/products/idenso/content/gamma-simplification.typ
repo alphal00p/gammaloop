@@ -1818,6 +1818,171 @@ Input construction, term counting and validation are outside the Python clock,
 while FORM process wall includes startup and input parsing. The single Python
 run is not a multi-run median.
 
+A separate run of the same frozen ladder implementation adds timers at the
+public operation boundaries. It takes *42.697 s*, with exact equality to the
+previous final expression; these measurements are not a retroactive partition
+of the 46.474 s run.
+
+#table(
+  columns: 3,
+  [Ladder operation], [Wall time, s], [Share],
+  [Construct TensorExpression from expanded input], [32.083], [75.14%],
+  [Schoonschip, including result reconstruction], [9.846], [23.06%],
+  [Multiply and initially expand], [0.700], [1.64%],
+  [Normalize dots, including result reconstruction], [0.0387], [0.091%],
+  [Final expansion and previous-result disposal], [0.0275], [0.064%],
+  [Vertex-rule substitution], [0.0011], [0.003%],
+  [Extract expression and dispose wrapper], [0.0003], [0.001%],
+)
+
+Native sampling of a second full run retains 4,289 samples within these operation
+boundaries, excluding setup and validation. Within initial construction, disjoint
+owners account for 64.52% of sampled user cycles in interface inference/syntax
+analysis, 19.66% in tensor-power lowering and product normalization, and 15.63%
+in index-multiplicity, placeholder and nesting validation. Within Schoonschip,
+52.89% belongs to the Idenso operation and 45.30% to `from_transformed_atom` result
+reconstruction; 1.81% is other or unresolved. These are sampling estimates, not
+exact wall-time phases. The profiled run takes 44.430 s and also matches the
+saved final expression exactly.
+
+The dominant cost is reconstructing tensor metadata after distributing the
+product. The output slot interface can instead be determined before expansion:
+validate the small substituted factors, compose their interfaces with the
+accumulator, and retain that interface through expansion and contraction. For
+a contraction inside an already composed expression, its external interface
+is unchanged. When composing two tensors, the surviving ports follow from the
+contraction pairs, without inspecting the expanded output terms.
+
+This requires an internal construction path that carries established invariants.
+Merely using the current public tensor arithmetic or `preserving_interface`
+still performs global validation or inference. The network contraction kernel
+already carries its result structure but drops it when returning the Atom.
+Input parsing and contraction compatibility checks remain necessary; repeated
+output validation is avoidable for operations that guarantee those invariants.
+Such a path must preserve logical port order, fresh dummy identities, tensor-zero
+shape and the existing normalization semantics. It must not implicitly trust
+arbitrary user rewrites or custom normalization callbacks. No implementation
+speedup from carrying interfaces is claimed by this investigation. The `full_gluon_ladder_breakdown`
+archive entry retains the driver, phases, exact comparison and build identity.
+
+The subsequent constructor improvement reuses Spenso's cached `SlotMatcher`
+for both explicit slots and compact representations. Recursive inference borrows
+Atom views, shares its matcher, and reads ordinary tensor-leaf ports directly.
+It no longer creates temporary dummy indices and rebuilds those leaves merely
+to infer their interface. Bounded reuse of small leaf interfaces retains fresh
+open-port identities; tensor-power lowering also avoids rebuilding unchanged
+subtrees. Callback-bearing or order-sensitive leaves retain their normalization
+semantics. Raw input still receives all-summand compatibility validation: the
+existing fast inference mode's first summand cannot establish validity of an
+arbitrary user-supplied sum.
+
+Constructor-only measurements use the same saved, already parsed ladder inputs,
+with one warmup and three timed calls per case. All eight output Atoms and
+interfaces agree exactly with the preceding build.
+
+#table(
+  columns: 4,
+  [Input terms], [Before, ms], [After, ms], [Ratio],
+  [6], [0.128], [0.095], [1.35×],
+  [36], [1.230], [0.771], [1.60×],
+  [204], [8.213], [5.140], [1.60×],
+  [1,152], [57.788], [35.181], [1.64×],
+  [6,503], [419.630], [241.470], [1.74×],
+  [50,684], [3,921.555], [2,241.664], [1.75×],
+  [92,341], [8,151.410], [4,451.431], [1.83×],
+  [186,516], [18,916.916], [9,874.551], [1.92×],
+)
+
+The complete ladder's measured operation sum improves *47.506 → 25.340 s*
+(*1.88×*). Construction accounts for *36.420 → 16.941 s*, while Schoonschip,
+including result reconstruction, improves *10.291 → 7.648 s*. This harness saves
+fixtures between operation clocks, so its phase sum is distinct from the earlier
+contiguous 46.474 s run. Fresh FORM process-wall median is *0.727 s* over three
+runs (0.70 s internal CPU); the observed remaining ratio is *34.8×* and does not
+establish parity. These are shared-host observations, not interleaved process
+pairs. All intermediate outputs and the FORM-certified 9,652-term final Atom
+match exactly. The 68-case adversarial constructor corpus, eleven metric/trace
+controls, and the four-stage typed route also retain their outputs and errors.
+The `retained_fast_constructor_inference` archive entry records the sources,
+builds, timings and validation. Carrying a proven interface through contraction
+remains a separate opportunity; this change speeds inference itself.
+
+Separate five-call constructor medians also improve the 32-metric chain
+458.7 → 378.4 µs, compact dot sum 45.2 → 24.2 µs, free-six D-dimensional trace
+78.5 → 67.7 µs, and repeated-eight 4D trace 96.6 → 81.3 µs. These small-case
+measurements exclude contraction; their complete output/error checks pass.
+
+A native profile at that checkpoint takes 25.399 s in timed operations,
+again with exact final equality. Construction still takes 16.952 s. Of its
+1,640 samples, interface inference and syntax analysis own 44.71% of sampled
+user cycles, product normalization 20.34%, explicit multiplicity/placeholder/
+nesting checks 25.27%, and tensor-power lowering 9.43%. These are disjoint
+sampling estimates, not wall-time subdivisions. Schoonschip takes 7.614 s:
+68.31% of its sampled cycles belong to Idenso and 29.64% to result reconstruction.
+The remaining constructor cost is spread across repeated global analysis and
+normalization, beyond the now cheaper leaf-port extraction.
+
+The next retained refinement avoids rebuilding unchanged products and powers:
+`StructuredAtom` keeps its existing Atom storage until bracket normalization
+changes a child. The existing bounded inference cache also retains scalar dots
+whose operands already have reusable interfaces. Syntax validation reuses checks
+for directly readable leaves, with the first occurrence still visiting every
+child. Callback-sensitive materialization and all validation boundaries remain.
+
+A fresh before/after run improves the full ladder operation sum
+*25.160 → 17.740 s (1.42×)*. Its constructor sum falls *16.851 → 10.155 s* and
+Schoonschip including result reconstruction falls *7.547 → 6.801 s*. Fresh FORM
+takes *0.719 s* process wall (three-run median; 0.69 s internal CPU), leaving an
+observed *24.7×* ratio with the same phase-sum caveat. All eight intermediate
+Atoms/interfaces and the final 9,652-term result agree exactly.
+
+#table(
+  columns: 4,
+  [Constructor input terms], [Before, ms], [After, ms], [Ratio],
+  [6,503], [251.410], [173.175], [1.45×],
+  [50,684], [2,344.216], [1,589.343], [1.47×],
+  [92,341], [4,651.301], [3,209.359], [1.45×],
+  [186,516], [10,361.964], [7,133.692], [1.45×],
+)
+
+These are new three-call medians, separate from the preceding checkpoint.
+The small 32-metric constructor improves 378.2 → 267.9 µs; the two-metric and
+compact-dot controls instead move 24.6 → 25.6 and 24.2 → 25.8 µs. The cache adds
+some work where an expression offers little repetition; no universal gain is
+claimed. Five-sample complete trace transformations give:
+
+#table(
+  columns: 4,
+  [Expanded trace], [Python before, ms], [Python after, ms], [FORM body CPU, ms],
+  [Free 2, D], [0.02384], [0.02019], [0.00064],
+  [Free 4, D], [0.09027], [0.07876], [0.00130],
+  [Free 6, D], [0.39843], [0.34175], [0.00540],
+  [Free 10, D], [29.1296], [24.0113], [0.34333],
+  [Free 12, D], [387.3884], [316.3761], [4.06667],
+  [Free 8, 4D], [2.60757], [2.13313], [0.04800],
+  [Repeated 8, 4D], [0.11895], [0.10306], [0.00200],
+  [Repeated 8, D], [0.65066], [0.54286], [0.01400],
+)
+
+Python includes its factored scalar spectator and result construction; FORM
+measures trace-body expansion and sorting without that spectator. Every Python
+result matches its reference and the previous build; all 24 fresh FORM processes
+pass exact polynomial checks. First calls improve 1.15–1.22×, while reruns are
+mostly unchanged. The `retained_unchanged_products_and_scalar_interfaces` archive
+entry retains timings, sources, the 68-case constructor comparison and validation.
+The targeted Rust suite passes 96 of 97 tests; the remaining wrapped-index
+assertion is the previously reproduced baseline failure. Clippy and formatting
+pass.
+
+An executed counterexample clarifies the next interface-retention boundary.
+A valid rank-one `g(a,b)*T(a)` can invoke a custom normalizer that turns `T(b)`
+into scalar one after index substitution. The current wrapper rejects the lost
+tensor syntax; blindly retaining its rank-one interface would be wrong. Also,
+the separately valid scalar `p(a)*q(a)` and vector `r(a)` cannot be multiplied
+without accounting for the resulting three occurrences of `a`. Reusing proven
+interfaces therefore needs callback and internal-index information as well as
+the external slot shape. The archive retains both executed reproducers.
+
 Measured, unintegrated Symbolica candidates include an initialization-completion
 query, normalized polynomial emission, compact-heap sum merging, and lazy scratch
 allocation during expansion. They have separate correctness and performance

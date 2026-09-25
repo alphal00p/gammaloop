@@ -143,6 +143,9 @@ rather than through GammaLoop's application state:
     [`feynkit-graph`], [Linnet-backed finalized diagram IR, external/cut
     metadata, canonical symbolic numerators and factors, DOT/serde
     support, and selected loop-momentum routing],
+    [`feynkit-amplitude`], [Coherent diagram-backed symbolic amplitudes, physical-leg
+    conjugation, squared operators, and shared spin/color completeness relations;
+    independent of integration settings, CFF caches, and GammaLoop runtime state],
     [`feynkit-generator`], [The complete deterministic generation
     pipeline: topology expansion, interaction assignment, filters,
     canonicalization, fermion flow, numerator/projector construction,
@@ -168,7 +171,8 @@ Within this family, dependencies point from foundations to consumers:
 ```text
 feynkit-model ------> feynkit-graph, feynkit-generator, feynkit-ufo
 feynkit-kinematics -> feynkit-graph
-feynkit-graph ------> feynkit-generator, feynkit-cff
+feynkit-graph ------> feynkit-amplitude, feynkit-generator, feynkit-cff
+feynkit-amplitude -> feynkit-generator
 feynkit-graph,
 spenso, idenso ------> feynkit-tensor
 
