@@ -54,10 +54,7 @@ from symbolica import E, S
 import symbolica.community.feynkit as fk
 
 model = fk.Model("crates/feynkit-py/tests/fixtures/scalars_2p_3p.json")
-diagrams = model.generate_diagrams(
-    ["scalar_0"], ["scalar_0"], loops=1, max_vertices=2,
-    vertex_allow=["V_3_SCALAR_000"], allow_self_loops=False,
-).diagrams
+diagrams = fk.Process(model, ["scalar_0"], ["scalar_0"]).generate_diagrams(loops=1, max_vertices=2, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=False).diagrams
 diagram = diagrams[0]
 family = diagram.integral_family()
 p = family.external_momenta[0]

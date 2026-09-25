@@ -138,7 +138,7 @@ impl PyAmplitude {
     ///     Additional scalar expressions assumed real under conjugation.
     #[new]
     #[pyo3(signature = (diagrams, *, dimension=None, real=None))]
-    fn new(
+    pub(crate) fn new(
         diagrams: Vec<PyFeynmanDiagram>,
         dimension: Option<ConvertibleToExpression>,
         real: Option<Vec<PythonExpression>>,

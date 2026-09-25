@@ -1491,7 +1491,7 @@ class FeynkitError(builtins.Exception):
     Catch any model, diagram, generation, CFF, tensor-reduction, or kinematics failure:
 
     >>> try:
-    ...     result = model.generate_diagrams(incoming, outgoing)
+    ...     result = fk.Process(model, incoming, outgoing).generate_diagrams()
     ... except fk.FeynkitError as error:
     ...     print(error)
     """
@@ -2733,7 +2733,7 @@ class GenerationError(FeynkitError):
     Process and topology failures share one public exception type:
 
     >>> try:
-    ...     result = model.generate_diagrams(incoming, outgoing, loops=1)
+    ...     result = fk.Process(model, incoming, outgoing).generate_diagrams(loops=1)
     ... except fk.GenerationError as error:
     ...     print(error)
     """
@@ -2751,7 +2751,7 @@ class GenerationProgress:
     --------
     >>> def report(progress):
     ...     print(progress.stage, progress.completed, progress.total)
-    >>> result = generator.generate(process, progress=report)
+    >>> result = process.generate_diagrams(progress=report)
     """
     @property
     def stage(self) -> builtins.str:
@@ -2852,7 +2852,7 @@ class GenerationResult:
     Examples
     --------
     >>> import symbolica.community.feynkit as fk
-    >>> result = fk.Generator(model).generate(process)
+    >>> result = process.generate_diagrams()
     >>> diagrams = result.diagrams
     """
     @property
@@ -2933,147 +2933,6 @@ class GenerationResult:
             The IPython pretty-printer object.
         cycle : bool
             Whether this object is part of a recursive formatting cycle.
-        """
-
-@typing.final
-class Generator:
-    r"""
-    Generate Feynman diagrams from a particle model and a process definition.
-
-    The generator combines model interactions with graph topologies at the
-    requested loop orders. It instantiates the selected Feynman rules as
-    numerator annotations on interaction vertices and propagator edges, and
-    stores their product as the diagram-wide numerator. The resulting typed
-    diagrams are ready for symbolic manipulation and CFF operations.
-
-    Examples
-    --------
-    >>> import symbolica.community.feynkit as fk
-    >>> generator = fk.Generator(model)
-    >>> result = generator.generate(process)
-
-    Parameters
-    ----------
-    model : Model
-        Particle model supplying fields, propagators, and interaction vertices.
-    """
-    @property
-    def model(self) -> Model:
-        r"""
-        Return the particle model used by this generator.
-        """
-    def __new__(cls, model: Model) -> Generator:
-        r"""
-        Create a diagram generator backed by a loaded particle model.
-
-        Examples
-        --------
-        >>> generator = fk.Generator(model)
-
-        Parameters
-        ----------
-        model : Model
-            Particle model supplying particles, interactions, and parameters.
-        """
-    def generate(self, process: Process, *, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> GenerationResult:
-        r"""
-        Generate and optionally group all diagrams matching a process.
-
-        Model Feynman rules are instantiated into each returned diagram: inspect
-        ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
-        individual factors, or ``diagram.numerator_expression()`` for their
-        combined numerator.
-
-        Examples
-        --------
-        >>> result = generator.generate(process, max_vertices=6)
-        >>> combined_numerator = result.diagrams[0].numerator_expression()
-
-        Parameters
-        ----------
-        process : Process
-            Scattering process and loop range to generate.
-        threads : int or None, optional
-            Number of worker threads; None uses the generator default.
-        max_vertices : int or None, optional
-            Maximum interaction vertices; None applies no override.
-        allow_self_loops : bool, optional
-            Permit propagators that start and end on the same vertex; defaults to True.
-        allow_zero_flow_edges : bool, optional
-            Permit internal edges with identically zero momentum flow.
-        graph_prefix : str or None, optional
-            Prefix assigned to generated diagram names.
-        particle_veto : sequence[Particle | str | int] or None, optional
-            Reject graphs containing these particles, model names, or signed PDG codes.
-        vertex_allow : sequence[VertexRule | str] or None, optional
-            Keep only graphs whose vertices use these model rules or names.
-        vertex_veto : sequence[VertexRule | str] or None, optional
-            Reject graphs containing these interaction vertices.
-        maximum_bridges : int, None, or Ellipsis, optional
-            Omission or Ellipsis requires one-particle irreducibility only for diagrams
-            with loops; tree exchanges are allowed, including in mixed loop ranges.
-            An integer limits internal bridges at every loop order; None disables it.
-        self_energy : SelfEnergyFilterOptions or None, optional
-            Reject self-energy subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        tadpoles : TadpoleFilterOptions or None, optional
-            Reject tadpole subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        zero_snails : SnailFilterOptions or None, optional
-            Reject zero-snail subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
-            Exact coupling powers or inclusive ranges; an upper None is unbounded.
-        fermion_loop_count_range : tuple[int, int] or None, optional
-            Inclusive range of closed fermion loops.
-        factorized_loop_topologies_count_range : tuple[int, int] or None, optional
-            Inclusive range of factorized loop-topology components. Defaults to
-            ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
-        blob_range : tuple[int, int] or None, optional
-            Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
-            cross sections; ``None`` disables the restriction.
-        spectator_range : tuple[int, int] or None, optional
-            Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
-            cross sections; ``None`` disables the restriction.
-        perturbative_orders : dict[str, int] or None, optional
-            Exact perturbative powers required for cross-section graphs.
-        sewn_tadpoles : bool or None, optional
-            Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
-        cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
-            Coupling-order bounds applied independently within every cut amplitude.
-        cut_amplitude_loop_count_range : tuple[int, int] or None, optional
-            Inclusive combined loop count across both sides of every cut.
-        select_diagrams : sequence[FeynmanDiagram | str] or None, optional
-            Retain only these diagram objects, content-derived IDs, or finalized names.
-        veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
-            Remove these diagram objects, content-derived IDs, or finalized names.
-        loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
-            Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
-        numerator_prefactor : Expression or None, optional
-            Scalar multiplier retained on every finalized diagram numerator.
-        projector : Expression or None, optional
-            Override external-state contraction; S("1") disables external wavefunctions.
-        numerator_grouping : NumeratorGrouping or None, optional
-            Defaults to None: no numerator comparison or grouping. Diagrams still
-            contain numerators. Pass NumeratorGrouping to enable zero detection or grouping.
-        progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
-            Defaults to "auto": show progress when marimo.running_in_notebook()
-            is true, with stage, counts, and elapsed time. None disables progress.
-            Known totals use a progress bar; unknown totals use a spinner.
-            The display closes on completion, cancellation, or error.
-            Observe stage changes and coalesced counts on the calling Python thread.
-            Callback exceptions propagate and stop generation.
-        filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
-            Prune partial topologies during enumeration. The first N vertices are
-            complete. False rejects only this search branch. Edge data is the base
-            particle PDG code; node data is 0 internally, -(index+1) for incoming
-            legs and +(index+1) for outgoing legs. Mutating the snapshot does not
-            change enumeration. Keep callbacks cheap: each snapshot is constructed
-            using Symbolica's Python Graph API.
-        cancellation_token : CancellationToken or None, optional
-            Shared token for cancelling a running generation task. Token cancellation
-            returns an incomplete result; Python signal-handler exceptions, including
-            KeyboardInterrupt, stop generation and propagate to the caller.
         """
 
 @typing.final
@@ -4721,123 +4580,6 @@ class Model:
         json : str
             Serialized model object.
         """
-    def generate_diagrams(self, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], *, kind: builtins.str = 'amplitude', loops: builtins.int | tuple[builtins.int, builtins.int] = 0, final_state_alternatives: typing.Optional[typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]] = None, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> GenerationResult:
-        r"""
-        Generate amplitude or cross-section diagrams from this model.
-
-        Concrete :class:`Particle` values, particle names, signed PDG codes, and
-        :class:`ParticleSelector` objects may be mixed in the external states.
-        An integer loop order selects that exact order; a pair such as ``(0, 1)``
-        selects an inclusive range. The selected model Feynman rules are
-        instantiated on every returned vertex and propagator edge and combined
-        in each diagram numerator.
-
-        Examples
-        --------
-        Generate one-loop scalar amplitudes directly from their model:
-
-        >>> scalar = model.particle("scalar_0")
-        >>> result = model.generate_diagrams(
-        ...     [scalar], [scalar, scalar.antiparticle],
-        ...     loops=1, max_vertices=3, allow_self_loops=True,
-        ... )
-        >>> diagram = result.diagrams[0]
-        >>> diagram.numerator_expression()
-
-        Parameters
-        ----------
-        incoming : sequence[Particle | ParticleSelector | str | int]
-            Incoming particles in external-leg order.
-        outgoing : sequence[Particle | ParticleSelector | str | int]
-            Primary outgoing state in external-leg order.
-        kind : {"amplitude", "cross_section"}, optional
-            Graph structure to generate.
-        loops : int or tuple[int, int], optional
-            Exact loop order or inclusive minimum and maximum.
-        threads : int or None, optional
-            Number of worker threads; None uses the generator default.
-        max_vertices : int or None, optional
-            Maximum interaction vertices; None applies no override.
-        allow_self_loops : bool, optional
-            Permit propagators that start and end on the same vertex; defaults to True.
-        allow_zero_flow_edges : bool, optional
-            Permit internal edges with identically zero momentum flow.
-        graph_prefix : str or None, optional
-            Prefix assigned to generated diagram names.
-        particle_veto : sequence[Particle | str | int] or None, optional
-            Reject graphs containing these particles, model names, or signed PDG codes.
-        vertex_allow : sequence[VertexRule | str] or None, optional
-            Keep only graphs whose vertices use these model rules or names.
-        vertex_veto : sequence[VertexRule | str] or None, optional
-            Reject graphs containing these interaction vertices.
-        maximum_bridges : int, None, or Ellipsis, optional
-            Omission or Ellipsis requires one-particle irreducibility only for diagrams
-            with loops; tree exchanges are allowed, including in mixed loop ranges.
-            An integer limits internal bridges at every loop order; None disables it.
-        self_energy : SelfEnergyFilterOptions or None, optional
-            Reject self-energy subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        tadpoles : TadpoleFilterOptions or None, optional
-            Reject tadpole subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        zero_snails : SnailFilterOptions or None, optional
-            Reject zero-snail subgraphs. Omission enables the default filter for
-            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-        coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
-            Exact coupling powers or inclusive ranges; an upper None is unbounded.
-        fermion_loop_count_range : tuple[int, int] or None, optional
-            Inclusive range of closed fermion loops.
-        factorized_loop_topologies_count_range : tuple[int, int] or None, optional
-            Inclusive range of factorized loop-topology components. Defaults to
-            ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
-        blob_range : tuple[int, int] or None, optional
-            Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
-            cross sections; ``None`` disables the restriction.
-        spectator_range : tuple[int, int] or None, optional
-            Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
-            cross sections; ``None`` disables the restriction.
-        perturbative_orders : dict[str, int] or None, optional
-            Exact perturbative powers required for cross-section graphs.
-        sewn_tadpoles : bool or None, optional
-            Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
-        cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
-            Coupling-order bounds applied independently within every cut amplitude.
-        cut_amplitude_loop_count_range : tuple[int, int] or None, optional
-            Inclusive combined loop count across both sides of every cut.
-        select_diagrams : sequence[FeynmanDiagram | str] or None, optional
-            Retain only these diagram objects, content-derived IDs, or finalized names.
-        veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
-            Remove these diagram objects, content-derived IDs, or finalized names.
-        loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
-            Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
-        numerator_prefactor : Expression or None, optional
-            Scalar multiplier retained on every finalized diagram numerator.
-        projector : Expression or None, optional
-            Override external-state contraction; S("1") disables external wavefunctions.
-        numerator_grouping : NumeratorGrouping or None, optional
-            Defaults to None: no numerator comparison or grouping. Diagrams still
-            contain numerators. Pass NumeratorGrouping to enable zero detection or grouping.
-        progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
-            Defaults to "auto": show progress when marimo.running_in_notebook()
-            is true, with stage, counts, and elapsed time. None disables progress.
-            Known totals use a progress bar; unknown totals use a spinner.
-            The display closes on completion, cancellation, or error.
-            Observe stage changes and coalesced counts on the calling Python thread.
-            Callback exceptions propagate and stop generation.
-        filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
-            Prune partial topologies during enumeration. The first N vertices are
-            complete. False rejects only this search branch. Edge data is the base
-            particle PDG code; node data is 0 internally, -(index+1) for incoming
-            legs and +(index+1) for outgoing legs. Mutating the snapshot does not
-            change enumeration. Keep callbacks cheap: each snapshot is constructed
-            using Symbolica's Python Graph API.
-        cancellation_token : CancellationToken or None, optional
-            Shared token for cancelling a running generation task. Token cancellation
-            returns an incomplete result; Python signal-handler exceptions, including
-            KeyboardInterrupt, stop generation and propagate to the caller.
-        final_state_alternatives : sequence[sequence[Particle | ParticleSelector | str | int]] or None, optional
-            Extra outgoing states for a cross section.
-        """
     def particle(self, name: builtins.str) -> Particle:
         r"""
         Look up a particle by name.
@@ -5985,18 +5727,13 @@ class Process:
     Examples
     --------
     >>> import symbolica.community.feynkit as fk
-    >>> process = fk.Process.amplitude(["e-", "e+"], ["mu-", "mu+"])
+    >>> process = fk.Process(model, ["e-", "e+"], ["mu-", "mu+"])
     >>> one_loop = process.with_loop_count(1, 1)
     """
     @property
-    def generation_type(self) -> GenerationType:
+    def model(self) -> Model:
         r"""
-        Return whether this process generates amplitudes or cross sections.
-
-        Examples
-        --------
-        >>> process.generation_type == fk.GenerationType.AMPLITUDE
-        True
+        The particle model supplying this process's Feynman rules.
         """
     @property
     def incoming(self) -> builtins.list[ParticleSelector]:
@@ -6034,9 +5771,9 @@ class Process:
         True
         """
     @property
-    def symmetrizes_final(self) -> builtins.bool:
+    def symmetrizes_final(self) -> typing.Optional[builtins.bool]:
         r"""
-        Report whether final-state permutations are identified.
+        Final-state symmetry override; None uses False for amplitudes and True for cross sections.
 
         Examples
         --------
@@ -6063,39 +5800,34 @@ class Process:
         >>> process.with_symmetrization(external_fermions=True).symmetrizes_external_fermions
         True
         """
-    @staticmethod
-    def amplitude(incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]) -> Process:
+    def __new__(cls, model: Model, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0) -> Process:
         r"""
-        Define an amplitude with ordered incoming and outgoing particles.
+        Define a model-bound process independently of what will be generated.
 
         Examples
         --------
-        >>> electron = model.particle_by_pdg(11)
-        >>> positron = model.particle_by_pdg(-11)
-        >>> process = fk.Process.amplitude([electron, positron], [22])
+        >>> process = fk.Process(model, ["e-", "e+"], ["a", "a"])
+        >>> amplitude = process.generate_amplitude()
 
         Parameters
         ----------
+        model : Model
+            Particle model supplying the Feynman rules.
         incoming : sequence[Particle | ParticleSelector | str | int]
-            Incoming particles in external-leg order.
+            Ordered incoming external states.
         outgoing : sequence[Particle | ParticleSelector | str | int]
-            Outgoing particles in external-leg order.
+            Ordered outgoing external states.
+        loops : int or tuple[int, int], optional
+            Default exact loop order or inclusive range, initially zero.
         """
-    @staticmethod
-    def cross_section(incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]) -> Process:
+    def __repr__(self) -> builtins.str:
         r"""
-        Define a cross section with ordered incoming and outgoing particles.
+        Format the external states, model, and default loop range.
 
         Examples
         --------
-        >>> process = fk.Process.cross_section([11, -11], [13, -13])
-
-        Parameters
-        ----------
-        incoming : sequence[Particle | ParticleSelector | str | int]
-            Incoming particles in external-leg order.
-        outgoing : sequence[Particle | ParticleSelector | str | int]
-            Outgoing particles in external-leg order.
+        >>> repr(process)
+        'Process("sm": [e-, e+] -> [a, a]; loops=(0, 0))'
         """
     def with_loop_count(self, minimum: builtins.int, maximum: builtins.int) -> Process:
         r"""
@@ -6115,12 +5847,12 @@ class Process:
     def with_final_state_alternatives(self, alternatives: typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]) -> Process:
         r"""
         Return a process accepting any of the supplied final states.
-        Amplitudes accept exactly one alternative; cross sections may include an empty
+        Generating amplitudes requires exactly one alternative; cross sections may include an empty
         alternative for a vacuum final state.
 
         Examples
         --------
-        >>> process = fk.Process.cross_section([11, -11], [22, 22])
+        >>> process = fk.Process(model, [11, -11], [22, 22])
         >>> inclusive = process.with_final_state_alternatives([[22, 22], [13, -13]])
 
         Parameters
@@ -6146,6 +5878,315 @@ class Process:
             Identify cross-section graphs related by exchanging amplitude sides.
         external_fermions : bool, optional
             Include amplitude fermions in enabled external-state symmetry classes.
+        """
+    def generate_diagrams(self, *, loops: typing.Optional[builtins.int | tuple[builtins.int, builtins.int]] = None, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> GenerationResult:
+        r"""
+        Generate and optionally group all diagrams matching a process.
+
+        Model Feynman rules are instantiated into each returned diagram: inspect
+        ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
+        individual factors, or ``diagram.numerator_expression()`` for their
+        combined numerator.
+
+        Examples
+        --------
+        >>> result = process.generate_diagrams(max_vertices=6)
+        >>> combined_numerator = result.diagrams[0].numerator_expression()
+
+        Parameters
+        ----------
+        loops : int or tuple[int, int] or None, optional
+            Override the process loop range for this call. Cross sections count
+            loops in the sewn forward graph; two-particle tree cuts need loops=1.
+        threads : int or None, optional
+            Number of worker threads; None uses the generator default.
+        max_vertices : int or None, optional
+            Maximum interaction vertices; None applies no override.
+        allow_self_loops : bool, optional
+            Permit propagators that start and end on the same vertex; defaults to True.
+        allow_zero_flow_edges : bool, optional
+            Permit internal edges with identically zero momentum flow.
+        graph_prefix : str or None, optional
+            Prefix assigned to generated diagram names.
+        particle_veto : sequence[Particle | str | int] or None, optional
+            Reject graphs containing these particles, model names, or signed PDG codes.
+        vertex_allow : sequence[VertexRule | str] or None, optional
+            Keep only graphs whose vertices use these model rules or names.
+        vertex_veto : sequence[VertexRule | str] or None, optional
+            Reject graphs containing these interaction vertices.
+        maximum_bridges : int, None, or Ellipsis, optional
+            Omission or Ellipsis requires one-particle irreducibility only for diagrams
+            with loops; tree exchanges are allowed, including in mixed loop ranges.
+            An integer limits internal bridges at every loop order; None disables it.
+        self_energy : SelfEnergyFilterOptions or None, optional
+            Reject self-energy subgraphs. Omission enables the default filter for
+            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+        tadpoles : TadpoleFilterOptions or None, optional
+            Reject tadpole subgraphs. Omission enables the default filter for
+            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+        zero_snails : SnailFilterOptions or None, optional
+            Reject zero-snail subgraphs. Omission enables the default filter for
+            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+        coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+            Exact coupling powers or inclusive ranges; an upper None is unbounded.
+        fermion_loop_count_range : tuple[int, int] or None, optional
+            Inclusive range of closed fermion loops.
+        factorized_loop_topologies_count_range : tuple[int, int] or None, optional
+            Inclusive range of factorized loop-topology components. Defaults to
+            ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
+        blob_range : tuple[int, int] or None, optional
+            Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
+            cross sections; ``None`` disables the restriction.
+        spectator_range : tuple[int, int] or None, optional
+            Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
+            cross sections; ``None`` disables the restriction.
+        perturbative_orders : dict[str, int] or None, optional
+            Exact perturbative powers required for cross-section graphs.
+        sewn_tadpoles : bool or None, optional
+            Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
+        cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+            Coupling-order bounds applied independently within every cut amplitude.
+        cut_amplitude_loop_count_range : tuple[int, int] or None, optional
+            Inclusive combined loop count across both sides of every cut.
+        select_diagrams : sequence[FeynmanDiagram | str] or None, optional
+            Retain only these diagram objects, content-derived IDs, or finalized names.
+        veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
+            Remove these diagram objects, content-derived IDs, or finalized names.
+        loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
+            Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
+        numerator_prefactor : Expression or None, optional
+            Scalar multiplier retained on every finalized diagram numerator.
+        projector : Expression or None, optional
+            Override external-state contraction; S("1") disables external wavefunctions.
+        numerator_grouping : NumeratorGrouping or None, optional
+            Defaults to None: no numerator comparison or grouping. Diagrams still
+            contain numerators. Pass NumeratorGrouping to enable zero detection or grouping.
+        progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
+            Defaults to "auto": show progress when marimo.running_in_notebook()
+            is true, with stage, counts, and elapsed time. None disables progress.
+            Known totals use a progress bar; unknown totals use a spinner.
+            The display closes on completion, cancellation, or error.
+            Observe stage changes and coalesced counts on the calling Python thread.
+            Callback exceptions propagate and stop generation.
+        filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+            Prune partial topologies during enumeration. The first N vertices are
+            complete. False rejects only this search branch. Edge data is the base
+            particle PDG code; node data is 0 internally, -(index+1) for incoming
+            legs and +(index+1) for outgoing legs. Mutating the snapshot does not
+            change enumeration. Keep callbacks cheap: each snapshot is constructed
+            using Symbolica's Python Graph API.
+        cancellation_token : CancellationToken or None, optional
+            Shared token for cancelling a running generation task. Token cancellation
+            returns an incomplete result; Python signal-handler exceptions, including
+            KeyboardInterrupt, stop generation and propagate to the caller.
+        """
+    def generate_amplitude(self, *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, real: typing.Optional[typing.Sequence[Expression]] = None, loops: typing.Optional[builtins.int | tuple[builtins.int, builtins.int]] = None, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> Amplitude:
+        r"""
+        Generate a coherent symbolic amplitude for this process.
+        Cancelled or empty generation cannot produce an amplitude.
+
+        Model Feynman rules are instantiated into each returned diagram: inspect
+        ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
+        individual factors, or ``diagram.numerator_expression()`` for their
+        combined numerator.
+
+        Examples
+        --------
+        >>> result = process.generate_amplitude(max_vertices=6)
+        >>> operator = result.expression()
+
+        Parameters
+        ----------
+        dimension : int or Expression, optional
+            Lorentz dimension of the amplitude; default four.
+        real : list[Expression] or None, optional
+            Additional scalars assumed real under conjugation.
+        loops : int or tuple[int, int] or None, optional
+            Override the process loop range for this call. Cross sections count
+            loops in the sewn forward graph; two-particle tree cuts need loops=1.
+        threads : int or None, optional
+            Number of worker threads; None uses the generator default.
+        max_vertices : int or None, optional
+            Maximum interaction vertices; None applies no override.
+        allow_self_loops : bool, optional
+            Permit propagators that start and end on the same vertex; defaults to True.
+        allow_zero_flow_edges : bool, optional
+            Permit internal edges with identically zero momentum flow.
+        graph_prefix : str or None, optional
+            Prefix assigned to generated diagram names.
+        particle_veto : sequence[Particle | str | int] or None, optional
+            Reject graphs containing these particles, model names, or signed PDG codes.
+        vertex_allow : sequence[VertexRule | str] or None, optional
+            Keep only graphs whose vertices use these model rules or names.
+        vertex_veto : sequence[VertexRule | str] or None, optional
+            Reject graphs containing these interaction vertices.
+        maximum_bridges : int, None, or Ellipsis, optional
+            Omission or Ellipsis requires one-particle irreducibility only for diagrams
+            with loops; tree exchanges are allowed, including in mixed loop ranges.
+            An integer limits internal bridges at every loop order; None disables it.
+        self_energy : SelfEnergyFilterOptions or None, optional
+            Reject self-energy subgraphs. Omission enables the default filter for
+            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+        tadpoles : TadpoleFilterOptions or None, optional
+            Reject tadpole subgraphs. Omission enables the default filter for
+            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+        zero_snails : SnailFilterOptions or None, optional
+            Reject zero-snail subgraphs. Omission enables the default filter for
+            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+        coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+            Exact coupling powers or inclusive ranges; an upper None is unbounded.
+        fermion_loop_count_range : tuple[int, int] or None, optional
+            Inclusive range of closed fermion loops.
+        factorized_loop_topologies_count_range : tuple[int, int] or None, optional
+            Inclusive range of factorized loop-topology components. Defaults to
+            ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
+        blob_range : tuple[int, int] or None, optional
+            Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
+            cross sections; ``None`` disables the restriction.
+        spectator_range : tuple[int, int] or None, optional
+            Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
+            cross sections; ``None`` disables the restriction.
+        perturbative_orders : dict[str, int] or None, optional
+            Exact perturbative powers required for cross-section graphs.
+        sewn_tadpoles : bool or None, optional
+            Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
+        cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+            Coupling-order bounds applied independently within every cut amplitude.
+        cut_amplitude_loop_count_range : tuple[int, int] or None, optional
+            Inclusive combined loop count across both sides of every cut.
+        select_diagrams : sequence[FeynmanDiagram | str] or None, optional
+            Retain only these diagram objects, content-derived IDs, or finalized names.
+        veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
+            Remove these diagram objects, content-derived IDs, or finalized names.
+        loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
+            Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
+        numerator_prefactor : Expression or None, optional
+            Scalar multiplier retained on every finalized diagram numerator.
+        projector : Expression or None, optional
+            Override external-state contraction; S("1") disables external wavefunctions.
+        numerator_grouping : NumeratorGrouping or None, optional
+            Defaults to None: no numerator comparison or grouping. Diagrams still
+            contain numerators. Pass NumeratorGrouping to enable zero detection or grouping.
+        progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
+            Defaults to "auto": show progress when marimo.running_in_notebook()
+            is true, with stage, counts, and elapsed time. None disables progress.
+            Known totals use a progress bar; unknown totals use a spinner.
+            The display closes on completion, cancellation, or error.
+            Observe stage changes and coalesced counts on the calling Python thread.
+            Callback exceptions propagate and stop generation.
+        filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+            Prune partial topologies during enumeration. The first N vertices are
+            complete. False rejects only this search branch. Edge data is the base
+            particle PDG code; node data is 0 internally, -(index+1) for incoming
+            legs and +(index+1) for outgoing legs. Mutating the snapshot does not
+            change enumeration. Keep callbacks cheap: each snapshot is constructed
+            using Symbolica's Python Graph API.
+        cancellation_token : CancellationToken or None, optional
+            Shared token for cancelling a running generation task. Token cancellation
+            returns an incomplete result; Python signal-handler exceptions, including
+            KeyboardInterrupt, stop generation and propagate to the caller.
+        """
+    def generate_cross_section(self, *, loops: typing.Optional[builtins.int | tuple[builtins.int, builtins.int]] = None, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> GenerationResult:
+        r"""
+        Generate sewn forward diagrams and their physical final-state cuts.
+        The result contains diagrams and cut metadata, before phase-space integration.
+
+        Model Feynman rules are instantiated into each returned diagram: inspect
+        ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
+        individual factors, or ``diagram.numerator_expression()`` for their
+        combined numerator.
+
+        Examples
+        --------
+        >>> result = process.generate_cross_section(max_vertices=6)
+        >>> combined_numerator = result.diagrams[0].numerator_expression()
+
+        Parameters
+        ----------
+        loops : int or tuple[int, int] or None, optional
+            Override the process loop range for this call. Cross sections count
+            loops in the sewn forward graph; two-particle tree cuts need loops=1.
+        threads : int or None, optional
+            Number of worker threads; None uses the generator default.
+        max_vertices : int or None, optional
+            Maximum interaction vertices; None applies no override.
+        allow_self_loops : bool, optional
+            Permit propagators that start and end on the same vertex; defaults to True.
+        allow_zero_flow_edges : bool, optional
+            Permit internal edges with identically zero momentum flow.
+        graph_prefix : str or None, optional
+            Prefix assigned to generated diagram names.
+        particle_veto : sequence[Particle | str | int] or None, optional
+            Reject graphs containing these particles, model names, or signed PDG codes.
+        vertex_allow : sequence[VertexRule | str] or None, optional
+            Keep only graphs whose vertices use these model rules or names.
+        vertex_veto : sequence[VertexRule | str] or None, optional
+            Reject graphs containing these interaction vertices.
+        maximum_bridges : int, None, or Ellipsis, optional
+            Omission or Ellipsis requires one-particle irreducibility only for diagrams
+            with loops; tree exchanges are allowed, including in mixed loop ranges.
+            An integer limits internal bridges at every loop order; None disables it.
+        self_energy : SelfEnergyFilterOptions or None, optional
+            Reject self-energy subgraphs. Omission enables the default filter for
+            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+        tadpoles : TadpoleFilterOptions or None, optional
+            Reject tadpole subgraphs. Omission enables the default filter for
+            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+        zero_snails : SnailFilterOptions or None, optional
+            Reject zero-snail subgraphs. Omission enables the default filter for
+            non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+        coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+            Exact coupling powers or inclusive ranges; an upper None is unbounded.
+        fermion_loop_count_range : tuple[int, int] or None, optional
+            Inclusive range of closed fermion loops.
+        factorized_loop_topologies_count_range : tuple[int, int] or None, optional
+            Inclusive range of factorized loop-topology components. Defaults to
+            ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
+        blob_range : tuple[int, int] or None, optional
+            Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
+            cross sections; ``None`` disables the restriction.
+        spectator_range : tuple[int, int] or None, optional
+            Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
+            cross sections; ``None`` disables the restriction.
+        perturbative_orders : dict[str, int] or None, optional
+            Exact perturbative powers required for cross-section graphs.
+        sewn_tadpoles : bool or None, optional
+            Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
+        cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+            Coupling-order bounds applied independently within every cut amplitude.
+        cut_amplitude_loop_count_range : tuple[int, int] or None, optional
+            Inclusive combined loop count across both sides of every cut.
+        select_diagrams : sequence[FeynmanDiagram | str] or None, optional
+            Retain only these diagram objects, content-derived IDs, or finalized names.
+        veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
+            Remove these diagram objects, content-derived IDs, or finalized names.
+        loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
+            Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
+        numerator_prefactor : Expression or None, optional
+            Scalar multiplier retained on every finalized diagram numerator.
+        projector : Expression or None, optional
+            Override external-state contraction; S("1") disables external wavefunctions.
+        numerator_grouping : NumeratorGrouping or None, optional
+            Defaults to None: no numerator comparison or grouping. Diagrams still
+            contain numerators. Pass NumeratorGrouping to enable zero detection or grouping.
+        progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
+            Defaults to "auto": show progress when marimo.running_in_notebook()
+            is true, with stage, counts, and elapsed time. None disables progress.
+            Known totals use a progress bar; unknown totals use a spinner.
+            The display closes on completion, cancellation, or error.
+            Observe stage changes and coalesced counts on the calling Python thread.
+            Callback exceptions propagate and stop generation.
+        filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+            Prune partial topologies during enumeration. The first N vertices are
+            complete. False rejects only this search branch. Edge data is the base
+            particle PDG code; node data is 0 internally, -(index+1) for incoming
+            legs and +(index+1) for outgoing legs. Mutating the snapshot does not
+            change enumeration. Keep callbacks cheap: each snapshot is constructed
+            using Symbolica's Python Graph API.
+        cancellation_token : CancellationToken or None, optional
+            Shared token for cancelling a running generation task. Token cancellation
+            returns an incomplete result; Python signal-handler exceptions, including
+            KeyboardInterrupt, stop generation and propagate to the caller.
         """
 
 @typing.final
@@ -7502,58 +7543,6 @@ class Axis(enum.Enum):
     X = ...
     Y = ...
     Z = ...
-
-@typing.final
-class GenerationType(enum.Enum):
-    r"""
-    Select whether diagrams describe an amplitude or a squared cross section.
-
-    The generation type determines which graph construction and external-state
-    conventions are applied to a particle-physics process.
-
-    Examples
-    --------
-    >>> import symbolica.community.feynkit as fk
-    >>> kind = fk.GenerationType.AMPLITUDE
-    >>> kind.value
-    'amplitude'
-    """
-    AMPLITUDE = ...
-    CROSS_SECTION = ...
-
-    @property
-    def value(self) -> builtins.str:
-        r"""
-        Return the stable lowercase value used to identify the generation type.
-
-        Examples
-        --------
-        >>> fk.GenerationType.AMPLITUDE.value
-        'amplitude'
-        """
-    def __str__(self) -> builtins.str:
-        r"""
-        Format the generation type as its stable lowercase value.
-
-        Examples
-        --------
-        >>> str(fk.GenerationType.CROSS_SECTION)
-        'cross_section'
-        """
-    def __eq__(self, other: typing.Any) -> builtins.bool:
-        r"""
-        Compare with another generation type or its lowercase string value.
-
-        Examples
-        --------
-        >>> fk.GenerationType.AMPLITUDE == "amplitude"
-        True
-
-        Parameters
-        ----------
-        other : object
-            Generation type or string to compare with.
-        """
 
 @typing.final
 class JetAlgorithm(enum.Enum):

@@ -11,14 +11,13 @@ fk = importlib.import_module(
     f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
 )
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
-bubble = model.generate_diagrams(
-    ["scalar_0"],
-    ["scalar_0"],
-    loops=1,
-    max_vertices=2,
-    vertex_allow=["V_3_SCALAR_000"],
-    allow_self_loops=False,
-).diagrams[0]
+bubble = (
+    fk.Process(model, ["scalar_0"], ["scalar_0"])
+    .generate_diagrams(
+        loops=1, max_vertices=2, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=False
+    )
+    .diagrams[0]
+)
 mass = S("uv_test::mUV", is_scalar=True)
 original = bubble.to_json()
 expanded = bubble.uv_expansion(mass)
@@ -94,14 +93,13 @@ except fk.DiagramError:
 else:
     raise AssertionError("nonpositive dimension accepted")
 
-triangle = model.generate_diagrams(
-    ["scalar_0"],
-    ["scalar_0", "scalar_0"],
-    loops=1,
-    max_vertices=3,
-    vertex_allow=["V_3_SCALAR_000"],
-    allow_self_loops=False,
-).diagrams
+triangle = (
+    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
+    .generate_diagrams(
+        loops=1, max_vertices=3, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=False
+    )
+    .diagrams
+)
 triangle = next(
     d
     for d in triangle
@@ -114,15 +112,17 @@ assert triangle.uv_counterterm(mass, dimension=6) != 0
 # The HEP example's gluon, ghost and massive-quark bubbles retain their open
 # Lorentz/color interface; callers can contract a projector after expansion.
 sm = fk.Model(Path(__file__).parents[3] / "assets/models/json/sm/sm.json")
-diagrams = sm.generate_diagrams(
-    ["g"],
-    ["g"],
-    loops=1,
-    max_vertices=2,
-    coupling_orders={"QCD": 2, "QED": 0},
-    particle_veto=["c", "t", "s", "u", "d"],
-    allow_self_loops=False,
-).diagrams
+diagrams = (
+    fk.Process(sm, ["g"], ["g"])
+    .generate_diagrams(
+        loops=1,
+        max_vertices=2,
+        coupling_orders={"QCD": 2, "QED": 0},
+        particle_veto=["c", "t", "s", "u", "d"],
+        allow_self_loops=False,
+    )
+    .diagrams
+)
 assert len(diagrams) >= 3
 for diagram in diagrams:
     counterterm = diagram.uv_counterterm(mass)

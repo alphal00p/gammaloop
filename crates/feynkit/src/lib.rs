@@ -32,9 +32,7 @@ pub use feynkit_ufo as ufo;
 #[cfg(feature = "cff")]
 pub use feynkit_cff::{CffGenerator, CffOptions, CffResult};
 #[cfg(feature = "generator")]
-pub use feynkit_generator::{
-    GenerationOptions, GenerationResult, Generator, ParticleSelector, Process,
-};
+pub use feynkit_generator::{GenerationOptions, GenerationResult, ParticleSelector, Process};
 #[cfg(feature = "graph")]
 pub use feynkit_graph::{
     FeynmanDiagram, IntegralFamily, IntegralFamilyError, IntegralMapping, LoopMomentumBasis,
@@ -69,7 +67,6 @@ mod tests {
     fn facade_exposes_primary_types() {
         let _ = std::any::TypeId::of::<super::Model>();
         let _ = std::any::TypeId::of::<super::FeynmanDiagram>();
-        let _ = std::any::TypeId::of::<super::Generator>();
         let _ = std::any::TypeId::of::<super::CffGenerator>();
         let _ = std::any::TypeId::of::<super::FourMomentum<f64>>();
         let _ = std::any::TypeId::of::<super::TensorReducer>();

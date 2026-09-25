@@ -1,6 +1,6 @@
 use brotli::CompressorWriter;
 use feynkit_generator::{
-    GenerationFilter, GenerationOptions, Generator, NumeratorGrouping, Process, VertexSelector,
+    GenerationFilter, GenerationOptions, NumeratorGrouping, Process, VertexSelector,
 };
 use idenso::{dirac::GammaSimplifier, representations::Bispinor};
 use insta::assert_snapshot;
@@ -919,7 +919,7 @@ fn one_loop_lbl_concretize() {
 #[test]
 fn dumb_four_gluon() {
     let model = load_generic_model("sm");
-    let process = Process::amplitude(Vec::<i64>::new(), Vec::<i64>::new())
+    let process = Process::new(Vec::<i64>::new(), Vec::<i64>::new())
         .with_loop_count(2, 2)
         .unwrap();
     let options = GenerationOptions::default()
@@ -929,8 +929,7 @@ fn dumb_four_gluon() {
         .with_graph_filter(GenerationFilter::VertexAllow(vec![VertexSelector::Name(
             "V_37".to_owned(),
         )]));
-    let generated = Generator::new(Arc::new(model.clone()))
-        .generate(&process, &options)
+    let generated = process.generate_diagrams(Arc::new(model.clone()), &options)
         .unwrap();
     let diagram = generated
         .diagrams

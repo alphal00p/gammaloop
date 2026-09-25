@@ -51,12 +51,10 @@ for label, incoming, outgoing, loops in [
     ("vertex", 2, 1, 1),
     ("tree", 2, 1, 0),
 ]:
-    generated = model.generate_diagrams(
-        [particle] * incoming,
-        [particle] * outgoing,
-        loops=loops,
-        max_vertices=incoming + outgoing if loops else 1,
-        **options,
+    generated = hep.Process(
+        model, [particle] * incoming, [particle] * outgoing
+    ).generate_diagrams(
+        loops=loops, max_vertices=incoming + outgoing if loops else 1, **options
     )
     assert len(generated.diagrams) == 1
     diagram = generated.diagrams[0]
@@ -199,14 +197,9 @@ ct_model = hep.Model.from_json(json.dumps(specification))
 ct_diagrams, counterterms = {}, {}
 self_kinematics = hep.Kinematics().with_scalar_product(P(0), P(0), p2)
 for label, incoming, count in [("self_energy", 1, 2), ("vertex", 2, 1)]:
-    generated = ct_model.generate_diagrams(
-        [particle.name] * incoming,
-        [particle.name],
-        loops=0,
-        max_vertices=1,
-        coupling_orders={"CT": 1},
-        **options,
-    )
+    generated = hep.Process(
+        ct_model, [particle.name] * incoming, [particle.name]
+    ).generate_diagrams(loops=0, max_vertices=1, coupling_orders={"CT": 1}, **options)
     ct_diagrams[label] = generated.diagrams
     assert len(generated.diagrams) == count
     amplitude = zero

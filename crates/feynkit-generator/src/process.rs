@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt, ops::RangeInclusive, str::FromStr};
+use std::{collections::BTreeMap, fmt, ops::RangeInclusive, str::FromStr, sync::Arc};
 
 use feynkit_model::{Model, ModelError, ModelFingerprint, ParticleId, VertexRuleId};
 use serde::{Deserialize, Serialize};
@@ -198,6 +198,8 @@ pub enum GenerationType {
     CrossSection,
 }
 
+bincode::impl_borrow_decode!(GenerationType);
+
 impl fmt::Display for GenerationType {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
@@ -229,8 +231,8 @@ impl FromStr for GenerationType {
     bincode_trait_derive::Encode,
     bincode_trait_derive::Decode,
 )]
+/// External states and default generation settings, independent of calculation kind.
 pub struct Process {
-    generation_type: GenerationType,
     incoming: Vec<ParticleSelector>,
     outgoing_alternatives: Vec<Vec<ParticleSelector>>,
     loop_count: RangeInclusive<usize>,
@@ -263,26 +265,41 @@ pub enum ProcessError {
 }
 
 impl Process {
-    pub fn amplitude<I, O, PI, PO>(incoming: I, outgoing: O) -> Self
-    where
-        I: IntoIterator<Item = PI>,
-        O: IntoIterator<Item = PO>,
-        PI: Into<ParticleSelector>,
-        PO: Into<ParticleSelector>,
-    {
-        Self {
-            generation_type: GenerationType::Amplitude,
-            incoming: incoming.into_iter().map(Into::into).collect(),
-            outgoing_alternatives: vec![outgoing.into_iter().map(Into::into).collect()],
-            loop_count: 0..=0,
-            symmetrize_initial: false,
-            symmetrize_final: false,
-            symmetrize_left_right: false,
-            symmetrize_external_fermions: false,
-        }
+    /// Generate unsewn diagrams for this process.
+    pub fn generate_diagrams(
+        &self,
+        model: impl Into<Arc<Model>>,
+        options: &crate::GenerationOptions,
+    ) -> Result<crate::GenerationResult, crate::GenerationError> {
+        crate::generation::Generator::new(model).generate(self, options, GenerationType::Amplitude)
     }
 
-    pub fn cross_section<I, O, PI, PO>(incoming: I, outgoing: O) -> Self
+    /// Generate a coherent symbolic amplitude from complete, unsewn diagrams.
+    pub fn generate_amplitude(
+        &self,
+        model: impl Into<Arc<Model>>,
+        options: &crate::GenerationOptions,
+        amplitude_options: feynkit_amplitude::AmplitudeOptions,
+    ) -> Result<feynkit_amplitude::Amplitude, crate::GenerationError> {
+        self.generate_diagrams(model, options)?
+            .into_amplitude(amplitude_options)
+    }
+
+    /// Generate sewn forward diagrams with physical final-state cuts.
+    /// The loop range counts loops in the forward graph, not in each amplitude.
+    pub fn generate_cross_section(
+        &self,
+        model: impl Into<Arc<Model>>,
+        options: &crate::GenerationOptions,
+    ) -> Result<crate::GenerationResult, crate::GenerationError> {
+        crate::generation::Generator::new(model).generate(
+            self,
+            options,
+            GenerationType::CrossSection,
+        )
+    }
+
+    pub fn new<I, O, PI, PO>(incoming: I, outgoing: O) -> Self
     where
         I: IntoIterator<Item = PI>,
         O: IntoIterator<Item = PO>,
@@ -290,7 +307,6 @@ impl Process {
         PO: Into<ParticleSelector>,
     {
         Self {
-            generation_type: GenerationType::CrossSection,
             incoming: incoming.into_iter().map(Into::into).collect(),
             outgoing_alternatives: vec![outgoing.into_iter().map(Into::into).collect()],
             loop_count: 0..=0,
@@ -316,9 +332,6 @@ impl Process {
             .collect();
         if alternatives.is_empty() {
             return Err(ProcessError::MissingFinalState);
-        }
-        if self.generation_type == GenerationType::Amplitude && alternatives.len() != 1 {
-            return Err(ProcessError::MultipleAmplitudeFinalStates);
         }
         self.outgoing_alternatives = alternatives;
         Ok(self)
@@ -354,10 +367,6 @@ impl Process {
     pub fn symmetrize_external_fermions(mut self, enabled: bool) -> Self {
         self.symmetrize_external_fermions = enabled;
         self
-    }
-
-    pub fn generation_type(&self) -> GenerationType {
-        self.generation_type
     }
 
     pub fn incoming(&self) -> &[ParticleSelector] {
@@ -406,8 +415,9 @@ impl Process {
     pub fn covariant_cut_representatives(
         &self,
         model: &Model,
+        generation_type: GenerationType,
     ) -> Result<BTreeMap<i64, i64>, crate::GenerationError> {
-        if self.generation_type != GenerationType::CrossSection {
+        if generation_type != GenerationType::CrossSection {
             return Ok(BTreeMap::new());
         }
         let states = self.outgoing_pdgs(model)?;
@@ -424,8 +434,9 @@ impl Process {
         &self,
         model: &Model,
         options: &crate::GenerationOptions,
+        generation_type: GenerationType,
     ) -> Result<(), crate::GenerationError> {
-        let representatives = self.covariant_cut_representatives(model)?;
+        let representatives = self.covariant_cut_representatives(model, generation_type)?;
         for scope in [crate::FilterScope::Graph, crate::FilterScope::CutAmplitude] {
             for filter in options.filters(scope) {
                 if let crate::GenerationFilter::ParticleVeto(vetoes) = filter {
@@ -448,12 +459,13 @@ impl Process {
     pub fn covariant_cut_states(
         &self,
         model: &Model,
+        generation_type: GenerationType,
     ) -> Result<Vec<Vec<i64>>, crate::GenerationError> {
         let requested = self.outgoing_pdgs(model)?;
-        if self.generation_type != GenerationType::CrossSection {
+        if generation_type != GenerationType::CrossSection {
             return Ok(requested);
         }
-        let representatives = self.covariant_cut_representatives(model)?;
+        let representatives = self.covariant_cut_representatives(model, generation_type)?;
         for &member in requested.iter().flatten() {
             if let Some(&physical) = representatives.get(&member)
                 && member != physical
@@ -468,11 +480,6 @@ impl Process {
         if self.outgoing_alternatives.is_empty() {
             return Err(ProcessError::MissingFinalState);
         }
-        if self.generation_type == GenerationType::Amplitude
-            && self.outgoing_alternatives.len() != 1
-        {
-            return Err(ProcessError::MultipleAmplitudeFinalStates);
-        }
         Ok(())
     }
 }
@@ -483,7 +490,7 @@ mod tests {
 
     #[test]
     fn cp_symmetrization_is_an_explicit_serialized_opt_in() {
-        let process = Process::cross_section([25_i64], [25_i64, 25]);
+        let process = Process::new([25_i64], [25_i64, 25]);
         assert!(!process.symmetrizes_left_right());
         for enabled in [false, true] {
             let process = process.clone().symmetrize_left_right(enabled);
@@ -497,17 +504,17 @@ mod tests {
     #[test]
     fn accepts_vacuum_processes_and_empty_cross_section_alternatives() {
         assert!(
-            Process::cross_section(Vec::<i64>::new(), Vec::<i64>::new())
+            Process::new(Vec::<i64>::new(), Vec::<i64>::new())
                 .validate()
                 .is_ok()
         );
         assert!(
-            Process::cross_section([1_i64], [1_i64])
+            Process::new([1_i64], [1_i64])
                 .with_final_state_alternatives([Vec::<i64>::new(), vec![1]])
                 .is_ok()
         );
         assert!(
-            Process::amplitude(Vec::<i64>::new(), Vec::<i64>::new())
+            Process::new(Vec::<i64>::new(), Vec::<i64>::new())
                 .validate()
                 .is_ok()
         );

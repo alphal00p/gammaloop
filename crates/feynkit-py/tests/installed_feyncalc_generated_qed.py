@@ -12,12 +12,11 @@ from symbolica.community.spenso import TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 # A sewn tree x tree graph has one loop and its two muon lines form the cut.
-process = fk.Process.cross_section([11, -11], [13, -13]).with_loop_count(1, 1)
-result = fk.Generator(model).generate(
-    process,
+process = fk.Process(model, [11, -11], [13, -13]).with_loop_count(1, 1)
+result = process.generate_cross_section(
     max_vertices=4,
     maximum_bridges=None,
-    vertex_allow=["V_98", "V_99"],  # electron-photon and muon-photon vertices
+    vertex_allow=["V_98", "V_99"],
     numerator_grouping=None,
     progress=None,
 )

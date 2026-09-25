@@ -18,9 +18,7 @@ vertices = [
     and any(p in ("e-", "e+", "mu-", "mu+") for p in v.particles)
 ]
 assert len(vertices) == 4
-generated = model.generate_diagrams(
-    [13],
-    [11, -12, 14],
+generated = hep.Process(model, [13], [11, -12, 14]).generate_diagrams(
     max_vertices=2,
     maximum_bridges=None,
     vertex_allow=vertices,

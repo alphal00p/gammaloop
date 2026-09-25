@@ -16,14 +16,14 @@ fk = importlib.import_module(
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagram = next(
     candidate
-    for candidate in model.generate_diagrams(
-        ["scalar_0"],
-        ["scalar_0", "scalar_0"],
+    for candidate in fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
+    .generate_diagrams(
         loops=1,
         max_vertices=3,
         vertex_allow=["V_3_SCALAR_000"],
         allow_self_loops=True,
-    ).diagrams
+    )
+    .diagrams
     if len(
         {
             edge.source if edge.source is not None else edge.target
@@ -95,15 +95,13 @@ print("installed FeynmanDiagram and Subgraph SVG interaction checks passed")
 # Opening initial-state connections changes only the drawing. Both displayed
 # stubs must still inspect and select the same edge in the canonical diagram.
 
-cross_section = model.generate_diagrams(
-    ["scalar_0"],
-    ["scalar_0", "scalar_0"],
-    kind="cross_section",
-    loops=1,
-    max_vertices=2,
-    vertex_allow=["V_3_SCALAR_000"],
-    allow_self_loops=True,
-).diagrams[0]
+cross_section = (
+    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
+    .generate_cross_section(
+        loops=1, max_vertices=2, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=True
+    )
+    .diagrams[0]
+)
 snapshot = cross_section.to_json()
 graph = cross_section.to_linnet()
 edges = {edge.id: edge for edge in cross_section.edges}

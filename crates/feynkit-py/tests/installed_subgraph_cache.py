@@ -12,14 +12,13 @@ fk = importlib.import_module(
     f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
 )
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
-diagram = model.generate_diagrams(
-    ["scalar_0"],
-    ["scalar_0", "scalar_0"],
-    loops=1,
-    max_vertices=3,
-    vertex_allow=["V_3_SCALAR_000"],
-    allow_self_loops=True,
-).diagrams[0]
+diagram = (
+    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
+    .generate_diagrams(
+        loops=1, max_vertices=3, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=True
+    )
+    .diagrams[0]
+)
 snapshot = diagram.to_json()
 
 for first_caller in ("parent", "view"):
@@ -45,15 +44,13 @@ for first_caller in ("parent", "view"):
         raise AssertionError("a stale canonical selection was accepted after refresh")
 
 # Native cut factories can create views before any graph has been exported.
-cross_section = model.generate_diagrams(
-    ["scalar_0"],
-    ["scalar_0", "scalar_0"],
-    kind="cross_section",
-    loops=1,
-    max_vertices=2,
-    vertex_allow=["V_3_SCALAR_000"],
-    allow_self_loops=True,
-).diagrams[0]
+cross_section = (
+    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
+    .generate_cross_section(
+        loops=1, max_vertices=2, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=True
+    )
+    .diagrams[0]
+)
 side = cross_section.cuts[0].left.subgraph
 original = side.original
 assert side.to_linnet() is cross_section.to_linnet() is original.to_linnet()

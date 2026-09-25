@@ -559,14 +559,14 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
 
 #[test]
 fn native_amplitude_runtime_enrichment_preserves_every_graph_coordinate() {
-    use feynkit_generator::{GenerationOptions, Generator, Process};
+    use feynkit_generator::{GenerationOptions, Process};
     test_initialise().unwrap();
     let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
-    let generated = Generator::new(model)
-        .generate(
-            &Process::amplitude(["scalar_1"], ["scalar_1"])
-                .with_loop_count(1, 1)
-                .unwrap(),
+    let generated = Process::new(["scalar_1"], ["scalar_1"])
+        .with_loop_count(1, 1)
+        .unwrap()
+        .generate_diagrams(
+            model,
             &GenerationOptions::default().threads(1).max_vertices(2),
         )
         .unwrap();
@@ -578,14 +578,14 @@ fn native_amplitude_runtime_enrichment_preserves_every_graph_coordinate() {
 
 #[test]
 fn native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_flow() {
-    use feynkit_generator::{GenerationOptions, Generator, Process};
+    use feynkit_generator::{GenerationOptions, Process};
     test_initialise().unwrap();
     let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
-    let generated = Generator::new(model)
-        .generate(
-            &Process::cross_section(["scalar_1"], ["scalar_1", "scalar_1"])
-                .with_loop_count(1, 1)
-                .unwrap(),
+    let generated = Process::new(["scalar_1"], ["scalar_1", "scalar_1"])
+        .with_loop_count(1, 1)
+        .unwrap()
+        .generate_cross_section(
+            model,
             &GenerationOptions::default().threads(1).max_vertices(2),
         )
         .unwrap();
@@ -611,7 +611,7 @@ fn native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_
 
 #[test]
 fn native_compton_runtime_enrichment_preserves_sewn_fermions() {
-    use feynkit_generator::{GenerationFilter, GenerationOptions, Generator, Process};
+    use feynkit_generator::{GenerationFilter, GenerationOptions, Process};
     test_initialise().unwrap();
     let model = std::sync::Arc::new(
         feynkit_model::Model::from_json(include_str!(
@@ -619,13 +619,13 @@ fn native_compton_runtime_enrichment_preserves_sewn_fermions() {
         ))
         .unwrap(),
     );
-    let generator = Generator::new(model);
+
     for pdg in [11_i64, -11] {
-        let generated = generator
-            .generate(
-                &Process::cross_section([pdg, 22], [pdg, 22])
-                    .with_loop_count(1, 1)
-                    .unwrap(),
+        let generated = Process::new([pdg, 22], [pdg, 22])
+            .with_loop_count(1, 1)
+            .unwrap()
+            .generate_cross_section(
+                model.clone(),
                 &GenerationOptions::default()
                     .threads(1)
                     .max_vertices(4)

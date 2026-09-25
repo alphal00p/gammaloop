@@ -11,9 +11,8 @@ from symbolica.community import hep as fk
 from symbolica.community.spenso import Representation, TensorExpression, chain
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
-process = fk.Process.cross_section([11, -11], [13, -13]).with_loop_count(1, 1)
-result = fk.Generator(model).generate(
-    process,
+process = fk.Process(model, [11, -11], [13, -13]).with_loop_count(1, 1)
+result = process.generate_cross_section(
     max_vertices=4,
     maximum_bridges=None,
     vertex_allow=["V_98", "V_99"],

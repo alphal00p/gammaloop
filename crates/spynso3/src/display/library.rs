@@ -50,7 +50,7 @@ impl Recipe {
         let mut counters = HashMap::new();
         let mut indices = Vec::new();
         let mut dimensions = Vec::new();
-        for slot in tensor.descriptor.interface.logical_slots() {
+        for slot in tensor.descriptor.structure.logical_slots() {
             let rep = slot.rep();
             let base = rep.rep.base();
             let dimension = match rep.dim {
@@ -182,7 +182,7 @@ pub(crate) fn to_html(
         let svg = structured_to_svg(py, &tensor.descriptor, settings, None)?;
         let shape = tensor
             .descriptor
-            .interface
+            .structure
             .logical_slots()
             .into_iter()
             .map(|slot| slot.rep().dim.to_string())

@@ -273,7 +273,7 @@ impl SpensoTensorStructure {
             .interface
             .logical_slots()
             .iter()
-            .map(|slot| crate::composition::port_atom(*slot).to_string())
+            .map(|slot| idenso::tensor::composition::port_atom(*slot).to_string())
             .collect::<Vec<_>>()
             .join(", ");
         let name = self

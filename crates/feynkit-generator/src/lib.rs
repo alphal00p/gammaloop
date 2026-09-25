@@ -11,7 +11,7 @@ use feynkit_graph::momentum_symbol;
 
 pub use generation::{
     DiagramGroup, EdgeColor, ExternalNode, GenerationError, GenerationReport, GenerationResult,
-    Generator, GroupMember, NodeColor, UnresolvedCutContent, unresolved_cut_content,
+    GroupMember, NodeColor, UnresolvedCutContent, unresolved_cut_content,
 };
 pub use grouping::GroupingError;
 pub use options::{

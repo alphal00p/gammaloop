@@ -2034,6 +2034,37 @@ those are isolated emission times. The updated
 and `end_to_end_gap_checkpoint` archive entry retain the full inventory,
 counterexamples, measured regressions and timing limits.
 
+=== Shared symbolic tensor ownership
+
+Idenso's `SymbolicTensor<S>` owns the expression together with its structure.
+Its default storage remains `OrderedStructure<LibraryRep, AbstractIndex>` for
+explicit symbolic networks. Positional composition uses the same type with
+`PartialStructure`: this retains the canonical-to-logical layout and
+occurrence-local unresolved ports. The former Spynso `StructuredAtom` has been
+removed. A bare ordered structure cannot replace its logical layout; unresolved
+port identifiers are metadata, not serialized abstract indices.
+
+Composition, contraction, index substitution, chain and trace assembly, fast
+structure inference, and result-interface validation now live beside that
+existing Idenso owner. Spynso converts Python arguments, dispatches operations,
+translates errors, and wraps results and presentation metadata. This follows
+the existing dependency direction: Idenso uses Spenso's structure machinery,
+and Spynso uses Idenso. Mapping a symbolic tensor's structure retains its
+expression and classification flags instead of discarding them into a shell.
+
+Known interfaces survive algebra when the operation's invariants establish
+their validity. A zero retains its declared tensor shape, and unresolved ports
+remain distinct and ordered. Callback-sensitive rewrites check the resulting
+interface, including the metric counterexample above. External slots alone
+cannot establish internal index multiplicity, so necessary index checks remain.
+
+Port rewriting borrows unchanged branches, including identity substitutions.
+Every sum branch still independently accounts for the requested ports; an
+index missing from one summand is an error. Genuine relabeling uses Symbolica's
+bulk sum and product builders when arithmetic is exact and callbacks cannot be
+reordered. Rounded coefficients and callback-sensitive expressions retain their
+existing evaluation order.
+
 == Run locally
 
 Use an interpreter containing the combined Symbolica community host with Spenso and Idenso,

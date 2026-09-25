@@ -1696,6 +1696,16 @@ class TensorExpression(Expression):
         Custom settings control the index encoding, source filters, and output tags.
         """
     @staticmethod
+    def unsafe_from_expression(expression: _ScalarInput, *, structure: TensorStructure) -> TensorExpression:
+        r"""
+        Construct without tensor inference, validation, or contraction normalization.
+
+        Copy the supplied TensorStructure exactly, including logical slot order,
+        identity, and arguments. The caller must ensure it matches the expression;
+        subsequent tensor operations trust it. Prefer TensorExpression(expression)
+        when that correspondence has not already been established.
+        """
+    @staticmethod
     def g(rep: Representation, other: typing.Optional[Representation] = None) -> TensorExpression:
         r"""
         Create an unresolved metric with ports in `rep` and `other`.

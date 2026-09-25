@@ -38,12 +38,8 @@ for label, pdgs, masses, ckm_name in [
     ("Top", (6, 5, 24), (mt, mb, mw), "CKM3x3"),
     ("Antitop", (-6, -5, -24), (mt, mb, mw), "CKM3x3"),
 ]:
-    generated = model.generate_diagrams(
-        [pdgs[0]],
-        list(pdgs[1:]),
-        max_vertices=1,
-        numerator_grouping=None,
-        progress=None,
+    generated = hep.Process(model, [pdgs[0]], list(pdgs[1:])).generate_diagrams(
+        max_vertices=1, numerator_grouping=None, progress=None
     )
     assert len(generated.diagrams) == 1
     diagram = generated.diagrams[0]

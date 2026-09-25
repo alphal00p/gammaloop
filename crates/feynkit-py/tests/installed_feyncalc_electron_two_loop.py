@@ -74,9 +74,9 @@ reducer = (
 # Native amplitudes additionally order external fields by leg ID: [0,1] rather
 # than the conventional kernel order [antifermion,fermion]=[1,0].
 one_loop = (
-    hep.Generator(model)
-    .generate(
-        hep.Process.amplitude([11], [11]).with_loop_count(1, 1),
+    hep.Process(model, [11], [11])
+    .with_loop_count(1, 1)
+    .generate_diagrams(
         max_vertices=2,
         maximum_bridges=0,
         vertex_allow=["V_98"],
@@ -136,16 +136,19 @@ assert abs(complex(oneloop.B0(-1.0, 0.0, 0.0, 1.0)[1]) - 1) < 1e-12
 # Thus the normalized one-loop kernel has +i*a4*slash(p)/eps and deltaZpsi=-1/eps.
 zpsi_one = -one / eps
 
-result = hep.Generator(model).generate(
-    hep.Process.amplitude([11], [11]).with_loop_count(2, 2),
-    max_vertices=4,
-    maximum_bridges=0,
-    vertex_allow=["V_98"],
-    self_energy=None,
-    tadpoles=None,
-    zero_snails=None,
-    numerator_grouping=None,
-    progress=None,
+result = (
+    hep.Process(model, [11], [11])
+    .with_loop_count(2, 2)
+    .generate_diagrams(
+        max_vertices=4,
+        maximum_bridges=0,
+        vertex_allow=["V_98"],
+        self_energy=None,
+        tadpoles=None,
+        zero_snails=None,
+        numerator_grouping=None,
+        progress=None,
+    )
 )
 assert len(result.diagrams) == 3
 targets, diagram_integrals, flavor_weights = set(), [], []

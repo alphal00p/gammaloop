@@ -151,8 +151,10 @@ impl SpensoBroadcastFunction {
         }
         match TensorOperand::extract(arg)? {
             TensorOperand::Structured(value) => {
-                let atom = FunctionBuilder::new(self.name).add_arg(value.atom).finish();
-                TensorExpression::from_known_parts(py, atom, value.interface, None, Vec::new())
+                let atom = FunctionBuilder::new(self.name)
+                    .add_arg(value.expression)
+                    .finish();
+                TensorExpression::from_known_parts(py, atom, value.structure, None, Vec::new())
                     .map(Py::into_any)
             }
             TensorOperand::Scalar(arg) => {

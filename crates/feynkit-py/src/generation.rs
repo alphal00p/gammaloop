@@ -7,8 +7,8 @@ use std::{
 use feynkit_generator::{
     CancellationToken, DiagramGroup, EdgeColor, FilterScope, GenerationControl, GenerationFilter,
     GenerationOptions, GenerationProgress, GenerationReport, GenerationResult, GenerationType,
-    Generator, GraphGroupingOptions, GroupMember, NodeColor, NumeratorGrouping, ParticleSelector,
-    Process, SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions,
+    GraphGroupingOptions, GroupMember, NodeColor, NumeratorGrouping, ParticleSelector, Process,
+    SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions,
     VertexSelector,
 };
 use feynkit_graph::{DiagramId, EdgeId};
@@ -23,104 +23,19 @@ use pyo3::{
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
     PyStubType, TypeInfo,
-    derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods},
+    derive::{gen_stub_pyclass, gen_stub_pymethods},
 };
 
 use crate::{
+    amplitude::PyAmplitude,
     error,
     graph::PyFeynmanDiagram,
     model::{PyModel, PyParticle, PyVertexRule},
 };
 use symbolica::{
-    api::python::{PythonExpression, PythonGraph},
+    api::python::{ConvertibleToExpression, PythonExpression, PythonGraph},
     graph::Graph,
 };
-
-/// Select whether diagrams describe an amplitude or a squared cross section.
-///
-/// The generation type determines which graph construction and external-state
-/// conventions are applied to a particle-physics process.
-///
-/// Examples
-/// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> kind = fk.GenerationType.AMPLITUDE
-/// >>> kind.value
-/// 'amplitude'
-///
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
-#[pyclass(
-    name = "GenerationType",
-    module = "symbolica.community.feynkit",
-    rename_all = "SCREAMING_SNAKE_CASE",
-    frozen,
-    from_py_object
-)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PyGenerationType {
-    Amplitude,
-    CrossSection,
-}
-
-impl From<GenerationType> for PyGenerationType {
-    fn from(value: GenerationType) -> Self {
-        match value {
-            GenerationType::Amplitude => Self::Amplitude,
-            GenerationType::CrossSection => Self::CrossSection,
-        }
-    }
-}
-
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[pymethods]
-impl PyGenerationType {
-    /// Return the stable lowercase value used to identify the generation type.
-    ///
-    /// Examples
-    /// --------
-    /// >>> fk.GenerationType.AMPLITUDE.value
-    /// 'amplitude'
-    ///
-    #[getter]
-    fn value(&self) -> &'static str {
-        match self {
-            Self::Amplitude => "amplitude",
-            Self::CrossSection => "cross_section",
-        }
-    }
-
-    /// Format the generation type as its stable lowercase value.
-    ///
-    /// Examples
-    /// --------
-    /// >>> str(fk.GenerationType.CROSS_SECTION)
-    /// 'cross_section'
-    ///
-    fn __str__(&self) -> &'static str {
-        self.value()
-    }
-
-    /// Compare with another generation type or its lowercase string value.
-    ///
-    /// Examples
-    /// --------
-    /// >>> fk.GenerationType.AMPLITUDE == "amplitude"
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// other : object
-    ///     Generation type or string to compare with.
-    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
-        if let Ok(other) = other.cast::<Self>() {
-            self == other.get()
-        } else {
-            other
-                .extract::<String>()
-                .is_ok_and(|other| self.value() == other)
-        }
-    }
-}
 
 /// A model-independent way to identify an external particle.
 ///
@@ -495,7 +410,7 @@ impl<const UNBOUNDED: bool> PyStubType for OrderRangeInput<UNBOUNDED> {
 /// Examples
 /// --------
 /// >>> import symbolica.community.feynkit as fk
-/// >>> process = fk.Process.amplitude(["e-", "e+"], ["mu-", "mu+"])
+/// >>> process = fk.Process(model, ["e-", "e+"], ["mu-", "mu+"])
 /// >>> one_loop = process.with_loop_count(1, 1)
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -508,56 +423,84 @@ impl<const UNBOUNDED: bool> PyStubType for OrderRangeInput<UNBOUNDED> {
 #[derive(Clone)]
 pub struct PyProcess {
     pub(crate) inner: Process,
+    model: Arc<Model>,
+    final_state_symmetry: Option<bool>,
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyProcess {
-    /// Define an amplitude with ordered incoming and outgoing particles.
+    /// Define a model-bound process independently of what will be generated.
     ///
     /// Examples
     /// --------
-    /// >>> electron = model.particle_by_pdg(11)
-    /// >>> positron = model.particle_by_pdg(-11)
-    /// >>> process = fk.Process.amplitude([electron, positron], [22])
+    /// >>> process = fk.Process(model, ["e-", "e+"], ["a", "a"])
+    /// >>> amplitude = process.generate_amplitude()
     ///
     /// Parameters
     /// ----------
+    /// model : Model
+    ///     Particle model supplying the Feynman rules.
     /// incoming : sequence[Particle | ParticleSelector | str | int]
-    ///     Incoming particles in external-leg order.
+    ///     Ordered incoming external states.
     /// outgoing : sequence[Particle | ParticleSelector | str | int]
-    ///     Outgoing particles in external-leg order.
-    #[staticmethod]
-    fn amplitude(incoming: Vec<SelectorInput>, outgoing: Vec<SelectorInput>) -> Self {
-        Self {
-            inner: Process::amplitude(
-                incoming.into_iter().map(ParticleSelector::from),
-                outgoing.into_iter().map(ParticleSelector::from),
-            ),
-        }
+    ///     Ordered outgoing external states.
+    /// loops : int or tuple[int, int], optional
+    ///     Default exact loop order or inclusive range, initially zero.
+    #[new]
+    #[pyo3(signature = (model, incoming, outgoing, *, loops=OrderRangeInput::default()))]
+    fn new(
+        model: &PyModel,
+        incoming: Vec<SelectorInput>,
+        outgoing: Vec<SelectorInput>,
+        loops: OrderRangeInput,
+    ) -> PyResult<Self> {
+        let inner = Process::new(
+            incoming.into_iter().map(ParticleSelector::from),
+            outgoing.into_iter().map(ParticleSelector::from),
+        )
+        .with_loop_count(loops.minimum, loops.maximum.unwrap())
+        .map_err(error::process)?;
+        Ok(Self {
+            inner,
+            model: model.inner.clone(),
+            final_state_symmetry: None,
+        })
     }
 
-    /// Define a cross section with ordered incoming and outgoing particles.
+    /// The particle model supplying this process's Feynman rules.
+    #[getter]
+    fn model(&self) -> PyModel {
+        self.model.clone().into()
+    }
+
+    /// Format the external states, model, and default loop range.
     ///
     /// Examples
     /// --------
-    /// >>> process = fk.Process.cross_section([11, -11], [13, -13])
-    ///
-    /// Parameters
-    /// ----------
-    /// incoming : sequence[Particle | ParticleSelector | str | int]
-    ///     Incoming particles in external-leg order.
-    /// outgoing : sequence[Particle | ParticleSelector | str | int]
-    ///     Outgoing particles in external-leg order.
-    #[staticmethod]
-    fn cross_section(incoming: Vec<SelectorInput>, outgoing: Vec<SelectorInput>) -> Self {
-        Self {
-            inner: Process::cross_section(
-                incoming.into_iter().map(ParticleSelector::from),
-                outgoing.into_iter().map(ParticleSelector::from),
-            )
-            .symmetrize_final(true),
-        }
+    /// >>> repr(process)
+    /// 'Process("sm": [e-, e+] -> [a, a]; loops=(0, 0))'
+    fn __repr__(&self) -> String {
+        let names = |state: &[ParticleSelector]| {
+            state
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        format!(
+            "Process({:?}: [{}] -> {}; loops={:?})",
+            self.model.name(),
+            names(self.inner.incoming()),
+            self.inner
+                .outgoing_alternatives()
+                .iter()
+                .map(|state| format!("[{}]", names(state)))
+                .collect::<Vec<_>>()
+                .join(" | "),
+            self.loop_count()
+        )
     }
 
     /// Return a process restricted to an inclusive loop-count range.
@@ -576,17 +519,20 @@ impl PyProcess {
         self.inner
             .clone()
             .with_loop_count(minimum, maximum)
-            .map(|inner| Self { inner })
+            .map(|inner| Self {
+                inner,
+                ..self.clone()
+            })
             .map_err(error::process)
     }
 
     /// Return a process accepting any of the supplied final states.
-    /// Amplitudes accept exactly one alternative; cross sections may include an empty
+    /// Generating amplitudes requires exactly one alternative; cross sections may include an empty
     /// alternative for a vacuum final state.
     ///
     /// Examples
     /// --------
-    /// >>> process = fk.Process.cross_section([11, -11], [22, 22])
+    /// >>> process = fk.Process(model, [11, -11], [22, 22])
     /// >>> inclusive = process.with_final_state_alternatives([[22, 22], [13, -13]])
     ///
     /// Parameters
@@ -604,7 +550,10 @@ impl PyProcess {
                     .into_iter()
                     .map(|state| state.into_iter().map(ParticleSelector::from)),
             )
-            .map(|inner| Self { inner })
+            .map(|inner| Self {
+                inner,
+                ..self.clone()
+            })
             .map_err(error::process)
     }
 
@@ -640,19 +589,627 @@ impl PyProcess {
                 .symmetrize_final(final_state)
                 .symmetrize_left_right(left_right)
                 .symmetrize_external_fermions(external_fermions),
+            final_state_symmetry: Some(final_state),
+            ..self.clone()
         }
     }
 
-    /// Return whether this process generates amplitudes or cross sections.
+    /// Generate and optionally group all diagrams matching a process.
+    ///
+    /// Model Feynman rules are instantiated into each returned diagram: inspect
+    /// ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
+    /// individual factors, or ``diagram.numerator_expression()`` for their
+    /// combined numerator.
     ///
     /// Examples
     /// --------
-    /// >>> process.generation_type == fk.GenerationType.AMPLITUDE
-    /// True
+    /// >>> result = process.generate_diagrams(max_vertices=6)
+    /// >>> combined_numerator = result.diagrams[0].numerator_expression()
     ///
-    #[getter]
-    fn generation_type(&self) -> PyGenerationType {
-        self.inner.generation_type().into()
+    /// Parameters
+    /// ----------
+    /// loops : int or tuple[int, int] or None, optional
+    ///     Override the process loop range for this call. Cross sections count
+    ///     loops in the sewn forward graph; two-particle tree cuts need loops=1.
+    /// threads : int or None, optional
+    ///     Number of worker threads; None uses the generator default.
+    /// max_vertices : int or None, optional
+    ///     Maximum interaction vertices; None applies no override.
+    /// allow_self_loops : bool, optional
+    ///     Permit propagators that start and end on the same vertex; defaults to True.
+    /// allow_zero_flow_edges : bool, optional
+    ///     Permit internal edges with identically zero momentum flow.
+    /// graph_prefix : str or None, optional
+    ///     Prefix assigned to generated diagram names.
+    /// particle_veto : sequence[Particle | str | int] or None, optional
+    ///     Reject graphs containing these particles, model names, or signed PDG codes.
+    /// vertex_allow : sequence[VertexRule | str] or None, optional
+    ///     Keep only graphs whose vertices use these model rules or names.
+    /// vertex_veto : sequence[VertexRule | str] or None, optional
+    ///     Reject graphs containing these interaction vertices.
+    /// maximum_bridges : int, None, or Ellipsis, optional
+    ///     Omission or Ellipsis requires one-particle irreducibility only for diagrams
+    ///     with loops; tree exchanges are allowed, including in mixed loop ranges.
+    ///     An integer limits internal bridges at every loop order; None disables it.
+    /// self_energy : SelfEnergyFilterOptions or None, optional
+    ///     Reject self-energy subgraphs. Omission enables the default filter for
+    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+    /// tadpoles : TadpoleFilterOptions or None, optional
+    ///     Reject tadpole subgraphs. Omission enables the default filter for
+    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+    /// zero_snails : SnailFilterOptions or None, optional
+    ///     Reject zero-snail subgraphs. Omission enables the default filter for
+    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+    /// coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+    ///     Exact coupling powers or inclusive ranges; an upper None is unbounded.
+    /// fermion_loop_count_range : tuple[int, int] or None, optional
+    ///     Inclusive range of closed fermion loops.
+    /// factorized_loop_topologies_count_range : tuple[int, int] or None, optional
+    ///     Inclusive range of factorized loop-topology components. Defaults to
+    ///     ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
+    /// blob_range : tuple[int, int] or None, optional
+    ///     Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
+    ///     cross sections; ``None`` disables the restriction.
+    /// spectator_range : tuple[int, int] or None, optional
+    ///     Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
+    ///     cross sections; ``None`` disables the restriction.
+    /// perturbative_orders : dict[str, int] or None, optional
+    ///     Exact perturbative powers required for cross-section graphs.
+    /// sewn_tadpoles : bool or None, optional
+    ///     Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
+    /// cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+    ///     Coupling-order bounds applied independently within every cut amplitude.
+    /// cut_amplitude_loop_count_range : tuple[int, int] or None, optional
+    ///     Inclusive combined loop count across both sides of every cut.
+    /// select_diagrams : sequence[FeynmanDiagram | str] or None, optional
+    ///     Retain only these diagram objects, content-derived IDs, or finalized names.
+    /// veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
+    ///     Remove these diagram objects, content-derived IDs, or finalized names.
+    /// loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
+    ///     Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
+    /// numerator_prefactor : Expression or None, optional
+    ///     Scalar multiplier retained on every finalized diagram numerator.
+    /// projector : Expression or None, optional
+    ///     Override external-state contraction; S("1") disables external wavefunctions.
+    /// numerator_grouping : NumeratorGrouping or None, optional
+    ///     Defaults to None: no numerator comparison or grouping. Diagrams still
+    ///     contain numerators. Pass NumeratorGrouping to enable zero detection or grouping.
+    /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
+    ///     Defaults to "auto": show progress when marimo.running_in_notebook()
+    ///     is true, with stage, counts, and elapsed time. None disables progress.
+    ///     Known totals use a progress bar; unknown totals use a spinner.
+    ///     The display closes on completion, cancellation, or error.
+    ///     Observe stage changes and coalesced counts on the calling Python thread.
+    ///     Callback exceptions propagate and stop generation.
+    /// filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+    ///     Prune partial topologies during enumeration. The first N vertices are
+    ///     complete. False rejects only this search branch. Edge data is the base
+    ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
+    ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
+    ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
+    ///     using Symbolica's Python Graph API.
+    /// cancellation_token : CancellationToken or None, optional
+    ///     Shared token for cancelling a running generation task. Token cancellation
+    ///     returns an incomplete result; Python signal-handler exceptions, including
+    ///     KeyboardInterrupt, stop generation and propagate to the caller.
+    #[pyo3(signature = (*, loops=None, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(
+        text_signature = "($self, *, loops=None, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
+    )]
+    #[allow(clippy::too_many_arguments)]
+    fn generate_diagrams(
+        &self,
+        py: Python<'_>,
+        loops: Option<OrderRangeInput>,
+        threads: Option<usize>,
+        max_vertices: Option<usize>,
+        allow_self_loops: bool,
+        allow_zero_flow_edges: bool,
+        graph_prefix: Option<String>,
+        particle_veto: Option<Vec<ParticleInput>>,
+        vertex_allow: Option<Vec<VertexInput>>,
+        vertex_veto: Option<Vec<VertexInput>>,
+        #[gen_stub(override_type(type_repr = "int | None | types.EllipsisType"))]
+        maximum_bridges: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "SelfEnergyFilterOptions | types.EllipsisType | None", imports = ("types")))]
+        self_energy: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "TadpoleFilterOptions | types.EllipsisType | None", imports = ("types")))]
+        tadpoles: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "SnailFilterOptions | types.EllipsisType | None", imports = ("types")))]
+        zero_snails: Option<Py<PyAny>>,
+        coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
+        fermion_loop_count_range: Option<(usize, usize)>,
+        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
+        factorized_loop_topologies_count_range: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
+        blob_range: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
+        spectator_range: Option<Py<PyAny>>,
+        perturbative_orders: Option<BTreeMap<String, usize>>,
+        sewn_tadpoles: Option<bool>,
+        cut_amplitude_coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
+        cut_amplitude_loop_count_range: Option<(usize, usize)>,
+        select_diagrams: Option<Vec<DiagramSelectionInput>>,
+        veto_diagrams: Option<Vec<DiagramSelectionInput>>,
+        loop_momentum_bases: Option<Vec<(DiagramSelectionInput, Vec<usize>)>>,
+        numerator_prefactor: Option<PythonExpression>,
+        projector: Option<PythonExpression>,
+        numerator_grouping: Option<PyNumeratorGrouping>,
+        cancellation_token: Option<PyCancellationToken>,
+        #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
+        progress: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.core.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.core")))]
+        filter: Option<Py<PyAny>>,
+    ) -> PyResult<PyGenerationResult> {
+        let generation_type = GenerationType::Amplitude;
+        let mut process = self.inner.clone().symmetrize_final(
+            self.final_state_symmetry
+                .unwrap_or(generation_type == GenerationType::CrossSection),
+        );
+        if let Some(loops) = loops {
+            process = process
+                .with_loop_count(loops.minimum, loops.maximum.unwrap())
+                .map_err(error::process)?;
+        }
+        let options = GenerationSettings::new(
+            py,
+            &process,
+            generation_type,
+            threads,
+            max_vertices,
+            allow_self_loops,
+            allow_zero_flow_edges,
+            graph_prefix,
+            particle_veto,
+            vertex_allow,
+            vertex_veto,
+            maximum_bridges,
+            self_energy,
+            tadpoles,
+            zero_snails,
+            coupling_orders,
+            fermion_loop_count_range,
+            factorized_loop_topologies_count_range,
+            blob_range,
+            spectator_range,
+            perturbative_orders,
+            sewn_tadpoles,
+            cut_amplitude_coupling_orders,
+            cut_amplitude_loop_count_range,
+            select_diagrams,
+            veto_diagrams,
+            loop_momentum_bases,
+            numerator_prefactor,
+            projector,
+            numerator_grouping,
+            cancellation_token,
+        )?
+        .inner;
+        run_generation(
+            py,
+            self.model.clone(),
+            process,
+            generation_type,
+            options,
+            progress,
+            filter,
+        )
+    }
+    /// Generate a coherent symbolic amplitude for this process.
+    /// Cancelled or empty generation cannot produce an amplitude.
+    ///
+    /// Model Feynman rules are instantiated into each returned diagram: inspect
+    /// ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
+    /// individual factors, or ``diagram.numerator_expression()`` for their
+    /// combined numerator.
+    ///
+    /// Examples
+    /// --------
+    /// >>> result = process.generate_amplitude(max_vertices=6)
+    /// >>> operator = result.expression()
+    ///
+    /// Parameters
+    /// ----------
+    /// dimension : int or Expression, optional
+    ///     Lorentz dimension of the amplitude; default four.
+    /// real : list[Expression] or None, optional
+    ///     Additional scalars assumed real under conjugation.
+    /// loops : int or tuple[int, int] or None, optional
+    ///     Override the process loop range for this call. Cross sections count
+    ///     loops in the sewn forward graph; two-particle tree cuts need loops=1.
+    /// threads : int or None, optional
+    ///     Number of worker threads; None uses the generator default.
+    /// max_vertices : int or None, optional
+    ///     Maximum interaction vertices; None applies no override.
+    /// allow_self_loops : bool, optional
+    ///     Permit propagators that start and end on the same vertex; defaults to True.
+    /// allow_zero_flow_edges : bool, optional
+    ///     Permit internal edges with identically zero momentum flow.
+    /// graph_prefix : str or None, optional
+    ///     Prefix assigned to generated diagram names.
+    /// particle_veto : sequence[Particle | str | int] or None, optional
+    ///     Reject graphs containing these particles, model names, or signed PDG codes.
+    /// vertex_allow : sequence[VertexRule | str] or None, optional
+    ///     Keep only graphs whose vertices use these model rules or names.
+    /// vertex_veto : sequence[VertexRule | str] or None, optional
+    ///     Reject graphs containing these interaction vertices.
+    /// maximum_bridges : int, None, or Ellipsis, optional
+    ///     Omission or Ellipsis requires one-particle irreducibility only for diagrams
+    ///     with loops; tree exchanges are allowed, including in mixed loop ranges.
+    ///     An integer limits internal bridges at every loop order; None disables it.
+    /// self_energy : SelfEnergyFilterOptions or None, optional
+    ///     Reject self-energy subgraphs. Omission enables the default filter for
+    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+    /// tadpoles : TadpoleFilterOptions or None, optional
+    ///     Reject tadpole subgraphs. Omission enables the default filter for
+    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+    /// zero_snails : SnailFilterOptions or None, optional
+    ///     Reject zero-snail subgraphs. Omission enables the default filter for
+    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+    /// coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+    ///     Exact coupling powers or inclusive ranges; an upper None is unbounded.
+    /// fermion_loop_count_range : tuple[int, int] or None, optional
+    ///     Inclusive range of closed fermion loops.
+    /// factorized_loop_topologies_count_range : tuple[int, int] or None, optional
+    ///     Inclusive range of factorized loop-topology components. Defaults to
+    ///     ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
+    /// blob_range : tuple[int, int] or None, optional
+    ///     Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
+    ///     cross sections; ``None`` disables the restriction.
+    /// spectator_range : tuple[int, int] or None, optional
+    ///     Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
+    ///     cross sections; ``None`` disables the restriction.
+    /// perturbative_orders : dict[str, int] or None, optional
+    ///     Exact perturbative powers required for cross-section graphs.
+    /// sewn_tadpoles : bool or None, optional
+    ///     Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
+    /// cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+    ///     Coupling-order bounds applied independently within every cut amplitude.
+    /// cut_amplitude_loop_count_range : tuple[int, int] or None, optional
+    ///     Inclusive combined loop count across both sides of every cut.
+    /// select_diagrams : sequence[FeynmanDiagram | str] or None, optional
+    ///     Retain only these diagram objects, content-derived IDs, or finalized names.
+    /// veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
+    ///     Remove these diagram objects, content-derived IDs, or finalized names.
+    /// loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
+    ///     Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
+    /// numerator_prefactor : Expression or None, optional
+    ///     Scalar multiplier retained on every finalized diagram numerator.
+    /// projector : Expression or None, optional
+    ///     Override external-state contraction; S("1") disables external wavefunctions.
+    /// numerator_grouping : NumeratorGrouping or None, optional
+    ///     Defaults to None: no numerator comparison or grouping. Diagrams still
+    ///     contain numerators. Pass NumeratorGrouping to enable zero detection or grouping.
+    /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
+    ///     Defaults to "auto": show progress when marimo.running_in_notebook()
+    ///     is true, with stage, counts, and elapsed time. None disables progress.
+    ///     Known totals use a progress bar; unknown totals use a spinner.
+    ///     The display closes on completion, cancellation, or error.
+    ///     Observe stage changes and coalesced counts on the calling Python thread.
+    ///     Callback exceptions propagate and stop generation.
+    /// filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+    ///     Prune partial topologies during enumeration. The first N vertices are
+    ///     complete. False rejects only this search branch. Edge data is the base
+    ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
+    ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
+    ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
+    ///     using Symbolica's Python Graph API.
+    /// cancellation_token : CancellationToken or None, optional
+    ///     Shared token for cancelling a running generation task. Token cancellation
+    ///     returns an incomplete result; Python signal-handler exceptions, including
+    ///     KeyboardInterrupt, stop generation and propagate to the caller.
+    #[pyo3(signature = (*, dimension=None, real=None, loops=None, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(
+        text_signature = "($self, *, dimension=None, real=None, loops=None, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
+    )]
+    #[allow(clippy::too_many_arguments)]
+    fn generate_amplitude(
+        &self,
+        py: Python<'_>,
+        dimension: Option<ConvertibleToExpression>,
+        real: Option<Vec<PythonExpression>>,
+        loops: Option<OrderRangeInput>,
+        threads: Option<usize>,
+        max_vertices: Option<usize>,
+        allow_self_loops: bool,
+        allow_zero_flow_edges: bool,
+        graph_prefix: Option<String>,
+        particle_veto: Option<Vec<ParticleInput>>,
+        vertex_allow: Option<Vec<VertexInput>>,
+        vertex_veto: Option<Vec<VertexInput>>,
+        #[gen_stub(override_type(type_repr = "int | None | types.EllipsisType"))]
+        maximum_bridges: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "SelfEnergyFilterOptions | types.EllipsisType | None", imports = ("types")))]
+        self_energy: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "TadpoleFilterOptions | types.EllipsisType | None", imports = ("types")))]
+        tadpoles: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "SnailFilterOptions | types.EllipsisType | None", imports = ("types")))]
+        zero_snails: Option<Py<PyAny>>,
+        coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
+        fermion_loop_count_range: Option<(usize, usize)>,
+        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
+        factorized_loop_topologies_count_range: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
+        blob_range: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
+        spectator_range: Option<Py<PyAny>>,
+        perturbative_orders: Option<BTreeMap<String, usize>>,
+        sewn_tadpoles: Option<bool>,
+        cut_amplitude_coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
+        cut_amplitude_loop_count_range: Option<(usize, usize)>,
+        select_diagrams: Option<Vec<DiagramSelectionInput>>,
+        veto_diagrams: Option<Vec<DiagramSelectionInput>>,
+        loop_momentum_bases: Option<Vec<(DiagramSelectionInput, Vec<usize>)>>,
+        numerator_prefactor: Option<PythonExpression>,
+        projector: Option<PythonExpression>,
+        numerator_grouping: Option<PyNumeratorGrouping>,
+        cancellation_token: Option<PyCancellationToken>,
+        #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
+        progress: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.core.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.core")))]
+        filter: Option<Py<PyAny>>,
+    ) -> PyResult<PyAmplitude> {
+        let generation_type = GenerationType::Amplitude;
+        let mut process = self.inner.clone().symmetrize_final(
+            self.final_state_symmetry
+                .unwrap_or(generation_type == GenerationType::CrossSection),
+        );
+        if let Some(loops) = loops {
+            process = process
+                .with_loop_count(loops.minimum, loops.maximum.unwrap())
+                .map_err(error::process)?;
+        }
+        let options = GenerationSettings::new(
+            py,
+            &process,
+            generation_type,
+            threads,
+            max_vertices,
+            allow_self_loops,
+            allow_zero_flow_edges,
+            graph_prefix,
+            particle_veto,
+            vertex_allow,
+            vertex_veto,
+            maximum_bridges,
+            self_energy,
+            tadpoles,
+            zero_snails,
+            coupling_orders,
+            fermion_loop_count_range,
+            factorized_loop_topologies_count_range,
+            blob_range,
+            spectator_range,
+            perturbative_orders,
+            sewn_tadpoles,
+            cut_amplitude_coupling_orders,
+            cut_amplitude_loop_count_range,
+            select_diagrams,
+            veto_diagrams,
+            loop_momentum_bases,
+            numerator_prefactor,
+            projector,
+            numerator_grouping,
+            cancellation_token,
+        )?
+        .inner;
+        let result = run_generation(
+            py,
+            self.model.clone(),
+            process,
+            generation_type,
+            options,
+            progress,
+            filter,
+        )?;
+        if !result.inner.report.completed {
+            return Err(error::generation(
+                feynkit_generator::GenerationError::IncompleteAmplitude,
+            ));
+        }
+        PyAmplitude::new(result.diagrams(), dimension, real)
+    }
+    /// Generate sewn forward diagrams and their physical final-state cuts.
+    /// The result contains diagrams and cut metadata, before phase-space integration.
+    ///
+    /// Model Feynman rules are instantiated into each returned diagram: inspect
+    /// ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
+    /// individual factors, or ``diagram.numerator_expression()`` for their
+    /// combined numerator.
+    ///
+    /// Examples
+    /// --------
+    /// >>> result = process.generate_cross_section(max_vertices=6)
+    /// >>> combined_numerator = result.diagrams[0].numerator_expression()
+    ///
+    /// Parameters
+    /// ----------
+    /// loops : int or tuple[int, int] or None, optional
+    ///     Override the process loop range for this call. Cross sections count
+    ///     loops in the sewn forward graph; two-particle tree cuts need loops=1.
+    /// threads : int or None, optional
+    ///     Number of worker threads; None uses the generator default.
+    /// max_vertices : int or None, optional
+    ///     Maximum interaction vertices; None applies no override.
+    /// allow_self_loops : bool, optional
+    ///     Permit propagators that start and end on the same vertex; defaults to True.
+    /// allow_zero_flow_edges : bool, optional
+    ///     Permit internal edges with identically zero momentum flow.
+    /// graph_prefix : str or None, optional
+    ///     Prefix assigned to generated diagram names.
+    /// particle_veto : sequence[Particle | str | int] or None, optional
+    ///     Reject graphs containing these particles, model names, or signed PDG codes.
+    /// vertex_allow : sequence[VertexRule | str] or None, optional
+    ///     Keep only graphs whose vertices use these model rules or names.
+    /// vertex_veto : sequence[VertexRule | str] or None, optional
+    ///     Reject graphs containing these interaction vertices.
+    /// maximum_bridges : int, None, or Ellipsis, optional
+    ///     Omission or Ellipsis requires one-particle irreducibility only for diagrams
+    ///     with loops; tree exchanges are allowed, including in mixed loop ranges.
+    ///     An integer limits internal bridges at every loop order; None disables it.
+    /// self_energy : SelfEnergyFilterOptions or None, optional
+    ///     Reject self-energy subgraphs. Omission enables the default filter for
+    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+    /// tadpoles : TadpoleFilterOptions or None, optional
+    ///     Reject tadpole subgraphs. Omission enables the default filter for
+    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+    /// zero_snails : SnailFilterOptions or None, optional
+    ///     Reject zero-snail subgraphs. Omission enables the default filter for
+    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
+    /// coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+    ///     Exact coupling powers or inclusive ranges; an upper None is unbounded.
+    /// fermion_loop_count_range : tuple[int, int] or None, optional
+    ///     Inclusive range of closed fermion loops.
+    /// factorized_loop_topologies_count_range : tuple[int, int] or None, optional
+    ///     Inclusive range of factorized loop-topology components. Defaults to
+    ///     ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
+    /// blob_range : tuple[int, int] or None, optional
+    ///     Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
+    ///     cross sections; ``None`` disables the restriction.
+    /// spectator_range : tuple[int, int] or None, optional
+    ///     Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
+    ///     cross sections; ``None`` disables the restriction.
+    /// perturbative_orders : dict[str, int] or None, optional
+    ///     Exact perturbative powers required for cross-section graphs.
+    /// sewn_tadpoles : bool or None, optional
+    ///     Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
+    /// cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
+    ///     Coupling-order bounds applied independently within every cut amplitude.
+    /// cut_amplitude_loop_count_range : tuple[int, int] or None, optional
+    ///     Inclusive combined loop count across both sides of every cut.
+    /// select_diagrams : sequence[FeynmanDiagram | str] or None, optional
+    ///     Retain only these diagram objects, content-derived IDs, or finalized names.
+    /// veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
+    ///     Remove these diagram objects, content-derived IDs, or finalized names.
+    /// loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
+    ///     Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
+    /// numerator_prefactor : Expression or None, optional
+    ///     Scalar multiplier retained on every finalized diagram numerator.
+    /// projector : Expression or None, optional
+    ///     Override external-state contraction; S("1") disables external wavefunctions.
+    /// numerator_grouping : NumeratorGrouping or None, optional
+    ///     Defaults to None: no numerator comparison or grouping. Diagrams still
+    ///     contain numerators. Pass NumeratorGrouping to enable zero detection or grouping.
+    /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
+    ///     Defaults to "auto": show progress when marimo.running_in_notebook()
+    ///     is true, with stage, counts, and elapsed time. None disables progress.
+    ///     Known totals use a progress bar; unknown totals use a spinner.
+    ///     The display closes on completion, cancellation, or error.
+    ///     Observe stage changes and coalesced counts on the calling Python thread.
+    ///     Callback exceptions propagate and stop generation.
+    /// filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
+    ///     Prune partial topologies during enumeration. The first N vertices are
+    ///     complete. False rejects only this search branch. Edge data is the base
+    ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
+    ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
+    ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
+    ///     using Symbolica's Python Graph API.
+    /// cancellation_token : CancellationToken or None, optional
+    ///     Shared token for cancelling a running generation task. Token cancellation
+    ///     returns an incomplete result; Python signal-handler exceptions, including
+    ///     KeyboardInterrupt, stop generation and propagate to the caller.
+    #[pyo3(signature = (*, loops=None, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(
+        text_signature = "($self, *, loops=None, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
+    )]
+    #[allow(clippy::too_many_arguments)]
+    fn generate_cross_section(
+        &self,
+        py: Python<'_>,
+        loops: Option<OrderRangeInput>,
+        threads: Option<usize>,
+        max_vertices: Option<usize>,
+        allow_self_loops: bool,
+        allow_zero_flow_edges: bool,
+        graph_prefix: Option<String>,
+        particle_veto: Option<Vec<ParticleInput>>,
+        vertex_allow: Option<Vec<VertexInput>>,
+        vertex_veto: Option<Vec<VertexInput>>,
+        #[gen_stub(override_type(type_repr = "int | None | types.EllipsisType"))]
+        maximum_bridges: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "SelfEnergyFilterOptions | types.EllipsisType | None", imports = ("types")))]
+        self_energy: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "TadpoleFilterOptions | types.EllipsisType | None", imports = ("types")))]
+        tadpoles: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "SnailFilterOptions | types.EllipsisType | None", imports = ("types")))]
+        zero_snails: Option<Py<PyAny>>,
+        coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
+        fermion_loop_count_range: Option<(usize, usize)>,
+        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
+        factorized_loop_topologies_count_range: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
+        blob_range: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
+        spectator_range: Option<Py<PyAny>>,
+        perturbative_orders: Option<BTreeMap<String, usize>>,
+        sewn_tadpoles: Option<bool>,
+        cut_amplitude_coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
+        cut_amplitude_loop_count_range: Option<(usize, usize)>,
+        select_diagrams: Option<Vec<DiagramSelectionInput>>,
+        veto_diagrams: Option<Vec<DiagramSelectionInput>>,
+        loop_momentum_bases: Option<Vec<(DiagramSelectionInput, Vec<usize>)>>,
+        numerator_prefactor: Option<PythonExpression>,
+        projector: Option<PythonExpression>,
+        numerator_grouping: Option<PyNumeratorGrouping>,
+        cancellation_token: Option<PyCancellationToken>,
+        #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
+        progress: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.core.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.core")))]
+        filter: Option<Py<PyAny>>,
+    ) -> PyResult<PyGenerationResult> {
+        let generation_type = GenerationType::CrossSection;
+        let mut process = self.inner.clone().symmetrize_final(
+            self.final_state_symmetry
+                .unwrap_or(generation_type == GenerationType::CrossSection),
+        );
+        if let Some(loops) = loops {
+            process = process
+                .with_loop_count(loops.minimum, loops.maximum.unwrap())
+                .map_err(error::process)?;
+        }
+        let options = GenerationSettings::new(
+            py,
+            &process,
+            generation_type,
+            threads,
+            max_vertices,
+            allow_self_loops,
+            allow_zero_flow_edges,
+            graph_prefix,
+            particle_veto,
+            vertex_allow,
+            vertex_veto,
+            maximum_bridges,
+            self_energy,
+            tadpoles,
+            zero_snails,
+            coupling_orders,
+            fermion_loop_count_range,
+            factorized_loop_topologies_count_range,
+            blob_range,
+            spectator_range,
+            perturbative_orders,
+            sewn_tadpoles,
+            cut_amplitude_coupling_orders,
+            cut_amplitude_loop_count_range,
+            select_diagrams,
+            veto_diagrams,
+            loop_momentum_bases,
+            numerator_prefactor,
+            projector,
+            numerator_grouping,
+            cancellation_token,
+        )?
+        .inner;
+        run_generation(
+            py,
+            self.model.clone(),
+            process,
+            generation_type,
+            options,
+            progress,
+            filter,
+        )
     }
 
     /// Return the ordered incoming-particle selectors.
@@ -707,7 +1264,7 @@ impl PyProcess {
         self.inner.symmetrizes_initial()
     }
 
-    /// Report whether final-state permutations are identified.
+    /// Final-state symmetry override; None uses False for amplitudes and True for cross sections.
     ///
     /// Examples
     /// --------
@@ -715,8 +1272,8 @@ impl PyProcess {
     /// True
     ///
     #[getter]
-    fn symmetrizes_final(&self) -> bool {
-        self.inner.symmetrizes_final()
+    fn symmetrizes_final(&self) -> Option<bool> {
+        self.final_state_symmetry
     }
 
     /// Report whether exchanging the two cross-section sides is identified.
@@ -1083,15 +1640,16 @@ impl PyNumeratorGrouping {
 ///
 /// The Python entry points construct the same Rust options from keyword arguments;
 /// resource limits, filters, grouping, and cancellation have one implementation.
-pub(crate) struct GenerationSettings {
-    pub(crate) inner: GenerationOptions,
+struct GenerationSettings {
+    inner: GenerationOptions,
 }
 
 impl GenerationSettings {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    fn new(
         py: Python<'_>,
         process: &Process,
+        generation_type: GenerationType,
         threads: Option<usize>,
         max_vertices: Option<usize>,
         allow_self_loops: bool,
@@ -1123,7 +1681,7 @@ impl GenerationSettings {
     ) -> PyResult<Self> {
         // Ported from GammaLoop's CLI policy. Explicit None disables a default;
         // Ellipsis selects the process-dependent default without a mutable preset.
-        let cross_section = process.generation_type() == GenerationType::CrossSection;
+        let cross_section = generation_type == GenerationType::CrossSection;
         let vacuum = process.incoming().is_empty()
             && (cross_section || process.outgoing_alternatives().iter().all(Vec::is_empty));
         let self_energy = match self_energy {
@@ -1323,7 +1881,7 @@ impl GenerationSettings {
 /// --------
 /// >>> def report(progress):
 /// ...     print(progress.stage, progress.completed, progress.total)
-/// >>> result = generator.generate(process, progress=report)
+/// >>> result = process.generate_diagrams(progress=report)
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -1623,7 +2181,7 @@ impl PyDiagramGroup {
 /// Examples
 /// --------
 /// >>> import symbolica.community.feynkit as fk
-/// >>> result = fk.Generator(model).generate(process)
+/// >>> result = process.generate_diagrams()
 /// >>> diagrams = result.diagrams
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -1808,255 +2366,13 @@ impl PyGenerationResult {
     }
 }
 
-/// Generate Feynman diagrams from a particle model and a process definition.
-///
-/// The generator combines model interactions with graph topologies at the
-/// requested loop orders. It instantiates the selected Feynman rules as
-/// numerator annotations on interaction vertices and propagator edges, and
-/// stores their product as the diagram-wide numerator. The resulting typed
-/// diagrams are ready for symbolic manipulation and CFF operations.
-///
-/// Examples
-/// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> generator = fk.Generator(model)
-/// >>> result = generator.generate(process)
-///
-/// Parameters
-/// ----------
-/// model : Model
-///     Particle model supplying fields, propagators, and interaction vertices.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(
-    name = "Generator",
-    module = "symbolica.community.feynkit",
-    frozen,
-    from_py_object
-)]
-#[derive(Clone)]
-pub struct PyGenerator {
-    inner: Generator,
-    model: Arc<Model>,
-}
-
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
-#[pymethods]
-impl PyGenerator {
-    /// Create a diagram generator backed by a loaded particle model.
-    ///
-    /// Examples
-    /// --------
-    /// >>> generator = fk.Generator(model)
-    ///
-    /// Parameters
-    /// ----------
-    /// model : Model
-    ///     Particle model supplying particles, interactions, and parameters.
-    #[new]
-    fn new(model: &PyModel) -> Self {
-        Self {
-            inner: Generator::new(model.inner.clone()),
-            model: model.inner.clone(),
-        }
-    }
-
-    /// Return the particle model used by this generator.
-    #[getter]
-    fn model(&self) -> PyModel {
-        self.model.clone().into()
-    }
-
-    /// Generate and optionally group all diagrams matching a process.
-    ///
-    /// Model Feynman rules are instantiated into each returned diagram: inspect
-    /// ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
-    /// individual factors, or ``diagram.numerator_expression()`` for their
-    /// combined numerator.
-    ///
-    /// Examples
-    /// --------
-    /// >>> result = generator.generate(process, max_vertices=6)
-    /// >>> combined_numerator = result.diagrams[0].numerator_expression()
-    ///
-    /// Parameters
-    /// ----------
-    /// process : Process
-    ///     Scattering process and loop range to generate.
-    /// threads : int or None, optional
-    ///     Number of worker threads; None uses the generator default.
-    /// max_vertices : int or None, optional
-    ///     Maximum interaction vertices; None applies no override.
-    /// allow_self_loops : bool, optional
-    ///     Permit propagators that start and end on the same vertex; defaults to True.
-    /// allow_zero_flow_edges : bool, optional
-    ///     Permit internal edges with identically zero momentum flow.
-    /// graph_prefix : str or None, optional
-    ///     Prefix assigned to generated diagram names.
-    /// particle_veto : sequence[Particle | str | int] or None, optional
-    ///     Reject graphs containing these particles, model names, or signed PDG codes.
-    /// vertex_allow : sequence[VertexRule | str] or None, optional
-    ///     Keep only graphs whose vertices use these model rules or names.
-    /// vertex_veto : sequence[VertexRule | str] or None, optional
-    ///     Reject graphs containing these interaction vertices.
-    /// maximum_bridges : int, None, or Ellipsis, optional
-    ///     Omission or Ellipsis requires one-particle irreducibility only for diagrams
-    ///     with loops; tree exchanges are allowed, including in mixed loop ranges.
-    ///     An integer limits internal bridges at every loop order; None disables it.
-    /// self_energy : SelfEnergyFilterOptions or None, optional
-    ///     Reject self-energy subgraphs. Omission enables the default filter for
-    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-    /// tadpoles : TadpoleFilterOptions or None, optional
-    ///     Reject tadpole subgraphs. Omission enables the default filter for
-    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-    /// zero_snails : SnailFilterOptions or None, optional
-    ///     Reject zero-snail subgraphs. Omission enables the default filter for
-    ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
-    /// coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
-    ///     Exact coupling powers or inclusive ranges; an upper None is unbounded.
-    /// fermion_loop_count_range : tuple[int, int] or None, optional
-    ///     Inclusive range of closed fermion loops.
-    /// factorized_loop_topologies_count_range : tuple[int, int] or None, optional
-    ///     Inclusive range of factorized loop-topology components. Defaults to
-    ///     ``(1, 1)`` for vacuum processes; ``None`` disables the restriction.
-    /// blob_range : tuple[int, int] or None, optional
-    ///     Inclusive cross-section blob-count range. Defaults to ``(1, 1)`` for
-    ///     cross sections; ``None`` disables the restriction.
-    /// spectator_range : tuple[int, int] or None, optional
-    ///     Inclusive cross-section spectator-count range. Defaults to ``(0, 0)`` for
-    ///     cross sections; ``None`` disables the restriction.
-    /// perturbative_orders : dict[str, int] or None, optional
-    ///     Exact perturbative powers required for cross-section graphs.
-    /// sewn_tadpoles : bool or None, optional
-    ///     Reject tadpoles revealed by sewing cross-section sides; None applies no filter.
-    /// cut_amplitude_coupling_orders : dict[str, int | tuple[int, int or None]] or None, optional
-    ///     Coupling-order bounds applied independently within every cut amplitude.
-    /// cut_amplitude_loop_count_range : tuple[int, int] or None, optional
-    ///     Inclusive combined loop count across both sides of every cut.
-    /// select_diagrams : sequence[FeynmanDiagram | str] or None, optional
-    ///     Retain only these diagram objects, content-derived IDs, or finalized names.
-    /// veto_diagrams : sequence[FeynmanDiagram | str] or None, optional
-    ///     Remove these diagram objects, content-derived IDs, or finalized names.
-    /// loop_momentum_bases : sequence[tuple[FeynmanDiagram | str, sequence[int]]] or None, optional
-    ///     Diagram selectors paired with ordered stable edge IDs for independent loop momenta.
-    /// numerator_prefactor : Expression or None, optional
-    ///     Scalar multiplier retained on every finalized diagram numerator.
-    /// projector : Expression or None, optional
-    ///     Override external-state contraction; S("1") disables external wavefunctions.
-    /// numerator_grouping : NumeratorGrouping or None, optional
-    ///     Defaults to None: no numerator comparison or grouping. Diagrams still
-    ///     contain numerators. Pass NumeratorGrouping to enable zero detection or grouping.
-    /// progress : {"auto"}, Callable[[GenerationProgress], None] or None, optional
-    ///     Defaults to "auto": show progress when marimo.running_in_notebook()
-    ///     is true, with stage, counts, and elapsed time. None disables progress.
-    ///     Known totals use a progress bar; unknown totals use a spinner.
-    ///     The display closes on completion, cancellation, or error.
-    ///     Observe stage changes and coalesced counts on the calling Python thread.
-    ///     Callback exceptions propagate and stop generation.
-    /// filter : Callable[[symbolica.core.Graph, int], bool] or None, optional
-    ///     Prune partial topologies during enumeration. The first N vertices are
-    ///     complete. False rejects only this search branch. Edge data is the base
-    ///     particle PDG code; node data is 0 internally, -(index+1) for incoming
-    ///     legs and +(index+1) for outgoing legs. Mutating the snapshot does not
-    ///     change enumeration. Keep callbacks cheap: each snapshot is constructed
-    ///     using Symbolica's Python Graph API.
-    /// cancellation_token : CancellationToken or None, optional
-    ///     Shared token for cancelling a running generation task. Token cancellation
-    ///     returns an incomplete result; Python signal-handler exceptions, including
-    ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (process, *, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
-    #[pyo3(
-        text_signature = "($self, process, *, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
-    )]
-    #[allow(clippy::too_many_arguments)]
-    fn generate(
-        &self,
-        py: Python<'_>,
-        process: &PyProcess,
-        threads: Option<usize>,
-        max_vertices: Option<usize>,
-        allow_self_loops: bool,
-        allow_zero_flow_edges: bool,
-        graph_prefix: Option<String>,
-        particle_veto: Option<Vec<ParticleInput>>,
-        vertex_allow: Option<Vec<VertexInput>>,
-        vertex_veto: Option<Vec<VertexInput>>,
-        #[gen_stub(override_type(type_repr = "int | None | types.EllipsisType"))]
-        maximum_bridges: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr = "SelfEnergyFilterOptions | types.EllipsisType | None", imports = ("types")))]
-        self_energy: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr = "TadpoleFilterOptions | types.EllipsisType | None", imports = ("types")))]
-        tadpoles: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr = "SnailFilterOptions | types.EllipsisType | None", imports = ("types")))]
-        zero_snails: Option<Py<PyAny>>,
-        coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
-        fermion_loop_count_range: Option<(usize, usize)>,
-        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
-        factorized_loop_topologies_count_range: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
-        blob_range: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr = "tuple[int, int] | types.EllipsisType | None", imports = ("types")))]
-        spectator_range: Option<Py<PyAny>>,
-        perturbative_orders: Option<BTreeMap<String, usize>>,
-        sewn_tadpoles: Option<bool>,
-        cut_amplitude_coupling_orders: Option<BTreeMap<String, OrderRangeInput<true>>>,
-        cut_amplitude_loop_count_range: Option<(usize, usize)>,
-        select_diagrams: Option<Vec<DiagramSelectionInput>>,
-        veto_diagrams: Option<Vec<DiagramSelectionInput>>,
-        loop_momentum_bases: Option<Vec<(DiagramSelectionInput, Vec<usize>)>>,
-        numerator_prefactor: Option<PythonExpression>,
-        projector: Option<PythonExpression>,
-        numerator_grouping: Option<PyNumeratorGrouping>,
-        cancellation_token: Option<PyCancellationToken>,
-        #[gen_stub(override_type(type_repr = "typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None", imports = ("collections.abc", "typing")))]
-        progress: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr = "collections.abc.Callable[[symbolica.core.Graph, int], bool] | None", imports = ("collections.abc", "symbolica.core")))]
-        filter: Option<Py<PyAny>>,
-    ) -> PyResult<PyGenerationResult> {
-        let generator = self.inner.clone();
-        let process = process.inner.clone();
-        let options = GenerationSettings::new(
-            py,
-            &process,
-            threads,
-            max_vertices,
-            allow_self_loops,
-            allow_zero_flow_edges,
-            graph_prefix,
-            particle_veto,
-            vertex_allow,
-            vertex_veto,
-            maximum_bridges,
-            self_energy,
-            tadpoles,
-            zero_snails,
-            coupling_orders,
-            fermion_loop_count_range,
-            factorized_loop_topologies_count_range,
-            blob_range,
-            spectator_range,
-            perturbative_orders,
-            sewn_tadpoles,
-            cut_amplitude_coupling_orders,
-            cut_amplitude_loop_count_range,
-            select_diagrams,
-            veto_diagrams,
-            loop_momentum_bases,
-            numerator_prefactor,
-            projector,
-            numerator_grouping,
-            cancellation_token,
-        )?
-        .inner;
-        generate_diagrams(py, generator, process, options, progress, filter)
-    }
-}
-
-/// Run both entry points with callbacks and signals on the calling Python thread.
-pub(crate) fn generate_diagrams(
+/// Run generation with callbacks and signals on the calling Python thread.
+#[allow(clippy::too_many_arguments)]
+fn run_generation(
     py: Python<'_>,
-    generator: Generator,
+    model: Arc<Model>,
     process: Process,
+    generation_type: GenerationType,
     mut options: GenerationOptions,
     progress: Option<Py<PyAny>>,
     filter: Option<Py<PyAny>>,
@@ -2238,12 +2554,7 @@ pub(crate) fn generate_diagrams(
         });
     }
     let has_filter = filter.is_some();
-    let pdgs: Vec<_> = generator
-        .model()
-        .particles()
-        .iter()
-        .map(|p| p.pdg_code)
-        .collect();
+    let pdgs: Vec<_> = model.particles().iter().map(|p| p.pdg_code).collect();
     let apply_filter =
         move |graph: &Graph<NodeColor, EdgeColor>, completed_vertices| -> PyResult<bool> {
             Python::attach(|py| {
@@ -2297,7 +2608,12 @@ pub(crate) fn generate_diagrams(
         let deliver_progress = deliver_progress.clone();
         py.detach(move || {
             std::thread::scope(|scope| {
-                let worker = scope.spawn(|| generator.generate(&process, &options));
+                let worker = scope.spawn(|| match generation_type {
+                    GenerationType::Amplitude => process.generate_diagrams(model.clone(), &options),
+                    GenerationType::CrossSection => {
+                        process.generate_cross_section(model.clone(), &options)
+                    }
+                });
                 // Python handles signals only on its main thread, including while
                 // generation is inside Rayon's parallel interaction assignment.
                 // Filter requests wake this thread immediately; never impose the
@@ -2359,7 +2675,10 @@ pub(crate) fn generate_diagrams(
                 }
             });
         }
-        py.detach(|| generator.generate(&process, &options))
+        py.detach(|| match generation_type {
+            GenerationType::Amplitude => process.generate_diagrams(model.clone(), &options),
+            GenerationType::CrossSection => process.generate_cross_section(model.clone(), &options),
+        })
     };
     let result = (|| {
         if let Some(error) = interruption.lock().unwrap().take() {
@@ -2401,7 +2720,6 @@ pub(crate) fn generate_diagrams(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<PyGenerationType>()?;
     module.add_class::<PyParticleSelector>()?;
     module.add_class::<PyProcess>()?;
     module.add_class::<PyCancellationToken>()?;
@@ -2414,7 +2732,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyGroupMember>()?;
     module.add_class::<PyDiagramGroup>()?;
     module.add_class::<PyGenerationResult>()?;
-    module.add_class::<PyGenerator>()?;
     Ok(())
 }
 
@@ -2448,8 +2765,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 model = fk.Model.from_json(MODEL_JSON)
-generator = fk.Generator(model)
-process = fk.Process.amplitude([1000], [1000, 1000]).with_loop_count(1, 1)
+process = fk.Process(model, [1000], [1000, 1000]).with_loop_count(1, 1)
 settings = dict(max_vertices=3, threads=2, vertex_allow=["V_3_SCALAR_000"])
 context = MagicMock()
 indicator = context.__enter__.return_value
@@ -2465,10 +2781,10 @@ marimo = SimpleNamespace(
 for via_model in (True, False):
     def generate(**kwargs):
         if via_model:
-            return model.generate_diagrams([1000], [1000, 1000], loops=1, **settings, **kwargs)
-        return generator.generate(process, **settings, **kwargs)
+            return fk.Process(model, [1000], [1000, 1000]).generate_diagrams(loops=1, **settings, **kwargs)
+        return process.generate_diagrams(**settings, **kwargs)
 
-    method = model.generate_diagrams if via_model else generator.generate
+    method = process.generate_diagrams
     assert inspect.signature(method).parameters["progress"].default == "auto"
     with patch.dict(sys.modules, {"marimo": None}):
         baseline = generate()
@@ -2589,7 +2905,6 @@ for via_model in (True, False):
             let code = CString::new(r#"
 import inspect
 model = fk.Model.from_json(MODEL_JSON)
-generator = fk.Generator(model)
 settings = dict(max_vertices=3, vertex_allow=["V_3_SCALAR_000"])
 explicit = dict(
     maximum_bridges=0, allow_self_loops=True,
@@ -2599,9 +2914,9 @@ explicit = dict(
 for via_model in (True, False):
     def generate(incoming, outgoing, loops=0, **kwargs):
         if via_model:
-            return model.generate_diagrams(incoming, outgoing, loops=loops, **settings, **kwargs)
-        process = fk.Process.amplitude(incoming, outgoing).with_loop_count(loops, loops)
-        return generator.generate(process, **settings, **kwargs)
+            return fk.Process(model, incoming, outgoing).generate_diagrams(loops=loops, **settings, **kwargs)
+        process = fk.Process(model, incoming, outgoing).with_loop_count(loops, loops)
+        return process.generate_diagrams(**settings, **kwargs)
 
     stages = []
     implicit = generate([1000], [1000, 1000], loops=1, progress=lambda p: stages.append(p.stage))
@@ -2633,8 +2948,8 @@ for via_model in (True, False):
         tadpoles=None, zero_snails=None, factorized_loop_topologies_count_range=(1, 1))
     assert [d.to_json() for d in vacuum.diagrams] == [d.to_json() for d in configured_vacuum.diagrams]
 
-assert fk.Process.cross_section([1000], [1000]).symmetrizes_final
-for generate in (model.generate_diagrams, generator.generate):
+assert fk.Process(model, [1000], [1000]).symmetrizes_final is None
+for generate in (fk.Process.generate_diagrams, fk.Process.generate_amplitude, fk.Process.generate_cross_section):
     parameters = inspect.signature(generate).parameters
     assert parameters["maximum_bridges"].default is Ellipsis
     assert parameters["allow_self_loops"].default is True
@@ -2665,16 +2980,15 @@ for generate in (model.generate_diagrams, generator.generate):
 import threading
 
 model = fk.Model.from_json(MODEL_JSON)
-generator = fk.Generator(model)
-process = fk.Process.amplitude([1000], [1000, 1000]).with_loop_count(1, 1)
+process = fk.Process(model, [1000], [1000, 1000]).with_loop_count(1, 1)
 settings = dict(max_vertices=3, threads=2, vertex_allow=["V_3_SCALAR_000"])
 caller = threading.get_ident()
 
 for via_model in (True, False):
     def generate(**callbacks):
         if via_model:
-            return model.generate_diagrams([1000], [1000, 1000], loops=1, **settings, **callbacks)
-        return generator.generate(process, **settings, **callbacks)
+            return fk.Process(model, [1000], [1000, 1000]).generate_diagrams(loops=1, **settings, **callbacks)
+        return process.generate_diagrams(**settings, **callbacks)
 
     baseline = generate()
     assert baseline.report.completed and len(baseline) > 0
@@ -2758,8 +3072,7 @@ for via_model in (True, False):
 import signal
 
 model = fk.Model.from_json(MODEL_JSON)
-generator = fk.Generator(model)
-process = fk.Process.amplitude([1000], [1000, 1000]).with_loop_count(6, 6)
+process = fk.Process(model, [1000], [1000, 1000]).with_loop_count(6, 6)
 settings = dict(max_vertices=13, threads=2, vertex_allow=["V_3_SCALAR_000"])
 
 def interrupt(signum, frame):
@@ -2772,9 +3085,9 @@ try:
             signal.setitimer(signal.ITIMER_REAL, 0.05)
             try:
                 if via_model:
-                    model.generate_diagrams([1000], [1000, 1000], loops=6, **settings)
+                    fk.Process(model, [1000], [1000, 1000]).generate_diagrams(loops=6, **settings)
                 else:
-                    generator.generate(process, **settings)
+                    process.generate_diagrams(**settings)
             except expected_error as error:
                 assert str(error) == "generation interrupted"
             else:
@@ -2785,7 +3098,7 @@ finally:
     signal.signal(signal.SIGALRM, previous_handler)
 
 # Interruption belongs to one call; subsequent generation must still complete.
-result = model.generate_diagrams([1000], [1000, 1000], loops=0, **settings)
+result = fk.Process(model, [1000], [1000, 1000]).generate_diagrams(loops=0, **settings)
 assert result.report.completed
 assert len(result) == 1
 "#,
@@ -2848,7 +3161,7 @@ except AttributeError:
 else:
     raise AssertionError("particle selectors must be immutable")
 
-mixed_process = fk.Process.amplitude(
+mixed_process = fk.Process(model,
     [particle, by_name, "scalar_2", 1001],
     [particle.antiparticle],
 )
@@ -2860,37 +3173,30 @@ assert mixed_process.outgoing_alternatives[0][0].pdg == 1000
 
 sm_model = fk.Model.from_json(SM_MODEL_JSON)
 gluon = sm_model.particle_by_pdg(21)
-gluon_process = fk.Process.amplitude([gluon], [gluon.antiparticle])
+gluon_process = fk.Process(sm_model, [gluon], [gluon.antiparticle])
 assert gluon_process.incoming[0].pdg == 21
 assert gluon_process.outgoing_alternatives[0][0].pdg == 21
 
 bottom = sm_model.particle_by_pdg(5)
-bottom_process = fk.Process.amplitude([bottom], [bottom.antiparticle])
+bottom_process = fk.Process(sm_model, [bottom], [bottom.antiparticle])
 assert bottom_process.incoming[0].pdg == 5
 assert bottom_process.outgoing_alternatives[0][0].pdg == -5
 
-process = fk.Process.amplitude(
+process = fk.Process(model,
     [by_name, by_pdg],
     [fk.ParticleSelector.by_name("out"), fk.ParticleSelector.by_pdg(-1)],
 ).with_loop_count(1, 2)
-assert process.generation_type == fk.GenerationType.AMPLITUDE
-assert process.generation_type == "amplitude"
-assert isinstance(process.generation_type, fk.GenerationType)
 assert all(isinstance(selector, fk.ParticleSelector) for selector in process.incoming)
 assert process.incoming == [by_name, by_pdg]
 assert process.outgoing_alternatives[0][0].name == "out"
 assert process.outgoing_alternatives[0][1].pdg == -1
 
-round_tripped = fk.Process.amplitude(
-    process.incoming,
-    process.outgoing_alternatives[0],
-).with_loop_count(*process.loop_count)
-assert round_tripped.generation_type == process.generation_type
+round_tripped = fk.Process(model, process.incoming, process.outgoing_alternatives[0]).with_loop_count(*process.loop_count)
 assert round_tripped.incoming == process.incoming
 assert round_tripped.outgoing_alternatives == process.outgoing_alternatives
 assert round_tripped.loop_count == process.loop_count
 
-cross_section = fk.Process.cross_section([particle, by_pdg], [by_name])
+cross_section = fk.Process(model, [particle, by_pdg], [by_name])
 cross_section = cross_section.with_final_state_alternatives(
     [[particle.antiparticle], [by_name], [by_pdg], ["scalar_2"], [1002]],
 )
@@ -2900,8 +3206,6 @@ cross_section = cross_section.with_symmetrization(
     left_right=True,
     external_fermions=True,
 )
-assert cross_section.generation_type == fk.GenerationType.CROSS_SECTION
-assert cross_section.generation_type.value == "cross_section"
 assert cross_section.incoming[0].pdg == 1000
 assert cross_section.outgoing_alternatives[0][0].pdg == 1000
 assert cross_section.outgoing_alternatives[1:] == [
@@ -2916,11 +3220,11 @@ assert cross_section.symmetrizes_left_right
 assert cross_section.symmetrizes_external_fermions
 
 for particle_veto in ([particle, 1001], ["scalar_0"]):
-    assert len(model.generate_diagrams([particle], [particle, particle], particle_veto=particle_veto)) == 0
+    assert len(fk.Process(model, [particle], [particle, particle]).generate_diagrams(particle_veto=particle_veto)) == 0
 
 foreign_model = fk.Model.from_json(MODEL_JSON.replace("scalar_0", "foreign_scalar_0"))
 foreign_particle = foreign_model.particle("foreign_scalar_0")
-foreign_process = fk.Process.amplitude([foreign_particle], [foreign_particle.antiparticle])
+foreign_process = fk.Process(model, [foreign_particle], [foreign_particle.antiparticle])
 assert foreign_process.incoming[0].pdg == 1000
 assert foreign_process.outgoing_alternatives[0][0].pdg == 1000
 "#,

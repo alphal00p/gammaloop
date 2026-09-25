@@ -13,7 +13,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use feynkit_generator::{GenerationFilter, GenerationOptions, Generator, Process, VertexSelector};
+use feynkit_generator::{GenerationFilter, GenerationOptions, Process, VertexSelector};
 use feynkit_graph::{EdgeId, ExternalState, FeynmanDiagram};
 use feynkit_model::{Model, ParameterCard};
 use gammalooprs::{
@@ -496,7 +496,7 @@ fn select_target(
 
 fn generate_addbar() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError> {
     let model = standard_model()?;
-    let process = Process::cross_section(["a"], ["d", "d~"])
+    let process = Process::new(["a"], ["d", "d~"])
         .with_final_state_alternatives([vec!["d", "d~"], vec!["d", "d~", "g"]])?
         .with_loop_count(2, 2)?;
     let options = GenerationOptions::default()
@@ -510,7 +510,7 @@ fn generate_addbar() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError>
         ]))
         .with_graph_filter(GenerationFilter::BlobRange(1..=1))
         .with_graph_filter(GenerationFilter::SpectatorRange(0..=0));
-    let generated = Generator::new(model.clone()).generate(&process, &options)?;
+    let generated = process.generate_cross_section(model.clone(), &options)?;
     let target = addbar_target();
     let diagram = select_target(&target, &generated.diagrams, &model)?;
     Ok((model, vec![(target, diagram)]))
@@ -518,8 +518,7 @@ fn generate_addbar() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError>
 
 fn generate_scalars() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError> {
     let model = scalar_model()?;
-    let process =
-        Process::cross_section(["scalar_1"], ["scalar_1", "scalar_1"]).with_loop_count(1, 1)?;
+    let process = Process::new(["scalar_1"], ["scalar_1", "scalar_1"]).with_loop_count(1, 1)?;
     let options = GenerationOptions::default()
         .threads(1)
         .max_vertices(4)
@@ -530,7 +529,7 @@ fn generate_scalars() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError
         ]))
         .with_graph_filter(GenerationFilter::BlobRange(1..=1))
         .with_graph_filter(GenerationFilter::SpectatorRange(0..=0));
-    let generated = Generator::new(model.clone()).generate(&process, &options)?;
+    let generated = process.generate_cross_section(model.clone(), &options)?;
     let diagrams = scalar_targets()
         .into_iter()
         .map(|target| {
@@ -545,7 +544,7 @@ fn generate_epemttbar(model: &Model) -> Result<Vec<(Target, FeynmanDiagram)>, Dy
     // GL092 is the tree-level cross-section topology for the double-real
     // e+ e- -> t t~ H g g final state. Its four graph loops are the sewn
     // phase-space loops, not four virtual loops.
-    let process = Process::cross_section(["e+", "e-"], ["t", "t~", "H", "g", "g"])
+    let process = Process::new(["e+", "e-"], ["t", "t~", "H", "g", "g"])
         .with_loop_count(4, 4)?
         .symmetrize_final(true)
         .symmetrize_left_right(true);
@@ -564,7 +563,7 @@ fn generate_epemttbar(model: &Model) -> Result<Vec<(Target, FeynmanDiagram)>, Dy
         ])))
         .with_graph_filter(GenerationFilter::BlobRange(1..=1))
         .with_graph_filter(GenerationFilter::SpectatorRange(0..=0));
-    let generated = Generator::new(model.clone()).generate(&process, &options)?;
+    let generated = process.generate_cross_section(model.clone(), &options)?;
     let target = epemttbar_target();
     let diagram = select_target(&target, &generated.diagrams, model)?;
     Ok(vec![(target, diagram)])

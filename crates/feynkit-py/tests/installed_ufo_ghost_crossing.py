@@ -93,16 +93,18 @@ for name, (particles, coupling_name) in vertices.items():
             P(0, mink(4, mu)) - P(1, mink(4, mu)),
         ),
     ):
-        diagrams = model.generate_diagrams(
-            incoming,
-            outgoing,
-            loops=0,
-            max_vertices=1,
-            maximum_bridges=0,
-            vertex_allow=[name],
-            numerator_grouping=None,
-            progress=None,
-        ).diagrams
+        diagrams = (
+            hep.Process(model, incoming, outgoing)
+            .generate_diagrams(
+                loops=0,
+                max_vertices=1,
+                maximum_bridges=0,
+                vertex_allow=[name],
+                numerator_grouping=None,
+                progress=None,
+            )
+            .diagrams
+        )
         assert len(diagrams) == 1, (name, slots)
         diagram = diagrams[0]
         edges = {edge.external_index: edge for edge in diagram.external_edges}
@@ -158,16 +160,18 @@ for label, tensor in (
         (["Z"], ["ghWm~", "ghWm"], "V_19"),
         (["g"], ["ghG~", "ghG"], "V_35"),
     ):
-        diagrams = probe_model.generate_diagrams(
-            incoming,
-            outgoing,
-            loops=0,
-            max_vertices=1,
-            maximum_bridges=0,
-            vertex_allow=[name],
-            numerator_grouping=None,
-            progress=None,
-        ).diagrams
+        diagrams = (
+            hep.Process(probe_model, incoming, outgoing)
+            .generate_diagrams(
+                loops=0,
+                max_vertices=1,
+                maximum_bridges=0,
+                vertex_allow=[name],
+                numerator_grouping=None,
+                progress=None,
+            )
+            .diagrams
+        )
         assert len(diagrams) == 1, (name, label)
         linearity[name, label] = diagrams[0].numerator_expression().to_expression()
 for name in ("V_18", "V_19", "V_35"):

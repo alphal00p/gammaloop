@@ -37,9 +37,7 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
             sorted(["b", "b~", "g"]),
         ]
     ]
-    generated = model.generate_diagrams(
-        names[:2],
-        names[2:],
+    generated = hep.Process(model, names[:2], names[2:]).generate_diagrams(
         vertex_allow=allowed,
         max_vertices=2,
         maximum_bridges=None,

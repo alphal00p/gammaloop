@@ -203,8 +203,11 @@ its stored local numerator degrees with the loop measure and quadratic internal 
 GammaLoop's vertex, edge, and rescaled-integrand checks use the same momentum-scaling trait.
 This bound excludes global projectors/prefactors and does not replace subdivergence analysis.
 
-Python's `Model.generate_diagrams()` and `Generator.generate()` accept generation settings
-as keyword arguments and construct the same Rust options. Python dictionaries support reusable
+Python's model-bound `Process` describes external states independently of calculation kind.
+Its `generate_diagrams()`, `generate_amplitude()`, and `generate_cross_section()` methods
+accept generation settings as keywords and construct the same Rust options.
+The corresponding Rust methods receive the model explicitly. Generation mode belongs to the
+method call; GammaLoop persists it on `ProcessDefinition` alongside the neutral process. Python dictionaries support reusable
 configurations; no mutable Python options builder accumulates filters. The Python boundary
 owns the process-dependent topology filter defaults. Explicit None disables a filter default;
 Ellipsis requests automatic filter settings. Numerator grouping defaults to None and must be

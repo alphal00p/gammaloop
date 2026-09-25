@@ -1,3 +1,4 @@
+use spenso::structure::{OrderedStructure, representation::LibraryRep};
 use std::{
     collections::BTreeSet,
     env, fs,
@@ -955,9 +956,9 @@ fn parse_symbolic_network(config: &Config, selected: &Atom) -> Result<SymbolicNe
             inference: StructureInferenceMode::Fast,
         }
     };
-    let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
+    let lib = DummyLibrary::<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>::new();
 
-    SymbolicNet::<Aind>::try_from_view::<SymbolicTensor<Aind>, _>(
+    SymbolicNet::<Aind>::try_from_view::<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>, _>(
         selected.as_view(),
         &lib,
         &NetworkParseSettings {

@@ -46,10 +46,9 @@ use tabled::{
     settings::{Alignment, Style},
 };
 
-use crate::{
-    Spensor,
-    composition::{self, StructuredAtom},
-};
+use crate::Spensor;
+use idenso::tensor::{SymbolicTensor, composition};
+use spenso::structure::partial::PartialStructure;
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pymethods};
@@ -381,10 +380,10 @@ struct IndexAliases {
 }
 
 impl IndexAliases {
-    fn for_descriptor(descriptor: &StructuredAtom, style: &str) -> Self {
+    fn for_descriptor(descriptor: &SymbolicTensor<PartialStructure>, style: &str) -> Self {
         let mut bundle = FunctionBuilder::new(spenso::structure::abstract_index::AIND_SYMBOLS.aind)
-            .add_arg(&descriptor.atom);
-        for slot in descriptor.interface.logical_slots() {
+            .add_arg(&descriptor.expression);
+        for slot in descriptor.structure.logical_slots() {
             bundle = bundle.add_arg(composition::port_atom(slot));
         }
         Self::for_atom(&bundle.finish(), style)
@@ -645,7 +644,7 @@ fn format_atom_with_mode(atom: &Atom, mode: TensorDisplayMode, show_dimensions: 
 }
 
 fn format_structured_with_mode(
-    value: &StructuredAtom,
+    value: &SymbolicTensor<PartialStructure>,
     mode: TensorDisplayMode,
     show_dimensions: bool,
 ) -> String {
@@ -653,7 +652,7 @@ fn format_structured_with_mode(
 }
 
 fn format_structured_with_settings(
-    value: &StructuredAtom,
+    value: &SymbolicTensor<PartialStructure>,
     mode: TensorDisplayMode,
     settings: &DisplaySettings,
 ) -> String {
@@ -661,14 +660,14 @@ fn format_structured_with_settings(
 }
 
 pub(crate) fn structured_to_typst_with_settings(
-    value: &StructuredAtom,
+    value: &SymbolicTensor<PartialStructure>,
     settings: &DisplaySettings,
 ) -> String {
     format_structured_with_settings(value, TensorDisplayMode::Typst, settings)
 }
 
 pub(crate) fn format_structured_settings(
-    value: &StructuredAtom,
+    value: &SymbolicTensor<PartialStructure>,
     settings: &DisplaySettings,
 ) -> String {
     format_structured_with_settings(value, TensorDisplayMode::Plain, settings)
@@ -679,7 +678,10 @@ fn format_atom(atom: &Atom, show_dimensions: bool) -> String {
     format_atom_with_mode(atom, TensorDisplayMode::Plain, show_dimensions)
 }
 
-pub(crate) fn format_structured(value: &StructuredAtom, show_dimensions: bool) -> String {
+pub(crate) fn format_structured(
+    value: &SymbolicTensor<PartialStructure>,
+    show_dimensions: bool,
+) -> String {
     format_structured_with_mode(value, TensorDisplayMode::Plain, show_dimensions)
 }
 
@@ -688,7 +690,10 @@ pub(crate) fn atom_to_latex(atom: &Atom, show_dimensions: bool) -> String {
     format!("$${body}$$")
 }
 
-pub(crate) fn structured_to_latex(value: &StructuredAtom, show_dimensions: bool) -> String {
+pub(crate) fn structured_to_latex(
+    value: &SymbolicTensor<PartialStructure>,
+    show_dimensions: bool,
+) -> String {
     atom_to_latex(&value.presentation_atom(), show_dimensions)
 }
 
@@ -712,7 +717,7 @@ pub(crate) fn format_atom_output_rich(
 
 pub(crate) fn format_structured_output_rich(
     py: Python<'_>,
-    value: &StructuredAtom,
+    value: &SymbolicTensor<PartialStructure>,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PythonFormattedOutput {
@@ -971,7 +976,7 @@ pub(crate) fn atom_to_svg(
 
 pub(crate) fn structured_to_html(
     py: Python<'_>,
-    value: &StructuredAtom,
+    value: &SymbolicTensor<PartialStructure>,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PyResult<String> {
@@ -980,7 +985,7 @@ pub(crate) fn structured_to_html(
 
 pub(crate) fn structured_to_svg(
     py: Python<'_>,
-    value: &StructuredAtom,
+    value: &SymbolicTensor<PartialStructure>,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PyResult<String> {
@@ -1009,7 +1014,7 @@ fn format_tensor_interface(
     let aliases = IndexAliases::for_descriptor(&tensor.descriptor, &settings.index_style);
     tensor
         .descriptor
-        .interface
+        .structure
         .logical_slots()
         .into_iter()
         .map(composition::port_atom)
@@ -1097,7 +1102,7 @@ impl<'a> ConcreteTensorView<'a> {
     ) -> Option<Self> {
         Some(Self {
             tensor,
-            layout: crate::tensor_data_layout(&tensor.descriptor.interface).ok()?,
+            layout: crate::tensor_data_layout(&tensor.descriptor.structure).ok()?,
             mode,
             settings,
         })
@@ -1553,7 +1558,7 @@ fn format_tensor_interface_rows(
     let mut top = Vec::new();
     let mut bottom = Vec::new();
     let aliases = IndexAliases::for_descriptor(&tensor.descriptor, &settings.index_style);
-    for slot in tensor.descriptor.interface.logical_slots() {
+    for slot in tensor.descriptor.structure.logical_slots() {
         let representation = slot.rep_name();
         let row = representation
             .metadata()
@@ -1879,7 +1884,7 @@ pub(crate) fn concrete_tensor_to_html(
     notation_source: Option<&str>,
 ) -> PyResult<String> {
     if settings.tensor_view == "interactive"
-        && !tensor.descriptor.interface.logical_slots().is_empty()
+        && !tensor.descriptor.structure.logical_slots().is_empty()
     {
         return explorer::to_html(py, tensor, settings, notation_source);
     }
@@ -2511,7 +2516,7 @@ mod tests {
         let interface = PartialStructure::from_logical_slots([]);
         let tensor = Spensor::scalar_with_descriptor(
             2.,
-            StructuredAtom::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface),
             None,
             Vec::new(),
         );
@@ -2551,7 +2556,7 @@ mod tests {
                 structure,
             }
             .into(),
-            StructuredAtom::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface),
             None,
             Vec::new(),
         );
@@ -2601,7 +2606,7 @@ mod tests {
         .into_canonical();
         let tensor = Spensor::from_storage_with_descriptor(
             tensor,
-            StructuredAtom::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface),
             None,
             Vec::new(),
         );
@@ -2653,7 +2658,7 @@ mod tests {
         .into_canonical();
         let tensor = Spensor::from_storage_with_descriptor(
             storage,
-            StructuredAtom::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface),
             None,
             Vec::new(),
         );

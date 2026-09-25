@@ -33,13 +33,16 @@ expected = (
 )
 
 for pdg in (11, -11):
-    generated = fk.Generator(model).generate(
-        fk.Process.amplitude([pdg, 22], [pdg, 22]).with_loop_count(0, 0),
-        max_vertices=2,
-        maximum_bridges=None,
-        vertex_allow=["V_98"],
-        numerator_grouping=None,
-        progress=None,
+    generated = (
+        fk.Process(model, [pdg, 22], [pdg, 22])
+        .with_loop_count(0, 0)
+        .generate_diagrams(
+            max_vertices=2,
+            maximum_bridges=None,
+            vertex_allow=["V_98"],
+            numerator_grouping=None,
+            progress=None,
+        )
     )
     assert len(generated.diagrams) == 2
     amplitude = E("0")

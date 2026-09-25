@@ -6,14 +6,13 @@ from symbolica import E, S
 from symbolica.community import feynkit as fk
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
-diagrams = model.generate_diagrams(
-    ["scalar_0"],
-    ["scalar_0"],
-    loops=1,
-    max_vertices=2,
-    vertex_allow=["V_3_SCALAR_000"],
-    allow_self_loops=False,
-).diagrams
+diagrams = (
+    fk.Process(model, ["scalar_0"], ["scalar_0"])
+    .generate_diagrams(
+        loops=1, max_vertices=2, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=False
+    )
+    .diagrams
+)
 assert len(diagrams) == 1
 s, x, y = S("s", "x", "y")
 diagram = diagrams[0]
@@ -81,13 +80,11 @@ except fk.DiagramError:
 else:
     raise AssertionError("nonlinear auxiliary product was accepted")
 
-contact = model.generate_diagrams(
-    ["scalar_0"],
-    ["scalar_0", "scalar_0"],
-    loops=0,
-    max_vertices=1,
-    vertex_allow=["V_3_SCALAR_000"],
-).diagrams[0]
+contact = (
+    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
+    .generate_diagrams(loops=0, max_vertices=1, vertex_allow=["V_3_SCALAR_000"])
+    .diagrams[0]
+)
 for construct in (
     lambda: contact.integral_family(),
     lambda: contact.propagator_family(),

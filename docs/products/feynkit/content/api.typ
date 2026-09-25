@@ -40,7 +40,7 @@ revision of this manual, so pin matching dependencies when reproducing a calcula
 
 The #link("reference/python/feynkit-community/")[generated Python reference] covers native
 classes, properties, signatures, examples, and error types. The primary owners are `Model`,
-`Process`, `Generator`, `SnailFilterOptions`, `NumeratorGrouping`, `FeynmanDiagram`, `Amplitude`, `SquaredAmplitude`, `AmplitudeLeg`, `Subgraph`, `CffGenerator`, `TensorReducer`,
+`Process`, `SnailFilterOptions`, `NumeratorGrouping`, `FeynmanDiagram`, `Amplitude`, `SquaredAmplitude`, `AmplitudeLeg`, `Subgraph`, `CffGenerator`, `TensorReducer`,
 `Kinematics`, `IntegralFamily`, `JetDefinition`, and the optional `UfoLoader`. Expressions cross the boundary as Symbolica values.
 
 Use the #link("quickstart/python/")[quickstart] for an installed host or the

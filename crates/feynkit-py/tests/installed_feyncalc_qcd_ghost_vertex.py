@@ -79,9 +79,9 @@ for pdg in (9000005, -9000005):
         ("self", [pdg], 1, 1),
     ):
         diagrams = (
-            hep.Generator(model)
-            .generate(
-                hep.Process.amplitude([pdg], outgoing).with_loop_count(loops, loops),
+            hep.Process(model, [pdg], outgoing)
+            .with_loop_count(loops, loops)
+            .generate_diagrams(
                 max_vertices=len(outgoing) - 1 + 2 * loops,
                 maximum_bridges=0,
                 vertex_allow=["V_35", "V_36"],

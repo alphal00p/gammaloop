@@ -42,10 +42,7 @@ for name, incoming, outgoing in [
         else [me**2, mm**2, me**2, mm**2]
     )
     kin = fk.Kinematics.mandelstam([P(0), P(1), k1, k2], masses, [s, t, u])
-    result = model.generate_diagrams(
-        incoming,
-        outgoing,
-        kind="cross_section",
+    result = fk.Process(model, incoming, outgoing).generate_cross_section(
         loops=1,
         max_vertices=4,
         maximum_bridges=None,

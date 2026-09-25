@@ -3069,10 +3069,10 @@ impl State {
         } = options;
         let generation_type = Self::infer_graph_list_generation_type(&graphs)?;
         if let Some(definition) = &process_definition {
-            if definition.process.generation_type() != generation_type {
+            if definition.generation_type != generation_type {
                 return Err(eyre!(
                     "--process-spec describes a {} process, but the imported graph list is {}",
-                    definition.process.generation_type(),
+                    definition.generation_type,
                     generation_type
                 ));
             }

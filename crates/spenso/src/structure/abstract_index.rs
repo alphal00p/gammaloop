@@ -408,6 +408,7 @@ let args = arg.pos().map(to-eq).join("")
 }
 
 static DUMMYCOUNTER: AtomicUsize = AtomicUsize::new(0);
+static OPEN_OWNER: AtomicUsize = AtomicUsize::new(0);
 /// A type that represents the name of an index in a tensor.
 #[derive(
     Debug,
@@ -450,6 +451,13 @@ pub enum AbstractIndex {
 }
 
 impl AbsInd for AbstractIndex {}
+
+impl AbstractIndex {
+    /// Allocate an occurrence identity shared by symbolic and concrete open ports.
+    pub fn fresh_open_owner() -> usize {
+        OPEN_OWNER.fetch_add(1, Ordering::Relaxed)
+    }
+}
 
 impl DummyAind for AbstractIndex {
     fn new_dummy() -> Self {

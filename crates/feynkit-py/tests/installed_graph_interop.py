@@ -15,14 +15,13 @@ fk = importlib.import_module(
     f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
 )
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
-diagrams = model.generate_diagrams(
-    ["scalar_0"],
-    ["scalar_0", "scalar_0"],
-    loops=1,
-    max_vertices=3,
-    vertex_allow=["V_3_SCALAR_000"],
-    allow_self_loops=True,
-).diagrams
+diagrams = (
+    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
+    .generate_diagrams(
+        loops=1, max_vertices=3, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=True
+    )
+    .diagrams
+)
 diagram = next(
     candidate
     for candidate in diagrams
@@ -136,15 +135,13 @@ assert (
     == diagram.numerator_expression()
 )
 
-cross_section = model.generate_diagrams(
-    ["scalar_0"],
-    ["scalar_0", "scalar_0"],
-    kind="cross_section",
-    loops=1,
-    max_vertices=2,
-    vertex_allow=["V_3_SCALAR_000"],
-    allow_self_loops=True,
-).diagrams[0]
+cross_section = (
+    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
+    .generate_cross_section(
+        loops=1, max_vertices=2, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=True
+    )
+    .diagrams[0]
+)
 assert len(cross_section.vertices) == 2
 assert all(not edge.is_dangling for edge in cross_section.external_edges)
 assert len(cross_section.external_edges) == 1

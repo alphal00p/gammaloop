@@ -5,6 +5,7 @@ use spenso::network::{
     ContractScalars, ExecutionResult, Network, NetworkState, Sequential, SequentialExtract,
     SingleSmallestDegree, SmallestDegree, Steps, tags::SPENSO_TAG,
 };
+use spenso::structure::{OrderedStructure, representation::LibraryRep};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     printer::PrintOptions,
@@ -38,7 +39,7 @@ use insta::assert_snapshot;
 use symbolica::{parse, parse_lit};
 
 fn symbolic_net_result_atom(net: &SymbolicNet<AbstractIndex>) -> Atom {
-    let lib = DummyLibrary::<SymbolicTensor<AbstractIndex>>::new();
+    let lib = DummyLibrary::<SymbolicTensor<OrderedStructure<LibraryRep, AbstractIndex>>>::new();
     match net.result_tensor(&lib).unwrap() {
         ExecutionResult::One => Atom::num(1),
         ExecutionResult::Zero => Atom::Zero,
@@ -1183,5 +1184,6 @@ fn symbolic_structure_parsing() {
         default_namespace = "spenso"
     );
 
-    let _a = SymbolicTensor::<AbstractIndex>::parse(a.as_view()).unwrap();
+    let _a =
+        SymbolicTensor::<OrderedStructure<LibraryRep, AbstractIndex>>::parse(a.as_view()).unwrap();
 }

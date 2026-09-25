@@ -827,7 +827,7 @@ The local kinetic, mass, gauge-fixing and vertex operators are explicit model
 inputs, as in the reference's QED model. Symbolica expands their bare field
 and parameter factors through first order in $a_4$. The normalized model
 stores the resulting rules with a separate `CT` coupling order. Existing
-`Model.generate_diagrams` generates two electron, three photon and one vertex
+`Process.generate_diagrams` generates two electron, three photon and one vertex
 counterterm diagrams at topological loop count zero and `CT=1`. Setting
 `CT=0` removes them. Bound `max_vertices` explicitly: two-point insertions do
 not increase the loop count. Shared Dirac projection of these actual graph

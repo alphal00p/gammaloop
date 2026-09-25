@@ -17,16 +17,15 @@ program, use the scalar fixture and the same owning APIs:
 
 // docs-example: compile feynkit-rust-quickstart
 ```rust
-use feynkit::{GenerationOptions, Generator, Model, Process};
+use feynkit::{GenerationOptions, Model, Process};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let model = Model::from_path(
         "crates/feynkit-model/tests/fixtures/scalars_2p_3p.json",
     )?;
-    let generator = Generator::new(model);
-    let process = Process::amplitude(["scalar_0"], ["scalar_0", "scalar_0"]);
+    let process = Process::new(["scalar_0"], ["scalar_0", "scalar_0"]);
     let options = GenerationOptions::default().max_vertices(3);
-    let result = generator.generate(&process, &options)?;
+    let result = process.generate_diagrams(model, &options)?;
 
     assert!(!result.diagrams.is_empty());
     for diagram in result.diagrams {

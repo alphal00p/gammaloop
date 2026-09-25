@@ -122,6 +122,7 @@ fn saved_child_dirs(root: &Path, expected_binary: &str, kind: &str) -> Result<Ve
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct ProcessDefinition {
+    pub generation_type: GenerationType,
     pub process: GenerationProcess,
     pub generation_options: GenerationOptions,
     pub folder_name: String,
@@ -135,14 +136,14 @@ impl fmt::Display for ProcessDefinition {
             "Process #{}: '{}'\nGeneration type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
             self.process_id,
             self.folder_name,
-            self.process.generation_type(),
+            self.generation_type,
             if self.process.symmetrizes_left_right() {
                 " (left-right symmetrized)"
             } else {
                 ""
             },
             if self.process.symmetrizes_external_fermions()
-                && self.process.generation_type() == GenerationType::Amplitude
+                && self.generation_type == GenerationType::Amplitude
                 && (self.process.symmetrizes_initial()
                     || self.process.symmetrizes_final()
                     || self.process.symmetrizes_left_right())
@@ -232,7 +233,8 @@ impl fmt::Display for ProcessDefinition {
 impl Default for ProcessDefinition {
     fn default() -> Self {
         Self {
-            process: GenerationProcess::amplitude(Vec::<i64>::new(), Vec::<i64>::new())
+            generation_type: GenerationType::Amplitude,
+            process: GenerationProcess::new(Vec::<i64>::new(), Vec::<i64>::new())
                 .with_loop_count(1, 1)
                 .expect("the default loop range is valid"),
             generation_options: GenerationOptions::default().graph_prefix("GL"),
@@ -244,14 +246,19 @@ impl Default for ProcessDefinition {
 
 impl ProcessDefinition {
     pub(crate) fn covariant_cut_states(&self, model: &Model) -> Result<Vec<Vec<i64>>> {
-        self.process
-            .validate_covariant_cut_filters(model, &self.generation_options)?;
-        Ok(self.process.covariant_cut_states(model)?)
+        self.process.validate_covariant_cut_filters(
+            model,
+            &self.generation_options,
+            self.generation_type,
+        )?;
+        Ok(self
+            .process
+            .covariant_cut_states(model, self.generation_type)?)
     }
 
     pub(crate) fn covariant_cut_representatives(&self, model: &Model) -> BTreeMap<isize, isize> {
         self.process
-            .covariant_cut_representatives(model)
+            .covariant_cut_representatives(model, self.generation_type)
             .expect("process selectors were validated against the graph model")
             .into_iter()
             .map(|(member, physical)| (member as isize, physical as isize))
@@ -394,17 +401,16 @@ impl ProcessDefinition {
 
         let first_final = final_pdgs_lists.first().cloned().unwrap_or_default();
         let process = match generation_type {
-            GenerationType::Amplitude => GenerationProcess::amplitude(initial_pdgs, first_final),
-            GenerationType::CrossSection => {
-                GenerationProcess::cross_section(initial_pdgs, first_final)
-                    .with_final_state_alternatives(final_pdgs_lists)
-                    .map_err(|error| eyre!(error))?
-            }
+            GenerationType::Amplitude => GenerationProcess::new(initial_pdgs, first_final),
+            GenerationType::CrossSection => GenerationProcess::new(initial_pdgs, first_final)
+                .with_final_state_alternatives(final_pdgs_lists)
+                .map_err(|error| eyre!(error))?,
         }
         .with_loop_count(min_loop_count, max_loop_count)
         .map_err(|error| eyre!(error))?;
 
         Ok(Self {
+            generation_type,
             process,
             ..Self::default()
         })

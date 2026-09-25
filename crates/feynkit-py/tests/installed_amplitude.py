@@ -5,9 +5,7 @@ from symbolica.community import hep
 from symbolica.community.spenso import TensorExpression
 
 model = hep.Model.standard_model()
-generated = model.generate_diagrams(
-    ["e-", "e+"],
-    ["a", "a"],
+generated = hep.Process(model, ["e-", "e+"], ["a", "a"]).generate_diagrams(
     max_vertices=2,
     maximum_bridges=None,
     vertex_allow=["V_98"],

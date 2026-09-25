@@ -11,9 +11,7 @@ vertices = [
     for v in model.vertex_rules
     if set(v.particles) <= {"e-", "e+", "a", "Z", "W-", "W+", "ve", "ve~", "H"}
 ]
-generated = model.generate_diagrams(
-    [11, -11],
-    [-24, 24],
+generated = hep.Process(model, [11, -11], [-24, 24]).generate_diagrams(
     max_vertices=2,
     maximum_bridges=None,
     vertex_allow=vertices,

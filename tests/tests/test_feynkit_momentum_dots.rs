@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
-use feynkit_generator::{
-    GenerationFilter, GenerationOptions, Generator, ParticleSelector, Process,
-};
+use feynkit_generator::{GenerationFilter, GenerationOptions, ParticleSelector, Process};
 use feynkit_model::Model;
 use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 use symbolica::{atom::AtomCore, symbol};
@@ -13,9 +11,7 @@ fn generated_qcd_numerator_contractions_convert_to_dots() {
         "../../crates/feynkit-model/tests/fixtures/sm.json"
     ))
     .unwrap();
-    let process = Process::amplitude(["g"], ["g"])
-        .with_loop_count(1, 1)
-        .unwrap();
+    let process = Process::new(["g"], ["g"]).with_loop_count(1, 1).unwrap();
     let options = GenerationOptions::default()
         .max_vertices(2)
         .with_graph_filter(GenerationFilter::CouplingOrders(BTreeMap::from([
@@ -28,7 +24,7 @@ fn generated_qcd_numerator_contractions_convert_to_dots() {
                 .map(ParticleSelector::from)
                 .collect(),
         ));
-    let generated = Generator::new(model).generate(&process, &options).unwrap();
+    let generated = process.generate_diagrams(model, &options).unwrap();
     let gluon_loop = generated
         .diagrams
         .iter()

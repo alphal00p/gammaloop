@@ -49,12 +49,12 @@ fn feynkit_kinematics_entry() {}
 fn feynkit_graph_entry() {}
 
 #[alphal00p_docs::ty(
-    id = "Generator",
-    title = "Generator",
+    id = "Process",
+    title = "Process",
     summary = "Generates Feynman diagrams from a validated model and process specification.",
     format = "rust-markdown",
-    source = "crates/feynkit-generator/src/generation.rs",
-    source_id = "feynkit_generator::generation::Generator"
+    source = "crates/feynkit-generator/src/process.rs",
+    source_id = "feynkit_generator::process::Process"
 )]
 fn feynkit_generator_entry() {}
 
