@@ -140,6 +140,74 @@ class TensorLibraryTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             library[None]
 
+    def test_membership_and_get_share_signature_resolution(self):
+        rep = Representation.euc(2)
+        name = TensorName("library_tests::mapping")
+        signature = name(7, rep)
+        library = TensorLibrary()
+        library.register(Tensor.dense(signature, [1.0, 2.0]))
+        for key in [
+            signature,
+            name(7, rep),
+            library.keys()[0],
+            name,
+            S("library_tests::mapping"),
+            "library_tests::mapping",
+        ]:
+            with self.subTest(key=str(key)):
+                self.assertIn(key, library)
+                stored = library.get(key)
+                self.assertEqual(stored[:], [1.0, 2.0])
+                stored[0] = 9.0
+                self.assertEqual(library[key][0], 1.0)
+
+        sentinel = object()
+        for key in [
+            name(8, rep),
+            name(7, Representation.euc(3)),
+            "library_tests::absent",
+        ]:
+            with self.subTest(missing=str(key)):
+                self.assertNotIn(key, library)
+                self.assertIsNone(library.get(key))
+                self.assertIs(library.get(key, sentinel), sentinel)
+                self.assertIs(library.get(key, default=sentinel), sentinel)
+                with self.assertRaises(KeyError):
+                    library[key]
+
+        library.register(Tensor.dense(name(8, rep), [3.0, 4.0]))
+        self.assertIn(signature, library)
+        for key in [name, S("library_tests::mapping"), "library_tests::mapping"]:
+            with self.subTest(ambiguous=str(key)):
+                with self.assertRaisesRegex(KeyError, "ambiguous"):
+                    self.assertIn(key, library)
+                with self.assertRaisesRegex(KeyError, "ambiguous"):
+                    library.get(key, sentinel)
+
+    def test_factory_membership_and_get_preserve_errors_and_enumeration(self):
+        library = TensorLibrary()
+        metric = TensorExpression.g(Representation.mink(2))
+        self.assertIn(metric, library)
+        self.assertEqual(library.get(metric)[:], [1.0, 0.0, 0.0, -1.0])
+        self.assertEqual(len(library), 0)
+        self.assertEqual(library.keys(), [])
+        # Name-only lookup cannot choose concrete dimensions for a factory.
+        self.assertNotIn("spenso::g", library)
+        self.assertIsNone(library.get("spenso::g"))
+        for key, error in [
+            (None, TypeError),
+            (metric("mu", "nu"), ValueError),
+            (
+                TensorExpression.g(Representation.mink(S("library_tests::D"))),
+                ValueError,
+            ),
+        ]:
+            with self.subTest(invalid=str(key)):
+                with self.assertRaises(error):
+                    self.assertIn(key, library)
+                with self.assertRaises(error):
+                    library.get(key, object())
+
 
 if __name__ == "__main__":
     unittest.main()

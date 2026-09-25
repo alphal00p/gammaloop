@@ -16,7 +16,7 @@ use pyo3_stub_gen::{
 
 use spenso::algebra::complex::{Complex, RealOrComplex};
 use spenso::network::library::function_lib::{PanicMissingConcrete, SymbolLib};
-use spenso::network::library::{FunctionLibraryError, function_lib::INBUILTS};
+use spenso::network::library::{FunctionLibraryError, LibraryError, function_lib::INBUILTS};
 use spenso::network::parsing::ShadowedStructure;
 use spenso::tensors::complex::RealOrComplexTensor;
 use spenso::tensors::data::StorageTensor;
@@ -443,8 +443,8 @@ impl SpensorLibrary {
         references
     }
 
-    fn resolve_reference(&self, key: LibraryReference) -> PyResult<ExactLibraryReference> {
-        match key {
+    fn resolve_reference(&self, key: LibraryReference) -> PyResult<Option<ExactLibraryReference>> {
+        let reference = match key {
             LibraryReference::Exact(reference) => {
                 if [AGS.gamma, AGS.gammaadj, AGS.gammaconj].contains(&reference.name)
                     && let Some(registered) = self.references.get(reference.key.canonical())
@@ -455,29 +455,35 @@ impl SpensorLibrary {
                         reference.signature(),
                     )));
                 }
-                Ok(*reference)
+                *reference
             }
             LibraryReference::Symbol(symbol) => {
-                let key = self.library.get_key_from_name(symbol).map_err(|error| {
-                    let variants = self
-                        .stored_references()
-                        .into_iter()
-                        .filter(|reference| reference.name == symbol)
-                        .map(|reference| reference.signature())
-                        .collect::<Vec<_>>();
-                    let message = if variants.len() > 1 {
-                        format!(
+                let key = match self.library.get_key_from_name(symbol) {
+                    Ok(key) => key,
+                    Err(LibraryError::InvalidKey | LibraryError::NotFound(_)) => return Ok(None),
+                    Err(LibraryError::MultipleKeys(_)) => {
+                        let variants = self
+                            .stored_references()
+                            .into_iter()
+                            .filter(|reference| reference.name == symbol)
+                            .map(|reference| reference.signature())
+                            .collect::<Vec<_>>();
+                        return Err(exceptions::PyKeyError::new_err(format!(
                             "tensor name `{symbol}` is ambiguous; registered signatures: {}",
                             variants.join(", ")
-                        )
-                    } else {
-                        error.to_string()
-                    };
-                    exceptions::PyKeyError::new_err(message)
-                })?;
-                Ok(self.stored_reference(&key))
+                        )));
+                    }
+                };
+                self.stored_reference(&key)
             }
-        }
+        };
+        // Apply the same concrete-dimension validation as data lookup without
+        // allocating component data when checking factory membership.
+        crate::tensor_data_layout(&reference.interface)?;
+        Ok(self
+            .library
+            .contains_key(reference.key.canonical())
+            .then_some(reference))
     }
 
     fn stored_tensor(&self, reference: ExactLibraryReference) -> PyResult<Spensor> {
@@ -648,8 +654,42 @@ impl SpensorLibrary {
         py: Python<'_>,
         key: ConvertibleToLibraryReference,
     ) -> PyResult<Py<Spensor>> {
-        let reference = self.resolve_reference(key.0)?;
+        let signature = match &key.0 {
+            LibraryReference::Symbol(symbol) => symbol.to_string(),
+            LibraryReference::Exact(reference) => reference.signature(),
+        };
+        let reference = self.resolve_reference(key.0)?.ok_or_else(|| {
+            exceptions::PyKeyError::new_err(format!(
+                "tensor library has no entry for `{signature}`"
+            ))
+        })?;
         Py::new(py, self.stored_tensor(reference)?)
+    }
+
+    /// Whether a signature can be resolved, including dimension-dependent factories.
+    ///
+    /// Accepts the same keys as lookup. Missing signatures return False;
+    /// ambiguous names and invalid keys raise the same errors as lookup.
+    /// Factories are checked without constructing their component data.
+    fn __contains__(&self, key: ConvertibleToLibraryReference) -> PyResult<bool> {
+        Ok(self.resolve_reference(key.0)?.is_some())
+    }
+
+    /// Retrieve an independent Tensor snapshot, or default if the signature is missing.
+    ///
+    /// The default is None when omitted. Ambiguous names and invalid keys raise
+    /// the same errors as lookup; they do not return the default.
+    #[pyo3(signature = (key, default=None))]
+    fn get(
+        &self,
+        py: Python<'_>,
+        key: ConvertibleToLibraryReference,
+        default: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        match self.resolve_reference(key.0)? {
+            Some(reference) => Ok(Py::new(py, self.stored_tensor(reference)?)?.into_any()),
+            None => Ok(default.unwrap_or_else(|| py.None())),
+        }
     }
 
     /// Number of stored tensors, excluding dimension-dependent factories.

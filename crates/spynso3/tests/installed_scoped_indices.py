@@ -43,6 +43,7 @@ class ScopedIndicesTests(unittest.TestCase):
 
         for tensor in (original * wrapped, original * nested):
             html = tensor._repr_html_()
+            assert isinstance(html, str)
             root = ET.fromstring(html[html.index("<math") : html.index("</math>") + 7])
             visible = unicodedata.normalize("NFKC", "".join(root.itertext()))
             self.assertIn("μ", visible)

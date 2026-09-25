@@ -1,7 +1,7 @@
 //! Shared typing refinements for the generated documentation and installed package.
 use pyo3_stub_gen::{
     PyStubType, TypeInfo,
-    generate::{Module, Parameters, VariableDef},
+    generate::{Module, ParameterDefault, Parameters, VariableDef},
 };
 use symbolica::api::python::{ConvertibleToExpression, ConvertibleToReplaceWith};
 
@@ -111,6 +111,27 @@ pub(crate) fn refine(module: &mut Module) {
                 "Select components by logical coordinates, returning nested lists for sliced axes.";
             overloads.push(slice);
         }
+        if class.name == "TensorLibrary"
+            && let Some(overloads) = class.methods.get_mut("get")
+            && overloads.len() == 1
+        {
+            let mut with_default = overloads[0].clone();
+            with_default.is_overload = true;
+            with_default.r#return = named("Tensor | _LibraryDefault");
+            parameters(&mut with_default.parameters, |parameter| {
+                if parameter.name == "default" {
+                    parameter.type_info = named("_LibraryDefault");
+                    parameter.default = ParameterDefault::None;
+                }
+            });
+            let mut without_default = with_default.clone();
+            without_default.r#return = named("Tensor | None");
+            without_default
+                .parameters
+                .positional_or_keyword
+                .retain(|parameter| parameter.name != "default");
+            *overloads = vec![without_default, with_default];
+        }
     }
     for function in module.function.values_mut().flatten() {
         simplify(&mut function.r#return);
@@ -120,6 +141,14 @@ pub(crate) fn refine(module: &mut Module) {
     }
     // Module variables are emitted after actual imports by the upstream generator.
     // Quoted aliases support forward references without scanning Python docstrings.
+    module.variables.insert(
+        "_LibraryDefault",
+        VariableDef {
+            name: "_LibraryDefault",
+            type_: named("typing.TypeVar"),
+            default: Some("typing.TypeVar(\"_LibraryDefault\")".to_owned()),
+        },
+    );
     for (name, value) in [
         ("_RealInput", "Float | int | float | str | decimal.Decimal"),
         (

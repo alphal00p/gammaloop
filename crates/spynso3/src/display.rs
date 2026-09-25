@@ -2350,14 +2350,15 @@ mod tests {
     fn scoped_index_aliases_preserve_base_letters_and_manual_labels() {
         let index = graph_index("display_index_tests::hedge", &[0, 1]);
         let scope = symbol!("display_index_tests::bra");
-        let scoped = AbstractIndex::try_from(index.as_view())
-            .unwrap()
-            .scoped(scope)
-            .to_atom();
+        let scoped = Atom::from(
+            AbstractIndex::try_from(index.as_view())
+                .unwrap()
+                .scoped(scope),
+        );
         let atom = indexed_test_tensor([index.clone(), scoped.clone()]);
         let original = atom.clone();
         let aliases = IndexAliases::for_atom(&atom, "alphabet");
-        let rep = spenso::structure::representation::Minkowski {}.to_symbol();
+        let rep = ExtendibleReps::MINKOWSKI.symbol();
         let base = &aliases.entries[&(rep, index.clone())].1;
         let prime = IndexDisplay::text("′").unwrap();
         assert_eq!(

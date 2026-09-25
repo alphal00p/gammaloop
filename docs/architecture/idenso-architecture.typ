@@ -163,8 +163,8 @@ rank-one handling, and one of several topology- or expression-size contraction o
 custom `Schoonschipify` strategies plug into Spenso's `ContractionStrategy`; they do not replace
 Spenso's graph or store.
 
-The direct pattern path exposed by `schoonschip_with_settings` applies the local metric/function
-replacement families without building the full network. Its initial scan records pending
+The direct path exposed by `schoonschip_with_settings` contracts explicit slots without building
+the full network. Its initial scan records pending
 contractions, dot identities, bracket scopes, and whether normalization can invoke user code.
 For intrinsic normalization without brackets, dot rewrites remove index occurrences, so the
 input's contraction candidate remains a conservative guide without rescanning the result.
@@ -174,8 +174,8 @@ the direct pass. Callback-sensitive expressions and compound opaque slot metadat
 result scans and the observable discovery/replacement order. Bracket scopes retain their
 normalization schedule because opening a scope can expose further products.
 
-The network path is preferable when
-contraction topology and ordering matter. Their exact behavior and settings are detailed in the
+The network path is preferable when contraction topology and ordering matter. Their exact
+behavior and settings are detailed in the
 #link("schoonschip-net-parsing.typ")[Schoonschip network parsing note].
 
 == Parsing, shorthand, and index invariants

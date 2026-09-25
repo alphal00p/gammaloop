@@ -401,6 +401,8 @@ fn parse_scalar_tensors_step_by() {
     let fnlib = ErroringLibrary::<Symbol>::new();
 
     let mut netc = net.clone();
+    // Tensor powers lower to explicit products so repeated indices contract
+    // between tensor copies before the result becomes a scalar.
     assert_snapshot!(
         net.snapshot_dot(),@r#"
     digraph {
@@ -412,8 +414,9 @@ fn parse_scalar_tensors_step_by() {
       1	 [label = "S:a*c"];
       2	 [label = "T:b(mink(4,1))"];
       3	 [label = "T:d(mink(4,1))"];
-      4	 [label = "^( 2 )"];
+      4	 [label = "∏"];
       5	 [label = "T:d(mink(4,2))"];
+      6	 [label = "T:d(mink(4,2))"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       4:10:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
@@ -421,8 +424,9 @@ fn parse_scalar_tensors_step_by() {
       2:6:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
       1:5:s	-> 0:4:s	 [id=4  color="red:blue;0.5"];
       2:7:s	-> 3:9:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
-      5:14:s	-> 4:12:s	 [id=6 dir=none  color="red:blue;0.5" label="mink4|2"];
-      5:13:s	-> 4:11:s	 [id=7  color="red:blue;0.5"];
+      5:14:s	-> 6:16:s	 [id=6 dir=none  color="red:blue;0.5" label="mink4|2"];
+      6:15:s	-> 4:11:s	 [id=7  color="red:blue;0.5"];
+      5:13:s	-> 4:12:s	 [id=8  color="red:blue;0.5"];
     }
     "#
     );
@@ -435,18 +439,21 @@ fn parse_scalar_tensors_step_by() {
       overlap = "scale";
       layout = "neato";
 
-      0	 [label = "∏"];
+      5	 [label = "∏"];
+      4	 [label = "T:d(mink(4,2))"];
       1	 [label = "S:a*c"];
       2	 [label = "T:b(mink(4,1))"];
       3	 [label = "T:d(mink(4,1))"];
-      4	 [label = "S:(d(mink(4,2)))^2"];
+      0	 [label = "T:d(mink(4,2))"];
       ext0	 [style=invis];
-      0:0:s	-> ext0	 [id=0 color="red"];
-      4:10:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
-      3:8:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
-      2:6:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
-      1:5:s	-> 0:4:s	 [id=4  color="red:blue;0.5"];
+      5:0:s	-> ext0	 [id=0 color="red"];
+      0:13:s	-> 5:12:s	 [id=1  color="red:blue;0.5"];
+      3:8:s	-> 5:2:s	 [id=2  color="red:blue;0.5"];
+      2:6:s	-> 5:3:s	 [id=3  color="red:blue;0.5"];
+      1:5:s	-> 5:4:s	 [id=4  color="red:blue;0.5"];
       2:7:s	-> 3:9:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
+      0:14:s	-> 4:1:s	 [id=6 dir=none  color="red:blue;0.5" label="mink4|2"];
+      4:10:s	-> 5:11:s	 [id=7  color="red:blue;0.5"];
     }
     "#
     );
@@ -459,15 +466,18 @@ fn parse_scalar_tensors_step_by() {
       overlap = "scale";
       layout = "neato";
 
-      3	 [label = "∏"];
-      0	 [label = "S:(d(mink(4,2)))^2"];
+      4	 [label = "∏"];
+      3	 [label = "T:(d(mink(4,2)))^2"];
       1	 [label = "S:a*c"];
-      2	 [label = "T:b(mink(4,1))*d(mink(4,1))"];
+      2	 [label = "T:b(mink(4,1))"];
+      0	 [label = "T:d(mink(4,1))"];
       ext0	 [style=invis];
-      3:0:s	-> ext0	 [id=0 color="red"];
-      0:2:s	-> 3:1:s	 [id=1  color="red:blue;0.5"];
-      1:5:s	-> 3:4:s	 [id=2  color="red:blue;0.5"];
-      2:6:s	-> 3:3:s	 [id=3  color="red:blue;0.5"];
+      4:0:s	-> ext0	 [id=0 color="red"];
+      3:1:s	-> 4:10:s	 [id=1  color="red:blue;0.5"];
+      0:8:s	-> 4:2:s	 [id=2  color="red:blue;0.5"];
+      2:6:s	-> 4:3:s	 [id=3  color="red:blue;0.5"];
+      1:5:s	-> 4:4:s	 [id=4  color="red:blue;0.5"];
+      2:7:s	-> 0:9:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
     }
     "#
     );
@@ -480,15 +490,15 @@ fn parse_scalar_tensors_step_by() {
       overlap = "scale";
       layout = "neato";
 
-      3	 [label = "∏"];
-      0	 [label = "S:(d(mink(4,2)))^2"];
+      2	 [label = "∏"];
+      0	 [label = "T:(d(mink(4,2)))^2"];
       1	 [label = "S:a*c"];
-      2	 [label = "T:b(mink(4,1))*d(mink(4,1))"];
+      3	 [label = "T:b(mink(4,1))*d(mink(4,1))"];
       ext0	 [style=invis];
-      3:0:s	-> ext0	 [id=0 color="red"];
-      0:2:s	-> 3:1:s	 [id=1  color="red:blue;0.5"];
-      1:5:s	-> 3:4:s	 [id=2  color="red:blue;0.5"];
-      2:6:s	-> 3:3:s	 [id=3  color="red:blue;0.5"];
+      2:0:s	-> ext0	 [id=0 color="red"];
+      0:1:s	-> 2:3:s	 [id=1  color="red:blue;0.5"];
+      3:6:s	-> 2:2:s	 [id=2  color="red:blue;0.5"];
+      1:5:s	-> 2:4:s	 [id=3  color="red:blue;0.5"];
     }
     "#
     );
@@ -526,6 +536,7 @@ fn parse_scalar_tensors_step_by() {
     let netc_expression = symbolic_net_result_atom(&netc);
 
     assert_eq!(net_expression, netc_expression);
+    assert_eq!(net_expression, expr);
 }
 
 #[test]
