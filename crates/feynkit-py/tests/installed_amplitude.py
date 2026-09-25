@@ -45,15 +45,14 @@ for references in (None, {2: P(3), 3: P(2)}, {2: P(0), 3: P(0)}):
     closed = fermions.sum_spins(references=references).sum_colors()
     expression = closed.expression()
     assert expression.is_scalar
+    # The gamma pass reaches its own fixed point. Physical polarization sums
+    # then require distributing contracted tensor factors, not scalar algebra.
     scalar = (
-        expression.expand()
-        .simplify_gamma()
-        .expand()
-        .simplify_gamma()
-        .simplify_metrics()
+        expression.simplify_gamma()
+        .schoonschip_net(expand_contracted_sums=True)
         .to_dots()
     )
-    result = kin.apply(scalar.to_expression())
+    result = kin.apply(scalar)
     assert (result - expected).replace(s, 2 * mass**2 - t - u).together() == E("0")
     assert closed.sum_spins().expression().to_expression() == expression.to_expression()
 

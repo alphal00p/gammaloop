@@ -2068,6 +2068,10 @@ bulk sum and product builders when arithmetic is exact and callbacks cannot be
 reordered. Rounded coefficients and callback-sensitive expressions retain their
 existing evaluation order.
 
+Unchanged results consume the already-owned result Atom while retaining the
+existing structure and classification flags. Python wraps those results
+directly, avoiding a temporary symbolic tensor and another expression copy.
+
 == Run locally
 
 Use an interpreter containing the combined Symbolica community host with Spenso and Idenso,
