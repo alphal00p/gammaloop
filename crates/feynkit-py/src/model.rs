@@ -1972,9 +1972,10 @@ impl PyModel {
     ///     Keep only graphs whose vertices use these model rules or names.
     /// vertex_veto : sequence[VertexRule | str] or None, optional
     ///     Reject graphs containing these interaction vertices.
-    /// maximum_bridges : int or None, optional
-    ///     Largest allowed number of internal graph bridges; defaults to 0.
-    ///     Pass None to allow unrestricted bridges, including exchange-channel trees.
+    /// maximum_bridges : int, None, or Ellipsis, optional
+    ///     Omission or Ellipsis requires one-particle irreducibility only for diagrams
+    ///     with loops; tree exchanges are allowed, including in mixed loop ranges.
+    ///     An integer limits internal bridges at every loop order; None disables it.
     /// self_energy : SelfEnergyFilterOptions or None, optional
     ///     Reject self-energy subgraphs. Omission enables the default filter for
     ///     non-vacuum processes; explicit None disables it. Ellipsis selects automatic defaults.
@@ -2038,9 +2039,9 @@ impl PyModel {
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
     /// final_state_alternatives : sequence[sequence[Particle | ParticleSelector | str | int]] or None, optional
     ///     Extra outgoing states for a cross section.
-    #[pyo3(signature = (incoming, outgoing, *, kind="amplitude", loops=OrderRangeInput::default(), final_state_alternatives=None, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=0, self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (incoming, outgoing, *, kind="amplitude", loops=OrderRangeInput::default(), final_state_alternatives=None, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, incoming, outgoing, *, kind='amplitude', loops=..., final_state_alternatives=None, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=0, self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, incoming, outgoing, *, kind='amplitude', loops=..., final_state_alternatives=None, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_diagrams(
@@ -2059,7 +2060,8 @@ impl PyModel {
         particle_veto: Option<Vec<ParticleInput>>,
         vertex_allow: Option<Vec<VertexInput>>,
         vertex_veto: Option<Vec<VertexInput>>,
-        #[gen_stub(override_type(type_repr = "int | None"))] maximum_bridges: Option<usize>,
+        #[gen_stub(override_type(type_repr = "int | None | types.EllipsisType"))]
+        maximum_bridges: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "SelfEnergyFilterOptions | types.EllipsisType | None", imports = ("types")))]
         self_energy: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "TadpoleFilterOptions | types.EllipsisType | None", imports = ("types")))]

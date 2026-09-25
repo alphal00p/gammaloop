@@ -1349,7 +1349,7 @@ impl Generator {
                 GenerationError::ArithmeticOverflow("the Symbolica vertex limit"),
             )?);
         }
-        if let Some(maximum) = options.max_bridges() {
+        if let Some(maximum) = options.max_bridges(*process.loop_count().start()) {
             settings = settings.max_bridges(maximum);
         }
         let abort_options = options.clone();
@@ -1887,6 +1887,7 @@ impl Generator {
                     | GenerationFilter::VertexAllow(_)
                     | GenerationFilter::VertexVeto(_)
                     | GenerationFilter::MaxNumberOfBridges(_)
+                    | GenerationFilter::LoopOneParticleIrreducible
                     | GenerationFilter::CouplingOrders(_)
                     | GenerationFilter::LoopCountRange(_)
                     | GenerationFilter::FermionLoopCountRange(_)
@@ -1929,6 +1930,7 @@ impl Generator {
                         | GenerationFilter::VertexAllow(_)
                         | GenerationFilter::VertexVeto(_)
                         | GenerationFilter::MaxNumberOfBridges(_)
+                        | GenerationFilter::LoopOneParticleIrreducible
                         | GenerationFilter::BlobRange(_)
                         | GenerationFilter::SpectatorRange(_)
                         | GenerationFilter::PerturbativeOrders(_)
@@ -1972,6 +1974,7 @@ impl Generator {
                 | GenerationFilter::ZeroSnails(_)
                 | GenerationFilter::Sewn(_)
                 | GenerationFilter::MaxNumberOfBridges(_)
+                | GenerationFilter::LoopOneParticleIrreducible
                 | GenerationFilter::LoopCountRange(_)
                 | GenerationFilter::BlobRange(_)
                 | GenerationFilter::SpectatorRange(_)
@@ -2012,6 +2015,7 @@ impl Generator {
             | GenerationFilter::VertexAllow(_)
             | GenerationFilter::VertexVeto(_)
             | GenerationFilter::MaxNumberOfBridges(_)
+            | GenerationFilter::LoopOneParticleIrreducible
             | GenerationFilter::PerturbativeOrders(_) => None,
         };
         if let Some((minimum, maximum)) = invalid {
@@ -2143,6 +2147,13 @@ impl Generator {
 
         for filter in &options.graph_filters {
             match filter {
+                GenerationFilter::LoopOneParticleIrreducible if graph.num_loops() > 0 => {
+                    let mut tree = graph.get_spanning_tree(0);
+                    tree.chain_decomposition();
+                    if tree.count_bridges() != 0 {
+                        return Ok(false);
+                    }
+                }
                 GenerationFilter::ParticleVeto(vetoed)
                     if graph.edges().iter().any(|edge| {
                         vetoed.iter().any(|selector| match selector {
@@ -2169,6 +2180,7 @@ impl Generator {
                 | GenerationFilter::VertexAllow(_)
                 | GenerationFilter::VertexVeto(_)
                 | GenerationFilter::MaxNumberOfBridges(_)
+                | GenerationFilter::LoopOneParticleIrreducible
                 | GenerationFilter::CouplingOrders(_)
                 | GenerationFilter::LoopCountRange(_)
                 | GenerationFilter::FermionLoopCountRange(_)
@@ -2546,6 +2558,7 @@ impl Generator {
                 }
                 GenerationFilter::ParticleVeto(_)
                 | GenerationFilter::MaxNumberOfBridges(_)
+                | GenerationFilter::LoopOneParticleIrreducible
                 | GenerationFilter::LoopCountRange(_)
                 | GenerationFilter::SelfEnergy(_)
                 | GenerationFilter::Tadpoles(_)
@@ -4802,6 +4815,62 @@ mod tests {
             particle: particle(model, pdg),
             direction: None,
         }
+    }
+
+    #[test]
+    fn loop_one_particle_irreducibility_preserves_trees_in_mixed_ranges() {
+        let generator = Generator::new(scalar_model());
+        let process = Process::amplitude(["phi", "phi"], ["phi", "phi"])
+            .with_loop_count(0, 1)
+            .unwrap();
+        let options = GenerationOptions::default().threads(1).max_vertices(4);
+        let automatic = options
+            .clone()
+            .with_graph_filter(GenerationFilter::LoopOneParticleIrreducible);
+        assert_eq!(automatic.max_bridges(0), None);
+        assert_eq!(automatic.max_bridges(1), Some(0));
+
+        let all = generator.generate(&process, &options).unwrap();
+        let filtered = generator.generate(&process, &automatic).unwrap();
+        let strict = generator
+            .generate(
+                &process,
+                &options.with_graph_filter(GenerationFilter::MaxNumberOfBridges(0)),
+            )
+            .unwrap();
+        let ids = |result: &GenerationResult, loops| {
+            result
+                .diagrams
+                .iter()
+                .filter(|diagram| diagram.loop_count() == loops)
+                .map(FeynmanDiagram::id)
+                .collect::<BTreeSet<_>>()
+        };
+        assert_eq!(
+            ids(&filtered, 0).len(),
+            3,
+            "all tree exchange channels survive"
+        );
+        assert_eq!(ids(&filtered, 0), ids(&all, 0));
+        assert!(
+            ids(&strict, 0).is_empty(),
+            "an explicit bridge limit remains literal"
+        );
+        assert!(!ids(&filtered, 1).is_empty());
+        assert_eq!(ids(&filtered, 1), ids(&strict, 1));
+        assert!(
+            ids(&all, 1).len() > ids(&filtered, 1).len(),
+            "1PR loop diagrams are removed"
+        );
+
+        let loops_only = generator
+            .generate(&process.with_loop_count(1, 1).unwrap(), &automatic)
+            .unwrap();
+        assert_eq!(
+            ids(&loops_only, 1),
+            ids(&filtered, 1),
+            "early pruning preserves the result"
+        );
     }
 
     #[test]

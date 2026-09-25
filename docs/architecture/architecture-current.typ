@@ -209,8 +209,11 @@ configurations; no mutable Python options builder accumulates filters. The Pytho
 owns the process-dependent topology filter defaults. Explicit None disables a filter default;
 Ellipsis requests automatic filter settings. Numerator grouping defaults to None and must be
 enabled explicitly with a NumeratorGrouping value.
-Python defaults to zero internal bridges and permits self-loops. The reusable low-level Rust
-options remain explicit. Coupling upper bounds prune impossible vertex signatures before
+Python permits tree exchanges and applies `LoopOneParticleIrreducible` to positive-loop
+individual graphs, including in mixed ranges; external legs are excluded from bridge counts.
+Explicit numeric bridge limits still apply to every graph, and None disables the default.
+When the requested minimum loop order is positive, the policy also prunes enumeration.
+Python permits self-loops; the reusable low-level Rust options remain explicit. Coupling upper bounds prune impossible vertex signatures before
 enumeration. Numerator construction reuses identical comparison/output diagrams, validation
 avoids expanding equal factored expressions, and unchanged cut inventories are retained. Coupling orders accept
 exact integers or inclusive ranges, while filter and grouping values wrap their Rust settings.
