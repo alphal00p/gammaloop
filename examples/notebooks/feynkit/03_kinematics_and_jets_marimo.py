@@ -43,9 +43,27 @@ def _(mo):
 def _():
     from math import cos, cosh, sin, sinh
 
-    import symbolica.community.feynkit as fk
+    from symbolica.community.hep import (
+        Axis,
+        Boost,
+        FourMomentum,
+        JetDefinition,
+        Rotation,
+        ThreeMomentum,
+    )
 
-    return cos, cosh, fk, sin, sinh
+    return (
+        Axis,
+        Boost,
+        FourMomentum,
+        JetDefinition,
+        Rotation,
+        ThreeMomentum,
+        cos,
+        cosh,
+        sin,
+        sinh,
+    )
 
 
 @app.cell(hide_code=True)
@@ -59,8 +77,8 @@ def _(mo):
 
 
 @app.cell
-def _(fk):
-    spatial = fk.ThreeMomentum(3.0, 4.0, 0.0)
+def _(ThreeMomentum):
+    spatial = ThreeMomentum(3.0, 4.0, 0.0)
     p = spatial.on_shell(12.0)
     {
         "components": p.components(),
@@ -73,8 +91,8 @@ def _(fk):
 
 
 @app.cell
-def _(fk, p):
-    q = fk.FourMomentum(5.0, 1.0, 2.0, 3.0)
+def _(FourMomentum, p):
+    q = FourMomentum(5.0, 1.0, 2.0, 3.0)
     expected = p.energy * q.energy - p.px * q.px - p.py * q.py - p.pz * q.pz
     {"dot_product": p.dot(q), "component_formula": expected}
     return
@@ -91,9 +109,9 @@ def _(mo):
 
 
 @app.cell
-def _(fk):
-    rest = fk.FourMomentum(5.0, 0.0, 0.0, 0.0)
-    boost = fk.Boost(fk.ThreeMomentum(0.6, 0.0, 0.0))
+def _(Boost, FourMomentum, ThreeMomentum):
+    rest = FourMomentum(5.0, 0.0, 0.0, 0.0)
+    boost = Boost(ThreeMomentum(0.6, 0.0, 0.0))
     boosted = boost.apply(rest)
     recovered = boost.apply_inverse(boosted)
     {
@@ -106,9 +124,9 @@ def _(fk):
 
 
 @app.cell
-def _(fk):
-    unit_x = fk.ThreeMomentum(1.0, 0.0, 0.0)
-    unit_y = fk.Rotation.quarter_turn(fk.Axis.Z).apply_three(unit_x)
+def _(Axis, Rotation, ThreeMomentum):
+    unit_x = ThreeMomentum(1.0, 0.0, 0.0)
+    unit_y = Rotation.quarter_turn(Axis.Z).apply_three(unit_x)
     unit_y
     return
 
@@ -124,9 +142,9 @@ def _(mo):
 
 
 @app.cell
-def _(fk):
-    a = fk.FourMomentum(20.0, 10.0, 0.0, 10.0)
-    b = fk.FourMomentum(20.0, 0.0, 10.0, -10.0)
+def _(FourMomentum):
+    a = FourMomentum(20.0, 10.0, 0.0, 10.0)
+    b = FourMomentum(20.0, 0.0, 10.0, -10.0)
     delta_phi = a.delta_phi(b)
     delta_r = a.delta_r(b)
     {
@@ -147,9 +165,9 @@ def _(mo):
 
 
 @app.cell
-def _(cos, cosh, fk, sin, sinh):
+def _(FourMomentum, cos, cosh, sin, sinh):
     particles = [
-        fk.FourMomentum(
+        FourMomentum(
             _pt * cosh(_rapidity),
             _pt * cos(_phi),
             _pt * sin(_phi),
@@ -165,8 +183,8 @@ def _(cos, cosh, fk, sin, sinh):
 
 
 @app.cell
-def _(fk, particles):
-    jet_definition = fk.JetDefinition.anti_kt(radius=0.6, minimum_pt=5.0)
+def _(JetDefinition, particles):
+    jet_definition = JetDefinition.anti_kt(radius=0.6, minimum_pt=5.0)
     clustered = jet_definition.cluster(particles)
     [
         {
@@ -181,11 +199,11 @@ def _(fk, particles):
 
 
 @app.cell
-def _(fk, particles):
+def _(JetDefinition, particles):
     definitions = {
-        "kt": fk.JetDefinition.kt(0.6, minimum_pt=5.0),
-        "cambridge_aachen": fk.JetDefinition.cambridge_aachen(0.6, minimum_pt=5.0),
-        "anti_kt": fk.JetDefinition.anti_kt(0.6, minimum_pt=5.0),
+        "kt": JetDefinition.kt(0.6, minimum_pt=5.0),
+        "cambridge_aachen": JetDefinition.cambridge_aachen(0.6, minimum_pt=5.0),
+        "anti_kt": JetDefinition.anti_kt(0.6, minimum_pt=5.0),
     }
     algorithm_constituents = {
         algorithm: [

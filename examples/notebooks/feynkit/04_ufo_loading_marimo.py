@@ -61,10 +61,10 @@ def _():
     import os
     from pathlib import Path
 
-    import symbolica.community.feynkit as fk
+    from symbolica.community.hep import UfoLoader
 
     UFO_MODEL = Path(__file__).resolve().parents[3] / "assets/models/ufo/scalars"
-    return UFO_MODEL, fk, os
+    return (UFO_MODEL, UfoLoader, os)
 
 
 @app.cell(hide_code=True)
@@ -80,7 +80,7 @@ def _(mo):
 
 
 @app.cell
-def _(UFO_MODEL, fk, mo, os):
+def _(UFO_MODEL, UfoLoader, mo, os):
     import importlib.util
     import sys
 
@@ -105,7 +105,7 @@ def _(UFO_MODEL, fk, mo, os):
     _previous_interactions = os.environ.get(_interaction_key)
     os.environ[_interaction_key] = "2,3"
     try:
-        loaded = fk.UfoLoader(restriction_name="default").load(UFO_MODEL)
+        loaded = UfoLoader(restriction_name="default").load(UFO_MODEL)
     finally:
         if _previous_interactions is None:
             os.environ.pop(_interaction_key, None)

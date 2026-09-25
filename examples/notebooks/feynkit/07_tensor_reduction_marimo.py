@@ -59,14 +59,14 @@ def _():
     import math
     import time
 
-    import symbolica.community.feynkit as fk
+    from symbolica.community.hep import Model, TensorReducer
     from symbolica import E, S
 
     D = S("D")
     momentum = S("gammalooprs::Q")
     external = S("TensorTutorial::p")
     mink = S("spenso::mink")
-    return D, E, S, external, fk, math, mink, momentum, time
+    return (D, E, Model, S, TensorReducer, external, math, mink, momentum, time)
 
 
 @app.cell(hide_code=True)
@@ -93,12 +93,12 @@ def _(mo):
 
 
 @app.cell
-def _(D, S, external, fk, mink, momentum):
+def _(D, S, TensorReducer, external, mink, momentum):
     _mu = S("tr_mu")
     _nu = S("tr_nu")
     _k = momentum(10, mink(D))
 
-    rank_two_reducer = fk.TensorReducer(D).with_integrated_vector(_k)
+    rank_two_reducer = TensorReducer(D).with_integrated_vector(_k)
     rank_two_input = (
         momentum(10, mink(D, _mu))
         * momentum(10, mink(D, _nu))
@@ -147,7 +147,7 @@ def _(mo):
 
 
 @app.cell
-def _(D, S, external, fk, mink, momentum):
+def _(D, S, TensorReducer, external, mink, momentum):
     _indices = [S(f"tr_rank6_mu_{position}") for position in range(6)]
     _k = momentum(20, mink(D))
     _q = momentum(21, mink(D))
@@ -164,7 +164,7 @@ def _(D, S, external, fk, mink, momentum):
         rank_six_input *= _factor
 
     rank_six_reducer = (
-        fk.TensorReducer(D).with_integrated_vector(_k).with_integrated_vector(_q)
+        TensorReducer(D).with_integrated_vector(_k).with_integrated_vector(_q)
     )
     rank_six_output = rank_six_reducer.reduce(rank_six_input)
     return rank_six_input, rank_six_output
@@ -210,7 +210,7 @@ def _(mo):
 
 
 @app.cell
-def _(D, S, external, fk, math, mink, momentum, time):
+def _(D, S, TensorReducer, external, math, mink, momentum, time):
     _indices = [S(f"tr_rank20_mu_{position}") for position in range(20)]
     _compact_loop_momentum = momentum(30, mink(D))
     _rank_twenty_factors = []
@@ -225,7 +225,7 @@ def _(D, S, external, fk, math, mink, momentum, time):
     for _factor in _rank_twenty_factors[1:]:
         _rank_twenty_input *= _factor
 
-    _reducer = fk.TensorReducer(D).with_integrated_vector(_compact_loop_momentum)
+    _reducer = TensorReducer(D).with_integrated_vector(_compact_loop_momentum)
     _started = time.perf_counter()
     rank_twenty_output = _reducer.reduce(_rank_twenty_input)
     rank_twenty_seconds = time.perf_counter() - _started
@@ -285,7 +285,7 @@ def _(mo):
     numerator. Every contribution retains the scalar numerator prefactor. The
     external-state projector has been consumed by the reduction and is reset
     to one, so it cannot be applied twice. Graph splitting requires a fully
-    contracted projection and raises `fk.TensorReductionError` if Lorentz
+    contracted projection and raises `TensorReductionError` if Lorentz
     indices remain; use `reduce_tensor_numerator` when tensor-valued output is
     intentional. The original diagram is not mutated. Its topology,
     denominators, and topology ID are preserved in every contribution, while
@@ -297,8 +297,8 @@ def _(mo):
 
 
 @app.cell
-def _(E, fk, mo, table):
-    _vacuum_model = fk.Model.yang_mills()
+def _(E, Model, TensorReducer, mo, table):
+    _vacuum_model = Model.yang_mills()
 
     _vacuum_result = _vacuum_model.with_filters(
         particle_veto=[
@@ -313,7 +313,7 @@ def _(E, fk, mo, table):
         raise RuntimeError("expected one pure-gluon theta vacuum graph")
 
     vacuum_diagram = _vacuum_result.diagrams[0]
-    vacuum_reducer = fk.TensorReducer.feynkit(E("4"))
+    vacuum_reducer = TensorReducer.feynkit(E("4"))
     reduced_diagram_numerator = vacuum_diagram.reduce_tensor_numerator(vacuum_reducer)
     scalar_vacuum_graphs = vacuum_diagram.reduce_tensor_graphs(vacuum_reducer)
 
