@@ -5,6 +5,14 @@
 
 For complete executable examples, open the #link("guides/showcases/")[FeynKit showcase gallery].
 
+Loading a model registers its parameter `texname` labels with Spenso's display
+settings. Typst renders these LaTeX names through MiTeX in both SVG and notebook
+MathML, including inside amplitudes and parameter definitions. The algebraic
+names and plain-text output stay unchanged. `model.parameter("ee").texname`
+returns `"e"` in the Standard Model; `Me` deliberately uses the UFO label
+`\text{Me}`, rather than an inferred mass notation. JSON export and UFO import
+preserve these labels; parameters without labels keep their ordinary names.
+
 Use a diagram produced by the #link("quickstart/python/")[Python quickstart]. Its
 `to_linnest()` method returns complete Typst source; it does not compile a figure. `render()`,
 `to_html()`, `_repr_svg_()`, and `_repr_html_()` compile that source with Python's Typst package.

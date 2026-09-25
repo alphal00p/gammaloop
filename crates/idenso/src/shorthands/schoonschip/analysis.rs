@@ -8,6 +8,11 @@ use symbolica::atom::{AtomView, Symbol};
 
 use crate::tensor::inference::InterfaceInference;
 
+#[cfg(test)]
+std::thread_local! {
+    pub(super) static SCAN_COUNTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Call-local observations of one expression. Intrinsic dot rewrites may retain
 /// the contraction candidate: they remove indices rather than introduce them.
 /// A compound opaque payload leaves head observations incomplete; consumers
@@ -18,11 +23,20 @@ pub(crate) struct SimplificationCandidates<const N: usize> {
     pub(crate) dots: bool,
     pub(crate) symbols: [bool; N],
     pub(crate) complete: bool,
+    // Separate from opaque metadata: an early observer may leave normal syntax
+    // unvisited after proving only the repeated-index predicate.
+    pub(crate) traversal_complete: bool,
     pub(crate) intrinsic: bool,
 }
 
 impl<const N: usize> SimplificationCandidates<N> {
-    pub(crate) fn scan(expression: AtomView<'_>, symbols: [Symbol; N]) -> Self {
+    pub(crate) fn scan(
+        expression: AtomView<'_>,
+        symbols: [Symbol; N],
+        on_first_repeat: impl FnOnce() -> bool,
+    ) -> Self {
+        #[cfg(test)]
+        SCAN_COUNTS.with(|count| count.set(count.get() + 1));
         let symbols = symbols.map(|symbol| symbol.get_id());
         let bracket = SPENSO_TAG.bracket.get_id();
         let rank_one = &SPENSO_TAG.rank1;
@@ -34,84 +48,97 @@ impl<const N: usize> SimplificationCandidates<N> {
             dots: false,
             symbols: [false; N],
             complete: true,
+            traversal_complete: false,
             intrinsic: true,
         };
-        candidates.repeated_indices =
-            expression.has_repeated_explicit_indices_with_observer(|node, slot| match node {
-                AtomView::Fun(function) => {
-                    let id = function.get_symbol_id();
-                    candidates.observe_symbol(id, bracket, &symbols);
-                    let entry = &mut rank_one_heads[(id.wrapping_mul(0x9e37_79b9) >> 28) as usize];
-                    let (tagged, intrinsic) = match *entry {
-                        Some((cached, tagged, intrinsic)) if cached == id => (tagged, intrinsic),
-                        _ => {
-                            let tagged = function.get_symbol().has_tag(rank_one);
-                            let intrinsic = InterfaceInference::intrinsic_normalization_head(
-                                function.get_symbol(),
-                            );
-                            *entry = Some((id, tagged, intrinsic));
-                            (tagged, intrinsic)
-                        }
-                    };
-                    candidates.intrinsic &= intrinsic;
-                    if tagged && !candidates.dots {
-                        let slots = vector_slots.get_or_insert_with(SlotMatcher::default);
-                        candidates.dots = !slots
-                            .vector_argument(function)
-                            .and_then(|argument| slots.compact_representation(argument))
-                            .is_some_and(|representation| representation.is_base());
-                    }
-                    match slot {
-                        SlotMatch::Explicit(slot) => {
-                            // A variance wrapper can hide the representation
-                            // head from the observer's outer function node.
-                            if slot.representation().wrapper().is_some() {
-                                candidates.intrinsic &=
-                                    InterfaceInference::intrinsic_normalization_head(
-                                        slot.representation().head(),
-                                    );
-                                candidates.observe_symbol(
-                                    slot.representation().head().get_id(),
-                                    bracket,
-                                    &symbols,
+        let mut traversal_complete = true;
+        candidates.repeated_indices = expression.has_repeated_explicit_indices_with_observer(
+            |node, slot| {
+                match node {
+                    AtomView::Fun(function) => {
+                        let id = function.get_symbol_id();
+                        candidates.observe_symbol(id, bracket, &symbols);
+                        let entry =
+                            &mut rank_one_heads[(id.wrapping_mul(0x9e37_79b9) >> 28) as usize];
+                        let (tagged, intrinsic) = match *entry {
+                            Some((cached, tagged, intrinsic)) if cached == id => {
+                                (tagged, intrinsic)
+                            }
+                            _ => {
+                                let tagged = function.get_symbol().has_tag(rank_one);
+                                let intrinsic = InterfaceInference::intrinsic_normalization_head(
+                                    function.get_symbol(),
                                 );
+                                *entry = Some((id, tagged, intrinsic));
+                                (tagged, intrinsic)
                             }
-                            if !candidates.observe_leaf(slot.dimension(), bracket, &symbols)
-                                || !candidates.observe_leaf(slot.index(), bracket, &symbols)
-                            {
-                                candidates.allow_all();
-                            }
+                        };
+                        candidates.intrinsic &= intrinsic;
+                        if tagged && !candidates.dots {
+                            let slots = vector_slots.get_or_insert_with(SlotMatcher::default);
+                            candidates.dots = !slots
+                                .vector_argument(function)
+                                .and_then(|argument| slots.compact_representation(argument))
+                                .is_some_and(|representation| representation.is_base());
                         }
-                        SlotMatch::Opaque => {
-                            if function.iter().any(|argument| {
-                                !candidates.observe_leaf(argument, bracket, &symbols)
-                            }) {
-                                candidates.allow_all();
+                        match slot {
+                            SlotMatch::Explicit(slot) => {
+                                // A variance wrapper can hide the representation
+                                // head from the observer's outer function node.
+                                if slot.representation().wrapper().is_some() {
+                                    candidates.intrinsic &=
+                                        InterfaceInference::intrinsic_normalization_head(
+                                            slot.representation().head(),
+                                        );
+                                    candidates.observe_symbol(
+                                        slot.representation().head().get_id(),
+                                        bracket,
+                                        &symbols,
+                                    );
+                                }
+                                if !candidates.observe_leaf(slot.dimension(), bracket, &symbols)
+                                    || !candidates.observe_leaf(slot.index(), bracket, &symbols)
+                                {
+                                    candidates.allow_all();
+                                }
                             }
+                            SlotMatch::Opaque => {
+                                if function.iter().any(|argument| {
+                                    !candidates.observe_leaf(argument, bracket, &symbols)
+                                }) {
+                                    candidates.allow_all();
+                                }
+                            }
+                            SlotMatch::Other => {}
                         }
-                        SlotMatch::Other => {}
                     }
-                }
-                AtomView::Var(variable) => {
-                    candidates.observe_symbol(variable.get_symbol_id(), bracket, &symbols);
-                }
-                AtomView::Pow(power) => {
-                    // Rank-one bases are observed as functions below. Only a
-                    // metric base adds a power identity of its own; scalar
-                    // powers still expose any eligible work in their children.
-                    if !candidates.dots
-                        && let AtomView::Fun(base) = power.get_base()
-                    {
-                        candidates.dots = base.get_symbol_id() == ETS.metric.get_id();
+                    AtomView::Var(variable) => {
+                        candidates.observe_symbol(variable.get_symbol_id(), bracket, &symbols);
                     }
+                    AtomView::Pow(power) => {
+                        // Rank-one bases are observed as functions below. Only a
+                        // metric base adds a power identity of its own; scalar
+                        // powers still expose any eligible work in their children.
+                        if !candidates.dots
+                            && let AtomView::Fun(base) = power.get_base()
+                        {
+                            candidates.dots = base.get_symbol_id() == ETS.metric.get_id();
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
-            });
+            },
+            || {
+                traversal_complete = on_first_repeat();
+                traversal_complete
+            },
+        );
+        candidates.traversal_complete = traversal_complete;
         candidates
     }
 
     pub(crate) fn normalized(&self) -> bool {
-        !self.repeated_indices && !self.brackets && !self.dots
+        self.traversal_complete && !self.repeated_indices && !self.brackets && !self.dots
     }
 
     /// The complete scan found no normalization or supplied-symbol work.
@@ -159,6 +186,68 @@ mod tests {
     };
 
     #[test]
+    fn early_observation_distinguishes_unvisited_tails_from_opaque_metadata() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        use symbolica::atom::FunctionBuilder;
+
+        crate::test_support::test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let callback = spenso::tensor_symbol!(
+            "analysis_early_callback",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let vector = SPENSO_TAG.rank_one_tensor_symbol("spenso::analysis_early_vector");
+        let slot = spenso::mink!(4, 83719);
+        let tail = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(FunctionBuilder::new(vector).add_arg(&slot).finish().pow(2))
+            .finish();
+        // Noncommutative function arguments put both tails strictly after the
+        // repeated pair, independent of Add/Mul canonical ordering.
+        let source = FunctionBuilder::new(symbolica::symbol!("analysis_early_scope"))
+            .add_arg(&slot)
+            .add_arg(&slot)
+            .add_arg(FunctionBuilder::new(callback).add_arg(1).finish())
+            .add_arg(tail)
+            .finish();
+        calls.store(0, Ordering::Relaxed);
+        let early = SimplificationCandidates::scan(source.as_view(), [callback], || false);
+        assert!(early.repeated_indices && early.complete && early.intrinsic);
+        assert!(!early.traversal_complete && !early.normalized());
+        assert!(!early.brackets && !early.dots && !early.symbols[0]);
+        let full = SimplificationCandidates::scan(source.as_view(), [callback], || true);
+        assert!(full.repeated_indices && full.traversal_complete && full.complete);
+        assert!(full.brackets && full.dots && full.symbols[0]);
+        assert!(!full.intrinsic);
+        let mut decisions = 0;
+        let resumed = SimplificationCandidates::scan(source.as_view(), [callback], || {
+            decisions += 1;
+            true
+        });
+        assert_eq!(decisions, 1);
+        assert!(resumed.traversal_complete && resumed.complete && resumed.repeated_indices);
+        assert_eq!(resumed.brackets, full.brackets);
+        assert_eq!(resumed.dots, full.dots);
+        assert_eq!(resumed.intrinsic, full.intrinsic);
+        assert_eq!(resumed.symbols, full.symbols);
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+
+        let opaque =
+            Atom::parse("T(mink(4,hidden(a)))", "spenso", ParseSettings::symbolica()).unwrap();
+        let early = SimplificationCandidates::scan(opaque.as_view(), [], || false);
+        assert!(!early.repeated_indices && early.traversal_complete);
+        assert!(
+            !early.complete,
+            "payload completeness is independent of traversal completion"
+        );
+    }
+
+    #[test]
     fn intrinsic_observations_exclude_callbacks_and_hidden_payloads() {
         crate::test_support::test_initialize();
         let callback = spenso::tensor_symbol!("analysis_callback", norm = |_, _| {});
@@ -168,16 +257,16 @@ mod tests {
             ParseSettings::symbolica(),
         )
         .unwrap();
-        assert!(SimplificationCandidates::scan(plain.as_view(), []).intrinsic);
+        assert!(SimplificationCandidates::scan(plain.as_view(), [], || true).intrinsic);
         // The observer must continue after finding a repeated index, including
         // into scalar function metadata where normalization is still observable.
         let callback = symbolica::function!(callback, plain.clone());
         for expression in [callback.clone(), &plain * &callback] {
-            assert!(!SimplificationCandidates::scan(expression.as_view(), []).intrinsic);
+            assert!(!SimplificationCandidates::scan(expression.as_view(), [], || true).intrinsic);
         }
         for source in ["T(mink(f(x),a))", "T(mink(4,f(a)))", "T(dind(cof(3,f(a))))"] {
             let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
-            assert!(!SimplificationCandidates::scan(expression.as_view(), []).intrinsic);
+            assert!(!SimplificationCandidates::scan(expression.as_view(), [], || true).intrinsic);
         }
     }
 
@@ -209,7 +298,7 @@ mod tests {
         assert_eq!(square.normalize_dots(), expected);
         for source in ["(x+y)^8", "x^n", "unknown(x)^3", "(x+y)^(-2)"] {
             let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
-            let candidates = SimplificationCandidates::scan(expression.as_view(), []);
+            let candidates = SimplificationCandidates::scan(expression.as_view(), [], || true);
             assert!(!candidates.dots, "{source}");
             assert_eq!(expression.normalize_dots(), expression, "{source}");
         }
@@ -228,7 +317,7 @@ mod tests {
         ] {
             let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
             assert!(
-                SimplificationCandidates::scan(expression.as_view(), []).dots,
+                SimplificationCandidates::scan(expression.as_view(), [], || true).dots,
                 "{source}"
             );
         }
@@ -272,7 +361,7 @@ mod tests {
             "scope(mink(4,a),mink(4,a),T(mink(4,f(spenso::epsilon))))",
         ] {
             let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
-            let candidates = SimplificationCandidates::scan(expression.as_view(), heads);
+            let candidates = SimplificationCandidates::scan(expression.as_view(), heads, || true);
             assert_eq!(
                 candidates.repeated_indices,
                 expression.has_repeated_explicit_indices(),
@@ -302,7 +391,7 @@ mod tests {
         let head = representation.symbol();
         let expression =
             Atom::parse("T(dind(bis(4,a)))", "spenso", ParseSettings::symbolica()).unwrap();
-        let candidates = SimplificationCandidates::scan(expression.as_view(), [head]);
+        let candidates = SimplificationCandidates::scan(expression.as_view(), [head], || true);
         assert!(!candidates.complete || candidates.symbols == [expression.contains_symbol(head)]);
     }
 
@@ -323,7 +412,7 @@ mod tests {
             "analysis_compact_vector(spenso::trace,mink(4))",
         ] {
             let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
-            let candidates = SimplificationCandidates::scan(expression.as_view(), heads);
+            let candidates = SimplificationCandidates::scan(expression.as_view(), heads, || true);
             assert!(candidates.complete, "{source}");
             assert!(!candidates.dots, "{source}");
             assert_eq!(
@@ -352,7 +441,7 @@ mod tests {
         ] {
             let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
             assert!(
-                SimplificationCandidates::scan(expression.as_view(), []).dots,
+                SimplificationCandidates::scan(expression.as_view(), [], || true).dots,
                 "{source}"
             );
         }
@@ -362,7 +451,8 @@ mod tests {
             ParseSettings::symbolica(),
         )
         .unwrap();
-        let candidates = SimplificationCandidates::scan(expression.as_view(), [SPENSO_TAG.trace]);
+        let candidates =
+            SimplificationCandidates::scan(expression.as_view(), [SPENSO_TAG.trace], || true);
         assert!(!candidates.complete);
         assert!(candidates.dots);
     }

@@ -103,8 +103,9 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
             return false;
         };
 
-        Self::is_compact_scalar_product(fun)
-            || fun.iter().any(Self::contains_schoonschip_shorthand_arg)
+        !fun.get_symbol().is_scalar()
+            && (Self::is_compact_scalar_product(fun)
+                || fun.iter().any(Self::contains_schoonschip_shorthand_arg))
     }
 
     /// Materialize an expandable shorthand expression, or return it unchanged.
@@ -131,6 +132,12 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
         let AtomView::Fun(fun) = value else {
             return None;
         };
+
+        // Scalar payloads are opaque metadata even when they contain compact
+        // vectors or scalar products. Hoisting their factors changes the function.
+        if fun.get_symbol().is_scalar() {
+            return None;
+        }
 
         if Self::is_chain_like_head(fun) && !self.mode.expand_inside_chains {
             return None;
@@ -325,6 +332,7 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
     /// Every other product factor must be syntactically scalar.
     fn compact_vector_rep(value: AtomView<'_>) -> Option<Representation<LibraryRep>> {
         match value {
+            AtomView::Fun(fun) if fun.get_symbol().is_scalar() => None,
             AtomView::Fun(fun) if fun.get_symbol().has_tag(&SPENSO_TAG.broadcast) => {
                 let args = fun.iter().collect::<Vec<_>>();
                 let [argument] = args.as_slice() else {
@@ -403,7 +411,8 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
     /// metric or dot product, and has exactly one direct representation argument.
     /// Explicit slots are spectators: only that unique unindexed axis is replaced.
     fn compact_tensor_rep_arg(value: FunView<'_>) -> Option<(usize, Representation<LibraryRep>)> {
-        if !value.get_symbol().has_tag(&SPENSO_TAG.tensor)
+        if value.get_symbol().is_scalar()
+            || !value.get_symbol().has_tag(&SPENSO_TAG.tensor)
             || value.get_symbol() == ETS.metric
             || value.get_symbol() == SPENSO_TAG.dot
         {
@@ -1162,6 +1171,137 @@ mod tests {
         };
 
         assert_eq!(product.iter().count(), 2);
+    }
+
+    #[test]
+    fn scalar_metadata_keeps_compact_products_sums_and_powers_opaque() {
+        let state = ParseState::<AbstractIndex>::default();
+        let materializer =
+            SchoonschipMaterializer::with_mode(&state, SchoonschipExpansionMode::full());
+        let scalar = symbol!("materialized_scalar_metadata"; Scalar);
+        let wrapper = symbol!("materialized_metadata_wrapper");
+        let tensor = SPENSO_TAG.tensor_symbol("materialized_metadata_owner");
+        let p = compact_vector(SPENSO_TAG.rank_one_tensor_symbol("materialized_metadata_p"));
+        let q = compact_vector(SPENSO_TAG.rank_one_tensor_symbol("materialized_metadata_q"));
+        let dot = function!(ETS.metric, &p, &q);
+        let slot = mink4()
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(31))
+            .to_atom();
+
+        for payload in [p.clone(), &p + &q, dot.clone(), dot.pow(2)] {
+            let metadata = function!(scalar, payload);
+            for expression in [
+                metadata.clone(),
+                function!(tensor, &metadata, &slot),
+                function!(tensor, function!(wrapper, &metadata), &slot),
+            ] {
+                assert!(
+                    !SchoonschipMaterializer::<AbstractIndex>::contains_schoonschip_shorthand(
+                        expression.as_view()
+                    )
+                );
+                assert_eq!(
+                    materializer.materialize_shorthand(expression.as_view()),
+                    expression
+                );
+            }
+        }
+        assert_eq!(state.next_dummy.get(), 1_000_000);
+    }
+
+    #[test]
+    fn scalar_attribute_takes_priority_over_compact_tensor_tags() {
+        let state = ParseState::<AbstractIndex>::default();
+        let materializer =
+            SchoonschipMaterializer::with_mode(&state, SchoonschipExpansionMode::full());
+        let scalar_tensor = symbol!("materialized_scalar_tensor"; Scalar; tags = [
+            SPENSO_TAG.tensor.clone(), SPENSO_TAG.rank1.clone()
+        ]);
+        let scalar_broadcast = symbol!("materialized_scalar_broadcast"; Scalar; tags = [
+            SPENSO_TAG.broadcast.clone()
+        ]);
+        let tensor = SPENSO_TAG.tensor_symbol("materialized_conflict_owner");
+        let compact = function!(scalar_tensor, mink4().to_symbolic([]));
+        let broadcast = function!(
+            scalar_broadcast,
+            compact_vector(SPENSO_TAG.rank_one_tensor_symbol("materialized_conflict_p"))
+        );
+
+        for metadata in [compact, broadcast] {
+            let AtomView::Fun(function) = metadata.as_view() else {
+                unreachable!()
+            };
+            assert!(
+                SchoonschipMaterializer::<AbstractIndex>::compact_tensor_rep_arg(function)
+                    .is_none()
+            );
+            assert!(
+                SchoonschipMaterializer::<AbstractIndex>::compact_vector_rep(metadata.as_view())
+                    .is_none()
+            );
+            for expression in [metadata.clone(), function!(tensor, &metadata)] {
+                assert!(
+                    !SchoonschipMaterializer::<AbstractIndex>::contains_schoonschip_shorthand(
+                        expression.as_view()
+                    )
+                );
+                assert_eq!(
+                    materializer.materialize_shorthand(expression.as_view()),
+                    expression
+                );
+            }
+        }
+        assert_eq!(state.next_dummy.get(), 1_000_000);
+    }
+
+    #[test]
+    fn bound_vector_lowering_preserves_adjacent_scalar_metadata() {
+        let state = ParseState::<AbstractIndex>::default();
+        let materializer =
+            SchoonschipMaterializer::with_mode(&state, SchoonschipExpansionMode::full());
+        let p = SPENSO_TAG.rank_one_tensor_symbol("materialized_bound_p");
+        let q = SPENSO_TAG.rank_one_tensor_symbol("materialized_bound_q");
+        let tensor = SPENSO_TAG.tensor_symbol("materialized_bound_owner");
+        let scalar = symbol!("materialized_bound_metadata"; Scalar);
+        let metadata = function!(
+            scalar,
+            function!(ETS.metric, compact_vector(p), compact_vector(q))
+        );
+        let visible = mink4()
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(37))
+            .to_atom();
+        let expression = function!(tensor, &metadata, compact_vector(p), &visible);
+        assert!(
+            SchoonschipMaterializer::<AbstractIndex>::contains_schoonschip_shorthand(
+                expression.as_view()
+            )
+        );
+
+        let materialized = materializer.materialize_shorthand(expression.as_view());
+        let AtomView::Mul(product) = materialized.as_view() else {
+            panic!("expected bound-vector factors")
+        };
+        assert_eq!(product.iter().count(), 2);
+        let owner = product
+            .iter()
+            .find_map(|factor| match factor {
+                AtomView::Fun(function) if function.get_symbol() == tensor => Some(function),
+                _ => None,
+            })
+            .unwrap();
+        let vector = product
+            .iter()
+            .find_map(|factor| match factor {
+                AtomView::Fun(function) if function.get_symbol() == p => Some(function),
+                _ => None,
+            })
+            .unwrap();
+        let arguments = owner.iter().collect::<Vec<_>>();
+        assert_eq!(arguments[0], metadata.as_view());
+        assert_eq!(arguments[2], visible.as_view());
+        assert_eq!(arguments[1], vector.iter().next().unwrap());
+        assert!(Slot::<LibraryRep, AbstractIndex>::try_from(arguments[1]).is_ok());
+        assert_eq!(state.next_dummy.get(), 1_000_001);
     }
 
     #[test]

@@ -1,5 +1,8 @@
 //! Contract a metric or tagged vector by replacing one compatible tensor slot.
 
+mod components;
+use components::Intake;
+
 use ahash::AHashMap;
 
 use spenso::{
@@ -58,6 +61,11 @@ enum SlotReplacement {
     Ambiguous,
 }
 
+#[cfg(test)]
+std::thread_local! {
+    pub(super) static COLLECTION_COUNTS: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+
 pub(crate) struct SlotContraction {
     metric: Symbol,
     tags: &'static SpensoTags,
@@ -65,19 +73,66 @@ pub(crate) struct SlotContraction {
 }
 
 impl SlotContraction {
+    fn new() -> Self {
+        Self {
+            metric: ETS.metric,
+            tags: &SPENSO_TAG,
+            projectors: [*shadowing::CYCLIC, *shadowing::SYM],
+        }
+    }
+
+    pub(super) fn component_sum_candidate(view: AtomView<'_>, expand_sums: bool) -> bool {
+        matches!(view, AtomView::Add(_))
+            || (expand_sums && matches!(view, AtomView::Mul(_) | AtomView::Pow(_)))
+    }
+
+    /// Emit a fully admitted metric/vector sum before any dot cleanup work.
+    pub(super) fn component_sum(view: AtomView<'_>, expand_sums: bool) -> Option<Atom> {
+        if !Self::component_sum_candidate(view, expand_sums) {
+            return None;
+        }
+        let mut slots = SlotMatcher::default();
+        Self::new().collect_component_sum(
+            view,
+            &mut slots,
+            if expand_sums {
+                Intake::FactoredContraction
+            } else {
+                Intake::ExpandedContraction
+            },
+        )
+    }
+
+    /// Expand admitted scalar sums without constructing or reducing tensor ports.
+    pub(crate) fn expand_scalar_sum(view: AtomView<'_>) -> Option<Atom> {
+        if !matches!(view, AtomView::Add(_)) {
+            return None;
+        }
+        let mut slots = SlotMatcher::default();
+        Self::new().collect_component_sum(view, &mut slots, Intake::ScalarExpansion)
+    }
+
     /// Contract explicit metrics and optional vectors while preserving scalar factors.
     /// Dot normalization, including metric traces and powers, remains a
     /// prerequisite stage owned by the caller.
-    pub(crate) fn run(view: AtomView<'_>, chain_like: bool, rank_one: bool) -> Atom {
+    pub(crate) fn run(
+        view: AtomView<'_>,
+        chain_like: bool,
+        rank_one: bool,
+        collect_components: bool,
+    ) -> Atom {
         let mut current = view.to_owned();
         let mut slots = SlotMatcher::default();
         // SlotMatcher has already initialized these predefined bundles. Retain
         // their handles instead of probing Symbolica's state on every candidate.
-        let contractor = Self {
-            metric: ETS.metric,
-            tags: &SPENSO_TAG,
-            projectors: [*shadowing::CYCLIC, *shadowing::SYM],
-        };
+        let contractor = Self::new();
+        if collect_components
+            && rank_one
+            && let Some(result) =
+                contractor.collect_component_sum(view, &mut slots, Intake::ExpandedContraction)
+        {
+            return result;
+        }
         loop {
             if let AtomView::Mul(product) = current.as_view()
                 && let Some(next) =
@@ -782,9 +837,12 @@ mod tests {
             ("g(mink(4,a),P(mink(4)))*T(mink(4,a))", "T(P(mink(4)))"),
         ] {
             let expression = parse(input);
-            let result = SlotContraction::run(expression.as_view(), false, false);
+            let result = SlotContraction::run(expression.as_view(), false, false, true);
             assert_eq!(result, parse(expected), "{input}");
-            assert_eq!(SlotContraction::run(result.as_view(), false, false), result);
+            assert_eq!(
+                SlotContraction::run(result.as_view(), false, false, true),
+                result
+            );
         }
     }
 
@@ -822,11 +880,14 @@ mod tests {
             ),
         ] {
             calls.lock().unwrap().clear();
-            let result = SlotContraction::run(input.as_view(), false, false);
+            let result = SlotContraction::run(input.as_view(), false, false, true);
             assert_eq!(result, output);
             assert_eq!(*calls.lock().unwrap(), expected_calls);
             calls.lock().unwrap().clear();
-            assert_eq!(SlotContraction::run(result.as_view(), false, false), result);
+            assert_eq!(
+                SlotContraction::run(result.as_view(), false, false, true),
+                result
+            );
             assert!(calls.lock().unwrap().is_empty());
         }
     }
@@ -846,7 +907,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), false, false),
+                SlotContraction::run(expression.as_view(), false, false, true),
                 parse(expected),
                 "{input}"
             );
@@ -874,9 +935,12 @@ mod tests {
                 "T(slot_contraction_p(mink(4)))",
             ),
         ] {
-            let result = SlotContraction::run(parse(input).as_view(), false, true);
+            let result = SlotContraction::run(parse(input).as_view(), false, true, true);
             assert_eq!(result, parse(expected), "{input}");
-            assert_eq!(SlotContraction::run(result.as_view(), false, true), result);
+            assert_eq!(
+                SlotContraction::run(result.as_view(), false, true, true),
+                result
+            );
         }
     }
 
@@ -922,9 +986,12 @@ mod tests {
             ),
         ] {
             let expression = parse(input);
-            let result = SlotContraction::run(expression.as_view(), true, true);
+            let result = SlotContraction::run(expression.as_view(), true, true, true);
             assert_eq!(result, parse(expected), "{input}");
-            assert_eq!(SlotContraction::run(result.as_view(), true, true), result);
+            assert_eq!(
+                SlotContraction::run(result.as_view(), true, true, true),
+                result
+            );
         }
     }
 
@@ -937,11 +1004,14 @@ mod tests {
         let expected = parse(
             "g(mink(4,c),mink(4,d))*epsilon(mink(4,b),mink(4,e),mink(4,f),mink(4,h))-g(mink(4,c),mink(4,b))*epsilon(mink(4,d),mink(4,e),mink(4,f),mink(4,h))",
         );
-        let result = SlotContraction::run(determinant.as_view(), false, false);
+        let result = SlotContraction::run(determinant.as_view(), false, false, true);
         // Epsilon normalization can move a common minus sign outside the
         // two-term tensor polynomial. There are no scalar spectators here.
         assert_eq!(result.expand(), expected.expand());
-        assert_eq!(SlotContraction::run(result.as_view(), false, false), result);
+        assert_eq!(
+            SlotContraction::run(result.as_view(), false, false, true),
+            result
+        );
         for (input, expected, rank_one) in [
             (
                 "(x+y)^6*(z*g(mink(D,a),mink(D,b))+(u+v)*(g(mink(D,a),mink(D,c))+g(mink(D,a),mink(D,d))))*T(mink(D,a))",
@@ -962,14 +1032,14 @@ mod tests {
             let expression = parse(input);
             if rank_one {
                 assert_eq!(
-                    SlotContraction::run(expression.as_view(), false, false),
+                    SlotContraction::run(expression.as_view(), false, false, true),
                     expression
                 );
             }
-            let result = SlotContraction::run(expression.as_view(), false, rank_one);
+            let result = SlotContraction::run(expression.as_view(), false, rank_one, true);
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(
-                SlotContraction::run(result.as_view(), false, rank_one),
+                SlotContraction::run(result.as_view(), false, rank_one, true),
                 result
             );
         }
@@ -981,7 +1051,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), false, false),
+                SlotContraction::run(expression.as_view(), false, false, true),
                 expression
             );
         }
@@ -1006,7 +1076,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), true, true),
+                SlotContraction::run(expression.as_view(), true, true, true),
                 expression,
                 "{input}"
             );
@@ -1046,9 +1116,12 @@ mod tests {
                 "D*Nc",
             ),
         ] {
-            let result = SlotContraction::run(parse(input).as_view(), false, false);
+            let result = SlotContraction::run(parse(input).as_view(), false, false, true);
             assert_eq!(result, parse(expected), "{input}");
-            assert_eq!(SlotContraction::run(result.as_view(), false, false), result);
+            assert_eq!(
+                SlotContraction::run(result.as_view(), false, false, true),
+                result
+            );
         }
     }
 
@@ -1086,7 +1159,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), true, true),
+                SlotContraction::run(expression.as_view(), true, true, true),
                 expression
             );
         }
@@ -1098,7 +1171,7 @@ mod tests {
         let distinct =
             parse("g(mink(4,1),mink(4,2))*T(mink(4,4294967297))*U(mink(4,k))*V(mink(4,k))");
         assert_eq!(
-            SlotContraction::run(distinct.as_view(), false, false),
+            SlotContraction::run(distinct.as_view(), false, false, true),
             distinct
         );
         for (input, expected) in [
@@ -1112,7 +1185,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                SlotContraction::run(parse(input).as_view(), false, false),
+                SlotContraction::run(parse(input).as_view(), false, false, true),
                 parse(expected)
             );
         }
@@ -1133,7 +1206,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                SlotContraction::run(parse(input).as_view(), false, false),
+                SlotContraction::run(parse(input).as_view(), false, false, true),
                 parse(expected)
             );
         }
@@ -1144,7 +1217,7 @@ mod tests {
         crate::representations::initialize();
         let endpoint = parse("g(bis(4,a),bis(4,b))*chain(bis(4,b),bis(4,c),F(in,out))");
         assert_eq!(
-            SlotContraction::run(endpoint.as_view(), false, false),
+            SlotContraction::run(endpoint.as_view(), false, false, true),
             parse("chain(bis(4,a),bis(4,c),F(in,out))")
         );
         for (input, expected) in [
@@ -1163,12 +1236,12 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), false, false),
+                SlotContraction::run(expression.as_view(), false, false, true),
                 expression,
                 "{input}"
             );
             assert_eq!(
-                SlotContraction::run(expression.as_view(), true, false),
+                SlotContraction::run(expression.as_view(), true, false, true),
                 parse(expected),
                 "{input}"
             );
@@ -1180,7 +1253,7 @@ mod tests {
         crate::representations::initialize();
         let expression = parse("g(mink(4,a),mink(4,b))*g(mink(4,c),mink(4,d))*T(mink(4,d))");
         assert_eq!(
-            SlotContraction::run(expression.as_view(), false, false),
+            SlotContraction::run(expression.as_view(), false, false, true),
             parse("g(mink(4,a),mink(4,b))*T(mink(4,c))")
         );
     }
@@ -1201,7 +1274,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), false, false),
+                SlotContraction::run(expression.as_view(), false, false, true),
                 expression,
                 "{input}"
             );

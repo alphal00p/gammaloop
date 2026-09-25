@@ -1134,7 +1134,7 @@ def _(mo):
     are in that record.
 
     ```sh
-    cargo run -p idenso --profile dev-optim --example metric_contraction_benchmark -- /tmp/metric-benchmark
+    cargo run -p idenso --features reference-cases --profile dev-optim --example metric_contraction_benchmark -- /tmp/metric-benchmark
     cargo nextest run -p spenso-hep-lib --test metric_contraction_validation --cargo-profile dev-optim
     ```
 
@@ -1904,7 +1904,7 @@ def _(mo):
     The complete record is `examples/notebooks/contraction_performance.json`, including both run orders, raw samples, source identities, FORM programs and validation evidence. Reproduce the current Rust measurements with:
 
     ```sh
-    cargo run --locked -p idenso --profile dev-optim --example metric_contraction_benchmark -- /tmp/contraction-full 5 8
+    cargo run --locked -p idenso --features reference-cases --profile dev-optim --example metric_contraction_benchmark -- /tmp/contraction-full 5 8
     cargo run --locked -p idenso --profile dev-optim --example contraction_phase_benchmark -- /tmp/contraction-full /tmp/contraction-phases 5 8
     ```
     """)
@@ -2715,23 +2715,26 @@ def _(mo):
     mo.md(r"""
     ## Ordered gluonic-ladder Feynman rules
 
-    This benchmark preserves the supplied eight-vertex routing, the six-term
-    three-gluon Lorentz rule, and the substitution order **1 → 8**. It contracts
+    This benchmark preserves the supplied eight-vertex routing and six-term
+    three-gluon Lorentz rule. The selector applies the same order to both engines:
+    the original **1 → 8**, or **5, 4, 6, 3, 7, 2, 8, 1** to close rungs early
+    (the default). It contracts
     the two external Lorentz ports with `k10` and `k20`. No on-shell identities,
     color factors, couplings, or propagator denominators are included.
     The supplied topology has eleven internal edges and eight vertices, hence
     **four loops**, despite the original three-loop label.
 
     The reference FORM script sorts and contracts after *each* replacement.
-    Its intermediate term counts are **6, 34, 192, 1,084, 6,069, 10,947,
+    Its original-order intermediate counts are **6, 34, 192, 1,084, 6,069, 10,947,
     23,937, 9,652**. Changing substitution order changes the intermediate work.
 
     Two timings answer different questions. **Rule substitution** applies the
     eight replacements with `rhs_cache_size=1000` and a held RHS expansion;
     the vertex product stays factored. **Ordered scalar reduction** additionally
-    expands and contracts the accumulated vertices after every replacement.
-    Unprocessed vertex factors are held outside that accumulator; they multiply
-    every intermediate term and do not change its term count.
+    expands and contracts the accumulated vertices after every replacement,
+    carrying typed interfaces between stages. Python keeps unapplied vertices
+    outside its accumulator; FORM carries their functions throughout. Intermediate
+    forms need not match, so the final polynomial is checked exactly.
     Only the latter has the same 9,652-term endpoint as FORM. This explicitly
     requested polynomial expansion is confined to this standalone benchmark.
 
@@ -3037,6 +3040,279 @@ def _(mo):
     Sources, full ranges, exact checks and FORM programs are preserved under
     `shared_tensor_axial_and_conversion_followup` in the parity archive.
 
+    **Direct Atom emission without a polynomial:** a separate three-way trial
+    keeps the shared recurrence but emits each final product with `mul_many`
+    and collects once with `add_many`.
+
+    | Expanded tracen | Original polynomial | Patched conversion | Direct Atoms |
+    | --- | ---: | ---: | ---: |
+    | Free length 10 | 1.472 ms | 1.031 ms | 1.605 ms |
+    | Free length 12 | 18.814 ms | 13.125 ms | 18.866 ms |
+    | Free length 14 | 379.800 ms | 280.832 ms | 368.768 ms |
+    | Contracted order-sensitive 12 | 0.931 ms | 0.825 ms | 3.356 ms |
+    | Contracted interior-pair case | 3.282 ms | 2.349 ms | 8.926 ms |
+
+    These whole-call medians use three rotating process rounds and retain the
+    factored spectator. All candidates start from the same earlier baseline;
+    the axial shortcut above remains a separate retained change. The direct
+    emitter is **not retained**: it is flat for free length 12 and much slower
+    on contracted words. Complete typed ladder times are **8.833 / 8.804 / 9.044 s**;
+    raw times are **17.226 / 16.954 / 17.044 s**, with shared-host ranges retained.
+    All outputs agree, including the 9,652-term ladder result. The candidate
+    passes **112 Rust**, **207 exact**, **117 HEP**, and both added contracted
+    checks. The current-worktree suite passes **591/591** enabled tests, with
+    **22 ignored**, after repairing the stale snapshots and scoped-index test.
+    Fresh FORM trace-body CPU medians are **0.757 / 2.550 ms** for the two
+    contracted cases, excluding the spectator and Python wrapping. Patched
+    polynomial conversion is competitive here; direct emission widens the gap.
+    The direct free-12 profile spends **44.38%** of sampled cycles normalizing
+    products, **6.59%** on other product construction, and **33.42%** on the final
+    bulk sum; per-leaf ID sorting is **3.77%**. These disjoint sampled shares
+    show that ordinary Atom construction remains expensive after removing the
+    polynomial. They are not wall-time phase measurements.
+    Untimed counts confirm **2,220 → 315** monomials in the order-sensitive
+    case and **5,670 → 1,890** in the interior-pair case. Polynomial collection
+    combines coefficients before constructing Atoms; direct emission does that
+    work later, after building every product. Free length 12 has **10,395**
+    leaves and the same number of final monomials.
+    See `shared_tensor_direct_atom_emission_experiment` in the parity archive.
+
+    **Ladder-focused checkpoint:** the frozen current-workspace host
+    `f51d1774` takes **8.551 s typed / 16.408 s raw**, versus fresh FORM's
+    **0.733 s process wall**: an approximately **11.7×** typed gap. Three
+    alternating process pairs retain exact agreement at all eight stages and
+    with the FORM-certified **9,652-term** final polynomial. This checkpoint
+    includes other workspace/dependency updates, so its small improvement over
+    the preceding release cannot be assigned to one contraction change.
+    Separate diagnostic phases give **6.009 s Schoonschip**, **1.579 s typed
+    composition**, and **1.004 s initial expansion**; raw construction takes
+    **10.110 s**. Repeated initialization probes consume **27.13%** of sampled
+    raw-constructor cycles through public lazy symbol-bundle accesses.
+
+    At stage eight, the initial dot pass leaves **184,152 terms**. One
+    productive contraction pass performs **197,841 metric** and **299,093
+    rank-one** substitutions, collecting **54,846 terms**. Its **85,702**
+    nested-vector occurrences then normalize to **9,652 terms**. Emitting
+    compact dots earlier passed correctness checks but is **not retained**:
+    native stage six improves **832.73 → 683.74 ms**, while stage eight
+    regresses **2,192.48 → 2,243.86 ms**. Profiles show function construction
+    moving into contraction, before equal terms combine. These stage timings
+    exclude Python wrapping. The complete baseline, FORM program and profiles
+    are saved under `current_ladder_profile_checkpoint` in the parity archive.
+
+    A directed-pair inventory finds **no opposite nested orientations** in
+    either ladder order. All **26** nested-pair types in the original final
+    stage also occur as compact `g` products; **22 of 26** do in the
+    rung-closing stage. New nested contractions therefore only collect with
+    existing dots during cleanup. Current vector construction has no default
+    hook for this identity: `p(q(rep)) != q(p(rep))` until explicit cleanup,
+    even though both then become the same symmetric metric.
+
+    A native constructor-hook prototype establishes that equality immediately
+    and passes exact, fixed-point and callback checks, but is **not retained**:
+    original stages six/eight change **832.771 → 702.641 ms** and
+    **2,197.455 → 2,406.311 ms**; closing rungs early gives
+    **58.559 → 51.046 ms** and **646.315 → 653.410 ms**. These are three-pair
+    medians for complete Schoonschip calls on preconstructed stage fixtures.
+    The largest stage regresses **9.5%**. Earlier canonicalization alone does
+    not establish a complete-ladder gain. The experiment and construction
+    semantics are saved as `native_vector_constructor_normalization_experiment`.
+
+    The matched profile assigns **15.6%** of original stage-eight samples to
+    constructor normalization, **30.9%** to remaining dot cleanup and
+    **43.5%** to remaining slot contraction. Closing rungs early gives
+    **12.5%, 32.2%, 44.9%**, respectively. These disjoint sampled shares
+    explain why moving the identity into construction is insufficient: dots
+    are still built repeatedly before equal products combine. See
+    `native_vector_constructor_profile` for the measured source and stacks.
+
+    A bounded cache of successful constructor identities improves the isolated
+    final-stage medians to **2.172 → 2.066 s** in original order and
+    **651 → 572 ms** with rungs closed early. All **36 timed outputs**, callback
+    and fixed-point gates, **139 Idenso tests** and **six constructor/cache
+    tests** pass. The cache remains isolated pending owner-controlled
+    registration and complete-host validation. Its two separately recorded
+    screens are saved as `native_vector_constructor_cache_experiment`.
+
+    A separate Symbolica patch avoids copying/rebuilding already ordered
+    symmetric-function arguments and sorts borrowed views otherwise. The
+    dot-shaped constructor microbenchmark improves **359 → 227 ns** when
+    ordered and **357 → 304 ns** when reversed. This is a primitive result,
+    not a ladder speedup. The standalone `symmetric_construction` reproducer
+    and patch live in `examples/reproducers/symbolica-expansion`; see
+    `symbolica_symmetric_borrowed_arguments_experiment` for differential gates
+    and all clocks.
+
+    **Retained constructor improvements:** reusing initialized symbol handles
+    and consulting the existing interface cache before another syntax walk
+    reduces the complete typed ladder **8.489 → 7.936 s (6.5%)** across three
+    improving pairs. The raw median is **16.798 → 14.802 s (11.9%)**, but one
+    raw pair regresses **20.4%**; the archive retains that variability. Fresh
+    FORM takes **0.733 s**, leaving a **10.8×** typed gap. Separate diagnostics
+    reduce raw construction **10.128 → 7.431 s** and typed composition
+    **1.553 → 1.264 s**; these phases are not additive median estimates.
+    Callback-aware result validation and index checks remain in place.
+    All **207 exact / 117 HEP** checks and **592 live Rust tests** pass,
+    with **22 default ignored**, plus Clippy and formatting. Trace controls
+    show small mixed changes. See
+    `retained_ladder_constructor_handles_and_shape_cache` for the isolated
+    source comparison, complete samples and rejected early-dot experiment.
+
+    **Closing rungs earlier:** on the same frozen baseline, vertex order
+    **5, 4, 6, 3, 7, 2, 8, 1** reduces the complete typed loop
+    **8.553 → 2.569 s** and the largest expanded input
+    **186,516 → 60,314 terms**. FORM also benefits, **0.729 → 0.173 s**,
+    so the ratio grows **11.7× → 14.9×**. Ordering helps substantially but
+    does not explain the relative engine gap. Both final polynomials agree
+    exactly; intermediate forms need not match.
+
+    With the retained constructor changes, a further three-pair comparison
+    gives **2.579 → 2.297 s**, improving every pair. Fresh FORM takes
+    **0.171 s**, leaving a **13.4×** gap. The executable example below now
+    carries typed interfaces and defaults to this order, with a selector for
+    the original order; FORM follows the same choice. These are explicit
+    orders, not an automatic planner or a claim of optimality. The validated
+    build is installed in the notebook interpreter. See
+    `ladder_order_comparison` for all observations and both exact checks.
+
+    The preceding validation build also corrects an existing strict-syntax
+    inconsistency for `dind` wrappers. All **873 library tests** pass, with
+    **22 default ignored**, plus all-target Clippy, formatting, **207 exact /
+    117 HEP** checks and both actual notebook orders. Fresh complete medians
+    are **8.224 s original / 2.490 s closing rungs early**, versus FORM's
+    **0.748 / 0.182 s**: remaining gaps of **11.0× / 13.7×**. Paired timing
+    changes from the preceding build are mixed; no speedup is attributed to
+    this correctness fix. See `final_strict_wrapper_ladder_validation`.
+
+    **Closed-component collection:** the shared Rust contractor now turns
+    closed metric/vector paths directly into canonical dots, collects exact
+    rational coefficients, then emits the scalar expression once. It uses
+    explicit-index connectivity and the existing power conventions; open,
+    opaque or callback-sensitive cases keep their established behavior.
+    An existing repeated-index flag guards the early attempt, preserving
+    scalar rerun performance.
+
+    The selected native screen gives **2.189 → 0.832 s** for original-order
+    stage eight and **646 → 241 ms** with rungs closed early, about **62%**
+    faster. Scalar reruns remain around **13.5 ms**. Open stage-six controls
+    are **1–4.3% slower** in this screen. These saved-stage timings exclude
+    frontend multiplication, expansion and wrapping; see
+    `guarded_pre_dot_closed_component_collection_native_screen` for every
+    timing, exact/callback check and retained-source identity.
+
+    **Complete-ladder validation of the selected collector:** three alternating
+    process pairs use the same current frontend and dependency snapshot on both
+    sides. Each complete loop checks the full **9,652-term** FORM-certified
+    polynomial after timing:
+
+    | Route and order | Baseline | Selected collector | Median change |
+    | --- | ---: | ---: | ---: |
+    | Typed, original | 7.832 s | 6.979 s | −10.9% |
+    | Typed, rungs closed early | 2.349 s | 2.160 s | −8.0% |
+    | Raw, original | 13.784 s | 12.500 s | −9.3% |
+    | Raw, rungs closed early | 4.020 s | 3.554 s | −11.6% |
+
+    All original-order typed pairs and all raw pairs improve. Rung-closing
+    typed pairs range from **13.7% faster to 3.1% slower**, so their median
+    improvement has more variability. Fresh FORM process medians are
+    **0.725 / 0.174 s** in the same two orders, leaving typed gaps of
+    **9.6× / 12.4×**. Python clocks include all eight reduction steps but
+    exclude imports, fixture setup and final checking; FORM clocks include
+    process startup. These results establish improvement, not FORM parity.
+
+    Separate instrumented runs locate the remaining cost. Original-order
+    public Schoonschip calls total **4.389 s (66.6%)**, composition **1.243 s**
+    and initial expansion **0.933 s**. Closing rungs early gives **1.214 s
+    (62.2%)**, **0.467 s** and **0.256 s**, respectively. Public calls include
+    result wrapping and validation; these phase clocks do not isolate those
+    inner costs and are not additive estimates of the paired medians.
+
+    Trace controls are mixed: free length-12 `tracen` is **18.777 → 18.707 ms**,
+    free length-8 `trace4` **0.229 → 0.226 ms**, and free length-10 `tracen`
+    **1.481 → 1.551 ms (+4.7%)**. Axial length-12 is **1.560 → 1.358 ms**.
+    No general trace speedup is attributed to this collector.
+
+    All **877 library tests**, **207 exact comparisons**, **117 HEP component
+    checks**, and both actual notebook orders pass, with **22 existing tests
+    ignored**. All-target Clippy and formatting pass. The validated collector
+    is installed in the notebook interpreter; the constructor hook, its cache
+    and the isolated Symbolica patch remain experiments. See
+    `retained_closed_component_ladder_validation` for source identities,
+    complete samples, FORM programs and validation records.
+
+    **Open components and shared result checks:** the same Rust collector now
+    reduces paths ending in free indices, preserving their exact slot syntax.
+    The shared callback certificate reuses its metric handle within one walk;
+    metadata and callback checks remain intact. Three fresh process pairs
+    against the preceding closed-component build give:
+
+    | Route and order | Before | After | Median change |
+    | --- | ---: | ---: | ---: |
+    | Typed, original | 6.547 s | 4.784 s | −26.9% |
+    | Typed, rungs closed early | 1.880 s | 1.502 s | −20.1% |
+    | Raw, original | 12.535 s | 10.684 s | −14.8% |
+    | Raw, rungs closed early | 3.574 s | 3.445 s | −3.6% |
+
+    Every paired ladder comparison improves and checks the complete polynomial.
+    Fresh FORM takes **0.724 / 0.177 s**, leaving typed gaps of **6.6× / 8.5×**.
+    All **880 library tests**, the existing **207 exact / 117 HEP** checks,
+    and **30 additional interface cases / 46 HEP** checks pass, alongside
+    Clippy and formatting. The existing 22 ignored tests remain unchanged.
+    Trace controls show no general improvement; free length-12 `tracen`
+    changes **19.032 → 19.615 ms**, with its rerun essentially unchanged.
+    Separate original-order phase clocks now spend **2.484 s** in public
+    Schoonschip, **1.241 s** in composition and **0.925 s** in initial expansion.
+    These diagnostic phases are not a decomposition of the paired medians.
+
+    **Why completed-stage counts missed the scheduling opportunity:** FORM's
+    retained counts match our typed accumulator at every stage in both orders.
+    Its generated-term counter counts a stream, while our expanded input is a
+    complete normalized sum. The supplied pure Symbolica recipe keeps future
+    vertices opaque, binds their indices early, and contracts each held vertex
+    replacement locally. Holding its scalar `d` notation and contraction rules
+    fixed exposes the following final-stage expanded sums:
+
+    | Schedule | Original order | Rungs closed early |
+    | --- | ---: | ---: |
+    | Expand-first accumulator | 186,516 | 60,314 |
+    | Bind future vertices; contract after expansion | 31,724 | 22,148 |
+    | Bind future vertices; contract held RHS locally | 9,652 | 9,652 |
+
+    Across all eight stages, the maximum expanded sum falls from **186,516 to
+    36,281** terms in original order and **60,314 to 20,570** with rungs closed
+    early.
+    All three schedules, both orders, and cache sizes **1000 / 0** produce
+    exactly the same final polynomial. The two outside-in variants retain the
+    same counts after each completed step despite these different temporary
+    sizes. The executable alternative below reuses our routing and vertex rule
+    and checks its complete result against the typed route and FORM. It is a
+    ladder recipe using scalar symbols, not a replacement for the generic
+    tensor API's interface and callback semantics. Source identities, raw
+    measurements and checks are saved under
+    `retained_open_component_ladder_validation`.
+
+    With cache size 1000, three fresh-process medians for the same scalar
+    rules are **2.573 → 1.438 → 0.867 s** in original order across the three
+    schedules above, and **0.677 → 0.584 → 0.320 s** with rungs closed early.
+    The supplied loop itself takes **0.874 / 0.324 s**, versus fresh FORM
+    **0.724 / 0.173 s**. Its count/print operations remain inside the clock;
+    setup and exact checking are outside, whereas FORM includes startup.
+    These are gaps of **1.21× / 1.87×** for this scalar recipe, not generic
+    tensor-API parity. Disabling the cache raises local outside-in medians to
+    **2.477 / 0.850 s**. The first ablation round is systematically slower;
+    complete samples are retained, and the accumulator's initially different
+    cache-on/off medians are confounded rather than evidence of useful caching
+    for its single vertex match. The executable cell clocks below are separate
+    single-run diagnostics.
+    A bounded follow-up with adjacent accumulator pairs finds **−1.0% to +2.7%**
+    changes when disabling the cache, confirming no substantial benefit there.
+
+    A small nested-dot cache is **not retained**: despite **52 passing tests**
+    and exact/callback agreement, stage six regresses **3.0%** while stage eight
+    improves **2.1%**. Global product and sum normalization remains unchanged.
+    Its source and measurements are archived under
+    `rejected_ladder_nested_dot_memoization`.
+
     **Partial-network follow-up:** a closed subcase with vertices **1, 2, 8**
     produces **64 scalar terms**. The baseline expand-first route takes about
     **5.56 ms**; network contraction with local sum distribution takes
@@ -3143,7 +3419,10 @@ def _(E, S, TensorName, lorentz, prod):
         for i in (0, 1, 2, 3, 4, 10, 20)
     }
     _k = ladder_momenta
-    _mu = {i: lorentz(S(f"gluon_ladder::mu{i}")).to_expression() for i in range(1, 12)}
+    ladder_indices = {
+        i: lorentz(S(f"gluon_ladder::mu{i}")).to_expression() for i in range(1, 12)
+    }
+    _mu = ladder_indices
     ladder_metric = TensorName.g().to_expression()
     _vx = S("gluon_ladder::vx")
     # All three momenta enter each vertex. The final three arguments are
@@ -3165,24 +3444,27 @@ def _(E, S, TensorName, lorentz, prod):
         *(f"gluon_ladder::{name}_" for name in ("p1", "p2", "p3", "i1", "i2", "i3"))
     )
     _g = ladder_metric
-    ladder_rhs = (
+    ladder_vertex_rule = (
         -_g(_i1, _i3) * _g(_p1, _i2)
         + _g(_i1, _i2) * _g(_p1, _i3)
         + _g(_i2, _i3) * _g(_p2, _i1)
         - _g(_i1, _i2) * _g(_p2, _i3)
         - _g(_i2, _i3) * _g(_p3, _i1)
         + _g(_i1, _i3) * _g(_p3, _i2)
-    ).hold(T().expand())
+    )
+    ladder_rhs = ladder_vertex_rule.hold(T().expand())
     ladder_patterns = [_vx(i, _p1, _p2, _p3, _i1, _i2, _i3) for i in range(1, 9)]
     ladder_expected_counts = (6, 34, 192, 1084, 6069, 10947, 23937, 9652)
     return (
         ladder_expected_counts,
         ladder_input,
+        ladder_indices,
         ladder_metric,
         ladder_momenta,
         ladder_patterns,
         ladder_rhs,
         ladder_vertices,
+        ladder_vertex_rule,
     )
 
 
@@ -3205,9 +3487,29 @@ def _(ladder_input, ladder_patterns, ladder_rhs, median, perf_counter):
 
 @app.cell
 def _(mo):
-    run_ladder_reduction = mo.ui.run_button(
-        label="Time the full ordered ladder reduction (can take minutes)"
+    ladder_order_selector = mo.ui.dropdown(
+        options=["Close rungs early", "Original vertex order"],
+        value="Close rungs early",
+        label="Contraction order (used by both engines)",
     )
+    ladder_order_selector
+    return (ladder_order_selector,)
+
+
+@app.cell
+def _(ladder_expected_counts, ladder_order_selector):
+    if ladder_order_selector.value == "Close rungs early":
+        ladder_order = (5, 4, 6, 3, 7, 2, 8, 1)
+        ladder_run_counts = (6, 34, 63, 352, 829, 4586, 10516, 9652)
+    else:
+        ladder_order = tuple(range(1, 9))
+        ladder_run_counts = ladder_expected_counts
+    return ladder_order, ladder_run_counts
+
+
+@app.cell
+def _(mo):
+    run_ladder_reduction = mo.ui.run_button(label="Run ladder comparisons")
     run_ladder_reduction
     return (run_ladder_reduction,)
 
@@ -3216,9 +3518,10 @@ def _(mo):
 def _(
     E,
     TensorExpression,
-    ladder_expected_counts,
+    ladder_order,
     ladder_patterns,
     ladder_rhs,
+    ladder_run_counts,
     ladder_vertices,
     mo,
     perf_counter,
@@ -3227,45 +3530,361 @@ def _(
     ladder_stages = []
     ladder_result = None
     if run_ladder_reduction.value:
-        _result = E("1")
+        _result = TensorExpression(E("1"))
         _cumulative = 0.0
         with mo.status.progress_bar(
             total=8, title="Applying ladder vertices"
         ) as _progress:
-            for _i, (_vertex, _pattern) in enumerate(
-                zip(ladder_vertices, ladder_patterns), 1
-            ):
+            for _i, _vertex_number in enumerate(ladder_order):
+                _vertex = ladder_vertices[_vertex_number - 1]
+                _pattern = ladder_patterns[_vertex_number - 1]
                 _start = perf_counter()
                 _factor = _vertex.replace(_pattern, ladder_rhs, rhs_cache_size=1000)
-                # Unprocessed vertices remain spectator factors, just as in FORM.
-                # Distribute the current product before contraction, then collect
-                # the scalar products and expand the resulting polynomial.
+                # Carry the known interface between stages. Each newly applied
+                # vertex is expanded against the accumulator before contraction.
                 _result = (
-                    TensorExpression((_result * _factor).expand())
+                    (_result * TensorExpression(_factor))
+                    .expand()
                     .schoonschip()
-                    .to_expression()
                     .expand()
                 )
                 _seconds = perf_counter() - _start
                 _cumulative += _seconds
                 _terms = sum(1 for _ in _result.terms())
-                assert _terms == ladder_expected_counts[_i - 1], (_i, _terms)
+                assert _terms == ladder_run_counts[_i], (_vertex_number, _terms)
                 ladder_stages.append(
                     {
-                        "vertex": _i,
+                        "vertex": _vertex_number,
                         "Spenso terms": _terms,
                         "Spenso step wall (s)": _seconds,
                         "Spenso cumulative wall (s)": _cumulative,
                     }
                 )
                 _progress.update()
-        ladder_result = _result
+        ladder_result = _result.to_expression()
     return ladder_result, ladder_stages
 
 
 @app.cell
-def _():
-    # Supplied gluon.frm, preserving its rules, routing and sort order.
+def _(
+    S,
+    ladder_indices,
+    ladder_input,
+    ladder_metric,
+    ladder_momenta,
+    ladder_vertex_rule,
+):
+    from symbolica import T as _T
+
+    # Translate the existing routing and rule; do not define a second graph.
+    ladder_outside_d = S("gluon_ladder_outside::d", is_symmetric=True, is_linear=True)
+    ladder_outside_k = S("gluon_ladder_outside::k")
+    _vertex = S("gluon_ladder::vx")
+    _a, _b = S("gluon_ladder_outside::a_", "gluon_ladder_outside::b_")
+    _index = S("gluon_ladder_outside::index_", tags=["ladder_outside_index"])
+    _before, _after = S(
+        "gluon_ladder_outside::before___", "gluon_ladder_outside::after___"
+    )
+    ladder_outside_input = ladder_input
+    for _number, _momentum in ladder_momenta.items():
+        ladder_outside_input = ladder_outside_input.replace(
+            _momentum, ladder_outside_k(_number)
+        )
+    for _number, _slot in ladder_indices.items():
+        _plain = S(f"gluon_ladder_outside::mu{_number}", tags=["ladder_outside_index"])
+        ladder_outside_input = ladder_outside_input.replace(_slot, _plain)
+    _d = ladder_outside_d
+    _contract = (
+        _T()
+        .repeat(
+            _T().replace(
+                _d(_index, _a) * _d(_b, _index), _d(_a, _b), min_level=0, max_level=0
+            )
+        )
+        .replace(_d(_index, _b) ** 2, _d(_b, _b), min_level=0, max_level=0)
+        .replace(_d(_index, _index), 4, min_level=0, max_level=0)
+    )
+    ladder_outside_rhs = ladder_vertex_rule.replace(
+        ladder_metric(_a, _b), _d(_a, _b)
+    ).hold(_T().expand().chain(_contract))
+    ladder_outside_absorb = (
+        _d(_index, _a) * _vertex(_before, _index, _after),
+        _vertex(_before, _a, _after),
+    )
+    return (
+        ladder_outside_absorb,
+        ladder_outside_d,
+        ladder_outside_input,
+        ladder_outside_k,
+        ladder_outside_rhs,
+    )
+
+
+@app.cell
+def _(
+    ladder_order,
+    ladder_outside_absorb,
+    ladder_outside_input,
+    ladder_outside_rhs,
+    ladder_patterns,
+    ladder_result,
+    mo,
+    perf_counter,
+    run_ladder_reduction,
+):
+    ladder_outside_stages = []
+    ladder_outside_result = None
+    if run_ladder_reduction.value and ladder_result is not None:
+        _result = ladder_outside_input
+        _cumulative = 0.0
+        with mo.status.progress_bar(
+            total=8, title="Outside-in Symbolica diagnostic"
+        ) as _progress:
+            for _vertex_number in ladder_order:
+                _start = perf_counter()
+                # Future vertices remain opaque. Their already-bound ports enter
+                # the held RHS reduction and its existing match-result cache.
+                _result = _result.replace(
+                    ladder_patterns[_vertex_number - 1],
+                    ladder_outside_rhs,
+                    rhs_cache_size=1000,
+                )
+                _result = _result.expand().replace(
+                    *ladder_outside_absorb, min_level=0, max_level=0, repeat=True
+                )
+                _seconds = perf_counter() - _start
+                _cumulative += _seconds
+                _terms = sum(1 for _ in _result.terms())
+                ladder_outside_stages.append(
+                    {
+                        "vertex": _vertex_number,
+                        "outside-in terms": _terms,
+                        "diagnostic step wall (s)": _seconds,
+                        "diagnostic cumulative wall (s)": _cumulative,
+                    }
+                )
+                _progress.update()
+        ladder_outside_result = _result
+    return ladder_outside_result, ladder_outside_stages
+
+
+@app.cell
+def _(
+    ladder_exact_match,
+    ladder_metric,
+    ladder_momenta,
+    ladder_outside_d,
+    ladder_outside_k,
+    ladder_outside_result,
+    ladder_result,
+):
+    ladder_outside_typed_match = None
+    ladder_outside_form_match = None
+    if ladder_outside_result is not None:
+        _converted = ladder_outside_result
+        for _i, _p in ladder_momenta.items():
+            for _j, _q in ladder_momenta.items():
+                if _i <= _j:
+                    _converted = _converted.replace(
+                        ladder_outside_d(ladder_outside_k(_i), ladder_outside_k(_j)),
+                        ladder_metric(_p, _q),
+                    )
+        ladder_outside_typed_match = _converted == ladder_result
+        assert ladder_outside_typed_match, (
+            "Outside-in and typed ladder polynomials differ"
+        )
+        if ladder_exact_match is not None:
+            # Reuse the existing complete typed-to-FORM polynomial certificate.
+            ladder_outside_form_match = (
+                ladder_outside_typed_match and ladder_exact_match
+            )
+            assert ladder_outside_form_match, (
+                "Outside-in and FORM ladder polynomials differ"
+            )
+    return ladder_outside_form_match, ladder_outside_typed_match
+
+
+@app.cell(hide_code=True)
+def _(
+    ladder_outside_form_match,
+    ladder_outside_stages,
+    ladder_outside_typed_match,
+    mo,
+):
+    mo.vstack(
+        [
+            mo.md("""
+        ### Explicit outside-in Symbolica route
+
+        This alternative keeps all unapplied vertices opaque. After applying one
+        vertex, it contracts exposed indices into future vertex arguments; the
+        next held rule is reduced locally using those bound arguments. It reuses
+        the routing, six-term rule, order selector and run button above.
+
+        This recipe uses a plain scalar `d` function and tagged index symbols.
+        It exercises the supplied reduction rules without the full tensor-interface
+        API; its final result is converted back to Spenso and checked exactly.
+
+        These are **single-run diagnostic clocks**, not a controlled benchmark.
+        Each step excludes term counting, notation conversion and equality checks.
+        Intermediate term counts include the remaining opaque vertices, so they
+        describe a different schedule from the typed accumulator above.
+        """),
+            mo.ui.table(ladder_outside_stages, selection=None)
+            if ladder_outside_stages
+            else mo.md("Use the shared ladder run button to execute the comparisons."),
+            mo.md(
+                f"**Exact final polynomial:** typed result `{ladder_outside_typed_match}`; "
+                f"FORM `{ladder_outside_form_match}`. The FORM check reuses the full-polynomial "
+                "certificate above after converting the outside-in notation back to Spenso."
+            )
+            if ladder_outside_typed_match is not None
+            else mo.md(""),
+        ]
+    )
+    return
+
+
+@app.cell
+def _(
+    S,
+    TensorExpression,
+    TensorName,
+    ladder_patterns,
+    ladder_vertex_rule,
+    ladder_vertices,
+    prod,
+):
+    from symbolica import T as _T
+    from symbolica.community.spenso import SchoonschipSettings as _SchoonschipSettings
+
+    _vertex = TensorName("gluon_ladder_typed::vx").to_expression()
+    _routing = S("gluon_ladder_typed::routing", is_scalar=True)
+    ladder_native_settings = _SchoonschipSettings(expand_contracted_sums=True)
+
+    def _with_ports(value):
+        _number, _p1, _p2, _p3, _a, _b, _c = value
+        # Momentum routing is opaque metadata. Only the last three arguments
+        # are vertex ports; compact tagged vectors consume those ports.
+        return _vertex(_number, _routing(_p1), _routing(_p2), _routing(_p3), _a, _b, _c)
+
+    def _contract_rhs(value):
+        return (
+            TensorExpression(value)
+            .schoonschip(settings=ladder_native_settings)
+            .to_expression()
+        )
+
+    ladder_native_input = prod(_with_ports(vertex) for vertex in ladder_vertices)
+    ladder_native_patterns = [_with_ports(pattern) for pattern in ladder_patterns]
+    ladder_native_rhs = ladder_vertex_rule.hold(_T().expand().map(_contract_rhs))
+    return (
+        ladder_native_input,
+        ladder_native_patterns,
+        ladder_native_rhs,
+        ladder_native_settings,
+    )
+
+
+@app.cell
+def _(
+    TensorExpression,
+    ladder_native_input,
+    ladder_native_patterns,
+    ladder_native_rhs,
+    ladder_native_settings,
+    ladder_order,
+    ladder_result,
+    mo,
+    perf_counter,
+    run_ladder_reduction,
+):
+    ladder_native_stages = []
+    ladder_native_match = None
+    if run_ladder_reduction.value and ladder_result is not None:
+        _result = TensorExpression(ladder_native_input)
+        _cumulative = 0.0
+        with mo.status.progress_bar(
+            total=8, title="Binding future tensor vertices"
+        ) as _progress:
+            for _step, _vertex_number in enumerate(ladder_order, 1):
+                _start = perf_counter()
+                _result = _result.replace_tensor(
+                    ladder_native_patterns[_vertex_number - 1],
+                    ladder_native_rhs,
+                    rhs_cache_size=1000,
+                ).schoonschip(settings=ladder_native_settings)
+                if _step == len(ladder_order):
+                    # Include the complete final scalar polynomial in the clock.
+                    _result = _result.expand()
+                _seconds = perf_counter() - _start
+                _cumulative += _seconds
+                ladder_native_stages.append(
+                    {
+                        "vertex": _vertex_number,
+                        "typed outside-in terms": sum(1 for _ in _result.terms()),
+                        "step wall (s)": _seconds,
+                        "cumulative wall (s)": _cumulative,
+                    }
+                )
+                _progress.update()
+        ladder_native_match = _result.to_expression() == ladder_result
+        assert ladder_native_match, (
+            "Typed outside-in and accumulator polynomials differ"
+        )
+        assert _result.is_scalar
+    return ladder_native_match, ladder_native_stages
+
+
+@app.cell(hide_code=True)
+def _(ladder_exact_match, ladder_native_match, ladder_native_stages, mo):
+    mo.vstack(
+        [
+            mo.md("""
+        ### Outside-in reduction with tensor interfaces
+
+        This applies the same schedule using Spenso's metrics, tagged vectors,
+        and typed tensor expressions throughout. Routing momenta are scalar
+        metadata; each explicit index or bound compact vector occupies a vertex
+        port. Every held replacement reduces its substituted right-hand side
+        before multiplication into the surrounding expression.
+
+        The local callback calls the existing Rust Schoonschip implementation.
+        Repeated right-hand sides are cached. The small held right-hand side
+        is expanded first. With `expand_contracted_sums=True`, the ambient
+        collector combines equal monomials before planning contractions,
+        without constructing the full expanded indexed expression. It binds
+        exposed indices into the remaining vertices, so later replacements
+        start with fewer free ports. Intermediate counts include those opaque
+        vertices and may retain factored scalar coefficients.
+
+        `replace_tensor` replaces whole tensor factors and checks each reduced
+        right-hand side locally, reusing those checks with repeated matches.
+        It preserves the tensor interface without rescanning the complete sum
+        after every vertex replacement.
+
+        Single-run clocks include replacement, typed result validation, local
+        expansion and contraction. The last step also includes expansion of the
+        complete final scalar polynomial. Setup, counting and exact checks are
+        outside the clock.
+        """),
+            mo.ui.table(ladder_native_stages, selection=None)
+            if ladder_native_stages
+            else mo.md("Use the shared ladder run button to execute the comparisons."),
+            mo.md(
+                f"**Exact final polynomial:** accumulator `{ladder_native_match}`; "
+                f"FORM `{ladder_native_match and ladder_exact_match}`."
+            )
+            if ladder_native_match is not None
+            else mo.md(""),
+        ]
+    )
+    return
+
+
+@app.cell
+def _(ladder_order):
+    # Preserve the supplied rules and routing; select the same order as Python.
     ladder_form_source = r"""#-
 format nospaces;
 Dimension 4;
@@ -3300,12 +3919,25 @@ L F = vx(1,-k0, k0-k1, k1, k10, mu1, mu8)*
 *Print +s;
 .end
 """
+    if ladder_order != tuple(range(1, 9)):
+        _prefix, _loop = ladder_form_source.split("#do i=1,8\n")
+        _body, _suffix = _loop.split("#enddo", 1)
+        ladder_form_source = (
+            _prefix
+            + "".join(_body.replace("`i'", str(_i)) for _i in ladder_order)
+            + _suffix
+        )
     return (ladder_form_source,)
 
 
 @app.cell
 def _(
-    form_executable, ladder_expected_counts, ladder_form_source, median, perf_counter
+    form_executable,
+    ladder_form_source,
+    ladder_order,
+    ladder_run_counts,
+    median,
+    perf_counter,
 ):
     import re as _re
     import subprocess as _subprocess
@@ -3341,18 +3973,18 @@ def _(
                     r"\s+Bytes used\s*=\s*(\d+)",
                     _run.stdout,
                 )
-                assert (
-                    tuple(int(stage[2]) for stage in _stages) == ladder_expected_counts
-                ), _run.stdout
-                assert [int(stage[3]) for stage in _stages] == list(range(1, 9))
+                assert tuple(int(stage[2]) for stage in _stages) == ladder_run_counts, (
+                    _run.stdout
+                )
+                assert [int(stage[3]) for stage in _stages] == list(ladder_order)
                 if _round:
                     ladder_form_process_samples.append(_seconds)
                     ladder_form_stages.append(_stages)
             ladder_form_stdout = _run.stdout
             ladder_form_stages = [
                 {
-                    "vertex": _i + 1,
-                    "FORM terms": ladder_expected_counts[_i],
+                    "vertex": ladder_order[_i],
+                    "FORM terms": ladder_run_counts[_i],
                     "FORM generated terms": int(ladder_form_stages[0][_i][1]),
                     "FORM cumulative CPU (s)": median(
                         float(run[_i][0]) for run in ladder_form_stages
@@ -3421,11 +4053,12 @@ def _(
     form_executable,
     form_version,
     ladder_exact_match,
-    ladder_expected_counts,
     ladder_form_process_samples,
     ladder_form_source,
     ladder_form_stages,
     ladder_form_stdout,
+    ladder_order,
+    ladder_run_counts,
     ladder_stages,
     ladder_substitution_samples,
     ladder_substitution_seconds,
@@ -3434,18 +4067,23 @@ def _(
 ):
     _rows = []
     _reference_cpu = (0.00, 0.00, 0.00, 0.00, 0.02, 0.17, 0.36, 0.49)
-    for _i, _terms in enumerate(ladder_expected_counts):
+    for _i, _terms in enumerate(ladder_run_counts):
         _row = {
-            "vertex": _i + 1,
+            "vertex": ladder_order[_i],
             "reference terms": _terms,
-            "supplied FORM cumulative CPU (s)": _reference_cpu[_i],
         }
+        if ladder_order == tuple(range(1, 9)):
+            _row["supplied FORM cumulative CPU (s)"] = _reference_cpu[_i]
         if ladder_form_stages:
             _row.update(ladder_form_stages[_i])
         if ladder_stages:
             _row.update(ladder_stages[_i])
         _rows.append(_row)
     _notes = [
+        (
+            f"**Vertex order:** {' → '.join(map(str, ladder_order))}. "
+            "Python carries typed interfaces between stages; FORM uses the same vertex order."
+        ),
         (
             f"**Rule substitution only:** first call {1000 * ladder_substitution_samples[0]:.3f} ms; "
             f"five-run warm median {1000 * ladder_substitution_seconds:.3f} ms. "
@@ -3454,7 +4092,7 @@ def _(
         (
             "Stage times exclude input construction, term counting, validation and display. "
             "Spenso reports a single full run's wall time; FORM statistics report cumulative "
-            "CPU time rounded to 0.01 s. The supplied 0.49 s is a reference measurement, "
+            "CPU time rounded to 0.01 s. The supplied original-order 0.49 s is a reference measurement, "
             "not a measurement of this notebook's machine. Use an optimized community build "
             "for performance comparisons."
         ),

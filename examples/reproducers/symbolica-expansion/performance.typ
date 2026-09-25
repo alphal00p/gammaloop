@@ -1,9 +1,85 @@
 = Symbolica expansion performance reproducer
 
-This standalone package isolates expansion and polynomial-to-expression
-conversion. It depends only on Symbolica main `06906976`
+This standalone package isolates expansion, polynomial-to-expression
+conversion, symmetric function construction and visitor termination. It depends only on Symbolica main `06906976`
 and the Rust standard library. No Idenso rewrite rules, Spenso slot parsing,
 tensor networks or pattern matching execute in the timed operation.
+
+== Symmetric function construction
+
+`symmetric_construction` isolates the `FunctionBuilder` work needed by scalar
+products such as `g(p(mink(4)),q(mink(4)))`. Arguments are built before timing;
+the clock includes function construction and destruction. The function has
+symmetry but no Spenso metric callback. Run the differential
+correctness gates alone, or add `bench` for six shapes and five samples each:
+
+```sh
+CARGO_PROFILE_RELEASE_OPT_LEVEL=3 cargo build --release --locked --bin symmetric_construction
+./target/release/symmetric_construction
+taskset -c 8 ./target/release/symmetric_construction bench
+```
+
+`SYMMETRY_PROBE_ITERATIONS` changes the default 50,000 calls per sample.
+Compare baseline and candidate gate output byte-for-byte: it includes canonical
+text, raw Atom encodings, custom-normalizer transcripts and numeric evaluation.
+The checks cover mixed argument types, distinct floating precisions, argument
+counts across the inline-storage boundary, antisymmetry, cyclic symmetry and
+linearity. They run outside the benchmark clocks.
+
+The isolated `patches/symmetric-construction.patch` leaves already ordered
+symmetric functions in their existing buffer. Unordered calls sort borrowed
+argument views and rebuild once. It preserves the existing explicit argument
+comparator and leaves antisymmetric sorting and callback invocation in place.
+The patch is not applied to the pinned dependency.
+
+Three alternating process pairs on CPU 8, with both the driver and Symbolica
+compiled at optimization level 3, gave these medians per call:
+
+#table(
+  columns: 3,
+  table.header([Arguments], [Baseline, ns], [Patched, ns]),
+  [Ordered pair], [359], [227],
+  [Reversed pair], [357], [304],
+  [Ordered eight], [899], [477],
+  [Reversed eight], [1,143], [832],
+  [Reversed thirty-two], [3,436], [1,883],
+  [Pair with wide scalar arguments], [705], [361],
+)
+
+Every process passed the exact baseline-output comparison. These native
+primitive timings use the saved host dependency family, including its Python
+features; the standalone package's narrower features are a separate build.
+They establish no complete-ladder or FORM improvement. Raw clocks, source
+identities and gates are preserved in the notebook's tensor-contraction parity
+archive.
+
+== Visitor termination
+
+`visitor_shortcircuit` isolates a limitation relevant to Idenso's dot preflight:
+returning `false` from Symbolica's visitor prunes the current subtree but does
+not end the whole traversal. After finding a rewrite, a visitor still calls the
+closure on the remaining sibling roots of each active ancestor. It does not
+descend through those roots when the closure returns `false`.
+
+```sh
+cargo build --release --locked --bin visitor_shortcircuit
+./target/release/visitor_shortcircuit
+```
+
+The driver compares that visitor with a recursive search that returns at its
+first match, preserving argument order and an explicit opaque-function boundary.
+It checks three widths with the target first, last, absent or hidden inside an
+opaque argument. With 8,192 remaining arguments and the target first, the visitor
+receives 8,194 calls and the short-circuit search receives two. Last-match and
+unsuccessful searches retain the same visit counts in both implementations.
+Every result is asserted, including refusal to inspect the opaque argument.
+
+These are deterministic visit counts, not timing or complete-ladder speedup
+claims. The standalone search is a reproducer, not a proposed public tensor API.
+The corresponding isolated Idenso experiment leaves its normalizer's callback
+construction and final replacement pass unchanged.
+
+== Expansion inputs
 
 The input is the memoized, factored Clifford pairing polynomial with `Tr(1)=4`.
 All free-index metrics are algebraically independent. The `tensor` payload is
@@ -407,3 +483,91 @@ accounts for 14.33% separately. These are sampled cycle shares, not wall-time
 phases. The `corrected_emission_full_host_followup` entry in
 #link("primitive_measurements.json")[the primitive record] retains the separate
 build, profiles, corrected patch, original failing examples and full timings.
+
+== Ladder scheduling before primitive optimization
+
+The complete gluon ladder also has an algorithmic source of avoidable work.
+The supplied pure Symbolica recipe keeps future vertices opaque, substitutes
+contracted indices into their arguments, then expands and contracts each held
+vertex replacement locally. A matched ablation uses the same plain symmetric
+linear metric and contraction rules throughout. For the original order, the
+final-stage expanded sum decreases from 186,516 terms with an expand-first
+accumulator to 31,724 with early binding but global contraction, and 9,652 with
+local contraction. The largest expanded sum across all stages decreases from
+186,516 to 36,281 terms. All schedules, both measured orders and enabled/disabled
+replacement caches give the same exact final polynomial.
+
+This evidence separates expansion scheduling from the conversion primitives
+studied above. It does not establish that a Symbolica primitive sets the current
+tensor pipeline's performance limit. The executable outside-in comparison and
+complete timings are in the
+#link("../../../docs/products/idenso/content/gamma-simplification.typ")[gamma
+simplification guide] and notebook. The shared tensor implementation retains its
+interface and callback guarantees; the scalar-symbol recipe is an explicit
+benchmark alternative with complete final-polynomial checks.
+
+== Scalar expansion routes with a fixed variable basis
+
+`scalar_expansion_routes` compares four public operations on the same parsed
+scalar expression: ordinary `expand`, `expand_via_poly` with signed 16-bit
+exponents, whole-input conversion to a rational polynomial followed by
+`to_expression`, and a balanced reduction of the existing outer sum. The last
+route converts each outer term separately, then combines pairs using public
+variable unification and polynomial addition. Nested conversion is unchanged.
+Neither this binary nor the pinned Symbolica dependency applies the isolated
+patches described above.
+
+The synthetic input uses exactly twenty scalar variables at every size.
+It selects `N` distinct degree-five monomials, starting with all twenty pure
+fifth powers, and multiplies each by `(x0+x1)*(x2-x3)` and a deterministic exact
+rational coefficient. `N` ranges from 20 to 42,504. Requested monomials,
+parser-normalized input terms and expanded output terms are reported separately;
+expansion may merge or cancel terms. This fixed basis distinguishes growth in
+the number of terms from growth in the number of polynomial variables.
+
+From this directory, build the driver and dependency at optimization level 3:
+
+```sh
+CARGO_PROFILE_RELEASE_OPT_LEVEL=3 cargo build --release --locked --bin scalar_expansion_routes
+./target/release/scalar_expansion_routes ordinary --synthetic 1024
+./target/release/scalar_expansion_routes via_poly --synthetic 1024
+./target/release/scalar_expansion_routes whole_poly --synthetic 1024
+./target/release/scalar_expansion_routes balanced --synthetic 1024
+./target/release/scalar_expansion_routes ordinary --input /absolute/path/expression.txt
+```
+
+Use multiple sizes such as 20, 256, 1,024 and 4,096 before larger inputs. For
+performance comparisons, pin fresh processes to the same CPU and alternate
+route order. Each invocation measures one operation and emits one JSON record.
+`total_ns` includes conversion, emission and destruction of temporary
+polynomials. The explicit `whole_poly` and `balanced` routes also report these
+three phases separately; the opaque expansion calls report null phase fields.
+Small gaps between phase clocks remain part of the total. Parsing, input
+construction, the ordinary-expansion oracle, exact equality and expansion
+fixed-point checks, term counting and result destruction are outside the clock.
+
+File inputs use the ordinary parser without Spenso or Idenso initialization.
+The binary registers no tensor tags, symmetry attributes, normalization
+callbacks or scalar metadata; standard Symbolica builtins still apply. The
+certificate is exact equality to ordinary expansion under those parser
+semantics; it does not certify a
+tensor interface or reproduce a physical FORM comparison. Polynomial routes
+use exact rational coefficients and signed 16-bit exponents and fail visibly
+when conversion cannot represent an input.
+
+All four routes pass the exact and fixed-point checks at synthetic sizes 20,
+256, 1,024 and 4,096, producing 80, 888, 3,263 and 12,206 output terms. They
+also pass on both saved final ladder sums under the plain-parser boundary,
+each producing 9,652 terms. The standalone release build, scoped Clippy and
+formatting checks pass. These are correctness checks; their single printed
+clocks are diagnostic observations, not a controlled performance comparison.
+
+The balanced route is a diagnostic, not a selected production replacement.
+In a separate matched native experiment on the saved final scalar ladder sums,
+balanced conversion reduced the cost of whole-input polynomial conversion but
+remained slower than ordinary expansion in every pair. Balancing also changes
+how variable maps grow: each outer term starts with its own variable map.
+That comparison therefore does not isolate addition-tree shape alone. It used
+host dependency features and different synthetic inputs; its clocks are not
+measurements of this standalone package or the complete typed ladder. The
+existing ordinary final expansion remains selected.

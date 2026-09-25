@@ -49,6 +49,10 @@ harness = false
 name = "vertex_algebra_once"
 harness = false
 
+[[example]]
+name = "metric_contraction_benchmark"
+required-features = ["reference-cases"]
+
 [features]
 default = ["native"]
 bincode = ["dep:bincode", "dep:bincode-trait-derive"]

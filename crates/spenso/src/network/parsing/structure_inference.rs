@@ -85,13 +85,14 @@ pub trait AtomStructureExt {
     /// compact and malformed slots are visited once; their dimensions and index
     /// payloads remain opaque. The root is always visited, including a root sum.
     ///
-    /// Observation continues after the first repetition, without collecting
-    /// further index occurrences. Every node within this traversal's scope is
-    /// observed for either result; payloads remain opaque. Use the boolean-only
-    /// predicate when no observation is needed so it can stop early.
+    /// At the first repetition, `on_first_repeat` is called exactly once. Return
+    /// true to observe the remainder without collecting further index occurrences,
+    /// or false to stop. With no repetition the decision is not called and the
+    /// traversal finishes. Slot payloads remain opaque in either case.
     fn has_repeated_explicit_indices_with_observer<'a>(
         &'a self,
         observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>),
+        on_first_repeat: impl FnOnce() -> bool,
     ) -> bool;
 
     /// Replace four-dimensional Minkowski representations and slots by `dimension`.
@@ -126,8 +127,9 @@ impl AtomStructureExt for Atom {
     fn has_repeated_explicit_indices_with_observer<'a>(
         &'a self,
         observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>),
+        on_first_repeat: impl FnOnce() -> bool,
     ) -> bool {
-        super::indices::RepeatedIndices::contains::<true>(self.as_view(), observe)
+        super::indices::RepeatedIndices::contains(self.as_view(), observe, on_first_repeat)
     }
 
     fn with_lorentz_dimension(&self, dimension: AtomView<'_>) -> Atom {
@@ -152,14 +154,15 @@ impl AtomStructureExt for Atom {
 
 impl AtomStructureExt for AtomView<'_> {
     fn has_repeated_explicit_indices(&self) -> bool {
-        super::indices::RepeatedIndices::contains::<false>(*self, |_, _| {})
+        super::indices::RepeatedIndices::contains(*self, |_, _| {}, || false)
     }
 
     fn has_repeated_explicit_indices_with_observer<'a>(
         &'a self,
         observe: impl FnMut(AtomView<'a>, &SlotMatch<'a>),
+        on_first_repeat: impl FnOnce() -> bool,
     ) -> bool {
-        super::indices::RepeatedIndices::contains::<true>(*self, observe)
+        super::indices::RepeatedIndices::contains(*self, observe, on_first_repeat)
     }
 
     fn with_lorentz_dimension(&self, dimension: AtomView<'_>) -> Atom {
@@ -252,41 +255,41 @@ impl TensorialSyntax {
 
     pub(crate) fn function_is_tensorial(fun: FunView<'_>, filter: StrictTensorFilter) -> bool {
         let symbol = fun.get_symbol();
-
-        if symbol.is_scalar() || symbol == SPENSO_TAG.pure_scalar || symbol == SPENSO_TAG.scalar {
+        if symbol.is_scalar() {
+            return false;
+        }
+        // Public bundle access probes Symbolica initialization. Reuse the
+        // handles throughout this predicate instead of probing for every field.
+        let tags = &*SPENSO_TAG;
+        if symbol == tags.pure_scalar || symbol == tags.scalar {
             return false;
         }
 
-        if symbol == SPENSO_TAG.bracket {
+        if symbol == tags.bracket {
             return fun.iter().any(|arg| arg.is_tensorial(filter));
         }
 
-        // A variance wrapper retains the tensor syntax of its slot or compact
-        // argument; wrapping a concrete component index still stays scalar.
-        if symbol == AIND_SYMBOLS.dind && fun.get_nargs() == 1 {
-            return fun.iter().next().unwrap().is_tensorial(filter);
-        }
-
-        if symbol.has_attributes_of(SPENSO_TAG.rep_)
-            || symbol == SPENSO_TAG.chain
-            || symbol == SPENSO_TAG.trace
-            || symbol == SPENSO_TAG.dot
+        if symbol.has_attributes_of(tags.rep_)
+            || symbol == tags.chain
+            || symbol == tags.trace
+            || symbol == tags.dot
         {
             return true;
         }
 
         // Variance wrappers preserve representation syntax. In particular,
         // g(rep(i), dind(rep(j))) must retain its oriented tensor ports.
+        let index_symbols = &*AIND_SYMBOLS;
         if [
-            AIND_SYMBOLS.dind,
-            AIND_SYMBOLS.uind,
-            AIND_SYMBOLS.selfdualind,
+            index_symbols.dind,
+            index_symbols.uind,
+            index_symbols.selfdualind,
         ]
         .contains(&symbol)
             && fun.get_nargs() == 1
             && fun.iter().next().is_some_and(|arg| match arg {
-                AtomView::Fun(rep) => rep.get_symbol().has_attributes_of(SPENSO_TAG.rep_),
-                AtomView::Var(rep) => rep.get_symbol().has_attributes_of(SPENSO_TAG.rep_),
+                AtomView::Fun(rep) => rep.get_symbol().has_attributes_of(tags.rep_),
+                AtomView::Var(rep) => rep.get_symbol().has_attributes_of(tags.rep_),
                 _ => false,
             })
         {
@@ -297,15 +300,15 @@ impl TensorialSyntax {
             return fun.get_nargs() == 2 && fun.iter().all(|arg| arg.is_tensorial(filter));
         }
 
-        if symbol.has_tag(&SPENSO_TAG.broadcast) {
+        if symbol.has_tag(&tags.broadcast) {
             let args = fun.iter().collect::<Vec<_>>();
             return matches!(args.as_slice(), [arg] if arg.is_tensorial(filter));
         }
 
         match filter {
-            StrictTensorFilter::Tagged => symbol.has_tag(&SPENSO_TAG.tensor),
+            StrictTensorFilter::Tagged => symbol.has_tag(&tags.tensor),
             StrictTensorFilter::TaggedChecked => {
-                symbol.has_tag(&SPENSO_TAG.tensor)
+                symbol.has_tag(&tags.tensor)
                     && (fun.get_nargs() == 0
                         || fun.iter().any(Self::contains_representation_syntax))
             }
@@ -852,16 +855,49 @@ mod tests {
                 assert!(expression.is_tensorial(filter), "{expression}");
             }
         }
-        // A variance wrapper is not a generic tensor-valued function.
-        for expression in [
-            function!(AIND_SYMBOLS.dind, symbol!("dual_scalar_argument")),
-            function!(
-                AIND_SYMBOLS.dind,
-                vector!(dual_wrapped_vector, rep.to_symbolic([]))
-            ),
+        for wrapper in [
+            AIND_SYMBOLS.dind,
+            AIND_SYMBOLS.uind,
+            AIND_SYMBOLS.selfdualind,
         ] {
-            assert!(!expression.is_tensorial(StrictTensorFilter::Tagged));
-            assert!(!expression.is_tensorial(StrictTensorFilter::TaggedChecked));
+            for argument in [rep.to_symbolic([]), slot!(rep, i).to_atom()] {
+                let expression = function!(wrapper, argument);
+                for filter in [
+                    StrictTensorFilter::Tagged,
+                    StrictTensorFilter::TaggedChecked,
+                    StrictTensorFilter::ContainsReps,
+                ] {
+                    assert!(expression.is_tensorial(filter), "{expression}");
+                }
+            }
+            // A variance wrapper is not a generic tensor-valued function.
+            // Concrete component indices likewise do not carry tensor ports.
+            for argument in [
+                Atom::num(1),
+                function!(AIND_SYMBOLS.cind, Atom::num(1)),
+                Atom::var(symbol!("dual_scalar_argument")),
+            ] {
+                let expression = function!(wrapper, argument);
+                assert!(
+                    !expression.is_tensorial(StrictTensorFilter::Tagged),
+                    "{expression}"
+                );
+                assert!(
+                    !expression.is_tensorial(StrictTensorFilter::TaggedChecked),
+                    "{expression}"
+                );
+            }
+        }
+        let vector = vector!(dual_wrapped_vector, rep.to_symbolic([]));
+        let lower = function!(AIND_SYMBOLS.dind, &vector);
+        assert!(!lower.is_tensorial(StrictTensorFilter::Tagged));
+        assert!(!lower.is_tensorial(StrictTensorFilter::TaggedChecked));
+        // The other wrappers normalize to their arguments before classification.
+        for wrapper in [AIND_SYMBOLS.uind, AIND_SYMBOLS.selfdualind] {
+            let expression = function!(wrapper, &vector);
+            assert_eq!(expression, vector);
+            assert!(expression.is_tensorial(StrictTensorFilter::Tagged));
+            assert!(expression.is_tensorial(StrictTensorFilter::TaggedChecked));
         }
     }
 

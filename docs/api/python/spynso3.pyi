@@ -15,6 +15,7 @@ AUTO: _AutoIndex
 _: _AutoIndex
 _Components: typing.TypeAlias = "Expression | float | complex | list[_Components]"
 _IndexInput: typing.TypeAlias = "int | str | Expression | Slot | _AutoIndex"
+_LibraryDefault = typing.TypeVar("_LibraryDefault")
 _RealInput: typing.TypeAlias = "Float | int | float | str | decimal.Decimal"
 _ReplacementInput: typing.TypeAlias = "_ScalarInput | HeldExpression | typing.Callable[[dict[Expression, Expression]], Expression]"
 _ScalarInput: typing.TypeAlias = "Expression | int | float | complex | str | decimal.Decimal | Float | ComplexFloat | tuple[_RealInput, _RealInput]"
@@ -1692,7 +1693,7 @@ class TensorExpression(Expression):
         Construct a tensor expression, preserving existing tensor metadata or inferring it.
 
         Pass `cook_indices=CookSettings.indices()` to flatten nested index payloads before
-        inferring the tensor interface, including expressions returned by `wrap_indices()`.
+        inferring the tensor interface for arbitrary nested index expressions.
         Custom settings control the index encoding, source filters, and output tags.
         """
     @staticmethod
@@ -1800,6 +1801,19 @@ class TensorExpression(Expression):
         Supports Symbolica's patterns, callbacks, conditions and traversal options.
         Index-changing rewrites must use reindex/rename_indices, or explicitly drop
         the tensor interface with to_expression() before rebuilding it.
+        """
+    def replace_tensor(self, pattern: _ScalarInput, rhs: _ReplacementInput, *, cond: typing.Optional[PatternRestriction | Condition] = None, rhs_cache_size: builtins.int = 100) -> TensorExpression:
+        r"""
+        Replace whole tensor factors using locally checked right-hand sides.
+
+        Traverses sums and products, leaving scalar metadata and tensor arguments
+        opaque. Each replacement must preserve the factor's explicit interface
+        without introducing additional index occurrences. Unresolved ports and
+        unsupported tensor powers are rejected. Conditions are evaluated at each
+        match; repeated right-hand sides and their checks share a bounded cache.
+        Remaining user normalization or evaluation hooks are rejected; callbacks
+        may produce an admitted normalized RHS. Use `rhs_cache_size=0` when RHS
+        callbacks have side effects.
         """
     def replace_multiple(self, replacements: typing.Sequence[Replacement], repeat: builtins.bool = False, once: builtins.bool = False, bottom_up: builtins.bool = False, nested: builtins.bool = False) -> TensorExpression:
         r"""
@@ -2261,39 +2275,15 @@ class TensorExpression(Expression):
 
         Results retain the Rust API's `(structure, coefficient)` factorization.
         """
-    def wrap_indices(self, header: Expression) -> Expression:
+    def wrap_indices(self, header: Expression) -> TensorExpression:
         r"""
-        Wrap every abstract-index payload with `header` and return an ordinary expression.
+        Put all explicit indices in a named scope, preserving the tensor interface.
 
-        Wrapped payloads are not Spenso abstract indices until they are cooked, so the result
-        intentionally has no `TensorExpression` interface.
+        Scoped copies contract internally as before, but their indices are distinct
+        from the original. Alphabet display uses primed labels for scoped indices.
+        Applying the same outer scope twice is idempotent; different scopes nest.
 
-        Wrap all abstract indices with a header symbol
-
-        # Arguments
-        - `self`: input expression containing tensor indices
-        - `header`: symbol to use as the wrapper function for all indices
-
-        # Returns
-        Expression with all indices wrapped by the header symbol.
-
-        # Examples:
-        ```python
-        from symbolica.community.spenso import TensorName, Slot, Representation
-        import symbolica as sp
-        from symbolica.community.spenso import TensorExpression
-
-        T = TensorName("T")
-        rep = Representation.euc(3)
-        # With slots (creates TensorExpression)
-        mu = rep("mu")
-        nu = rep("nu")
-        x = sp.S("x")
-        tensor_with_args = T(x, mu, nu)  # T(x; mu, nu)
-        print(tensor_with_args)
-        print(tensor_with_args.wrap_indices(sp.S('wrap')))
-
-        ```
+        >>> conjugate = tensor.dirac_adjoint().wrap_indices(S("bra"))
         """
     def cook_indices(self, settings: typing.Optional[CookSettings] = None) -> TensorExpression:
         r"""
@@ -2322,24 +2312,14 @@ class TensorExpression(Expression):
 
         # Examples:
         ```python
-        from symbolica.community.spenso import TensorName, Slot, Representation
-        import symbolica as sp
-        from symbolica.community.spenso import CookSettings, TensorExpression
+        from symbolica import S
+        from symbolica.community.spenso import CookSettings, Representation, TensorName
 
-        T = TensorName("T")
         rep = Representation.euc(3)
-        # With slots (creates TensorExpression)
-        mu = rep("mu")
-        nu = rep("nu")
-        x = sp.S("x")
-        tensor_with_args = T(x, mu, nu)  # T(x; mu, nu)
-        print(tensor_with_args)
-        print(
-            TensorExpression(
-                tensor_with_args.wrap_indices(sp.S("wrap")),
-                cook_indices=CookSettings.indices(),
-            )
-        )
+        template = TensorName("T")(rep, rep)
+        nested = S("outer")(S("mu"))
+        # Cook an arbitrary payload when filling the tensor's open ports.
+        tensor = template(nested, "nu", cook_indices=CookSettings.indices())
         ```
         """
     def cook_function(self, settings: typing.Optional[CookSettings] = None) -> Expression:
@@ -2743,6 +2723,11 @@ class TensorExpression(Expression):
         r"""
         Format this structured expression using compact Spenso notation.
         """
+    def to_latex(self, max_line_length: typing.Optional[builtins.int] = None) -> builtins.str:
+        r"""
+        Export LaTeX with tensor notation, index alphabets, and model parameter labels.
+        ``max_line_length`` wraps top-level sums using Symbolica's usual rules.
+        """
     def to_typst(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None) -> builtins.str:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Format this structured expression as Typst math source.
@@ -2998,6 +2983,30 @@ class TensorLibrary:
 
         >>> stored = lib[TensorName("T")(1, Representation.euc(3))]
         >>> reference = stored.expression()
+        """
+    def __contains__(self, key: TensorExpression | TensorName | Expression | builtins.str) -> builtins.bool:
+        r"""
+        Whether a signature can be resolved, including dimension-dependent factories.
+
+        Accepts the same keys as lookup. Missing signatures return False;
+        ambiguous names and invalid keys raise the same errors as lookup.
+        Factories are checked without constructing their component data.
+        """
+    @typing.overload
+    def get(self, key: TensorExpression | TensorName | Expression | builtins.str) -> Tensor | None:
+        r"""
+        Retrieve an independent Tensor snapshot, or default if the signature is missing.
+
+        The default is None when omitted. Ambiguous names and invalid keys raise
+        the same errors as lookup; they do not return the default.
+        """
+    @typing.overload
+    def get(self, key: TensorExpression | TensorName | Expression | builtins.str, default: _LibraryDefault) -> Tensor | _LibraryDefault:
+        r"""
+        Retrieve an independent Tensor snapshot, or default if the signature is missing.
+
+        The default is None when omitted. Ambiguous names and invalid keys raise
+        the same errors as lookup; they do not return the default.
         """
     def __len__(self) -> builtins.int:
         r"""

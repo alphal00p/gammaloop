@@ -43,7 +43,9 @@ use symbolica::{
 
 use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 
-use idenso::{color::CS, dirac::AGS, representations::Bispinor};
+use idenso::{
+    color::CS, dirac::AGS, representations::Bispinor, tensor::inference::InterfaceInference,
+};
 
 use super::{ModuleInit, expression::TensorExpression};
 
@@ -258,7 +260,7 @@ impl SpensoName {
         self.name.has_tag(&SPENSO_TAG.rank1)
     }
 
-    fn builtin_factory(&self) -> Option<&'static str> {
+    pub(crate) fn builtin_factory(&self) -> Option<&'static str> {
         if self.name == ETS.metric {
             Some("g")
         } else if self.name == ETS.flat {
@@ -297,7 +299,7 @@ impl SpensoName {
     }
 
     fn _repr_latex_(&self) -> String {
-        crate::display::atom_to_latex(&self.to_expression().expr, false)
+        crate::display::atom_to_latex(&self.to_expression().expr, false, None)
     }
 
     #[new]
@@ -528,6 +530,8 @@ impl SpensoName {
     ///
     /// Slots become explicit ports and representations become unresolved ports. They may be
     /// mixed in one call, but every scalar key argument must precede the first structural port.
+    /// A direct compact tagged vector consumes a port of a generic tensor. Such
+    /// bound calls are derived contractions with no atomic stored-data descriptor.
     ///
     /// Parameters
     /// ----------
@@ -572,12 +576,20 @@ impl SpensoName {
         let rank_one = self.name.has_tag(&SPENSO_TAG.rank1);
         let mut structural_seen = false;
         let mut next_open = 0;
+        let mut bound_ports = false;
+        let mut inference = InterfaceInference::default();
 
         for arg_bound in args.iter() {
             let convertible = arg_bound.extract::<SpensoSlotOrArgOrRep>()?;
 
             match convertible {
                 SpensoSlotOrArgOrRep::Arg(expr) => {
+                    if !rank_one && inference.compact_vector_port(expr.expr.as_view()) {
+                        structural_seen = true;
+                        bound_ports = true;
+                        port_atoms.push(expr.expr);
+                        continue;
+                    }
                     if structural_seen {
                         return Err(PyValueError::new_err(
                             "tensor scalar arguments must precede every slot or representation",
@@ -614,13 +626,22 @@ impl SpensoName {
             .add_args(&port_atoms)
             .finish();
         let interface = PartialStructure::from_logical_slots(ports);
-        if self.name.get_normalization_function().is_some()
+        if bound_ports
+            || !scalar_args.is_empty()
+            || self.name.get_normalization_function().is_some()
             || self.name.get_evaluation_info().is_some()
         {
             idenso::tensor::SymbolicTensor::validate_interface(&atom, &interface)
                 .map_err(|error| PyValueError::new_err(error.to_string()))?;
         }
-        TensorExpression::from_known_parts(py, atom, interface, Some(self.name), scalar_args)
+        let (name, arguments) = if bound_ports {
+            // A bound vertex is a contraction, not the stored tensor with its
+            // surviving signature. Keep the bound operands in the expression.
+            (None, Vec::new())
+        } else {
+            (Some(self.name), scalar_args)
+        };
+        TensorExpression::from_known_parts(py, atom, interface, name, arguments)
     }
 
     fn __repr__(&self) -> String {
@@ -967,7 +988,7 @@ impl SpensoRepresentation {
     }
 
     fn _repr_latex_(&self) -> String {
-        crate::display::atom_to_latex(&self.to_expression().expr, false)
+        crate::display::atom_to_latex(&self.to_expression().expr, false, None)
     }
 
     #[new]
@@ -1359,7 +1380,7 @@ impl SpensoSlot {
     }
 
     fn _repr_latex_(&self) -> String {
-        crate::display::atom_to_latex(&self.to_expression().expr, false)
+        crate::display::atom_to_latex(&self.to_expression().expr, false, None)
     }
 
     fn __repr__(&self) -> String {
@@ -1522,6 +1543,106 @@ pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
 mod tests {
     use super::*;
     use spenso::structure::representation::ExtendibleReps;
+
+    #[test]
+    fn tensor_name_bound_vectors_are_composites_and_metadata_stays_scalar() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+            let tensor = SpensoName {
+                name: spenso::tensor_symbol!("python_bound_tensor"),
+            };
+            let slot = || {
+                Py::new(
+                    py,
+                    SpensoSlot {
+                        slot: representation.slot(AbstractIndex::Normal(9)),
+                    },
+                )
+                .map(Py::into_any)
+            };
+            let p = FunctionBuilder::new(spenso::vector_symbol!("python_bound_p"))
+                .add_arg(representation.to_symbolic([]))
+                .finish();
+            let q = FunctionBuilder::new(spenso::vector_symbol!("python_bound_q"))
+                .add_arg(representation.to_symbolic([]))
+                .finish();
+            let mut expressions = Vec::new();
+            for vector in [&p, &q] {
+                for bound_first in [true, false] {
+                    let bound = PythonExpression::from(vector.clone())
+                        .into_pyobject(py)?
+                        .unbind()
+                        .into_any();
+                    let args = if bound_first {
+                        vec![bound, slot()?]
+                    } else {
+                        vec![slot()?, bound]
+                    };
+                    let value = tensor.__call__(py, &PyTuple::new(py, args)?)?;
+                    let value = value.bind(py).borrow();
+                    assert_eq!(value.interface.canonical().order(), 1);
+                    assert_eq!(
+                        value.interface.logical_slots()[0].aind,
+                        PartialIndex::Explicit(AbstractIndex::Normal(9))
+                    );
+                    assert!(value.name.is_none());
+                    assert!(value.name_args.is_empty());
+                    expressions.push(value.as_super().expr.clone());
+                }
+            }
+            assert_ne!(expressions[0], expressions[2]);
+            let nested_tensor = FunctionBuilder::new(tensor.name)
+                .add_arg(representation.to_symbolic([]))
+                .add_arg(representation.to_symbolic([]))
+                .finish();
+            let invalid = PyTuple::new(
+                py,
+                [
+                    PythonExpression::from(nested_tensor.clone())
+                        .into_pyobject(py)?
+                        .unbind()
+                        .into_any(),
+                    slot()?,
+                ],
+            )?;
+            assert!(tensor.__call__(py, &invalid).is_err());
+            let malformed =
+                FunctionBuilder::new(spenso::vector_symbol!("python_bound_missing_port"))
+                    .add_arg(Atom::num(3))
+                    .finish();
+            let malformed = PyTuple::new(
+                py,
+                [
+                    PythonExpression::from(malformed)
+                        .into_pyobject(py)?
+                        .unbind()
+                        .into_any(),
+                    slot()?,
+                ],
+            )?;
+            assert!(tensor.__call__(py, &malformed).is_err());
+            let metadata = FunctionBuilder::new(symbol!("python_bound_scalar"; Scalar))
+                .add_arg(nested_tensor)
+                .finish();
+            let unbound = PyTuple::new(
+                py,
+                [
+                    PythonExpression::from(metadata.clone())
+                        .into_pyobject(py)?
+                        .unbind()
+                        .into_any(),
+                    slot()?,
+                ],
+            )?;
+            let value = tensor.__call__(py, &unbound)?;
+            let value = value.bind(py).borrow();
+            assert_eq!(value.name, Some(tensor.name));
+            assert_eq!(value.name_args, vec![metadata]);
+            Ok(())
+        })
+        .unwrap();
+    }
 
     #[test]
     fn tensor_name_builds_scalar_and_mixed_structured_expressions() {

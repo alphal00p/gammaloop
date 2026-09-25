@@ -24,3 +24,15 @@ path = "expansion.rs"
 [[bin]]
 name = "polynomial_emission"
 path = "polynomial_emission.rs"
+
+[[bin]]
+name = "symmetric_construction"
+path = "symmetric_construction.rs"
+
+[[bin]]
+name = "scalar_expansion_routes"
+path = "scalar_expansion_routes.rs"
+
+[[bin]]
+name = "visitor_shortcircuit"
+path = "visitor_shortcircuit.rs"

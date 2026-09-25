@@ -1,6 +1,9 @@
 pub struct SchoonschipSettings {
     pub depth_limit: Option<usize>,
     pub mode: SchoonschipMode,
+    /// Distribute supported sums at the contraction boundary. Raw simplification
+    /// combines admitted terms before materialization and otherwise retains its
+    /// ordinary traversal; network contraction distributes its sum operands.
     pub expand_contracted_sums: bool,
     pub simplify_chain_like_functions: bool,
     pub schoonschip_rank1_tensors: bool,

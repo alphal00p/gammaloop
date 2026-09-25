@@ -121,42 +121,47 @@ impl NetworkSchoonschip<'_> {
         ];
         let mut slots = SlotMatcher::default();
         let mut required = false;
-        expression.has_repeated_explicit_indices_with_observer(|node, slot| {
-            if required {
-                return;
-            }
-            match slot {
-                SlotMatch::Explicit(_) => required = true,
-                SlotMatch::Opaque => {
-                    required = slots.compact_representation(node).is_none()
-                        || Representation::<LibraryRep>::try_from(node).is_err();
+        expression.has_repeated_explicit_indices_with_observer(
+            |node, slot| {
+                if required {
+                    return;
                 }
-                SlotMatch::Other => {
-                    if let AtomView::Fun(function) = node {
-                        let head = function.get_symbol();
-                        required =
-                            parser_heads.contains(&head) || head.has_tag(&SPENSO_TAG.broadcast);
-                        if head == ETS.metric {
-                            let mut arguments = function.iter().map(|argument| {
-                                let AtomView::Fun(vector) = argument else {
-                                    return None;
-                                };
-                                if !vector.get_symbol().has_tag(&SPENSO_TAG.rank1) {
-                                    return None;
-                                }
-                                let argument = slots.vector_argument(vector)?;
-                                slots.compact_representation(argument)
-                            });
-                            required |= match (arguments.next(), arguments.next(), arguments.next())
-                            {
-                                (Some(Some(left)), Some(Some(right)), None) => !left.matches(right),
-                                _ => true,
-                            };
+                match slot {
+                    SlotMatch::Explicit(_) => required = true,
+                    SlotMatch::Opaque => {
+                        required = slots.compact_representation(node).is_none()
+                            || Representation::<LibraryRep>::try_from(node).is_err();
+                    }
+                    SlotMatch::Other => {
+                        if let AtomView::Fun(function) = node {
+                            let head = function.get_symbol();
+                            required =
+                                parser_heads.contains(&head) || head.has_tag(&SPENSO_TAG.broadcast);
+                            if head == ETS.metric {
+                                let mut arguments = function.iter().map(|argument| {
+                                    let AtomView::Fun(vector) = argument else {
+                                        return None;
+                                    };
+                                    if !vector.get_symbol().has_tag(&SPENSO_TAG.rank1) {
+                                        return None;
+                                    }
+                                    let argument = slots.vector_argument(vector)?;
+                                    slots.compact_representation(argument)
+                                });
+                                required |=
+                                    match (arguments.next(), arguments.next(), arguments.next()) {
+                                        (Some(Some(left)), Some(Some(right)), None) => {
+                                            !left.matches(right)
+                                        }
+                                        _ => true,
+                                    };
+                            }
                         }
                     }
                 }
-            }
-        });
+            },
+            || true,
+        );
         required
     }
 
@@ -390,7 +395,7 @@ impl Schoonschip for AtomView<'_> {
     }
 
     fn schoonschip_with_settings(&self, settings: &SchoonschipSettings) -> Atom {
-        SchoonschipWithSettings { settings }.run(*self)
+        SchoonschipWithSettings { settings }.run::<false>(*self)
     }
 
     fn to_dots(&self) -> Atom {

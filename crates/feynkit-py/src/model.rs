@@ -25,10 +25,11 @@ use crate::{
     error,
     generation::{PyProcess, SelectorInput, VertexInput},
 };
-use spynso3::expression::TensorExpression;
+use spynso3::{display::DisplaySettings, expression::TensorExpression};
 use symbolica::{
     api::python::{ConvertibleToExpression, PythonExpression},
     atom::{Atom, AtomCore},
+    symbol,
 };
 
 fn complex_value<'py>(py: Python<'py>, value: ComplexValue) -> Bound<'py, PyComplex> {
@@ -722,6 +723,16 @@ impl PyParameter {
         &self.inner().name
     }
 
+    /// The model's LaTeX display label, or None when no label was supplied.
+    /// MiTeX renders this label in Typst and notebook math output.
+    ///
+    /// >>> Model.standard_model().parameter("ee").texname
+    /// 'e'
+    #[getter]
+    fn texname(&self) -> Option<&str> {
+        self.inner().texname.as_deref()
+    }
+
     /// Return the Les Houches block name, when defined.
     ///
     /// Examples
@@ -839,6 +850,15 @@ impl PyParameter {
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
         let p = self.inner();
         let mut rows = vec![
+            (
+                "Symbol",
+                model_expression_html(
+                    py,
+                    PythonExpression {
+                        expr: Atom::var(symbol!(&format!("UFO::{}", p.name))),
+                    },
+                )?,
+            ),
             (
                 "Nature / type",
                 format!("{:?} / {:?}", p.nature, p.parameter_type),
@@ -2312,14 +2332,18 @@ pub struct PyModel {
 
 impl From<Model> for PyModel {
     fn from(inner: Model) -> Self {
-        Self {
-            inner: Arc::new(inner),
-        }
+        Arc::new(inner).into()
     }
 }
 
 impl From<Arc<Model>> for PyModel {
     fn from(inner: Arc<Model>) -> Self {
+        for parameter in inner.parameters() {
+            DisplaySettings::register_latex_name(
+                symbol!(&format!("UFO::{}", parameter.name)),
+                parameter.texname.as_deref().unwrap_or_default(),
+            );
+        }
         Self { inner }
     }
 }

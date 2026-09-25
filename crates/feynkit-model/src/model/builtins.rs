@@ -160,6 +160,15 @@ impl Model {
             .enumerate()
             .map(|(index, (name, value))| Parameter {
                 name: name.to_owned(),
+                texname: Some(
+                    match name {
+                        "ZERO" => "0",
+                        "mass" => "m",
+                        "lam" => r"\lambda",
+                        _ => name,
+                    }
+                    .to_owned(),
+                ),
                 lhablock: (index != 0).then(|| "SCALAR".to_owned()),
                 lhacode: (index != 0).then(|| vec![index]),
                 nature: if index == 0 {
