@@ -3020,38 +3020,12 @@ impl Generator {
     }
 
     fn propagator_numerator(&self, particle: &Particle) -> Result<(Atom, bool), GenerationError> {
-        if let Some(propagator) = particle.propagator {
-            return Ok((
-                self.model.propagator_by_id(propagator)?.numerator.clone(),
-                false,
-            ));
+        match self.model.particle_propagator(particle)? {
+            Some((id, reversed)) => {
+                Ok((self.model.propagator_by_id(id)?.numerator.clone(), reversed))
+            }
+            None => Ok((Atom::one(), false)),
         }
-        let particle_id = self.model.particle_id(&particle.name)?;
-        if let Some(propagator) = self
-            .model
-            .propagators()
-            .iter()
-            .find(|propagator| propagator.particle == particle_id)
-        {
-            return Ok((propagator.numerator.clone(), false));
-        }
-
-        let antiparticle = self.model.antiparticle(particle)?;
-        if let Some(propagator) = antiparticle.propagator {
-            return Ok((
-                self.model.propagator_by_id(propagator)?.numerator.clone(),
-                true,
-            ));
-        }
-        Ok(self
-            .model
-            .propagators()
-            .iter()
-            .find(|propagator| propagator.particle == particle.antiparticle)
-            .map_or_else(
-                || (Atom::one(), false),
-                |propagator| (propagator.numerator.clone(), true),
-            ))
     }
 
     fn interaction_numerator(

@@ -1100,7 +1100,7 @@ class DiagramEdge:
     Examples
     --------
     >>> edge = next(iter(diagram.edges))
-    >>> particle = model.particle_by_pdg(edge.particle_pdg)
+    >>> particle = edge.particle
     >>> source, target = diagram.vertices[edge.source], diagram.vertices[edge.target]
     """
     @property
@@ -1127,6 +1127,22 @@ class DiagramEdge:
         --------
         >>> edge = diagram.edges[0]
         >>> target_vertex = diagram.vertices[edge.target]
+        """
+    @property
+    def particle(self) -> Particle:
+        r"""
+        The model particle, including symbolic mass, width parameter, spin and charge.
+
+        >>> edge.particle.mass_expression
+        >>> edge.particle.width_parameter
+        """
+    @property
+    def propagator(self) -> typing.Optional[Propagator]:
+        r"""
+        The model propagator template for an internal physical line, or None.
+
+        Template expressions retain model placeholders. Use numerator_expression()
+        and denominator_expression() for the instantiated diagram factors.
         """
     @property
     def external_index(self) -> builtins.int:
@@ -1191,7 +1207,8 @@ class DiagramEdge:
         Examples
         --------
         >>> edge = diagram.edges[0]
-        >>> particle = model.particle_by_pdg(edge.particle_pdg)
+        >>> edge.particle.pdg_code == edge.particle_pdg
+        True
         """
     @property
     def directed(self) -> builtins.bool:
@@ -1209,6 +1226,68 @@ class DiagramEdge:
 
         Raises :class:`DiagramError` for an incomplete imported diagram that has
         no instantiated propagator numerator.
+        """
+    def denominator_expression(self, *, power: builtins.int = 1, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
+        r"""
+        Return this edge's tagged q² - m² denominator as a scalar TensorExpression.
+
+        Uses the shared diagram denominator builder, excluding widths, iε and custom
+        UFO formulas. External, dummy and dangling lines raise DiagramError.
+        Signed power and dimension follow FeynmanDiagram.denominator_expression().
+        ``in_lmb=True`` uses the stored basis; an explicit ``lmb`` takes precedence.
+
+        Examples
+        --------
+        >>> edge = diagram.internal_edges[0]
+        >>> denominator = edge.denominator_expression(in_lmb=True)
+
+        Parameters
+        ----------
+        power : int, optional
+            Signed propagator power; defaults to one.
+        dimension : Expression or int or None, optional
+            Lorentz dimension; defaults to the shared symbolic dimension.
+        in_lmb : bool, optional
+            Route through the diagram's stored loop-momentum basis.
+        lmb : LoopMomentumBasis or None, optional
+            Explicit basis from this diagram, overriding ``in_lmb``.
+        """
+    def momentum_expression(self, *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
+        r"""
+        Return the oriented edge momentum as a rank-one Minkowski TensorExpression.
+
+        The default is Q(edge, mink(D)). With ``in_lmb=True``, return its linear
+        combination of loop and external momenta. An explicit ``lmb`` from this
+        diagram takes precedence. Dummy edges have no momentum and raise DiagramError.
+
+        Examples
+        --------
+        >>> momentum = edge.momentum_expression(dimension=4, in_lmb=True)
+
+        Parameters
+        ----------
+        dimension : Expression or int or None, optional
+            Lorentz dimension; defaults to the shared symbolic dimension.
+        in_lmb : bool, optional
+            Route through the diagram's stored loop-momentum basis.
+        lmb : LoopMomentumBasis or None, optional
+            Explicit basis from this diagram, overriding ``in_lmb``.
+        """
+    def momentum_signature(self, *, lmb: typing.Optional[LoopMomentumBasis] = None) -> MomentumSignature:
+        r"""
+        Return integer loop and external momentum coefficients in the selected basis.
+
+        Defaults to the diagram's stored basis. Dummy edges have no signature.
+
+        Examples
+        --------
+        >>> edge.momentum_signature().loops
+        >>> edge.momentum_signature().external
+
+        Parameters
+        ----------
+        lmb : LoopMomentumBasis or None, optional
+            Explicit basis from this diagram; defaults to its stored basis.
         """
     def numerator_expression(self) -> TensorExpression:
         r"""

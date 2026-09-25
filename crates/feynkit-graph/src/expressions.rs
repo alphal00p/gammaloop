@@ -150,6 +150,12 @@ pub struct PropagatorSymbols {
 }
 
 impl PropagatorSymbols {
+    /// The uncontracted Minkowski vector carried by an edge.
+    pub fn momentum(&self, edge: EdgeIndex, dimension: Dimension) -> Atom {
+        let representation = Minkowski {}.new_rep(dimension).to_symbolic([]);
+        self.momentum.call_args([Atom::num(edge.0), representation])
+    }
+
     /// Keep the identity, uncontracted momentum and mass alongside the explicit
     /// quadratic expression so UV derivatives can act on the fourth argument.
     pub fn denominator(

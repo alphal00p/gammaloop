@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from symbolica import E, S, Expression
+from symbolica import E, Expression, S
 from symbolica.community.spenso import Representation, TensorExpression, TensorName, dot
 
 fk = importlib.import_module(
@@ -173,6 +173,128 @@ for expression in (diagram.numerator_expression, diagram.denominator_expression)
             raise AssertionError("a supplied basis must belong to the diagram instance")
 
 
+# Edge access retains the original diagram's identity and uses its shared
+# denominator builder, even when the edge was obtained through a subgraph.
+for dimension in (4, S("lmb_test::D")):
+    for selected_basis in (None, basis, alternate):
+        product = TensorExpression(1)
+        for edge in diagram.internal_edges:
+            options = {"dimension": dimension, "lmb": selected_basis}
+            denominator = edge.denominator_expression(power=powers[edge.id], **options)
+            product *= denominator
+            selected = diagram.subgraph(edges=[edge.id])
+            assert denominator == selected.denominator_expression(
+                edge_powers=powers, **options
+            )
+            assert selected.edges[0].denominator_expression(**options) == (
+                edge.denominator_expression(**options)
+            )
+        assert product == diagram.denominator_expression(
+            edge_powers=powers, dimension=dimension, lmb=selected_basis
+        )
+
+for edge in diagram.edges:
+    assert edge.particle.name == edge.particle_name
+    assert edge.particle.mass_expression == 0
+    assert edge.particle.width_parameter == "ZERO"
+    if edge.is_external:
+        assert edge.propagator is None
+        try:
+            edge.denominator_expression()
+        except fk.DiagramError as error:
+            assert "not an internal propagator" in str(error)
+        else:
+            raise AssertionError("external carriers do not supply propagators")
+    else:
+        assert isinstance(edge.propagator, fk.Propagator)
+        assert edge.propagator.particle == edge.particle_name
+        assert edge.denominator_expression(in_lmb=True) == basis.route_expression(
+            edge.denominator_expression()
+        )
+    raw = edge.momentum_expression(dimension=4)
+    assert isinstance(raw, TensorExpression) and raw.rank == 1
+    assert raw == Q(edge.id, lorentz)
+    assert edge.momentum_expression(dimension=4, in_lmb=True) == (
+        basis.route_expression(raw)
+    )
+    for selected_basis in (basis, alternate):
+        routed = edge.momentum_expression(dimension=4, lmb=selected_basis)
+        assert routed == selected_basis.route_expression(raw)
+        assert routed.rank == 1
+        assert edge.momentum_signature(lmb=selected_basis).integer_coefficients() == (
+            selected_basis.edge_signatures[edge.id].integer_coefficients()
+        )
+    assert edge.momentum_signature().integer_coefficients() == (
+        basis.edge_signatures[edge.id].integer_coefficients()
+    )
+
+edge = diagram.internal_edges[0]
+for expression in (
+    edge.denominator_expression,
+    edge.momentum_expression,
+    edge.momentum_signature,
+):
+    try:
+        expression(lmb=foreign_basis)
+    except fk.DiagramError as error:
+        assert "momentum basis belongs to a different diagram" in str(error)
+    else:
+        raise AssertionError("edge accepted another diagram's basis")
+
+# A massive propagator must keep its symbolic mass rather than its numerical
+# parameter value, and must agree with the diagram-level denominator.
+massive = next(
+    iter(
+        model.process(
+            ["scalar_1", "scalar_1"],
+            ["scalar_1", "scalar_1"],
+            vertex_allow=["V_3_SCALAR_111"],
+        ).generate_diagrams(loops=0, max_vertices=2, progress=None)
+    )
+)
+edge = massive.internal_edges[0]
+assert edge.particle.mass_expression == model.particle("scalar_1").mass_expression
+assert edge.particle.mass_expression != 0
+assert edge.particle.width_parameter == "width_scalar_1"
+assert edge.denominator_expression() == massive.denominator_expression()
+assert edge.particle.mass_expression in edge.denominator_expression().get_all_symbols()
+a, b, c, quadratic = S(
+    "edge_test::a_", "edge_test::b_", "edge_test::c_", "edge_test::q_"
+)
+explicit = edge.denominator_expression(dimension=4).replace(
+    S("gammalooprs::denom")(a, b, c, quadratic), quadratic
+)
+momentum = edge.momentum_expression(dimension=4)
+assert explicit == dot(momentum, momentum) - edge.particle.mass_expression**2
+denominator = edge.denominator_expression(in_lmb=True)
+del massive
+assert edge.denominator_expression(in_lmb=True) == denominator
+
+# Momentum conservation sets a one-point function's external momentum to zero.
+# It must still be a vector, so it can participate in subsequent contractions.
+tadpole = next(
+    iter(
+        model.process(
+            ["scalar_0"],
+            [],
+            vertex_allow=["V_3_SCALAR_000"],
+        ).generate_diagrams(
+            loops=1,
+            max_vertices=1,
+            allow_self_loops=True,
+            allow_zero_flow_edges=True,
+            tadpoles=None,
+            zero_snails=None,
+            self_energy=None,
+            maximum_bridges=None,
+            progress=None,
+        )
+    )
+)
+zero_momentum = tadpole.external_edges[0].momentum_expression(in_lmb=True)
+assert zero_momentum == 0 and zero_momentum.rank == 1
+
+
 # Custom names label independent coordinates without changing the routing.
 # Exercise multiple loops, alternate bases, indexed vectors, and compact dots.
 two_loop = next(
@@ -197,7 +319,7 @@ for selected_basis in (basis, alternate, two_loop.loop_momentum_basis):
     external_names = [
         TensorName.vector(f"named_routing::p{i}") for i in independent_external
     ]
-    options = dict(loop_momenta=loop_names, external_momenta=external_names)
+    options = {"loop_momenta": loop_names, "external_momenta": external_names}
     zero = 0 * Q(selected_basis.loop_edges[0], mu)
     routed_zero = selected_basis.route_expression(zero, **options)
     assert isinstance(routed_zero, TensorExpression)
