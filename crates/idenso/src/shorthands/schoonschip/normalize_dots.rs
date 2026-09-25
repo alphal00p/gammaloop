@@ -7,7 +7,7 @@ use spenso::{
     structure::slot::{SlotMatch, SlotMatcher},
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, representation::FunView},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
     function,
     id::Replacement,
 };
@@ -54,12 +54,20 @@ enum DotRewrite {
     Descend,
 }
 
-pub(crate) struct DotNormalizer;
+pub(crate) struct DotNormalizer {
+    slots: SlotMatcher,
+    rank_one: &'static str,
+    metric: Symbol,
+}
 
 impl DotNormalizer {
     pub(super) fn run(view: AtomView<'_>) -> Atom {
-        let mut slots = SlotMatcher::default();
-        match Self::normalize_node(view, &mut slots) {
+        let mut normalizer = Self {
+            slots: SlotMatcher::default(),
+            rank_one: &T.rank1,
+            metric: ETS.metric,
+        };
+        match normalizer.normalize_node(view) {
             DotRewrite::Rewritten(result) => return result,
             DotRewrite::Opaque => return view.to_owned(),
             DotRewrite::Descend => {}
@@ -67,25 +75,23 @@ impl DotNormalizer {
         // replace_map treats even an unchanged pruning assignment as a change,
         // rebuilding its ancestors. A visitor can skip opaque payloads without
         // that work when no nested-vector or power identity applies.
-        if !Self::has_rewrite(view, &mut slots) {
+        if !normalizer.has_rewrite(view) {
             return view.to_owned();
         }
-        view.replace_map(
-            |atom, _, out| match Self::normalize_node(atom, &mut slots) {
-                DotRewrite::Rewritten(result) => **out = result,
-                DotRewrite::Opaque => out.set_from_view(&atom),
-                DotRewrite::Descend => {}
-            },
-        )
+        view.replace_map(|atom, _, out| match normalizer.normalize_node(atom) {
+            DotRewrite::Rewritten(result) => **out = result,
+            DotRewrite::Opaque => out.set_from_view(&atom),
+            DotRewrite::Descend => {}
+        })
     }
 
-    fn has_rewrite(view: AtomView<'_>, slots: &mut SlotMatcher) -> bool {
+    fn has_rewrite(&mut self, view: AtomView<'_>) -> bool {
         let mut found = false;
         view.visitor(&mut |atom| {
             if found {
                 return false;
             }
-            match Self::normalize_node(atom, slots) {
+            match self.normalize_node(atom) {
                 DotRewrite::Rewritten(_) => found = true,
                 DotRewrite::Opaque => return false,
                 DotRewrite::Descend => {}
@@ -95,7 +101,7 @@ impl DotNormalizer {
         found
     }
 
-    fn normalize_node(atom: AtomView<'_>, slots: &mut SlotMatcher) -> DotRewrite {
+    fn normalize_node(&mut self, atom: AtomView<'_>) -> DotRewrite {
         // Metric construction owns traces and compact-vector substitution.
         // Only nested vectors and powers need this expression walk. Canonical
         // vectors have one final argument carrying their tensor structure;
@@ -103,16 +109,15 @@ impl DotNormalizer {
         match atom {
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
-                Self::normalize_power(base, exponent, slots)
+                self.normalize_power(base, exponent)
                     .map_or(DotRewrite::Descend, DotRewrite::Rewritten)
             }
-            AtomView::Fun(function) if function.get_symbol().has_tag(&T.rank1) => {
-                Self::normalize_nested_vector(function, slots)
-                    .map_or(DotRewrite::Opaque, DotRewrite::Rewritten)
-            }
+            AtomView::Fun(function) if function.get_symbol().has_tag(self.rank_one) => self
+                .normalize_nested_vector(function)
+                .map_or(DotRewrite::Opaque, DotRewrite::Rewritten),
             AtomView::Fun(function)
                 if function.get_symbol().is_scalar()
-                    || !matches!(slots.classify(atom), SlotMatch::Other) =>
+                    || !matches!(self.slots.classify(atom), SlotMatch::Other) =>
             {
                 DotRewrite::Opaque
             }
@@ -120,27 +125,23 @@ impl DotNormalizer {
         }
     }
 
-    fn normalize_nested_vector(function: FunView<'_>, slots: &mut SlotMatcher) -> Option<Atom> {
-        let inner = slots.vector_argument(function)?;
+    fn normalize_nested_vector(&mut self, function: FunView<'_>) -> Option<Atom> {
+        let inner = self.slots.vector_argument(function)?;
         let AtomView::Fun(inner_function) = inner else {
             return None;
         };
-        let compact = slots.vector_argument(inner_function)?;
-        let representation = slots.compact_representation(compact)?;
+        let compact = self.slots.vector_argument(inner_function)?;
+        let representation = self.slots.compact_representation(compact)?;
         if !representation.is_base() {
             return None;
         }
         // The compact final argument identifies even an untagged inner vector;
         // the outer function must have the rank-one tag checked by the caller.
         let outer = Self::replace_last_argument(function, compact.to_owned());
-        Some(g!(outer, inner))
+        Some(function!(self.metric, outer, inner))
     }
 
-    fn normalize_power(
-        base: AtomView<'_>,
-        exponent: AtomView<'_>,
-        slots: &mut SlotMatcher,
-    ) -> Option<Atom> {
+    fn normalize_power(&mut self, base: AtomView<'_>, exponent: AtomView<'_>) -> Option<Atom> {
         let exponent = i64::try_from(exponent).ok()?;
         // Retain the existing integral-power convention: negative even powers
         // normalize, while negative odd and nonintegral powers remain opaque.
@@ -150,15 +151,15 @@ impl DotNormalizer {
         let AtomView::Fun(function) = base else {
             return None;
         };
-        let square = if function.get_symbol() == ETS.metric {
+        let square = if function.get_symbol() == self.metric {
             let mut arguments = function.iter();
             if arguments.len() != 2 {
                 return None;
             }
-            let SlotMatch::Explicit(first) = slots.classify(arguments.next().unwrap()) else {
+            let SlotMatch::Explicit(first) = self.slots.classify(arguments.next().unwrap()) else {
                 return None;
             };
-            let SlotMatch::Explicit(second) = slots.classify(arguments.next().unwrap()) else {
+            let SlotMatch::Explicit(second) = self.slots.classify(arguments.next().unwrap()) else {
                 return None;
             };
             if first.is_concrete_index()
@@ -170,16 +171,16 @@ impl DotNormalizer {
                 return None;
             }
             first.dimension().to_owned()
-        } else if function.get_symbol().has_tag(&T.rank1) {
-            let argument = slots.vector_argument(function)?;
-            let SlotMatch::Explicit(slot) = slots.classify(argument) else {
+        } else if function.get_symbol().has_tag(self.rank_one) {
+            let argument = self.slots.vector_argument(function)?;
+            let SlotMatch::Explicit(slot) = self.slots.classify(argument) else {
                 return None;
             };
             if slot.is_concrete_index() || !slot.representation().is_self_dual() {
                 return None;
             }
             let compact = Self::replace_last_argument(function, slot.representation().compact());
-            g!(&compact, &compact)
+            function!(self.metric, &compact, &compact)
         } else {
             return None;
         };
@@ -511,5 +512,53 @@ mod tests {
             DotNormalizer::run(vector.pow(2).as_view()),
             g!(&stripped, &stripped)
         );
+    }
+
+    #[test]
+    fn dot_normalization_preserves_pruned_ancestor_callbacks() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+        };
+
+        crate::test_support::test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let enabled = Arc::new(AtomicBool::new(false));
+        let observed = Arc::clone(&calls);
+        let replace = Arc::clone(&enabled);
+        let head = spenso::tensor_symbol!(
+            "dot_pruned_ancestor_callback",
+            norm = move |_, output| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                if replace.load(Ordering::Relaxed) {
+                    **output = Atom::num(17);
+                }
+            }
+        );
+        let p = T.rank_one_tensor_symbol("dot_pruned_callback_p");
+        let q = T.rank_one_tensor_symbol("dot_pruned_callback_q");
+        let compact = spenso::mink!(4);
+        let vector = function!(q, &compact);
+        let inert = function!(head, g!(&vector, &vector));
+        let work = function!(p, spenso::mink!(4, 1)).pow(2);
+        let expression = &inert + &work;
+        let normalized = function!(p, &compact);
+        let normalized = g!(&normalized, &normalized);
+
+        for replace in [false, true] {
+            enabled.store(replace, Ordering::Relaxed);
+            calls.store(0, Ordering::Relaxed);
+            assert_eq!(DotNormalizer::run(inert.as_view()), inert);
+            assert_eq!(calls.load(Ordering::Relaxed), 0);
+
+            let result = DotNormalizer::run(expression.as_view());
+            assert_eq!(calls.load(Ordering::Relaxed), 1);
+            let unchanged_branch = if replace {
+                Atom::num(17)
+            } else {
+                inert.clone()
+            };
+            assert_eq!(result, unchanged_branch + &normalized);
+        }
     }
 }

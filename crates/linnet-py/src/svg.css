@@ -156,8 +156,3 @@ svg[data-linnet-interactive] .linnet-inspector-shortcuts {
   font-size: 10px;
   color: color-mix(in srgb, var(--linnet-panel-ink) 65%, var(--linnet-panel-bg));
 }
-svg[data-linnet-interactive] .linnet-inspector-empty {
-  border-color: transparent;
-  box-shadow: none;
-  background: transparent;
-}

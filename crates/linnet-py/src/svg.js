@@ -169,9 +169,9 @@
       panel.setAttribute('x', wide ? graphWidth + 16 : 0);
       panel.setAttribute('y', wide ? toolbarHeight : toolbarHeight + graphHeight + 12);
       panel.setAttribute('width', panelWidth);
-      const panelHeight = content.offsetHeight;
+      const panelHeight = panel.style.display === 'none' ? 0 : content.offsetHeight;
       panel.setAttribute('height', panelHeight);
-      const height = toolbarHeight + (wide ? Math.max(graphHeight, panelHeight) : graphHeight + panelHeight + 12);
+      const height = toolbarHeight + (wide ? Math.max(graphHeight, panelHeight) : graphHeight + (panelHeight ? panelHeight + 12 : 0));
       svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
       svg.setAttribute('height', height);
       svg.style.height = `${height}px`;
@@ -179,8 +179,8 @@
     };
     const close = () => {
       pinned = false;
-      content.replaceChildren(html('div', 'Hover over a node or edge to inspect it. Click to pin its details.'));
-      content.classList.add('linnet-inspector-empty');
+      content.replaceChildren();
+      panel.style.display = 'none';
       layout();
     };
     svg.style.width = '100%';
@@ -195,7 +195,7 @@
     const show = target => {
       inspected = target;
       content.replaceChildren();
-      content.classList.remove('linnet-inspector-empty');
+      panel.style.display = '';
       const kind = target.dataset.linnetKind;
       const id = Number(target.dataset.linnetId);
       const detail = JSON.parse(target.dataset.linnetDetail);
@@ -369,7 +369,12 @@
       svg.addEventListener(name, event => {
         const target = targetOf(event);
         if (!target || dragging) return;
-        if (active && !pinned && (inspected !== target || content.classList.contains('linnet-inspector-empty'))) show(target);
+        const related = event.relatedTarget?.closest?.('[data-linnet-kind]');
+        if (related && svg.contains(related) && related.dataset.linnetKind === target.dataset.linnetKind && related.dataset.linnetId === target.dataset.linnetId) return;
+        if (!pinned) {
+          if (active) show(target);
+          else close();
+        }
         highlightEdge(target, active);
         for (const item of targets) {
           if (item.dataset.linnetKind === target.dataset.linnetKind && item.dataset.linnetId === target.dataset.linnetId) {

@@ -32,15 +32,13 @@ use pyo3_stub_gen::{
 use spenso::{
     network::{
         library::symbolic::{ETS, ExplicitKey},
-        parsing::AtomStructureExt,
         tags::SPENSO_TAG,
     },
     structure::{
         Canonicalized, HasName, TensorStructure,
         abstract_index::AbstractIndex,
-        dimension::Dimension,
         partial::{PartialIndex, PartialStructure, PartialStructureExt},
-        representation::{LibraryRep, Minkowski, Representation},
+        representation::{LibraryRep, Representation},
         slot::{IsAbstractSlot, Slot},
     },
 };
@@ -1214,20 +1212,15 @@ impl TensorExpression {
         py: Python<'_>,
         dimension: ConvertibleToDimension,
     ) -> PyResult<Py<Self>> {
-        let atom = self_
-            .as_super()
-            .expr
-            .with_lorentz_dimension(dimension.0.to_symbolic().as_view());
-        let interface = PartialStructure::from_logical_slots(
-            self_.interface.logical_slots().into_iter().map(|slot| {
-                let mut rep = slot.rep();
-                if rep.rep == (Minkowski {}).into() && rep.dim == Dimension::Concrete(4) {
-                    rep.dim = dimension.0;
-                }
-                rep.slot(slot.aind)
-            }),
-        );
-        Self::from_known_parts(py, atom, interface, self_.name, self_.name_args.clone())
+        let value = Self::structured(&self_)
+            .with_lorentz_dimension(dimension.0)
+            .map_err(Self::inference_error)?;
+        let (name, args) = if value.rank() == self_.interface.canonical().order() {
+            (self_.name, self_.name_args.clone())
+        } else {
+            (None, Vec::new())
+        };
+        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
     }
 
     /// Apply the selected algebra identities while retaining the ordered external interface.
@@ -3394,7 +3387,7 @@ mod tests {
     };
     use spenso::structure::{
         dimension::Dimension,
-        representation::{ExtendibleReps, RepName},
+        representation::{ExtendibleReps, Minkowski, RepName},
     };
     use symbolica::{atom::FunctionBuilder, symbol};
 
@@ -4661,16 +4654,6 @@ mod tests {
                 py,
                 ConvertibleToDimension(d),
             )?;
-            assert_eq!(
-                promoted
-                    .borrow(py)
-                    .interface
-                    .logical_slots()
-                    .iter()
-                    .map(IsAbstractSlot::dim)
-                    .collect::<Vec<_>>(),
-                vec![4.into(), 4.into(), d]
-            );
             let expected = TensorExpression::gamma(py, ConvertibleToDimension(d))?;
             let promoted_indexed = promoted.bind(py).call1(("i", "j", "mu"))?;
             let expected_indexed = expected.bind(py).call1(("i", "j", "mu"))?;
@@ -6110,6 +6093,52 @@ mod tests {
                 assert!(error.is_instance_of::<PyValueError>(py));
                 assert!(error.to_string().contains("cannot parse tensor network"));
                 assert!(error.to_string().contains("Invalid dot function"));
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn dimension_rewrite_clears_descriptor_only_when_ports_contract() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let index = PartialIndex::Explicit(AbstractIndex::Normal(73331));
+            let ports = [4, 6].map(|dimension| {
+                ExtendibleReps::MINKOWSKI
+                    .new_rep(Dimension::Concrete(dimension))
+                    .slot(index)
+            });
+            let expression = FunctionBuilder::new(spenso::tensor_symbol!("dimension_named_tensor"))
+                .add_args(ports.map(idenso::tensor::composition::port_atom))
+                .finish();
+            let name = symbol!("dimension_explicit_data_name");
+            let original = TensorExpression::from_known_parts(
+                py,
+                expression,
+                PartialStructure::from_logical_slots(ports),
+                Some(name),
+                vec![Atom::num(7)],
+            )?;
+            assert_eq!(original.borrow(py).interface.canonical().order(), 2);
+            let result = TensorExpression::with_lorentz_dimension(
+                original.borrow(py),
+                py,
+                ConvertibleToDimension(Dimension::Concrete(6)),
+            )?;
+            assert!(result.borrow(py).interface.canonical().is_scalar());
+            assert!(result.borrow(py).name.is_none());
+            assert!(result.borrow(py).name_args.is_empty());
+
+            for dimension in [4, 5] {
+                let result = TensorExpression::with_lorentz_dimension(
+                    original.borrow(py),
+                    py,
+                    ConvertibleToDimension(Dimension::Concrete(dimension)),
+                )?;
+                assert_eq!(result.borrow(py).interface.canonical().order(), 2);
+                assert_eq!(result.borrow(py).name, Some(name));
+                assert_eq!(result.borrow(py).name_args, vec![Atom::num(7)]);
             }
             Ok(())
         })

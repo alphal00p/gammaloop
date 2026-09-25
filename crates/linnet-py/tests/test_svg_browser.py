@@ -10,6 +10,45 @@ import linnet as lp
     importlib.util.find_spec("playwright"), "Playwright is not installed"
 )
 class SvgBrowserTests(unittest.TestCase):
+    def test_preview_only_while_hovered_or_focused_unless_pinned(self):
+        from playwright.sync_api import sync_playwright
+
+        left, right = lp.node("left"), lp.node("right")
+        graph = lp.build(left, right, lp.edge(lp.source(left), "p", lp.sink(right)))
+        with sync_playwright() as playwright:
+            for engine in (playwright.chromium, playwright.webkit):
+                with self.subTest(browser=engine.name):
+                    browser = engine.launch()
+                    try:
+                        page = browser.new_page(viewport={"width": 1000, "height": 800})
+                        page.set_content(
+                            '<!doctype html><meta charset="utf-8">' + graph.to_svg()
+                        )
+                        panel = page.locator(".linnet-inspector")
+                        self.assertFalse(panel.is_visible())
+                        for kind in ("node", "edge", "halfedge"):
+                            target = page.locator(f'[data-linnet-kind="{kind}"]').first
+                            target.dispatch_event("pointerover")
+                            self.assertTrue(panel.is_visible())
+                            target.dispatch_event("pointerout")
+                            self.assertFalse(panel.is_visible())
+                        node = page.locator('[data-linnet-kind="node"]').first
+                        node.focus()
+                        self.assertTrue(panel.is_visible())
+                        page.locator(".linnet-viewport").focus()
+                        self.assertFalse(panel.is_visible())
+                        node.click()
+                        page.mouse.move(990, 790)
+                        self.assertTrue(panel.is_visible())
+                        page.get_by_role("button", name="Close graph details").click()
+                        self.assertFalse(panel.is_visible())
+                        node.hover()
+                        self.assertTrue(panel.is_visible())
+                        page.mouse.move(990, 790)
+                        self.assertFalse(panel.is_visible())
+                    finally:
+                        browser.close()
+
     def test_navigation_inspection_and_independent_views(self):
         from playwright.sync_api import sync_playwright
 
@@ -96,8 +135,8 @@ class SvgBrowserTests(unittest.TestCase):
                         self.assertTrue(
                             first.locator(".linnet-inspector-construction").is_visible()
                         )
-                        self.assertTrue(
-                            second.locator(".linnet-inspector-empty").is_visible()
+                        self.assertFalse(
+                            second.locator(".linnet-inspector").is_visible()
                         )
 
                         # Wheel zoom is opt-in so ordinary notebook scrolling still works.

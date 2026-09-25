@@ -196,6 +196,45 @@ impl SymbolicTensor<PartialStructure> {
         Self::checked_parts(expression, structure)
     }
 
+    /// Change four-dimensional Lorentz ports in the expression and its logical interface.
+    /// Newly equal explicit indices contract; callback-sensitive results must still
+    /// carry the resulting interface without replaying normalization during validation.
+    pub fn with_lorentz_dimension(&self, dimension: Dimension) -> InferenceResult<Self> {
+        let expression = self
+            .expression
+            .with_lorentz_dimension(dimension.to_symbolic().as_view());
+        let mapped_structure = |structure: &PartialStructure| {
+            PartialStructure::from_logical_slots(structure.logical_slots().into_iter().map(
+                |slot| {
+                    let mut representation = slot.rep();
+                    if representation.rep == (Minkowski {}).into()
+                        && representation.dim == Dimension::Concrete(4)
+                    {
+                        representation.dim = dimension;
+                    }
+                    representation.slot(slot.aind)
+                },
+            ))
+        };
+        let mut value = Self::checked_parts(expression, mapped_structure(&self.structure))?;
+        if !InterfaceInference::normalization_is_intrinsic(self.expression.as_view()) {
+            // Named signatures may encode ports in canonical storage order while
+            // exposing a different logical order. Compare the two encoded forms;
+            // retain the independently mapped public layout on the result.
+            let physical = Self::observed_interface(&self.expression)?;
+            let expected =
+                InterfaceInference::merge_explicit_interface_sequence(&[mapped_structure(
+                    &physical,
+                )])?;
+            Self::validate_interface(&value.expression, &expected)?;
+        }
+        if value.expression == self.expression {
+            value.is_metric = self.is_metric;
+            value.is_composite = self.is_composite;
+        }
+        Ok(value)
+    }
+
     /// Cook both encoded indices and their logical interface, contracting collisions.
     pub fn with_cooked_indices(&self, settings: &crate::CookSettings) -> InferenceResult<Self> {
         let cook = |atom: &Atom| {
@@ -272,24 +311,31 @@ impl SymbolicTensor<PartialStructure> {
     /// inspect the resulting syntax without invoking that normalizer again with
     /// synthetic indices. Constructors still materialize compact callback leaves.
     pub fn validate_interface(atom: &Atom, structure: &PartialStructure) -> InferenceResult<()> {
-        let inferred = if atom.as_view().is_zero() {
-            structure.clone()
-        } else if !InterfaceInference::has_structured_syntax(atom.as_view()) {
-            PartialStructure::from_logical_slots([])
-        } else {
-            InterfaceInference::merge_explicit_interface_sequence(&[InterfaceInference {
-                leaf_inference: LeafInference::Observe,
-                ..InterfaceInference::default()
-            }
-            .infer_validated(atom.as_view())?])?
-            .canonicalize_open_ports()
-        };
+        if atom.as_view().is_zero() {
+            return Ok(());
+        }
+        let inferred = Self::observed_interface(atom)?;
         if !InterfaceInference::additive_interfaces_match(structure, &inferred) {
             return Err(TensorInferenceError::invalid(
                 "transformed expression does not preserve a compatible tensor interface",
             ));
         }
         Ok(())
+    }
+
+    /// Observe encoded port order without materializing compact callback leaves.
+    fn observed_interface(atom: &Atom) -> InferenceResult<PartialStructure> {
+        if !InterfaceInference::has_structured_syntax(atom.as_view()) {
+            return Ok(PartialStructure::from_logical_slots([]));
+        }
+        Ok(
+            InterfaceInference::merge_explicit_interface_sequence(&[InterfaceInference {
+                leaf_inference: LeafInference::Observe,
+                ..InterfaceInference::default()
+            }
+            .infer_validated(atom.as_view())?])?
+            .canonicalize_open_ports(),
+        )
     }
 }
 
@@ -1771,7 +1817,250 @@ mod tests {
                 vec![euclidean, minkowski],
             );
             assert_eq!(value.structure.open_positions(), vec![0, 1]);
+            let dimension = Dimension::Concrete(6);
+            let promoted = value.with_lorentz_dimension(dimension).unwrap();
+            assert_eq!(
+                promoted.structure.logical_slots(),
+                vec![
+                    euclidean.slot(PartialIndex::open(0)),
+                    ExtendibleReps::MINKOWSKI
+                        .new_rep(dimension)
+                        .slot(PartialIndex::open(1)),
+                ],
+            );
+            assert_eq!(
+                promoted.expression,
+                value
+                    .expression
+                    .with_lorentz_dimension(dimension.to_symbolic().as_view()),
+            );
         }
+    }
+
+    #[test]
+    fn lorentz_dimension_preserves_logical_ports_typed_zero_and_dispatch_flags() {
+        let minkowski = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let euclidean = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
+        let slots = [
+            euclidean.slot(PartialIndex::open(0)),
+            minkowski.slot(PartialIndex::Explicit(AbstractIndex::Normal(73301))),
+            ExtendibleReps::MINKOWSKI
+                .new_rep(Dimension::Concrete(3))
+                .slot(PartialIndex::open(1)),
+        ];
+        let atom = FunctionBuilder::new(spenso::tensor_symbol!("dimension_logical_ports"))
+            .add_arg(4)
+            .add_args(slots.into_iter().rev().map(composition::port_atom))
+            .finish();
+        let dimension = Dimension::from(symbolica::symbol!("shared_lorentz_dimension"));
+        let expected_slots = [
+            slots[0],
+            ExtendibleReps::MINKOWSKI
+                .new_rep(dimension)
+                .slot(slots[1].aind),
+            slots[2],
+        ];
+        for expression in [atom, Atom::Zero] {
+            let value = SymbolicTensor::<PartialStructure>::new(
+                expression,
+                PartialStructure::from_logical_slots(slots),
+            );
+            INFERENCE_CALLS.with(|count| count.set(0));
+            let result = value.with_lorentz_dimension(dimension).unwrap();
+            assert_eq!(result.structure.logical_slots(), expected_slots);
+            assert_eq!(result.structure.open_positions(), vec![0, 2]);
+            assert_eq!(result.is_metric, value.is_metric);
+            assert_eq!(result.is_composite, value.is_composite);
+            assert_eq!(result.expression.is_zero(), value.expression.is_zero());
+            assert_eq!(result.with_lorentz_dimension(dimension).unwrap(), result);
+            assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        }
+
+        let gamma = SymbolicTensor::<PartialStructure>::from_signature(
+            &AGS.gamma_strct::<AbstractIndex>(Dimension::Concrete(4)),
+        )
+        .unwrap();
+        let promoted = gamma.with_lorentz_dimension(dimension).unwrap();
+        assert_eq!(
+            promoted
+                .structure
+                .logical_slots()
+                .iter()
+                .map(IsAbstractSlot::dim)
+                .collect::<Vec<_>>(),
+            vec![4.into(), 4.into(), dimension],
+        );
+        assert_eq!(
+            promoted.structure.open_positions(),
+            gamma.structure.open_positions()
+        );
+
+        let metric =
+            SymbolicTensor::<PartialStructure>::new(
+                FunctionBuilder::new(ETS.metric)
+                    .add_args([73303, 73305].map(|index| {
+                        minkowski
+                            .slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                            .to_atom()
+                    }))
+                    .finish(),
+                PartialStructure::from_logical_slots([73303, 73305].map(|index| {
+                    minkowski.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)))
+                })),
+            );
+        let promoted = metric.with_lorentz_dimension(dimension).unwrap();
+        assert!(promoted.is_metric);
+        assert!(!promoted.is_composite);
+    }
+
+    #[test]
+    fn lorentz_dimension_merges_new_index_pairs_and_rejects_excess_occurrences() {
+        let index = PartialIndex::Explicit(AbstractIndex::Normal(73311));
+        let minkowski4 = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let minkowski6 = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(6));
+        let remaining = ExtendibleReps::EUCLIDEAN
+            .new_rep(Dimension::Concrete(3))
+            .slot(PartialIndex::Explicit(AbstractIndex::Normal(73313)));
+        let ports = [minkowski4.slot(index), remaining, minkowski6.slot(index)];
+        let head = spenso::tensor_symbol!("dimension_collision_tensor");
+        let expression = FunctionBuilder::new(head)
+            .add_args(ports.map(composition::port_atom))
+            .finish();
+        let value = SymbolicTensor::<PartialStructure>::checked_parts(
+            expression,
+            PartialStructure::from_logical_slots(ports.into_iter().rev()),
+        )
+        .unwrap();
+        assert_eq!(value.rank(), 3);
+        let result = value
+            .with_lorentz_dimension(Dimension::Concrete(6))
+            .unwrap();
+        assert_eq!(result.structure.logical_slots(), vec![remaining]);
+        let ports = [
+            minkowski4.slot(index),
+            minkowski6.slot(index),
+            minkowski6.slot(index),
+        ];
+        let expression = FunctionBuilder::new(head)
+            .add_args(ports.map(composition::port_atom))
+            .finish();
+        let value = SymbolicTensor::<PartialStructure>::checked_parts(
+            expression,
+            PartialStructure::from_logical_slots(ports),
+        )
+        .unwrap();
+        assert_eq!(value.rank(), 1);
+        assert!(
+            value
+                .with_lorentz_dimension(Dimension::Concrete(6))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn lorentz_dimension_checks_actual_callback_output_without_replaying_callbacks() {
+        use std::sync::{Arc, Mutex};
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&calls);
+        let head = spenso::tensor_symbol!(
+            "dimension_result_normalizer",
+            norm = move |node, output| {
+                observed.lock().unwrap().push(node.to_owned());
+                if let AtomView::Fun(function) = node
+                    && let Some(AtomView::Fun(slot)) = function.iter().last()
+                    && slot.iter().next() == Some(Atom::num(6).as_view())
+                {
+                    let mode = function.iter().next().unwrap();
+                    if mode == Atom::Zero.as_view() || mode == Atom::one().as_view() {
+                        **output = mode.to_owned();
+                    }
+                }
+            }
+        );
+        let representation = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        for index in [
+            PartialIndex::open(0),
+            PartialIndex::Explicit(AbstractIndex::Normal(73321)),
+        ] {
+            for mode in [0, 1, 2] {
+                let port = representation.slot(index);
+                let expression = FunctionBuilder::new(head)
+                    .add_arg(mode)
+                    .add_arg(composition::port_atom(port))
+                    .finish();
+                let value = SymbolicTensor::<PartialStructure>::new(
+                    expression,
+                    PartialStructure::from_logical_slots([port]),
+                );
+                calls.lock().unwrap().clear();
+                let expected = value
+                    .expression
+                    .with_lorentz_dimension(Atom::num(6).as_view());
+                let expected_calls = std::mem::take(&mut *calls.lock().unwrap());
+                assert!(!expected_calls.is_empty());
+                let result = value.with_lorentz_dimension(Dimension::Concrete(6));
+                assert_eq!(*calls.lock().unwrap(), expected_calls);
+                if mode == 1 {
+                    assert_eq!(expected, Atom::one());
+                    assert!(
+                        result.is_err(),
+                        "a scalar callback result cannot retain a tensor port"
+                    );
+                } else {
+                    let result = result.unwrap();
+                    assert_eq!(result.expression, expected);
+                    assert_eq!(
+                        result.structure.logical_slots(),
+                        vec![
+                            ExtendibleReps::MINKOWSKI
+                                .new_rep(Dimension::Concrete(6))
+                                .slot(index)
+                        ]
+                    );
+                }
+            }
+        }
+
+        let tensor = FunctionBuilder::new(spenso::tensor_symbol!("dimension_promoted_tensor"))
+            .add_arg(ExtendibleReps::MINKOWSKI.new_rep(6).to_symbolic([]))
+            .finish();
+        let promoted_tensor = tensor.clone();
+        let observed = Arc::clone(&calls);
+        let scalar = symbolica::symbol!(
+            "dimension_scalar_callback"; Scalar;
+            norm = move |node, output| {
+                observed.lock().unwrap().push(node.to_owned());
+                if let AtomView::Fun(function) = node
+                    && let Some(AtomView::Fun(slot)) = function.iter().next()
+                    && slot.iter().next() == Some(Atom::num(6).as_view())
+                {
+                    **output = promoted_tensor.clone();
+                }
+            }
+        );
+        let expression = FunctionBuilder::new(scalar)
+            .add_arg(representation.to_symbolic([]))
+            .finish();
+        assert!(!InterfaceInference::has_structured_syntax(
+            expression.as_view()
+        ));
+        let value = SymbolicTensor::<PartialStructure>::new(
+            expression,
+            PartialStructure::from_logical_slots([]),
+        );
+        calls.lock().unwrap().clear();
+        let expected = value
+            .expression
+            .with_lorentz_dimension(Atom::num(6).as_view());
+        assert_eq!(expected, tensor);
+        let expected_calls = std::mem::take(&mut *calls.lock().unwrap());
+        assert!(
+            value
+                .with_lorentz_dimension(Dimension::Concrete(6))
+                .is_err()
+        );
+        assert_eq!(*calls.lock().unwrap(), expected_calls);
     }
 
     #[test]
