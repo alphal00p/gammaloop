@@ -63,7 +63,7 @@ applies to factorized-loop, cut-blob and spectator ranges.
 ```python
 import symbolica.community.feynkit as fk
 
-result = fk.Process(model, ['g'], ['g']).generate_diagrams(loops=1, coupling_orders={'QCD': 2, 'QED': 0}, particle_veto=['c', 't', 's', 'u', 'd'], zero_snails=fk.SnailFilterOptions(veto_attached_to_massless=True), threads=4)
+result = model.process(['g'], ['g'], particle_veto=['c', 't', 's', 'u', 'd']).generate_diagrams(loops=1, coupling_orders={'QCD': 2, 'QED': 0}, zero_snails=fk.SnailFilterOptions(veto_attached_to_massless=True), threads=4)
 ```
 
 Reuse keyword settings with a Python dictionary and `**kwargs`; each call constructs a fresh
@@ -73,15 +73,14 @@ Rust configuration. A process can also be configured independently of generation
 ```python
 import symbolica.community.feynkit as fk
 
-process = fk.Process(model, ["e-", "e+"], ["mu-", "mu+"])
-process = process.with_loop_count(1, 1)
-result = process.generate_diagrams(max_vertices=6, maximum_bridges=None)
+process = model.process(["e-", "e+"], ["mu-", "mu+"])
+result = process.generate_diagrams(loops=1, max_vertices=6, maximum_bridges=None)
 ```
 
 The same process can produce a symbolic amplitude or sewn cross-section diagrams:
 
 ```python
-process = fk.Process(model, ["e-", "e+"], ["a", "a"])
+process = model.process(["e-", "e+"], ["a", "a"])
 amplitude = process.generate_amplitude()
 squared = amplitude.squared().sum_spins(average_initial=True)
 forward = process.generate_cross_section(loops=1)
@@ -91,10 +90,13 @@ forward = process.generate_cross_section(loops=1)
 cut metadata; phase-space integration is a later operation. Its loop order counts loops in
 the forward graph, so a two-particle tree cut requires one loop. `generate_amplitude` rejects
 empty or cancelled generation rather than presenting an incomplete coherent sum.
-Neither method changes the process, so per-call loop overrides remain local to that call.
+Neither method changes the process; loop order and symmetrization belong to each call.
 
-Here `model` must provide those particles. Loop range, vertex bounds, allowed interactions,
-particle vetoes, coupling orders, and numerator grouping are explicit generation choices. An
+Here `model` must provide those particles. Allowed interactions and particle vetoes are
+process restrictions, validated at construction. `process.with_filters(...)` returns a copy
+with changed restrictions; omitted fields are kept and `None` clears them. An empty
+`vertex_allow=[]` permits no interactions. Loop ranges, vertex bounds, coupling orders, and
+numerator grouping are specified for each generation call. An
 empty result can therefore mean the chosen constraints admit no graph. This is a completed
 `GenerationResult` with zero retained diagrams, not a configuration error. Inspect the generation
 report and relax a specific constraint before enlarging the search indiscriminately.
@@ -134,7 +136,7 @@ yield execution to the browser for painting.
 
 // docs-example: compile
 ```python
-result = fk.Process(model, ["e-", "e+"], ["mu-", "mu+"]).generate_diagrams(loops=1, maximum_bridges=None)
+result = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams(loops=1, maximum_bridges=None)
 ```
 
 Use `filter=callback` for live pruning during enumeration. It receives a Symbolica `Graph`
@@ -148,7 +150,7 @@ partial graph grows; a numerator or UV-degree test requires a finished `FeynmanD
 def no_self_edges(topology, completed_vertices):
     return all(source != target for source, target, directed, pdg in topology.edges())
 
-result = fk.Process(model, ["e-", "e+"], ["mu-", "mu+"]).generate_diagrams(loops=1, allow_self_loops=True, maximum_bridges=None, filter=no_self_edges)
+result = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams(loops=1, allow_self_loops=True, maximum_bridges=None, filter=no_self_edges)
 ```
 
 This example illustrates the callback contract; for this particular condition, prefer the
@@ -371,7 +373,7 @@ vertices = [
     if sorted(vertex.particles) == sorted([electron.name, electron.antiname, photon.name])
 ]
 photon_count = 3
-result = fk.Process(model, [photon], [photon] * (photon_count - 1)).generate_diagrams(loops=1, max_vertices=photon_count, vertex_allow=vertices, maximum_bridges=None, allow_self_loops=True, allow_zero_flow_edges=True, self_energy=None, tadpoles=None, zero_snails=None, numerator_grouping=None)
+result = model.process([photon], [photon] * (photon_count - 1), vertex_allow=vertices).generate_diagrams(loops=1, max_vertices=photon_count, maximum_bridges=None, allow_self_loops=True, allow_zero_flow_edges=True, self_energy=None, tadpoles=None, zero_snails=None, numerator_grouping=None)
 ```
 
 Contract the external Lorentz slots with independent symbolic probe vectors,
@@ -431,7 +433,7 @@ allowed_particles = [
     sorted([top.antiname, top.name, gluon.name]),
 ]
 vertices = [v for v in model.vertex_rules if sorted(v.particles) in allowed_particles]
-result = fk.Process(model, [higgs], [gluon, gluon]).generate_diagrams(loops=1, max_vertices=3, maximum_bridges=0, vertex_allow=vertices, numerator_grouping=None)
+result = model.process([higgs], [gluon, gluon], vertex_allow=vertices).generate_diagrams(loops=1, max_vertices=3, maximum_bridges=0, numerator_grouping=None)
 ```
 
 Keep both orientations and each diagram's complete weight. Promote Lorentz slots
@@ -464,7 +466,7 @@ the existing typed generation interface:
 
 // docs-example: compile
 ```python
-counterterms = fk.Process(ct_model, [ct_electron], [ct_electron]).generate_diagrams(loops=0, max_vertices=1, vertex_allow=ct_vertices, coupling_orders={"QED": 2, "CT": 1}, maximum_bridges=None, self_energy=None, tadpoles=None, zero_snails=None, numerator_grouping=None)
+counterterms = ct_model.process([ct_electron], [ct_electron], vertex_allow=ct_vertices).generate_diagrams(loops=0, max_vertices=1, coupling_orders={"QED": 2, "CT": 1}, maximum_bridges=None, self_energy=None, tadpoles=None, zero_snails=None, numerator_grouping=None)
 ```
 
 The loop count describes topology; the `CT` order describes perturbative

@@ -563,11 +563,13 @@ fn native_amplitude_runtime_enrichment_preserves_every_graph_coordinate() {
     test_initialise().unwrap();
     let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
     let generated = Process::new(["scalar_1"], ["scalar_1"])
-        .with_loop_count(1, 1)
-        .unwrap()
         .generate_diagrams(
             model,
-            &GenerationOptions::default().threads(1).max_vertices(2),
+            &GenerationOptions::default()
+                .with_loop_count(1, 1)
+                .unwrap()
+                .threads(1)
+                .max_vertices(2),
         )
         .unwrap();
     assert!(!generated.diagrams.is_empty());
@@ -582,11 +584,13 @@ fn native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_
     test_initialise().unwrap();
     let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
     let generated = Process::new(["scalar_1"], ["scalar_1", "scalar_1"])
-        .with_loop_count(1, 1)
-        .unwrap()
         .generate_cross_section(
             model,
-            &GenerationOptions::default().threads(1).max_vertices(2),
+            &GenerationOptions::default()
+                .with_loop_count(1, 1)
+                .unwrap()
+                .threads(1)
+                .max_vertices(2),
         )
         .unwrap();
     assert!(!generated.diagrams.is_empty());
@@ -622,11 +626,11 @@ fn native_compton_runtime_enrichment_preserves_sewn_fermions() {
 
     for pdg in [11_i64, -11] {
         let generated = Process::new([pdg, 22], [pdg, 22])
-            .with_loop_count(1, 1)
-            .unwrap()
             .generate_cross_section(
                 model.clone(),
                 &GenerationOptions::default()
+                    .with_loop_count(1, 1)
+                    .unwrap()
                     .threads(1)
                     .max_vertices(4)
                     .with_graph_filter(GenerationFilter::VertexAllow(vec!["V_98".into()])),

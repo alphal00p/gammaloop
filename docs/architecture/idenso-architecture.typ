@@ -49,18 +49,40 @@ must not treat printed names alone as a complete serialized registry.
 
 == Core symbolic representation
 
-`SymbolicTensor<Aind>` carries four fields:
+`SymbolicTensor<S>` carries four fields:
 
-- an `OrderedStructure<LibraryRep, Aind>` containing the external slots;
+- the structure `S`, defaulting to `OrderedStructure<LibraryRep, AbstractIndex>`;
 - the owned Symbolica `Atom` expression;
 - `is_metric`, used by contraction-specialized identities;
 - `is_composite`, distinguishing a direct tensor function from an expression-backed leaf.
 
-It implements both `TensorStructure` and `HasStructure`. Structural methods delegate to the
-ordered slots, while permutations rewrite slot atoms and introduce identity tensors when
-needed. Its generic `Contract` implementation multiplies the two atoms and merges their
-structures; domain-specific cleanup is a later rewrite stage rather than component-wise
-evaluation.
+The explicit ordered specialization implements `TensorStructure` and network contraction.
+Structural methods delegate to the ordered slots, while permutations rewrite slot atoms and
+introduce identity tensors when needed. Its `Contract` implementation multiplies the atoms and
+merges their structures; domain-specific cleanup follows separately. `HasStructure` supports
+structure types implementing `TensorStructure`, and mapping the structure retains the
+expression and classification flags.
+
+The same symbolic tensor with `PartialStructure` retains canonical-to-logical layout and
+occurrence-local unresolved ports. It owns positional composition, index substitution,
+chain/trace assembly, and the fast interface inference used by Python. Unresolved ports remain
+distinct under ordered multiplication, and a zero retains its declared shape. This replaces
+the former Spynso `StructuredAtom`; Python bindings retain argument conversion, dispatch,
+error translation, and presentation metadata. `PartialStructure` does not pretend to implement
+the canonical-storage `TensorStructure` contract.
+
+Checked reconstruction preserves established interfaces where the operation justifies it.
+Public fields and low-level constructors are not validity certificates: inference can retain
+raw repeated ports until `checked_parts` merges their explicit contractions. This intermediate
+boundary also lets bindings discard stored-data identity when a declaration becomes a
+contraction, even if its input and final result have the same rank.
+Callback-sensitive rewrites validate their output because normalization can remove tensor
+ports. Result validation observes the existing ports without temporary index materialization
+or callback replay; constructor inference retains its materialization semantics within the
+same inference owner. Index substitution distinguishes graph storage identities from logical unresolved
+ports, checks every sum branch, and retains necessary multiplicity checks. Unchanged branches
+are borrowed; changed exact sums and products use bulk construction when callback ordering
+permits it.
 
 `SymbolicNet<Aind>` is a Spenso `Network` whose local tensors are `SymbolicTensor`, whose scalars
 are Symbolica atoms, and whose function keys are Symbolica symbols. `SymbolicNetParse` forces

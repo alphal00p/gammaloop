@@ -7,10 +7,8 @@ from symbolica.community import feynkit as fk
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = (
-    fk.Process(model, ["scalar_0"], ["scalar_0"])
-    .generate_diagrams(
-        loops=1, max_vertices=2, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=False
-    )
+    model.process(["scalar_0"], ["scalar_0"], vertex_allow=["V_3_SCALAR_000"])
+    .generate_diagrams(loops=1, max_vertices=2, allow_self_loops=False)
     .diagrams
 )
 assert len(diagrams) == 1
@@ -81,8 +79,10 @@ else:
     raise AssertionError("nonlinear auxiliary product was accepted")
 
 contact = (
-    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
-    .generate_diagrams(loops=0, max_vertices=1, vertex_allow=["V_3_SCALAR_000"])
+    model.process(
+        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    )
+    .generate_diagrams(loops=0, max_vertices=1)
     .diagrams[0]
 )
 for construct in (

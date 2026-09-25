@@ -59,10 +59,13 @@ fn complex_ckm_generation_preserves_named_and_inline_couplings() -> color_eyre::
         assert_ne!(model.get_coupling("GC_40").value.unwrap().im, 0.0);
         let mut process = ProcessDefinition {
             generation_type: feynkit_generator::GenerationType::CrossSection,
-            process: GenerationProcess::new([24_i64], [2_i64, -5]).with_loop_count(1, 1)?,
-            generation_options: GenerationOptions::default().with_graph_filter(
-                GenerationFilter::VertexAllow(vec!["V_95".into(), "V_125".into()]),
-            ),
+            process: GenerationProcess::new([24_i64], [2_i64, -5]),
+            generation_options: GenerationOptions::default()
+                .with_loop_count(1, 1)?
+                .with_graph_filter(GenerationFilter::VertexAllow(vec![
+                    "V_95".into(),
+                    "V_125".into(),
+                ])),
             ..Default::default()
         };
         let settings = GlobalSettings {
@@ -75,7 +78,10 @@ fn complex_ckm_generation_preserves_named_and_inline_couplings() -> color_eyre::
         for symmetrize in [false, true] {
             // Acceptance certifies the opt-in contract, not CP validity of
             // this complex coupling point or a physical optimized rate.
-            process.process = process.process.clone().symmetrize_left_right(symmetrize);
+            process.generation_options = process
+                .generation_options
+                .clone()
+                .symmetrize_left_right(symmetrize);
             assert_eq!(process.generate(&model, &settings)?.len(), 1);
         }
         let left = model.get_coupling("GC_43").value.unwrap();
@@ -130,12 +136,14 @@ fn complex_ckm_updates_preserve_direct_integrand_warm_up() -> color_eyre::Result
 
         let definition = ProcessDefinition {
             generation_type: feynkit_generator::GenerationType::CrossSection,
-            process: GenerationProcess::new([24_i64], [2_i64, -5])
+            process: GenerationProcess::new([24_i64], [2_i64, -5]),
+            generation_options: GenerationOptions::default()
                 .with_loop_count(1, 1)?
-                .symmetrize_left_right(symmetrize),
-            generation_options: GenerationOptions::default().with_graph_filter(
-                GenerationFilter::VertexAllow(vec!["V_95".into(), "V_125".into()]),
-            ),
+                .symmetrize_left_right(symmetrize)
+                .with_graph_filter(GenerationFilter::VertexAllow(vec![
+                    "V_95".into(),
+                    "V_125".into(),
+                ])),
             ..Default::default()
         };
         let mut settings = GlobalSettings::default();

@@ -283,7 +283,7 @@ mod tests {
         assert_eq!(closed.expression, traced.expression);
         assert_eq!(
             SymbolicTensor::trace(rep, &[]).unwrap().expression,
-            Atom::num(3)
+            SPENSO_TAG.trace(rep.to_symbolic([]), std::iter::empty::<Atom>())
         );
     }
 
@@ -307,5 +307,25 @@ mod tests {
             .add_args([rep.to_symbolic([]), rep.to_symbolic([])])
             .finish();
         assert_eq!(SymbolicTensor::infer(compact).unwrap().rank(), 2);
+    }
+
+    #[test]
+    fn graph_reindexing_retains_explicit_storage_open_identities() {
+        let rep = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let value = matrix("shared_storage_open_matrix", rep);
+        let owner = AbstractIndex::fresh_open_owner();
+        let indices = [0, 1].map(|axis| AbstractIndex::Open { owner, axis });
+        let indexed = value
+            .reindex_interface_ports(&HashMap::from([(0, indices[0]), (1, indices[1])]))
+            .unwrap();
+        assert_eq!(
+            indexed
+                .structure
+                .logical_slots()
+                .iter()
+                .map(|slot| slot.aind)
+                .collect::<Vec<_>>(),
+            indices.map(PartialIndex::Explicit),
+        );
     }
 }

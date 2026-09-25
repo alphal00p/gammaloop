@@ -34,7 +34,7 @@ define_exception!(
     FeynkitError,
     PyException,
     pyo3_stub_gen::TypeInfo::builtin("Exception"),
-    "Base exception for native FeynKit operations.\n\nExamples\n--------\nCatch any model, diagram, generation, CFF, tensor-reduction, or kinematics failure:\n\n>>> try:\n...     result = fk.Process(model, incoming, outgoing).generate_diagrams()\n... except fk.FeynkitError as error:\n...     print(error)"
+    "Base exception for native FeynKit operations.\n\nExamples\n--------\nCatch any model, diagram, generation, CFF, tensor-reduction, or kinematics failure:\n\n>>> try:\n...     result = model.process(incoming, outgoing).generate_diagrams()\n... except fk.FeynkitError as error:\n...     print(error)"
 );
 define_exception!(
     ModelError,
@@ -52,7 +52,7 @@ define_exception!(
     GenerationError,
     FeynkitError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
-    "Invalid process configuration or Feynman-diagram generation failure.\n\nExamples\n--------\nProcess and topology failures share one public exception type:\n\n>>> try:\n...     result = fk.Process(model, incoming, outgoing).generate_diagrams(loops=1)\n... except fk.GenerationError as error:\n...     print(error)"
+    "Invalid process configuration or Feynman-diagram generation failure.\n\nExamples\n--------\nProcess and topology failures share one public exception type:\n\n>>> try:\n...     result = model.process(incoming, outgoing).generate_diagrams(loops=1)\n... except fk.GenerationError as error:\n...     print(error)"
 );
 define_exception!(
     CffError,

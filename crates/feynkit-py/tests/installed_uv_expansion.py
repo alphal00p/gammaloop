@@ -12,10 +12,8 @@ fk = importlib.import_module(
 )
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 bubble = (
-    fk.Process(model, ["scalar_0"], ["scalar_0"])
-    .generate_diagrams(
-        loops=1, max_vertices=2, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=False
-    )
+    model.process(["scalar_0"], ["scalar_0"], vertex_allow=["V_3_SCALAR_000"])
+    .generate_diagrams(loops=1, max_vertices=2, allow_self_loops=False)
     .diagrams[0]
 )
 mass = S("uv_test::mUV", is_scalar=True)
@@ -94,10 +92,10 @@ else:
     raise AssertionError("nonpositive dimension accepted")
 
 triangle = (
-    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
-    .generate_diagrams(
-        loops=1, max_vertices=3, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=False
+    model.process(
+        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
     )
+    .generate_diagrams(loops=1, max_vertices=3, allow_self_loops=False)
     .diagrams
 )
 triangle = next(
@@ -113,12 +111,11 @@ assert triangle.uv_counterterm(mass, dimension=6) != 0
 # Lorentz/color interface; callers can contract a projector after expansion.
 sm = fk.Model(Path(__file__).parents[3] / "assets/models/json/sm/sm.json")
 diagrams = (
-    fk.Process(sm, ["g"], ["g"])
+    sm.process(["g"], ["g"], particle_veto=["c", "t", "s", "u", "d"])
     .generate_diagrams(
         loops=1,
         max_vertices=2,
         coupling_orders={"QCD": 2, "QED": 0},
-        particle_veto=["c", "t", "s", "u", "d"],
         allow_self_loops=False,
     )
     .diagrams

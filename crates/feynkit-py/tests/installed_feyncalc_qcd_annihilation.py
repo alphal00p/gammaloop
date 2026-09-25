@@ -11,16 +11,14 @@ from symbolica.community import hep as fk
 from symbolica.community.spenso import ColorSimplifySettings, TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
-result = (
-    fk.Process(model, [5, -5], [6, -6])
-    .with_loop_count(1, 1)
-    .generate_cross_section(
-        max_vertices=4,
-        maximum_bridges=None,
-        vertex_allow=["V_76", "V_137"],
-        numerator_grouping=None,
-        progress=None,
-    )
+result = model.process(
+    [5, -5], [6, -6], vertex_allow=["V_76", "V_137"]
+).generate_cross_section(
+    loops=1,
+    max_vertices=4,
+    maximum_bridges=None,
+    numerator_grouping=None,
+    progress=None,
 )
 assert len(result.diagrams) == 1
 diagram = result.diagrams[0]

@@ -152,12 +152,12 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
     ] {
         let process = ProcessDefinition {
             generation_type: feynkit_generator::GenerationType::CrossSection,
-            process: GenerationProcess::new([25_i64], physical).with_loop_count(1, 1)?,
-            generation_options: GenerationOptions::default().with_graph_filter(
-                GenerationFilter::CouplingOrders(
+            process: GenerationProcess::new([25_i64], physical),
+            generation_options: GenerationOptions::default()
+                .with_loop_count(1, 1)?
+                .with_graph_filter(GenerationFilter::CouplingOrders(
                     [("QED".into(), (2, Some(2)))].into_iter().collect(),
-                ),
-            ),
+                )),
             ..Default::default()
         };
         let graphs = process.generate(&model, &settings)?;

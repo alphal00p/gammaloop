@@ -253,7 +253,7 @@ mod tests {
             for (name, expected) in [
                 (
                     "GammaSimplifySettings",
-                    "(*, chain_ordering=None, evaluate_traces=True, expand_three_gamma_epsilon=False)",
+                    "(*, chain_ordering=None, evaluate_traces=True, expand_traces=False, expand_three_gamma_epsilon=False)",
                 ),
                 (
                     "CookSettings",

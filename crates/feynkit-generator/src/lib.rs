@@ -20,5 +20,6 @@ pub use options::{
     SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions,
 };
 pub use process::{
-    GenerationType, ParticleSelector, Process, ProcessError, SelectorError, VertexSelector,
+    GenerationType, ModelProcessExt, ParticleSelector, Process, ProcessError, SelectorError,
+    VertexSelector,
 };

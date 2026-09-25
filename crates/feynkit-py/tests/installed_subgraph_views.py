@@ -14,11 +14,12 @@ fk = importlib.import_module(
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagram = next(
     candidate
-    for candidate in fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
+    for candidate in model.process(
+        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    )
     .generate_diagrams(
         loops=1,
         max_vertices=3,
-        vertex_allow=["V_3_SCALAR_000"],
         allow_self_loops=False,
     )
     .diagrams

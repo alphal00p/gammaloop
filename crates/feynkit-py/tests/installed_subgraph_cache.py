@@ -13,10 +13,10 @@ fk = importlib.import_module(
 )
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagram = (
-    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
-    .generate_diagrams(
-        loops=1, max_vertices=3, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=True
+    model.process(
+        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
     )
+    .generate_diagrams(loops=1, max_vertices=3, allow_self_loops=True)
     .diagrams[0]
 )
 snapshot = diagram.to_json()
@@ -45,10 +45,10 @@ for first_caller in ("parent", "view"):
 
 # Native cut factories can create views before any graph has been exported.
 cross_section = (
-    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
-    .generate_cross_section(
-        loops=1, max_vertices=2, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=True
+    model.process(
+        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
     )
+    .generate_cross_section(loops=1, max_vertices=2, allow_self_loops=True)
     .diagrams[0]
 )
 side = cross_section.cuts[0].left.subgraph

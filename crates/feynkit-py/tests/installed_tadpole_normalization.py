@@ -41,13 +41,8 @@ for label, vertices, incoming, outgoing, coupling in [
     ("scalar_quartic", quartics, [higgs, higgs], [higgs, higgs], 6 * lam),
 ]:
     trees = (
-        hep.Process(model, incoming, outgoing)
-        .generate_diagrams(
-            max_vertices=1,
-            vertex_allow=vertices,
-            numerator_grouping=None,
-            progress=None,
-        )
+        model.process(incoming, outgoing, vertex_allow=vertices)
+        .generate_diagrams(max_vertices=1, numerator_grouping=None, progress=None)
         .diagrams
     )
     assert len(trees) == 1, label
@@ -67,12 +62,13 @@ for label, vertices, outgoing, mass, expected_trace, wick_weight in [
     ("scalar_cubic", cubics, [], mh, 6 * vev * lam, wick_weights[1]),
     ("scalar_quartic", quartics, [higgs], mh, 6 * lam, wick_weights[2]),
 ]:
-    generated = hep.Process(model, [higgs], outgoing).generate_diagrams(
+    generated = model.process(
+        [higgs], outgoing, vertex_allow=vertices
+    ).generate_diagrams(
         loops=1,
         max_vertices=1,
         allow_zero_flow_edges=True,
         maximum_bridges=None,
-        vertex_allow=vertices,
         tadpoles=None,
         zero_snails=None,
         self_energy=None,

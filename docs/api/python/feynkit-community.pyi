@@ -895,11 +895,34 @@ class Coupling:
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return a concise representation containing the coupling name.
+        Summarize the defining data as well as the coupling name.
 
         Examples
         --------
         >>> print(next(c for c in model.couplings if c.orders.get("QED", 0) > 0))
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display the model member's physical data and defining expressions.
+
+        Examples
+        --------
+        Leave this object as the final expression in a notebook cell.
+        """
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
+        r"""
+        Write the complete text summary to an IPython pretty printer.
+
+        Examples
+        --------
+        IPython calls this automatically when formatting model members in lists.
+
+        Parameters
+        ----------
+        pretty : object
+            IPython pretty printer receiving the text.
+        cycle : bool
+            Whether the object occurs recursively in the current display.
         """
 
 @typing.final
@@ -1491,7 +1514,7 @@ class FeynkitError(builtins.Exception):
     Catch any model, diagram, generation, CFF, tensor-reduction, or kinematics failure:
 
     >>> try:
-    ...     result = fk.Process(model, incoming, outgoing).generate_diagrams()
+    ...     result = model.process(incoming, outgoing).generate_diagrams()
     ... except fk.FeynkitError as error:
     ...     print(error)
     """
@@ -2415,11 +2438,34 @@ class FormFactor:
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return a concise representation containing the form-factor name.
+        Summarize the defining data as well as the form-factor name.
 
         Examples
         --------
         >>> print(model.form_factors[0])
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display the model member's physical data and defining expressions.
+
+        Examples
+        --------
+        Leave this object as the final expression in a notebook cell.
+        """
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
+        r"""
+        Write the complete text summary to an IPython pretty printer.
+
+        Examples
+        --------
+        IPython calls this automatically when formatting model members in lists.
+
+        Parameters
+        ----------
+        pretty : object
+            IPython pretty printer receiving the text.
+        cycle : bool
+            Whether the object occurs recursively in the current display.
         """
 
 @typing.final
@@ -2733,7 +2779,7 @@ class GenerationError(FeynkitError):
     Process and topology failures share one public exception type:
 
     >>> try:
-    ...     result = fk.Process(model, incoming, outgoing).generate_diagrams(loops=1)
+    ...     result = model.process(incoming, outgoing).generate_diagrams(loops=1)
     ... except fk.GenerationError as error:
     ...     print(error)
     """
@@ -4328,12 +4374,35 @@ class LorentzStructure:
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return a concise representation containing the structure name.
+        Summarize the defining data as well as the structure name.
 
         Examples
         --------
         >>> vertex = model.vertex_rules[0]
         >>> print(model.lorentz_structure(vertex.lorentz_structures[0]))
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display the model member's physical data and defining expressions.
+
+        Examples
+        --------
+        Leave this object as the final expression in a notebook cell.
+        """
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
+        r"""
+        Write the complete text summary to an IPython pretty printer.
+
+        Examples
+        --------
+        IPython calls this automatically when formatting model members in lists.
+
+        Parameters
+        ----------
+        pretty : object
+            IPython pretty printer receiving the text.
+        cycle : bool
+            Whether the object occurs recursively in the current display.
         """
 
 @typing.final
@@ -4580,6 +4649,30 @@ class Model:
         json : str
             Serialized model object.
         """
+    def process(self, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], *, particle_veto: typing.Optional[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None) -> Process:
+        r"""
+        Define a process with model-validated external states and sector restrictions.
+        The returned process is immutable; loops and other calculation choices are
+        arguments to its generate_diagrams, generate_amplitude and generate_cross_section methods.
+
+        Examples
+        --------
+        >>> process = model.process(["e-", "e+"], ["a", "a"], vertex_allow=["V_98"])
+        >>> amplitude = process.generate_amplitude(loops=0)
+
+        Parameters
+        ----------
+        incoming : sequence[Particle | ParticleSelector | str | int]
+            Ordered incoming external states.
+        outgoing : sequence[Particle | ParticleSelector | str | int]
+            Ordered outgoing external states.
+        particle_veto : sequence[Particle | ParticleSelector | str | int] or None, optional
+            Excluded species, including their antiparticles.
+        vertex_allow : sequence[VertexRule | str] or None, optional
+            Allowed interactions. None allows all; an empty list allows none.
+        vertex_veto : sequence[VertexRule | str] or None, optional
+            Excluded interactions.
+        """
     def particle(self, name: builtins.str) -> Particle:
         r"""
         Look up a particle by name.
@@ -4782,7 +4875,7 @@ class Model:
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return a concise representation containing the name and particle count.
+        Summarize the defining data as well as the name and particle count.
 
         Examples
         --------
@@ -4889,11 +4982,34 @@ class ModelFunction:
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return a concise representation containing the function name.
+        Summarize the defining data as well as the function name.
 
         Examples
         --------
         >>> print(model.functions[0])
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display the model member's physical data and defining expressions.
+
+        Examples
+        --------
+        Leave this object as the final expression in a notebook cell.
+        """
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
+        r"""
+        Write the complete text summary to an IPython pretty printer.
+
+        Examples
+        --------
+        IPython calls this automatically when formatting model members in lists.
+
+        Parameters
+        ----------
+        pretty : object
+            IPython pretty printer receiving the text.
+        cycle : bool
+            Whether the object occurs recursively in the current display.
         """
 
 @typing.final
@@ -5116,11 +5232,34 @@ class Parameter:
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return a concise representation containing the parameter name.
+        Summarize the defining data as well as the parameter name.
 
         Examples
         --------
         >>> print(model.parameter(model.particle_by_pdg(13).mass_parameter))
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display the model member's physical data and defining expressions.
+
+        Examples
+        --------
+        Leave this object as the final expression in a notebook cell.
+        """
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
+        r"""
+        Write the complete text summary to an IPython pretty printer.
+
+        Examples
+        --------
+        IPython calls this automatically when formatting model members in lists.
+
+        Parameters
+        ----------
+        pretty : object
+            IPython pretty printer receiving the text.
+        cycle : bool
+            Whether the object occurs recursively in the current display.
         """
 
 @typing.final
@@ -5605,11 +5744,34 @@ class Particle:
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return a concise representation containing the name and PDG code.
+        Summarize the defining data as well as the name and PDG code.
 
         Examples
         --------
         >>> print(model.particle_by_pdg(11))
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display the model member's physical data and defining expressions.
+
+        Examples
+        --------
+        Leave this object as the final expression in a notebook cell.
+        """
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
+        r"""
+        Write the complete text summary to an IPython pretty printer.
+
+        Examples
+        --------
+        IPython calls this automatically when formatting model members in lists.
+
+        Parameters
+        ----------
+        pretty : object
+            IPython pretty printer receiving the text.
+        cycle : bool
+            Whether the object occurs recursively in the current display.
         """
 
 @typing.final
@@ -5719,21 +5881,35 @@ class Process:
     r"""
     A scattering or decay process to pass to the diagram generator.
 
-    A process records its incoming and outgoing particles, loop-order range,
-    and optional external-state symmetrizations. External states accept loaded
+    A process records its incoming and outgoing particles and model-sector restrictions. External states accept loaded
     :class:`Particle` objects as well as names, signed PDG codes, and explicit
     :class:`ParticleSelector` objects.
 
     Examples
     --------
     >>> import symbolica.community.feynkit as fk
-    >>> process = fk.Process(model, ["e-", "e+"], ["mu-", "mu+"])
-    >>> one_loop = process.with_loop_count(1, 1)
+    >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
+    >>> one_loop = process.generate_diagrams(loops=1)
     """
     @property
     def model(self) -> Model:
         r"""
         The particle model supplying this process's Feynman rules.
+        """
+    @property
+    def particle_veto(self) -> builtins.list[ParticleSelector]:
+        r"""
+        The excluded particle selectors, shared by every generation operation.
+        """
+    @property
+    def vertex_allow(self) -> typing.Optional[builtins.list[VertexRule]]:
+        r"""
+        Allowed model vertex rules; None permits every interaction.
+        """
+    @property
+    def vertex_veto(self) -> builtins.list[VertexRule]:
+        r"""
+        Excluded model vertex rules.
         """
     @property
     def incoming(self) -> builtins.list[ParticleSelector]:
@@ -5750,99 +5926,44 @@ class Process:
         r"""
         Return every allowed ordered final-state alternative.
         """
-    @property
-    def loop_count(self) -> tuple[builtins.int, builtins.int]:
-        r"""
-        Return the inclusive minimum and maximum loop counts.
-
-        Examples
-        --------
-        >>> process.with_loop_count(1, 2).loop_count
-        (1, 2)
-        """
-    @property
-    def symmetrizes_initial(self) -> builtins.bool:
-        r"""
-        Report whether initial-state permutations are identified.
-
-        Examples
-        --------
-        >>> process.with_symmetrization(initial=True).symmetrizes_initial
-        True
-        """
-    @property
-    def symmetrizes_final(self) -> typing.Optional[builtins.bool]:
-        r"""
-        Final-state symmetry override; None uses False for amplitudes and True for cross sections.
-
-        Examples
-        --------
-        >>> process.with_symmetrization(final_state=True).symmetrizes_final
-        True
-        """
-    @property
-    def symmetrizes_left_right(self) -> builtins.bool:
-        r"""
-        Report whether exchanging the two cross-section sides is identified.
-
-        Examples
-        --------
-        >>> process.with_symmetrization(left_right=True).symmetrizes_left_right
-        True
-        """
-    @property
-    def symmetrizes_external_fermions(self) -> builtins.bool:
-        r"""
-        Report whether amplitude fermions participate in enabled state symmetries.
-
-        Examples
-        --------
-        >>> process.with_symmetrization(external_fermions=True).symmetrizes_external_fermions
-        True
-        """
-    def __new__(cls, model: Model, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0) -> Process:
-        r"""
-        Define a model-bound process independently of what will be generated.
-
-        Examples
-        --------
-        >>> process = fk.Process(model, ["e-", "e+"], ["a", "a"])
-        >>> amplitude = process.generate_amplitude()
-
-        Parameters
-        ----------
-        model : Model
-            Particle model supplying the Feynman rules.
-        incoming : sequence[Particle | ParticleSelector | str | int]
-            Ordered incoming external states.
-        outgoing : sequence[Particle | ParticleSelector | str | int]
-            Ordered outgoing external states.
-        loops : int or tuple[int, int], optional
-            Default exact loop order or inclusive range, initially zero.
-        """
     def __repr__(self) -> builtins.str:
         r"""
-        Format the external states, model, and default loop range.
+        Format the external states, model, and active particle/vertex restrictions.
 
         Examples
         --------
         >>> repr(process)
-        'Process("sm": [e-, e+] -> [a, a]; loops=(0, 0))'
+        'Process("sm": [e-, e+] -> [a, a])'
         """
-    def with_loop_count(self, minimum: builtins.int, maximum: builtins.int) -> Process:
+    def render(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
         r"""
-        Return a process restricted to an inclusive loop-count range.
+        Render a blob with the process's physical incoming and outgoing particles.
+        Alternative final states are displayed as separate schematics.
 
         Examples
         --------
-        >>> loop_process = process.with_loop_count(1, 2)
+        >>> svg = process.render()
 
         Parameters
         ----------
-        minimum : int
-            Minimum number of loops to generate.
-        maximum : int
-            Maximum number of loops to generate, inclusive.
+        config : linnet.RenderConfig or None, optional
+            Particle-label, layout and drawing overrides shared with Feynman diagrams.
+        """
+    def _repr_svg_(self) -> builtins.str:
+        r"""
+        Display the process schematic in SVG-aware frontends.
+
+        Examples
+        --------
+        >>> process._repr_svg_()
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display the process blob, model and active restrictions in notebooks.
+
+        Examples
+        --------
+        Leave ``process`` as the final expression in a notebook cell.
         """
     def with_final_state_alternatives(self, alternatives: typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]) -> Process:
         r"""
@@ -5852,7 +5973,7 @@ class Process:
 
         Examples
         --------
-        >>> process = fk.Process(model, [11, -11], [22, 22])
+        >>> process = model.process([11, -11], [22, 22])
         >>> inclusive = process.with_final_state_alternatives([[22, 22], [13, -13]])
 
         Parameters
@@ -5860,26 +5981,27 @@ class Process:
         alternatives : sequence[sequence[Particle | ParticleSelector | str | int]]
             Allowed outgoing particle lists.
         """
-    def with_symmetrization(self, *, initial: builtins.bool = False, final_state: builtins.bool = False, left_right: builtins.bool = False, external_fermions: builtins.bool = False) -> Process:
+    def with_filters(self, *, particle_veto: typing.Sequence[Particle | ParticleSelector | str | int] | types.EllipsisType | None = ..., vertex_allow: typing.Sequence[VertexRule | str] | types.EllipsisType | None = ..., vertex_veto: typing.Sequence[VertexRule | str] | types.EllipsisType | None = ...) -> Process:
         r"""
-        Return a process configured with the selected graph symmetries.
+        Return a process with updated particle and vertex restrictions.
+        Omitted fields are preserved; None clears a field. An empty vertex_allow
+        list permits no interactions, whereas None permits every interaction.
 
         Examples
         --------
-        >>> process = process.with_symmetrization(initial=True, final_state=True)
+        >>> qed = process.with_filters(vertex_allow=["V_98"])
+        >>> unrestricted = qed.with_filters(vertex_allow=None)
 
         Parameters
         ----------
-        initial : bool, optional
-            Identify graphs related by permutations of initial-state particles.
-        final_state : bool, optional
-            Identify graphs related by permutations of final-state particles.
-        left_right : bool, optional
-            Identify cross-section graphs related by exchanging amplitude sides.
-        external_fermions : bool, optional
-            Include amplitude fermions in enabled external-state symmetry classes.
+        particle_veto : sequence[Particle | ParticleSelector | str | int] or None, optional
+            Replace the excluded species, including their antiparticles.
+        vertex_allow : sequence[VertexRule | str] or None, optional
+            Replace the allowed interaction rules.
+        vertex_veto : sequence[VertexRule | str] or None, optional
+            Replace the excluded interaction rules.
         """
-    def generate_diagrams(self, *, loops: typing.Optional[builtins.int | tuple[builtins.int, builtins.int]] = None, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> GenerationResult:
+    def generate_diagrams(self, *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: typing.Optional[builtins.bool] = None, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> GenerationResult:
         r"""
         Generate and optionally group all diagrams matching a process.
 
@@ -5895,9 +6017,17 @@ class Process:
 
         Parameters
         ----------
-        loops : int or tuple[int, int] or None, optional
-            Override the process loop range for this call. Cross sections count
+        loops : int or tuple[int, int], optional
+            Exact order or inclusive range for this call, default zero. Cross sections count
             loops in the sewn forward graph; two-particle tree cuts need loops=1.
+        symmetrize_initial : bool, optional
+            Identify graphs related by initial-state permutations; default False.
+        symmetrize_final : bool or None, optional
+            Identify final-state permutations; None uses True for cross sections and False for amplitudes.
+        symmetrize_left_right : bool, optional
+            Identify cross-section graphs related by exchanging amplitude sides.
+        symmetrize_external_fermions : bool, optional
+            Include amplitude fermions in enabled external-state symmetry classes.
         threads : int or None, optional
             Number of worker threads; None uses the generator default.
         max_vertices : int or None, optional
@@ -5908,12 +6038,6 @@ class Process:
             Permit internal edges with identically zero momentum flow.
         graph_prefix : str or None, optional
             Prefix assigned to generated diagram names.
-        particle_veto : sequence[Particle | str | int] or None, optional
-            Reject graphs containing these particles, model names, or signed PDG codes.
-        vertex_allow : sequence[VertexRule | str] or None, optional
-            Keep only graphs whose vertices use these model rules or names.
-        vertex_veto : sequence[VertexRule | str] or None, optional
-            Reject graphs containing these interaction vertices.
         maximum_bridges : int, None, or Ellipsis, optional
             Omission or Ellipsis requires one-particle irreducibility only for diagrams
             with loops; tree exchanges are allowed, including in mixed loop ranges.
@@ -5980,7 +6104,7 @@ class Process:
             returns an incomplete result; Python signal-handler exceptions, including
             KeyboardInterrupt, stop generation and propagate to the caller.
         """
-    def generate_amplitude(self, *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, real: typing.Optional[typing.Sequence[Expression]] = None, loops: typing.Optional[builtins.int | tuple[builtins.int, builtins.int]] = None, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> Amplitude:
+    def generate_amplitude(self, *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, real: typing.Optional[typing.Sequence[Expression]] = None, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: typing.Optional[builtins.bool] = None, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> Amplitude:
         r"""
         Generate a coherent symbolic amplitude for this process.
         Cancelled or empty generation cannot produce an amplitude.
@@ -6001,9 +6125,17 @@ class Process:
             Lorentz dimension of the amplitude; default four.
         real : list[Expression] or None, optional
             Additional scalars assumed real under conjugation.
-        loops : int or tuple[int, int] or None, optional
-            Override the process loop range for this call. Cross sections count
+        loops : int or tuple[int, int], optional
+            Exact order or inclusive range for this call, default zero. Cross sections count
             loops in the sewn forward graph; two-particle tree cuts need loops=1.
+        symmetrize_initial : bool, optional
+            Identify graphs related by initial-state permutations; default False.
+        symmetrize_final : bool or None, optional
+            Identify final-state permutations; None uses True for cross sections and False for amplitudes.
+        symmetrize_left_right : bool, optional
+            Identify cross-section graphs related by exchanging amplitude sides.
+        symmetrize_external_fermions : bool, optional
+            Include amplitude fermions in enabled external-state symmetry classes.
         threads : int or None, optional
             Number of worker threads; None uses the generator default.
         max_vertices : int or None, optional
@@ -6014,12 +6146,6 @@ class Process:
             Permit internal edges with identically zero momentum flow.
         graph_prefix : str or None, optional
             Prefix assigned to generated diagram names.
-        particle_veto : sequence[Particle | str | int] or None, optional
-            Reject graphs containing these particles, model names, or signed PDG codes.
-        vertex_allow : sequence[VertexRule | str] or None, optional
-            Keep only graphs whose vertices use these model rules or names.
-        vertex_veto : sequence[VertexRule | str] or None, optional
-            Reject graphs containing these interaction vertices.
         maximum_bridges : int, None, or Ellipsis, optional
             Omission or Ellipsis requires one-particle irreducibility only for diagrams
             with loops; tree exchanges are allowed, including in mixed loop ranges.
@@ -6086,7 +6212,7 @@ class Process:
             returns an incomplete result; Python signal-handler exceptions, including
             KeyboardInterrupt, stop generation and propagate to the caller.
         """
-    def generate_cross_section(self, *, loops: typing.Optional[builtins.int | tuple[builtins.int, builtins.int]] = None, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, particle_veto: typing.Optional[typing.Sequence[Particle | builtins.str | builtins.int]] = None, vertex_allow: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, vertex_veto: typing.Optional[typing.Sequence[VertexRule | builtins.str]] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> GenerationResult:
+    def generate_cross_section(self, *, loops: builtins.int | tuple[builtins.int, builtins.int] = 0, symmetrize_initial: builtins.bool = False, symmetrize_final: typing.Optional[builtins.bool] = None, symmetrize_left_right: builtins.bool = False, symmetrize_external_fermions: builtins.bool = False, threads: typing.Optional[builtins.int] = None, max_vertices: typing.Optional[builtins.int] = None, allow_self_loops: builtins.bool = True, allow_zero_flow_edges: builtins.bool = False, graph_prefix: typing.Optional[builtins.str] = None, maximum_bridges: int | None | types.EllipsisType = ..., self_energy: SelfEnergyFilterOptions | types.EllipsisType | None = ..., tadpoles: TadpoleFilterOptions | types.EllipsisType | None = ..., zero_snails: SnailFilterOptions | types.EllipsisType | None = ..., coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, fermion_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, factorized_loop_topologies_count_range: tuple[int, int] | types.EllipsisType | None = ..., blob_range: tuple[int, int] | types.EllipsisType | None = ..., spectator_range: tuple[int, int] | types.EllipsisType | None = ..., perturbative_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int]] = None, sewn_tadpoles: typing.Optional[builtins.bool] = None, cut_amplitude_coupling_orders: typing.Optional[typing.Mapping[builtins.str, builtins.int | tuple[builtins.int, typing.Optional[builtins.int]]]] = None, cut_amplitude_loop_count_range: typing.Optional[tuple[builtins.int, builtins.int]] = None, select_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, veto_diagrams: typing.Optional[typing.Sequence[FeynmanDiagram | builtins.str]] = None, loop_momentum_bases: typing.Optional[typing.Sequence[tuple[FeynmanDiagram | builtins.str, typing.Sequence[builtins.int]]]] = None, numerator_prefactor: typing.Optional[Expression] = None, projector: typing.Optional[Expression] = None, numerator_grouping: typing.Optional[NumeratorGrouping] = None, cancellation_token: typing.Optional[CancellationToken] = None, progress: typing.Literal['auto'] | collections.abc.Callable[[GenerationProgress], None] | None = 'auto', filter: collections.abc.Callable[[symbolica.core.Graph, int], bool] | None = None) -> GenerationResult:
         r"""
         Generate sewn forward diagrams and their physical final-state cuts.
         The result contains diagrams and cut metadata, before phase-space integration.
@@ -6103,9 +6229,17 @@ class Process:
 
         Parameters
         ----------
-        loops : int or tuple[int, int] or None, optional
-            Override the process loop range for this call. Cross sections count
+        loops : int or tuple[int, int], optional
+            Exact order or inclusive range for this call, default zero. Cross sections count
             loops in the sewn forward graph; two-particle tree cuts need loops=1.
+        symmetrize_initial : bool, optional
+            Identify graphs related by initial-state permutations; default False.
+        symmetrize_final : bool or None, optional
+            Identify final-state permutations; None uses True for cross sections and False for amplitudes.
+        symmetrize_left_right : bool, optional
+            Identify cross-section graphs related by exchanging amplitude sides.
+        symmetrize_external_fermions : bool, optional
+            Include amplitude fermions in enabled external-state symmetry classes.
         threads : int or None, optional
             Number of worker threads; None uses the generator default.
         max_vertices : int or None, optional
@@ -6116,12 +6250,6 @@ class Process:
             Permit internal edges with identically zero momentum flow.
         graph_prefix : str or None, optional
             Prefix assigned to generated diagram names.
-        particle_veto : sequence[Particle | str | int] or None, optional
-            Reject graphs containing these particles, model names, or signed PDG codes.
-        vertex_allow : sequence[VertexRule | str] or None, optional
-            Keep only graphs whose vertices use these model rules or names.
-        vertex_veto : sequence[VertexRule | str] or None, optional
-            Reject graphs containing these interaction vertices.
         maximum_bridges : int, None, or Ellipsis, optional
             Omission or Ellipsis requires one-particle irreducibility only for diagrams
             with loops; tree exchanges are allowed, including in mixed loop ranges.
@@ -6229,11 +6357,34 @@ class Propagator:
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return a concise representation containing the propagator name.
+        Summarize the defining data as well as the propagator name.
 
         Examples
         --------
         >>> print(model.propagators[0])
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display the model member's physical data and defining expressions.
+
+        Examples
+        --------
+        Leave this object as the final expression in a notebook cell.
+        """
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
+        r"""
+        Write the complete text summary to an IPython pretty printer.
+
+        Examples
+        --------
+        IPython calls this automatically when formatting model members in lists.
+
+        Parameters
+        ----------
+        pretty : object
+            IPython pretty printer receiving the text.
+        cycle : bool
+            Whether the object occurs recursively in the current display.
         """
 
 @typing.final
@@ -7522,11 +7673,34 @@ class VertexRule:
         """
     def __repr__(self) -> builtins.str:
         r"""
-        Return a concise representation containing the vertex-rule name.
+        Summarize the defining data as well as the vertex-rule name.
 
         Examples
         --------
         >>> print(next(v for v in model.vertex_rules if "e-" in v.particles))
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display the model member's physical data and defining expressions.
+
+        Examples
+        --------
+        Leave this object as the final expression in a notebook cell.
+        """
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
+        r"""
+        Write the complete text summary to an IPython pretty printer.
+
+        Examples
+        --------
+        IPython calls this automatically when formatting model members in lists.
+
+        Parameters
+        ----------
+        pretty : object
+            IPython pretty printer receiving the text.
+        cycle : bool
+            Whether the object occurs recursively in the current display.
         """
 
 @typing.final

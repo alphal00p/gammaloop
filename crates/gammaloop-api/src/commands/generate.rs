@@ -21,12 +21,12 @@ use serde::{Deserialize, Serialize};
 use symbolica::parse;
 use tabled::{
     builder::Builder,
-    settings::{style::HorizontalLine, themes::Theme, Style},
+    settings::{Style, style::HorizontalLine, themes::Theme},
 };
 use thiserror::Error;
 use walkdir::WalkDir;
 
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 use feynkit_generator::{
     FilterScope, GenerationFilter, GenerationOptions, GenerationType, GraphGroupingOptions,
     NumeratorGrouping, ParticleSelector, Process as GenerationProcess, SelfEnergyFilterOptions,
@@ -36,8 +36,8 @@ use feynkit_graph::EdgeId;
 use gammalooprs::model::Model;
 use gammalooprs::processes::amplitude::Amplitude;
 use gammalooprs::processes::{
-    merge_generated_graph_reports, CrossSection, GeneratedGraphReport, GraphGenerationStats,
-    Process, ProcessDefinition, ProcessList,
+    CrossSection, GeneratedGraphReport, GraphGenerationStats, Process, ProcessDefinition,
+    ProcessList, merge_generated_graph_reports,
 };
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 
@@ -1832,11 +1832,7 @@ fn feyngen_from_spec_args(
                 .with_final_state_alternatives(outgoing_alternatives)
                 .expect("the parser produces a non-empty final-state alternative list")
         }
-    }
-    .symmetrize_initial(sym_init)
-    .symmetrize_final(sym_final)
-    .symmetrize_left_right(sym_left_right)
-    .symmetrize_external_fermions(allow_symferm);
+    };
     let mut loop_count = (1, 1);
 
     // Build filters
@@ -2031,9 +2027,6 @@ fn feyngen_from_spec_args(
         }
     }
 
-    let process = process
-        .with_loop_count(loop_count.0, loop_count.1)
-        .expect("the parser produces a valid loop range");
     let mut generation_options = GenerationOptions::default();
     match generation_type {
         GenerationType::Amplitude => {
@@ -2051,6 +2044,14 @@ fn feyngen_from_spec_args(
             }
         }
     }
+
+    let generation_options = generation_options
+        .with_loop_count(loop_count.0, loop_count.1)
+        .expect("the parser produces a valid loop range")
+        .symmetrize_initial(sym_init)
+        .symmetrize_final(sym_final)
+        .symmetrize_left_right(sym_left_right)
+        .symmetrize_external_fermions(allow_symferm);
 
     ProcessDefinition {
         generation_type,
@@ -2231,11 +2232,7 @@ fn parse_loop_momentum_bases(s: &str) -> Option<HashMap<String, Vec<String>>> {
             // single name without '=' is allowed but ignored
         }
     }
-    if out.is_empty() {
-        None
-    } else {
-        Some(out)
-    }
+    if out.is_empty() { None } else { Some(out) }
 }
 
 // =================== Tests ===================
@@ -2243,7 +2240,7 @@ fn parse_loop_momentum_bases(s: &str) -> Option<HashMap<String, Vec<String>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{commands::Commands, Repl};
+    use crate::{Repl, commands::Commands};
     use clap::Parser;
     use gammalooprs::initialisation::test_initialise;
     use gammalooprs::utils::load_generic_model;
@@ -2435,7 +2432,9 @@ mod tests {
             let spec =
                 parse_spec_with_model(&decoded, GenerationType::CrossSection, &model).unwrap();
             assert_eq!(
-                spec.process_definition.process.symmetrizes_left_right(),
+                spec.process_definition
+                    .generation_options
+                    .symmetrizes_left_right(),
                 option.unwrap_or(false)
             );
         }
@@ -2459,13 +2458,13 @@ mod tests {
                 .process_definition;
             assert_eq!(
                 (
-                    definition.process.symmetrizes_initial(),
-                    definition.process.symmetrizes_final()
+                    definition.generation_options.symmetrizes_initial(),
+                    definition.generation_options.symmetrizes_final()
                 ),
                 expected
             );
             assert_eq!(
-                definition.process.symmetrizes_left_right(),
+                definition.generation_options.symmetrizes_left_right(),
                 left_right.unwrap_or(false)
             );
         }
@@ -2506,9 +2505,12 @@ mod tests {
                     .generation_options
                     .filters(FilterScope::Graph)
             };
-            assert!(filters
-                .iter()
-                .any(|filter| matches!(filter, GenerationFilter::FermionLoopCountRange((1, 2)))));
+            assert!(
+                filters.iter().any(|filter| matches!(
+                    filter,
+                    GenerationFilter::FermionLoopCountRange((1, 2))
+                ))
+            );
         }
     }
 
@@ -2520,19 +2522,20 @@ mod tests {
 
         let spec = parse_spec_with_model(&args, GenerationType::Amplitude, model).unwrap();
 
-        assert!(spec
-            .process_definition
-            .generation_options
-            .filters(FilterScope::Graph)
-            .iter()
-            .any(|filter| matches!(
-                filter,
-                GenerationFilter::VertexAllow(vertices)
-                    if vertices == &vec![
-                        VertexSelector::Name("V_6".to_owned()),
-                        VertexSelector::Name("V_9".to_owned()),
-                    ]
-            )));
+        assert!(
+            spec.process_definition
+                .generation_options
+                .filters(FilterScope::Graph)
+                .iter()
+                .any(|filter| matches!(
+                    filter,
+                    GenerationFilter::VertexAllow(vertices)
+                        if vertices == &vec![
+                            VertexSelector::Name("V_6".to_owned()),
+                            VertexSelector::Name("V_9".to_owned()),
+                        ]
+                ))
+        );
     }
 
     #[test]
@@ -2674,21 +2677,27 @@ mod tests {
             .filters(FilterScope::Graph);
 
         // Smart defaults for vacuum-like graphs
-        assert!(xs_filters
-            .iter()
-            .any(|f| matches!(f, GenerationFilter::MaxNumberOfBridges(0))));
+        assert!(
+            xs_filters
+                .iter()
+                .any(|f| matches!(f, GenerationFilter::MaxNumberOfBridges(0)))
+        );
         assert!(xs_filters.iter().any(|f| matches!(
             f,
             GenerationFilter::FactorizedLoopTopologiesCountRange((1, 1))
         )));
 
         // Default cut ranges present
-        assert!(xs_filters
-            .iter()
-            .any(|f| matches!(f, GenerationFilter::BlobRange(r) if r.clone()==(1..=1))));
-        assert!(xs_filters
-            .iter()
-            .any(|f| matches!(f, GenerationFilter::SpectatorRange(r) if r.clone()==(0..=0))));
+        assert!(
+            xs_filters
+                .iter()
+                .any(|f| matches!(f, GenerationFilter::BlobRange(r) if r.clone()==(1..=1)))
+        );
+        assert!(
+            xs_filters
+                .iter()
+                .any(|f| matches!(f, GenerationFilter::SpectatorRange(r) if r.clone()==(0..=0)))
+        );
     }
 
     #[test]
@@ -2771,7 +2780,7 @@ mod tests {
         );
 
         // XS loop count from {{3}}
-        assert_eq!(ps.process_definition.process.loop_count(), 3..=3);
+        assert_eq!(ps.process_definition.generation_options.loop_count(), 3..=3);
 
         // Perturbative orders end up in XS filters
         let xs_filters = ps

@@ -5,12 +5,10 @@ from symbolica.community import hep
 from symbolica.community.spenso import TensorExpression
 
 model = hep.Model.standard_model()
-generated = hep.Process(model, ["e-", "e+"], ["a", "a"]).generate_diagrams(
-    max_vertices=2,
-    maximum_bridges=None,
-    vertex_allow=["V_98"],
-    numerator_grouping=None,
-    progress=None,
+generated = model.process(
+    ["e-", "e+"], ["a", "a"], vertex_allow=["V_98"]
+).generate_diagrams(
+    max_vertices=2, maximum_bridges=None, numerator_grouping=None, progress=None
 )
 amplitude = hep.Amplitude(generated.diagrams)
 assert len(amplitude.diagrams) == len(amplitude.terms) == 2

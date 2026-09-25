@@ -11,12 +11,10 @@ vertices = [
     for v in model.vertex_rules
     if set(v.particles) <= {"e-", "e+", "a", "Z", "W-", "W+", "ve", "ve~", "H"}
 ]
-generated = hep.Process(model, [11, -11], [-24, 24]).generate_diagrams(
-    max_vertices=2,
-    maximum_bridges=None,
-    vertex_allow=vertices,
-    numerator_grouping=None,
-    progress=None,
+generated = model.process(
+    [11, -11], [-24, 24], vertex_allow=vertices
+).generate_diagrams(
+    max_vertices=2, maximum_bridges=None, numerator_grouping=None, progress=None
 )
 assert len(generated.diagrams) == 4
 assert {d.internal_edges[0].particle_pdg for d in generated.diagrams} == {

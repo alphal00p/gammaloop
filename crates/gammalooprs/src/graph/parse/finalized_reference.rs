@@ -58,45 +58,46 @@ fn finalized_graph_matches_gammaloop_reference() {
             "scalar_amplitude",
             "scalars",
             GenerationType::Amplitude,
-            Process::new(["scalar_1"], ["scalar_1"])
-                .with_loop_count(1, 1)
-                .unwrap(),
+            Process::new(["scalar_1"], ["scalar_1"]),
+            1,
         ),
         (
             "scalar_cross_section",
             "scalars",
             GenerationType::CrossSection,
-            Process::new(["scalar_1"], ["scalar_1", "scalar_1"])
-                .with_loop_count(1, 1)
-                .unwrap(),
+            Process::new(["scalar_1"], ["scalar_1", "scalar_1"]),
+            1,
         ),
         (
             "fermion_amplitude",
             "sm",
             GenerationType::Amplitude,
-            Process::new(["e-", "e+"], ["mu-", "mu+"])
-                .with_loop_count(0, 0)
-                .unwrap(),
+            Process::new(["e-", "e+"], ["mu-", "mu+"]),
+            0,
         ),
         (
             "vector_amplitude",
             "sm",
             GenerationType::Amplitude,
-            Process::new(["g"], ["g"]).with_loop_count(1, 1).unwrap(),
+            Process::new(["g"], ["g"]),
+            1,
         ),
         (
             "fermion_cross_section",
             "sm",
             GenerationType::CrossSection,
-            Process::new(["e-", "e+"], ["a"])
-                .with_loop_count(0, 0)
-                .unwrap(),
+            Process::new(["e-", "e+"], ["a"]),
+            0,
         ),
     ];
     let mut result = serde_json::Map::new();
-    for (name, model, generation_type, process) in cases {
+    for (name, model, generation_type, process, loops) in cases {
         let model = std::sync::Arc::new(crate::utils::load_generic_model(model));
-        let options = GenerationOptions::default().threads(1).max_vertices(2);
+        let options = GenerationOptions::default()
+            .with_loop_count(loops, loops)
+            .unwrap()
+            .threads(1)
+            .max_vertices(2);
         let generated = match generation_type {
             GenerationType::Amplitude => process.generate_diagrams(model.clone(), &options),
             GenerationType::CrossSection => process.generate_cross_section(model.clone(), &options),

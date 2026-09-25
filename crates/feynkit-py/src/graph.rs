@@ -18,7 +18,7 @@ use pyo3::{
     PyTraverseError, PyVisit,
     exceptions::{PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyBytes, PyDict, PyModule, PyTuple},
+    types::{PyAny, PyDict, PyModule, PyTuple},
 };
 use spynso3::{expression::TensorExpression, structure::SpensoName};
 use symbolica::{
@@ -3444,34 +3444,7 @@ impl PyFeynmanDiagram {
         if let Some(config) = config {
             effective = effective.call_method1("overlay", (config,))?;
         }
-        let sources = PyDict::new(py);
-        sources.set_item("main.typ", PyBytes::new(py, source.as_bytes()))?;
-        for (path, source) in [
-            (
-                "assets/embedded/drawing/templates/layout-core.typ",
-                include_bytes!("../../../assets/embedded/drawing/templates/layout-core.typ")
-                    .as_slice(),
-            ),
-            (
-                "assets/embedded/drawing/templates/physics-edge-style.typ",
-                include_bytes!("../../../assets/embedded/drawing/templates/physics-edge-style.typ")
-                    .as_slice(),
-            ),
-            (
-                "assets/embedded/drawing/templates/impl/physics-edge-style.typ",
-                include_bytes!(
-                    "../../../assets/embedded/drawing/templates/impl/physics-edge-style.typ"
-                )
-                .as_slice(),
-            ),
-        ] {
-            sources.set_item(path, PyBytes::new(py, source))?;
-        }
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("config", effective)?;
-        linnet
-            .getattr("PreparedRender")?
-            .call_method("from_sources", (sources,), Some(&kwargs))
+        crate::display::prepare_physics_render(py, &source, Some(&effective))
     }
 }
 

@@ -22,7 +22,7 @@ integral-evaluation backend.
 import symbolica.community.feynkit as fk
 
 model = fk.Model("crates/feynkit-model/tests/fixtures/scalars_2p_3p.json")
-result = fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"]).generate_diagrams(loops=0, max_vertices=3)
+result = model.process(["scalar_0"], ["scalar_0", "scalar_0"]).generate_diagrams(loops=0, max_vertices=3)
 assert result.diagrams
 
 diagram = result.diagrams[0]
@@ -36,11 +36,32 @@ cff = diagram.build_cff()
 print(cff.to_expression())
 ```
 
-`Process(model, incoming, outgoing)` owns the external states and generation settings.
+`model.process(incoming, outgoing)` binds external states and particle/vertex restrictions
+to the model. Use `particle_veto`, `vertex_allow`, and `vertex_veto` at construction, or
+`process.with_filters(...)` to create a restricted copy. Omitted filters are preserved;
+`None` clears a filter, while `vertex_allow=[]` allows no interactions.
 Use `process.generate_diagrams()` for a `GenerationResult`, `process.generate_amplitude()`
 for an `Amplitude`, and `process.generate_cross_section()` for sewn diagrams and their cuts.
-All three accept generation settings as keywords. Particle names, PDG codes, and particles
+All three accept loop order (`loops=0` by default), coupling orders, symmetrization,
+topology filters, and execution settings as keywords. These settings belong to each call. Particle names, PDG codes, and particles
 obtained from that model can select external states.
+
+In notebooks, displaying a `Process` draws the external states around a central blob.
+`process.render()` exports the same schematic and accepts a `linnet.RenderConfig`.
+Alternative final states are drawn separately.
+
+Model members display their defining data and expressions, rather than only their names:
+
+```python
+model.vertex_rules[0]  # ordered legs, color/Lorentz structures, and coupling terms
+model.particle("scalar_0")  # quantum numbers, mass, width, and antiparticle
+print(model.vertex_rules[0])  # a complete plain-text summary
+```
+
+The same rich and plain-text printers cover `model.parameters`, `model.couplings`,
+`model.lorentz_structures`, `model.propagators`, `model.functions`, and `model.form_factors`.
+For a collection in marimo, use `mo.vstack(model.vertex_rules)`; in a terminal, iterate and
+`print` the members or use `pprint` on the list.
 
 #callout("Keep the same Symbolica kernel", [
   Numerators are Spenso `TensorExpression` values, which extend Symbolica `Expression`; CFF

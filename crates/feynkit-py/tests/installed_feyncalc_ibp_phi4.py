@@ -75,7 +75,7 @@ assert family.is_complete and family.is_independent
 # shared graph UV expansion. The supplied integrands are independent checks.
 model = hep.Model.phi4()
 particle = model.particle("phi")
-generated = hep.Process(model, [particle], [particle]).generate_diagrams(
+generated = model.process([particle], [particle]).generate_diagrams(
     loops=2,
     max_vertices=2,
     maximum_bridges=0,
@@ -320,7 +320,7 @@ ct_diagrams = {}
 ct_integral, ct_coordinate = S("ibp_phi4::J", "ibp_phi4::y")
 ct_input, tree_ct = zero, zero
 for loops, ct_order in [(1, 1), (0, 2)]:
-    result = hep.Process(ct_model, [particle.name], [particle.name]).generate_diagrams(
+    result = ct_model.process([particle.name], [particle.name]).generate_diagrams(
         loops=loops,
         max_vertices=2 if loops else 1,
         coupling_orders={"CT": ct_order},
@@ -443,7 +443,7 @@ print(
 # Two-loop four-point function. The self-energy calculation above supplies
 # the vacuum family, symmetry maps, counterterm model and field constant.
 vertex_diagrams = (
-    hep.Process(model, [particle] * 2, [particle] * 2)
+    model.process([particle] * 2, [particle] * 2)
     .generate_diagrams(
         loops=2,
         max_vertices=3,
@@ -553,8 +553,8 @@ vertex_ct_diagrams = {}
 vertex_ct_input, vertex_tree_ct = zero, zero
 external_index = S("ibp_phi4::external_")
 for loops, order in [(1, 1), (0, 2)]:
-    result = hep.Process(
-        ct_model, [particle.name] * 2, [particle.name] * 2
+    result = ct_model.process(
+        [particle.name] * 2, [particle.name] * 2
     ).generate_diagrams(
         loops=loops,
         max_vertices=3 if loops else 1,

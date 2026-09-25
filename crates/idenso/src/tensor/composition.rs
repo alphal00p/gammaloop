@@ -222,6 +222,10 @@ pub enum TensorCompositionError {
     InvalidAxisPermutation { rank: usize, axes: Vec<usize> },
     #[error("{0}")]
     InvalidResultInterface(String),
+    #[error(
+        "outer product cannot preserve equal explicit indices on compatible port pairs {0:?}; use distinct indices"
+    )]
+    ExplicitOuterContraction(Vec<PortPair>),
     #[error("port position {position} is outside an interface of rank {rank}")]
     InvalidPort { position: usize, rank: usize },
     #[error("ports {left} and {right} carry incompatible representations")]
@@ -1205,16 +1209,14 @@ pub enum ProductPlan {
 
 impl SymbolicTensor<PartialStructure> {
     fn validate_rewrite(self, sources: &[&Self]) -> Result<Self, TensorCompositionError> {
-        let mut inference = InterfaceInference::default();
-        if sources
-            .iter()
-            .any(|source| !inference.rewrites_preserve_leaf_interfaces(source.expression.as_view()))
-        {
+        if sources.iter().any(|source| {
+            !InterfaceInference::normalization_is_intrinsic(source.expression.as_view())
+        }) {
             // Materialization can make a pair explicit before its enclosing
             // composition removes it. Compare the contracted external interface.
-            let external = InterfaceInference::merge_explicit_interface_sequence(&[self
-                .structure
-                .clone()])
+            let external = InterfaceInference::merge_explicit_interface_sequence(
+                std::slice::from_ref(&self.structure),
+            )
             .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?;
             Self::validate_interface(&self.expression, &external).map_err(|error| {
                 TensorCompositionError::InvalidResultInterface(error.to_string())
@@ -1417,12 +1419,25 @@ impl SymbolicTensor<PartialStructure> {
     pub fn outer(
         &self,
         right: &SymbolicTensor<PartialStructure>,
-    ) -> SymbolicTensor<PartialStructure> {
+    ) -> Result<Self, TensorCompositionError> {
+        let left_slots = self.structure.logical_slots();
+        let right_slots = right.structure.logical_slots();
+        let collisions = compatible_pairs(&self.structure, &right.structure)
+            .into_iter()
+            .filter(|pair| {
+                matches!(left_slots[pair.left].aind, PartialIndex::Explicit(_))
+                    && matches!(right_slots[pair.right].aind, PartialIndex::Explicit(_))
+            })
+            .collect::<Vec<_>>();
+        if !collisions.is_empty() {
+            return Err(TensorCompositionError::ExplicitOuterContraction(collisions));
+        }
         let atom = if self.expression.as_view().is_zero() || right.expression.as_view().is_zero() {
             Atom::Zero
         } else {
             SymbolicTensor::bracket_product(self.expression.as_view(), right.expression.as_view())
         };
+        validate_explicit_index_occurrences(&atom)?;
         SymbolicTensor::new(
             atom,
             concatenate_interfaces(
@@ -1430,6 +1445,7 @@ impl SymbolicTensor<PartialStructure> {
                 right.structure.logical_slots(),
             ),
         )
+        .validate_rewrite(&[self, right])
     }
 
     pub fn contract_ports(
@@ -1438,7 +1454,7 @@ impl SymbolicTensor<PartialStructure> {
         positions: &[PortPair],
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
         if positions.is_empty() {
-            return Ok(self.outer(right));
+            return self.outer(right);
         }
         let left_slots = self.structure.logical_slots();
         let right_slots = right.structure.logical_slots();
@@ -1868,12 +1884,11 @@ impl SymbolicTensor<PartialStructure> {
                 } else {
                     self.structure.clone()
                 };
-                Ok(SymbolicTensor::new(
-                    self.expression.as_ref() * right.expression.as_ref(),
-                    interface,
-                ))
+                let atom = self.expression.as_ref() * right.expression.as_ref();
+                validate_explicit_index_occurrences(&atom)?;
+                SymbolicTensor::new(atom, interface).validate_rewrite(&[self, right])
             }
-            ProductPlan::Outer => Ok(self.outer(right)),
+            ProductPlan::Outer => self.outer(right),
             ProductPlan::Contract(pairs) => self.contract_ports(right, &pairs),
             ProductPlan::Compose(left_channel, right_channel) => {
                 self.compose(right, left_channel, right_channel)
@@ -2036,14 +2051,14 @@ mod tests {
         let b = tensor("flat_b", &[rep()]);
         let c = tensor("flat_c", &[rep()]);
         let d = tensor("flat_d", &[rep()]);
-        let left = SymbolicTensor::outer(&a, &b);
-        let right = SymbolicTensor::outer(&c, &d);
-        let result = SymbolicTensor::outer(&left, &right);
+        let left = a.outer(&b).unwrap();
+        let right = c.outer(&d).unwrap();
+        let result = left.outer(&right).unwrap();
         let expected = &a.expression * &b.expression * &c.expression * &d.expression;
         assert_eq!(result.expression, expected);
         assert_eq!(result.rank(), 4);
         assert_eq!(
-            SymbolicTensor::outer(&SymbolicTensor::outer(&left, &c), &d).expression,
+            left.outer(&c).unwrap().outer(&d).unwrap().expression,
             expected
         );
 
@@ -2159,6 +2174,40 @@ mod tests {
     }
 
     #[test]
+    fn shared_products_reject_hidden_multiplicity_and_explicit_outer_contractions() {
+        let port = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(439)));
+        let left = partial_tensor(
+            SPENSO_TAG.tensor_symbol("shared_product_left"),
+            &[port],
+            &[port],
+        );
+        let right = partial_tensor(
+            SPENSO_TAG.tensor_symbol("shared_product_right"),
+            &[port],
+            &[port],
+        );
+        assert!(matches!(
+            left.outer(&right),
+            Err(TensorCompositionError::ExplicitOuterContraction(_))
+        ));
+        let scalar = SymbolicTensor::new(
+            &left.expression * &right.expression,
+            PartialStructure::from_logical_slots([]),
+        );
+        let extra = partial_tensor(
+            SPENSO_TAG.tensor_symbol("shared_product_extra"),
+            &[port],
+            &[port],
+        );
+        for result in [scalar.multiply(&extra), scalar.outer(&extra)] {
+            assert!(matches!(
+                result,
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+            ));
+        }
+    }
+
+    #[test]
     fn exact_bulk_relabeling_matches_ordered_folds_and_checks_every_branch() {
         let port = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(401)));
         let spectator = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(403)));
@@ -2226,7 +2275,9 @@ mod tests {
         let head = spenso::tensor_symbol!(
             "relabel_result_rank",
             norm = move |function, output| {
-                if function.iter().any(|arg| arg == target_atom.as_view()) {
+                if let AtomView::Fun(function) = function
+                    && function.iter().any(|arg| arg == target_atom.as_view())
+                {
                     **output = if emit_zero.load(Ordering::Relaxed) {
                         Atom::Zero
                     } else {
@@ -2267,6 +2318,84 @@ mod tests {
                 .unwrap()
                 .is_scalar()
         );
+    }
+
+    #[test]
+    fn composition_validation_does_not_replay_materialization_callbacks() {
+        use std::sync::{Arc, Mutex};
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&calls);
+        let head = spenso::tensor_symbol!(
+            "composition_observation_callback",
+            norm = move |value, _| {
+                if let AtomView::Fun(function) = value {
+                    observed
+                        .lock()
+                        .unwrap()
+                        .push(function.iter().next().unwrap().to_owned());
+                }
+            }
+        );
+        let explicit = PartialIndex::Explicit(AbstractIndex::Normal(431));
+        let right_port = rep().slot(explicit);
+        let right = partial_tensor(
+            SPENSO_TAG.tensor_symbol("composition_observation_plain"),
+            &[right_port],
+            &[right_port],
+        );
+        for left_index in [explicit, PartialIndex::open(0)] {
+            let left_port = rep().slot(left_index);
+            let left = partial_tensor(head, &[left_port], &[left_port]);
+            calls.lock().unwrap().clear();
+            let result = if left_index == explicit {
+                left.multiply(&right)
+            } else {
+                left.contract_ports(&right, &[PortPair { left: 0, right: 0 }])
+            }
+            .unwrap();
+            assert!(result.is_scalar());
+            assert_eq!(
+                *calls.lock().unwrap(),
+                [port_atom(right_port), rep().to_symbolic([])],
+                "only the actual port substitution and compact-dot construction invoke the callback"
+            );
+        }
+    }
+
+    #[test]
+    fn scalar_composition_observes_compact_callback_leaves_without_materializing() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let head = spenso::tensor_symbol!(
+            "scalar_composition_observation_callback",
+            norm = move |value, output| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                if let AtomView::Fun(function) = value
+                    && function.iter().any(|argument| {
+                        Slot::<LibraryRep, AbstractIndex>::try_from(argument).is_ok()
+                    })
+                {
+                    **output = Atom::Zero;
+                }
+            }
+        );
+        let port = rep().slot(PartialIndex::open(0));
+        let tensor = partial_tensor(head, &[port], &[port]);
+        let scalar = SymbolicTensor::new(
+            Atom::var(symbolica::symbol!("composition_observation_x")) + Atom::num(1),
+            PartialStructure::from_logical_slots([]),
+        );
+        calls.store(0, Ordering::Relaxed);
+        let result = scalar.multiply(&tensor).unwrap();
+        assert_eq!(result.structure, tensor.structure);
+        assert!(!result.expression.as_view().is_zero());
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
     }
 
     #[test]
@@ -2994,7 +3123,7 @@ mod tests {
     fn outer_materialization_uses_logical_operand_order() {
         let q = tensor("z_outer_q", &[rep()]);
         let p = tensor("a_outer_p", &[rep()]);
-        let product = SymbolicTensor::outer(&q, &p);
+        let product = q.outer(&p).unwrap();
         let indexed = SymbolicTensor::materialize_interface_ports(
             &product,
             &HashMap::from([(0, AbstractIndex::Normal(17))]),
@@ -3160,7 +3289,7 @@ mod tests {
         assert!(dotted.is_scalar());
         assert!(dotted.expression.as_view().is_zero());
 
-        let outer_product = SymbolicTensor::outer(&zero_vector, &vector);
+        let outer_product = zero_vector.outer(&vector).unwrap();
         assert_eq!(outer_product.rank(), 2);
         assert!(outer_product.expression.as_view().is_zero());
 

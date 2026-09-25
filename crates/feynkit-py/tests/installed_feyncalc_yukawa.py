@@ -190,7 +190,7 @@ for variant, lorentz, local_coupling in [
             ("vertex", [fermion], [scalar, fermion], 1, 1),
             ("quartic", [scalar] * 2, [scalar] * 2, 9, 1),
         ]:
-            generated = hep.Process(stage_model, incoming, outgoing).generate_diagrams(
+            generated = stage_model.process(incoming, outgoing).generate_diagrams(
                 loops=loops,
                 max_vertices=len(incoming) + len(outgoing) if loops else 1,
                 coupling_orders={"CT": 1} if not loops else None,

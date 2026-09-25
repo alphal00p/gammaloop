@@ -599,7 +599,7 @@ impl SpensoNet {
         right.freshen_open_ports()?;
         let materialized = match plan {
             ProductPlan::Scalar => self.materialized.multiply(&right.materialized),
-            ProductPlan::Outer => Ok(self.materialized.outer(&right.materialized)),
+            ProductPlan::Outer => self.materialized.outer(&right.materialized),
             ProductPlan::Contract(pairs) => {
                 for &pair in &pairs {
                     Self::align_pair(&mut self, &mut right, pair)?;
@@ -1634,25 +1634,16 @@ impl SpensoNet {
     pub fn outer(&self, rhs: ConvertibleToSpensoNet) -> PyResult<Self> {
         let mut left = self.clone();
         let mut right = rhs.to_net();
-        let left_slots = left.semantic_slots();
-        let right_slots = right.semantic_slots();
-        let collisions =
-            composition::compatible_pairs(&left.structure.structure, &right.structure.structure)
-                .into_iter()
-                .filter(|pair| {
-                    matches!(left_slots[pair.left].aind, PartialIndex::Explicit(_))
-                        && matches!(right_slots[pair.right].aind, PartialIndex::Explicit(_))
-                })
-                .collect::<Vec<_>>();
-        if !collisions.is_empty() {
-            return Err(PyValueError::new_err(format!(
-                "outer product cannot preserve equal explicit indices on compatible port pairs {collisions:?}; use distinct indices"
-            )));
-        }
-        let structure = left.structure.outer(&right.structure);
+        let structure = left
+            .structure
+            .outer(&right.structure)
+            .map_err(composition_error)?;
         left.freshen_open_ports()?;
         right.freshen_open_ports()?;
-        let materialized = left.materialized.outer(&right.materialized);
+        let materialized = left
+            .materialized
+            .outer(&right.materialized)
+            .map_err(composition_error)?;
         Self::finish(left.network * right.network, structure, materialized)
     }
 
