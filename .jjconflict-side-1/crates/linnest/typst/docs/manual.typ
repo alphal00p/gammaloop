@@ -1136,39 +1136,55 @@
   estimates the internal loads, accounting for parallel routes and cancellation
   where incoming and outgoing legs share a node. The reciprocal of the largest
   load, including the dangling springs, gives a width $W$. Each endpoint uses
-  the fixed multiplier $w_e = W / N_("side")$, where $N_("side")$ counts the
-  component's external legs with that endpoint's direction. Thus both sides
-  have equal total pull, and no endpoint receives more than $F_0$. Components
-  with only one external direction keep $w_e = 1$.
+  the baseline multiplier $W / N_("side")$, where $N_("side")$ counts the
+  component's external legs with that endpoint's direction. Components with
+  only one external direction keep $w_e = 1$.
+
+  Endpoints constrained to move together in X can attach at different places
+  along the internal network. Their common external line must clear the
+  furthest attachment, rather than the average attachment. Let $u_v$ be the
+  unit-load spring-network displacement at an attachment node, and let $s$
+  be $-1$ for incoming legs and $+1$ for outgoing legs. Within each movable
+  X group, connected component, and direction, the multiplier is
+  $w_e = W / N_("side") + W "mean"_i ("max"_j(s u_j) - s u_i)$.
+  The mean counts external legs, including repeated attachments at a node.
+  Independent endpoints and groups whose attachments have the same displacement
+  retain the baseline. Fixed X coordinates receive no group correction.
+  This uses connectivity and coordinate constraints, without measuring the
+  current drawing or adding a target position. The correction can exceed one,
+  and opposite sides need not receive equal total pull.
 
   A series chain with one external leg at each end keeps its original pull
   regardless of its length. Parallel routes share the internal load, while
   dangling springs still limit the normalization. For example, two incoming
   and two outgoing legs separated by one internal bridge each receive $F_0 / 2$;
   three parallel internal edges with one external leg on each side keep $F_0$
-  on those legs. This is an estimate of axial spring loads based on topology,
-  not a promise of equal geometry or strain in the presence of repulsion,
-  curvature, or pins.
+  on those legs. Distributed attachments sharing an external line can need
+  more pull than these terminal attachments. This linear estimate does not
+  guarantee equal strain or outward endpoints in the nonlinear layout with
+  repulsion, curvature, and pins.
 
   `external-pull-balance` (also `constraints.external-pull-balance`) controls
   the strength of the topology adjustment. Its default is `1`, retaining the
   balancing above. Set it to `0` for uniform pull per external endpoint,
   a value between `0` and `1` for weaker balancing, or a value above `1` for
-  stronger balancing. It accepts any finite non-negative value. For example,
+  stronger balancing. It accepts finite non-negative values; combinations
+  whose effective force overflows are rejected. For example,
   `2` gives the bridge example above one quarter of the base force per leg;
   the Higgs sunset with one leg on each side keeps its base force.
   This setting does not change one-direction radial pull or a series chain
-  with one external leg at each end. Away from `1`, opposite sides need not
-  receive equal total pull when they have different numbers of legs; the
-  reaction on the nodes still prevents translational drift.
+  with one external leg at each end. Values above `1` decrease multipliers
+  below one further and increase multipliers above one further. The reaction
+  on the nodes prevents translational drift.
 
   Writing this balance as $b$, the endpoint force is
-  $F_e = F_0 w_e^b$. Using an exponent keeps the pull non-negative and no larger
-  than the base force, even above `1`. Its contribution to energy is
+  $F_e = F_0 w_e^b$. Using an exponent keeps the pull non-negative.
+  Its contribution to energy is
   $-sum_e F_e s_e (x_e - overline(x))$ in the mixed case, where $s_e$ is $-1$
   for incoming and $+1$ for outgoing; in the radial case it is
-  $-sum_e F_e d(e, overline(v))$. The weights depend only on active topology,
-  so moving points or changing per-edge rest lengths does not change them.
+  $-sum_e F_e d(e, overline(v))$. The weights depend on active topology and
+  coordinate groups, so moving points or changing per-edge rest lengths does
+  not change them.
   The opposite reaction is shared over the nodes; pins are respected in both
   force and anneal modes. The generic `external-pull` default is zero (disabled).
   The shared physics template uses `external-pull: 1` and

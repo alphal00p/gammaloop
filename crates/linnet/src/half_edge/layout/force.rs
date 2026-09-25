@@ -785,8 +785,9 @@ impl ForceBuffers {
         }
 
         // Pull mixed external flows horizontally with constant, topology-normalized
-        // force. Balancing side loads and capping the greatest spring load prevents
-        // a narrow connection from overstretching under several external legs.
+        // force. A bottleneck-load baseline prevents narrow connections from being
+        // overstretched by their external leg count; shared X groups add the spring
+        // demand needed to clear distributed attachments.
         // A single external flow instead pulls radially outward. Neither mode imposes
         // a target extent, so springs along a long chain can each stretch. Sharing the
         // opposite reaction over active nodes prevents translational drift. This term

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use cgmath::{EuclideanSpace, MetricSpace, Point2, Vector2, Zero};
 
 use rand::{distributions::Uniform, prelude::Distribution, Rng};
@@ -129,7 +131,7 @@ pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     pub graph: &'a HedgeGraph<E, V, H, N>,
     pub ext: SuBitGraph,
     active_subgraph: Option<SuBitGraph>,
-    /// Topology-only external load sharing, recomputed when the active graph changes.
+    /// External load sharing and shared-axis attachment demand, independent of geometry.
     pub(super) external_pull_scales: EdgeVec<f64>,
     pub vertex_points: NodeVec<Point2<f64>>,
     pub edge_points: EdgeVec<Point2<f64>>,
@@ -162,7 +164,11 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         delta: f64,
         directional_force: f64,
         incremental: bool,
-    ) -> LayoutState<'_, E, V, H, N> {
+    ) -> LayoutState<'_, E, V, H, N>
+    where
+        E: HasPointConstraint,
+        V: HasPointConstraint,
+    {
         let ext = self.external_filter();
         let len_v = vertex_points.len().0;
         let len_e = edge_points.len().0;
@@ -215,7 +221,11 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> Clone for LayoutState<'a, E, 
 }
 
 impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
-    pub fn with_active_subgraph(mut self, active_subgraph: SuBitGraph) -> Self {
+    pub fn with_active_subgraph(mut self, active_subgraph: SuBitGraph) -> Self
+    where
+        E: HasPointConstraint,
+        V: HasPointConstraint,
+    {
         assert_eq!(active_subgraph.size(), self.graph.n_hedges());
         let mut ext: SuBitGraph = self.graph.empty_subgraph();
         for (pair, _, _) in self.graph.iter_edges_of(&active_subgraph) {
@@ -241,13 +251,18 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
         self
     }
 
-    /// Topology-only external load-sharing scale, before the balancing exponent.
+    /// External load-sharing scale, including demand from shared-X attachments.
     /// Recomputed when the active graph changes; independent of route geometry.
+    /// Distributed attachments can require a scale greater than one.
     pub fn external_pull_scale(&self, edge: EdgeIndex) -> f64 {
         self.external_pull_scales[edge]
     }
 
-    fn rebuild_external_pull_scales(&mut self) {
+    fn rebuild_external_pull_scales(&mut self)
+    where
+        E: HasPointConstraint,
+        V: HasPointConstraint,
+    {
         self.external_pull_scales = vec![1.0; self.edge_points.len().0].into();
         if self.ext.included_iter().next().is_none() {
             return;
@@ -337,11 +352,12 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>();
-            let width = Self::component_pull_width(
+            let (width, potential) = Self::component_pull_distribution(
                 &local_adjacency,
                 &demand,
                 (1.0 / incoming as f64).max(1.0 / outgoing as f64),
             );
+            let mut groups: HashMap<_, Vec<(EdgeIndex, f64)>> = HashMap::new();
             for node in nodes {
                 for &(edge, flow) in &external[node] {
                     let side_count = match flow {
@@ -349,6 +365,45 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
                         Flow::Sink => incoming,
                     };
                     self.external_pull_scales[edge] = (width / side_count as f64).min(1.0);
+                    let Some(reference) = self.graph[edge]
+                        .point_constraint()
+                        .x
+                        .force_target(LayoutPointIndex::Edge(edge))
+                    else {
+                        continue;
+                    };
+                    if !self.point_is_active(reference) {
+                        continue;
+                    }
+                    if matches!(self.constraints(reference).x, Constraint::Fixed) {
+                        continue;
+                    }
+                    let outgoing = flow == Flow::Source;
+                    let sign = if outgoing { 1.0 } else { -1.0 };
+                    groups
+                        .entry((reference, outgoing))
+                        .or_default()
+                        .push((edge, sign * potential[local_index[node]]));
+                }
+            }
+            // A common external X coordinate must clear the outermost owner.
+            // In the unit-current model, each external stem has voltage drop
+            // 1 / side_count. Moving the shared line from the mean owner to the
+            // outermost owner adds this mean potential deficit to every stem's
+            // load. Only actual shared coordinates receive the correction;
+            // unshared endpoints form singleton groups and contribute exactly zero.
+            for members in groups.values() {
+                let outermost = members
+                    .iter()
+                    .map(|(_, value)| *value)
+                    .fold(f64::NEG_INFINITY, f64::max);
+                let deficit = members
+                    .iter()
+                    .map(|(_, value)| outermost - value)
+                    .sum::<f64>()
+                    / members.len() as f64;
+                for &(edge, _) in members {
+                    self.external_pull_scales[edge] += width * deficit;
                 }
             }
         }
@@ -358,7 +413,12 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
     /// Unit-conductance edges share load in parallel; series edges retain the
     /// same load, so longer chains can still stretch naturally. Rest lengths
     /// do not enter this topology calculation, and self-loops conduct no load.
-    fn component_pull_width(adjacency: &[Vec<usize>], demand: &[f64], boundary_load: f64) -> f64 {
+    /// Return the capacity and unit-current potentials used to compare owners.
+    fn component_pull_distribution(
+        adjacency: &[Vec<usize>],
+        demand: &[f64],
+        boundary_load: f64,
+    ) -> (f64, Vec<f64>) {
         let n = adjacency.len();
         let ground = (0..n).max_by_key(|&i| adjacency[i].len()).unwrap_or(0);
         let apply_laplacian = |values: &[f64], result: &mut [f64]| {
@@ -375,7 +435,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
         residual[ground] = 0.0;
         let rhs_norm_sq = residual.iter().map(|r| r * r).sum::<f64>();
         if rhs_norm_sq == 0.0 {
-            return 1.0 / boundary_load;
+            return (1.0 / boundary_load, potential);
         }
         let tolerance_sq = rhs_norm_sq * 1e-22;
         let mut direction = residual
@@ -447,9 +507,10 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
             residual_dot_preconditioned = next_dot;
         }
         if !converged {
-            // One channel is a conservative fallback if numerical conditioning
-            // prevents convergence; it never amplifies any endpoint's old pull.
-            return 1.0;
+            // One channel and no attachment correction are conservative if
+            // conditioning prevents convergence. Discard unverified potentials.
+            potential.fill(0.0);
+            return (1.0, potential);
         }
         let max_load = adjacency
             .iter()
@@ -457,7 +518,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
             .flat_map(|(i, neighbors)| neighbors.iter().map(move |&j| (i, j)))
             .map(|(i, j)| (potential[i] - potential[j]).abs())
             .fold(boundary_load, f64::max);
-        1.0 / max_load
+        (1.0 / max_load, potential)
     }
 
     pub(super) fn has_active_subgraph(&self) -> bool {
@@ -497,6 +558,17 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
         match point {
             LayoutPointIndex::Node(node) => self.node_is_active(node),
             LayoutPointIndex::Edge(edge) => self.edge_is_active(edge),
+        }
+    }
+
+    fn constraints(&self, index: LayoutPointIndex) -> PointConstraint
+    where
+        E: HasPointConstraint,
+        V: HasPointConstraint,
+    {
+        match index {
+            LayoutPointIndex::Node(index) => *self.graph[index].point_constraint(),
+            LayoutPointIndex::Edge(index) => *self.graph[index].point_constraint(),
         }
     }
 
@@ -888,13 +960,6 @@ where
     V: HasPointConstraint,
     N: NodeStorageOps<NodeData = V> + Clone,
 {
-    fn constraints(&self, index: LayoutPointIndex) -> PointConstraint {
-        match index {
-            LayoutPointIndex::Node(index) => *self.graph[index].point_constraint(),
-            LayoutPointIndex::Edge(index) => *self.graph[index].point_constraint(),
-        }
-    }
-
     fn group_members(
         &self,
         reference: LayoutPointIndex,
@@ -1531,12 +1596,20 @@ pub use energy_trace::{
 
 impl SpringChargeEnergy {
     pub(super) fn external_pull_strength(&self, topology_scale: f64) -> f64 {
+        if self.external_pull == 0.0 {
+            return 0.0;
+        }
         let scale = match self.external_pull_balance {
             0.0 => 1.0,
             1.0 => topology_scale,
             balance => topology_scale.powf(balance),
         };
-        self.external_pull * scale
+        let strength = self.external_pull * scale;
+        assert!(
+            strength.is_finite(),
+            "external pull and balancing produce an unrepresentable force for topology scale {topology_scale}"
+        );
+        strength
     }
 
     #[cfg_attr(feature = "energy_trace", inline(never))]
@@ -2136,13 +2209,15 @@ mod tests {
         internal: &[(usize, usize)],
         external: &[(usize, Flow)],
     ) -> Vec<f64> {
-        let mut builder = HedgeGraphBuilder::<(), ()>::new();
-        let nodes = (0..n).map(|_| builder.add_node(())).collect::<Vec<_>>();
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let nodes = (0..n)
+            .map(|_| builder.add_node(PointConstraint::default()))
+            .collect::<Vec<_>>();
         for &(a, b) in internal {
-            builder.add_edge(nodes[a], nodes[b], (), false);
+            builder.add_edge(nodes[a], nodes[b], PointConstraint::default(), false);
         }
         for &(node, flow) in external {
-            builder.add_external_edge(nodes[node], (), false, flow);
+            builder.add_external_edge(nodes[node], PointConstraint::default(), false, flow);
         }
         let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
         let state = graph.new_layout_state(
@@ -2380,17 +2455,184 @@ mod tests {
     }
 
     #[test]
+    fn normalized_pull_accounts_for_actual_shared_x_attachments() {
+        // Unit side current on 0--1--2 gives potentials (0, 1, 1.5).
+        // Each outgoing stem carries 1/4, while a common X line must cover
+        // an additional mean owner deficit of 1/4. The incoming owners coincide.
+        for reverse in [false, true] {
+            for mode in [
+                "free",
+                "fixed",
+                "y",
+                "shared",
+                "separate",
+                "free-reference",
+                "fixed-reference",
+                "node-reference",
+                "fixed-node-reference",
+            ] {
+                let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+                let nodes = (0..3)
+                    .map(|i| {
+                        let mut constraint = PointConstraint::default();
+                        if mode == "fixed-node-reference" && i == 0 {
+                            constraint.x = Constraint::Fixed;
+                        }
+                        builder.add_node(constraint)
+                    })
+                    .collect::<Vec<_>>();
+                for i in 0..2 {
+                    builder.add_edge(nodes[i], nodes[i + 1], PointConstraint::default(), false);
+                }
+                let incoming = if reverse { Flow::Source } else { Flow::Sink };
+                let outgoing = if reverse { Flow::Sink } else { Flow::Source };
+                for _ in 0..2 {
+                    builder.add_external_edge(
+                        nodes[0],
+                        PointConstraint::default(),
+                        false,
+                        incoming,
+                    );
+                }
+                for (i, owner) in [1, 1, 2, 2].into_iter().enumerate() {
+                    let reference = if matches!(mode, "node-reference" | "fixed-node-reference") {
+                        LayoutPointIndex::Node(nodes[0])
+                    } else if mode == "separate" {
+                        LayoutPointIndex::Edge(EdgeIndex(4 + 2 * (owner - 1)))
+                    } else {
+                        LayoutPointIndex::Edge(EdgeIndex(4))
+                    };
+                    let group = Constraint::Grouped(reference, ShiftDirection::Any);
+                    let mut constraint = PointConstraint::default();
+                    match mode {
+                        "fixed" => constraint.x = Constraint::Fixed,
+                        "y" => constraint.y = group,
+                        "shared" | "separate" | "node-reference" | "fixed-node-reference" => {
+                            constraint.x = group;
+                        }
+                        "free-reference" if i != 0 => constraint.x = group,
+                        "fixed-reference" => {
+                            constraint.x = if i == 0 { Constraint::Fixed } else { group };
+                        }
+                        _ => {}
+                    }
+                    builder.add_external_edge(nodes[owner], constraint, false, outgoing);
+                }
+                let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+                let state = graph.new_layout_state(
+                    vec![Point2::origin(); 3].into(),
+                    vec![Point2::origin(); 8].into(),
+                    1.0,
+                    0.0,
+                    false,
+                );
+                let expected = if matches!(mode, "shared" | "free-reference" | "node-reference") {
+                    0.5
+                } else {
+                    0.25
+                };
+                for edge in 2..8 {
+                    let expected = if edge < 4 { 0.5 } else { expected };
+                    assert!(
+                        (state.external_pull_scale(EdgeIndex(edge)) - expected).abs() < 1e-12,
+                        "mode={mode}, reverse={reverse}, edge={edge}"
+                    );
+                }
+                assert_eq!(
+                    state.external_pull_scales,
+                    state.clone().external_pull_scales
+                );
+                if mode == "shared" {
+                    // Removing one attachment at each owner changes the base
+                    // load from 1/4 to 1/2, while retaining the 1/4 rail deficit.
+                    let mut selected = graph.empty_subgraph::<SuBitGraph>();
+                    for edge in [0, 1, 2, 3, 4, 6] {
+                        selected.add(graph[&EdgeIndex(edge)].1);
+                    }
+                    let isolated = state.clone().with_active_subgraph(selected);
+                    for edge in [4, 6] {
+                        assert!(
+                            (isolated.external_pull_scale(EdgeIndex(edge)) - 0.75).abs() < 1e-12
+                        );
+                    }
+                    for edge in [5, 7] {
+                        assert_eq!(isolated.external_pull_scale(EdgeIndex(edge)), 1.0);
+                    }
+                    // An excluded group reference cannot move; its remaining
+                    // members retain only the component's load-sharing baseline.
+                    let mut selected = graph.empty_subgraph::<SuBitGraph>();
+                    for edge in [0, 1, 2, 3, 5, 6, 7] {
+                        selected.add(graph[&EdgeIndex(edge)].1);
+                    }
+                    let isolated = state.with_active_subgraph(selected);
+                    for edge in [5, 6, 7] {
+                        assert!(
+                            (isolated.external_pull_scale(EdgeIndex(edge)) - 1.0 / 3.0).abs()
+                                < 1e-12
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn normalized_pull_can_exceed_one_for_long_distributed_attachments() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let nodes = (0..=10)
+            .map(|_| builder.add_node(PointConstraint::default()))
+            .collect::<Vec<_>>();
+        for i in 0..10 {
+            builder.add_edge(nodes[i], nodes[i + 1], PointConstraint::default(), false);
+        }
+        builder.add_external_edge(nodes[0], PointConstraint::default(), false, Flow::Sink);
+        let shared = PointConstraint {
+            x: Constraint::Grouped(LayoutPointIndex::Edge(EdgeIndex(11)), ShiftDirection::Any),
+            y: Constraint::Free,
+        };
+        for &node in &nodes[1..] {
+            builder.add_external_edge(node, shared, false, Flow::Source);
+        }
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let state = graph.new_layout_state(
+            vec![Point2::origin(); 11].into(),
+            vec![Point2::origin(); 21].into(),
+            1.0,
+            0.0,
+            false,
+        );
+        for edge in 11..21 {
+            assert!((state.external_pull_scale(EdgeIndex(edge)) - 1.75).abs() < 1e-10);
+        }
+        let mut energy = SpringChargeEnergy {
+            external_pull: 2.0,
+            ..test_energy(0.0)
+        };
+        for balance in [0.0, 0.25, 1.0, 2.0, 4.0] {
+            energy.external_pull_balance = balance;
+            assert_eq!(
+                energy.external_pull_strength(1.75),
+                2.0 * 1.75_f64.powf(balance)
+            );
+        }
+        energy.external_pull_balance = f64::MAX;
+        assert!(std::panic::catch_unwind(|| energy.external_pull_strength(1.75)).is_err());
+        energy.external_pull = 0.0;
+        assert_eq!(energy.external_pull_strength(1.75), 0.0);
+    }
+
+    #[test]
     fn normalized_pull_rebuilds_for_active_edges_and_exposed_half_edges() {
-        let mut builder = HedgeGraphBuilder::<(), ()>::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        builder.add_edge(a, b, (), false);
-        builder.add_edge(a, b, (), false);
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, PointConstraint::default(), false);
+        builder.add_edge(a, b, PointConstraint::default(), false);
         for _ in 0..2 {
-            builder.add_external_edge(a, (), false, Flow::Sink);
+            builder.add_external_edge(a, PointConstraint::default(), false, Flow::Sink);
         }
         for _ in 0..2 {
-            builder.add_external_edge(b, (), false, Flow::Source);
+            builder.add_external_edge(b, PointConstraint::default(), false, Flow::Source);
         }
         let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
         let state = graph.new_layout_state(
@@ -2432,10 +2674,10 @@ mod tests {
 
     #[test]
     fn route_spring_length_is_invariant_under_collinear_subdivision() {
-        let mut builder = HedgeGraphBuilder::<(), ()>::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        builder.add_edge(a, b, (), false);
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, PointConstraint::default(), false);
         let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
         let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
             panic!("expected paired edge");
@@ -2462,10 +2704,10 @@ mod tests {
 
     #[test]
     fn route_charge_samples_normalize_active_physical_edge_charge() {
-        let mut builder = HedgeGraphBuilder::<(), ()>::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        builder.add_edge(a, b, (), false);
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, PointConstraint::default(), false);
         let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
         let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
             panic!("expected paired edge");
@@ -2605,12 +2847,12 @@ mod tests {
 
     #[test]
     fn route_crossing_penalty_includes_routed_self_loops_only() {
-        let mut builder = HedgeGraphBuilder::<(), ()>::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        let c = builder.add_node(());
-        builder.add_edge(a, a, (), false);
-        builder.add_edge(b, c, (), false);
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        let c = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, a, PointConstraint::default(), false);
+        builder.add_edge(b, c, PointConstraint::default(), false);
         let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
         let mut state = graph.new_layout_state(
             vec![
@@ -2639,12 +2881,12 @@ mod tests {
 
     #[test]
     fn route_crossing_penalty_checks_bends_beyond_a_shared_vertex() {
-        let mut builder = HedgeGraphBuilder::<(), ()>::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        let c = builder.add_node(());
-        builder.add_edge(a, b, (), false);
-        builder.add_edge(a, c, (), false);
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        let c = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, PointConstraint::default(), false);
+        builder.add_edge(a, c, PointConstraint::default(), false);
         let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
         let mut state = graph.new_layout_state(
             vec![
@@ -2931,12 +3173,12 @@ mod tests {
     #[test]
     fn edge_spring_length_scales_are_local_and_preserve_dangling_factor() {
         for split in [None, Some(Flow::Source), Some(Flow::Sink)] {
-            let mut builder = HedgeGraphBuilder::<(), ()>::new();
-            let a = builder.add_node(());
-            let b = builder.add_node(());
-            builder.add_edge(a, b, (), false);
-            builder.add_external_edge(a, (), false, Flow::Source);
-            builder.add_external_edge(b, (), false, Flow::Sink);
+            let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+            let a = builder.add_node(PointConstraint::default());
+            let b = builder.add_node(PointConstraint::default());
+            builder.add_edge(a, b, PointConstraint::default(), false);
+            builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
+            builder.add_external_edge(b, PointConstraint::default(), false, Flow::Sink);
             let mut graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
             if let Some(split) = split {
                 let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
@@ -2997,14 +3239,14 @@ mod tests {
     #[test]
     fn heterogeneous_edge_spring_length_scales_incremental_energy_matches_full() {
         for second_flow in [Flow::Sink, Flow::Source] {
-            let mut builder = HedgeGraphBuilder::<(), ()>::new();
-            let a = builder.add_node(());
-            let b = builder.add_node(());
-            let c = builder.add_node(());
-            builder.add_edge(a, b, (), false);
-            builder.add_edge(b, c, (), false);
-            builder.add_external_edge(a, (), false, Flow::Source);
-            builder.add_external_edge(c, (), false, second_flow);
+            let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+            let a = builder.add_node(PointConstraint::default());
+            let b = builder.add_node(PointConstraint::default());
+            let c = builder.add_node(PointConstraint::default());
+            builder.add_edge(a, b, PointConstraint::default(), false);
+            builder.add_edge(b, c, PointConstraint::default(), false);
+            builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
+            builder.add_external_edge(c, PointConstraint::default(), false, second_flow);
             let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
             let mut state = graph.new_layout_state(
                 vec![
@@ -3049,12 +3291,12 @@ mod tests {
 
     #[test]
     fn isolated_energy_ignores_complement_geometry() {
-        let mut builder = HedgeGraphBuilder::<(), ()>::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        let c = builder.add_node(());
-        builder.add_edge(a, b, (), false);
-        builder.add_edge(b, c, (), false);
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        let c = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, PointConstraint::default(), false);
+        builder.add_edge(b, c, PointConstraint::default(), false);
         let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
         let selected_pair = graph.iter_edges().next().unwrap().0;
         let mut selected = graph.empty_subgraph::<SuBitGraph>();
@@ -3102,10 +3344,10 @@ mod tests {
 
     #[test]
     fn one_sided_isolated_edge_has_one_dangling_spring() {
-        let mut builder = HedgeGraphBuilder::<(), ()>::new();
-        let a = builder.add_node(());
-        let b = builder.add_node(());
-        builder.add_edge(a, b, (), false);
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let a = builder.add_node(PointConstraint::default());
+        let b = builder.add_node(PointConstraint::default());
+        builder.add_edge(a, b, PointConstraint::default(), false);
         let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
         let HedgePair::Paired { source, .. } = graph.iter_edges().next().unwrap().0 else {
             panic!("expected paired edge");
