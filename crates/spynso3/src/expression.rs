@@ -5541,6 +5541,62 @@ mod tests {
     }
 
     #[test]
+    fn reflected_division_retains_tensor_numerator_interface_and_typed_zero() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let ports = [
+                ExtendibleReps::MINKOWSKI
+                    .new_rep(Dimension::Concrete(4))
+                    .slot(PartialIndex::Explicit(AbstractIndex::Normal(73001))),
+                ExtendibleReps::EUCLIDEAN
+                    .new_rep(Dimension::Concrete(3))
+                    .slot(PartialIndex::Explicit(AbstractIndex::Normal(73003))),
+            ];
+            let interface = PartialStructure::from_logical_slots(ports);
+            let expression =
+                FunctionBuilder::new(spenso::tensor_symbol!("reflected_division_numerator"))
+                    .add_args(ports.into_iter().rev().map(composition::port_atom))
+                    .finish();
+            let divisor = Atom::num(2);
+            let denominator = TensorExpression::from_atom_interface(
+                py,
+                divisor.clone(),
+                PartialStructure::from_logical_slots([]),
+            )?;
+            for expression in [expression, Atom::Zero] {
+                let numerator = TensorExpression::from_atom_interface(
+                    py,
+                    expression.clone(),
+                    interface.clone(),
+                )?;
+                let TensorDispatch::Expression(quotient) = TensorExpression::__rtruediv__(
+                    denominator.bind(py).borrow(),
+                    py,
+                    numerator.bind(py).as_any(),
+                )?
+                else {
+                    panic!("symbolic reflected division produced a network")
+                };
+                let quotient = quotient.borrow(py);
+                assert_eq!(quotient.as_super().expr, &expression / &divisor);
+                assert_eq!(quotient.interface.logical_slots(), ports);
+                assert_eq!(numerator.borrow(py).interface.logical_slots(), ports);
+                let error = TensorExpression::__rtruediv__(
+                    numerator.bind(py).borrow(),
+                    py,
+                    denominator.bind(py).as_any(),
+                )
+                .err()
+                .expect("a tensor denominator must be rejected, including typed zero");
+                assert!(error.is_instance_of::<PyValueError>(py));
+                assert!(error.to_string().contains("non-scalar tensor"));
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
     fn scalar_zero_is_a_polymorphic_additive_identity() {
         idenso::representations::initialize();
         Python::initialize();

@@ -46,8 +46,8 @@ def _(mo):
     mo.md(r"""
     ## Setup
 
-    Use a Symbolica host built with the FeynKit community module. We use
-    the conventional short alias `fk` so the physics namespace stays visible.
+    Use a Symbolica host built with the HEP community module. Import the
+    classes used in each notebook directly from `symbolica.community.hep`.
 
     Built-in constructors need no model files. This example uses a single
     real scalar with a cubic interaction and unit mass and coupling.
@@ -57,9 +57,9 @@ def _(mo):
 
 @app.cell
 def _():
-    import symbolica.community.feynkit as fk
+    from symbolica.community.hep import Model
 
-    return (fk,)
+    return (Model,)
 
 
 @app.cell(hide_code=True)
@@ -75,8 +75,8 @@ def _(mo):
 
 
 @app.cell
-def _(fk, table):
-    model = fk.Model.phi3()
+def _(Model, table):
+    model = Model.phi3()
 
     table(
         [

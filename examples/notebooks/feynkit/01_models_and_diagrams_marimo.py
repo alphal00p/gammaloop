@@ -45,10 +45,10 @@ def _(mo):
 
 @app.cell
 def _():
-    import symbolica.community.feynkit as fk
+    from symbolica.community.hep import FeynmanDiagram, Model, ModelError
 
-    model = fk.Model.phi_3_4()
-    return fk, model
+    model = Model.phi_3_4()
+    return (FeynmanDiagram, Model, ModelError, model)
 
 
 @app.cell(hide_code=True)
@@ -94,14 +94,14 @@ def _(mo):
 
 
 @app.cell
-def _(fk, mo, model, table):
+def _(ModelError, mo, model, table):
     _card = model.default_parameter_card()
     _card.set("lam", 2.5)
     _updated = model.with_parameter_card(_card)
 
     try:
         _dependent_coupling = _updated.coupling("SCALAR4_COUPLING").value
-    except fk.ModelError:
+    except ModelError:
         _dependent_coupling = "not evaluated after the parameter update"
 
     table(
@@ -212,7 +212,7 @@ def _(mo):
 
 
 @app.cell
-def _(fk, generated, mo, model, table):
+def _(FeynmanDiagram, generated, mo, model, table):
     _loop_diagram = next(
         diagram
         for diagram in generated.diagrams
@@ -220,8 +220,8 @@ def _(fk, generated, mo, model, table):
         and all(edge.source != edge.target for edge in diagram.edges)
     )
 
-    from_json = fk.FeynmanDiagram.from_json(model, _loop_diagram.to_json())
-    _from_dot = fk.FeynmanDiagram.from_dot(model, _loop_diagram.to_dot())
+    from_json = FeynmanDiagram.from_json(model, _loop_diagram.to_json())
+    _from_dot = FeynmanDiagram.from_dot(model, _loop_diagram.to_dot())
     from_json.validate()
     _from_dot.validate()
 
@@ -333,8 +333,8 @@ def _(mo):
     Symbolica 3-compatible UFO loader pinned in **04 — Loading UFO models**.
     That notebook installs and exercises the optional boundary explicitly.
 
-    Configure an `fk.UfoLoader`, for example
-    `fk.UfoLoader(restriction_name="massless").load(path)`. It returns a
+    Configure an `UfoLoader`, for example
+    `UfoLoader(restriction_name="massless").load(path)`. It returns a
     `LoadedModel` containing the normalized `model`, its `parameters`, and
     detailed loader `diagnostics`. Normalized JSON remains the reproducible,
     dependency-free choice for saved analyses.

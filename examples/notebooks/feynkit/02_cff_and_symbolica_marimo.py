@@ -44,11 +44,11 @@ def _(mo):
 
 @app.cell
 def _():
-    import symbolica.community.feynkit as fk
+    from symbolica.community.hep import Model
     from symbolica import S
 
-    model = fk.Model.phi3()
-    return S, fk, model
+    model = Model.phi3()
+    return (Model, S, model)
 
 
 @app.cell
