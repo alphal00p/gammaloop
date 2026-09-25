@@ -6529,8 +6529,9 @@ dependencies = [
 [[package]]
 name = "symbolica-typst-atom-payload"
 version = "0.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=780334ea83b45edf651ccc43a26cc280f0ae9595#780334ea83b45edf651ccc43a26cc280f0ae9595"
+source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=cf7b9fe59ba3fc7fe9ea70b875f5660ee2addd7a#cf7b9fe59ba3fc7fe9ea70b875f5660ee2addd7a"
 dependencies = [
+ "blake3",
  "ciborium",
  "symbolica",
 ]

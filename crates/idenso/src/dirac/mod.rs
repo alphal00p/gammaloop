@@ -23,9 +23,7 @@ use symbolica::{
 };
 
 use crate::{
-    IndexTooling, bis,
-    dirac::simplify::DiracSimplifier,
-    gamma, gamma0,
+    IndexTooling, bis, gamma, gamma0,
     rep_symbols::RS,
     shorthands::{bracket::BracketNormalizer, chain::Chain},
 };
@@ -679,6 +677,7 @@ pub fn id_atom(i: impl Into<Atom>, j: impl Into<Atom>) -> Atom {
 
 mod macros;
 mod simplify;
+pub(crate) use simplify::DiracSimplifier;
 pub use simplify::{GammaChainOrdering, GammaSimplifySettings};
 #[cfg(test)]
 mod test;

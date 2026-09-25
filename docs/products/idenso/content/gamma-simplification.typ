@@ -2216,6 +2216,76 @@ their 24.60% inclusive share overlaps the owners above. These are sampled
 cycle shares, not additive wall-time measurements. Symbolica initialization
 and normalized result construction remain relevant upstream targets.
 
+=== Reusing closed-trace interfaces
+
+Profiling the expanded length-12 tracen call exposed a second reconstruction
+cost: 94.23% of sampled cycles were spent validating and wrapping its output.
+The shared symbolic tensor now reuses the Dirac evaluator's terminal-word
+recognition and checks the short source interface. Only the trace's actual
+cyclic wrapper is exempted from the callback check. Compact vector attributes,
+unresolved ports, nested trace metadata, and user callbacks remain checked.
+The proof is attempted only when output bytes exceed twice the source bytes;
+small results retain their cheaper output-validation path.
+
+Two alternating process pairs against the preceding saved release give these
+medians for complete public calls, with expanded trace output and a factored
+`S=(x+y)^8` spectator:
+
+#table(
+  columns: (2fr, 1fr, 1fr, 1fr),
+  inset: 5pt,
+  table.header([Operation], [Before], [After], [Speedup]),
+  [Free trace4, length 8], [1.745 ms], [0.230 ms], [7.58×],
+  [Free tracen, length 6], [0.353 ms], [0.115 ms], [3.07×],
+  [Free tracen, length 10], [22.552 ms], [1.541 ms], [14.63×],
+  [Free tracen, length 12], [253.761 ms], [18.836 ms], [13.47×],
+  [Repeated-index tracen, length 8], [0.454 ms], [0.150 ms], [3.02×],
+  [Axial trace4, length 12], [30.977 ms], [9.205 ms], [3.37×],
+)
+
+Length-2 and length-4 tracen, repeated-index trace4, and large-result reruns
+remain approximately flat. The complete typed ladder is also flat:
+*8.830 → 8.826 s* across three alternating pairs. The raw-expression route is
+slightly slower, *17.031 → 17.302 s*, with paired increases of 0.73–2.22%; no
+ladder improvement is attributed to this trace change. All runs retain the
+exact FORM-certified 9,652-term result. A separate endpoint-recognition
+optimization was rejected after its 91-case matrix showed no reliable gain.
+
+Fresh FORM takes *0.753 s process wall* for the ladder, leaving about *11.7×*
+between complete typed routes. FORM's trace-body CPU times are *0.0473 ms*
+for free trace4 length 8, *3.967 ms* for free tracen length 12, and *0.600 ms*
+for axial length 12. Those body clocks exclude the spectator and Python
+wrapping; both pipelines exclude source construction from their trace clocks.
+The remaining measured trace gaps are approximately 4.9×, 4.7×, and 15.3×,
+respectively, across these different timing boundaries. This is not FORM parity.
+
+The final profiles assign only 2.29% of free tracen and 2.78% of axial sampled
+cycles to result wrapping; over 96% now belongs to the core trace pipeline.
+These cycle shares are separate from the unprofiled timings above. They confirm
+that expanded-output interface reconstruction is no longer the dominant cost.
+Within the core, free tracen's polynomial-to-Atom conversion
+(`to_expression_with_map`) accounts for 73.14% inclusively. This is Rust-side
+Symbolica result construction. This profile uses the pinned Symbolica
+`06906976` without the isolated `poly-emission.patch` and `poly-presence.patch`
+experiments described above. Their combined effect on this complete tracen
+pipeline has not been measured; the 73.14% share is not a post-patch result.
+Axial epsilon cleanup accounts for 64.23% inclusively, including nested
+Schoonschip scans; the length-12 trace kernel itself accounts for 14.73%.
+These inclusive shares overlap other profile categories and must not be added.
+The axial scalar-spectator path still excludes gamma5 from its terminal shortcut,
+and epsilon cleanup invokes Schoonschip before checking for epsilon-pair work.
+
+The final build passes 207 exact Python behavior records and 117 HEP component
+comparisons. Current-worktree Rust checks pass 469 Idenso tests and 114 of 115
+binding tests, with the existing wrapped-index admission failure, 22 ignored
+tests, and one known Idenso snapshot exclusion. The concurrent renderer update
+clears the previous rendering failure. All three new source-proof regressions,
+Clippy, and scoped formatting pass. The callback regression emits a large scalar
+result and verifies rank-loss rejection without replaying its normalizer.
+`shared_tensor_trace_interface_followup` in the parity archive retains both
+releases, samples, FORM programs, source snapshots, profiles, and the rejected
+endpoint trial.
+
 == Run locally
 
 Use an interpreter containing the combined Symbolica community host with Spenso and Idenso,

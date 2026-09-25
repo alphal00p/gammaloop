@@ -1,4 +1,4 @@
-// Synced from symbolica-typst-plugin 780334ea83b45edf651ccc43a26cc280f0ae9595.
+// Synced from symbolica-typst-plugin cf7b9fe59ba3fc7fe9ea70b875f5660ee2addd7a.
 // Local extensions preserve tensor power grouping, complex signs, and rational coefficients.
 // Generic, document-side rendering for a `symbolica` Atom render tree.
 // Rust owns algebra and exact payloads; Typst owns presentation.
@@ -312,7 +312,12 @@
   if exponent == none or not exponent.negative { return none }
   let base = _field(node, ("base", "lhs", "left"))
   if exponent.numerator == "1" and exponent.denominator == "1" { return base }
-  (kind: "power", base: base, exponent: exponent.magnitude)
+  let positive = (kind: "power", base: base, exponent: exponent.magnitude)
+  // The displayed denominator is the reciprocal of the original factor.
+  // Its metadata must describe the positive power, not the negative one.
+  let reciprocal-atom = _field(node, ("reciprocal-atom",), default: none)
+  if reciprocal-atom != none { positive.insert("atom", reciprocal-atom) }
+  positive
 }
 
 #let _is-fraction-product(node) = {
@@ -499,7 +504,28 @@
       let reciprocal = exponent != none and exponent.negative
       let radical = roots and exponent != none and exponent.denominator != "1"
       let unit = exponent != none and exponent.numerator == "1" and exponent.denominator == "1"
-      let base = render-node(base-node, exact: exact, power-base: not radical and not unit)
+      // Metadata inside an attachment base prevents Typst from aligning a new
+      // superscript with existing subscripts. In this case render the complete
+      // power first and put its exact metadata outside the attachment.
+      let detached-base = if exact and _atom(node) != none and _kind(base-node) == "variable" {
+        render-node(base-node, exact: false, power-base: not radical and not unit)
+      } else { none }
+      // Source syntax puts a superscript on the last item of a sequence,
+      // such as the closing argument group in a literal label `h'(c)`.
+      // Keep custom sequence notation's existing whole-base convention.
+      let sequence-power = detached-base != none and repr(detached-base.func()) == "sequence" and (
+        detached-base == _default-source(base-node)
+      )
+      let merge-attachments = detached-base != none and (
+        repr(detached-base.func()) == "attach" or sequence-power
+      )
+      let base = if detached-base == none {
+        render-node(base-node, exact: exact, power-base: not radical and not unit)
+      } else if merge-attachments {
+        detached-base
+      } else {
+        _annotate(annotate, _atom(base-node), detached-base, base-node)
+      }
       if _source(exponent-node) == "1" { return base }
       let visual = if radical {
         // Symbolica prints standalone fractional powers as roots. Powers moved
@@ -522,9 +548,17 @@
           )
         ) { base = _parenthesize(base) }
         let power = if reciprocal { exponent.magnitude } else { exponent-node }
-        math.attach(base, t: render-node(power, exact: exact))
+        let top = render-node(power, exact: exact)
+        if sequence-power and base.children.len() > 0 {
+          let parts = base.children
+          parts.at(parts.len() - 1) = math.attach(parts.last(), t: top)
+          parts.join()
+        } else {
+          math.attach(base, t: top)
+        }
       }
-      return if reciprocal { math.frac(_source-content("1"), visual) } else { visual }
+      let visual = if reciprocal { math.frac(_source-content("1"), visual) } else { visual }
+      return if merge-attachments { _annotate(annotate, _atom(node), visual, node) } else { visual }
     }
 
     if kind == "product" {
@@ -571,11 +605,11 @@
         } else { _split-sign(term) }
         let visual = render-node(signed.node, exact: exact)
         if index == 0 {
-          result = if signed.negative { _math-body($- #visual$) } else { visual }
+          result = if signed.negative { _math-body($-#visual$) } else { visual }
         } else if signed.negative {
-          result += _math-body($ - #visual$)
+          result += _math-body($-#visual$)
         } else {
-          result += _math-body($ + #visual$)
+          result += _math-body($+#visual$)
         }
       }
       return result

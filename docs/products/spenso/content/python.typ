@@ -109,7 +109,9 @@ graph builder; DOT remains a separate export format.
 Typst entrypoint; both accept `linnet.RenderConfig`, like Feynman diagrams.
 `to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.
 Tensor labels use the registered tensor-name printer, including custom Typst heads
-and scalar arguments. Hover summaries identify the node or edge kind. Clicking
+and scalar arguments. Edge slots use the same Typst index notation as the slot display, with
+alphabet aliases assigned across the entire network. The inspector retains exact indices.
+Hover summaries identify the node or edge kind. Clicking
 shows tensor storage and ports, operator inputs, or contraction indices and metric
 information; keyboard focus and Enter/Space use the same inspector.
 `expression()` retains the semantic source formula, `to_dot()` exports the operation
