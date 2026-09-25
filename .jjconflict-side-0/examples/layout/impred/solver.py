@@ -16,17 +16,17 @@ import copy
 import json
 import math
 import time
+from collections import Counter
 from concurrent.futures import CancelledError
 from itertools import combinations, pairwise
 from pathlib import Path
 
 import numpy as np
-
 from init import initialize, validate_geometry
 from movement import MovementDOFs, project_halfplanes
 
 
-def model_arrays(state, *, flexible_edges=None):
+def model_arrays(state, *, flexible_edges=None, parallel_attraction_balance=0.0):
     """Build fixed physical-edge charge budgets and flexible repulsion masks.
 
     External tips and knots share one unit charge; internal knots share 0.35.
@@ -63,7 +63,23 @@ def model_arrays(state, *, flexible_edges=None):
             )
             for first, second in pairs:
                 weights[first, second] = weights[second, first] = 0
-    return keys, ids, p, routes, segments, weights
+    # Physical multiplicity ignores bends, direction and external connections.
+    endpoint_pairs = {
+        edge: tuple(sorted((route[0], route[-1])))
+        for edge, route in state["routes"].items()
+        if edge not in state.get("external_ids", {}) and route[0] != route[-1]
+    }
+    multiplicities = Counter(endpoint_pairs.values())
+    attraction_weights = np.array(
+        [
+            multiplicities[endpoint_pairs[edge]] ** (-parallel_attraction_balance)
+            if edge in endpoint_pairs
+            else 1.0
+            for edge, route in state["routes"].items()
+            for _ in pairwise(route)
+        ]
+    )
+    return keys, ids, p, routes, segments, weights, attraction_weights
 
 
 def point_segments(p, segments):
@@ -107,6 +123,7 @@ def segment_attraction_forces(p, segments, *, target, strength, exponent):
 
     Tension A l (l/δ)^a gives longer segments more pull. Splitting adds serial
     compliance; unequal adjacent tensions move a knot toward equal spacing.
+    Strength is scalar or one coefficient per segment, without changing this law.
     """
     force = np.zeros_like(p)
     vectors = p[segments[:, 1]] - p[segments[:, 0]]
@@ -364,6 +381,7 @@ def solve(
     project=None,
     repulsion=2.5,
     attraction=2.5,
+    parallel_attraction_balance=0.0,
     pull_scales=None,
     pull_balance=1.0,
     external_max_points=0,
@@ -374,7 +392,13 @@ def solve(
 ):
     if not all(
         math.isfinite(value) and value >= 0
-        for value in (repulsion, attraction, pull, pull_balance)
+        for value in (
+            repulsion,
+            attraction,
+            pull,
+            pull_balance,
+            parallel_attraction_balance,
+        )
     ):
         raise ValueError("Force multipliers must be finite and nonnegative")
     if not (
@@ -426,8 +450,10 @@ def solve(
     checked = 0
     min_scale = 1.0
     max_constraint_residual = 0.0
-    keys, ids, p, _routes, segs, weights = model_arrays(
-        state, flexible_edges=flexible_edges
+    keys, ids, p, _routes, segs, weights, attraction_weights = model_arrays(
+        state,
+        flexible_edges=flexible_edges,
+        parallel_attraction_balance=parallel_attraction_balance,
     )
     dofs = project.movement_constraints(keys) if project is not None else None
     movement_certificates = {
@@ -497,7 +523,11 @@ def solve(
         coefficients = weights * (target / np.maximum(r, target * 0.02)) ** rep_exp
         force = repulsion * np.sum(d * coefficients[:, :, None], axis=1)
         force += segment_attraction_forces(
-            p, segs, target=target, strength=attraction, exponent=att_exp
+            p,
+            segs,
+            target=target,
+            strength=attraction * attraction_weights,
+            exponent=att_exp,
         )
         data = point_segments(p, segs)
         force += node_edge_forces(
@@ -601,8 +631,10 @@ def solve(
                 )
                 added += a
                 removed += r
-                keys, ids, p, _routes, segs, weights = model_arrays(
-                    state, flexible_edges=flexible_edges
+                keys, ids, p, _routes, segs, weights, attraction_weights = model_arrays(
+                    state,
+                    flexible_edges=flexible_edges,
+                    parallel_attraction_balance=parallel_attraction_balance,
                 )
                 physical_ids = [ids[key] for key in state["node_ids"].values()]
                 if histories and histories[-1]["iteration"] == epoch:
@@ -668,8 +700,12 @@ def solve(
                         project.update_external_routes(state)
                         added += inserted
                         removed += contracted
-                        keys, ids, p, _routes, segs, weights = model_arrays(
-                            state, flexible_edges=flexible_edges
+                        keys, ids, p, _routes, segs, weights, attraction_weights = (
+                            model_arrays(
+                                state,
+                                flexible_edges=flexible_edges,
+                                parallel_attraction_balance=parallel_attraction_balance,
+                            )
                         )
                         physical_ids = [ids[key] for key in state["node_ids"].values()]
                         # Rebuild membership after deletion; original pins and
@@ -707,6 +743,7 @@ def solve(
         "node_edge_strength": node_edge_strength,
         "repulsion": repulsion,
         "attraction": attraction,
+        "parallel_attraction_balance": parallel_attraction_balance,
         "external_pull_scales": pull_scales,
         "external_pull_balance": pull_balance if pull_scales is not None else None,
         "external_max_points": external_max_points,

@@ -39,7 +39,7 @@ class PlaygroundRunnerTests(unittest.TestCase):
         self.assertTrue(required <= set(case_ids))
         self.assertSetEqual(set(case_ids), available)
         self.assertEqual(len(case_ids), len(set(case_ids)))
-        self.assertEqual(len(config["parameters"]), 12)
+        self.assertEqual(len(config["parameters"]), 13)
         self.assertEqual(config["defaults"], DEFAULTS)
         for case in config["cases"]:
             self.assertEqual(
@@ -149,7 +149,11 @@ class PlaygroundRunnerTests(unittest.TestCase):
         reference = self.runner.run("higgs-sunset", "impred", params)["case"]["stages"][
             1
         ]
-        for key, value in [("impred.repulsion", 0.4), ("impred.attraction", 2.0)]:
+        for key, value in [
+            ("impred.repulsion", 0.4),
+            ("impred.attraction", 2.0),
+            ("impred.parallel_attraction_balance", 0.0),
+        ]:
             changed = self.runner.run("higgs-sunset", "impred", {**params, key: value})[
                 "case"
             ]["stages"][1]
@@ -220,6 +224,7 @@ class PlaygroundRunnerTests(unittest.TestCase):
             "impred.pull": 3.6,
             "impred.pull_balance": 2.0,
             "impred.pull_attachment": 1.0,
+            "impred.parallel_attraction_balance": 0.25,
             "impred.external_max_points": 1,
             "impred.split_length_ratio": 1.5,
             "impred.contract_chord_ratio": 0.75,
@@ -230,6 +235,7 @@ class PlaygroundRunnerTests(unittest.TestCase):
             )
         knobs = actual_solver.call_args.kwargs
         self.assertEqual(knobs["pull_balance"], 2.0)
+        self.assertEqual(knobs["parallel_attraction_balance"], 0.25)
         self.assertNotIn("pull_attachment", knobs)
         self.assertNotIn("external_direction_strength", knobs)
         self.assertEqual(knobs["external_max_points"], 1)

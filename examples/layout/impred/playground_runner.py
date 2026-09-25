@@ -54,6 +54,16 @@ _PARAMETER_ROWS = [
     ),
     (
         "impred",
+        "parallel_attraction_balance",
+        "Parallel-edge attraction balancing",
+        0.0,
+        2.0,
+        0.05,
+        0.5,
+        "Reduce each parallel internal edge's attraction by multiplicity raised to this exponent. Zero preserves unbalanced attraction; one compensates the edge count. Bridges, external legs and self-loops keep their original attraction.",
+    ),
+    (
+        "impred",
         "pull",
         "External pull",
         0.0,

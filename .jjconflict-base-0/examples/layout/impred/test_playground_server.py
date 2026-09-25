@@ -62,7 +62,7 @@ class PlaygroundHTTPTests(unittest.TestCase):
         status, configuration = self.request("/api/config")
         self.assertEqual(status, 200)
         self.assertEqual(configuration, self.server.runner.config())
-        self.assertEqual(len(configuration["parameters"]), 12)
+        self.assertEqual(len(configuration["parameters"]), 13)
         status, response = self.request("/api/run", self.job_request("real-run", 1))
         self.assertEqual(status, 202)
         result = self.complete(response["job_id"])

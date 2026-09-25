@@ -40,6 +40,24 @@ These force choices extend the paper's metric model; they do not change the EC
 embedding algorithm, crossing guards, or certificates required to add or remove
 route points.
 
+=== Parallel-edge attraction balancing
+
+Parallel physical edges contribute multiple attractive routes between the same
+vertices. The experimental `parallel_attraction_balance` parameter applies
+$A_e = A m_e^(-beta)$ to every segment of such an edge, where $m_e$ counts
+internal edges sharing its two endpoints. Direction and intermediate drawing
+points do not affect this count. Single edges, dangling edges and self-loops
+keep their original attraction; charges, spacing and external pull are unchanged.
+
+At `0`, the accepted unbalanced force is reproduced. At `1`, identical parallel
+routes together exert the attraction of a single route. Intermediate values
+partially compensate this multiplicity, allowing the parallel loop to grow
+relative to adjoining single-edge bridges. This does not guarantee equal sizes:
+repulsive forces and the directions of curved segments still matter.
+It recognizes direct parallel edges, not arbitrary self-energy subgraphs with
+additional physical vertices. In split cross-section drawings, a visible bridge
+need not be a bridge of the unsplit physical graph.
+
 == Constraint semantics
 
 A constraint tree contains every edge incident to its vertex exactly once.

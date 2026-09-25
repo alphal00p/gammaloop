@@ -5,7 +5,6 @@ import unittest
 from itertools import pairwise
 
 import numpy as np
-
 from solver import (
     adapt,
     model_arrays,
@@ -86,7 +85,7 @@ class ForceTests(unittest.TestCase):
             "external_ids": {"1": "x:1"},
         }
         before = copy.deepcopy(state)
-        _, ids, _, _, _, weights = model_arrays(state, flexible_edges={"0", "1"})
+        _, ids, _, _, _, weights, _ = model_arrays(state, flexible_edges={"0", "1"})
         for route in (state["routes"]["0"], state["routes"]["1"]):
             for first, second in pairwise(route):
                 self.assertEqual(weights[ids[first], ids[second]], 0)
@@ -108,11 +107,11 @@ class ForceTests(unittest.TestCase):
             "external_ids": {"0": "x:0"},
             "flexible_edges": ["0"],
         }
-        _, ids, _, _, _, weights = model_arrays(state)
+        _, ids, _, _, _, weights, _ = model_arrays(state)
         self.assertEqual(weights[ids["v:0"], ids["x:0"]], 0)
         _, inserted, _ = adapt(state, 1, 0, max_points=1, remove=False)
         self.assertEqual(inserted, 1)
-        _, ids, _, _, _, weights = model_arrays(state)
+        _, ids, _, _, _, weights, _ = model_arrays(state)
         bend = state["routes"]["0"][1]
         self.assertEqual(weights[ids["v:0"], ids[bend]], 0)
         self.assertEqual(weights[ids[bend], ids["x:0"]], 0)
@@ -122,7 +121,7 @@ class ForceTests(unittest.TestCase):
 
         _, _, removed = adapt(state, 3, 0, max_points=0)
         self.assertEqual(removed, 1)
-        _, ids, _, _, _, weights = model_arrays(state)
+        _, ids, _, _, _, weights, _ = model_arrays(state)
         self.assertEqual(weights[ids["v:0"], ids["x:0"]], 0)
         self.assertEqual(weights[ids["x:0"], ids["v:probe"]], 1)
 
@@ -131,7 +130,7 @@ class ForceTests(unittest.TestCase):
             "positions": {"v:0": [0, 0], "b:0:a": [1, 1], "v:1": [2, 0]},
             "routes": {"0": ["v:0", "b:0:a", "v:1"]},
         }
-        _, ids, _, _, _, weights = model_arrays(state)
+        _, ids, _, _, _, weights, _ = model_arrays(state)
         self.assertEqual(weights[ids["v:0"], ids["b:0:a"]], 0.35)
         self.assertEqual(weights[ids["v:1"], ids["b:0:a"]], 0.35)
 
@@ -155,7 +154,7 @@ class ForceTests(unittest.TestCase):
                 elif phase == "contract":
                     _, added, removed = adapt(state, 3, 0, max_points=0)
                     self.assertEqual((added, removed), (0, 2))
-                _, ids, _, _, _, weights = model_arrays(state)
+                _, ids, _, _, _, weights, _ = model_arrays(state)
                 samples = [key for key in state["routes"]["0"] if key.startswith("b:")]
                 observed = weights[[ids[key] for key in samples], ids["v:probe"]]
                 np.testing.assert_allclose(observed, 0.35 / len(samples))
@@ -170,7 +169,7 @@ class ForceTests(unittest.TestCase):
             "anchor_ids": {"0": "b:0:anchor"},
             "flexible_edges": ["0"],
         }
-        _, ids, _, _, _, weights = model_arrays(state)
+        _, ids, _, _, _, weights, _ = model_arrays(state)
         for first, second in pairwise(route):
             self.assertEqual(weights[ids[first], ids[second]], 0)
         self.assertAlmostEqual(weights[ids["v:0"], ids["b:0:anchor"]], 0.35 / 3)
@@ -182,7 +181,7 @@ class ForceTests(unittest.TestCase):
             "routes": {"0": ["v:0", "b:0:a", "x:0"]},
             "external_ids": {"0": "x:0"},
         }
-        _, ids, _, _, _, weights = model_arrays(state)
+        _, ids, _, _, _, weights, _ = model_arrays(state)
         self.assertEqual(weights[ids["v:0"], ids["x:0"]], 0.5)
         self.assertEqual(weights[ids["v:0"], ids["b:0:a"]], 0.5)
         self.assertEqual(weights[ids["b:0:a"], ids["x:0"]], 0.25)
@@ -356,6 +355,67 @@ class ForceTests(unittest.TestCase):
             exponent=2,
         )
         np.testing.assert_allclose(actual, forces @ rotation.T, atol=1e-13)
+
+
+class ParallelAttractionTests(unittest.TestCase):
+    def test_physical_multiplicity_ignores_orientation_and_subdivision(self):
+        routes = {
+            "first": ["v:0", "b:first", "v:1"],
+            "reverse": ["v:1", "b:reverse:0", "b:reverse:1", "v:0"],
+            "bridge": ["v:1", "v:2"],
+            "loop": ["v:2", "b:loop", "v:2"],
+            "external": ["v:0", "b:external", "x:0"],
+        }
+        state = {
+            "positions": {
+                key: [float(i), 0.0]
+                for i, key in enumerate(
+                    dict.fromkeys(key for route in routes.values() for key in route)
+                )
+            },
+            "routes": routes,
+            "external_ids": {"external": "x:0"},
+        }
+        before = copy.deepcopy(state)
+        baseline = model_arrays(state)
+        balanced = model_arrays(state, parallel_attraction_balance=1.0)
+        np.testing.assert_array_equal(baseline[-1], np.ones(10))
+        np.testing.assert_array_equal(balanced[-1], [0.5] * 5 + [1.0] * 5)
+        np.testing.assert_array_equal(balanced[5], baseline[5])
+        self.assertEqual(state, before)
+        state["routes"]["first"].insert(1, "b:extra")
+        state["positions"]["b:extra"] = [0.3, 0.2]
+        split = model_arrays(state, parallel_attraction_balance=1.0)
+        np.testing.assert_array_equal(split[-1], [0.5] * 6 + [1.0] * 5)
+
+    def test_full_balance_compensates_congruent_parallel_attractions(self):
+        state = {
+            "positions": {"v:0": [0.0, 0.0], "v:1": [2.0, 0.0]},
+            "routes": {"a": ["v:0", "v:1"], "b": ["v:1", "v:0"]},
+        }
+        _, _, positions, _, segments, _, scales = model_arrays(
+            state, parallel_attraction_balance=1.0
+        )
+        single = segment_attraction_forces(
+            positions, segments[:1], target=1.3, strength=2.5, exponent=0.4
+        )
+        balanced = segment_attraction_forces(
+            positions, segments, target=1.3, strength=2.5 * scales, exponent=0.4
+        )
+        original = segment_attraction_forces(
+            positions, segments, target=1.3, strength=2.5, exponent=0.4
+        )
+        np.testing.assert_array_equal(balanced, single)
+        np.testing.assert_array_equal(original, 2 * single)
+        np.testing.assert_array_equal(balanced.sum(axis=0), [0, 0])
+
+    def test_invalid_parallel_balance_is_rejected_before_solving(self):
+        for balance in (-1, float("inf"), float("nan")):
+            with (
+                self.subTest(balance=balance),
+                self.assertRaisesRegex(ValueError, "finite and nonnegative"),
+            ):
+                solve({}, parallel_attraction_balance=balance)
 
 
 if __name__ == "__main__":

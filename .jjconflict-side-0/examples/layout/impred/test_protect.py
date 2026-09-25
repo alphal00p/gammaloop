@@ -5,7 +5,6 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-
 from init import initialize, validate_geometry
 from solver import model_arrays, point_segments, protect, solve
 from test_init import diagram
@@ -38,7 +37,7 @@ class ProtectionTests(unittest.TestCase):
 
     def test_arbitrary_proposals_preserve_all_old_separating_halfplanes(self):
         state = initialize(diagram(4, [(0, 1), (1, 2), (2, 3), (3, 0), (0, 2)]))
-        keys, _, p, _, segments, _ = model_arrays(state)
+        keys, _, p, _, segments, _, _ = model_arrays(state)
         random = np.random.default_rng(20260923)
         for _ in range(100):
             proposal = random.normal(size=p.shape) * random.uniform(0.01, 100)
@@ -101,7 +100,7 @@ class ProtectionTests(unittest.TestCase):
         initial = initialize(
             diagram(3, [(None, 0), (0, 1), (0, 1), (1, 1), (1, 2), (2, None)])
         )
-        keys, _, p, _, segments, _ = model_arrays(initial)
+        keys, _, p, _, segments, _, _ = model_arrays(initial)
         random = np.random.default_rng(1120)
         for _ in range(100):
             step, _ = protect(p, segments, random.normal(size=p.shape) * 0.15)

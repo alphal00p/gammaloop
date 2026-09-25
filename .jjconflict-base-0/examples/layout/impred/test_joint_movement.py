@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
-
 from init import validate_geometry
 from movement import MovementDOFs, _project_component, project_halfplanes
 from solver import model_arrays, protect, separating_halfplanes
@@ -124,7 +123,7 @@ class JointMovementTests(unittest.TestCase):
                 Path(__file__).parent / "fixtures-joint-movement/m4-blocked-final.json"
             ).read_text()
         )
-        keys, ids, p, _, segments, _ = model_arrays(fixture)
+        keys, ids, p, _, segments, _, _ = model_arrays(fixture)
         dofs = MovementDOFs(keys, fixture["constraints"])
         outgoing = [ids[key] for key in fixture["outgoing_ids"]]
         candidates = []
@@ -160,7 +159,7 @@ class JointMovementTests(unittest.TestCase):
                 Path(__file__).parent / "fixtures-joint-movement/m4-blocked-final.json"
             ).read_text()
         )
-        keys, ids, p, _, segments, _ = model_arrays(fixture)
+        keys, ids, p, _, segments, _, _ = model_arrays(fixture)
         dofs = MovementDOFs(keys, fixture["constraints"])
         proposal = np.array(
             [fixture["blocked_proposal"].get(key, [0.0, 0.0]) for key in keys]
