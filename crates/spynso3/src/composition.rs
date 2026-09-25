@@ -1964,6 +1964,218 @@ mod tests {
     }
 
     #[test]
+    fn identity_port_rewrites_still_validate_every_additive_branch() {
+        let port = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(131)));
+        let other = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(137)));
+        let a = partial_tensor(
+            SPENSO_TAG.tensor_symbol("identity_rewrite_a"),
+            &[port],
+            &[port],
+        );
+        let b = partial_tensor(
+            SPENSO_TAG.tensor_symbol("identity_rewrite_b"),
+            &[port],
+            &[port],
+        );
+        let replacements = HashMap::from([(0, port_atom(port))]);
+        let atom = &a.atom + &b.atom;
+        let mut state = PortRewriteState::new(1);
+        let rewritten = rewrite_ports(atom.as_view(), &[port], &replacements, &mut state);
+        assert!(matches!(rewritten, AtomOrView::View(_)));
+        assert_eq!(rewritten.as_view(), atom.as_view());
+        assert_eq!(state.claimed, [true]);
+        assert_eq!(state.applied, [true]);
+
+        let missing = partial_tensor(
+            SPENSO_TAG.tensor_symbol("identity_rewrite_missing"),
+            &[other],
+            &[other],
+        );
+        let invalid = StructuredAtom::new(&a.atom + missing.atom, a.interface);
+        assert!(matches!(
+            rewrite_interface_ports(&invalid, &replacements),
+            Err(TensorCompositionError::MissingInterfacePort { position: 0 })
+        ));
+    }
+
+    #[test]
+    fn port_rewrites_preserve_unchanged_custom_normalizer_calls() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+        };
+        let calls = Arc::new(AtomicUsize::new(0));
+        let zero = Arc::new(AtomicBool::new(false));
+        let observed = Arc::clone(&calls);
+        let enabled = Arc::clone(&zero);
+        let head = spenso::tensor_symbol!(
+            "port_rewrite_callback",
+            norm = move |_, output| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                if enabled.load(Ordering::Relaxed) {
+                    **output = Atom::Zero;
+                }
+            }
+        );
+        let port = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(139)));
+        let atom = FunctionBuilder::new(head).add_arg(port_atom(port)).finish();
+        for replacements in [HashMap::new(), HashMap::from([(0, port_atom(port))])] {
+            calls.store(0, Ordering::Relaxed);
+            let mut state = PortRewriteState::new(1);
+            let rewritten = rewrite_ports(atom.as_view(), &[port], &replacements, &mut state);
+            assert!(matches!(rewritten, AtomOrView::Atom(_)));
+            assert_eq!(rewritten.as_view(), atom.as_view());
+            assert_eq!(calls.load(Ordering::Relaxed), 1);
+            assert_eq!(state.claimed, [true]);
+            assert_eq!(state.applied, [replacements.contains_key(&0)]);
+        }
+
+        let x = Atom::var(symbolica::symbol!("port_rewrite_callback_x"));
+        let input = &atom * &x + atom.pow(2);
+        calls.store(0, Ordering::Relaxed);
+        zero.store(true, Ordering::Relaxed);
+        let rewritten = rewrite_ports(
+            input.as_view(),
+            &[],
+            &HashMap::new(),
+            &mut PortRewriteState::new(0),
+        );
+        assert!(rewritten.as_view().is_zero());
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn port_rewrites_preserve_intrinsic_metric_and_vector_normalization() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        let [a, b] = [149, 151]
+            .map(|index| rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
+        let metric = FunctionBuilder::new(ETS.metric)
+            .add_arg(port_atom(a))
+            .add_arg(port_atom(b))
+            .finish();
+        let x = Atom::var(symbolica::symbol!("port_rewrite_metric_x"));
+        let input = (&x + Atom::one()) * &metric;
+        let mut state = PortRewriteState::new(2);
+        let identity = HashMap::from([(0, port_atom(a)), (1, port_atom(b))]);
+        assert!(matches!(
+            rewrite_ports(input.as_view(), &[a, b], &identity, &mut state),
+            AtomOrView::View(_)
+        ));
+        assert_eq!(state.applied, [true, true]);
+        let trace = rewrite_ports(
+            metric.as_view(),
+            &[a, b],
+            &HashMap::from([(1, port_atom(a))]),
+            &mut PortRewriteState::new(2),
+        )
+        .into_owned();
+        assert_eq!(trace, Atom::num(4));
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let vector = spenso::vector_symbol!(
+            "port_rewrite_vector_callback",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let mink = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let compact = FunctionBuilder::new(vector)
+            .add_arg(mink.to_symbolic([]))
+            .finish();
+        let dot = FunctionBuilder::new(ETS.metric)
+            .add_arg(&compact)
+            .add_arg(&compact)
+            .finish();
+        calls.store(0, Ordering::Relaxed);
+        assert!(matches!(
+            rewrite_ports(
+                dot.as_view(),
+                &[],
+                &HashMap::new(),
+                &mut PortRewriteState::new(0)
+            ),
+            AtomOrView::View(_)
+        ));
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+
+        let replacement = mink.slot(PartialIndex::Explicit(AbstractIndex::Normal(149)));
+        let expected = FunctionBuilder::new(vector)
+            .add_arg(port_atom(replacement))
+            .finish();
+        // Reversing source arguments must preserve the mixed metric behavior;
+        // symmetry may canonicalize both orders identically. The initially
+        // incompatible representations leave the metric intact.
+        for arguments in [
+            [port_atom(a), compact.clone()],
+            [compact.clone(), port_atom(a)],
+        ] {
+            let mixed = FunctionBuilder::new(ETS.metric)
+                .add_args(arguments)
+                .finish();
+            assert!(
+                matches!(mixed.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric)
+            );
+            let unchanged = rewrite_ports(
+                mixed.as_view(),
+                &[a],
+                &HashMap::new(),
+                &mut PortRewriteState::new(1),
+            );
+            assert!(matches!(unchanged, AtomOrView::Atom(_)));
+            calls.store(0, Ordering::Relaxed);
+            let changed = rewrite_ports(
+                mixed.as_view(),
+                &[a],
+                &HashMap::from([(0, port_atom(replacement))]),
+                &mut PortRewriteState::new(1),
+            )
+            .into_owned();
+            assert_eq!(changed, expected);
+            assert_eq!(calls.load(Ordering::Relaxed), 1);
+        }
+    }
+
+    #[test]
+    fn port_rewrites_still_normalize_raw_arithmetic_and_functions() {
+        let mut sum = Atom::new();
+        sum.to_add();
+        let mut product = Atom::new();
+        product.to_mul();
+        let x = Atom::var(symbolica::symbol!("port_rewrite_raw_x"));
+        let mut power = Atom::new();
+        power.to_pow(x.as_view(), Atom::one().as_view());
+        let head = symbolica::symbol!(
+            "port_rewrite_raw_function",
+            norm = |_, output| {
+                **output = Atom::num(7);
+            }
+        );
+        let mut function = Atom::new();
+        function.to_fun(head);
+        for (input, expected) in [
+            (sum, Atom::Zero),
+            (product, Atom::one()),
+            (power, x),
+            (function, Atom::num(7)),
+        ] {
+            assert!(input.as_view().needs_normalization());
+            let rewritten = rewrite_ports(
+                input.as_view(),
+                &[],
+                &HashMap::new(),
+                &mut PortRewriteState::new(0),
+            )
+            .into_owned();
+            assert_eq!(rewritten, expected);
+            assert!(!rewritten.as_view().needs_normalization());
+        }
+    }
+
+    #[test]
     fn repeated_explicit_contractions_build_one_nary_product() {
         use spenso::network::graph::{NetworkNode, NetworkOp};
         let slots = (0..6)

@@ -170,10 +170,13 @@ mod tests {
             let malformed = FunctionBuilder::new(SPENSO_TAG.dot)
                 .add_arg(Atom::var(symbol!("malformed_dot_operand")))
                 .finish();
-            let expression = TensorExpression::from_atom_interface(
+            // Deliberately inject malformed internals to test tooling error translation.
+            let expression = TensorExpression::from_parts_unchecked(
                 py,
                 malformed,
                 PartialStructure::from_logical_slots([]),
+                None,
+                Vec::new(),
             )?;
 
             for name in ["undo_dots", "schoonschip_net"] {
