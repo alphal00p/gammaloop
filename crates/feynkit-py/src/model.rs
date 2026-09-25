@@ -1452,7 +1452,7 @@ pub struct PyPropagator {
 }
 
 impl PyPropagator {
-    fn new(id: PropagatorId, model: Arc<Model>) -> Self {
+    pub(crate) fn new(id: PropagatorId, model: Arc<Model>) -> Self {
         Self { id, model }
     }
 

@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use feynkit_graph::expressions::GraphExpressions;
+use feynkit_graph::expressions::{GraphExpressions, PropagatorSymbols};
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge,
     DiagramThresholdCandidate, DiagramVertex, FeynmanDiagram, LoopMomentumBasis, MomentumSignature,
@@ -42,7 +42,7 @@ use crate::{
     graph_interop::LinnetCache,
     integrals::PyIntegralFamily,
     kinematics::{PyFourMomentum, PyKinematics, PyThreeMomentum},
-    model::{PyModel, PyParticle},
+    model::{PyModel, PyParticle, PyPropagator},
     tensor::PyTensorReducer,
 };
 
@@ -177,7 +177,7 @@ impl PyDiagramVertex {
 /// Examples
 /// --------
 /// >>> edge = next(iter(diagram.edges))
-/// >>> particle = model.particle_by_pdg(edge.particle_pdg)
+/// >>> particle = edge.particle
 /// >>> source, target = diagram.vertices[edge.source], diagram.vertices[edge.target]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -211,12 +211,208 @@ pub struct PyDiagramEdge {
     target: Option<usize>,
     inner: DiagramEdge,
     model: Arc<Model>,
+    diagram: Arc<FeynmanDiagram>,
+    owner: Arc<()>,
+}
+
+impl PyDiagramEdge {
+    fn basis<'a>(
+        &'a self,
+        lmb: Option<&'a PyLoopMomentumBasis>,
+    ) -> PyResult<&'a LoopMomentumBasis> {
+        match lmb {
+            Some(basis) if !Arc::ptr_eq(&basis.owner, &self.owner) => Err(
+                error::DiagramError::new_err("momentum basis belongs to a different diagram"),
+            ),
+            Some(basis) => Ok(&basis.inner),
+            None => Ok(self.diagram.loop_momentum_basis()),
+        }
+    }
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDiagramEdge {
+    /// The model particle, including symbolic mass, width parameter, spin and charge.
+    ///
+    /// >>> edge.particle.mass_expression
+    /// >>> edge.particle.width_parameter
+    #[getter]
+    fn particle(&self) -> PyParticle {
+        PyParticle::new(self.inner.particle, Arc::clone(&self.model))
+    }
+
+    /// The model propagator template for an internal physical line, or None.
+    ///
+    /// Template expressions retain model placeholders. Use numerator_expression()
+    /// and denominator_expression() for the instantiated diagram factors.
+    #[getter]
+    fn propagator(&self) -> PyResult<Option<PyPropagator>> {
+        if self.is_external() || self.is_dummy() || self.is_dangling() {
+            return Ok(None);
+        }
+        let particle = self
+            .model
+            .particle_by_id(self.inner.particle)
+            .map_err(error::model)?;
+        Ok(self
+            .model
+            .particle_propagator(particle)
+            .map_err(error::model)?
+            .map(|(id, _)| PyPropagator::new(id, Arc::clone(&self.model))))
+    }
+
+    /// Return this edge's tagged q² - m² denominator as a scalar TensorExpression.
+    ///
+    /// Uses the shared diagram denominator builder, excluding widths, iε and custom
+    /// UFO formulas. External, dummy and dangling lines raise DiagramError.
+    /// Signed power and dimension follow FeynmanDiagram.denominator_expression().
+    /// ``in_lmb=True`` uses the stored basis; an explicit ``lmb`` takes precedence.
+    ///
+    /// Examples
+    /// --------
+    /// >>> edge = diagram.internal_edges[0]
+    /// >>> denominator = edge.denominator_expression(in_lmb=True)
+    ///
+    /// Parameters
+    /// ----------
+    /// power : int, optional
+    ///     Signed propagator power; defaults to one.
+    /// dimension : Expression or int or None, optional
+    ///     Lorentz dimension; defaults to the shared symbolic dimension.
+    /// in_lmb : bool, optional
+    ///     Route through the diagram's stored loop-momentum basis.
+    /// lmb : LoopMomentumBasis or None, optional
+    ///     Explicit basis from this diagram, overriding ``in_lmb``.
+    #[pyo3(signature = (*, power=1, dimension=None, in_lmb=false, lmb=None))]
+    fn denominator_expression(
+        &self,
+        py: Python<'_>,
+        power: isize,
+        dimension: Option<ConvertibleToExpression>,
+        in_lmb: bool,
+        lmb: Option<&PyLoopMomentumBasis>,
+    ) -> PyResult<Py<TensorExpression>> {
+        if self.is_external() || self.is_dummy() || self.is_dangling() {
+            return Err(error::DiagramError::new_err(format!(
+                "edge {} is not an internal propagator",
+                self.id
+            )));
+        }
+        let mut hedges = SuBitGraph::empty(self.diagram.underlying().n_hedges());
+        for endpoint in [DiagramEndpoint::Source, DiagramEndpoint::Target] {
+            let half = DiagramHalfEdge {
+                edge: feynkit_graph::EdgeId(self.id),
+                endpoint,
+            };
+            hedges.add(
+                self.diagram
+                    .half_edge_id(half)
+                    .expect("internal edge has both endpoints"),
+            );
+        }
+        let region = PyFeynmanDiagram {
+            inner: Arc::clone(&self.diagram),
+            linnet: LinnetCache::default(),
+            owner: Arc::clone(&self.owner),
+            selected_region: Some(DiagramSelection {
+                hedges,
+                isolated: BTreeSet::new(),
+            }),
+        };
+        region.denominator_expression(
+            py,
+            Some(BTreeMap::from([(self.id, power)])),
+            dimension,
+            in_lmb,
+            lmb,
+        )
+    }
+
+    /// Return the oriented edge momentum as a rank-one Minkowski TensorExpression.
+    ///
+    /// The default is Q(edge, mink(D)). With ``in_lmb=True``, return its linear
+    /// combination of loop and external momenta. An explicit ``lmb`` from this
+    /// diagram takes precedence. Dummy edges have no momentum and raise DiagramError.
+    ///
+    /// Examples
+    /// --------
+    /// >>> momentum = edge.momentum_expression(dimension=4, in_lmb=True)
+    ///
+    /// Parameters
+    /// ----------
+    /// dimension : Expression or int or None, optional
+    ///     Lorentz dimension; defaults to the shared symbolic dimension.
+    /// in_lmb : bool, optional
+    ///     Route through the diagram's stored loop-momentum basis.
+    /// lmb : LoopMomentumBasis or None, optional
+    ///     Explicit basis from this diagram, overriding ``in_lmb``.
+    #[pyo3(signature = (*, dimension=None, in_lmb=false, lmb=None))]
+    fn momentum_expression(
+        &self,
+        py: Python<'_>,
+        dimension: Option<ConvertibleToExpression>,
+        in_lmb: bool,
+        lmb: Option<&PyLoopMomentumBasis>,
+    ) -> PyResult<Py<TensorExpression>> {
+        if self.is_dummy() {
+            return Err(error::DiagramError::new_err("dummy edges have no momentum"));
+        }
+        let dimension = match dimension {
+            Some(dimension) => dimension
+                .to_expression()
+                .expr
+                .as_view()
+                .try_into()
+                .map_err(|_| {
+                    PyTypeError::new_err("dimension must be a positive integer or a symbol")
+                })?,
+            None => feynkit_graph::symbols::dimension().into(),
+        };
+        let symbols = PropagatorSymbols {
+            momentum: feynkit_graph::momentum_symbol(),
+            denominator: feynkit_graph::symbols::denominator(),
+        };
+        let momentum =
+            symbols.momentum(linnet::half_edge::involution::EdgeIndex(self.id), dimension);
+        let tensor = TensorExpression::from_atom_interface(py, momentum.clone(), None)?;
+        if in_lmb || lmb.is_some() {
+            let routed = self.basis(lmb)?.route_expression(&momentum);
+            TensorExpression::preserving_interface(&tensor.borrow(py), py, routed)
+        } else {
+            Ok(tensor)
+        }
+    }
+
+    /// Return integer loop and external momentum coefficients in the selected basis.
+    ///
+    /// Defaults to the diagram's stored basis. Dummy edges have no signature.
+    ///
+    /// Examples
+    /// --------
+    /// >>> edge.momentum_signature().loops
+    /// >>> edge.momentum_signature().external
+    ///
+    /// Parameters
+    /// ----------
+    /// lmb : LoopMomentumBasis or None, optional
+    ///     Explicit basis from this diagram; defaults to its stored basis.
+    #[pyo3(signature = (*, lmb=None))]
+    fn momentum_signature(
+        &self,
+        lmb: Option<&PyLoopMomentumBasis>,
+    ) -> PyResult<PyMomentumSignature> {
+        self.basis(lmb)?
+            .edge_signatures
+            .get(&feynkit_graph::EdgeId(self.id))
+            .cloned()
+            .map(Into::into)
+            .ok_or_else(|| {
+                error::DiagramError::new_err("edge has no momentum signature in this basis")
+            })
+    }
+
     /// Return the external-leg index.
     ///
     /// Raises :class:`DiagramError` for an internal edge. Use
@@ -305,7 +501,8 @@ impl PyDiagramEdge {
     /// Examples
     /// --------
     /// >>> edge = diagram.edges[0]
-    /// >>> particle = model.particle_by_pdg(edge.particle_pdg)
+    /// >>> edge.particle.pdg_code == edge.particle_pdg
+    /// True
     ///
     #[getter]
     fn particle_pdg(&self) -> PyResult<i64> {
@@ -2772,6 +2969,8 @@ impl PyFeynmanDiagram {
                 target: endpoints.target.map(|vertex| vertex.0),
                 inner: inner.clone(),
                 model: Arc::clone(&model),
+                diagram: Arc::clone(&self.inner),
+                owner: Arc::clone(&self.owner),
             })
             .collect()
     }

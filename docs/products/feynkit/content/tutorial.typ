@@ -269,6 +269,26 @@ final-state validity.
 
 == Inspect the propagator denominator
 
+Each edge exposes its model particle and its instantiated momentum and denominator:
+
+// docs-example: compile
+```python
+edge = diagram.internal_edges[0]
+mass = edge.particle.mass_expression
+width_parameter = edge.particle.width_parameter
+momentum = edge.momentum_expression(dimension=4, in_lmb=True)
+signature = edge.momentum_signature()
+denominator = edge.denominator_expression(dimension=4, in_lmb=True)
+```
+
+The momentum is a rank-one Spenso vector; the signature exposes integer `loops`
+and `external` coefficients. Both methods accept `lmb=basis` for an alternative
+routing from the same diagram. `edge.propagator` returns the model's propagator
+template for an internal physical line, or `None` when unavailable. Its expressions
+contain model placeholders; the edge expression methods supply diagram factors.
+External and dummy lines have no propagator denominator and raise `DiagramError`.
+Use `power=2`, for example, for a squared edge denominator.
+
 // docs-example: compile
 ```python
 denominator = diagram.denominator_expression()

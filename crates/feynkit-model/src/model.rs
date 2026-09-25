@@ -1305,6 +1305,29 @@ impl Model {
             .ok_or_else(|| self.not_found(EntityKind::Propagator, &id.index().to_string()))
     }
 
+    /// Resolve a particle's explicit or default propagator, then its antiparticle's.
+    /// The boolean records whether the template belongs to the antiparticle and
+    /// its numerator slots must be reversed during instantiation.
+    pub fn particle_propagator(
+        &self,
+        particle: &Particle,
+    ) -> Result<Option<(PropagatorId, bool)>, ModelError> {
+        for (candidate, reversed) in [(particle, false), (self.antiparticle(particle)?, true)] {
+            if let Some(id) = candidate.propagator {
+                return Ok(Some((id, reversed)));
+            }
+            let particle_id = self.particle_id(&candidate.name)?;
+            if let Some(index) = self
+                .propagators
+                .iter()
+                .position(|p| p.particle == particle_id)
+            {
+                return Ok(Some((PropagatorId(index), reversed)));
+            }
+        }
+        Ok(None)
+    }
+
     pub fn propagator_id_at(&self, index: usize) -> Result<PropagatorId, ModelError> {
         self.propagator_by_id(PropagatorId(index))?;
         Ok(PropagatorId(index))
