@@ -84,6 +84,13 @@ ports, checks every sum branch, and retains necessary multiplicity checks. Uncha
 are borrowed; changed exact sums and products use bulk construction when callback ordering
 permits it.
 
+Lorentz-dimension changes map both the Atom and its declared interface here. Newly coincident
+explicit indices contract; excess occurrences fail. Callback validation compares the encoded
+interfaces before and after the change, separately from the retained logical layout. A no-op
+normalizer must accept mixed representations stored in a different order, while a normalizer
+that removes a nonzero tensor's ports must fail. Python only converts the requested dimension,
+translates errors, and updates presentation metadata if the rank changes.
+
 `SymbolicNet<Aind>` is a Spenso `Network` whose local tensors are `SymbolicTensor`, whose scalars
 are Symbolica atoms, and whose function keys are Symbolica symbols. `SymbolicNetParse` forces
 Spenso's `ContainsReps` tensor filter, so representation-bearing functions can become tensor

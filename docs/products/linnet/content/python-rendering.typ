@@ -56,7 +56,8 @@ selections automatically. In Marimo, direct rich display enables the embedded sc
 embedding the SVG explicitly, use `mo.iframe(graph.to_svg())`.
 Drag the drawing to pan, or use Ctrl/Meta-scroll to zoom gently around the pointer.
 With the graph focused, `+` and `-` zoom in five-percent steps and `0` fits the drawing. Hover previews details beside the graph when space permits,
-and below it in narrow outputs. Clicking pins the details until the panel is closed.
+and below it in narrow outputs. The preview disappears when the pointer leaves the element;
+keyboard focus also previews details. Clicking pins the details until the panel is closed.
 The graph's `RenderConfig`
 combines layout options, drawing defaults, and Python selectors. Only topology and the selectors'
 typed drawing results pass to Typst; application payloads stay in Python.

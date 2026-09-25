@@ -2072,6 +2072,150 @@ Unchanged results consume the already-owned result Atom while retaining the
 existing structure and classification flags. Python wraps those results
 directly, avoiding a temporary symbolic tensor and another expression copy.
 
+Lorentz-dimension changes also belong to this shared owner. Changing four to
+six dimensions can join explicit indices that previously occupied different
+spaces, so the mapped interface must merge those pairs and reject excess
+occurrences. Callback-sensitive results are checked without invoking their
+normalizers again. In particular, a callback turning the changed tensor into a
+nonzero scalar cannot retain the old tensor interface. Typed zeros retain their
+mapped shape; Python clears descriptor metadata when contraction changes rank.
+The callback check compares encoded interfaces before and after the change;
+the retained logical order can differ from canonical argument storage order.
+
+The contraction and dot-normalization walkers capture predefined symbol and
+tag handles once per call. Their traversal and normalization order stay the
+same, including callbacks reached through unchanged branches when another
+branch changes. Skipping those branches would change observable behavior.
+
+The final frozen release is compared with the saved pre-consolidation binary,
+which already contains borrowed port rewriting. On the same pinned CPU:
+
+#table(
+  columns: (2fr, 1fr, 1fr),
+  inset: 5pt,
+  table.header([Operation], [Saved baseline], [Consolidated]),
+  [Complete typed eight-vertex ladder], [12.792 s], [9.929 s],
+  [Relabel a 1,024-term sum], [17.354 ms], [8.925 ms],
+  [Identity relabel, 1,024 terms], [6.873 ms], [6.951 ms],
+  [Free trace4, length 8], [2.119 ms], [1.797 ms],
+  [Free tracen, length 12], [309.781 ms], [259.863 ms],
+  [Axial trace4, length 12], [35.318 ms], [31.264 ms],
+)
+
+The complete typed loop is *22.4% shorter* in the adjacent final comparison.
+An earlier baseline/candidate/baseline comparison gave
+11.528 / 9.412 / 11.442 s, an 18% reduction. These are observed pinned-CPU
+runs, not a confidence interval. The contiguous clock includes every
+substitution, construction, composition, expansion, Schoonschip call and dot
+normalization; imports, fixture setup, serialization and exact checks are outside
+it. Every final Atom equals the FORM-certified 9,652-term result.
+
+Fresh FORM takes *1.194 s process wall* (three-run median), leaving about an
+*8.3×* full-ladder gap. Its free length-12 tracen body takes 4.033 ms CPU and
+axial length-12 trace4 takes about 1.06 ms CPU. Python trace timings include a
+scalar spectator and result wrapping, which FORM's trace-body clocks exclude.
+The trace kernels themselves were not changed by this consolidation.
+
+Tiny controls are mixed: free length-two first calls move 19.965 → 20.881 µs.
+The final no-op follow-up restores short reruns: in its own paired comparison,
+length two improves 1.825 → 1.039 µs and repeated-index trace4
+3.654 → 2.312 µs. The complete loop does not establish an additional gain from
+that follow-up. Raw-route observations vary: contiguous runs give
+18.049 → 19.401 s at the first consolidation checkpoint and 17.442 s for the
+final build, while a separate phase comparison gives 20.177 → 18.932 s.
+No raw-route gain or regression is established. Its measured construction
+phase still takes 11.402 s, with Schoonschip including wrapping at 6.840 s.
+
+The final typed profile assigns 54.87% of sampled cycles to Schoonschip/dot
+cleanup, 11.23% to interface inference/validation, 7.24% to explicit index
+multiplicity checks, 6.07% to product normalization, and 2.63% to port rewriting.
+These are disjoint sample-attribution groups, not wall-time phases. In the
+preceding consolidated profile, Symbolica's initialization guard alone owned
+about 10% of sampled cycles exclusively; its inclusive share overlaps the
+owners above. Repeated symbol-property lookup remains an upstream optimization
+target, alongside contraction and dot normalization.
+
+Validation includes 461 enabled Idenso tests, 11 Spenso structure/slot tests,
+111 of 113 binding tests plus the reflected-division regression, 34 exact
+composition controls, and 117 fresh HEP component comparisons. All 68
+constructor outcomes match apart from three shared-owner error-wording changes.
+Eight expansion cases now correctly retain compact callback tensors: the old
+errors came solely from validation inserting temporary indices. Actual
+callback-induced rank loss still fails. The old strict logical-order comparison
+is retained as a failure: the prior API work intentionally preserves incoming
+logical order instead of re-inferring it. Separate four-stage current-order assertions and
+exact algebra/component checks pass.
+
+Clippy and formatting pass. One Idenso snapshot failure was reproduced with the
+original owner and excluded; 22 existing tests remain ignored. The two binding
+failures also reproduce on the baseline: wrapped-index admission and the
+renderer rejecting Symbolica format 6. Rendering compatibility is not repaired
+by this change. The `shared_symbolic_tensor_consolidation` archive entry retains
+both measured releases, source snapshots, all strict failures, additional
+certificates, profiles, and reproduction scripts. The concurrent reflected
+division dispatch fix is preserved and tested; these timing drivers do not call
+that method. The validated final release is installed in the notebook environment;
+the installed 68-case constructor corpus matches the measured release exactly.
+
+=== Cached operation handles and checked dimension changes
+
+The next release captures metric symbols and tensor tags once per contraction
+or dot-normalization call. It also moves Lorentz-dimension rewriting and its
+interface checks into the shared symbolic tensor. The latter fixes stale rank
+metadata after user normalization, including mixed representations whose logical
+order differs from their encoded argument order.
+
+Two alternating process pairs compare this release with the same saved
+pre-consolidation baseline. Medians of the process measurements are:
+
+#table(
+  columns: (2fr, 1fr, 1fr),
+  inset: 5pt,
+  table.header([Operation], [Saved baseline], [Current]),
+  [Complete typed eight-vertex ladder], [12.124 s], [8.726 s],
+  [Free trace4, length 8], [2.160 ms], [1.812 ms],
+  [Free tracen, length 12], [315.654 ms], [266.506 ms],
+  [Axial trace4, length 12], [35.095 ms], [31.398 ms],
+)
+
+The complete ladder is about *28% shorter*. Its two paired reductions are
+24.7% and 31.0%; these observations are not a confidence interval. Fresh FORM
+takes *0.728 s process wall*, leaving about a *12×* full-ladder gap. The exact
+9,652-term result is unchanged. FORM trace-body CPU clocks remain separate from
+Python's spectator and wrapping costs.
+
+Against the immediately preceding consolidated release, three paired complete
+typed runs improve by 4.3–5.9%. Their process medians are 9.329 → 8.906 s;
+raw-route medians are 17.689 → 16.915 s, with paired reductions of 1.2–4.8%.
+The first typed pair is much slower for both builds (15.847 → 15.124 s), and
+is retained. Axial first-call measurements in this comparison are slightly
+slower, 31.098 → 31.773 ms; no additional axial pipeline gain is established.
+Short reruns are approximately unchanged.
+
+The isolated native matrix covers 91 cases and 890 timing rows. Large
+`normalize_dots` examples improve by 32–35%, while complete Schoonschip calls on
+large sums improve by 4–6% and long metric chains remain roughly flat. Tiny
+no-work calls pay an additional 30–55 ns for capturing handles. The unchanged
+phase harness fails for both binaries because it labels a newly multiplied
+late metric as an already terminal gamma result. Its failed assertions and
+fixture diagnosis are retained; no phase gate was weakened.
+
+All 7,504 native snapshot comparisons, 207 exact Python behavior records, and
+117 HEP component comparisons pass. The final current-source Rust run passes
+466 Idenso tests and 113 of 115 binding tests, with the same two binding
+failures, 22 ignored tests, and one known snapshot exclusion. Clippy and scoped
+formatting pass. The `shared_tensor_handle_and_dimension_followup` archive entry
+retains source and binary identities, original samples, FORM programs, callback
+regressions, and the remaining profile costs.
+
+The final complete-ladder profile assigns 53.65% of sampled cycles to
+Schoonschip/dot cleanup, 11.19% to interface inference/validation, 7.03% to
+explicit multiplicity, 6.19% to product normalization, and 2.77% to port
+rewriting. Initialization probes still account for 9.63% exclusively;
+their 24.60% inclusive share overlaps the owners above. These are sampled
+cycle shares, not additive wall-time measurements. Symbolica initialization
+and normalized result construction remain relevant upstream targets.
+
 == Run locally
 
 Use an interpreter containing the combined Symbolica community host with Spenso and Idenso,

@@ -2864,6 +2864,99 @@ def _(mo):
     synthetic indices. Unchanged results reuse the already-owned result Atom
     and are wrapped directly, preserving metadata without another tensor copy.
 
+    Lorentz-dimension rewriting now uses this owner too. New index collisions
+    merge before attaching the interface; excess occurrences fail. Callback
+    checks compare the encoded port order while preserving the separate logical
+    order. A callback returning a scalar cannot leave a nonzero rank-one tensor
+    wrapper, and rank changes clear stored descriptor metadata.
+
+    The final frozen release is compared with the saved pre-consolidation
+    binary, which already borrowed unchanged rewrite branches:
+
+    | Operation | Saved baseline | Consolidated |
+    | --- | ---: | ---: |
+    | Complete typed eight-vertex ladder | 12.792 s | 9.929 s |
+    | Relabel a 1,024-term sum | 17.354 ms | 8.925 ms |
+    | Identity relabel, 1,024 terms | 6.873 ms | 6.951 ms |
+    | Free trace4, length 8 | 2.119 ms | 1.797 ms |
+    | Free tracen, length 12 | 309.781 ms | 259.863 ms |
+    | Axial trace4, length 12 | 35.318 ms | 31.264 ms |
+
+    The final typed comparison is **22.4% shorter**; an earlier bracketed
+    comparison measured an **18% reduction**. The full clock includes all eight
+    substitutions, constructions, compositions, expansions, Schoonschip calls,
+    and dot normalizations. Imports, setup, serialization, and exact checks are
+    outside the clock. These are individual pinned-CPU runs, not confidence
+    intervals. All final Atoms match the **9,652-term** FORM-certified result.
+
+    Fresh FORM takes **1.194 s process wall**, leaving about an **8.3×** ladder
+    gap. Its free length-12 tracen body takes **4.033 ms CPU** and axial length-12
+    trace4 about **1.06 ms CPU**. Those trace-body clocks exclude Python's
+    spectator and result wrapping. No trace-kernel change is claimed here.
+
+    Short reruns recover after removing redundant wrapping: length two improves
+    **1.825 → 1.039 µs** and repeated-index trace4 **3.654 → 2.312 µs** in the
+    follow-up pair. Tiny first-call controls remain mixed. Raw-route results
+    vary between measurement protocols, so no raw-route gain or regression is
+    established; the final raw contiguous run is **17.442 s**.
+
+    The final typed profile assigns **54.9%** of sampled cycles to
+    Schoonschip/dot cleanup, **11.2%** to interface inference/validation,
+    **7.2%** to multiplicity checks, **6.1%** to product normalization, and
+    **2.6%** to port rewriting. These are sample groups, not wall-time phases.
+    Repeated Symbolica initialization and symbol-property lookups remain an
+    upstream target; the preceding consolidated profile measured about **10%**
+    of cycles exclusively in the initialization guard.
+
+    Validation includes **461** enabled Idenso tests, **11** Spenso tests,
+    **111/113** binding tests plus the reflected-division regression,
+    **34** exact composition controls, and **117** fresh HEP component checks.
+    The two binding failures and one excluded Idenso snapshot failure reproduce
+    on the baseline; the renderer's Symbolica-format-6 incompatibility remains.
+    Clippy and formatting pass. The historical logical-order mismatch and three
+    error-wording differences are retained explicitly. Four-stage current-order
+    assertions pass, and eight compact-callback expansion cases now correctly
+    succeed without validation replaying a normalizer on synthetic indices.
+    Full records, source snapshots, and reproducer scripts are under
+    `shared_symbolic_tensor_consolidation` in the parity archive.
+    The validated final release is installed in the notebook environment;
+    its 68-case constructor corpus matches the measured build exactly.
+
+    **Operation-handle follow-up:** contraction and dot normalization now capture
+    metric/tag handles once per call, preserving callback order. Two fresh
+    alternating process pairs against the saved pre-consolidation build give:
+
+    | Operation | Saved baseline | Current |
+    | --- | ---: | ---: |
+    | Complete typed eight-vertex ladder | 12.124 s | 8.726 s |
+    | Free trace4, length 8 | 2.160 ms | 1.812 ms |
+    | Free tracen, length 12 | 315.654 ms | 266.506 ms |
+    | Axial trace4, length 12 | 35.095 ms | 31.398 ms |
+
+    The typed ladder is about **28% shorter**, with paired reductions of
+    **24.7–31.0%**. Fresh FORM takes **0.728 s process wall**, so the complete
+    ladder remains about **12× slower**. Every result equals the FORM-certified
+    **9,652-term** polynomial. FORM trace-body CPU excludes the spectator and
+    Python wrapping included in these trace timings.
+
+    Against the immediately preceding consolidated release, three paired typed
+    runs improve **4.3–5.9%** (process medians **9.329 → 8.906 s**). The first pair
+    is slower for both builds (**15.847 → 15.124 s**) and is retained. Raw-route
+    medians improve **17.689 → 16.915 s**, with paired reductions **1.2–4.8%**.
+    Axial first calls are slightly slower in this immediate comparison, and
+    short reruns are roughly flat; this is not a universal improvement.
+
+    Native measurements cover **91 cases** and **890 timing rows**. Large dot
+    normalization cases improve **32–35%**, complete Schoonschip on large sums
+    **4–6%**, and long metric chains remain approximately flat. Tiny no-work
+    calls add **30–55 ns**. All **7,504** native snapshots, **207** exact Python
+    behavior records, and **117** HEP component checks match. The final Rust run
+    passes **466** Idenso and **113/115** binding tests, retaining the known
+    failures and exclusions. Clippy and formatting pass. The unchanged phase
+    harness's incorrect late-metric terminal label is recorded as a failure.
+    `shared_tensor_handle_and_dimension_followup` contains the sources, samples,
+    FORM references, validation, and profiles.
+
     **Partial-network follow-up:** a closed subcase with vertices **1, 2, 8**
     produces **64 scalar terms**. The baseline expand-first route takes about
     **5.56 ms**; network contraction with local sum distribution takes
