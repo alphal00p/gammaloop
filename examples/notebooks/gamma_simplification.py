@@ -2860,6 +2860,9 @@ def _(mo):
     Typed zeros keep their interfaces. Rewrites that can invoke a normalizer
     validate the resulting interface: `g(a,b)*T(a)` must not retain a vector
     interface if the callback turns `T(b)` into a scalar.
+    Result checks observe the encoded ports without replaying a normalizer on
+    synthetic indices. Unchanged results reuse the already-owned result Atom
+    and are wrapped directly, preserving metadata without another tensor copy.
 
     **Partial-network follow-up:** a closed subcase with vertices **1, 2, 8**
     produces **64 scalar terms**. The baseline expand-first route takes about
