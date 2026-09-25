@@ -136,19 +136,8 @@
       paintCamera();
     };
     const reset = () => { Object.assign(camera, box); paintCamera(); };
-    for (const [label, title, action] of [
-      ['−', 'Zoom out', () => zoom(1 / 1.25)],
-      ['+', 'Zoom in', () => zoom(1.25)],
-      ['Fit', 'Fit graph', reset],
-    ]) {
-      const button = html('button', label);
-      button.setAttribute('aria-label', title);
-      button.setAttribute('title', title);
-      button.addEventListener('click', action);
-      controls.append(button);
-    }
     controls.append(zoomLabel);
-    const hint = html('span', 'Drag to pan · Ctrl/⌘ + scroll to zoom');
+    const hint = html('span', 'Drag to pan · Ctrl/⌘ + scroll or +/− to zoom · 0 to fit');
     hint.className = 'linnet-navigation-hint';
     controls.append(hint);
     toolbar.append(controls);
@@ -318,7 +307,9 @@
       if (!inGraph(event)) return;
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
-      zoom(Math.exp(-event.deltaY * .01), graphPoint(event));
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.height.baseVal.value : 1;
+      const delta = Math.max(-100, Math.min(100, event.deltaY * unit));
+      zoom(Math.exp(-delta * .001), graphPoint(event));
     }, { passive: false });
     let pointer;
     svg.addEventListener('pointerdown', event => {
@@ -351,8 +342,8 @@
     svg.addEventListener('pointercancel', endPan);
     viewport.addEventListener('lostpointercapture', endPan);
     viewport.addEventListener('keydown', event => {
-      if (event.key === '+' || event.key === '=') zoom(1.25);
-      else if (event.key === '-') zoom(1 / 1.25);
+      if (event.key === '+' || event.key === '=') zoom(1.05);
+      else if (event.key === '-') zoom(1 / 1.05);
       else if (event.key === '0') reset();
       else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
         camera.x += (event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0) * camera.width / 10;

@@ -44,15 +44,6 @@ svg[data-linnet-interactive] .linnet-toolbar {
   color: var(--linnet-panel-ink);
   font: 12px/1.4 system-ui, sans-serif;
 }
-svg[data-linnet-interactive] .linnet-toolbar button {
-  padding: 3px 9px;
-  border: 1px solid color-mix(in srgb, var(--linnet-panel-ink) 20%, transparent);
-  border-radius: 5px;
-  background: var(--linnet-panel-bg);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
 svg[data-linnet-interactive] .linnet-toolbar output {
   min-width: 4ch;
   font-variant-numeric: tabular-nums;

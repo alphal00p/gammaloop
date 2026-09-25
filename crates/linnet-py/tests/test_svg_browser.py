@@ -53,13 +53,17 @@ class SvgBrowserTests(unittest.TestCase):
                         node.click()
                         other.hover()
                         self.assertIn("Node 0", panel.inner_text())
+                        self.assertEqual(
+                            first.locator(".linnet-toolbar button").count(), 0
+                        )
                         initial = camera.get_attribute("viewBox")
-                        first.get_by_role("button", name="Zoom in", exact=True).click()
+                        camera.focus()
+                        page.keyboard.press("+")
                         self.assertNotEqual(camera.get_attribute("viewBox"), initial)
-                        self.assertEqual(first.locator("output").inner_text(), "125%")
+                        self.assertEqual(first.locator("output").inner_text(), "105%")
                         self.assertEqual(second.locator("output").inner_text(), "100%")
                         self.assertIn("Node 0", panel.inner_text())
-                        first.get_by_role("button", name="Fit graph").click()
+                        page.keyboard.press("0")
                         self.assertEqual(camera.get_attribute("viewBox"), initial)
 
                         # A drag beginning on a node pans without changing the selection.
