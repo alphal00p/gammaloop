@@ -108,6 +108,10 @@ graph builder; DOT remains a separate export format.
 `render(config=...)` returns interactive SVG and `to_linnest(config=...)` returns its
 Typst entrypoint; both accept `linnet.RenderConfig`, like Feynman diagrams.
 `to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.
+Its execution summary uses `network.status` to show remaining nodes, operations,
+contractions, and ready operations. “Graph reduced” means no graph work remains;
+library or deferred results can still require materialization. Displaying the network
+does not execute it; redisplay a stepped or executed network to update the snapshot.
 Tensor labels use the registered tensor-name printer, including custom Typst heads
 and scalar arguments. Edge slots use the same Typst index notation as the slot display, with
 alphabet aliases assigned across the entire network. The inspector retains exact indices.

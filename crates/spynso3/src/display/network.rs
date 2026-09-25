@@ -1,6 +1,9 @@
 //! Network graph rendering through Linnet's shared asset and SVG pipeline.
 use super::{DisplaySettings, IndexAliases, TensorDisplayMode, format_atom_with_mode};
-use crate::{metadata::SpensoRepresentationName, network::SpensoNet};
+use crate::{
+    metadata::SpensoRepresentationName,
+    network::{SpensoNet, execution::ExecutionStatus},
+};
 use linnet::half_edge::involution::{Flow, HedgePair, Orientation};
 use pyo3::{
     prelude::*,
@@ -389,11 +392,33 @@ impl SpensoNet {
     }
 }
 
-pub(crate) fn html(svg: &str) -> String {
+pub(crate) fn html(svg: &str, status: &ExecutionStatus) -> String {
+    let state = if status.complete {
+        "Graph reduced"
+    } else {
+        "Pending"
+    };
+    let counts = [
+        (status.nodes, "node"),
+        (status.operations, "operation"),
+        (status.contractions, "contraction"),
+    ]
+    .map(|(count, noun)| format!("{count} {noun}{}", if count == 1 { "" } else { "s" }))
+    .join(" · ");
+    let ready = if status.complete {
+        String::new()
+    } else {
+        format!(" · Ready operations: {}", status.ready.len())
+    };
     format!(
         "<figure class=\"spenso-network\" style=\"max-width:100%;margin:.5rem 0\">\
          <figcaption style=\"font:11px/1.45 ui-monospace,monospace;opacity:.7;margin-bottom:10px\">TensorNetwork</figcaption>\
-         <div style=\"max-width:100%;overflow:auto\">{svg}</div></figure>"
+         <div class=\"spenso-network-status\" data-complete=\"{}\" role=\"status\" \
+         style=\"display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;font:12px/1.5 system-ui,sans-serif;margin-bottom:6px\" \
+         title=\"Current graph snapshot; counts are not time or cost estimates. Graph reduced means no operations or contractions remain; library and deferred results may still need materialization.\">\
+         <strong style=\"font-weight:600\">{state}</strong><span>{counts}{ready}</span></div>\
+         <div style=\"max-width:100%;overflow:auto\">{svg}</div></figure>",
+        status.complete
     )
 }
 

@@ -17,6 +17,42 @@ from symbolica.community.spenso import (
 
 
 class NetworkDisplayTests(unittest.TestCase):
+    def test_execution_summary_tracks_remaining_work_without_executing(self):
+        rep = Representation.euc(2)
+        tensor = Tensor.dense(
+            TensorName("network_status_tests::A")(rep, rep), [1.0, 2.0, 3.0, 4.0]
+        )
+        network = tensor("i", "j") * tensor("j", "k") * tensor("k", "l")
+
+        def summary(value):
+            before = value.to_dot()
+            status = value.status
+            html = value.to_html()
+            self.assertEqual(value.to_dot(), before)
+            text = re.search(r'class="spenso-network-status".*?</div>', html).group()
+            self.assertIn(f'data-complete="{str(status.complete).lower()}"', text)
+            for count, noun in (
+                (status.nodes, "node"),
+                (status.operations, "operation"),
+                (status.contractions, "contraction"),
+            ):
+                self.assertIn(f"{count} {noun}" + ("" if count == 1 else "s"), text)
+            self.assertIn("Graph reduced" if status.complete else "Pending", text)
+            return status
+
+        initial = summary(network)
+        stepped = network.step()
+        partial = summary(stepped)
+        self.assertLess(partial.contractions, initial.contractions)
+        self.assertFalse(partial.complete)
+        stepped.execute()
+        self.assertTrue(summary(stepped).complete)
+        self.assertFalse(summary(network).complete)
+        # A single stored tensor can still have a pending self-contraction.
+        self.assertFalse(summary(tensor.reindex("i", "i")).complete)
+        # A library leaf is structurally reduced without being materialized by display.
+        self.assertTrue(summary(TensorExpression.gamma(4).to_network()).complete)
+
     def test_edge_slots_use_representation_alphabets(self):
         gamma = TensorExpression.gamma(4)(1, 2, 1).to_network()
         labels = re.findall(r'\("label-typst"\): "([^"]*)"', gamma.to_linnest())
