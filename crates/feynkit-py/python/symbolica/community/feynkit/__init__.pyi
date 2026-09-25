@@ -5257,6 +5257,15 @@ class Parameter:
         Return the parameter name.
         """
     @property
+    def texname(self) -> typing.Optional[builtins.str]:
+        r"""
+        The model's LaTeX display label, or None when no label was supplied.
+        MiTeX renders this label in Typst and notebook math output.
+
+        >>> Model.standard_model().parameter("ee").texname
+        'e'
+        """
+    @property
     def lhablock(self) -> typing.Optional[builtins.str]:
         r"""
         Return the Les Houches block name, when defined.

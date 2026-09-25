@@ -1,3 +1,5 @@
+pub mod metric_contraction_benchmark;
+
 use spenso::{
     chain, g, p, q, s, slot,
     structure::{

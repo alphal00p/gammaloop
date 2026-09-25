@@ -239,6 +239,17 @@ fn load_model(
             }
         }
         metadata.set_item("particles", particles)?;
+        let parameters = PyDict::new(py);
+        if module.hasattr("all_parameters")? {
+            for parameter in module.getattr("all_parameters")?.try_iter()? {
+                let parameter = parameter?;
+                if parameter.hasattr("texname")? {
+                    parameters
+                        .set_item(parameter.getattr("name")?, parameter.getattr("texname")?)?;
+                }
+            }
+        }
+        metadata.set_item("parameter_texnames", parameters)?;
         py.import("json")?
             .call_method1("dumps", (metadata,))?
             .extract()
@@ -260,6 +271,15 @@ fn load_model(
                         for field in ["charge", "y_charge", "y_charge_right"] {
                             particle[field] = numbers[field].clone();
                         }
+                    }
+                }
+            }
+            if let Some(parameters) = serialized["parameters"].as_array_mut() {
+                for parameter in parameters {
+                    if let Some(texname) = metadata["parameter_texnames"]
+                        .get(parameter["name"].as_str().unwrap_or_default())
+                    {
+                        parameter["texname"] = texname.clone();
                     }
                 }
             }

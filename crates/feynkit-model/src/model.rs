@@ -143,6 +143,8 @@ pub enum ParameterType {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ParameterDefinition {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texname: Option<String>,
     pub lhablock: Option<String>,
     pub lhacode: Option<Vec<usize>>,
     pub nature: ParameterNature,
@@ -454,6 +456,8 @@ pub struct Coupling {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Parameter {
     pub name: String,
+    /// Model-supplied LaTeX label, independent of the algebraic symbol name.
+    pub texname: Option<String>,
     pub lhablock: Option<String>,
     pub lhacode: Option<Vec<usize>>,
     pub nature: ParameterNature,
@@ -589,6 +593,7 @@ impl Model {
             .map(|parameter| {
                 Ok(Parameter {
                     name: parameter.name.clone(),
+                    texname: parameter.texname.clone(),
                     lhablock: parameter.lhablock.clone(),
                     lhacode: parameter.lhacode.clone(),
                     nature: parameter.nature.clone(),
@@ -942,6 +947,7 @@ impl Model {
                 .iter()
                 .map(|parameter| ParameterDefinition {
                     name: parameter.name.clone(),
+                    texname: parameter.texname.clone(),
                     lhablock: parameter.lhablock.clone(),
                     lhacode: parameter.lhacode.clone(),
                     nature: parameter.nature.clone(),

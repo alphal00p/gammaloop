@@ -58,6 +58,7 @@ const NOTATION_TYP: &str = include_str!("../typst/notation.typ");
 const NOTEBOOK_STYLE: &str = include_str!("../typst/notebook.css");
 
 mod explorer;
+mod labels;
 pub(crate) mod library;
 pub(crate) mod metadata;
 pub(crate) mod network;
@@ -742,18 +743,26 @@ fn format_atom_with_settings(
     mode: TensorDisplayMode,
     settings: &DisplaySettings,
 ) -> String {
-    let aliases = IndexAliases::for_atom(atom, &settings.index_style);
-    let presentation = aliases.presentation_atom(atom, &settings.index_style);
-    prepare_tensor_print(&presentation).format_string(
+    format_atom_with_options(
+        atom,
         &display_options_with_settings(mode, settings),
-        PrintState::new(),
+        &settings.index_style,
     )
 }
 
 fn format_atom_with_mode(atom: &Atom, mode: TensorDisplayMode, show_dimensions: bool) -> String {
-    let aliases = IndexAliases::for_atom(atom, "alphabet");
-    prepare_tensor_print(&aliases.presentation_atom(atom, "alphabet"))
-        .format_string(&display_options(mode, show_dimensions), PrintState::new())
+    format_atom_with_options(atom, &display_options(mode, show_dimensions), "alphabet")
+}
+
+fn format_atom_with_options(atom: &Atom, options: &PrintOptions, index_style: &str) -> String {
+    let aliases = IndexAliases::for_atom(atom, index_style);
+    let presentation = aliases.presentation_atom(atom, index_style);
+    let presentation = if options.mode.is_latex() || options.mode.is_typst() {
+        labels::presentation_atom(&presentation)
+    } else {
+        presentation
+    };
+    prepare_tensor_print(&presentation).format_string(options, PrintState::new())
 }
 
 fn format_structured_with_mode(
@@ -798,16 +807,27 @@ pub(crate) fn format_structured(
     format_structured_with_mode(value, TensorDisplayMode::Plain, show_dimensions)
 }
 
-pub(crate) fn atom_to_latex(atom: &Atom, show_dimensions: bool) -> String {
-    let body = format_atom_with_mode(atom, TensorDisplayMode::Latex, show_dimensions);
-    format!("$${body}$$")
+pub(crate) fn atom_to_latex(
+    atom: &Atom,
+    show_dimensions: bool,
+    max_line_length: Option<usize>,
+) -> String {
+    let mut options = display_options(TensorDisplayMode::Latex, show_dimensions);
+    options.max_line_length = max_line_length;
+    let body = format_atom_with_options(atom, &options, "alphabet");
+    if body.contains("\\\\\n") {
+        format!("$$\\begin{{gathered}}\n{body}\n\\end{{gathered}}$$")
+    } else {
+        format!("$${body}$$")
+    }
 }
 
 pub(crate) fn structured_to_latex(
     value: &SymbolicTensor<PartialStructure>,
     show_dimensions: bool,
+    max_line_length: Option<usize>,
 ) -> String {
-    atom_to_latex(&value.presentation_atom(), show_dimensions)
+    atom_to_latex(&value.presentation_atom(), show_dimensions, max_line_length)
 }
 
 // Typst supplies semantic HTML when the optional renderer is installed;
@@ -875,7 +895,7 @@ fn typst_settings_source(settings: &DisplaySettings, atom: &Atom) -> String {
 fn typst_custom_print_source(settings: &DisplaySettings, atom: &Atom) -> PyResult<String> {
     let options = display_options_with_settings(TensorDisplayMode::Typst, settings);
     let attachments = portable_attachments(atom).map_err(PyRuntimeError::new_err)?;
-    let mut heads = BTreeMap::new();
+    let mut heads = labels::typst_heads(atom);
     for symbol in atom.get_all_symbols(true) {
         if let Some(source) = tensor_head_print(symbol, SpensoPrintBackend::Typst) {
             heads.insert(symbol.get_name().to_owned(), source);

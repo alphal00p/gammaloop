@@ -1,0 +1,605 @@
+//! Shared metric/vector contraction and complete pipeline timings on several shapes.
+//!
+//! `cargo run -p idenso --features reference-cases --profile dev-optim --example metric_contraction_benchmark
+//! -- OUTPUT_DIRECTORY [samples=5] [target_batch_ms=15]`
+//!
+//! The isolated metric-only and shared metric/vector contractors belong to
+//! the same library so this diagnostic can call the private operation directly. The two public
+//! Schoonschip methods and gamma simplification use their normal library entry points.
+//! The repeated-index check is timed separately; it never guards the contractor.
+//! Input creation, validation and output snapshots are outside timing except for
+//! `parse_only` and `parse_and_normalize_dots`, which start from the saved source.
+//! Comparing those methods exposes work moved into construction. Timed calls
+//! include output destruction. Settings with chain-like functions enabled also
+//! cover contractions into ordered chains and cyclic/symmetric traces.
+//!
+//! JSONL records whether the operation changed its input. Exact input/output
+//! snapshots permit before/after comparisons; different symbolic forms still need
+//! an independent tensor-network equality check, not a term-count comparison.
+
+use std::{hint::black_box, path::Path, time::Instant};
+
+use crate::{
+    dirac::GammaSimplifier,
+    epsilon::EpsilonSimplifier,
+    gamma, gamma5,
+    representations::Bispinor,
+    shorthands::schoonschip::{Schoonschip, SchoonschipSettings, SlotContraction},
+};
+use spenso::{
+    g,
+    network::parsing::AtomStructureExt,
+    network::tags::SPENSO_TAG,
+    p, q,
+    structure::representation::{Minkowski, RepName},
+    trace,
+};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView},
+    function, symbol,
+};
+
+struct Case {
+    name: String,
+    expression: Atom,
+    gamma_input: Option<Atom>,
+    source: Option<String>,
+}
+
+impl Case {
+    fn parse(name: &str, source: &str) -> Self {
+        Self {
+            name: name.into(),
+            expression: Atom::parse(
+                source,
+                "spenso",
+                symbolica::parser::ParseSettings::symbolica(),
+            )
+            .unwrap(),
+            gamma_input: None,
+            source: Some(source.into()),
+        }
+    }
+
+    fn cases() -> Vec<Self> {
+        // Register canonical rank-one heads before parsing the vector cases.
+        SPENSO_TAG.rank_one_tensor_symbol("cleanup_benchmark::V");
+        SPENSO_TAG.rank_one_tensor_symbol("cleanup_benchmark::W");
+        let mut cases = vec![
+            Self::parse("metric_hit", "g(mink(4,a),mink(4,b))*T(mink(4,b))"),
+            Self::parse("metric_miss", "g(mink(4,a),mink(4,b))*T(mink(4,c))"),
+            Self::parse("dimension_miss", "g(mink(4,a),mink(4,b))*T(mink(5,b))"),
+            Self::parse("representation_miss", "g(mink(4,a),mink(4,b))*T(euc(4,b))"),
+            Self::parse("dual_hit", "g(lor(4,a),dind(lor(4,b)))*T(lor(4,b))"),
+            Self::parse(
+                "dual_variance_miss",
+                "g(lor(4,a),dind(lor(4,b)))*T(dind(lor(4,b)))",
+            ),
+            Self::parse(
+                "two_metrics",
+                "g(mink(4,a),mink(4,b))*g(mink(4,b),mink(4,c))*T(mink(4,c))",
+            ),
+            Self::parse(
+                "closed_metric_loop",
+                "g(mink(4,a),mink(4,b))*g(mink(4,b),mink(4,c))*g(mink(4,c),mink(4,a))",
+            ),
+            Self::parse(
+                "epsilon_partner",
+                "g(mink(4,a),mink(4,b))*epsilon(mink(4,b),mink(4,c),mink(4,d),mink(4,e))",
+            ),
+            Self::parse(
+                "chain_partner",
+                "g(mink(4,a),mink(4,b))*chain(bis(4,s),bis(4,t),T(mink(4,b),in,out),U(in,out))",
+            ),
+            Self::parse(
+                "trace_partner",
+                "g(mink(4,a),mink(4,b))*trace(bis(4),cyclic(T(mink(4,b),in,out),U(in,out)))",
+            ),
+            Self::parse(
+                "sum_of_products",
+                "x*g(mink(4,a),mink(4,b))*T(mink(4,b))+y*g(mink(4,a),mink(4,c))*U(mink(4,c))",
+            ),
+            Self::parse(
+                "factored_sum_partner",
+                "g(mink(4,a),mink(4,b))*(T(mink(4,b))+U(mink(4,b)))",
+            ),
+            Self::parse("compact_metric", "g(mink(4,a),P(mink(4)))*T(mink(4,a))"),
+            Self::parse("no_metric", "T(mink(4,a))*U(mink(4,a))"),
+            Self::parse(
+                "vector_tensor",
+                "cleanup_benchmark::V(mink(4,a))*T(mink(4,a))",
+            ),
+            Self::parse(
+                "vector_miss",
+                "cleanup_benchmark::V(mink(4,a))*T(mink(4,b))",
+            ),
+            Self::parse(
+                "vector_dimension_miss",
+                "cleanup_benchmark::V(mink(4,a))*T(mink(5,a))",
+            ),
+            Self::parse(
+                "vector_dual",
+                "cleanup_benchmark::V(lor(4,a))*T(dind(lor(4,a)))",
+            ),
+            Self::parse(
+                "vector_variance_miss",
+                "cleanup_benchmark::V(lor(4,a))*T(lor(4,a))",
+            ),
+            Self::parse(
+                "vector_parameter",
+                "cleanup_benchmark::V(a,mink(4,a))*T(mink(4,a))",
+            ),
+            Self::parse(
+                "vector_dot",
+                "cleanup_benchmark::V(mink(4,a))*cleanup_benchmark::W(mink(4,a))",
+            ),
+            Self::parse(
+                "vector_chain",
+                "cleanup_benchmark::V(mink(4,a))*chain(bis(4,s),bis(4,t),T(mink(4,a),in,out),U(in,out))",
+            ),
+            Self::parse(
+                "vector_trace",
+                "cleanup_benchmark::V(mink(4,a))*trace(bis(4),cyclic(T(mink(4,a),in,out),U(in,out)))",
+            ),
+            Self::parse(
+                "vector_symmetric_trace",
+                "cleanup_benchmark::V(mink(4,a))*trace(bis(4),sym(T(mink(4,a),in,out),U(in,out)))",
+            ),
+            Self::parse(
+                "vector_epsilon",
+                "cleanup_benchmark::V(mink(4,a))*epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d))",
+            ),
+            Self::parse(
+                "tagged_compact_metric",
+                "g(mink(4,a),cleanup_benchmark::V(mink(4)))*T(mink(4,a))",
+            ),
+            Self::parse(
+                "epsilon_square",
+                "epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d))^2",
+            ),
+            Self::parse(
+                "epsilon_distinct_pair",
+                "epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d))*epsilon(mink(4,e),mink(4,f),mink(4,h),mink(4,j))",
+            ),
+            Self::parse(
+                "epsilon_compact_spectator",
+                "epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d))*g(mink(4,e),cleanup_benchmark::V(mink(4)))",
+            ),
+        ];
+        for (name, source) in [
+            ("dot_self_trace", "g(mink(4,a),mink(4,a))"),
+            ("dot_self_trace_square", "g(mink(4,a),mink(4,a))^2"),
+            ("dot_self_trace_cube", "g(mink(4,a),mink(4,a))^3"),
+            ("dot_symbolic_trace_square", "g(mink(D,a),mink(D,a))^2"),
+            ("dot_compound_trace", "g(mink(Nc^2-1,a),mink(Nc^2-1,a))"),
+            ("dot_dual_trace_square", "g(lor(4,a),dind(lor(4,a)))^2"),
+            ("dot_dual_trace_miss", "g(lor(4,a),lor(4,a))"),
+            ("dot_trace_dimension_miss", "g(mink(4,a),mink(5,a))"),
+            ("dot_metric_square", "g(mink(4,a),mink(4,b))^2"),
+            ("dot_metric_fourth", "g(mink(D,a),mink(D,b))^4"),
+            ("dot_metric_negative_even", "g(mink(4,a),mink(4,b))^(-2)"),
+            ("dot_metric_fractional", "g(mink(4,a),mink(4,b))^(1/2)"),
+            ("dot_vector_square", "cleanup_benchmark::V(mink(4,a))^2"),
+            ("dot_vector_cube", "cleanup_benchmark::V(mink(4,a))^3"),
+            (
+                "dot_nested_vectors",
+                "cleanup_benchmark::V(cleanup_benchmark::W(mink(4)))",
+            ),
+            (
+                "dot_compact_vector",
+                "g(mink(4,a),cleanup_benchmark::V(mink(4)))",
+            ),
+            (
+                "dot_vector_dimension_miss",
+                "g(mink(4,a),cleanup_benchmark::V(mink(5)))",
+            ),
+            ("dot_vector_no_slot", "g(mink(4,a),cleanup_benchmark::V(x))"),
+            (
+                "dot_compact_scalar_factors",
+                "g(3*cleanup_benchmark::V(mink(4)),-2*cleanup_benchmark::W(mink(4)))",
+            ),
+            ("dot_factored_scope", "(x+g(mink(4,a),mink(4,a)))^2*(y+z)"),
+            ("dot_malformed_metric", "g(mink(4,a),mink(4,b),x)"),
+            ("dot_malformed_slot", "g(mink(4,a,x),mink(4,a,x))"),
+            ("dot_opaque_payload", "S(g(mink(4,a),mink(4,a)),x)"),
+        ] {
+            cases.push(Self::parse(name, source));
+        }
+        cases.push(Self::parse(
+            "symmetric_trace_partner",
+            "g(mink(4,a),mink(4,b))*trace(bis(4),sym(T(mink(4,b),in,out),U(in,out)))",
+        ));
+        let spectators = (0..48)
+            .map(|i| format!("S{i}(x{i})"))
+            .collect::<Vec<_>>()
+            .join("*");
+        for length in [8, 32, 128] {
+            let sum = (0..length)
+                .map(|i| format!("T{i}(mink(4,b))"))
+                .collect::<Vec<_>>()
+                .join("+");
+            for (kind, source) in [
+                ("metric", "g(mink(4,a),mink(4,b))"),
+                ("vector", "cleanup_benchmark::V(mink(4,b))"),
+            ] {
+                cases.push(Self::parse(
+                    &format!("{kind}_sum_{length}"),
+                    &format!("{source}*({sum})"),
+                ));
+            }
+        }
+        cases.push(Self::parse(
+            "factored_nested_sum_partner",
+            "(x+y)^6*g(mink(4,a),mink(4,b))*(z*T(mink(4,b))+(x+y)*(U(mink(4,b))+V(mink(4,b))))",
+        ));
+        cases.push(Self::parse(
+            "many_spectators_hit",
+            &format!("{spectators}*g(mink(4,a),mink(4,b))*T(mink(4,b))"),
+        ));
+        cases.push(Self::parse(
+            "many_spectators_miss",
+            &format!("{spectators}*g(mink(4,a),mink(4,b))*T(mink(4,c))"),
+        ));
+        for length in [8, 16, 32, 64] {
+            let metrics = (0..length)
+                .map(|i| format!("g(mink(4,i{i}),mink(4,i{}))", i + 1))
+                .collect::<Vec<_>>()
+                .join("*");
+            let name = if length == 8 {
+                "eight_metrics".into()
+            } else {
+                format!("metric_chain_{length}")
+            };
+            cases.push(Self::parse(
+                &name,
+                &format!("{metrics}*T(mink(4,i{length}))"),
+            ));
+            let closed = (0..length)
+                .map(|i| format!("g(mink(4,i{i}),mink(4,i{}))", (i + 1) % length))
+                .collect::<Vec<_>>()
+                .join("*");
+            cases.push(Self::parse(&format!("metric_loop_{length}"), &closed));
+        }
+        let mink = Minkowski {}.new_rep(4);
+        let spin = Bispinor {}.new_rep(4).to_symbolic([]);
+        for length in [6, 8, 10, 12] {
+            let mut factors = vec![gamma5!()];
+            factors.extend(
+                (0..length)
+                    .map(|i| gamma!(mink.pattern(symbol!(&format!("metric_benchmark::mu{i}"))))),
+            );
+            let input = trace!(&spin; factors);
+            cases.push(Self {
+                name: format!("axial_{length}"),
+                expression: input.simplify_gamma(),
+                gamma_input: Some(input),
+                source: None,
+            });
+        }
+        let indices: Vec<_> = (0..8)
+            .map(|i| mink.pattern(symbol!(&format!("metric_benchmark::nu{i}"))))
+            .collect();
+        let free = trace!(&spin;indices.iter().map(|index|gamma!(index)));
+        cases.push(Self {
+            name: "free_trace_8".into(),
+            expression: free.simplify_gamma(),
+            gamma_input: Some(free),
+            source: None,
+        });
+        let p = p!(mink.to_symbolic([]));
+        let q = q!(mink.to_symbolic([]));
+        let compact = trace!(&spin;(0..8).map(|i|gamma!(if i<2{&p}else{&q})));
+        cases.push(Self {
+            name: "compact_paired_8".into(),
+            expression: compact.simplify_gamma(),
+            gamma_input: Some(compact),
+            source: None,
+        });
+        let a = mink.pattern(symbol!("metric_benchmark::a"));
+        let b = mink.pattern(symbol!("metric_benchmark::b"));
+        let c = mink.pattern(symbol!("metric_benchmark::c"));
+        let d = mink.pattern(symbol!("metric_benchmark::d"));
+        let momenta: Vec<_> = (0..10)
+            .map(|i| {
+                function!(
+                    SPENSO_TAG.rank_one_tensor_symbol(&format!("metric_benchmark::p{i}")),
+                    mink.to_symbolic([])
+                )
+            })
+            .collect();
+        let p = &momenta;
+        let odd = [&a, &p[0], &a, &p[1], &p[2], &p[3], &p[4], &p[5]];
+        let even = [
+            &a, &p[0], &p[1], &p[2], &p[3], &a, &p[4], &p[5], &p[6], &p[7],
+        ];
+        let crossing = [
+            &a, &p[0], &b, &p[1], &p[2], &a, &p[3], &p[4], &b, &p[5], &p[6], &p[7],
+        ];
+        for (name, factors, axial) in [
+            ("order_sensitive_12", crossing.as_slice(), false),
+            ("ordinary_odd_8", odd.as_slice(), false),
+            ("ordinary_even4_10", even.as_slice(), false),
+            ("axial_odd_8", odd.as_slice(), true),
+            ("axial_even4_10", even.as_slice(), true),
+            ("axial_crossing_12", crossing.as_slice(), true),
+            (
+                "ordinary_even2_8",
+                [&a, &p[0], &p[1], &a, &p[2], &p[3], &p[4], &p[5]].as_slice(),
+                false,
+            ),
+            (
+                "ordinary_cyclic_12",
+                [
+                    &a, &p[0], &p[1], &p[2], &p[3], &p[4], &p[5], &p[6], &p[7], &p[8], &p[9], &a,
+                ]
+                .as_slice(),
+                false,
+            ),
+        ] {
+            let factors = axial
+                .then(|| gamma5!())
+                .into_iter()
+                .chain(factors.iter().map(|p| gamma!(*p)));
+            let input = trace!(&spin; factors);
+            cases.push(Self {
+                name: name.into(),
+                expression: input.simplify_gamma(),
+                gamma_input: Some(input),
+                source: None,
+            });
+        }
+        let external = g!(&a, &c)
+            * g!(&b, &d)
+            * trace!(&spin; [&a, &p[0], &b, &p[1], &p[2], &c, &p[3], &p[4], &d, &p[5], &p[6], &p[7]].map(|p| gamma!(p)));
+        let free = trace!(&spin; (0..12).map(|i| gamma!(mink.pattern(symbol!(&format!("metric_benchmark::mu{i}"))))));
+        for (name, input) in [("external_metrics_12", external), ("free_12", free)] {
+            cases.push(Self {
+                name: name.into(),
+                expression: input.simplify_gamma(),
+                gamma_input: Some(input),
+                source: None,
+            });
+        }
+        for (dimension, length, axial) in [
+            ("4", 4, false),
+            ("4", 10, false),
+            ("D", 10, false),
+            ("4", 12, true),
+        ] {
+            let mut factors: Vec<_> = (0..length)
+                .map(|i| format!("spenso::gamma(in,out,mink({dimension},late_mu{i}))"))
+                .collect();
+            if axial {
+                factors.insert(0, "spenso::gamma5(in,out)".into());
+            }
+            let trace =
+                Self::parse("", &format!("trace(bis(4),cyclic({}))", factors.join(","))).expression;
+            let metric = Self::parse(
+                "",
+                &format!("g(mink({dimension},late_mu0),mink({dimension},late_mu1))"),
+            )
+            .expression;
+            let evaluated = trace.simplify_gamma();
+            assert!(
+                !evaluated.contains_symbol(SPENSO_TAG.trace),
+                "late-metric fixture must start from an evaluated Dirac trace"
+            );
+            let input = metric * evaluated;
+            cases.push(Self {
+                name: format!(
+                    "late_metric_{dimension}_{length}_{}",
+                    if axial { "axial" } else { "ordinary" }
+                ),
+                expression: input.clone(),
+                gamma_input: Some(input),
+                source: None,
+            });
+        }
+        cases
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Method {
+    NormalizeDots,
+    ParseOnly,
+    ParseAndNormalizeDots,
+    Repeated,
+    MetricCore,
+    SlotCore,
+    GuardedMetricCore,
+    MetricSettings,
+    FullSchoonschip,
+    EpsilonCleanup,
+    FullGamma,
+}
+impl Method {
+    const ALL: [Self; 11] = [
+        Self::NormalizeDots,
+        Self::ParseOnly,
+        Self::ParseAndNormalizeDots,
+        Self::Repeated,
+        Self::MetricCore,
+        Self::SlotCore,
+        Self::GuardedMetricCore,
+        Self::MetricSettings,
+        Self::FullSchoonschip,
+        Self::EpsilonCleanup,
+        Self::FullGamma,
+    ];
+    fn name(self) -> &'static str {
+        match self {
+            Self::NormalizeDots => "normalize_dots",
+            Self::ParseOnly => "parse_only",
+            Self::ParseAndNormalizeDots => "parse_and_normalize_dots",
+            Self::Repeated => "repeated_indices_only",
+            Self::MetricCore => "metric_contractor_only",
+            Self::SlotCore => "slot_contractor",
+            Self::GuardedMetricCore => "guarded_metric_contractor",
+            Self::MetricSettings => "metric_schoonschip",
+            Self::FullSchoonschip => "full_schoonschip",
+            Self::EpsilonCleanup => "epsilon_cleanup",
+            Self::FullGamma => "full_gamma",
+        }
+    }
+    fn input(self, case: &Case) -> Option<AtomView<'_>> {
+        match self {
+            Self::FullGamma => case.gamma_input.as_ref().map(Atom::as_view),
+            Self::ParseOnly | Self::ParseAndNormalizeDots => {
+                case.source.as_ref().map(|_| case.expression.as_view())
+            }
+            _ => Some(case.expression.as_view()),
+        }
+    }
+    fn apply(self, expression: AtomView<'_>, source: Option<&str>) -> Atom {
+        match self {
+            Self::NormalizeDots => expression.normalize_dots(),
+            Self::ParseOnly | Self::ParseAndNormalizeDots => {
+                let parsed = Atom::parse(
+                    source.unwrap(),
+                    "spenso",
+                    symbolica::parser::ParseSettings::symbolica(),
+                )
+                .unwrap();
+                if matches!(self, Self::ParseOnly) {
+                    parsed
+                } else {
+                    parsed.normalize_dots()
+                }
+            }
+            Self::Repeated => Atom::num(i64::from(expression.has_repeated_explicit_indices())),
+            Self::MetricCore => SlotContraction::run(expression, true, false, true),
+            Self::SlotCore => SlotContraction::run(expression, true, true, true),
+            Self::GuardedMetricCore => {
+                if expression.has_repeated_explicit_indices() {
+                    SlotContraction::run(expression, true, false, true)
+                } else {
+                    expression.to_owned()
+                }
+            }
+            Self::MetricSettings => expression.schoonschip_with_settings(
+                &SchoonschipSettings::default()
+                    .without_rank1_tensors()
+                    .with_chain_like_functions(),
+            ),
+            Self::FullSchoonschip => expression.schoonschip_with_settings(
+                &SchoonschipSettings::default().with_chain_like_functions(),
+            ),
+            Self::EpsilonCleanup => expression.simplify_epsilon(),
+            Self::FullGamma => expression.simplify_gamma(),
+        }
+    }
+    fn run(self, expression: AtomView<'_>, source: Option<&str>) {
+        if matches!(self, Self::Repeated) {
+            black_box(black_box(expression).has_repeated_explicit_indices());
+        } else {
+            let _ = black_box(self.apply(black_box(expression), black_box(source)));
+        }
+    }
+    fn batch(self, expression: AtomView<'_>, source: Option<&str>, repetitions: usize) -> f64 {
+        let started = Instant::now();
+        for _ in 0..repetitions {
+            self.run(expression, source);
+        }
+        started.elapsed().as_secs_f64() * 1e9 / repetitions as f64
+    }
+}
+
+pub fn run() {
+    let arguments: Vec<_> = std::env::args().collect();
+    let directory = Path::new(arguments.get(1).expect(
+        "usage: metric_contraction_benchmark OUTPUT_DIRECTORY [samples=5] [target_batch_ms=15]",
+    ));
+    let samples: usize = arguments.get(2).map_or(5, |s| s.parse().unwrap());
+    let target_ms: f64 = arguments.get(3).map_or(15., |s| s.parse().unwrap());
+    assert!(samples > 0 && target_ms.is_finite() && target_ms > 0.);
+    std::fs::create_dir_all(directory).unwrap();
+    crate::representations::initialize();
+    let _ = *crate::epsilon::EPSILON_SYMBOL;
+    for case in Case::cases() {
+        if let Some(source) = &case.source {
+            std::fs::write(directory.join(format!("{}.source", case.name)), source).unwrap();
+        }
+        std::fs::write(
+            directory.join(format!("{}.input", case.name)),
+            case.expression.to_plain_string(),
+        )
+        .unwrap();
+        if let Some(input) = &case.gamma_input {
+            std::fs::write(
+                directory.join(format!("{}.gamma_input", case.name)),
+                input.to_plain_string(),
+            )
+            .unwrap();
+        }
+        let methods: Vec<_> = Method::ALL
+            .into_iter()
+            .filter(|m| m.input(&case).is_some())
+            .collect();
+        let mut changed = Vec::new();
+        let mut repetitions = Vec::new();
+        let mut output_terms = Vec::new();
+        for &method in &methods {
+            let input = method.input(&case).unwrap();
+            let output = method.apply(input, case.source.as_deref());
+            changed.push(output.as_view() != input);
+            output_terms.push(output.nterms());
+            std::fs::write(
+                directory.join(format!("{}.{}.output", case.name, method.name())),
+                output.to_plain_string(),
+            )
+            .unwrap();
+            if matches!(
+                method,
+                Method::NormalizeDots
+                    | Method::MetricCore
+                    | Method::SlotCore
+                    | Method::GuardedMetricCore
+                    | Method::MetricSettings
+                    | Method::FullSchoonschip
+                    | Method::EpsilonCleanup
+            ) {
+                assert_eq!(
+                    method.apply(output.as_view(), None),
+                    output,
+                    "{} {} is not idempotent",
+                    case.name,
+                    method.name()
+                );
+            }
+            let ns = method.batch(input, case.source.as_deref(), 1);
+            repetitions.push((target_ms * 1e6 / ns).ceil().clamp(1., 500_000.) as usize);
+        }
+        let mut timings: Vec<Vec<f64>> = vec![Vec::new(); methods.len()];
+        for sample in 0..samples {
+            for offset in 0..methods.len() {
+                let m = (sample + offset) % methods.len();
+                timings[m].push(methods[m].batch(
+                    methods[m].input(&case).unwrap(),
+                    case.source.as_deref(),
+                    repetitions[m],
+                ));
+            }
+        }
+        for (m, method) in methods.iter().enumerate() {
+            let mut sorted = timings[m].clone();
+            sorted.sort_by(f64::total_cmp);
+            let median = if samples.is_multiple_of(2) {
+                (sorted[samples / 2 - 1] + sorted[samples / 2]) / 2.
+            } else {
+                sorted[samples / 2]
+            };
+            println!(
+                "{{\"case\":{:?},\"method\":{:?},\"terms\":{},\"output_terms\":{},\"changed\":{},\"repeated_indices\":{},\"repetitions\":{},\"samples_ns\":{:?},\"median_ns\":{median}}}",
+                case.name,
+                method.name(),
+                method.input(&case).unwrap().nterms(),
+                output_terms[m],
+                changed[m],
+                case.expression.has_repeated_explicit_indices(),
+                repetitions[m],
+                timings[m]
+            );
+        }
+    }
+}

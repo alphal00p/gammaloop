@@ -484,7 +484,11 @@ impl<'settings> DiracSimplifier<'settings> {
             *crate::epsilon::EPSILON_SYMBOL,
         ];
         let [bispinor, chain, bracket, trace, epsilon_head] = heads.map(|head| head.get_id());
-        let mut observed = Some(SimplificationCandidates::scan(expr.as_view(), heads));
+        let mut observed = Some(SimplificationCandidates::scan(
+            expr.as_view(),
+            heads,
+            || true,
+        ));
         if TERMINAL_CONTEXT
             && self.settings.evaluate_traces
             && observed
@@ -514,7 +518,7 @@ impl<'settings> DiracSimplifier<'settings> {
             // Close metric-linked chains before rewriting, including inert traces.
             let candidates = observed
                 .take()
-                .unwrap_or_else(|| SimplificationCandidates::scan(expr.as_view(), heads));
+                .unwrap_or_else(|| SimplificationCandidates::scan(expr.as_view(), heads, || true));
             let normalized = if candidates.normalized() {
                 expr.clone()
             } else {
@@ -557,7 +561,7 @@ impl<'settings> DiracSimplifier<'settings> {
             // may now contract with the trace output or callback result.
             let rewritten = next != normalized;
             if rewritten {
-                let complete = SimplificationCandidates::scan(next.as_view(), heads);
+                let complete = SimplificationCandidates::scan(next.as_view(), heads, || true);
                 if complete.finished() {
                     return next;
                 }

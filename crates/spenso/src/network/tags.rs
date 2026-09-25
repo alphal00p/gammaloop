@@ -2028,7 +2028,7 @@ mod tests {
         let typst = chain.printer(PrintOptions::typst()).to_string();
 
         assert_eq!(compact, "[factor]");
-        assert_eq!(typst, "lr([\"factor\"])");
+        assert_eq!(typst, "lr([italic(\"factor\")])");
         assert!(!compact.contains("in"));
         assert!(!compact.contains("out"));
     }

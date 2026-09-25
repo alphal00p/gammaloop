@@ -51,6 +51,13 @@ for additional notation controls.
 
 == Schoonschip performance and FORM comparison
 
+The latest qualified complete ladder takes *0.858 s* in the original order
+and *0.300 s* with early rung contractions. Both use tensor-safe replacement
+and include final expansion. Paired gains over the saved build are 9.09% and
+6.66%; current FORM comparisons and mixed trace controls are reported in
+#link(<resumable-observation-public>)[the public qualification below]. These
+results do not establish full FORM parity.
+
 The performance section follows equivalent paired and alternating slash traces through
 three routes: evaluate a free-index trace then contract momenta; contract the indexed
 input with `schoonschip_net()` before taking the trace; or start from the compact slash
@@ -59,9 +66,9 @@ compares the first two complete pipelines, including early conversion cost. The 
 input timing is reported separately. Changing the display layout alone does not change
 the algebra or its cost.
 
-Measurements use three timed runs after a warm-up, rotate execution order, and exclude
-construction, assertions, and rendering. They characterize the installed build and machine;
-they are not a release benchmark of the engines.
+These notebook trace examples use three timed runs after a warm-up, rotate execution
+order, and exclude construction, assertions, and rendering. They characterize the
+installed build and machine; they are not a release benchmark of the engines.
 
 Closed traces now reuse adjacent contractions and the four-dimensional Chisholm
 identities from open chains. A macro dispatches lengths 1–14 to generated short-trace
@@ -290,7 +297,7 @@ HEP integration tests.
 
 // docs-example: syntax
 ```sh
-cargo run -p idenso --profile dev-optim --example metric_contraction_benchmark -- /tmp/metric-benchmark
+cargo run -p idenso --features reference-cases --profile dev-optim --example metric_contraction_benchmark -- /tmp/metric-benchmark
 cargo nextest run -p spenso-hep-lib --test metric_contraction_validation --cargo-profile dev-optim
 ```
 
@@ -765,7 +772,7 @@ The #source-link("examples/notebooks/contraction_performance.json", label: "cont
 
 // docs-example: syntax
 ```sh
-cargo run --locked -p idenso --profile dev-optim --example metric_contraction_benchmark -- /tmp/contraction-full 5 8
+cargo run --locked -p idenso --features reference-cases --profile dev-optim --example metric_contraction_benchmark -- /tmp/contraction-full 5 8
 cargo run --locked -p idenso --profile dev-optim --example contraction_phase_benchmark -- /tmp/contraction-full /tmp/contraction-phases 5 8
 ```
 
@@ -2359,6 +2366,3063 @@ ten previous boundaries and the Laurent case on the actual host library;
 the original patch fails both new regressions. The parity archive's
 `shared_tensor_axial_and_conversion_followup` entry preserves the separate
 releases, exact sources, FORM programs, raw timings, profiles and validation.
+
+== Direct Atom emission without a polynomial
+
+A matched three-way experiment keeps the trace recurrence and its shared recipe
+nodes, then replaces only final emission. Each recipe leaf builds one product
+with `Atom::mul_many`; a single `Atom::add_many` collects the complete result.
+It removes the coefficient-list polynomial, dense exponent arrays and
+`to_expression` call. The saved baseline, corrected conversion experiment and
+direct emitter all start from `43942853`, so this comparison does not include
+the separately retained axial shortcut.
+
+#table(
+  columns: 4,
+  table.header([Expanded tracen input], [Original polynomial, ms],
+    [Patched conversion, ms], [Direct Atoms, ms]),
+  [Free length 10], [1.472], [1.031], [1.605],
+  [Free length 12], [18.814], [13.125], [18.866],
+  [Free length 14], [379.800], [280.832], [368.768],
+  [Order-sensitive contracted 12], [0.931], [0.825], [3.356],
+  [Interior-pair contracted case], [3.282], [2.349], [8.926],
+)
+
+These are medians across three rotating process rounds, timing the complete
+Python transformation with the scalar spectator kept factored. Exact checks,
+source construction and warmup are outside the clock. Removing the polynomial
+is approximately flat at free length 12 and substantially slower for both
+contracted cases. The direct emitter is not retained in production.
+
+The complete typed ladder takes 8.833, 8.804 and 9.044 seconds respectively;
+the raw route takes 17.226, 16.954 and 17.044 seconds. Shared-host ranges and
+paired observations are retained rather than interpreting these controls as
+an improvement in contraction. Trace4 length 8 remains around 0.23 ms.
+All three builds agree exactly, including the ladder's 9,652-term result.
+
+Fresh FORM trace-body CPU medians for the two contracted examples are
+0.757 and 2.550 ms. The corrected conversion experiment is competitive on these
+examples (0.825 and 2.349 ms for whole Python calls), while direct emission
+widens the gap. These clocks have different boundaries: FORM excludes the
+scalar spectator and Python wrapping. Free-length FORM references remain the
+preceding checkpoint's 4.167 ms at length 12 and 53.667 ms at length 14;
+they were not refreshed in this comparison. Broader FORM parity remains open.
+
+In the direct free-length-12 profile, product normalization owns 44.38% of
+sampled cycles, other product construction 6.59%, and the final bulk sum 33.42%.
+Per-leaf factor-ID sorting takes 3.77%. For the contracted order-sensitive word,
+the corresponding shares are 29.69%, 8.27%, 35.20% and 6.86%. These are disjoint
+owners from 288 and 290 samples, not precise wall-time phases. The polynomial
+conversion frames are gone; ordinary Atom construction and normalization now
+dominate. The corrected polynomial patch can skip product normalization for
+proven canonical square-free factors, while the general bulk constructors still
+perform it.
+
+An untimed diagnostic confirms why contraction makes this worse: the
+order-sensitive word has 2,220 recipe leaves but only 315 distinct final
+monomials; the interior-pair word has 5,670 leaves and 1,890 monomials.
+Polynomial coefficient collection therefore avoids roughly seven and three
+times as many Atom product constructions. Free words have no duplicate
+pairings: length 12 has 10,395 leaves and 10,395 monomials. All five diagnostic
+outputs equal their saved full-host outputs exactly.
+
+The isolated emitter passes 112 Rust tests, 207 exact Python records, 117 HEP
+component checks and both added contracted-word checks. Its polynomial-oracle
+regressions cover repeated metrics, powers, cancellation, large exact
+coefficients and callback-sensitive metadata. The current worktree also passes
+all 591 enabled Idenso/Spynso library tests after refreshing four tensor-power
+diagram snapshots and the scoped-index return-type assertion; 22 tests remain
+ignored. Clippy and formatting pass. The parity archive entry
+`shared_tensor_direct_atom_emission_experiment` preserves the source, frozen
+builds, benchmark drivers, all process observations and validation.
+
+== Ladder-focused contraction profile
+
+The current-workspace checkpoint (`f51d1774` host, unpatched Symbolica
+`06906976`) runs the complete typed eight-vertex ladder in *8.551 s* and the
+raw-expression route in *16.408 s*. Fresh FORM takes *0.733 s process wall*,
+leaving an approximately *11.7×* gap for the typed route. These medians cover
+three alternating process pairs; exact checks and fixture setup stay outside
+the clock. All eight stage outputs match the saved reference, including the
+FORM-certified 9,652-term final polynomial. This checkpoint also contains
+unrelated workspace/dependency updates, so its small improvement over the
+preceding release is not attributed to a single contraction change.
+
+A separate unprofiled diagnostic assigns 6.009 s to Schoonschip, 1.579 s to
+typed composition and 1.004 s to initial expansion. Raw construction alone
+takes 10.110 s. These diagnostic phases are distinct from the contiguous
+benchmark above. In the raw-constructor native profile, repeated Symbolica
+initialization probes account for 27.13% of sampled cycles. Repeated accesses
+to public lazy symbol bundles cause these probes even after initialization.
+
+An untimed count explains the importance of collecting terms before dot
+cleanup. At stage eight, the initial dot pass leaves 184,152 terms. One
+productive contraction pass performs 197,841 metric substitutions and 299,093
+rank-one substitutions, collecting 54,846 terms. Its 85,702 nested-vector
+occurrences then normalize to the final 9,652 terms. There are no successful
+metric-component shortcuts in this stage; the main remaining work is vector
+substitution and normalized expression construction.
+
+A subsequent directed-pair inventory finds *no opposite nested orientations*
+in either ladder order. The original final stage has 26 nested-pair types, all
+also present as compact `g` products; the rung-closing final stage has 26 types,
+22 also present as compact `g`. Thus new nested contractions fail to collect
+with existing dots until cleanup. The current vector constructor registers tags
+and printing without the normalization hook that would establish that shared
+form immediately. The installed frontend confirms `p(q(rep)) != q(p(rep))`
+before explicit cleanup, while both clean up to the same symmetric metric.
+
+An isolated native prototype installs that identity on default vector heads,
+sharing its implementation with explicit dot cleanup. It establishes
+`p(q(rep)) = q(p(rep)) = g(p(rep), q(rep))` during construction. Three
+alternating process pairs measure the complete Schoonschip call on the same
+preconstructed stage fixtures:
+
+#table(
+  columns: 4,
+  table.header([Order and stage], [Baseline, ms], [Constructor hook, ms], [Change]),
+  [Original, 6], [832.771], [702.641], [−15.6%],
+  [Original, 8], [2,197.455], [2,406.311], [+9.5%],
+  [Rungs closed early, 6], [58.559], [51.046], [−12.8%],
+  [Rungs closed early, 8], [646.315], [653.410], [+1.1%],
+)
+
+The largest stage regresses, so this prototype is not retained. All 72 timed
+outputs, expanded-output and fixed-point gates agree with the saved references;
+139 focused Idenso tests and four constructor tests pass. Explicit custom
+normalizers retain ownership, and automatic normalization leaves wildcard
+patterns literal. Normalization now precedes enclosing scalar/metadata
+construction; rounded arithmetic is checked against direct canonical-metric
+construction rather than the old deferred collection order. The prototype
+also needs an owner-controlled registration boundary before integration.
+These native results exclude frontend construction and establish no full-ladder
+or FORM improvement. The archive preserves both the measured source and the
+test-only follow-up under `native_vector_constructor_normalization_experiment`.
+
+Sampling that same prototype explains the regression: constructor normalization
+owns 15.6% of the original-order stage-eight samples, while subsequent dot
+cleanup still owns 30.9% and the remaining slot contraction owns 43.5%.
+In the rung-closing order those shares are 12.5%, 32.2% and 44.9%.
+They are disjoint sampled costs, not stopwatch phases. Canonicalizing earlier
+removes one representation mismatch, but still repeatedly constructs dots before
+equal scalar products combine. The `native_vector_constructor_profile` archive
+preserves the exact measured libraries and decoded stacks.
+
+A subsequent isolated prototype caches successful canonical nested-vector
+identities in a bounded thread-local cache. Three alternating process pairs
+reduce original-order stage eight from *2.172 to 2.066 s* and rung-closing
+stage eight from *651 to 572 ms*. Stage six improves by 15.2% and 16.5%,
+respectively. All 36 timed outputs and the callback/fixed-point gates agree;
+139 Idenso tests and six constructor/cache tests pass. This remains an isolated
+native experiment: owner-controlled registration and complete-host validation
+are required before integration. `native_vector_constructor_cache_experiment`
+preserves both the first screen and the refined cache's separate measurements.
+
+The underlying symmetric-function constructor also has avoidable work: it
+copies and rebuilds arguments even when already ordered. An isolated Symbolica
+patch retains ordered arguments and sorts borrowed views otherwise. A scalar-dot
+shaped two-argument microbenchmark improves from 359 to 227 ns when ordered,
+and 357 to 304 ns when reversed. These primitive clocks establish no ladder
+gain. The standalone `symmetric_construction` binary and
+`patches/symmetric-construction.patch` in
+`examples/reproducers/symbolica-expansion` preserve the reproducer and patch;
+`symbolica_symmetric_borrowed_arguments_experiment` retains exact differential
+gates, source identities and clocks.
+
+Emitting compact dots during contraction passes exact and callback checks but
+is not retained: stage six improves 832.73 → 683.74 ms, while stage eight
+regresses 2,192.48 → 2,243.86 ms in three paired native runs. Matched profiles
+show function construction moving from cleanup into the contractor. Doing it
+before terms combine repeats work. These native stage timings exclude Python
+wrapping and do not establish a full-ladder gain.
+
+The parity archive entry `current_ladder_profile_checkpoint` preserves the
+full-host baseline, exact and HEP checks, FORM source, raw clocks and sampled
+profiles. Further changes must be compared against that same frozen host.
+
+The retained constructor changes reuse initialized symbol-bundle handles within
+each syntax predicate and consult the existing successful-interface cache before
+repeating the syntax walk. The cache still stores shapes only: callback-aware
+result validation, logical port merging and index checks remain in place.
+Against the same frozen host, three paired full runs give:
+
+#table(
+  columns: 3,
+  table.header([Complete ladder route], [Baseline], [Handles and shape reuse]),
+  [Typed], [8.489 s], [7.936 s],
+  [Raw expression], [16.798 s], [14.802 s],
+)
+
+Every typed pair improves; its median falls 6.5%. The raw median falls 11.9%,
+but the first raw pair regresses 20.4%, so its improvement is less consistent.
+Fresh FORM takes 0.733 s process wall, leaving a *10.8×* typed gap. Separate
+phase diagnostics reduce raw construction from 10.128 to 7.431 s and typed
+composition from 1.553 to 1.264 s. These are individual diagnostic runs, not
+additive estimates of the medians above. Trace4/tracen controls show small
+mixed changes; no trace improvement is claimed.
+
+All 207 exact comparisons and 117 HEP component checks pass. The live Idenso
+and Spynso libraries pass 592 tests, with 22 default ignored; Clippy and
+formatting pass with no source drift during the checks. The archive entry
+`retained_ladder_constructor_handles_and_shape_cache` records the isolated
+two-file source change, all paired observations, FORM runs and the rejected
+early-dot experiment.
+
+Closing each rung earlier reduces the frontier from rank five to rank three.
+On the frozen baseline, changing only the order gives the following complete
+loop/process medians:
+
+#table(
+  columns: 4,
+  table.header([Vertex order], [Idenso], [FORM], [Ratio]),
+  [1, 2, 3, 4, 5, 6, 7, 8], [8.553 s], [0.729 s], [11.7×],
+  [1, 2, 8, 3, 7, 4, 6, 5], [2.593 s], [0.178 s], [14.5×],
+  [5, 4, 6, 3, 7, 2, 8, 1], [2.569 s], [0.173 s], [14.9×],
+)
+
+Both engines use the same selected order and retain the same final polynomial.
+FORM improves more, so a poor ordering does not explain the relative gap.
+Python accumulates applied vertices while FORM carries the unapplied vertex
+functions throughout; intermediate term counts need not agree. The reverse
+rung-closing order reduces Python's largest expanded input from 186,516 to
+60,314 terms. These are two explicit alternative orders, not measurements of
+an automatic planner or a claim of global optimality.
+
+A further three-pair comparison on that reverse order isolates the retained
+constructor changes: *2.579 → 2.297 s*, with every pair improving. Fresh FORM
+takes *0.171 s*, leaving a *13.4×* gap. The notebook now carries typed interfaces
+between stages and defaults to this rung-closing order; its selector also
+retains the original order and applies the choice to FORM. Both complete
+notebook routes check their 9,652-term result against FORM's exported polynomial.
+The validated build is installed in the notebook interpreter; saved baseline
+environments remain unchanged.
+
+The preceding validation build also fixes a pre-existing strict-syntax inconsistency:
+`dind` accepts representation slots without treating an arbitrary wrapped tensor
+as a slot. Its complete library suite passes *873 tests*, with 22 default ignored,
+plus all-target Clippy and formatting. The 207 exact and 117 HEP checks and both
+actual notebook orders pass again. Fresh medians are *8.224 s* in the original
+order and *2.490 s* closing rungs early, versus FORM's *0.748 s* and *0.182 s*:
+remaining gaps of *11.0×* and *13.7×*. Paired timing changes from the preceding
+build are mixed, so this correctness fix is not claimed as a speedup. The entry
+`final_strict_wrapper_ladder_validation` records this final build separately
+from the isolated performance comparisons above.
+
+The shared `SlotContraction` now collects closed metric/vector components before
+constructing intermediate scalar products. Each monomial supplies a small graph
+of explicit indices: metrics join nodes, vector occurrences terminate paths,
+closed paths yield canonical dots, and metric cycles yield dimensions. Existing
+dots and newly closed paths share one variable table. Exact rational
+coefficients are collected through Symbolica's coefficient-list polynomial
+constructor, followed by one expression emission; no general
+expression-to-polynomial conversion is required.
+
+Admission requires plain vectors and canonical self-dual representations, checks
+each component's index multiplicity, and preserves the existing local pairing
+of positive powers. Unknown functions, metadata-bearing vectors, custom
+callbacks, unsupported powers and open components retain the established
+normalization schedule. A checked 64 MiB bound limits the dense exponent
+storage. Failed admission constructs no speculative callback-bearing result.
+The early attempt uses the existing repeated-explicit-index flag, so scalar
+reruns avoid another collector walk.
+
+Six native processes compare the selected implementation with the frozen
+baseline and an unguarded intermediate. Original-order stage eight improves
+*2.189 → 0.832 s*, and rung-closing stage eight improves *646 → 241 ms*;
+scalar reruns remain approximately *13.5 ms*. The open stage-six controls are
+1–4.3% slower in this screen, and tiny rejected inputs retain sub-microsecond
+admission overhead. These are complete native Schoonschip calls on saved stage
+inputs, not complete-host or FORM timings. The archive entry
+`guarded_pre_dot_closed_component_collection_native_screen` retains all clocks,
+exact/callback checks and the proof that the retained code differs only by
+removing an experiment-specific fixture test.
+
+The selected collector's complete-host validation uses three alternating process
+pairs against a frozen baseline with the same current frontend and dependency
+snapshot. Each complete loop checks the full 9,652-term FORM-certified polynomial
+outside its clock:
+
+#table(
+  columns: 4,
+  table.header([Route and order], [Baseline, s], [Selected, s], [Median change]),
+  [Typed, original], [7.832], [6.979], [−10.9%],
+  [Typed, rungs closed early], [2.349], [2.160], [−8.0%],
+  [Raw, original], [13.784], [12.500], [−9.3%],
+  [Raw, rungs closed early], [4.020], [3.554], [−11.6%],
+)
+
+All original-order typed pairs and all raw pairs improve. Rung-closing typed
+pairs range from 13.7% faster to 3.1% slower, so their median gain has more
+variability. Fresh FORM process medians are *0.725 s* and *0.174 s* in the same
+two orders, leaving typed gaps of *9.6×* and *12.4×*. Python clocks include all
+eight reduction steps but exclude imports, fixture setup and final checks;
+FORM clocks include process startup. These results establish improvement,
+not FORM parity.
+
+Separate instrumented runs attribute the remaining operation time as follows:
+
+#table(
+  columns: 3,
+  table.header([Public operation], [Original order, s], [Rungs closed early, s]),
+  [Schoonschip], [4.389 (66.6%)], [1.214 (62.2%)],
+  [Typed composition], [1.243], [0.467],
+  [Initial expansion], [0.933], [0.256],
+)
+
+Public intervals include applicable result wrapping, validation and old-value
+disposal. These clocks do not separately resolve those inner owners and are not
+additive estimates of the complete-loop medians. The remaining phases account
+for less than 1% in each diagnostic.
+
+Trace controls show mixed changes: free length-12 `tracen` takes
+18.777 → 18.707 ms, free length-8 `trace4` 0.229 → 0.226 ms, and free length-10
+`tracen` 1.481 → 1.551 ms (+4.7%). Axial length-12 takes 1.560 → 1.358 ms.
+No general trace improvement is attributed to this collector; the archive
+preserves all first-pass and rerun samples.
+
+All 877 library tests, 207 exact comparisons, 117 HEP component checks and both
+actual notebook orders pass, with the 22 existing ignored tests unchanged.
+All-target Clippy and formatting pass. The final library source matches the
+measured host; a benchmark-only lint expectation is recorded separately.
+The validated collector is installed in the notebook interpreter. The vector
+constructor hook/cache and the isolated Symbolica patch remain experiments.
+`retained_closed_component_ladder_validation` preserves the complete samples,
+FORM programs, source identities and validation records.
+
+A subsequent profile of that validated build separates native contraction from
+shared interface proof, validation and wrapping. Within public Schoonschip
+intervals, those groups account for 76.3% / 21.2% in original order and
+66.3% / 32.0% when closing rungs early; the remaining 2.6% / 1.8% is unresolved.
+These are sampled cycle shares (427 / 117 samples), not additive wall-time
+measurements. The smaller reverse-order sample is directional evidence.
+`current_closed_collector_ladder_profile` records the phase boundaries and
+classification, with no samples attributed to both groups.
+
+FORM's retained output counts agree with this build at all eight stage
+boundaries in both orders. Its generated-term counter measures a different
+boundary from the already combined expanded input passed to Schoonschip:
+
+#table(
+  columns: 4,
+  table.header([Original stage], [FORM generated], [Expanded input], [Both retain]),
+  [6], [72,828], [50,684], [10,947],
+  [7], [131,364], [92,341], [23,937],
+  [8], [287,244], [186,516], [9,652],
+)
+
+The unapplied FORM vertices are opaque multiplicative spectators, so they do
+not add terms at these boundaries. Equal counts alone do not establish equality
+of every intermediate expression; the complete final polynomial is checked
+independently. FORM applies operations term by term and sorts generated terms
+in buffers, as described in chapters 4 and 16 of its
+#link("https://www.nikhef.nl/~form/maindir/documentation/reference/man.pdf")[reference
+manual]. Its generated count is therefore not a peak number of simultaneously
+materialized terms. Our expanded-input count describes a complete Atom sum.
+The counters do not quantify the cost of that materialization or of postponing
+contractions until after expansion.
+
+The collector now also reduces open components: a vector-to-free-index path
+becomes an indexed vector, and a path between two free indices becomes a metric.
+It retains the exact external slot syntax; the existing shared symbolic tensor
+owns logical order, metadata and typed zeros. Callback-sensitive or unsupported
+expressions keep the established checked route. This extends the same collector,
+renamed from `closed` to `components`, without introducing another tensor type.
+The shared callback certificate also reuses its metric symbol handle within one
+walk, preserving lazy initialization and every metadata/callback check.
+
+Three fresh alternating process pairs compare these changes with the preceding
+closed-component build, using identical frontend and dependency snapshots:
+
+#table(
+  columns: 4,
+  table.header([Route and order], [Before, s], [After, s], [Median change]),
+  [Typed, original], [6.547], [4.784], [−26.9%],
+  [Typed, rungs closed early], [1.880], [1.502], [−20.1%],
+  [Raw, original], [12.535], [10.684], [−14.8%],
+  [Raw, rungs closed early], [3.574], [3.445], [−3.6%],
+)
+
+Every paired ladder comparison improves, with all complete 9,652-term results
+checked exactly. Fresh FORM process medians are 0.724 / 0.177 s, leaving typed
+gaps of 6.6× / 8.5×. The timing boundaries remain those described above; these
+gains must not be added to the isolated native collector or certificate gains.
+All 880 library tests pass (22 existing ignored), as do all-target Clippy,
+formatting, 207 exact comparisons, 117 HEP component checks, and 30 additional
+interface cases with 46 HEP component checks. The added cases cover open paths,
+logical order, metadata, typed zero, unresolved ports, missing branch indices
+and callbacks that change rank.
+
+Separate diagnostic runs of the new build spend 2.484 / 0.823 s in public
+Schoonschip, 1.241 / 0.442 s in composition and 0.925 / 0.257 s in initial
+expansion (original / rung-closing order). Thus contraction still accounts for
+about 53% of these runs, while composition and initial expansion together account
+for about 46%. These are measured complete operation intervals, not a breakdown
+of the paired medians or of their improvement. Trace controls show no general
+gain: free length-12 `tracen` first calls change 19.032 → 19.615 ms (+3.1%),
+while their reruns remain 9.207 → 9.210 ms; other first-call trace/axial controls
+change between −0.1% and +0.7% in this checkpoint.
+
+The supplied pure Symbolica recipe exposes a larger scheduling difference. It
+keeps all unapplied vertices opaque, substitutes contracted indices into their
+arguments, and expands and contracts each replacement's right-hand side before
+multiplication into the surrounding expression. The existing replacement cache
+can then reuse the result for identical bound vertices. The notebook includes
+this explicit alternative using plain symmetric linear `d` and tagged indices,
+derived from the same routing and vertex rule as the typed example. The selected
+order applies to both, and their complete final polynomials are compared after
+notation conversion, including the existing FORM certificate.
+
+A controlled ablation keeps that same plain `d` notation and contraction kernel
+while changing the schedule. The normalized expanded sum at the final vertex
+has the following sizes, before the next separate global contraction, if any:
+
+#table(
+  columns: 3,
+  table.header([Schedule], [Original order], [Rungs closed early]),
+  [Accumulator, expand before contracting], [186,516], [60,314],
+  [Bind future vertices; contract after expansion], [31,724], [22,148],
+  [Bind future vertices; contract the held RHS locally], [9,652], [9,652],
+)
+
+Across all eight steps, the largest expanded sums are 186,516 / 60,314 terms
+for the accumulator and 36,281 / 20,570 for local outside-in contraction.
+All six schedule/order combinations, with the replacement cache both enabled
+and disabled, give exactly the same final 9,652-term polynomial. The local and
+global outside-in variants have identical counts after each completed step;
+their temporary expanded sums differ substantially. Thus completed-stage counts
+alone missed a material difference in the amount of intermediate algebra.
+These counts describe materialized normalized sums, not FORM's generated-term
+stream. The recipe is specific to this ladder; it does not replace the generic
+typed API's interface validation or callback semantics.
+
+Three fresh processes per configuration, with term counting and final checks
+outside the ablation clocks, give the following medians with cache size 1000:
+
+#table(
+  columns: 3,
+  table.header([Scalar Symbolica schedule], [Original, s], [Rungs closed early, s]),
+  [Expand-first accumulator], [2.573], [0.677],
+  [Bind future vertices; global contraction], [1.438], [0.584],
+  [Bind future vertices; local held contraction], [0.867], [0.320],
+)
+
+The supplied loop itself, with only the pinned API's equivalent level-argument
+spelling changed, takes *0.874 / 0.324 s*. Its clocks retain the supplied
+per-stage count/print operations and exclude setup. Fresh FORM process medians
+are *0.724 / 0.173 s*, including process startup: gaps of *1.21× / 1.87×* for
+this scalar recipe, not parity of the generic tensor API. Every final polynomial
+agrees exactly. The first ablation round is systematically slower; all raw
+observations are retained, and these median comparisons must not be read as
+precise confidence intervals. Later local/global observations and all literal
+user/FORM observations are stable within their recorded ranges.
+
+Disabling the replacement cache changes local outside-in medians to
+2.477 / 0.850 s. Bound vertices repeat across the surrounding sum, so caching
+their locally reduced replacement matters. The accumulator has only one
+vertex match per step; its initially different cache-on/off medians are
+temporally confounded and do not establish a caching benefit there.
+A bounded follow-up alternates adjacent cache-on/off accumulator pairs: disabling
+the cache changes time by −1.0% to +2.7%, confirming no substantial benefit for
+that schedule. The original observations remain archived unchanged.
+The plain-metric accumulator also changes representation, contraction kernel
+and interface work relative to the typed route; its residual timing difference
+cannot be assigned entirely to validation. The combined implementation,
+notebook checks, frozen sources and complete measurements are recorded under
+`retained_open_component_ladder_validation`.
+
+A bounded cache of successful nested-vector-to-dot rewrites also passed its
+52 focused tests and exact/callback checks, but is not retained: stage six
+regresses 3.0% while stage eight improves only 2.1%. Reusing those local results
+does not remove global product and sum normalization. The entries
+`rejected_ladder_nested_dot_memoization` and `ladder_order_comparison` preserve
+the rejected source and the order comparison respectively. The next structural
+experiment can reuse Spenso's existing interface-based pair selection; shape
+alone cannot distinguish the two mirrored rung-closing orders, which have
+identical frontier ranks but different term counts.
+
+== Applying the schedule to native tensor contractions
+
+The same experiment now uses Spenso's intrinsic metric, tagged vectors and
+existing Rust Schoonschip implementation. All future vertices remain in the
+expression. A held replacement expands and contracts its substituted body;
+the ambient contraction then binds exposed indices into future vertices.
+The routing and six-term vertex rule are exported from the notebook fixture.
+
+Three counterbalanced fresh processes per configuration give:
+
+#table(
+  columns: 3,
+  table.header([Native Atom schedule], [Original, s], [Rungs closed early, s]),
+  [Expand-first accumulator], [2.531], [0.675],
+  [Accumulator with local RHS contraction], [2.536], [0.673],
+  [Bind future vertices; global contraction], [1.580], [0.539],
+  [Bind future vertices; local held contraction], [1.376], [0.481],
+)
+
+The outside-in reduction is 45.6% and 28.7% shorter than the corresponding
+accumulator. Adding local contraction to the accumulator alone does not help.
+A separate paired comparison gives 1.377 / 0.469 s with replacement caching,
+versus 2.829 / 0.948 s without it. All 36 measured final results equal the full
+9,652-term FORM-certified polynomial and are unchanged by another Schoonschip
+pass. Four closed two- and three-vertex subgraphs also pass independent FORM
+polynomial and exact component comparisons.
+
+These are native Atom clocks on the saved tensor implementation, not Python
+tensor-interface clocks. They include all eight replacement/expansion/contraction
+steps and ordinary intermediate lifetimes, and exclude setup, input parsing,
+term counting, final checks and final-result destruction. The ambient pass is
+full Schoonschip, broader than the supplied recipe's targeted vertex absorption.
+CPU affinity is fixed; unrelated jobs on other cores mean the host is not
+globally quiet. Raw samples and source identities are retained.
+
+Separate diagnostic phases take 0.208 s for held replacement, 0.575 s for
+ambient expansion and 0.627 s for ambient Schoonschip in the original order.
+The local Schoonschip kernels account for only 2.25 ms across 295 cached RHS
+evaluations. Within the ambient Schoonschip profile, approximately 53% of
+samples belong to slot contraction, 28% to dot normalization and 18% to
+candidate scanning. These sampled shares are not additive wall-time phases.
+
+The notebook also executes this schedule through `TensorExpression`, retaining
+its interface checks. Routing momenta are explicitly opaque scalar metadata;
+the final three vertex arguments are ports. Direct compact tagged vectors in
+those positions consume ports without creating external indices. Their remaining
+logical port order is retained, and the result has no atomic stored-data
+descriptor. Scalar wrappers retain their metadata opacity; arbitrary tensor
+metadata and malformed vector arguments remain errors.
+
+The shared inference implementation recognizes these consumed ports directly.
+Scalar algebra can retain an established interface for plain, normalized leaves,
+including leaves with opaque routing metadata. This proof does not change how
+constructors handle callbacks. Callback-sensitive contraction results are still
+observed and checked: a normalizer that turns `T(b)` into a scalar after
+contracting `g(a,b)*T(a)` must not leave a stale rank-one interface. Network
+validation also retains encoded open-index owners, while partial interfaces
+continue to describe unresolved ports by logical position.
+
+Profiling the first typed implementation exposed repeated successful interface
+proofs across terms: they occupied about 35% of operation-filtered samples in
+both orders. The inference owner now remembers successful normalized function
+leaves within the operation, using its existing limits of 256 entries and
+256 bytes per key. This cache stores no inferred port identities and admits no
+failed proof. Constructor inference and callback-sensitive validation retain
+their separate semantics. Index-occurrence collection also uses an equivalent
+shorter head predicate, avoiding redundant composite classification without
+changing which indices are counted.
+
+The completed stages are still not identical to FORM's. In the original order,
+the typed outside-in route retains 11,959 and 25,662 terms after vertices six
+and seven, compared with FORM's 10,947 and 23,937. In the rung-closing order,
+the penultimate stage retains 11,836 versus 10,516. These counts include opaque
+future vertices; every route finishes at the same 9,652-term polynomial.
+Reducing temporary expanded sums therefore does not establish equality of the
+intermediate algorithms or eliminate all remaining algebra work.
+
+== Outside-in schedule checkpoint
+
+Three counterbalanced fresh processes per route and order measure the complete
+eight-step loop, retaining ordinary intermediate lifetimes. Input setup, counting
+and final checks are outside the clock. The preserved baseline and final host
+use the same pinned Symbolica source; the comparison includes the shared tensor
+changes and the selected schedule.
+
+#table(
+  columns: 3,
+  table.header([Route], [Original, s], [Rungs closed early, s]),
+  [Previous typed accumulator], [4.827], [1.528],
+  [Final typed accumulator], [4.470], [1.363],
+  [Typed outside-in before proof caching and shorter index checks], [4.964], [1.676],
+  [Final typed outside-in], [2.909], [1.044],
+  [Supplied scalar Symbolica recipe], [0.897], [0.330],
+  [FORM, complete process wall], [0.723], [0.175],
+)
+
+The final typed route is *39.7% / 31.7% faster* than the preserved accumulator,
+and *41.4% / 37.7% faster* than the first typed implementation of the same
+schedule. All 24 typed measurements and six fresh supplied-recipe measurements
+equal the full FORM-certified polynomial. FORM remains *4.02× / 5.96× faster*
+than the typed route under these clock boundaries; the supplied scalar recipe
+is *1.24× / 1.88×* slower than FORM. This is not general contraction parity.
+The shared host has visible variation: final original-order samples range from
+2.906 to 3.128 s, and early-rung samples from 1.039 to 1.065 s. These are three
+process medians, not confidence intervals.
+
+The final operation-filtered profile reduces successful proof scanning to about
+1–2% of samples. Arbitrary replacement's result observation and index checks
+now account for approximately 52% of the complete typed loop, using disjoint
+native parent categories. This is the largest remaining typed overhead.
+Within expansion, ordinary Symbolica normalization accounts for about 68% of
+samples. Profile shares are diagnostic and cannot be added to the benchmark
+wall times as separately measured phases.
+
+Trace controls retain the same factored scalar spectator and requested expanded
+output before and after. Across nine first-call cases, the final/baseline
+differences range from −2.1% to +0.6%; there is no substantial trace improvement
+in this update. Representative fresh comparisons are in milliseconds:
+
+#table(
+  columns: 4,
+  table.header([Case], [Previous Python], [Final Python], [FORM trace + sort CPU]),
+  [Free length-8 trace4], [0.228], [0.229], [0.0480],
+  [Repeated-index length-8 trace4], [0.0944], [0.0929], [0.0020],
+  [Free length-12 tracen], [19.581], [19.493], [3.8667],
+  [Repeated-index length-8 tracen], [0.1496], [0.1471], [0.0136],
+  [Axial length-12 trace4], [1.376], [1.374], [0.6000],
+)
+
+FORM trace clocks amortize internal tracing and sorting over repeated copies;
+they exclude the Python boundary and scalar spectator. Both first calls and
+unchanged-result reruns are retained in the record. Exact FORM polynomial
+certificates, 207 unchanged Python behavior records, 117 exact HEP component
+rows, 26 new public-boundary controls and two complete factored-ladder component
+assignments pass. The live worktree passes 897 Rust tests, with the previous
+22 skips retained, Clippy and formatting. The notebook executes all three routes
+in both orders against fresh FORM. Raw clocks, source identities, failed
+intermediate diagnostics and final validation are recorded under
+`retained_outside_in_typed_ladder_validation` in the
+#source-link("examples/notebooks/tensor_contraction_parity.json", label: "contraction record").
+
+== Shared replacement validation
+
+Arbitrary replacement must check the resulting tensor interface: a normalizer
+can remove a port, and a replacement can introduce a dummy index that collides
+with another factor. The shared `SymbolicTensor` now observes the result and
+finishes it through one checked boundary. Tensor scope checks performed during
+observation are not repeated during construction. The Python wrapper retains
+descriptor metadata and wraps the checked value without constructing it again.
+
+The explicit-index collector also reuses bounded summaries of repeated,
+normalized function nodes, including scalar dots with no explicit indices.
+Each invocation owns its cache. Products add counts, sums take the maximum
+over their branches, and encoded open-index owners remain distinct. This walk
+inspects syntax and does not execute normalization callbacks. Logical port
+order, typed zeros, unresolved ports, and existing error precedence are
+unchanged; callback-sensitive rank loss still fails validation.
+
+Three counterbalanced fresh processes per route and vertex order compare the
+saved outside-in checkpoint with these validation changes, using the same
+notebook, dependencies and contraction schedules. Medians of the complete
+eight-step loops are in seconds:
+
+#table(
+  columns: 5,
+  table.header([Route], [Original, before], [Original, after],
+    [Early rungs, before], [Early rungs, after]),
+  [Typed accumulator], [4.448], [3.865], [1.390], [1.136],
+  [Typed outside-in], [2.935], [2.220], [1.066], [0.846],
+)
+
+The outside-in route improves by *24.4% / 20.6%* and the accumulator by
+*13.1% / 18.2%*. All 24 runs retain exact equality to the 9652-term FORM
+polynomial, scalar rank and an unchanged contraction rerun. Counting and
+equality checks remain outside the clock. The early-rung candidate samples
+include 0.792, 0.846 and 0.847 s; the median retains that variation rather
+than selecting the fastest run.
+
+Fresh complete FORM process medians are 0.749 / 0.180 s; the supplied scalar
+Symbolica recipe takes 0.887 / 0.330 s. The typed outside-in route is therefore
+still *2.97× / 4.71× slower than FORM*. These clock boundaries retain the
+distinction between the typed loop and FORM process startup. The changes reduce
+validation work without changing intermediate term counts or the algebraic
+schedule.
+
+In separate operation-filtered profiles, explicit-index counting falls from
+about 19% to 3% of sampled cycles. Result validation and finishing together
+fall from approximately 53% / 52% to 38% / 34%. The main remaining categories
+are interface observation and scope validation, Schoonschip contraction, and
+Symbolica normalization. These are sampled CPU shares, not independently
+measured wall-time phases. In particular, removing duplicate validation does
+not remove the obligation to inspect arbitrary replacement results.
+
+All 901 Rust tests pass, with the previous 22 skips retained, along with Clippy
+and formatting. The unchanged 207 API controls, 117 HEP component rows,
+26 public metadata/callback controls, all three notebook routes in both
+orders, and the full factored ladder at two exact component assignments pass.
+
+Trace controls do not show a uniform improvement. Free length-12 tracen changes
+from 20.434 to 20.798 ms in the paired process medians. Axial length-12 shows a
+regression: the original short-loop control is 1.386 to 1.554 ms, and a separate
+longer-loop check confirms 1.392 to 1.580 ms. Its unchanged-result rerun also
+increases, from 2.537 to 2.902 ms in that follow-up. The rerun takes the existing
+identity shortcut and bypasses the new validator; the cause is not established.
+The retained change prioritizes the ladder's reduction of hundreds of
+milliseconds, while preserving this trace regression in the measurement record.
+
+Source identities, complete clocks, profiles, checks and the axial follow-up
+are recorded under `retained_replacement_validation_consolidation` in the
+#source-link("examples/notebooks/tensor_contraction_parity.json", label: "contraction record").
+
+== Tensor-factor replacement
+
+`TensorExpression.replace_tensor(pattern, rhs, rhs_cache_size=1000)` applies
+tensor identities to whole factors inside sums and products. It uses
+Symbolica's matcher and supports held right-hand sides, including the local
+expansion and contraction used by the ladder. Tensor arguments and scalar
+metadata are opaque to this traversal.
+
+The operation checks the actual matched factor and the reduced right-hand side
+for compatible explicit ports. A replacement may consume internal contracted
+indices, but cannot introduce extra occurrences or unrelated dummy indices.
+These restrictions let it preserve the surrounding tensor's established
+interface. This certifies tensor structure; the supplied rule still determines
+the algebraic identity. Repeated right-hand sides and their local summaries share a bounded
+cache; conditions still run at every match. The left-hand side is not rebuilt
+for validation, so its normalizer is not replayed. A source-admission walk is
+still required; the saving is avoiding inference of the complete result.
+
+Unresolved ports, remaining user normalization or evaluation hooks, and tensor
+powers that the interface proof cannot certify are rejected. RHS callbacks may
+produce an admitted normalized expression; set `rhs_cache_size=0` when those
+callbacks have side effects. Use `replace` for general Symbolica traversal and
+its full-result interface checks, and `rename_indices` or `reindex` for deliberate
+changes of index labels. Tensor-factor replacement retains logical port order and typed
+zeros while checking callback-sensitive replacement results.
+
+=== Complete ladder measurements
+
+The notebook now uses `replace_tensor` for the typed outside-in route. Three
+counterbalanced fresh processes per route and order compare the saved `b2ee`
+build with the new `60e11d75` build, including both replacement methods in the
+new build. Medians of the complete eight-step reduction are in seconds:
+
+#table(
+  columns: 3,
+  table.header([Route], [Original order], [Early rungs]),
+  [Saved typed generic replacement], [2.632], [1.138],
+  [New build, generic replacement], [2.303], [0.830],
+  [New build, tensor-safe replacement], [2.157], [0.686],
+  [Supplied scalar Symbolica recipe], [0.962], [0.344],
+  [FORM complete process], [0.791], [0.186],
+)
+
+Within the same build, the ratio of medians improves by *6.4% / 17.4%*. Every
+paired round improves in both orders. The saved-baseline samples vary widely:
+2.416–3.097 s in the original order and 0.814–1.325 s with early rung closure.
+The table retains those medians; it does not establish a universal percentage
+gain. Tensor-safe early-rung samples are 0.669, 0.686 and 0.718 s.
+
+The typed route remains *2.73× / 3.68× slower than FORM*. Its clocks include
+replacement, expansion and contraction, excluding setup, counting and exact
+checks; FORM includes process startup. All 30 typed reduction loops retain the
+same 9652-term scalar, exact FORM equality and unchanged reruns. Intermediate
+term counts are unchanged: original-order and early-rung peaks remain 25662
+and 11836, respectively.
+
+Separate 199 Hz profiles attribute roughly 33–36% of sampled cycles to the
+Schoonschip kernel, 26–27% to replacement traversal, matching and reconstruction
+(including its intrinsic callback guard), and 17–22% to other Symbolica
+normalization. Local replacement-signature observation accounts for 1.5–2.8%,
+with another 4.6–5.2% in the source-interface proof. These do not include all
+validation: the intrinsic guard contributes 2.2–2.8% within the replacement
+category. These are disjoint sampled CPU categories from separate diagnostic
+loops, not wall-time fractions. The profiles contain 371 / 136 operation
+samples, so small categories have limited precision.
+
+The controls show no general trace speedup. Free length-10 tracen increases
+from 1.590 to 1.668 ms, with all three paired processes slower. Free length-12
+tracen changes from 20.052 to 21.022 ms with mixed paired signs. Axial
+length-12 trace4 is essentially unchanged at 1.549 to 1.552 ms. The reverse
+accumulator median also increases by 3.5%. These observations remain in the
+record; their causes are not established. The retained improvement targets
+the complete ladder through the new operation.
+
+Validation passes all 910 Rust tests, Clippy and formatting, the unchanged
+207 API records and 117 HEP component rows, 32 new public replacement controls
+and 26 existing controls. Actual notebook cells pass in both orders, and the
+complete factored eight-vertex network agrees at two exact component
+assignments. The public tests compare logical ports independently of inferred
+tensor names and also require descriptor parity with general replacement.
+
+Sources, commands, raw timings, profiles and checks are preserved in the local
+measurement bundle at `/tmp/idenso-tensor-safe-replace-host`. The
+`retained_tensor_safe_replacement` checkpoint is prepared for the
+#source-link("examples/notebooks/tensor_contraction_parity.json", label: "contraction record");
+appending it awaits explicit approval. The existing archive is unchanged.
+
+=== Symbol classification and remaining contraction walks
+
+The tensor classifier now borrows Spenso's initialized tag bundle once per
+classification. It checks a symbol's symmetry attributes before comparing it
+with a projector symbol. Exact symbol equality still distinguishes projectors
+from ordinary tensors carrying the same attributes. Registered and imported
+projectors retain their nested ports; unrelated attributed tensor leaves retain
+their declared ports and scalar metadata.
+
+Outside initializer reentry, public lazy-bundle access synchronizes with
+Symbolica's registered initializers through a discarded `State::is_builtin`
+lookup. In the saved
+`60e11d75` profiles, those lookups account for about 5.9% / 6.6% of inclusive
+sampled cycles. An isolated warm primitive measures 10.61 ns for a bundle
+access and 0.657 ns through a held reference. These primitive clocks do not
+predict a complete-ladder speedup. The change retains the initialization
+barrier, reentry handling and license checks; no global readiness cache was
+introduced. A concurrent reproducer confirms that merely reading an existing
+symbol can return before registered initializers finish.
+
+A fresh 24-process matrix compares the saved `60e11d75` build with the retained
+`9c8b475a` classifier cleanup. Each row has three fresh-process samples per
+order; the typed variants run in counterbalanced rounds. Complete reduction
+medians are seconds:
+
+#table(
+  columns: 3,
+  table.header([Route], [Original order], [Early rungs]),
+  [Saved build, tensor-safe replacement], [1.764], [0.676],
+  [Classifier cleanup, tensor-safe replacement], [1.765], [0.663],
+  [Saved build, generic replacement], [2.309], [0.822],
+  [Classifier cleanup, generic replacement], [2.344], [0.823],
+  [Supplied scalar Symbolica recipe], [1.003], [0.349],
+  [FORM complete process], [0.827], [0.198],
+)
+
+The matched tensor-safe medians change by *+0.08% / −1.98%*. Paired samples
+have mixed signs, so this does not establish a speedup in both orders. The
+cleanup is retained as a small removal of redundant initialization checks.
+The generic controls change by +1.52% / +0.07%. Cross-session differences are
+larger than this change: the lower original-order time relative to the earlier
+table also occurs in the unchanged saved build and must not be attributed to
+the classifier. All samples, including the slower first baseline samples,
+remain in the record.
+
+The retained tensor-safe route remains *2.14× / 3.35× slower than FORM* in this
+session. Python clocks cover the eight reduction steps; FORM clocks include
+startup. All 24 reductions preserve the exact scalar result and intermediate
+counts. The unchanged notebook cells pass in both orders against fresh FORM;
+912 Rust tests, Clippy, formatting, 207 API records, 117 HEP rows, 58 public
+controls and the complete network component checks pass. The complete
+measurement bundle is `/tmp/idenso-initialization-guard-host`.
+
+Trace controls remain mixed. First-transformation medians below are milliseconds;
+the Python method clock and FORM's batched body CPU clock have different
+boundaries, unlike the complete-process FORM ladder clock above.
+
+#table(
+  columns: 4,
+  table.header([Case], [Saved build], [Classifier cleanup], [FORM body CPU]),
+  [Free 2, tracen], [0.02150], [0.02094], [0.00070],
+  [Free 4, tracen], [0.07532], [0.07432], [0.00145],
+  [Free 6, tracen], [0.12253], [0.12138], [0.00560],
+  [Free 10, tracen], [1.65475], [1.63159], [0.35667],
+  [Free 12, tracen], [20.72884], [20.95333], [4.43333],
+  [Free 8, trace4], [0.23939], [0.24758], [0.04933],
+  [Repeated 8, tracen], [0.16067], [0.17939], [0.01440],
+  [Repeated 8, trace4], [0.09369], [0.09209], [0.00200],
+  [Axial 12, trace4], [1.86560], [1.65081], [0.64800],
+)
+
+The repeated length-8 tracen median increases by 11.7%, with mixed paired
+signs. Free length-12 tracen's rerun control increases from 9.369 to 10.567 ms,
+also with mixed paired signs. Axial trace4's first median decreases by 11.5%,
+but its first process pair is essentially flat. The free length-8 trace4 rerun
+is slower in all three pairs (1.3–7.6%). These observations do not establish a
+general trace improvement; all exact output checks still pass.
+
+Separate untimed counters explain the contractor's remaining discovery work.
+They use the actual inputs to stages 1–7 of both tensor-safe ladder orders and
+match all saved stage outputs exactly:
+
+#table(
+  columns: 3,
+  table.header([Counter], [Original order], [Early rungs]),
+  [Actual substitutions], [82,042], [42,444],
+  [Discarded first-hit substitutions], [7], [7],
+  [Discovery product searches], [263,406], [79,313],
+  [Discovery visitor nodes], [3,007,991], [1,000,922],
+)
+
+Each active stage performs one modifying map followed by one unsuccessful
+discovery pass. Reusing the seven discarded first results would save little;
+the final no-work traversal is the stronger candidate. Callback purity alone
+does not justify skipping it: an unchanged factor may contain a metric product
+inside scalar metadata. A locality certificate would also need to exclude
+that work and account for normalization that exposes products. The production
+contractor retains its fixed-point walk. The scalar eighth-stage control is
+excluded from the table because the public pipeline skips contraction there.
+
+The initialization source, concurrency checks and primitive samples are in
+`/tmp/idenso-initialization-probe`; the contraction counters and exact stage
+fixtures are in `/tmp/idenso-certified-contraction-audit/diagnostic`.
+
+=== Completion-scan experiment (not retained)
+
+An isolated candidate (`72384254`) extended the existing index observation with
+the location of each explicit metric/vector source. When all sources belonged
+to outer products, normalization was intrinsic, and no replacement exposed
+new arithmetic, the contractor could omit its final unsuccessful traversal.
+Hidden sources, callbacks, component emission and chain rewriting retained the
+existing fixed-point search. The modifying pass and arithmetic order stayed
+unchanged.
+
+The initial eight-process screen improved both order medians by about 4%, but
+the separate 24-process matrix did not establish a consistent gain. Complete
+reduction medians are seconds; each typed row has three fresh-process samples:
+
+#table(
+  columns: 3,
+  table.header([Route], [Original order], [Early rungs]),
+  [Retained build, tensor-safe replacement], [1.994], [0.689],
+  [Experimental completion shortcut], [1.756], [0.891],
+  [Retained build, generic replacement], [2.596], [0.848],
+  [Experimental build, generic replacement], [2.708], [0.813],
+  [Supplied scalar Symbolica recipe], [0.959], [0.354],
+  [FORM complete process], [0.792], [0.176],
+)
+
+Two early-rung candidate samples were 27% and 39% slower; the third was 8%
+faster. A prespecified follow-up of four counterbalanced pairs added process
+and thread CPU clocks around the unchanged reduction. All four pairs improved,
+with wall medians 0.727 → 0.670 s and process CPU medians 0.718 → 0.662 s.
+It also contained a slow 1.013 s baseline sample. Scheduler waiting was small
+in that follow-up; these observations cannot retrospectively explain the
+original slow candidate samples. The screen, matrix and diagnostic remain
+separate, with no discarded samples.
+
+Trace controls showed no general improvement: free length-12 tracen changed
+from 19.170 to 20.255 ms and axial length-12 trace4 from 1.564 to 1.615 ms,
+both with mixed paired signs. Free length-10 tracen increased by 1.25%, with
+all three pairs slower.
+
+Correctness passed 917 Rust tests, Clippy, formatting, 207 API records,
+117 HEP rows, 58 public controls, 24 adversarial cases, all 16 saved stages
+and fixed points, actual notebook routes against fresh FORM, and the complete
+factored ladder component checks. Intermediate counts were unchanged.
+The seven-file experimental delta was nevertheless restored to the saved
+`9c8b475a` sources: the added complexity did not demonstrate a consistent
+end-to-end benefit. The installed build and tensor-safe replacement are
+unchanged. In this session the retained build remains 2.52× / 3.93× slower
+than FORM. Sources, raw samples, checks and the decision are preserved under
+`/tmp/idenso-contraction-completion-host`.
+
+=== Reusing Symbolica's tensor-factor matcher
+
+Tensor-factor replacement now keeps one lazily constructed
+`AtomMatchIterator` and its `WrappedMatchStack` for the operation. It clears
+bindings before each new factor and uses `next()` to require fully satisfied
+conditions. This replaces the former per-factor tree iterator, whose configured
+search visited only the root. A fixed function-name pattern also skips factors
+with another name before tensor classification. Wildcard heads, alternatives
+and optional arithmetic patterns keep Symbolica's matching semantics.
+
+The shared Idenso implementation still observes the actual matched factor,
+checks each normalized RHS against its interface and explicit-index counts,
+and validates cached results against each actual target. Conditions run before
+cache lookup; RHS callbacks retain their existing cache behavior. Lazy matcher
+construction preserves the existing behavior when no eligible leaf is reached.
+No interface proof, callback guard or Python conversion behavior was removed.
+
+The retained `ac275b56` build is compared with saved `9c8b475a` using three
+counterbalanced fresh processes per route and order. Complete eight-step
+reduction medians are seconds; setup and exact checks are outside the typed
+clock, while FORM includes process startup:
+
+#table(
+  columns: 3,
+  table.header([Route], [Original order], [Early rungs]),
+  [Saved build, tensor-safe replacement], [1.723], [0.655],
+  [Reused matcher, tensor-safe replacement], [1.637], [0.604],
+  [Saved build, generic replacement], [2.376], [0.816],
+  [New build, generic replacement], [2.271], [0.825],
+  [Supplied scalar Symbolica recipe], [0.955], [0.360],
+  [FORM complete process], [0.811], [0.180],
+)
+
+Tensor-safe medians decrease by *4.97% / 7.76%*. All six matched process pairs
+improve: 1.5–6.5% in the original order and 4.6–11.0% with early rungs; process
+CPU clocks give similar changes. Within the new build, tensor-safe replacement
+is *27.9% / 26.8% faster* than generic replacement. The generic original-order
+control also improves by 4.45%, so the entire original-order build difference
+cannot be attributed solely to matcher reuse. These small samples establish
+this measured result, not a universal speedup.
+
+The separate initial eight-process screen improved three pairs, with the fourth
+4.76% slower. Its order medians changed by −4.56% / −1.03%; it is not pooled
+with the full comparison. An earlier fixed-name-only candidate retired
+4.1–5.1% fewer user instructions in four hardware-counter pairs, but wall and CPU
+times remained mixed. In its slow early-rung pair, fewer instructions coincided
+with more cycles per instruction and cache misses. That diagnostic does not
+identify the stall source or explain earlier unprofiled slow samples. The
+intermediate candidate was not installed separately.
+
+Final output remains the same 9652-term scalar, exactly equal to FORM.
+Intermediate counts are unchanged: original-order and early-rung peaks remain
+25662 and 11836. The retained typed route is still *2.02× / 3.35× slower than
+FORM*. This change reduces replacement overhead; it does not change contraction
+order or the number of generated terms.
+
+Trace controls show no general improvement. First-transformation medians below
+are milliseconds. The Python method clock and FORM's batched body CPU clock
+have different boundaries:
+
+#table(
+  columns: 4,
+  table.header([Case], [Saved build], [New build], [FORM body CPU]),
+  [Free 2, tracen], [0.02079], [0.02012], [0.00066],
+  [Free 4, tracen], [0.07261], [0.07050], [0.00140],
+  [Free 6, tracen], [0.12126], [0.11961], [0.00540],
+  [Free 10, tracen], [1.57321], [1.62166], [0.36000],
+  [Free 12, tracen], [20.05999], [20.39048], [4.20000],
+  [Free 8, trace4], [0.24481], [0.23886], [0.04867],
+  [Repeated 8, tracen], [0.15591], [0.15489], [0.01540],
+  [Repeated 8, trace4], [0.09393], [0.09460], [0.00200],
+  [Axial 12, trace4], [1.60134], [1.61769], [0.65200],
+)
+
+Axial trace4's first transformation is slower in all three pairs. Rerun medians
+increase by 0.09–3.92%; free length-4 tracen and repeated length-8 trace4 reruns
+are slower in all three pairs. These observations are retained without a causal
+claim about code paths unchanged by this patch.
+
+Validation passes 918 Rust tests, Clippy and formatting, 207 API records,
+117 HEP rows, 84 public controls, the actual notebook's three routes in both
+orders, and the complete factored ladder at two independent exact component
+assignments. Regressions compare condition and RHS callback transcripts across
+cache settings, including failed matches, backtracking, changing arities,
+symmetric metric arguments, and lazy construction. The two initially invalid
+test fixtures were corrected to use admitted tensors; production checks were
+unchanged.
+
+The previous profile still identifies contraction and normalization as major
+remaining costs; no new profile is claimed for this build. A further concrete
+allocation candidate is the RHS cache key: lookup currently clones bindings
+even on hits and when the cache is full. A borrowed lookup could defer that
+copy until insertion; it is not implemented in this measurement.
+
+Sources, raw samples, exact checks and the final summary are preserved under
+`/tmp/idenso-reused-matcher-host`; the fixed-name-only diagnostic is under
+`/tmp/idenso-fixed-head-replacement-host`. The existing 85-entry benchmark
+archive is unchanged.
+
+=== Borrowing RHS cache keys
+
+Tensor-factor replacement now looks up cached right-hand sides using the
+borrowed match bindings. It copies the bindings only when inserting a new cache
+entry. Hits, disabled caches and full caches avoid the former temporary vector
+and copies of sequence-wildcard bindings. Matching, conditions, normalized RHS
+checks and the check against each actual target are unchanged.
+
+This remains a tensor-safe operation: whole factors are replaced underneath
+sums and products, and local interface checks justify retaining the surrounding
+logical ports. It avoids full-result structure inference, but still scans the
+source to establish that local checks suffice. It certifies structure, not the
+mathematical validity of a user-supplied identity. Remaining normalization hooks
+that can change rank require the general checked route; an RHS callback may
+return an admitted normalized expression, which is checked before reuse.
+
+The saved `ac275b56` and retained `d9846eac` builds were compared in three
+counterbalanced fresh processes per route and order. All complete ladder
+samples below are seconds, in paired run order:
+
+#table(
+  columns: 3,
+  table.header([Order], [Saved tensor-safe build], [Borrowed cache lookup]),
+  [Original], [1.682, 1.782, 1.796], [1.572, 1.555, 1.758],
+  [Early rungs], [0.705, 0.711, 6.698], [0.607, 1.127, 0.587],
+)
+
+All three original-order pairs improve by 2.1–12.7%; the medians change from
+1.782 to 1.572 seconds. The early-rung samples do not establish a reliable
+speedup. The 6.698-second saved-build sample consumed 5.287 seconds of process
+CPU time, while the 1.127-second candidate sample consumed 1.116 seconds.
+Scheduler delays alone therefore cannot explain the variation; no cause was
+established. All samples are retained. The separate eight-process screen is
+not pooled with this comparison; three pairs improved and one was 2.3% slower.
+
+Fresh FORM process medians are 0.809 / 0.196 seconds and the supplied scalar
+Symbolica recipe takes 0.950 / 0.350 seconds. The candidate's original-order
+median remains 1.94 times FORM. Generic-replacement controls also vary, with
+medians changing from 2.400 / 0.986 to 2.585 / 0.847 seconds. These results do
+not establish a general build-wide gain. Final results remain exactly equal
+to FORM's 9652-term scalar; intermediate counts and contraction order are
+unchanged.
+
+Nine trace4/tracen cases and their reruns remain exact. These controls do not
+use the changed RHS cache, so their timing changes are not attributed to this
+patch. Free length-12 tracen changes from 19.087 to 19.588 milliseconds, and
+axial length-12 trace4 from 1.573 to 1.619 milliseconds. FORM's corresponding
+batched body CPU times are 4.133 and 0.604 milliseconds; the Python method and
+FORM body clocks have different boundaries.
+
+Validation passes 918 Rust tests, Clippy, formatting, 207 API records,
+117 HEP rows, 84 public controls, all three notebook routes in both orders,
+and the complete factored ladder at two exact component assignments. The
+cache regression now covers disabled, saturated and reusable caches with
+sequence wildcards, including condition and RHS callback counts. Source and
+measurement evidence is preserved under `/tmp/idenso-borrowed-rhs-cache-host`;
+the existing 85-entry benchmark archive is unchanged.
+
+=== Planning contractions into opaque tensors
+
+The existing metric-component collector now admits plain tensor factors with
+explicit ports and already bound compact vectors. Each term supplies an index
+graph: metrics connect slots, vectors terminate paths, and tensor terminals
+identify argument positions. The collector resolves those positions and interns
+the resulting tensor argument lists across sum terms before constructing their
+Symbolica functions. Repeated source factors reuse their admitted port plans
+and metadata checks. Resolved explicit endpoints are cached across terms, while
+incidence counts remain local to each term; tensor scratch storage retains its
+capacity. The shared Idenso tensor inference still owns the leaf interface
+proof; Python dispatch is unchanged.
+
+For the 32-term `g(a,b_i)*T(b_i)` control, this reuses 33 resolved slots rather
+than making 288 endpoint-parser calls inside the collector. The existing
+interface proof still runs; these operation counts are not a timing result.
+
+Admission excludes normalization hooks, unresolved ports, incompatible spaces,
+unsupported powers and ambiguous index multiplicities. Scalar metadata is
+retained only when the existing pending-work observer certifies that it needs
+no further contraction or normalization. Failed admission constructs no
+speculative tensor results. This preserves the callback-sensitive case where
+relabeling a tensor makes its normalizer return a scalar.
+
+Two tensor terminals can retain a dummy index. The implementation preserves the
+ordered contractor's surviving label, including its whole-product threshold
+for the three-metric shortcut. A regression compares 912 small path arrangements
+with the unchanged ordered contractor, including two ports on one tensor and
+disconnected metrics. Other regressions cover bound vectors, opaque metadata,
+local power pairing, callback behavior, logical port order and typed zeros.
+
+All fourteen saved inputs to ladder stages one through seven are admitted and
+match the existing intermediate expressions exactly. The largest original-order
+case plans 339 variables, including 313 distinct tensor results; its dense
+exponents require 24.60 MB (23.46 MiB), within the existing 64 MiB bound. Closing
+rungs early needs at most 86 variables and 3.54 MB (3.37 MiB) on these inputs.
+The untimed source-included diagnostic uses the public full-subtree intrinsic
+check in place of the private head predicate; both admit these fixtures. It
+establishes workload coverage, not an end-to-end speedup.
+
+The native metric benchmark now calls the actual private contractor from the
+existing `reference-cases` library module. Its example is a thin launcher and
+requires `--features reference-cases`. Inputs, options, output snapshots and
+timing loops are preserved; the source-included copy of the contractor is
+removed.
+
+The retained `63ba01ba` build is compared with the saved `d9846eac` build, which
+already has tensor-safe replacement and borrowed RHS cache lookup. Both use
+the same pinned Symbolica revision. In the initial full matrix, three
+counterbalanced process pairs per route and order give these median seconds:
+
+#table(
+  columns: 5,
+  table.header([Order], [Saved tensor-safe], [New collector], [FORM process], [Scalar recipe]),
+  [Original], [1.916], [1.812], [0.960], [1.032],
+  [Early rungs], [0.695], [0.552], [0.211], [0.370],
+)
+
+All three original-order pairs improve. Two early-rung pairs improve, while
+the third changes from 0.633 to 0.851 seconds. That slow sample uses 0.837
+seconds of thread CPU, so scheduler waiting alone does not explain it. Its
+busy SMT sibling is a possible confounder, not a demonstrated cause. Generic
+replacement controls have medians 2.593 to 2.464 seconds and 0.902 to 0.798
+seconds. FORM measures complete process wall time, whereas Python measures
+the complete eight-stage reduction after imports and fixture setup.
+
+To assess this variation, a further fixed block runs eight fresh process pairs
+per order and eight metric pairs. It retains every sample and is not pooled
+with either the initial screen or the three-pair matrix. All sixteen ladder
+pairs improve in this larger block:
+
+#table(
+  columns: 4,
+  table.header([Order], [Saved median, s], [New median, s], [Candidate/saved paired range]),
+  [Original], [1.830], [1.627], [0.740–0.995],
+  [Early rungs], [0.624], [0.508], [0.758–0.905],
+)
+
+The median reductions are 11.1% and 18.5%; paired CPU clocks show the same
+direction. These are shared-host observations, with the earlier contrary
+sample preserved. They do not establish general FORM parity. The final scalar
+has the same 9652 terms, and the notebook's stage counts are unchanged.
+This improvement reduces work per stage; it does not remove
+the existing difference in intermediate counts relative to FORM.
+
+Small metric workloads do not improve uniformly. The eight-pair block gives
+the following microseconds. The first two columns time the Python contraction
+method, including dispatch and result wrapping. The next column also parses
+canonical source text and constructs the typed input. FORM's separate
+three-process batches include input declarations, contraction and the initial
+sort, since FORM can contract metrics while reading the input. These are
+different clock boundaries, not a pure-kernel comparison.
+
+#table(
+  columns: 5,
+  table.header([Case], [Saved method], [New method], [New parse + construct + contract], [FORM input + contract CPU]),
+  [Chain 8], [19.604], [19.563], [128.447], [5.000],
+  [Chain 64], [109.187], [110.385], [884.715], [44.000],
+  [Loop 64], [104.390], [107.137], [864.242], [42.000],
+  [Opaque sum 32], [123.202], [168.078], [809.917], [46.000],
+)
+
+The opaque sum is slower in all eight pairs, by 14.9–40.2%; its median grows
+by 36.4%, or 44.9 microseconds. The retained implementation prioritizes the
+complete ladder gain and leaves this small-sum planning overhead unresolved.
+The other metric cases have mixed paired results. No-op reruns remain exact.
+
+The full matrix also retains nine trace controls and their reruns. Below are
+first-call method wall-time medians in milliseconds; FORM gives batched trace-body CPU
+time. These clocks have different boundaries. Several small trace controls
+regress, and the variation does not support a general trace speedup:
+
+#table(
+  columns: 4,
+  table.header([Case], [Saved], [New], [FORM body CPU]),
+  [Free 2, tracen], [0.02092], [0.02056], [0.00072],
+  [Free 4, tracen], [0.07189], [0.07371], [0.00155],
+  [Free 6, tracen], [0.12156], [0.11997], [0.00640],
+  [Free 8, trace4], [0.27796], [0.38502], [0.05000],
+  [Repeated 8, trace4], [0.09411], [0.15894], [0.00220],
+  [Repeated 8, tracen], [0.15694], [0.26465], [0.01480],
+  [Free 10, tracen], [1.72363], [1.60299], [0.35000],
+  [Free 12, tracen], [23.99286], [21.36665], [4.16667],
+  [Axial 12, trace4], [3.08722], [2.87527], [0.64000],
+)
+
+Reruns do not improve uniformly either. Free length-12 tracen reruns have
+medians 10.234 to 16.594 milliseconds, a 62.1% increase; all three paired
+ratios exceed one (1.115, 1.004 and 1.621). The lower first-call median for
+that case must not be read as a general improvement to its lifecycle. These
+observations retain the full matrix's host-variation qualification.
+
+A separate 199 Hz profile of the retained build records 389 original-order
+and 101 early-rung samples inside the timed phases. Its disjoint attribution
+assigns about 31–34% to Schoonschip, 22–27% to other Symbolica normalization,
+19–20% to replacement traversal, matching and reconstruction, and 6–8% to
+the source-interface proof. Coefficient-list collection and conversion back
+to Symbolica expressions remain visible contraction costs. These small
+sample counts guide further investigation; profile clocks are not benchmark
+measurements or an exact wall-time decomposition.
+
+Validation passes 922 Rust tests with 22 existing skips, Clippy, formatting,
+207 API records, 117 HEP rows and 149 targeted controls. The complete factored
+ladder passes four component evaluations across two assignments. All three
+notebook routes agree exactly with fresh FORM results in both orders, including
+the inactive-cell behavior. Callback rank loss, typed zeros, missing branch
+indices, unresolved ports and logical order retain their checked behavior.
+Sources, every timing sample and validation evidence are saved under
+`/tmp/idenso-opaque-components-cache-host`, with independent controls under
+`/tmp/idenso-opaque-components-cache-review`. The earlier `b14f5d66` experiment
+is preserved separately; the existing 85-entry benchmark archive is unchanged.
+
+=== Sparse collection without the polynomial boundary
+
+An isolated experiment replaces the final dense coefficient-list polynomial
+with sparse monomial keys and exact rational coefficient accumulation. It
+retains the existing admission checks and canonical variable aliasing, then
+uses bulk Symbolica sum/product construction only for nonzero collected
+monomials. Unlike the earlier direct trace emitter, it combines duplicates
+before constructing product Atoms.
+
+The experiment passes 12 focused tests, including the existing 912 metric-path
+comparisons and new alias, cancellation, large-rational and exponent-limit
+checks. A matched native screen covers all 16 saved ladder stage inputs and
+eight metric/power controls, checking exact outputs and fixed points. Three
+counterbalanced process pairs retain all 864 timing batches. The following
+selected input-contraction medians are milliseconds; ranges include all three paired
+candidate/baseline wall-time ratios:
+
+#table(
+  columns: 4,
+  table.header([Contraction input], [Polynomial], [Sparse], [Paired ratio range]),
+  [Original stage 4], [9.405], [11.353], [0.993–1.494],
+  [Original stage 6], [121.655], [123.299], [0.912–1.103],
+  [Original stage 7], [221.667], [192.401], [0.825–0.942],
+  [Early-rung stage 4], [3.581], [4.176], [1.037–1.701],
+  [Early-rung stage 5], [10.557], [12.823], [1.012–1.602],
+  [Early-rung stage 6], [32.851], [35.739], [1.011–1.145],
+  [Early-rung stage 7], [89.594], [99.283], [0.973–1.141],
+)
+
+The largest original-order input improves in every pair, but several
+early-rung inputs regress in every pair. The opaque 32-term control is mixed,
+with medians 76.1 and 77.0 microseconds. These clocks measure the native
+contraction method on preconstructed inputs; parsing, exact-result checks and output
+destruction are outside the measured batches. They are not complete-ladder
+or Python method timings. The already scalar eighth-stage inputs do not
+exercise coefficient collection.
+
+This variant is not retained or installed, and no complete-host gain is
+claimed. All observations, compiler identities, source patches and checks are
+saved under `/tmp/idenso-component-sum-emission`. The installed implementation
+and its FORM/trace comparisons above remain unchanged.
+
+An independent shared-interface experiment reuses already validated explicit
+self-dual ports for ordinary tensor leaves, avoiding construction of a
+temporary interface merely to check the same ports again. Builtin validation,
+unresolved ports, metadata and callback-sensitive paths retain their existing
+behavior. All 18 focused tests pass, including 123 comparisons with the old
+proof and its callback schedule. This experiment does not include the sparse
+collector change.
+
+Its separate three-pair native screen improves the opaque 32-term case from
+161.8 to 138.2 microseconds for contraction plus the shared typed result
+operation, with every pair faster. The proof alone improves from 76.2 to 60.8
+microseconds. Larger typed inputs remain mixed: original stage 6 has medians
+145.0 to 157.1 milliseconds, with two of three pairs slower; original stage 7
+improves 6.3%, early-rung stage 6 improves 9.9%, and early-rung stage 7 improves
+14.3% by ratio of medians. The original stage-6 proof itself is slower in all
+three pairs. Large baseline outliers remain in the saved observations, and
+these measurements do not establish an end-to-end ladder improvement. The
+variant remains isolated and unselected while work prioritizes the complete
+ladder. Sources, old/new proof comparisons and every sample are saved under
+`/tmp/idenso-explicit-leaf-proof`.
+
+=== Locating the first intermediate-term difference
+
+An untimed comparison of the retained build isolates the first difference in
+the rung-closing order, after vertices 5, 4 and 6. The complete expressions
+agree exactly after vertices 5 and 4, with 6 and 34 terms respectively. The
+first syntax difference is created at vertex 6. Both the tensor-safe route
+and the supplied scalar outside-in recipe produce 74 terms; FORM produces 63.
+Converting the typed result to the scalar recipe's notation gives exactly the
+same 74-term expression.
+
+Subtracting the FORM expression leaves 14 pairs of terms. Each pair has
+equal-magnitude, opposite-sign coefficients and identical momenta and
+remaining vertices, but uses a different dummy label for the connection between
+vertices 3 and 7: `mu11` versus `mu6`.
+Renaming that label in this particular expression gives exactly FORM's 63
+terms. Independently, Symbolica's existing tensor canonicalization gives equal
+63-term expressions for both inputs. This is an exact algebraic diagnostic,
+not a measured speedup or a general prescription to replace index names.
+
+Feeding the saved, fully expanded 143-term input to FORM produces exactly
+Symbolica's 74-term expression. The notation conversion is checked by an exact
+round trip before execution. Thus the difference precedes contraction of the
+collected input; it arises while the vertex replacement is constructed and
+reduced.
+
+A minimal FORM probe exposes the relevant ordering: `d_(a,b)*t(a)*u(b)` becomes
+`t(b)*u(b)`, whereas writing `d_(b,a)` instead leaves `t(a)*u(a)`. FORM can
+contract using that written argument orientation. Both the scalar recipe's
+symmetric `d` and Spenso's symmetric `g` erase the orientation on construction:
+their two argument orders already have identical Symbolica bytes before any
+contraction.
+
+One controlled change ties this mechanism to the complete third stage.
+Reversing only the two `d_(mu2,mu3)` factors in FORM's vertex-6 replacement
+changes its 63-term result to 74 terms, exactly equal to Symbolica's result.
+Every other program byte is preserved, and reversing the patch recovers the
+original program. All results still canonicalize to the same 63-term tensor.
+These are untimed correctness comparisons; they quantify no runtime gain.
+
+The probes also confirm that FORM contracts into ordinary `CFunction`
+arguments. Index declaration order does not change the ladder counts, and
+moving the scalar recipe's contraction from the held RHS into the ambient
+product does not recover the orientation already erased by construction.
+This behavior does not imply general dummy canonicalization in FORM:
+`t(a)*u(a)-t(b)*u(b)` remains a two-term expression in a separate control.
+
+The distinction matters for coefficient collection: products with different
+dummy spellings are different Symbolica Atoms, so collecting equal products
+alone cannot merge them. Symmetric metric construction remains algebraically
+correct. A contraction strategy that combines more terms must choose dummy
+representatives consistently while preserving free indices, avoiding dummy
+collisions and respecting opaque metadata. The current contraction policy
+remains unchanged. The scripts, exported expressions and exact checks are
+saved under `/tmp/idenso-form-cfunction-boundary`, including the complete
+orientation A/B under `orientation-stage`.
+
+The existing scalar `canonize_tensors` operation was also checked after every
+vertex of both complete ladders. It recovers FORM's retained counts at every
+stage, with exact agreement on the final 9,652-term polynomial:
+
+#table(
+  columns: 3,
+  table.header([Order], [Current typed contractions], [Scalar canonicalization / FORM]),
+  [Original], [6, 34, 192, 1084, 6069, 11959, 25662, 9652],
+  [6, 34, 192, 1084, 6069, 10947, 23937, 9652],
+  [Early-rung], [6, 34, 74, 396, 944, 5046, 11836, 9652],
+  [6, 34, 63, 352, 829, 4586, 10516, 9652],
+)
+
+This test uses the supplied scalar recipe and its eleven explicit index
+symbols. Final contraction and canonicalization fixed points pass in both
+orders. It does not establish typed metadata handling or a runtime gain.
+The complete checks and the first-stage typed canonicalization failure are
+saved under `/tmp/idenso-existing-canonization`.
+
+Three counterbalanced process pairs per order measure the complete scalar
+recipe with and without this extra pass. All twelve runs preserve the exact
+final result and fixed points. Median whole-loop wall times, in seconds, are:
+
+#table(
+  columns: 4,
+  table.header([Order], [Scalar recipe], [With canonicalization], [Fresh FORM process]),
+  [Original], [1.110805], [1.989898], [0.832198],
+  [Early-rung], [0.346671], [0.681879], [0.186588],
+)
+
+Every pair is slower with canonicalization: wall-time ratios range from
+1.394 to 2.126 in the original order and 1.271 to 2.273 in the early-rung
+order. Process and thread clocks confirm the direction. These measurements
+exclude scalar setup, final projection and exact checks; FORM's separate
+three-run medians include process startup and parsing. The unchanged
+`63ba01ba` host, frozen notebook recipe, all observations and CPU/SMT-sibling
+snapshots are recorded under `benchmarks` in that experiment directory.
+No samples are discarded. General canonicalization after every step is not
+adopted: its cost exceeds the savings from fewer intermediate terms.
+
+Two separate instrumented runs attribute 0.701 seconds of a 1.561-second
+original-order loop and 0.270 seconds of a 0.573-second early-rung loop to
+canonicalization itself, about 45% and 47%. These single diagnostic runs add
+per-stage clocks and counts; they are not pooled with the primary timings
+or used to estimate a paired speedup.
+
+Two isolated native experiments also test borrowing unchanged tensor functions
+and allocating argument arrays only when a port changes. The second variant
+uses the existing component graph to skip identity writes, including pairs
+without metric edges, and avoids reading an old slot when the replacement
+is necessarily a vector. Both variants pass 12 focused tests, including the
+912 existing metric-path comparisons, and exact output/fixed-point checks on
+all 16 saved ladder stages plus eight controls.
+
+Each variant has its own three-pair screen, retaining all 864 batch samples.
+Neither demonstrates a broad gain on the large stages. For the refined variant,
+original stage 7 has contraction-method medians 212.747 to 254.424 milliseconds,
+with paired ratios 1.196, 1.240 and 1.043; early-rung stage 7 has medians 89.709
+to 89.785 milliseconds. The already scalar early-rung stage-8 control also
+varies from 13.959 to 21.398 milliseconds, so these observations do not establish
+that the patch causes every slowdown. Neither variant is retained or used to
+claim a complete-ladder gain. All samples, rerun controls and decisions remain
+under `/tmp/idenso-lazy-tensor-arguments` and
+`/tmp/idenso-lazy-tensor-arguments-refined`.
+
+=== Keeping scalar metadata opaque during materialization
+
+The typed canonicalization probe exposed a separate parser defect. Compact
+vectors inside a `Scalar` function were lowered into fresh tensor factors.
+For example, `T(F(g(p(rep),q(rep))),a)*U(a)` could become
+`p(d)*q(d)*T(F(1),a)*U(a)`, although `F` is scalar metadata and may be
+nonlinear. Different fresh dangling indices in sum branches also caused the
+network-addition panic seen on the ladder's first six-term expression.
+
+The shared Spenso shorthand materializer now stops at Scalar functions in
+both detection and lowering. Scalar attributes take precedence over tensor,
+rank-one and broadcast tags. Actual compact vectors in tensor argument
+positions still lower normally, leaving adjacent metadata unchanged. The
+fix adds four early guards in the existing owner, with regressions for
+nonlinear metadata, nested wrappers, sums, powers, conflicting tags and the
+allocation of exactly one dummy for a real bound vector. No tensor type or
+Python implementation is added.
+
+This source correction is separate from the installed `63ba01ba` host used
+for the timings above. That host already provides `replace_tensor` and runs
+the notebook's tensor-safe route; these measurements do not include the new
+materializer guards.
+
+Nine materializer tests pass. Five native pipeline checks also pass, including
+the two actual six-term ladder inputs: all 21 routing metadata fields survive
+literally in each input, the interface remains scalar, canonicalization reaches
+a fixed point, and an independent dummy-label comparison confirms equality
+after Schoonschip contraction. These are correctness checks, not timings.
+That worktree checkpoint also passes all 925 library tests across Spenso, Idenso
+and Spynso, with 22 existing skips, plus Clippy for all targets and formatting.
+Source snapshots remain unchanged throughout those checks.
+
+There is an independent remaining limitation in the general canonicalizer:
+`T(F(mink(4,a)),mink(4,a))*U(mink(4,a))`, with `F` Scalar, constructs as a
+scalar tensor but canonicalization reports that the index occurs too often.
+Symbolica's recursive labeling sees the slot hidden in metadata as well as
+the two real ports. The materializer correction does not claim to fix this
+separate labeling boundary. Its reproducer is saved as
+`checks/hidden-fullslot-summary.json` in the canonicalization experiment;
+the materializer patch and regressions are under
+`/tmp/idenso-materializer-scalar-opacity`.
+
+=== Collecting equivalent internal connections
+
+The shared Idenso component contractor now recognizes products that differ
+only by their internal index names. Its key records the tensor heads, exact
+noninternal arguments, ordered port positions, representation spaces,
+connections, and exact non-tensor factors and powers. Free labels and scalar
+metadata remain literal. Equal keys reuse one complete contracted product as
+the coefficient-collection representative;
+the operation does not generate or substitute fresh dummy names.
+
+This deliberately covers uniquely distinguishable tensor factors. Repeated
+indistinguishable factors retain their literal result, since identifying those
+graphs requires more general labeling. Estimated stored-key and transient work
+budgets are bounded separately. Exceeding either budget declines the entire
+collection before materialization. If ordinary contraction or dot cleanup
+makes a previously declined sum eligible, the public simplifier finishes that
+collection before returning, preserving its fixed point.
+
+The same collector caches successful compact-representation recognition across
+terms. The complete representation Atom is the key; dimension, variance and
+syntax validation still run on misses. This reuses the existing slot matcher
+and component plan. Neither change introduces another tensor abstraction or
+Python algebra implementation.
+
+The two complete ladder orders now match FORM's retained term counts at every
+stage:
+
+#table(
+  columns: 3,
+  table.header([Order], [Saved collector], [Connection collection / FORM]),
+  [Original], [6, 34, 192, 1084, 6069, 11959, 25662, 9652],
+  [6, 34, 192, 1084, 6069, 10947, 23937, 9652],
+  [Early-rung], [6, 34, 74, 396, 944, 5046, 11836, 9652],
+  [6, 34, 63, 352, 829, 4586, 10516, 9652],
+)
+
+Regressions cover self-connections, multiple connections, distinct spaces,
+free ports, opaque metadata, rational coefficients, local powers, compact
+vector aliases, typed zero with reordered logical ports, budget exhaustion and
+cleanup that changes eligibility. Existing callback-sensitive paths retain
+their checks. The integrated source passes all 932 library tests across Spenso,
+Idenso and Spynso, with 22 existing skips, all-target Clippy and scoped
+formatting checks. The test helper also now qualifies complete function heads,
+so registering Scalar `routing` tests that actual head rather than accidentally
+rewriting the end of its name.
+
+The isolated native comparisons explain the selection without establishing a
+Python speedup. Compact-space caching improves complete-loop medians from
+1.437 to 1.375 seconds in the original order and 0.492 to 0.458 seconds in the
+early-rung order. Adding connection collection to caching has a small further
+gain in a separate cohort: 1.336 to 1.315 seconds and 0.442 to 0.436 seconds.
+Seven of eight original-order pairs and five of eight early-rung pairs improve
+in the latter comparison. Connection collection alone was neutral or mixed;
+fewer retained terms do not remove the cost of constructing their keys.
+These are native typed operation loops in persistent processes, excluding
+Python dispatch. All samples remain under
+`/tmp/idenso-native-typed-compact-pipeline` and
+`/tmp/idenso-native-typed-alpha-compact-pipeline`; the separate cohorts are not
+pooled.
+
+=== Complete Python comparison of the retained collector
+
+Host `97833bbd` includes connection collection, compact-space caching and the
+Scalar materializer correction above. It is compared with the unchanged
+`63ba01ba` host using eight fresh process pairs per contraction order. Each
+measured loop includes all eight public tensor-safe replacements, expansions,
+contractions, interface checks and Python result wrapping. Imports, initial
+construction, exact comparisons and final result destruction are outside the
+clocks. All first samples and slower pairs are retained.
+
+#table(
+  columns: 5,
+  table.header([Order], [Saved host (s)], [New host (s)],
+    [Median paired change], [FORM process (s)]),
+  [Original], [1.625594], [1.612381], [−3.48%], [0.814914],
+  [Early-rung], [0.551142], [0.501827], [−9.00%], [0.189660],
+)
+
+The time columns are independent side medians; the change column is the median
+of the eight candidate/baseline ratios. These are different statistics: the
+original-order ratio of side medians improves only 0.81%. Seven original-order
+pairs and six early-rung pairs improve in wall, process and thread time. The
+slower wall-time pairs remain in the record: +19.09% in the original order,
+and +52.13% and +28.25% in the early-rung order. The observations establish a
+modest, mixed improvement rather than a uniform speedup.
+Processes are pinned to CPU 8, but the shared host is not exclusive: recorded
+activity on its SMT sibling ranges from zero to 97.4%. These observations do
+not establish the cause of individual slower pairs; none are excluded.
+
+FORM uses the same programs and contraction orders, with one declared warmup
+and three measured fresh processes per order. Its wall clock includes startup,
+parsing and teardown, unlike the Python operation loop. The displayed medians
+put the new loop at 1.98 and 2.65 times the separate FORM process times; this is
+not parity or a comparison of isolated contraction kernels.
+
+Both fresh FORM polynomials equal the final 9,652-term result exactly. The
+host also preserves 207 saved API cases and 117 HEP component rows. Four
+independent finite-network evaluations compare the full factored ladder and
+its scalar result under two exact momentum assignments. The actual notebook
+passes all three routes in both orders, and 25 additional public controls
+cover materializer opacity, connection identities, typed zeros and mixed
+representation spaces. No correctness assertion was relaxed.
+
+Three fresh process pairs also measure the unchanged trace first-call and
+rerun controls. First-call medians are milliseconds:
+
+#table(
+  columns: 5,
+  table.header([Trace case], [Saved host], [New host],
+    [Median paired change], [FORM body CPU]),
+  [Free 2, D], [0.02024], [0.02108], [+7.25%], [0.00066],
+  [Free 4, D], [0.07223], [0.07918], [+11.14%], [0.00135],
+  [Free 6, D], [0.12117], [0.12447], [+2.72%], [0.00540],
+  [Free 10, D], [1.95912], [1.92722], [+22.89%], [0.35333],
+  [Free 12, D], [23.81537], [22.30606], [−6.34%], [4.23333],
+  [Free 8, 4D], [0.25163], [0.25116], [−0.19%], [0.04800],
+  [Repeated 8, 4D], [0.09484], [0.09373], [−0.25%], [0.00200],
+  [Repeated 8, D], [0.16779], [0.16449], [−0.64%], [0.01420],
+  [Axial 12, 4D], [1.88230], [1.76866], [−9.08%], [0.62400],
+)
+
+Python includes the typed simplification method and factored scalar spectator.
+FORM's internal timer covers only `trace4` or `tracen` plus sorting, excluding
+that spectator, Python dispatch and interface handling. Its declared warmup
+batches and amortization are unchanged. These unequal scopes must not be read
+as isolated-kernel speed ratios.
+
+The trace observations do not establish a general improvement. Free 6 in D is
+slower in all three pairs. Free 10 in D has paired first-call ratios 1.229,
+0.892 and 2.085, despite its slightly smaller independent side median; that
+last pair's rerun ratio is also 1.811. Free 12 rerun medians are 9.804 and
+9.769 milliseconds, and axial reruns are 3.053 and 3.068 milliseconds. All
+individual measurements remain available; no trace regression is dismissed
+because the source change targets the ladder.
+
+Separate profiles of the new host reuse the existing whole-loop harness, at
+199 Hz with DWARF call stacks. They retain 291 original-order samples and 94
+early-rung samples. The existing disjoint owner classification attributes
+27.6% / 23.7% of sampled cycles to Symbolica normalization outside other
+classified owners, 27.1% / 31.3% to Schoonschip, 20.5% / 19.9% to certified
+replacement, and 7.4% / 6.2% to interface proof. These single profiles locate
+remaining work; especially the shorter profile is too small for precise
+percentage comparisons or a speedup estimate.
+Within the original-order normalization category, byte comparison contributes
+6.1 percentage points of the whole loop, term merging 3.0 and sorting 2.6.
+Those Symbolica operations remain useful optimization targets alongside the
+shared tensor code.
+
+The inclusive `normalization_is_intrinsic` check accounts for 9.5% / 7.9% of
+sampled cycles, overlapping the owner groups above. Its observed callers are
+replacement preflight and the outer contraction's typed-result validation,
+with one original-order sample in local RHS validation. Caching or avoiding
+redundant proofs is a concrete remaining opportunity, but merely trusting the
+old interface would revive the callback-induced rank-loss counterexample.
+The current implementation keeps those checks. Coefficient collection and
+normalization also remain substantive costs even with FORM-matching retained
+term counts.
+
+The verified wheel is installed in `/tmp/spenso-paper-venv`, with the immutable
+`63ba01ba` baseline preserved separately. The installed core equals the tested
+candidate byte for byte; all 25 focused public smoke checks pass, and the 33
+other installed dependency records remain unchanged.
+
+The complete commands, source manifest, raw timings, CPU/SMT observations and
+validation results are under `/tmp/idenso-component-optimization-host`.
+The source snapshot has 765 inputs; all frozen identities remain unchanged
+through the formal comparison. These results do not overwrite or pool the
+earlier cohorts.
+
+=== Reusing intrinsic normalization proofs
+
+The next inference change caches successful callback-safety checks for whole
+normalized function subtrees inside the existing `InterfaceInference` object.
+The bounded cache stores at most 256 expressions of at most 256 bytes each.
+It includes function arguments and scalar metadata in its keys; a shared head
+alone is insufficient to certify the contents. Negative results and unfinished
+normalization are not cached, and no persistent proof is attached to a mutable
+`SymbolicTensor` payload.
+
+The entire source must still pass the intrinsic-normalization check before
+interface inference starts. That ordering prevents inference or materialization
+of an earlier leaf from running before a later callback is discovered. Once
+the source passes, the leaf proof can omit its duplicate metadata scan. The
+algebra-only entry point retains its independent check. Callback-sensitive
+results, unresolved ports, multiplicities and logical interface order retain
+their existing validation, including the metric contraction whose callback
+turns `T(b)` into a scalar.
+
+Matched native experiments compare this change with the retained `97833bbd`
+implementation using the same public Rust operations as the notebook. Eight
+paired calls per order improve in every pair: the median paired wall-time
+reductions are 7.31% in the original order and 6.60% with early rung closure.
+Side medians are 1.315459 → 1.231453 s and 0.429324 → 0.404600 s. Process and
+thread clocks agree in sign. These are persistent native workers, excluding
+Python dispatch, and must not be pooled with fresh Python-process samples.
+The alternative head-only cache gave smaller, mixed gains and is not included.
+
+Both libraries reproduce every saved intermediate expression literally and
+the same final FORM polynomial and fixed point. Separate timed FORM processes
+check stage counts; the fresh full-polynomial checks belong to the Python host
+validation. All observations and the distinct timing boundaries are retained
+under `/tmp/idenso-native-typed-intrinsic-subtree-pipeline`.
+
+The integrated source passes all 936 Rust tests, with 22 existing skips,
+all-target Clippy and scoped formatting. Four added regressions cover repeated
+subtrees, the global callback barrier, cache limits and raw/oversized inputs,
+and equivalence with the previous two-phase proof under all inference policies.
+
+=== Python measurement of proof reuse
+
+The `ee756634` host differs from saved host `97833bbd` only in this inference
+implementation. Eight fresh process pairs per order time the complete eight
+public replacement, expansion and contraction steps, including Python wrapping.
+Setup, initial construction, final equality checks and disposal remain outside
+the clocks. The unchanged FORM programs use one declared warmup and three
+measured fresh processes per order.
+
+#table(
+  columns: 5,
+  table.header([Order], [Saved host (s)], [New host (s)],
+    [Median paired change], [FORM process (s)]),
+  [Original], [1.452938], [1.350243], [−7.15%], [0.856800],
+  [Early-rung], [0.478071], [0.451845], [−3.70%], [0.177630],
+)
+
+The time columns are separate medians, whose ratios improve by 7.07% and 5.49%;
+the paired column summarizes the eight individual ratios. Seven original-order
+pairs and six early-rung pairs improve. The slower pairs are retained: +15.69%
+original, and +5.98% / +47.11% early-rung. Process and thread clocks agree in
+sign, so wall-clock preemption alone cannot explain those observations.
+The shared machine was not reserved exclusively for these measurements.
+
+The new Python loop is still 1.58 / 2.54 times the separate FORM process wall
+time. FORM includes process startup, parsing and teardown; these are unequal
+bounds, not an isolated-kernel comparison or parity claim. All 32 Python
+results equal the same 9,652-term scalar exactly and are fixed points.
+Retained intermediate term counts remain equal to FORM in both orders.
+
+The candidate host also passes the unchanged 207 API cases, 117 HEP
+component rows, four full factored-network evaluations, two fresh full FORM
+polynomial comparisons, 58 existing public controls, 25 additional controls
+and all three current notebook routes in both orders. No correctness assertion
+or algebra fixture was changed. Source, core, driver and oracle identities
+remain fixed throughout the measured cohort; the saved baseline stays intact.
+Raw observations and the frozen protocol are under
+`/tmp/idenso-intrinsic-proof-host`.
+
+Three fresh process pairs measure the same trace first-call and rerun controls.
+First-call side medians below are milliseconds; the paired change is the median
+of the three candidate/baseline ratios.
+
+#table(
+  columns: 5,
+  table.header([Trace case], [Saved host], [New host],
+    [Median paired change], [FORM body CPU]),
+  [Free 2, D], [0.02214], [0.02159], [−2.50%], [0.00066],
+  [Free 4, D], [0.07397], [0.07440], [+2.68%], [0.00140],
+  [Free 6, D], [0.12057], [0.13649], [+13.65%], [0.00560],
+  [Free 10, D], [1.64681], [1.68647], [+0.73%], [0.37000],
+  [Free 12, D], [20.67946], [20.71930], [+0.29%], [4.13333],
+  [Free 8, 4D], [0.23977], [0.30042], [+24.10%], [0.04933],
+  [Repeated 8, 4D], [0.09377], [0.11534], [+23.00%], [0.00200],
+  [Repeated 8, D], [0.15485], [0.18306], [+19.39%], [0.01420],
+  [Axial 12, 4D], [1.58340], [1.70693], [+4.29%], [0.64800],
+)
+
+These observations do not establish a general trace improvement. Free 6 in D,
+free 8 in 4D and both repeated-index cases are slower in two of three first-call
+pairs. Axial 12 is slower in all three. Repeated 8 reruns are also slower in all
+three pairs in both dimensions, with paired median increases of 12.31% in 4D
+and 1.62% in D. Free 8 in 4D reruns increase 18.04% by the paired median.
+Free 12 in D rerun side medians are 9.402 → 9.439 ms; axial reruns are
+2.935 → 2.899 ms, with a paired median change of −0.15%. Every inner sample
+and process median remains in the record; the measurements do not identify
+the cause of these regressions. The retained change prioritizes the complete
+ladder, as requested.
+
+FORM's trace timer covers only the trace body and sorting. Python additionally
+handles the factored scalar spectator and public typed method. Those columns
+are not measurements of identical stages. The fresh FORM outputs and all
+Python trace results pass the unchanged exact checks.
+
+Separate 199 Hz profiles retain 329 original-order and 84 early-rung operation
+samples. The disjoint sampled cycle shares are 32.6% / 31.1% Schoonschip,
+30.5% / 24.4% other Symbolica normalization, 16.8% / 20.0% certified replacement,
+and 6.2% / 7.7% algebra/interface proof. The intrinsic callback scan contributes
+2.5% / 3.3% inclusively and overlaps those groups. These small single-loop
+profiles identify remaining work; their percentages are not paired speed
+estimates. The early-rung record retains one empty stack and one unknown leaf.
+
+The notebook still materializes its expanded expression before raw Schoonschip
+contracts it. The separate network-local expansion routine is not on this call
+path. Combining expansion with component collection must therefore receive the
+unexpanded expression at the actual replacement/expansion boundary, while
+preserving scalar spectators, powers, callbacks and tensor interfaces. That
+combination is a remaining opportunity, not part of this measured change.
+
+At that checkpoint, the verified `ee756634` wheel was installed in
+`/tmp/spenso-paper-venv`. The immutable `97833bbd` baseline was preserved,
+all 33 other dependency records were unchanged, and the installed host passed
+the 25 focused public smoke cases.
+
+=== Expansion needs early collection
+
+An isolated native experiment feeds unexpanded factors into the existing
+component collector. All intermediate tensor graphs agree with the saved
+pipeline after canonicalization, and both orders produce the exact 9,652-term
+FORM scalar and a fixed point. Nevertheless, the first implementation is
+slower. Four counterbalanced fresh processes per route and order give these
+complete-loop median seconds:
+
+#table(
+  columns: 4,
+  table.header([Order], [Saved expanded route], [Fused intake],
+    [Same new build, expanded route]),
+  [Original], [1.34406], [3.00912], [1.35602],
+  [Early rungs], [0.45983], [0.53285], [0.48617],
+)
+
+The fused route loses every pair against both controls. Relative to the saved
+route, its median paired wall-time ratios are 2.251 and 1.175; process and
+thread CPU clocks agree closely. All 24 results pass the exact checks, and no
+sample is discarded. These are native screening measurements, separate from
+the Python and FORM timings above. The complete fused interval includes its
+required final typed expansion; fixture setup and final checks are outside.
+The experiment is not installed.
+
+Counters on the actual original-order inputs explain the largest regression.
+At stage 6, the fused intake plans 65,456 monomials; normal expansion first
+combines the same input into 18,247 terms. At stage 7 it plans 121,158 rows
+with 333 variables, requiring 80,691,228 bytes of dense exponents. That exceeds
+the existing 64 MiB bound, so the complete attempt is discarded. Ordinary
+contraction then runs, followed by another attempt with 120,108 rows and 213
+variables. That retry fits and succeeds. Normal expansion of the original
+stage-7 input has only 34,196 terms.
+
+Thus avoiding expanded Atom construction also requires preserving expansion's
+early combination and cancellation of equal monomials. Performing tensor
+graph work before that collection multiplies the work even when no limit is
+hit; exceeding the bound adds fallback and repeated planning. The diagnostic
+counters run outside the timing cohort. Sources, all observations, canonical
+stage checks and the admission records are preserved under
+`/tmp/idenso-fused-component-expansion`. The retained implementation and
+notebook remain unchanged by this first experiment.
+
+=== Collect before planning contractions
+
+The selected implementation extends the existing component collector behind
+`expand_contracted_sums=True`. It compiles admitted sums, products and positive
+integer powers into a bounded syntax tape, interns their borrowed factors once,
+and collects equal factor/exponent keys with exact rational coefficients before
+building contraction graphs. Cancelled terms never reach incidence checks.
+Common scalar spectators remain factored; scalar differences within the indexed
+core are distributed. Unsupported inputs use the existing ordinary traversal.
+The final polynomial emitter and its existing memory bound are unchanged.
+
+Local held right-hand sides still use Symbolica expansion before contraction.
+The notebook removes only the ambient expansion before Schoonschip, then
+expands the complete final scalar inside the last measured step. Eliminating
+both expansions was slower in the native screen. This distinction matters:
+the small local expansion is useful, while constructing the complete indexed
+expression can be avoided.
+
+Four counterbalanced fresh native processes per route and order compare the
+saved implementation, the new build with its old expanded schedule, fully
+fused intake, and the selected schedule. Complete-loop side medians are:
+
+#table(
+  columns: 5,
+  table.header([Order], [Saved expanded (s)], [New expanded (s)],
+    [Fully fused (s)], [Selected (s)]),
+  [Original], [1.25712], [1.27572], [1.37565], [1.15887],
+  [Early rungs], [0.416078], [0.428726], [0.435531], [0.380686],
+)
+
+The selected schedule improves every pair against both expanded controls.
+Median paired reductions against the saved implementation are 7.44% and 8.60%;
+against the same new build they are 8.21% and 10.91%. Fully fused intake is
+slower than the saved implementation in every pair. All 32 observations are
+retained, CPU clocks agree in direction, and all final results equal the exact
+9,652-term FORM polynomial. Intermediate results agree by tensor graph
+canonicalization when factorization or dummy-index spelling differs. These
+native measurements exclude Python dispatch and are separate from the public
+Python comparison.
+
+The shared Idenso implementation retains typed interfaces and callback checks;
+Spynso adds no second contraction implementation. Fourteen regressions cover
+the admitted factored inputs, exact coefficient collection, cancellation before
+incidence validation, unsupported surviving terms, spectators, callbacks and
+typed zero. An empty collected coefficient list returns zero before entering
+Symbolica's polynomial constructor. The full affected Rust suite passes
+950 tests, with 22 existing skips; Clippy and formatting pass.
+
+=== Public Python measurement of collected intake
+
+Saved host `ee756634` and candidate `58dd008a` share their dependency snapshot;
+the candidate changes the four Schoonschip implementation/settings files.
+Eight fresh process pairs per ladder order compare the previous expanded
+schedule with the selected schedule above. Both include all eight public
+typed replacements, local expansion and contractions; the candidate also
+includes its final typed expansion. Initial construction, term counting,
+equality checks and disposal are outside the clocks.
+
+#table(
+  columns: 5,
+  table.header([Order], [Saved host (s)], [Selected host (s)],
+    [Median paired change], [FORM process (s)]),
+  [Original], [1.357979], [1.234922], [−10.66%], [0.856578],
+  [Early rungs], [0.453248], [0.409100], [−8.64%], [0.179846],
+)
+
+Every wall, process and thread clock pair improves in both orders. The ratios
+of the side medians improve by 9.06% and 9.74%; these differ from the medians
+of paired ratios shown in the table. All 32 timed results equal the same
+9,652-term scalar exactly and are fixed points. No observations are excluded.
+The shared machine is not reserved exclusively for these measurements.
+
+The remaining ratios to FORM are 1.44 and 2.27. FORM includes process startup,
+parsing and teardown, while the Python clock covers the prepared public loop.
+These unequal bounds do not establish kernel parity. Fresh untimed full FORM
+polynomials certify both orders independently of the timed term-count checks.
+
+The candidate passes 207 API cases, 117 HEP component rows, four network
+evaluations comparing the original factored ladder and certified scalar at
+two assignments, 58 public and tensor-safe controls, 25 additional controls,
+and all three actual notebook routes in both orders.
+The control records match the saved host, including callbacks, errors and
+logical port ordering. Source, extension and driver identities stay unchanged
+through the complete cohort.
+
+The unchanged trace controls use three fresh process pairs per case. First-call
+side medians below are milliseconds; FORM measures its internal trace-and-sort
+CPU body, excluding the Python scalar spectator and public wrapper.
+
+#table(
+  columns: 5,
+  table.header([Trace case], [Saved host], [Selected host],
+    [Median paired change], [FORM body CPU]),
+  [Free 2, D], [0.02065], [0.02002], [−4.38%], [0.00064],
+  [Free 4, D], [0.07297], [0.07106], [−2.62%], [0.00140],
+  [Free 6, D], [0.12761], [0.12138], [−4.36%], [0.00540],
+  [Free 10, D], [1.63196], [1.64530], [+7.12%], [0.35333],
+  [Free 12, D], [19.86224], [20.10018], [+2.23%], [4.13333],
+  [Free 8, 4D], [0.24366], [0.23789], [−2.49%], [0.05067],
+  [Repeated 8, 4D], [0.09477], [0.09354], [−1.30%], [0.00200],
+  [Repeated 8, D], [0.15984], [0.15822], [−1.01%], [0.01440],
+  [Axial 12, 4D], [1.57719], [1.61152], [+1.82%], [0.60400],
+)
+
+This is not a general trace improvement. Free 10 and 12 in D and axial 12 are
+slower in two of three first-call pairs. Seven of nine rerun controls have
+positive median paired changes: free 6/10/12 in D (+0.61% / +0.98% / +1.96%),
+free 8 in 4D (+0.43%), repeated 8 in 4D/D (+5.11% / +9.41%), and axial 12
+(+0.77%). Both repeated-index reruns are slower in all three pairs. Free 12 in
+D rerun side medians are 9.279 → 10.332 ms; axial reruns are 2.878 → 2.900 ms.
+All inner samples, process medians and slower observations are retained.
+Several processes show broad slowdowns across cases, so these measurements
+alone do not identify a code-level cause for the trace changes.
+
+Separate profiles of one native selected-schedule loop per order retain
+238 / 71 operation samples at 199 Hz. The disjoint sampled cycle shares are
+26.9% / 25.4% Symbolica normalization, 18.1% / 19.6% component collection,
+17.4% / 20.5% interface inference and proofs, and 16.4% / 15.7% other
+Schoonschip work. Symbolica matching/replacement accounts for 7.6% / 5.9%,
+polynomial operations for 6.8% / 4.5%, and expansion for 5.1% / 5.5%.
+These shares point to several remaining costs rather than a single matcher
+bottleneck. Inclusive collector and replacement stacks overlap these groups
+and must not be added to them. There are no empty operation stacks and
+8 / 1 unknown leaves. The small profiles exclude Python callback overhead;
+they are diagnostic attribution, not another speed comparison or precise
+wall-time breakdown. Attribution distinguishes the `normalize_dots` module
+from Symbolica normalization; the corrected overlay and raw stacks are both
+retained.
+
+Untimed counters on the selected original-order route show the avoided work.
+Stage 6 generates 43,824 branches, combines them into 19,291 distinct keys,
+and sends only 18,247 nonzero terms to contraction planning. Stage 7 generates
+81,099 branches, combines them into 35,250 keys, and plans 34,181 nonzero terms.
+Both planned counts equal ordinary Symbolica expansion of that same input.
+The stage-7 dense exponent estimate is 23,174,718 bytes with 339 variables,
+within the existing 64 MiB limit. Both stages complete one successful ambient
+collector call, with no rejected attempt or fallback/retry. These inputs use
+the retained local RHS expansion, so their generated counts are distinct from
+the earlier fully fused experiment.
+
+The frozen protocol, complete observations and exact checks are under
+`/tmp/idenso-fused-component-host`; native experiments remain separate under
+`/tmp/idenso-fused-component-expansion`. The source-controlled historical
+contraction archive is unchanged.
+
+The validated `58dd008a` wheel is installed in `/tmp/spenso-paper-venv`.
+The immutable `ee756634` baseline remains available, all 33 other dependency
+records are unchanged, and the installed extension passes the 25 focused
+public smoke cases.
+
+=== Final scalar expansion choices
+
+A caller-level audit of the same saved profiles places 23.09% / 23.24% of
+sampled cycles inside final typed expansion, including 15.89% / 14.91% in
+Symbolica normalization. Local RHS construction contributes only
+2.13% / 2.77% inclusively. The audit also separates three / one generic helper
+frames whose type names mention `TensorInferenceError` from concrete inference
+frames. Concrete inference frames occur in 16.00% / 19.02% of sampled cycles;
+the earlier broad subsystem grouping must not be read as that exact quantity.
+All these inclusive caller shares overlap and retain the small-profile limits.
+
+The last vertex replacement leaves 23,714 / 10,516 scalar terms containing
+small factored dot sums. No component-collector call occurs at this last stage:
+the repeated-index scan correctly finds no remaining contraction work. Final
+expansion must therefore distribute actual scalar products, not merely sort an
+already expanded polynomial. Expanding arbitrary scalar sums automatically in
+Schoonschip would change its existing no-work behavior.
+
+The existing public expansion choices were compared on these exact saved
+inputs using installed host `58dd008a`. Three fresh processes per route and
+order give the following median final-materialization seconds:
+
+#table(
+  columns: 4,
+  table.header([Order], [Ordinary expansion], [`via_poly=True`],
+    [Whole polynomial conversion]),
+  [Original], [0.296172], [0.741699], [6.402327],
+  [Early rungs], [0.096620], [0.240256], [2.602664],
+)
+
+The whole-conversion route includes both
+`source.to_expression().to_polynomial().to_expression()` and construction of
+the resulting `TensorExpression`; it does not bypass result validation.
+Setup, parsing the saved input, equality checks and disposal are outside the
+clocks. All 18 observations produce the exact 9,652-term scalar, preserve the
+receiver and empty logical interface, and pass expansion and Schoonschip
+fixed-point checks. No timeout, repeat or sample exclusion occurs.
+
+Both alternatives lose every pair in both orders. Median paired wall-time
+ratios are 2.50 / 2.52 for `via_poly=True` and 21.62 / 26.94 for whole
+conversion; process and thread clocks agree. Ordinary expansion stays in the
+notebook. The prepared complete-loop comparison is left unexecuted because
+the only changed stage already loses consistently; no complete-loop gain is
+claimed for either alternative.
+
+The pinned Symbolica implementation expands each Add term separately in
+`expand_via_poly`, then normalizes the full Atom sum. Whole polynomial
+conversion instead accumulates converted Add terms through sequential
+polynomial additions. The source suggests repeated accumulation as a cost to
+isolate; these timings alone do not attribute the whole conversion slowdown
+to that loop. The fixed protocol, all observations and rejected-route decision
+are preserved under `/tmp/idenso-final-scalar-expansion`.
+
+An isolated Symbolica-only diagnostic separates conversion from emission and
+also tries balanced polynomial accumulation. It parses the same saved scalar
+text with functions opaque; it does not register tensor tags or callbacks, so
+its clocks are separate from the typed measurements above. Three fresh
+processes per route and input give these raw-operation medians:
+
+#table(
+  columns: 4,
+  table.header([Input], [Ordinary (s)], [Sequential polynomial (s)],
+    [Balanced polynomial (s)]),
+  [Original ladder scalar], [0.250168], [6.795221], [0.881246],
+  [Early-rung ladder scalar], [0.077039], [2.561941], [0.296572],
+  [256-term synthetic], [0.002533], [0.423715], [0.006718],
+)
+
+For the original ladder, sequential conversion takes 6.786 s and emission
+9.32 ms; balanced conversion takes 0.871 s and emission 10.35 ms. The
+early-rung equivalents are 2.551 s / 11.05 ms and 0.286 s / 10.82 ms.
+Conversion dominates this whole-polynomial route on the pinned, unpatched
+Symbolica dependency. Balancing improves that route but still loses every pair
+against ordinary expansion: median paired ratios are 3.55, 3.85 and 2.47.
+All 27 results equal ordinary expansion of the identical parsed input and
+pass its fixed-point check; neither route is adopted in the notebook.
+
+This diagnostic changes both accumulation order and the variable map supplied
+to each term conversion. It therefore does not isolate addition-tree shape as
+the sole cause. Its synthetic case also grows the variable basis with input
+size. These limits and all observations are retained under
+`/tmp/idenso-final-scalar-expansion/balanced-poly`.
+
+The standalone
+#link("../../../../examples/reproducers/symbolica-expansion/performance.typ")[scalar
+expansion reproducer] makes these four routes available without tensor-library
+dependencies. Its synthetic input keeps twenty variables fixed while changing
+the number of terms; it also accepts a saved expression file. All four routes
+pass exact ordinary-expansion and fixed-point checks at 20, 256, 1,024 and
+4,096 input terms and on both saved ladder scalars. These 24 checks validate
+the reproducer; their single-call clocks are not a new benchmark cohort.
+
+=== Small admission experiments
+
+Two isolated native candidates were compared against a fresh build of the
+installed source and dependency family. The unchanged selected schedule
+includes final typed expansion inside its clocks. Six permutations of the
+three variants, for each ladder order, retain 36 fresh-process observations.
+Every candidate stage agrees literally with the corresponding baseline, and
+the final scalar has 9,652 terms. These native clocks are not pooled with the
+public Python measurements.
+
+Caching exact positive-power interface proofs gives a median paired wall-time
+increase of 0.59% in both orders, with three of six pairs faster in each.
+That candidate is rejected. Checking a function's arity and tensor tags
+before walking its arguments for vector admission reduces paired medians by
+1.53% / 2.04%; five / four of six wall pairs improve. This is a modest
+candidate, with slower observations retained, and has not been installed.
+The full protocol, source identities and results are under
+`/tmp/idenso-selected-hybrid-native`.
+
+=== Reuse scalar collection for final expansion
+
+The retained implementation moves expansion dispatch into the shared
+`SymbolicTensor<PartialStructure>` abstraction. Spynso converts arguments and
+wraps the checked result. The default expansion mode can reuse the existing
+bounded coefficient collector for scalar sums, while selected-variable and
+`via_poly` operations retain their Symbolica dispatch.
+
+This private intake admits exact rational arithmetic, ordinary scalar variables
+and compatible compact metric dots. It checks every source leaf before
+cancellation, retains normalized dot atoms literally, and skips all tensor
+graph and index-contraction work. Explicit tensor indices, unresolved ports,
+user normalization hooks, unsupported powers and resource-limit failures use
+the existing expansion and callback-aware finisher. Successful admission
+already proves that the established interface is preserved, so it avoids a
+second proof scan. Unchanged results retain their flags and metadata; typed
+zeros retain their interface. Schoonschip's scalar no-work behavior is unchanged.
+
+The collector builds exact coefficients and exponent lists directly; it does
+not call general expression-to-polynomial conversion on the input. Output
+still uses the existing coefficient-list polynomial emitter. The improvement
+comes from collecting equal monomials before constructing the resulting Atom
+sum and from reusing the scalar-interface proof.
+
+A separate diagnostic build confirms successful admission of both actual final
+ladder inputs, with no declined attempt. The original order generates 141,158
+virtual products, collects 10,121 distinct monomial keys and removes zero
+coefficients to emit 9,652 terms. Early rungs generate 47,416 products, collect
+10,027 keys and emit the same 9,652 terms. Both use 26 literal scalar leaves
+and 501,904 bytes of dense exponents. These are collector counts before Atom
+materialization, not FORM's intermediate term statistics.
+
+Four counterbalanced fresh-process pairs per order compare the exact saved
+native build with the candidate. A separate cohort measures only the final
+typed expansion; these are distinct clock scopes, each with 16 observations.
+
+#table(
+  columns: 5,
+  table.header([Order], [Complete loop, saved (s)], [Candidate (s)],
+    [Final expansion, saved (ms)], [Candidate (ms)]),
+  [Original], [1.228201], [1.064481], [275.157], [97.765],
+  [Early rungs], [0.422248], [0.368230], [82.924], [44.285],
+)
+
+Every pair improves on wall, process and thread clocks in both scopes. Median
+paired complete-loop wall changes are −17.38% / −8.89%; final-only changes
+are −64.73% / −46.82%. The complete-loop observations vary substantially:
+original pair improvements range from 11.73% to 21.54%, and early-rung
+improvements from 4.48% to 29.79%. No observation is excluded or repeated.
+All 32 timed results agree exactly; all 16 intermediate stage expressions
+match the baseline literally, and both final scalars equal FORM and remain
+fixed points. The diagnostic binary is never used for timing.
+
+The implementation passes 97 focused tests and the complete affected
+Idenso/Spenso/Spynso suite in the actual worktree: 955 tests, with 22 existing
+skips. All-target Clippy and formatting pass. Five new tests cover admitted
+scalar sums, refusal before cancellation, exact fallback, dispatch options,
+interface order, typed zero and callback behavior. The existing Python
+metadata/zero regression also covers shared expansion. The current locked
+dependencies and unrelated model, API and display changes are preserved.
+Native evidence is under `/tmp/idenso-scalar-expansion-intake` and
+`/tmp/idenso-scalar-expansion-native-harness/final`.
+
+=== Public measurement of shared scalar expansion
+
+Saved host `58dd008a` and selected host `9fb006cb` use the same dependency
+snapshot and the same contraction schedule. Both use tensor-safe replacement,
+local RHS expansion and fused ambient contraction; both include final typed
+expansion inside the loop clock. The selected implementation changes five
+shared tensor/Schoonschip and Python-dispatch source files. Symbolica remains
+the pristine pinned `06906976` revision; isolated emission patches are not
+included in either host.
+
+Eight counterbalanced fresh-process pairs per order give these wall medians:
+
+#table(
+  columns: 5,
+  table.header([Order], [Saved host (s)], [Selected host (s)],
+    [Median paired change], [FORM process (s)]),
+  [Original], [1.308102], [1.105130], [−16.41%], [0.851635],
+  [Early rungs], [0.435243], [0.365242], [−14.60%], [0.220752],
+)
+
+All sixteen pairs improve on wall, process and thread clocks. The ratios of
+the side medians improve by 15.52% / 16.08%, distinct from the median paired
+changes in the table. Original-order observations range from 1.232–1.606 s
+for the saved host and 1.033–1.169 s for the selected host; early-rung ranges
+are 0.407–0.453 s and 0.358–0.410 s. No slower observation is removed and no
+outcome-dependent repeat is performed. The shared machine is not reserved.
+
+Against the same fresh FORM processes, the original-order ratio falls from
+1.54 to 1.30 and the early-rung ratio from 1.97 to 1.65. These are unequal
+clock boundaries: Python measures the prepared public eight-vertex loop,
+excluding initial construction, counting, validation and disposal; FORM
+measures startup, parsing, computation and teardown. They quantify the
+observed remaining gap, not equal-scope engine parity. Each FORM order keeps
+three measured processes after one designated warmup; raw warmups are saved.
+
+Already expanded results now return without generic expansion. A separate
+three-pair control on the actual 9,652-term final scalar improves expansion
+rerun medians from 3.888 to 0.759 ms and from 3.548 to 0.878 ms. All six pairs
+improve on all three clocks, including a retained 1.653 ms original-order
+candidate observation. These controls are separate from the complete loop.
+
+The trace controls below keep three fresh paired process medians per case,
+each using five calibrated inner wall batches. Times are milliseconds; the
+FORM column is the median of its retained internal trace-and-sort CPU
+batches. It excludes the Python scalar spectator and wrapper, so those
+columns also have different boundaries.
+
+#table(
+  columns: 5,
+  table.header([Trace case], [Saved host], [Selected host],
+    [Median paired change], [FORM body CPU]),
+  [Free 2, D], [0.02213], [0.02171], [−7.45%], [0.00084],
+  [Free 4, D], [0.07386], [0.07494], [+1.46%], [0.00170],
+  [Free 6, D], [0.13121], [0.12079], [−3.19%], [0.00580],
+  [Free 10, D], [1.61352], [1.75478], [+10.67%], [0.42667],
+  [Free 12, D], [21.74959], [19.98120], [−6.61%], [4.96667],
+  [Free 8, 4D], [0.23674], [0.26900], [+1.76%], [0.05467],
+  [Repeated 8, 4D], [0.09309], [0.09647], [+3.30%], [0.00240],
+  [Repeated 8, D], [0.15499], [0.15959], [+2.81%], [0.01740],
+  [Axial 12, 4D], [1.59002], [1.62686], [+1.47%], [0.74800],
+)
+
+There is no general trace improvement. Free 10 in D is slower in all three
+first-call pairs. Free 8 in 4D reruns are also slower in all three pairs
+(median paired +8.17%, side medians 0.06001 → 0.06981 ms). Free 12 in D and
+axial reruns have positive paired medians of +0.84% and +2.64%; their side
+medians are 9.714 → 9.796 ms and 2.920 → 2.954 ms. The other six rerun
+controls have negative median paired changes. All trace samples and slower
+observations remain in the report; this cohort does not isolate the cause of
+those changes.
+
+A subsequent source audit follows the free-10 D control through
+`simplify_gamma(expand_traces=True)`. Its ten distinct indices use the existing
+generic terminal trace evaluator; the scalar spectator remains factored and
+the evaluator returns before Schoonschip component collection. The Python
+wrapper uses the existing rewritten-result finisher. Neither the new public
+expansion method nor scalar intake is reached, and the trace kernel and
+finisher bodies are byte-identical in the saved and selected sources. This
+excludes direct execution of the new dispatch as the explanation for the
+observed regression; effects from code generation, layout or allocation have
+not been isolated. The source comparison and route evidence are recorded in
+`/tmp/idenso-contraction-next/free10-dispatch-audit.json`.
+
+All measured ladder results equal the same scalar exactly. Separate untimed
+validation passes 207 API records, 117 HEP component rows, four network
+evaluations comparing the original factored ladder and scalar at two
+assignments, fresh complete FORM polynomials in both orders, 83 public and
+tensor-safe controls, all three actual notebook routes in both orders, and
+six installed metadata tests. Logical port order, callbacks, errors, typed
+zero and the preserved input are checked independently of the timing loops.
+
+The frozen protocol and all observations are under
+`/tmp/idenso-scalar-expansion-host`; `formal-summary.json` records the qualified
+comparison. Source and extension identities remain unchanged throughout the
+cohort. The source-controlled historical contraction archive is unchanged.
+
+At the end of this cohort, the selected `9fb006cb` wheel was installed in
+`/tmp/spenso-paper-venv` and passed the 25 focused public controls and six
+metadata tests there. A fresh
+before/after inventory preserves all 28 other local distributions and five
+additional distributions exposed by the development environment. The saved
+`58dd008a` host remains unchanged. Installation records are separate from the
+pre-installation benchmark summary under `canonical-install`.
+
+=== Remaining cost after shared expansion
+
+Separate native profiles of the `9fb006cb` implementation retain 783 / 272
+operation samples from four complete loops per order at 199 Hz. All eight
+loops produce the exact FORM scalar and pass fixed-point checks. The disjoint
+sampled-cycle shares are:
+
+#table(
+  columns: 3,
+  table.header([Owner], [Original], [Early rungs]),
+  [Component intake and collection], [28.24%], [29.51%],
+  [Other Schoonschip work], [17.21%], [16.60%],
+  [Interface inference and proofs], [17.84%], [18.90%],
+  [Symbolica normalization], [16.17%], [17.22%],
+  [Symbolica polynomial operations], [9.59%], [6.15%],
+  [Symbolica matching/replacement], [5.46%], [6.73%],
+  [Typed replacement bookkeeping], [3.65%], [2.30%],
+  [Index multiplicity and composition], [1.61%], [2.21%],
+)
+
+Final shared expansion accounts for 9.63% / 13.37% inclusively. Most sampled
+Symbolica normalization now occurs while rebuilding sums/products after
+tensor-factor replacement: 11.18% / 10.31% of the whole loop. This is where
+changed branches are materialized into normalized Atoms. The remaining work
+is spread across coefficient collection, tensor scans/proofs and Atom
+construction; matcher search alone does not explain the gap. The inclusive
+replacement and expansion shares overlap the table and must not be added to
+its disjoint owners.
+
+Intrinsic-normalization scans account for 9.88% / 8.70% inclusively across all
+callers. Of that, 3.58% / 4.13% of the whole loop is the final scalar intake's
+admission check before expansion. It is not reinference of the emitted
+result. Ambient collector admission, Schoonschip finishing and replacement
+preflight account for the other observed intrinsic scans.
+
+These are sampled native cycle shares, not wall-time fractions or another
+speed comparison. Four loops in one process may reuse caches differently
+from the fresh-process benchmark; Python callback crossings are absent.
+Inlining and truncated stacks limit attribution, with ten / one unknown
+leaf samples and no empty retained stacks. Classification uses the actual
+callee, excluding misleading generic parameter names such as
+`normalize_dots` and `TensorInferenceError`. The unchanged executable,
+sources and loaded runtime dependencies are verified. Raw profiles and
+corrected caller reports are under
+`/tmp/idenso-scalar-expansion-native-harness/final/selected-scalar-profile/v2`;
+`interpretation-overlay.json` records the corrected collector name and
+distinguishes scalar-intake admission from result finishing.
+
+=== Certify each input leaf once
+
+The collector now proves intrinsic normalization while compiling each distinct
+input leaf, using its existing literal-leaf table. Previously it walked the
+whole input first, repeating the same function-head and metadata checks for
+every occurrence. Factored contraction still checks each original opaque
+function subtree before caching it. The stricter scalar grammar already
+certifies every admitted compact dot head and operand. Root scalar factors
+that stay factored retain the existing complete/intrinsic observer check.
+
+Compilation of the entire input still precedes distribution and cancellation.
+A canceled term cannot conceal a user callback, and unsupported powers or
+resource exhaustion decline the intake before constructing results. Callback
+declines still use the checked ordinary path, including the counterexample
+where contracting a metric turns a tensor into a scalar. This change reuses
+the same tensor abstraction, collector and emitter; it adds no public mode
+or persistent cache.
+
+A separate allocation experiment reused a temporary monomial-key buffer.
+Both candidates were compared with a freshly built baseline from the selected
+`9fb006cb` source/dependency family. Each scope retains six permutations of
+the three variants for both orders: 36 complete-loop observations and 36
+separate final-expansion observations. Native clocks exclude Python wrapping
+and are not pooled with the public measurements above.
+
+#table(
+  columns: 5,
+  table.header([Order], [Complete baseline (s)], [Leaf proof (s)],
+    [Final baseline (ms)], [Leaf proof (ms)]),
+  [Original], [1.042415], [0.978628], [101.135], [59.778],
+  [Early rungs], [0.353807], [0.333711], [44.320], [32.292],
+)
+
+Median paired complete-loop changes are −5.59% / −5.32%, with five of six
+pairs faster in each order. Process and thread clocks agree. Final-only
+changes are −38.72% / −27.12%, with six / four of six pairs faster. All slower
+observations are retained, including two early-rung final-expansion pairs
+that regress slightly. The complete-loop screen and its selection criteria
+were fixed before timing; there are no outcome-dependent repeats.
+
+The temporary-key experiment fails those criteria: complete-loop paired
+changes are +0.59% / −1.72%, with only two / three of six pairs faster.
+Final-only paired changes are also positive (+0.29% / +1.24%). It is not
+retained. Its reduction in temporary allocation opportunities does not
+establish a runtime improvement, and the prepared combined candidate remains
+unbuilt.
+
+All 72 timed results pass exact and fixed-point checks. Untimed gates compare
+all sixteen intermediate expressions literally with the baseline, both final
+9,652-term scalars with FORM, and two saved scalar inputs plus three fixed-basis
+synthetic inputs. The leaf-proof implementation also passes 100 focused tests,
+Clippy and formatting. Its three new regressions use independent ordinary
+expansion/Schoonschip result oracles, check canceled and hidden callbacks,
+and preserve metric-induced rank-loss validation and typed zero. The selected
+source is integrated and passes the complete affected Idenso/Spenso/Spynso
+worktree suite: 958 tests, 22 existing skips, all-target Clippy and formatting.
+The original locked dependencies and all 677 checked source inputs remain
+unchanged through validation.
+The fixed dependency snapshot, protocols and all observations are under
+`/tmp/idenso-contraction-next`, with source and validation records under
+`/tmp/idenso-scalar-admission-proof`.
+
+==== Public comparison after leaf admission
+
+The public host changes only the collector admission source relative to the
+saved `9fb006cb` host, using the same pristine Symbolica `06906976` dependency.
+Both sides perform the same complete typed ladder loop, including final
+expansion. The prepared input, result checks, term counts and disposal are
+outside the clocks. Eight fresh paired calls per order retain all wall,
+process and thread observations. The selection criterion was fixed before
+timing: negative median paired changes on all three clocks and at least five
+of eight faster wall pairs in each order.
+
+#table(
+  columns: 6,
+  table.header([Order], [Saved host (s)], [Leaf proof (s)],
+    [Paired wall change], [FORM process (s)], [New / FORM]),
+  [Original], [1.138677], [1.037415], [−6.57%], [0.829428], [1.251×],
+  [Early rungs], [0.383812], [0.350274], [−12.71%], [0.197007], [1.778×],
+)
+
+Seven of eight wall pairs improve in each order, and process/thread changes
+agree. The candidate therefore passes the retention criterion. Ratios of
+the separate side medians give −8.89% / −8.74%; these are different statistics
+from the median paired changes in the table. Against the same fresh FORM
+observations, the saved host ratios are 1.373× / 1.948×. FORM's whole-process
+wall clock includes startup, parsing and teardown, whereas Python's prepared
+loop excludes input construction. These ratios describe the measured
+boundaries, not equal-scope engine overhead or parity. Native screens and
+historical public cohorts are kept separate.
+
+The separate final-expansion fixed-point controls remain mixed. Original-order
+side medians rise from 1.068 to 1.497 ms even though the median paired change
+is −7.36%, with two of three pairs faster. Early-rung medians rise from 0.840
+to 0.860 ms, with a +6.56% paired change and only one of three pairs faster.
+All observations are retained; this is not evidence of a rerun improvement.
+
+The trace controls use three fresh paired processes per case and five
+calibrated wall batches per process. The following first-call medians are in
+milliseconds. FORM reports internal trace-and-sort CPU time, excluding the
+Python scalar spectator and wrapping, and therefore has a different scope.
+
+#table(
+  columns: 5,
+  table.header([Trace case], [Saved host], [Leaf proof],
+    [Paired change], [FORM body CPU]),
+  [Free 2, D], [0.02048], [0.02032], [−1.58%], [0.00066],
+  [Free 4, D], [0.07232], [0.07189], [−0.97%], [0.00135],
+  [Free 6, D], [0.11864], [0.12108], [+1.61%], [0.00520],
+  [Free 10, D], [1.69740], [1.56434], [−4.73%], [0.35000],
+  [Free 12, D], [22.07120], [20.12071], [−8.50%], [3.90000],
+  [Free 8, 4D], [0.24780], [0.23661], [−5.22%], [0.04933],
+  [Repeated 8, 4D], [0.09323], [0.09308], [−0.61%], [0.00220],
+  [Repeated 8, D], [0.15511], [0.15609], [−0.05%], [0.01460],
+  [Axial 12, 4D], [1.77805], [1.68551], [−4.57%], [0.64400],
+)
+
+Free 6 in D is slower in all three first-call pairs. Rerun controls below also
+retain the positive paired changes for free 4 and free 6 in D. Times are
+milliseconds and remain independent of the first-call samples.
+
+#table(
+  columns: 4,
+  table.header([Trace rerun], [Saved host], [Leaf proof], [Paired change]),
+  [Free 2, D], [0.001101], [0.001062], [−3.58%],
+  [Free 4, D], [0.001872], [0.001882], [+0.85%],
+  [Free 6, D], [0.007474], [0.007455], [+0.81%],
+  [Free 10, D], [0.683301], [0.682330], [−0.14%],
+  [Free 12, D], [9.810806], [9.418374], [−5.93%],
+  [Free 8, 4D], [0.059934], [0.059437], [−0.83%],
+  [Repeated 8, 4D], [0.002364], [0.002341], [−0.98%],
+  [Repeated 8, D], [0.012684], [0.012618], [−0.52%],
+  [Axial 12, 4D], [3.013321], [3.003201], [−2.19%],
+)
+
+There is no general trace-speedup claim. In particular, the free-10 route
+audited above does not execute the changed admission code, so this cohort's
+improvement does not establish a causal benefit from that change. The earlier
+`9fb006cb` sampled profiles identify the motivation for the optimization;
+their percentages are not reused as measurements of the new implementation.
+The separate retained-host profile below measures the remaining work.
+
+Untimed public validation passes 207 API records, 117 HEP component rows,
+four network evaluations comparing the original factored ladder and scalar
+at two assignments, both fresh complete FORM polynomials, 83 public and
+tensor-safe controls, all three notebook routes in both orders, and six
+metadata tests. All timed results pass their exact checks. No source or
+extension identity changes during the cohort, and no observations are
+discarded or repeated based on their outcome.
+
+The selected host is `d58aee8a`. The frozen protocol, raw observations and
+qualified report are under `/tmp/idenso-scalar-admission-host`, with
+`formal-summary.json` recording the completed comparison before installation.
+The historical contraction archive remains unchanged.
+
+The selected wheel is installed in `/tmp/spenso-paper-venv`. Its 25 focused
+public control records exactly match the isolated candidate, and six installed
+metadata tests pass. A fresh inventory verifies that all 28 other local
+distributions and five additional development-environment distributions are
+unchanged. The immutable `9fb006cb` baseline remains available. The separate
+`canonical-install/summary.json` records the wheel, installed extension,
+dependency inventory and checks.
+
+=== Factor recognition and terminal storage experiments
+
+Two isolated candidates test additional collector costs against the retained
+`d58aee8a` source. The first caches immutable factor recognition by input ID
+after exact coefficient cancellation. It reuses resolved metric/vector
+endpoints and opaque tensor ports while retaining exponent checks, fresh
+incidence and contraction planning per monomial. Optional recognition storage
+is bounded; exhaustion repeats ordinary recognition. Original callback
+admission still precedes distribution and cancellation.
+
+Here the original vertex order is `[1,2,3,4,5,6,7,8]`; "early rungs"
+(called `reverse` by the measurement driver) is `[5,4,6,3,7,2,8,1]`.
+It already closes successive triangles, with expanded-vertex frontier ranks
+`[2,3,2,3,2,3,2,0]`. The opposite traversal `[1,2,8,3,7,4,6,5]` was measured
+historically on a growing-accumulator implementation, not on this current
+all-opaque loop. Its old times do not establish a new improvement here;
+`exact-order-audit.json` under the native measurement directory records that
+distinction and the exact arrays.
+
+The second replaces each node's terminal vector with two inline entries.
+Accepted degree-at-most-two graphs consist of paths and cycles, which have
+two or zero component terminals after free endpoints are included. Checked
+insertion and ordered merging preserve the existing behavior. This removes
+terminal allocations but makes each node larger; fewer allocations alone do
+not establish a runtime benefit.
+
+A fixed native comparison retains all six variant permutations twice per
+order: 72 fresh processes, twelve pairs per candidate and order. All variants
+include the final shared expansion. Before timing, retention requires median
+paired ratios below one on wall, process and thread clocks in both orders,
+plus at least eight of twelve faster wall pairs per order.
+
+#table(
+  columns: 4,
+  table.header([Complete loop], [Baseline (s)], [Recognition (s)], [Inline terminals (s)]),
+  [Original], [0.970406], [0.947283], [0.985330],
+  [Early rungs], [0.346926], [0.317414], [0.342484],
+)
+
+#table(
+  columns: 5,
+  table.header([Candidate], [Original paired change], [Faster pairs],
+    [Early-rung paired change], [Faster pairs]),
+  [Recognition], [−3.33%], [7/12], [−6.93%], [9/12],
+  [Inline terminals], [+2.11%], [4/12], [−3.47%], [7/12],
+)
+
+Neither candidate qualifies. Process and thread paired medians have the same
+directions as wall time. No observations are excluded or repeated, including
+the recognition candidate's slower ratios of 1.315 and 1.472 in the two
+orders. The separate side medians in the first table and median paired changes
+in the second are distinct statistics. These native measurements omit Python
+wrapping and are not pooled with the earlier public/FORM cohort. No combined
+candidate or new public host is built; production and the installed `d58aee8a`
+host retain the previous implementation.
+
+Both candidates pass all sixteen literal ladder-stage comparisons, both
+complete 9,652-term FORM scalar checks, fixed points and five scalar controls.
+Inline storage passes 100 focused tests; recognition passes 103. Both pass
+Clippy, formatting and independent source review. One new recognition fixture
+initially failed because constructing the diagonal metric already returned
+the dimension. The corrected fixture explicitly checks that normalization and
+uses a private plain metric to exercise the lower-level self-loop guard. The
+entire production prefix is unchanged, and all 100 original tests are retained.
+
+The frozen dependency family, protocol and observations are under
+`/tmp/idenso-factor-recognition-native`. Candidate sources and validation are
+under `/tmp/idenso-factor-recognition` and `/tmp/idenso-inline-terminals`.
+The earlier sample counts motivated these experiments; they do not establish
+the cause of the measured variation or a removable wall-time fraction.
+
+=== Remaining work in the retained implementation
+
+A fresh profile of the retained `d58aee8a` implementation records eight
+complete loops per order at 499 Hz. All sixteen results match the complete
+9,652-term FORM scalar, retain rank zero, and pass both simplification and
+expansion fixed-point checks. Source and runtime identities remain unchanged.
+There are 3,316 operation samples for the original order and 1,145 for early
+rungs. These repeated-loop native processes differ from the fresh-process
+public timing cohort; sampled cycle weights are not wall-time fractions.
+
+#table(
+  columns: 3,
+  table.header([Disjoint sampled owner], [Original], [Early rungs]),
+  [Component collector], [29.01%], [29.63%],
+  [Candidate observation], [12.67%], [13.17%],
+  [Replacement reconstruction normalization], [12.28%], [9.16%],
+  [Interface inference and proofs], [10.86%], [12.73%],
+  [Polynomial operations], [9.56%], [6.46%],
+  [Symbolica matching/replacement], [6.90%], [8.36%],
+  [Dot normalization traversal], [6.77%], [7.34%],
+)
+
+The table lists selected disjoint owners, not a complete partition. Nearly all
+candidate observation comes from ambient Schoonschip dispatch; collection's
+own tensor observation is small. The existing shared index walker can stop
+its observer at the first repeated explicit index. Trying the collector at
+that point could avoid observing the remaining expression on successful
+admission. A declined attempt must complete observation before cleanup uses
+callback, bracket or dot flags. An expression with no repeated index already
+receives a complete scan, so this design must not add a second scalar scan.
+
+Replacement reconstruction means Rust calls to Symbolica's bulk sum/product
+constructors after tensor-leaf replacement, including term merging and
+ordering. It does not mean conversion through Python or a new tensor-network
+parse. Tensor-safe replacement already retains the proved external interface;
+it still has to construct normalized algebra. Skipping that normalization
+would need a separate proof for downstream admission and validation.
+
+The intrinsic-normalization scan alone accounts for 3.08% / 2.64% inclusively,
+which overlaps the table's owners. Persistent proof caching is therefore a
+smaller target than candidate observation, and the publicly mutable tensor
+expression forbids blindly retaining such a cache. Collector stack frames
+identify attempted intake, not whether an `Option` result succeeds or declines.
+No success rate or per-stage term count is inferred from these samples.
+
+The frozen protocol, raw profiles, disjoint attribution and caller analysis
+are under `/tmp/idenso-collector-next-analysis/d58-profile`; `final-report.json`
+records their identities. This profile supplies optimization targets, not a
+measured speedup for an unimplemented change.
+
+=== Early observation: ladder gain and refusal cost
+
+An isolated candidate exposes the existing shared walker's early-stop mode to
+Schoonschip dispatch. Eligible expressions try collection at the first repeated
+explicit index. Successful collection skips the remaining observations; a
+declined attempt restarts full observation before cleanup. No-repeat inputs
+finish in one scan. The change also removes the immediate retry of an unchanged
+expanded input that the collector already declined; factored-to-expanded
+fallback and later changed-normalization retries retain their behavior.
+
+Both Spenso and Idenso are rebuilt against one frozen dependency family. The
+complete native loop includes all eight tensor-safe replacements, contractions
+and final shared expansion, excluding prepared input construction, checks and
+final disposal. The frozen comparison has twelve counterbalanced pairs per
+order, with no exclusions or outcome-dependent repeats. Its primary retention
+criterion requires lower median paired ratios on wall, process and thread
+clocks in both orders, and at least eight of twelve faster wall pairs per order.
+
+#table(
+  columns: 5,
+  table.header([Complete native loop], [Baseline (s)], [Candidate (s)],
+    [Paired wall change], [Faster pairs]),
+  [Original], [0.955089], [0.914345], [−3.85%], [10/12],
+  [Early rungs], [0.347077], [0.315647], [−8.19%], [12/12],
+)
+
+The candidate meets that primary criterion. Paired process/thread changes are
+−3.79% for the original order and −8.12% for early rungs. All sixteen intermediate
+expressions, complete FORM polynomials, scalar interfaces and fixed points
+match. These native times are kept separate from the public Python/FORM cohort.
+
+Separate controls expose the cost of restarting after refusal. Each fixture
+uses four counterbalanced pairs of fresh processes, with 32 calls per batch;
+these observations are not pooled with the ladder. A wrapper containing 1,024
+scalar arguments before its repeated explicit index uses factored intake,
+which preserves the subsequent expanded fallback. Its wall batch median rises
+from 2.115 to 2.570 ms; the median paired change is *+19.64%*. Process/thread
+paired changes are +18.15% / +18.16%, with no faster thread pair. A related late
+callback control is mixed and near flat (wall −0.11%, thread +1.77%). The small
+unchanged opaque-power refusal also has mixed clocks (wall −17.20%, process
++14.96%, thread −13.60%). All outputs and callback transcripts match, including
+the callback-free fixed-point reruns.
+
+This candidate remains isolated despite passing the primary ladder criterion.
+The measured refusal regression motivates continuing observation of the
+unvisited suffix in the same walk when collection declines. At the end of this
+comparison, production and the installed host retained `d58aee8a` while that
+follow-up was prepared.
+
+Focused validation passes 234 tests, all-target Spenso/Idenso Clippy, the HEP
+library compile check and formatting. The separate HEP library unit-test
+target cannot compile in this configuration: five trait-bound errors at
+`hep_lib_atom::<AbstractIndex, i32>()` reproduce on the saved baseline. Those
+unit tests were not run; the successful library check is compile coverage.
+One new admission-count fixture needed explicit registration of its tensor
+heads. Its corrected assertion retains the exact one-scan requirement and
+additionally checks that collection changes the expression; production is
+identical to the measured artifact.
+
+Sources and checks are under `/tmp/idenso-early-observation`. The frozen
+48-process primary comparison and separate 24-process controls are under
+`/tmp/idenso-early-observation-native`; the source-review records are under
+`/tmp/idenso-collector-next-analysis`. Earlier failures and all slower
+observations remain in their evidence bundles.
+
+=== Continuing observation after refused collection
+
+The follow-up extends the existing shared index observer with a first-hit
+decision callback. It runs once when an explicit index repeats and chooses
+whether to stop or observe the remaining nodes. With no repetition it is not
+called. Continuing uses the existing traversal with further index bookkeeping
+disabled; the observer sees the same nodes in the same order as a full scan.
+Constant full-observation and stop decisions serve the existing callers.
+
+Schoonschip attempts the existing collector in that decision. Success stops
+observation and returns the collected expression. Refusal completes the
+unvisited suffix before callback-sensitive cleanup uses its flags. The
+collector still proves source admission before distribution or cancellation.
+Observation completion remains distinct from certainty about opaque metadata.
+Previously certified intrinsic cleanup can carry pending observations into
+the next iteration, preserving the existing fixed-point behavior.
+
+A reviewed edge case needs a final memoized decision when the first repetition
+is a direct explicit-slot exponent of a root power. There is no ancestor left
+to request observation of a suffix. The fix invokes the decision before any
+true result returns, reusing a prior decision when one exists. Regressions
+verify that the power survives construction, and check callback count and
+ordering for both root and nested cases.
+
+A separate native cohort uses twelve pairs per ladder order against the same
+immutable baseline. It includes the final scalar expansion and retains all
+observations. Both orders pass the previously specified primary criterion.
+
+#table(
+  columns: 5,
+  table.header([Complete native loop], [Baseline (s)], [Candidate (s)],
+    [Paired wall change], [Faster pairs]),
+  [Original], [0.970110], [0.904641], [−6.06%], [12/12],
+  [Early rungs], [0.336101], [0.328655], [−3.00%], [10/12],
+)
+
+Paired process and thread changes are −6.03% for the original order and −3.02%
+for early rungs. All intermediate and final exact checks pass. These
+measurements are not pooled with the earlier early-stop experiment or the
+public Python/FORM cohort.
+
+Separate controls retain the same 32-call boundary, now with eight pairs of
+fresh processes per fixture (sixteen processes). Before measurement, the
+late-repeat remedy criterion requires median paired ratios at most 1.05 on
+all three clocks and at least six of eight wall and thread pairs at most 1.10.
+This tolerance checks the measured regression; it does not establish parity or zero overhead.
+
+The late-repeat control passes narrowly: median paired changes are *+3.29%
+wall, +4.90% process and +4.39% thread*. Six wall pairs and seven thread pairs
+are within 10%; only three wall and two thread pairs are faster. Its wall
+batch medians are 1.737 and 1.794 ms. The largest paired increases, +53.94%
+wall / +53.15% process / +41.34% thread, remain in the record without an
+asserted cause or exclusion. The other controls favor the candidate in their
+paired medians, with small-batch variability retained.
+
+The corrected candidate passes 235 focused tests, all-target Spenso/Idenso
+Clippy, the HEP library compile check and formatting. The separate baseline
+HEP unit-test compilation limitation remains as described above. Native
+qualification permitted the public-host comparison below. Its independently
+audited result qualifies the nine reviewed files for retention in production;
+the full worktree validation also passes.
+
+The corrected sources and checks are under `/tmp/idenso-resumable-observation`,
+with the final manifest in `revision2/source-manifest.json`. Frozen native
+protocols, raw observations and `comparison-summary.json` are under
+`/tmp/idenso-resumable-observation-native`. Independent source and 96-record
+reviews are under `/tmp/idenso-collector-next-analysis`.
+
+=== Public qualification of resumable observation
+<resumable-observation-public>
+
+The complete Python host rebuild includes all consumers of the changed Spenso
+and Idenso code. The frozen comparison uses the saved `d58aee8a` host and the
+new `4eace950` host, with eight counterbalanced pairs per order. Both sides use
+`replace_tensor`, the same contraction schedule, and final typed expansion.
+The measured boundary excludes prepared input construction, checks and disposal.
+Before timing, selection requires lower median paired ratios on wall, process
+and thread clocks in both orders, with at least six of eight faster wall pairs.
+
+#table(
+  columns: 5,
+  table.header([Complete ladder], [Saved host (s)], [New host (s)],
+    [Paired wall change], [FORM process (s)]),
+  [Original], [0.951250], [0.858030], [−9.09%], [0.759784],
+  [Early rungs], [0.320533], [0.300276], [−6.66%], [0.180466],
+)
+
+All eight pairs are faster on all three clocks in both orders. Paired process
+and thread changes are −9.09% / −6.64% for original / early-rung ordering.
+Side medians and median paired changes are distinct statistics. Every sample
+and designated warmup is retained; there are no outcome-dependent repeats.
+The early-rung order is `[5,4,6,3,7,2,8,1]`, called `reverse` by the driver.
+
+Against the same fresh FORM denominator, the original-order ratio falls from
+1.252 to *1.129*, and the early-rung ratio from 1.776 to *1.664*. FORM timings
+cover the whole process, including startup, parsing and teardown; Python times
+cover the prepared operation loop. These boundaries differ, so neither the
+ratios nor the remaining gaps establish equal-scope engine parity. The frozen
+native and earlier public cohorts remain separate.
+
+The nine trace controls cover symbolic-dimensional `tracen`, ordinary 4D
+`trace4`, repeated indices and an axial trace. First-call wall medians are
+below; FORM reports its internal trace-and-sort CPU body and excludes Python
+dispatch, wrapping and the axial scalar spectator.
+
+#table(
+  columns: 5,
+  table.header([Case], [Saved (ms)], [New (ms)], [Paired change], [FORM body (ms)]),
+  [Free 2, D], [0.020059], [0.020845], [+4.07%], [0.000640],
+  [Free 4, D], [0.072113], [0.070318], [−1.37%], [0.001350],
+  [Free 6, D], [0.123821], [0.121820], [−1.62%], [0.005400],
+  [Free 10, D], [1.597726], [1.562062], [−2.24%], [0.343333],
+  [Free 12, D], [19.593131], [19.338730], [−0.87%], [4.000000],
+  [Free 8, 4D], [0.234022], [0.236598], [+1.92%], [0.048667],
+  [Repeated 8, 4D], [0.093199], [0.092720], [−0.69%], [0.002000],
+  [Repeated 8, D], [0.154918], [0.156764], [+0.40%], [0.014000],
+  [Axial 12, 4D], [1.552262], [1.565161], [−0.57%], [0.596000],
+)
+
+Each trace route has three paired fresh processes, each retaining five
+calibrated inner samples. First calls and unchanged-result reruns are separate.
+The axial first-call side median rises while its median paired ratio falls;
+neither statistic is substituted for the other. Rerun paired changes are
++4.32%, −28.38%, +1.08%, +1.31%, +0.35%, +0.39%, +5.34%, +1.40% and +1.91%
+in the table's order. Six rerun cases are slower in all three pairs. These
+controls support no general trace or rerun speedup claim.
+
+The separate final-expansion fixed-point control has twelve processes. Paired
+wall changes are +3.03% / +0.15%, with only one of three faster pairs in each
+order; CPU changes are about +2.3% / −1%. The native late-repeat control's
+remaining slowdown and outlier are retained above. Selection prioritizes the
+complete ladder gain without treating these controls as improvements.
+
+Actual-worktree validation passes *964 tests*, with 22 existing skips,
+all-target Clippy, formatting and the HEP library compile check. The pre-existing
+HEP unit-test compilation failure described above is not counted as a pass.
+Public correctness additionally covers 207 API records, 117 HEP component
+rows, four network evaluations over two momentum assignments, both complete
+FORM polynomials, 83 public controls including tensor-safe replacement,
+three notebook routes in both orders
+and six metadata cases. The source and dependency inventories remain unchanged
+through measurement.
+
+The frozen protocol, all raw timings and validation records are under
+`/tmp/idenso-resumable-observation-host`; `formal-summary.json` records the
+qualified public result. Native profiles are separate from these wall timings.
+
+The qualified wheel is installed in the notebook environment. A fresh inventory
+checks all 28 other installed distributions; their versions and recorded
+metadata remain unchanged. Twenty-five selected controls and six metadata cases
+pass after installation. The saved baseline and isolated candidate remain
+available. Installation evidence is recorded separately in
+`canonical-install/summary.json` beneath the same host directory.
+
+=== Remaining costs after resumable observation
+
+A new native profile records eight complete loops per order, with all sixteen
+exact FORM, scalar-interface and fixed-point checks passing. It retains 4,583
+operation samples for the original order and 1,097 for early rungs at 499 Hz.
+These repeated-loop sampled cycle weights are separate from fresh-process
+Python wall timings and are not precise fractions of elapsed time.
+
+#table(
+  columns: 3,
+  table.header([Disjoint sampled owner], [Original], [Early rungs]),
+  [Component collection], [32.42%], [32.39%],
+  [Other Schoonschip work], [16.22%], [16.93%],
+  [Symbolica normalization], [14.28%], [15.85%],
+  [Interface inference and proofs], [12.68%], [13.66%],
+  [Polynomial operations], [10.14%], [6.41%],
+  [Symbolica matching/replacement], [9.48%], [8.20%],
+  [Typed replacement], [3.08%], [3.91%],
+  [Index occurrence and composition], [1.55%], [2.31%],
+)
+
+Collection now executes inside the observer's first-repeat callback. Consequently
+the inclusive scanner share, 47.41% / 41.99%, includes nested collection and
+cannot be read as scanning cost. Resolved nested collector ancestry accounts
+for 38.74% / 33.07%. A disjoint 7.76% / 8.01% remains attributable only to
+observation or an inlined decision; it is not assigned entirely to scanning.
+Dot normalization traversal accounts for 7.38% / 8.44%. These more detailed
+caller views overlap the owner table and must not be added to it.
+
+Reconstructing replaced sums/products accounts for 10.80% / 10.86% in Symbolica
+normalization. Within collection, the disjoint method samples include virtual
+distribution (7.66% / 7.06%), vector recognition (3.92% / 3.55%), monomial keys
+(3.32% / 2.28%), tensor planning (2.50% / 3.53%) and input compilation
+(2.20% / 2.68%). These measurements identify repeated work in contraction and
+reconstruction as native optimization targets.
+
+The finishing call `with_rewritten_expression` has an inclusive share of only
+3.93% / 3.40%, mostly after ambient contraction. That bounds the resolved target
+for reusing a collector's interface proof; it is not the whole inference share.
+The samples do not distinguish initial successful collection from other
+finishing calls, so they neither prove that all of this work is redundant nor
+predict a speedup. The native comparison below tests a certificate from initial
+collection while retaining validation after callbacks or earlier cleanup.
+
+There are 63 / 5 unresolved leaf frames; inlining and stack resolution limit
+finer attribution. The interrupted first launch stopped at its environment
+check before any samples. A versioned profile verified the same six shared
+library hashes under the current environment before and after recording;
+all source and executable guards passed. Its frozen protocol, raw stacks and
+`final-report.json` are under
+`/tmp/idenso-collector-next-analysis/resumable-profile/v2`. Old and new profile
+percentages are not subtracted to infer runtime gains.
+
+=== Rejected refinement of dot candidates
+
+An isolated follow-up made the observation pass distinguish ordinary indexed
+vectors, such as `p(mink(4,a))`, from nested vectors and explicit vector powers.
+Ordinary indexed vectors cannot trigger a nested-vector identity, so the change
+can avoid an otherwise unchanged dot-normalization walk. Powers, opaque
+payloads and callback-sensitive admission retain their checks. This also makes
+some inert vector metadata eligible for existing component collection.
+
+The candidate passes 215 focused Idenso/Spynso tests, all-target Clippy and
+formatting. Compiler paths, dependency records and the four new test names bind
+these checks to the candidate. Native checks preserve all sixteen literal
+intermediate ladder expressions, both exact 9,652-term FORM results, scalar
+interfaces and fixed points, plus five scalar-expansion cases.
+
+Nevertheless, it fails the fixed native performance criterion. Twelve fresh
+pairs per order compare the retained `4eace950` source with this one-file
+candidate. The measured operation includes the complete reduction and final
+typed expansion; setup, checks and disposal are outside the clocks. These
+native measurements are separate from the public Python timings above.
+
+#table(
+  columns: 5,
+  table.header([Order], [Retained median (s)], [Candidate median (s)],
+    [Paired wall change], [Faster pairs]),
+  [Original], [0.941312], [0.935361], [+0.22%], [6/12],
+  [Early rungs], [0.328228], [0.337743], [+6.49%], [3/12],
+)
+
+Paired process/thread changes are +0.25% / +0.25% for the original order and
++6.39% / +6.39% for early rungs. Neither order satisfies the prespecified
+requirement of lower median paired ratios on all three clocks and at least
+eight of twelve faster wall pairs. The slightly lower original-order side
+median is not substituted for its paired result.
+
+Separate controls retain eight pairs per fixture, each containing 32 calls on
+an unchanged input. Paired wall changes are −15.93% for one explicit vector
+(six faster pairs) and −14.90% for a 256-vector sum sharing one free port
+(eight faster pairs). The compact-dot control is mixed: −1.97% wall, +5.95%
+process and −1.21% thread. Short batches retain substantial outliers, including
+a 2.85-times wall ratio for one single-vector pair. These controls model the
+native wrapper work but omit Python object and descriptor allocation.
+
+The local no-op improvement does not justify the ladder regression. The
+candidate is not integrated or installed; the retained public build and FORM
+comparisons above are unchanged. All 48 ladder and 48 control observations,
+including slower pairs, are retained without outcome-dependent repeats under
+`/tmp/idenso-dot-candidate-flags-native`. Source and validation records are
+under `/tmp/idenso-dot-candidate-flags`. The measurements do not by themselves
+attribute the regression to a particular added classification step.
+
+=== Further native comparisons
+
+Three independent candidates were compared with the same retained `4eace950`
+implementation. Each cohort contains twelve fresh pairs per ladder order and
+includes the complete eight-step reduction plus final typed expansion. Setup,
+correctness checks and disposal are outside the operation clocks. Every
+candidate preserves all sixteen literal intermediate expressions and both
+exact 9,652-term FORM results, scalar interfaces and fixed points. The existing
+component certificate is reused through exact final equality; these native
+experiments do not claim new HEP evaluations or new FORM timings.
+
+The acceptance rule was fixed before measurement: both orders need lower
+median paired ratios on wall, process and thread clocks, and at least eight of
+twelve faster wall pairs. The following percentages are paired wall changes,
+each from its own cohort; absolute times across cohorts are not compared.
+
+#table(
+  columns: 5,
+  table.header([Change], [Original], [Early rungs],
+    [Faster pairs, original / early], [Decision]),
+  [Reuse verified interface], [−4.94%], [−2.87%], [10/12 / 10/12],
+    [Rejected in Python],
+  [Check vector head first], [+10.73%], [−1.93%], [4/12 / 7/12], [Rejected],
+  [Stop dot preflight globally], [−2.65%], [+4.26%], [7/12 / 4/12], [Rejected],
+)
+
+*Interface reuse.* Initial successful component admission can certify that the
+contraction preserves an established explicit interface. A shared
+`SymbolicTensor` operation consumes this fact instead of inferring the result's
+interface again. Admission after earlier cleanup cannot certify the original
+input. Callback-bearing or unresolved cases retain checked reconstruction,
+including the counterexample where contraction changes `T(b)` into a scalar.
+Identity results reuse the computed Atom, and typed zeros retain their ports.
+The candidate passes 215 focused Idenso/Spynso tests, all-target Clippy and
+formatting in a private, source-bound build.
+
+Native side wall medians are 0.928064 → 0.890104 seconds for the original order
+and 0.324804 → 0.314515 seconds for early rungs. Paired process/thread changes
+are −4.90% / −4.90% and −2.82% / −2.82%, with ten faster pairs on each clock.
+The native main loop omits Python's initial structured-input clone. Separate
+controls model that clone and identity wrapping, but still omit Python object
+and descriptor allocation. Eight pairs of 32 unchanged-input calls show a
+*+35.20%* paired wall change for a tiny scalar and *+3.30%* for the 9,652-term
+scalar; all eight wall pairs are slower in both controls. The tiny scalar's
+CPU records include a zero thread duration and large outliers, so they do not
+support precise CPU percentages. All records remain included. The subsequent
+public Python comparison below rejects this candidate.
+
+*Vector admission.* Checking arity and the rank-one tag before asking the slot
+matcher to recognize a vector preserves malformed-input and conflicting-tag
+checks. It passes 160 focused tests in separate processes and Clippy for the
+Idenso test target. Its original-order paired process/thread changes are both
++10.53%; early-rung changes are both −2.11%. Neither order meets the full rule.
+The candidate remains unintegrated; the measurements do not establish the cause
+of the regression.
+
+*Dot preflight.* Symbolica's visitor can prune a subtree, but its active ancestor
+loops still invoke the callback for later siblings. A private recursive search
+can stop globally at the first rewrite while preserving traversal order, opaque
+boundaries and the first rewrite's callback effects. The candidate passes 161
+focused tests in separate processes and Clippy for the Idenso test target.
+Its original-order paired process/thread changes are both −2.64%; early-rung
+changes are both +4.24%. It also fails the complete-ladder rule.
+
+Separate controls contain eight pairs of 32 calls for an early rewrite, a late
+rewrite, no rewrite, and an opaque payload. Paired wall changes are −6.54%,
+−7.64%, −12.66% and −9.11%, with six, six, eight and seven faster pairs. These
+measure the whole raw Schoonschip operation, including observation and any
+subsequent replacement and cleanup; they are not preflight-only timings. The
+same original input is used for each call, with all outputs retained until the
+clocks stop. These improvements do not justify the ladder regression.
+
+The standalone `visitor_shortcircuit` binary in
+`examples/reproducers/symbolica-expansion` demonstrates the visitor behavior
+without Idenso. For a first-argument match followed by 8,192 arguments, callback
+counts are 8,194 versus two. All twelve first/last/absent/opaque cases, formatting
+and Clippy checks pass. These are visit counts, not a runtime or ladder-speed
+claim; the accompanying `performance.typ` describes how to run it.
+
+All 80 interface-reuse, 48 vector-admission and 112 preflight observations are
+retained without exclusions or outcome-dependent repeats. Our builds and other
+benchmarks were quiet during each cohort; the shared host was not exclusive.
+Frozen protocols, raw records and independent arithmetic/guard reviews are in
+`/tmp/idenso-typed-schoonschip-proof-native`,
+`/tmp/idenso-vector-admission-order-native`,
+`/tmp/idenso-dot-preflight-shortcircuit-native` and
+`/tmp/idenso-collector-next-analysis`. None of these candidates is installed;
+the retained public timings and FORM ratios above are unchanged.
+
+=== Public comparison of interface reuse
+
+The isolated `23a302a3` Python host passes 207 API records, 117 HEP component
+rows, four complete network evaluations, both fresh FORM polynomials, 83 public
+controls, all three notebook routes in both orders and six metadata cases.
+Additional checks cover the actual Python no-op calls and the raw Symbolica
+reference. Callback-induced rank loss remains rejected. The candidate therefore
+passes correctness, but fails the performance requirement fixed before timing.
+
+Eight fresh pairs per order compare complete reductions against the retained
+`4eace950` host. Both orders require lower median paired ratios on all three
+clocks and at least six of eight faster wall pairs.
+
+#table(
+  columns: 5,
+  table.header([Order], [Retained median (s)], [Candidate median (s)],
+    [Paired wall change], [Faster pairs]),
+  [Original], [1.343208], [1.312954], [−0.61%], [4/8],
+  [Early rungs], [0.399306], [0.426222], [+4.10%], [3/8],
+)
+
+Paired process/thread changes are −0.50% for the original order and +4.09% for
+early rungs. Separate public no-op controls contain eight pairs per fixture:
+4,096 calls on a tiny scalar or 32 calls on the 9,652-term scalar, with outputs
+retained through the clocks. Paired wall changes are *+27.79%* and *+6.12%*,
+with only one and two faster pairs respectively. Unlike the native main loop,
+this public path clones its structured input before contraction; this source
+difference is established, but its contribution to the measured changes has
+not been isolated.
+
+The supplied raw Symbolica recipe is also measured separately on the retained
+host, with three fresh processes per order: medians are 1.081411 and 0.384681 s.
+Fresh FORM process medians are 1.035341 and 0.249036 s. The raw recipe uses
+specialized scalar rules, while FORM includes process startup and teardown;
+neither comparison isolates the cost of tensor-interface checks. These cohorts
+are not pooled with earlier timings or the primary paired comparison.
+
+Trace controls retain all three process pairs and five inner batches per route.
+Free length-12 tracen has side medians 32.468 → 23.502 ms, but only a −2.71%
+median paired change; these statistics must not be substituted for each other.
+Axial length-12 unchanged-result reruns have a +19.58% paired change. The trace
+algorithm is unchanged, and these variable controls do not establish a general
+trace improvement. Separate final-expansion fixed-point controls have paired
+wall changes of +157.42% and +18.74% for original and early-rung inputs. Their
+expansion implementation is unchanged; the measurements do not establish the
+cause of these differences.
+
+All eight measurement phases and source/dependency guards pass. Every sample
+is retained without outcome-dependent repeats; our other workloads were quiet,
+but external work continued on the shared host. Full clocks, trace controls,
+FORM output and correctness records are under
+`/tmp/idenso-typed-schoonschip-proof-host/benchmarks`. The candidate is neither
+integrated nor installed. The retained tensor-safe replacement implementation
+and its qualified results above remain current.
+
+=== Passing owned operands to replacement builders
+
+An independent two-line candidate passes the already-collected
+`Vec<AtomOrView>` directly to Symbolica's bulk sum and product builders, rather
+than creating iterators of borrowed views. Matching, callback order, unchanged
+branch reuse, normalization and post-product validation remain identical.
+The possible benefit is allocation reuse; it does not remove normalization.
+All fifteen existing replacement regressions pass in separate processes, along
+with Clippy for that Idenso test target and formatting. Native checks also
+preserve all sixteen intermediate ladder expressions, both exact FORM results
+and five scalar controls.
+
+The same twelve-pair native criterion rejects this candidate. Original-order
+paired wall/process/thread changes are +0.89% / +0.84% / +0.84%, with five of
+twelve faster pairs. Early-rung changes are −6.39% / −6.30% / −6.30%, with
+eight faster pairs. Both orders had to pass. Wall side medians are
+1.037943 → 1.238934 s and 0.392143 → 0.365881 s; the substantial difference
+between paired and side-median statistics remains in the record.
+
+All 48 observations and source/runtime guards are retained without exclusions
+or repeats under `/tmp/idenso-owned-replacement-builders-native`. These native
+clocks include final expansion but omit Python wrapping. No fresh FORM timing
+is claimed, and no cause is inferred from the variable results. The candidate
+is neither integrated nor installed.
 
 == Run locally
 

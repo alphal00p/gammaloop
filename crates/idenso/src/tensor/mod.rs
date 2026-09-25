@@ -51,6 +51,7 @@ use crate::NetworkToolingError;
 mod canonicalize;
 pub mod composition;
 pub mod inference;
+mod replacement;
 pub(crate) use canonicalize::remove_antisymmetric_zero_terms;
 
 #[cfg(test)]
@@ -163,6 +164,46 @@ pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>> {
     pub is_metric: bool,
     pub is_composite: bool,
     pub expression: symbolica::atom::Atom,
+}
+
+impl<Aind: AbsInd + ParseableAind> SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
+    /// Observe a callback-sensitive result without changing its planned port order.
+    pub(crate) fn validate_rewritten_interface(
+        &self,
+        expression: &Atom,
+    ) -> Result<(), inference::TensorInferenceError> {
+        use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
+
+        if expression.as_view().is_zero() {
+            return Ok(());
+        }
+        let slots = self
+            .structure
+            .external_structure()
+            .into_iter()
+            .map(|slot| {
+                // Use the index's symbolic representation, not its Rust storage
+                // type. The existing observer owns parsing and callback policy.
+                let encoded = slot.aind().to_atom();
+                let index = AbstractIndex::from_view(encoded.as_view()).map_err(|error| {
+                    inference::TensorInferenceError::Invalid(format!(
+                        "cannot validate rewritten tensor index: {error}"
+                    ))
+                })?;
+                if index.to_atom() != encoded {
+                    return Err(inference::TensorInferenceError::Invalid(
+                        "rewritten tensor index does not have a lossless shared representation"
+                            .into(),
+                    ));
+                }
+                Ok(slot.rep().slot(PartialIndex::Explicit(index)))
+            })
+            .collect::<Result<Vec<_>, inference::TensorInferenceError>>()?;
+        SymbolicTensor::<PartialStructure>::validate_encoded_interface(
+            expression,
+            &PartialStructure::from_logical_slots(slots),
+        )
+    }
 }
 
 impl<S> Ref for SymbolicTensor<S> {

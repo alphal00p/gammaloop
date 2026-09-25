@@ -18,7 +18,10 @@ use idenso::{
     },
 };
 use pyo3::{
-    exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError},
+    exceptions::{
+        PyIndexError, PyKeyboardInterrupt, PyOverflowError, PyRuntimeError, PyTypeError,
+        PyValueError,
+    },
     prelude::*,
     types::{PyAny, PyDict, PySlice, PyTuple},
 };
@@ -53,7 +56,7 @@ use symbolica::{
 use crate::{
     ModuleInit, SliceOrIntOrExpanded, Spensor, display,
     library::SpensorLibrary,
-    network::{ConvertibleToSpensoNet, ExecutionMode, SpensoNet},
+    network::{ConvertibleToSpensoNet, ExecutionMode, ReplacementCondition, SpensoNet},
     simplification::{
         CanonicalizationError, CookingError, DiracAdjointError, DotExpansionError,
         GammaConjugationError, NetworkToolingError, PyColorCasimirSettings,
@@ -130,6 +133,7 @@ pub struct TensorExpression {
 impl TensorExpression {
     pub(crate) fn inference_error(error: TensorInferenceError) -> PyErr {
         let message = match error {
+            TensorInferenceError::Interrupted => return PyKeyboardInterrupt::new_err(()),
             TensorInferenceError::InvalidBuiltinSignature { factory, signature } => format!(
                 "predefined tensor `{factory}` requires {signature}; use TensorExpression.{factory}(...) to construct it"
             ),
@@ -310,10 +314,16 @@ impl TensorExpression {
         if atom == self_.as_super().expr {
             return Self::from_preserved_atom(self_, py, atom);
         }
-        SymbolicTensor::validate_interface(&atom, &self_.interface)
-            .map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(self_, &atom);
-        Self::from_known_parts(py, atom, self_.interface.clone(), name, args)
+        let value = Self::structured(self_)
+            .with_checked_expression(atom)
+            .map_err(Self::inference_error)?;
+        let (name, args) = if value.rank() == self_.interface.canonical().order() {
+            (name, args)
+        } else {
+            (None, Vec::new())
+        };
+        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
     }
 
     pub(crate) fn from_structured(
@@ -628,6 +638,19 @@ fn flat_index(dimensions: &[usize], expanded: &[usize]) -> PyResult<usize> {
 fn inferred_descriptor(atom: AtomView<'_>) -> (Option<Symbol>, Vec<Atom>) {
     match atom {
         AtomView::Fun(function) if function.get_symbol().has_tag(&SPENSO_TAG.tensor) => {
+            let mut inference = InterfaceInference::default();
+            let name = SpensoName {
+                name: function.get_symbol(),
+            };
+            // Generic bound leaves are derived contractions. Predefined compact
+            // signatures, such as g(P(rep), Q(rep)), keep their data descriptors.
+            if name.builtin_factory().is_none()
+                && function
+                    .iter()
+                    .any(|argument| inference.compact_vector_port(argument))
+            {
+                return (None, Vec::new());
+            }
             let args = function
                 .iter()
                 .filter(|argument| {
@@ -978,6 +1001,35 @@ impl TensorExpression {
         Self::preserving_interface(&self_, py, result.expr)
     }
 
+    /// Replace whole tensor factors using locally checked right-hand sides.
+    ///
+    /// Traverses sums and products, leaving scalar metadata and tensor arguments
+    /// opaque. Each replacement must preserve the factor's explicit interface
+    /// without introducing additional index occurrences. Unresolved ports and
+    /// unsupported tensor powers are rejected. Conditions are evaluated at each
+    /// match; repeated right-hand sides and their checks share a bounded cache.
+    /// Remaining user normalization or evaluation hooks are rejected; callbacks
+    /// may produce an admitted normalized RHS. Use `rhs_cache_size=0` when RHS
+    /// callbacks have side effects.
+    #[pyo3(signature = (pattern, rhs, *, cond=None, rhs_cache_size=100))]
+    fn replace_tensor(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        pattern: ConvertibleToExpression,
+        rhs: ConvertibleToReplaceWith,
+        cond: Option<ReplacementCondition>,
+        rhs_cache_size: usize,
+    ) -> PyResult<Py<Self>> {
+        let pattern = pattern.to_expression().expr.to_pattern();
+        let rhs = rhs.to_replace_with()?;
+        let conditions = cond.map(|condition| condition.0);
+        let value = Self::structured(&self_)
+            .replace_tensor(&pattern, &rhs, conditions.as_ref(), rhs_cache_size)
+            .map_err(Self::inference_error)?;
+        let (name, args) = Self::transformed_descriptor(&self_, &value.expression);
+        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+    }
+
     /// Apply simultaneous Symbolica replacements and validate the resulting tensor.
     #[pyo3(signature = (replacements, repeat=false, once=false, bottom_up=false, nested=false))]
     fn replace_multiple(
@@ -1046,36 +1098,26 @@ impl TensorExpression {
         var: Option<ConvertibleToExpression>,
         via_poly: Option<bool>,
     ) -> PyResult<Py<Self>> {
-        let atom = if let Some(var) = var {
-            let var = var.to_expression();
-            if !matches!(var.expr, Atom::Var(_) | Atom::Fun(_)) {
-                return Err(PyValueError::new_err(
-                    "Expansion must be done wrt an indeterminate",
-                ));
-            }
-            if via_poly.unwrap_or(false) {
-                self_
-                    .as_super()
-                    .expr
-                    .as_view()
-                    .expand_via_poly::<i16, Atom>(Some(var.expr.clone()))
-            } else {
-                self_
-                    .as_super()
-                    .expr
-                    .as_view()
-                    .expand_in(var.expr.as_view())
-            }
-        } else if via_poly.unwrap_or(false) {
-            self_
-                .as_super()
-                .expr
-                .as_view()
-                .expand_via_poly::<i16, Atom>(None)
-        } else {
-            self_.as_super().expr.expand()
-        };
-        Self::from_algebra_atom(&self_, py, atom)
+        let var = var.map(|value| value.to_expression());
+        let value = Self::structured(&self_)
+            .expanded(
+                var.as_ref().map(|value| value.expr.as_view()),
+                via_poly.unwrap_or(false),
+            )
+            .map_err(Self::inference_error)?;
+        if value.expression == self_.as_super().expr {
+            return Py::new(
+                py,
+                (
+                    Self::clone(&self_),
+                    PythonExpression {
+                        expr: value.expression,
+                    },
+                ),
+            );
+        }
+        let (name, args) = Self::transformed_descriptor(&self_, &value.expression);
+        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
     }
 
     /// Factor scalar algebra while preserving and validating the tensor interface.
@@ -2876,6 +2918,13 @@ impl TensorExpression {
         ))
     }
 
+    /// Export LaTeX with tensor notation, index alphabets, and model parameter labels.
+    /// ``max_line_length`` wraps top-level sums using Symbolica's usual rules.
+    #[pyo3(signature = (max_line_length = None))]
+    fn to_latex(self_: PyRef<'_, Self>, max_line_length: Option<usize>) -> String {
+        display::structured_to_latex(&Self::structured(&self_), false, max_line_length)
+    }
+
     /// Format this structured expression as Typst math source.
     #[pyo3(signature = (show_dimensions = None, *, settings = None))]
     // Tensor semantics intentionally specialize the inherited Expression API.
@@ -2993,7 +3042,7 @@ impl TensorExpression {
     }
 
     fn _repr_latex_(self_: PyRef<'_, Self>) -> String {
-        display::structured_to_latex(&Self::structured(&self_), false)
+        Self::to_latex(self_, None)
     }
 }
 
@@ -4697,6 +4746,17 @@ mod tests {
             assert_eq!(expanded_ref.name, Some(name));
             assert_eq!(expanded_ref.name_args, vec![Atom::num(7)]);
             drop(expanded_ref);
+            let unchanged = TensorExpression::expand(expanded.borrow(py), py, None, None)?;
+            assert_eq!(
+                unchanged.borrow(py).as_super().expr,
+                expanded.borrow(py).as_super().expr
+            );
+            assert_eq!(
+                unchanged.borrow(py).interface,
+                expanded.borrow(py).interface
+            );
+            assert_eq!(unchanged.borrow(py).name, Some(name));
+            assert_eq!(unchanged.borrow(py).name_args, vec![Atom::num(7)]);
 
             let ordinary = TensorExpression::to_expression(expression.bind(py).borrow());
             let ordinary = ordinary.expand(None, None)?;
@@ -4704,6 +4764,9 @@ mod tests {
             assert!(!ordinary.is_instance_of::<TensorExpression>());
 
             let zero = TensorExpression::from_atom_interface(py, Atom::Zero, interface.clone())?;
+            let expanded_zero = TensorExpression::expand(zero.borrow(py), py, None, None)?;
+            assert!(expanded_zero.borrow(py).as_super().expr.as_view().is_zero());
+            assert_eq!(expanded_zero.borrow(py).interface, interface);
             let network = TensorExpression::to_network(zero.bind(py).borrow(), py, None)?;
             assert_eq!(
                 network.structure.structure.logical_slots(),
@@ -6125,6 +6188,75 @@ mod tests {
                 assert_eq!(result.borrow(py).name, Some(name));
                 assert_eq!(result.borrow(py).name_args, vec![Atom::num(7)]);
             }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn bound_vector_operands_are_composite_descriptors() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+            let slot = representation
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(73211))
+                .to_atom();
+            let name = spenso::tensor_symbol!("bound_descriptor_tensor");
+            let metadata = Atom::num(7);
+            for vector in [
+                spenso::vector_symbol!("bound_descriptor_p"),
+                spenso::vector_symbol!("bound_descriptor_q"),
+            ] {
+                let bound = FunctionBuilder::new(vector)
+                    .add_arg(representation.to_symbolic([]))
+                    .finish();
+                for arguments in [[&bound, &slot], [&slot, &bound]] {
+                    let atom = FunctionBuilder::new(name)
+                        .add_arg(&metadata)
+                        .add_args(arguments)
+                        .finish();
+                    let tensor = TensorExpression::from_atom_interface(py, atom.clone(), None)?;
+                    let tensor = tensor.borrow(py);
+                    assert_eq!(tensor.as_super().expr, atom);
+                    assert_eq!(tensor.interface.canonical().order(), 1);
+                    assert!(tensor.name.is_none());
+                    assert!(tensor.name_args.is_empty());
+                }
+            }
+            let atom = FunctionBuilder::new(name)
+                .add_arg(&metadata)
+                .add_arg(&slot)
+                .finish();
+            let tensor = TensorExpression::from_atom_interface(py, atom, None)?;
+            let tensor = tensor.borrow(py);
+            assert_eq!(tensor.name, Some(name));
+            assert_eq!(tensor.name_args, [metadata]);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn compact_metric_retains_builtin_descriptor() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+            let vectors = [
+                spenso::vector_symbol!("builtin_descriptor_p"),
+                spenso::vector_symbol!("builtin_descriptor_q"),
+            ]
+            .map(|name| {
+                FunctionBuilder::new(name)
+                    .add_arg(representation.to_symbolic([]))
+                    .finish()
+            });
+            let atom = FunctionBuilder::new(ETS.metric).add_args(&vectors).finish();
+            let tensor = TensorExpression::from_atom_interface(py, atom.clone(), None)?;
+            let tensor = tensor.borrow(py);
+            assert_eq!(tensor.as_super().expr, atom);
+            assert!(tensor.interface.canonical().is_scalar());
+            assert_eq!(tensor.name, Some(ETS.metric));
+            assert_eq!(tensor.name_args, vectors);
             Ok(())
         })
         .unwrap();

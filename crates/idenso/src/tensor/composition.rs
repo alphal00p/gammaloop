@@ -6,7 +6,7 @@ use spenso::{
         parsing::{
             AtomStructureExt, ChainNestingError, StrictTensorFilter, StructureInferenceMode,
         },
-        tags::SPENSO_TAG,
+        tags::{SPENSO_TAG, SpensoTags},
     },
     shadowing,
     structure::{
@@ -89,7 +89,8 @@ impl SymbolicTensor<PartialStructure> {
                 false
             }
             AtomView::Fun(fun)
-                if is_composite_head(fun.get_symbol()) || fun.get_symbol() == AIND_SYMBOLS.aind =>
+                if is_composite_head(fun.get_symbol(), &SPENSO_TAG)
+                    || fun.get_symbol() == AIND_SYMBOLS.aind =>
             {
                 fun.iter()
                     .skip(usize::from(fun.get_symbol() == SPENSO_TAG.trace))
@@ -499,18 +500,21 @@ pub fn fresh_dummy_index<'a>(
     }
 }
 
-fn is_composite_head(symbol: Symbol) -> bool {
-    symbol == SPENSO_TAG.bracket
-        || symbol == SPENSO_TAG.chain
-        || symbol == SPENSO_TAG.trace
-        || symbol.has_tag(&SPENSO_TAG.broadcast)
-        || symbol == *shadowing::SYM
-        || symbol == *shadowing::ANTISYM
-        || symbol == *shadowing::CYCLIC
+fn is_composite_head(symbol: Symbol, tags: &SpensoTags) -> bool {
+    symbol == tags.bracket
+        || symbol == tags.chain
+        || symbol == tags.trace
+        || symbol.has_tag(&tags.broadcast)
+        // Registered projectors carry these attributes. Check the bits before
+        // accessing their lazy bundles, which each synchronize initialization.
+        || (symbol.is_symmetric() && symbol == *shadowing::SYM)
+        || (symbol.is_antisymmetric() && symbol == *shadowing::ANTISYM)
+        || (symbol.is_cyclesymmetric() && symbol == *shadowing::CYCLIC)
 }
 
-fn is_tensor_leaf_head(symbol: Symbol) -> bool {
-    symbol.has_tag(&SPENSO_TAG.tensor) && !is_composite_head(symbol)
+pub(super) fn is_tensor_leaf_head(symbol: Symbol) -> bool {
+    let tags = &*SPENSO_TAG;
+    symbol.has_tag(&tags.tensor) && !is_composite_head(symbol, tags)
 }
 
 fn direct_structural_port(value: AtomView<'_>) -> bool {
@@ -521,13 +525,24 @@ fn direct_structural_port(value: AtomView<'_>) -> bool {
 /// Maximum explicit multiplicities in any additive branch, capped at three.
 /// Opposite orientations share a key; representation dimensions remain distinct.
 #[derive(Default)]
-struct ExplicitIndexOccurrences(HashMap<Slot<LibraryRep, AbstractIndex>, usize>);
+pub(super) struct ExplicitIndexOccurrences(HashMap<Slot<LibraryRep, AbstractIndex>, usize>);
 
 impl ExplicitIndexOccurrences {
-    fn from_atom(value: AtomView<'_>, slots: &mut SlotMatcher) -> Self {
+    const CACHE_ENTRIES: usize = 256;
+    const CACHE_KEY_BYTES: usize = 256;
+
+    pub(super) fn from_atom(value: AtomView<'_>, slots: &mut SlotMatcher) -> Self {
         let mut occurrences = Self::default();
-        occurrences.collect(value, slots);
+        occurrences.collect(value, slots, &mut HashMap::new());
         occurrences
+    }
+
+    /// A replacement may remove internal pairs, but cannot introduce a new
+    /// encoded index or increase its maximum count in an additive branch.
+    pub(super) fn is_bounded_by(&self, source: &Self) -> bool {
+        self.0
+            .iter()
+            .all(|(slot, count)| *count <= source.0.get(slot).copied().unwrap_or_default())
     }
 
     fn count(&self, target: Slot<LibraryRep, AbstractIndex>) -> usize {
@@ -546,11 +561,12 @@ impl ExplicitIndexOccurrences {
         &mut self,
         alternatives: impl IntoIterator<Item = AtomView<'a>>,
         slots: &mut SlotMatcher,
+        cache: &mut HashMap<Vec<u8>, Self>,
     ) {
         let mut maximum = Self::default();
         let mut branch = Self::default();
         for value in alternatives {
-            branch.collect(value, slots);
+            branch.collect(value, slots, cache);
             for (slot, count) in branch.0.drain() {
                 let occurrences = maximum.0.entry(slot).or_default();
                 *occurrences = (*occurrences).max(count);
@@ -561,26 +577,68 @@ impl ExplicitIndexOccurrences {
         }
     }
 
-    fn collect(&mut self, value: AtomView<'_>, slots: &mut SlotMatcher) {
+    fn collect(
+        &mut self,
+        value: AtomView<'_>,
+        slots: &mut SlotMatcher,
+        cache: &mut HashMap<Vec<u8>, Self>,
+    ) {
+        let reusable = matches!(value, AtomView::Fun(_))
+            && !value.needs_normalization()
+            && value.get_byte_size() <= Self::CACHE_KEY_BYTES;
+        if reusable {
+            if let Some(summary) = cache.get(value.get_data()) {
+                for (&slot, &count) in &summary.0 {
+                    self.add(slot, count);
+                }
+                return;
+            }
+            if cache.len() < Self::CACHE_ENTRIES {
+                let mut summary = Self::default();
+                summary.collect_uncached(value, slots, cache);
+                for (&slot, &count) in &summary.0 {
+                    self.add(slot, count);
+                }
+                // Counts depend only on immutable syntax, not the surrounding
+                // product. Cache empty summaries too, notably compact dots.
+                if cache.len() < Self::CACHE_ENTRIES {
+                    cache.insert(value.get_data().to_vec(), summary);
+                }
+                return;
+            }
+        }
+        self.collect_uncached(value, slots, cache);
+    }
+
+    fn collect_uncached(
+        &mut self,
+        value: AtomView<'_>,
+        slots: &mut SlotMatcher,
+        cache: &mut HashMap<Vec<u8>, Self>,
+    ) {
+        #[cfg(test)]
+        if matches!(value, AtomView::Fun(_)) {
+            tests::OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(count.get() + 1));
+        }
         if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(value) {
             self.add(slot.rep().base().slot(slot.aind()), 1);
             return;
         }
 
         match value {
-            AtomView::Add(sum) => self.collect_alternatives(sum.iter(), slots),
+            AtomView::Add(sum) => self.collect_alternatives(sum.iter(), slots, cache),
             AtomView::Mul(product) => {
                 for factor in product.iter() {
-                    self.collect(factor, slots);
+                    self.collect(factor, slots, cache);
                 }
             }
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
-                self.collect_alternatives([base, exponent], slots);
+                self.collect_alternatives([base, exponent], slots, cache);
             }
             AtomView::Fun(function)
-                if is_tensor_leaf_head(function.get_symbol())
-                    || is_composite_head(function.get_symbol()) =>
+                if function.get_symbol().has_tag(&SPENSO_TAG.tensor)
+                    || is_composite_head(function.get_symbol(), &SPENSO_TAG) =>
             {
                 for argument in function.iter() {
                     let structured = slots.parse::<LibraryRep, AbstractIndex>(argument).is_ok()
@@ -594,7 +652,7 @@ impl ExplicitIndexOccurrences {
                                     || nested.get_symbol() == *shadowing::CYCLIC
                         );
                     if structured {
-                        self.collect(argument, slots);
+                        self.collect(argument, slots, cache);
                     }
                 }
             }
@@ -797,7 +855,7 @@ fn reorder_presentation_ports(
                         state.claimed[position] = true;
                     }
                     rebuilt = rebuilt.add_arg(argument);
-                } else if is_composite_head(symbol)
+                } else if is_composite_head(symbol, &SPENSO_TAG)
                     && (argument.is_tensorial(StrictTensorFilter::Tagged)
                         || matches!(
                             argument,
@@ -992,7 +1050,7 @@ fn rewrite_ports<'a>(
                     // Scalar metadata belongs to this tensor leaf. Nested
                     // representations inside it are not public tensor ports.
                     arg.into()
-                } else if is_composite_head(fun.get_symbol())
+                } else if is_composite_head(fun.get_symbol(), &SPENSO_TAG)
                     && !arg.is_tensorial(StrictTensorFilter::Tagged)
                     && !matches!(
                         arg,
@@ -1122,7 +1180,7 @@ fn collect_interface_positions(
             let skip = usize::from(symbol == SPENSO_TAG.trace);
             for argument in fun.iter().skip(skip) {
                 let tensor_argument = !tensor_leaf
-                    && is_composite_head(symbol)
+                    && is_composite_head(symbol, &SPENSO_TAG)
                     && (argument.is_tensorial(StrictTensorFilter::Tagged)
                         || matches!(
                             argument,
@@ -1988,6 +2046,10 @@ mod tests {
         representation::{ExtendibleReps, Minkowski, RepName},
     };
     use symbolica::atom::Symbol;
+
+    thread_local! {
+        pub(super) static OCCURRENCE_FUNCTION_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
 
     fn rep() -> Representation<LibraryRep> {
         ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4))
@@ -3220,6 +3282,54 @@ mod tests {
     }
 
     #[test]
+    fn registered_and_imported_projectors_relabel_nested_ports() {
+        let a = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(191)));
+        let b = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(192)));
+        let head = SPENSO_TAG.tensor_symbol("classifier_projector_operand");
+        let leaf = partial_tensor(head, &[a], &[a]);
+        let renamed = partial_tensor(head, &[b], &[b]);
+        for projector in [*shadowing::SYM, *shadowing::ANTISYM, *shadowing::CYCLIC] {
+            let expression = projector.call(&leaf.expression);
+            let mut bytes = Vec::new();
+            expression.export(&mut bytes).unwrap();
+            let imported = Atom::import(&mut bytes.as_slice(), None).unwrap();
+            assert_eq!(imported, expression);
+            for expression in [expression, imported] {
+                let value = SymbolicTensor::<PartialStructure>::infer(expression).unwrap();
+                let result = value
+                    .reindex_interface_ports(&HashMap::from([(0, AbstractIndex::Normal(192))]))
+                    .unwrap();
+                assert_eq!(result.expression, projector.call(&renamed.expression));
+                assert_eq!(result.structure.logical_slots(), vec![b]);
+            }
+        }
+    }
+
+    #[test]
+    fn attributed_tensor_leaves_relabel_only_declared_ports() {
+        let a = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(193)));
+        let b = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(194)));
+        let metadata = Atom::var(symbolica::symbol!("classifier_metadata"));
+        let heads = [
+            SPENSO_TAG.tensor_symbol("classifier_plain_tensor"),
+            symbolica::symbol!("classifier_symmetric_tensor"; Symmetric; tags = [&SPENSO_TAG.tensor]),
+            symbolica::symbol!("classifier_antisymmetric_tensor"; Antisymmetric; tags = [&SPENSO_TAG.tensor]),
+            symbolica::symbol!("classifier_cyclic_tensor"; Cyclesymmetric; tags = [&SPENSO_TAG.tensor]),
+        ];
+        for head in heads {
+            // Matching a projector's attribute does not make this a projector.
+            assert!(is_tensor_leaf_head(head));
+            let expression = head.call((&metadata, port_atom(a)));
+            let value = SymbolicTensor::<PartialStructure>::infer(expression).unwrap();
+            let result = value
+                .reindex_interface_ports(&HashMap::from([(0, AbstractIndex::Normal(194))]))
+                .unwrap();
+            assert_eq!(result.expression, head.call((&metadata, port_atom(b))));
+            assert_eq!(result.structure.logical_slots(), vec![b]);
+        }
+    }
+
+    #[test]
     fn materialization_does_not_rewrite_scalar_factor_metadata() {
         let representation = rep();
         let port = representation.slot(PartialIndex::open(0));
@@ -3530,6 +3640,94 @@ mod tests {
         let sum = terms.into_iter().fold(Atom::Zero, |sum, term| sum + term);
 
         validate_explicit_index_occurrences(&sum).unwrap();
+    }
+
+    #[test]
+    fn occurrence_summaries_reuse_callback_leaves_without_replaying_them() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let head = spenso::tensor_symbol!(
+            "occurrence_summary_callback",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let slot = rep().slot::<AbstractIndex, _>(AbstractIndex::Normal(73));
+        let leaf = FunctionBuilder::new(head).add_arg(slot.to_atom()).finish();
+        let [a, b, c, d] = ["summary_a", "summary_b", "summary_c", "summary_d"].map(|name| {
+            FunctionBuilder::new(SPENSO_TAG.tensor_symbol(name))
+                .add_arg(&leaf)
+                .finish()
+        });
+        let valid = (a + b) * c;
+        let invalid = &valid * d;
+        calls.store(0, Ordering::Relaxed);
+
+        let mut slots = SlotMatcher::default();
+        let mut cache = HashMap::new();
+        let mut occurrences = ExplicitIndexOccurrences::default();
+        OCCURRENCE_FUNCTION_VISITS.set(0);
+        occurrences.collect(leaf.as_view(), &mut slots, &mut cache);
+        let visits = OCCURRENCE_FUNCTION_VISITS.get();
+        assert!(visits > 0);
+        for expected in [2, 3] {
+            occurrences.collect(leaf.as_view(), &mut slots, &mut cache);
+            assert_eq!(occurrences.count(slot), expected);
+            assert_eq!(OCCURRENCE_FUNCTION_VISITS.get(), visits);
+        }
+        validate_explicit_index_occurrences(&valid).unwrap();
+        assert!(matches!(
+            validate_explicit_index_occurrences(&invalid),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity {
+                index: AbstractIndex::Normal(73),
+                occurrences: 3
+            })
+        ));
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn occurrence_summaries_cache_scalar_dots_and_keep_encoded_index_identity() {
+        let compact = rep().to_symbolic([]);
+        let p = FunctionBuilder::new(spenso::vector_symbol!(occurrence_summary_p))
+            .add_arg(&compact)
+            .finish();
+        let q = FunctionBuilder::new(spenso::vector_symbol!(occurrence_summary_q))
+            .add_arg(&compact)
+            .finish();
+        let dot = FunctionBuilder::new(ETS.metric).add_args([p, q]).finish();
+        let mut slots = SlotMatcher::default();
+        let mut cache = HashMap::new();
+        let mut occurrences = ExplicitIndexOccurrences::default();
+        OCCURRENCE_FUNCTION_VISITS.set(0);
+        occurrences.collect(dot.as_view(), &mut slots, &mut cache);
+        let visits = OCCURRENCE_FUNCTION_VISITS.get();
+        assert!(visits > 0);
+        assert!(occurrences.0.is_empty());
+        occurrences.collect(dot.as_view(), &mut slots, &mut cache);
+        assert_eq!(OCCURRENCE_FUNCTION_VISITS.get(), visits);
+        assert!(occurrences.0.is_empty());
+
+        let head = SPENSO_TAG.tensor_symbol("occurrence_summary_open_owner");
+        let first = rep().slot::<AbstractIndex, _>(AbstractIndex::Open {
+            owner: 101,
+            axis: 0,
+        });
+        let second = rep().slot::<AbstractIndex, _>(AbstractIndex::Open {
+            owner: 102,
+            axis: 0,
+        });
+        for slot in [first, second, first] {
+            let leaf = FunctionBuilder::new(head).add_arg(slot.to_atom()).finish();
+            occurrences.collect(leaf.as_view(), &mut slots, &mut cache);
+        }
+        assert_eq!(occurrences.count(first), 2);
+        assert_eq!(occurrences.count(second), 1);
     }
 
     #[test]

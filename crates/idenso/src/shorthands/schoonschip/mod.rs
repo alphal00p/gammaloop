@@ -15,3 +15,4 @@ pub use api::Schoonschip;
 pub use contraction::Schoonschipify;
 pub(crate) use normalize_dots::DotNormalizer;
 pub use settings::{SchoonschipContractionOrder, SchoonschipSettings, SchoonschipTraversal};
+pub(crate) use slot_contraction::SlotContraction;

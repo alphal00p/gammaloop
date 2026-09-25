@@ -206,8 +206,8 @@ pub type ParsingNet = Network<
     Symbol,
 >;
 
-/// A Symbolica pattern restriction accepted by tensor-network replacement.
-pub struct ReplacementCondition(Condition<PatternRestriction>);
+/// A Symbolica pattern restriction accepted by tensor replacement.
+pub struct ReplacementCondition(pub(crate) Condition<PatternRestriction>);
 
 impl<'a, 'py> FromPyObject<'a, 'py> for ReplacementCondition {
     type Error = PyErr;
@@ -1282,7 +1282,7 @@ impl SpensoNet {
     }
 
     fn _repr_latex_(&self) -> String {
-        display::structured_to_latex(&self.structure, false)
+        display::structured_to_latex(&self.structure, false, None)
     }
 
     fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
