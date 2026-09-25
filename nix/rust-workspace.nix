@@ -2683,6 +2683,11 @@
   impureCheckRunnerTargets =
     [
       {
+        runnerAttr = "nix-ci-check-alphal00p-docs";
+        checkAttr = "alphal00p-docs";
+        inputs = [documentation.alphal00pDocsCargoArtifacts];
+      }
+      {
         runnerAttr = "nix-ci-check-gammaloop-doctest";
         checkAttr = "gammaloop-doctest";
         inputs = [cargoCheckArtifacts];

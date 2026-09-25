@@ -297,6 +297,9 @@
     "packages.x86_64-linux.gammaloop-python-module" = [
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
     ];
+    "packages.x86_64-linux.nix-ci-check-alphal00p-docs" = [
+      "packages.x86_64-linux.alphal00p-docs-cargo-artifacts"
+    ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-doctest" = [
       "packages.x86_64-linux.cargoCheckArtifacts"
     ];
@@ -352,6 +355,7 @@
     "checks.x86_64-linux.gammaloop-nextest-binaries-python-api"
     "checks.x86_64-linux.gammaloop-nextest-binaries-spenso"
     "checks.x86_64-linux.gammaloop-nextest-binaries-vakint"
+    "packages.x86_64-linux.alphal00p-docs-cargo-artifacts"
     "packages.x86_64-linux.cargoArtifacts"
     "packages.x86_64-linux.cargoCheckArtifacts"
     "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
@@ -404,6 +408,7 @@
     "packages.x86_64-linux.crate-test-dependencies-three-dimensional-reps"
     "packages.x86_64-linux.crate-test-dependencies-vakint"
     "packages.x86_64-linux.gammaloop-python-module"
+    "packages.x86_64-linux.nix-ci-check-alphal00p-docs"
     "packages.x86_64-linux.nix-ci-check-gammaloop-doctest"
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet"
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core"
@@ -419,6 +424,14 @@
     "x86_64-linux"
   ];
   test = {
+    alphal00p-docs = {
+      in-repo = true;
+      package = "packages.x86_64-linux.nix-ci-check-alphal00p-docs";
+      secrets = [
+        "SYMBOLICA_LICENSE_SIGNED"
+      ];
+      system = "x86_64-linux";
+    };
     gammaloop-doctest = {
       in-repo = true;
       package = "packages.x86_64-linux.nix-ci-check-gammaloop-doctest";
