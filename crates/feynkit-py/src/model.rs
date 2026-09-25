@@ -15,14 +15,26 @@ use pyo3::{
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
 
-use crate::{display::escape_html, error};
+use crate::{
+    display::{escape_html, model_expression_html, model_record_html},
+    error,
+    generation::{PyProcess, SelectorInput, VertexInput},
+};
 use symbolica::{
     api::python::{ConvertibleToExpression, PythonExpression},
-    atom::Atom,
+    atom::{Atom, AtomCore},
 };
 
 fn complex_value<'py>(py: Python<'py>, value: ComplexValue) -> Bound<'py, PyComplex> {
     PyComplex::from_doubles(py, value.re, value.im)
+}
+
+fn display_value(value: Option<ComplexValue>) -> String {
+    match value {
+        Some(v) if v.im == 0.0 => v.re.to_string(),
+        Some(v) => format!("{} {:+}i", v.re, v.im),
+        None => "not evaluated".to_owned(),
+    }
 }
 
 /// A particle species in a loaded interaction model.
@@ -506,7 +518,7 @@ impl PyParticle {
         self.model.particle_is_massless(self.id)
     }
 
-    /// Return a concise representation containing the name and PDG code.
+    /// Summarize the defining data as well as the name and PDG code.
     ///
     /// Examples
     /// --------
@@ -514,10 +526,88 @@ impl PyParticle {
     ///
     fn __repr__(&self) -> String {
         format!(
-            "Particle(name='{}', pdg_code={})",
-            self.inner().name,
-            self.inner().pdg_code
+            "Particle({:?}, pdg={}, antiparticle={:?}, spin={}, color={}, charge={}, mass={}, width={})",
+            self.name(),
+            self.pdg_code(),
+            self.model
+                .particle_by_id(self.inner().antiparticle)
+                .unwrap()
+                .name,
+            self.spin(),
+            self.color(),
+            self.inner().charge,
+            self.mass_parameter(),
+            self.width_parameter()
         )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Leave this object as the final expression in a notebook cell.
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        let p = self.inner();
+        let spin = if p.is_ghost() {
+            "ghost".to_owned()
+        } else {
+            format!(
+                "{} (UFO {})",
+                symbolica::domains::rational::Rational::from((p.spin - 1, 2)),
+                p.spin
+            )
+        };
+        let mut rows = vec![
+            ("PDG", p.pdg_code.to_string()),
+            (
+                "Antiparticle",
+                escape_html(&self.model.particle_by_id(p.antiparticle).unwrap().name),
+            ),
+            ("Spin", spin),
+            ("Color", p.color.to_string()),
+            ("Charge", model_expression_html(py, self.charge())?),
+            ("Mass", model_expression_html(py, self.mass_expression())?),
+            ("Width", escape_html(self.width_parameter())),
+            (
+                "Ghost / lepton number",
+                format!("{} / {}", p.ghost_number, p.lepton_number),
+            ),
+            (
+                "Propagating / Goldstone",
+                format!("{} / {}", p.propagating, p.goldstone),
+            ),
+        ];
+        if let Some(y) = self.y_charge() {
+            rows.push(("Hypercharge (left)", model_expression_html(py, y)?));
+        }
+        if let Some(y) = self.y_charge_right() {
+            rows.push(("Hypercharge (right)", model_expression_html(py, y)?));
+        }
+        Ok(model_record_html("Particle", self.name(), &rows))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// IPython calls this automatically when formatting model members in lists.
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "Particle(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -715,14 +805,78 @@ impl PyParameter {
             .map(|expr| PythonExpression { expr })
     }
 
-    /// Return a concise representation containing the parameter name.
+    /// Summarize the defining data as well as the parameter name.
     ///
     /// Examples
     /// --------
     /// >>> print(model.parameter(model.particle_by_pdg(13).mass_parameter))
     ///
     fn __repr__(&self) -> String {
-        format!("Parameter(name='{}')", self.inner().name)
+        format!(
+            "Parameter({:?}, {:?}, {:?}, expression={}, value={})",
+            self.name(),
+            self.inner().nature,
+            self.inner().parameter_type,
+            self.inner().expression.as_ref().map_or_else(
+                || "external input".to_owned(),
+                AtomCore::to_canonical_string
+            ),
+            display_value(self.inner().value)
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Leave this object as the final expression in a notebook cell.
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        let p = self.inner();
+        let mut rows = vec![
+            (
+                "Nature / type",
+                format!("{:?} / {:?}", p.nature, p.parameter_type),
+            ),
+            ("Value", escape_html(&display_value(p.value))),
+        ];
+        if let Some(expression) = self.expression() {
+            rows.push(("Definition", model_expression_html(py, expression)?));
+        }
+        if let Some(block) = &p.lhablock {
+            rows.push((
+                "LHA entry",
+                escape_html(&format!(
+                    "{} {:?}",
+                    block,
+                    p.lhacode.as_deref().unwrap_or_default()
+                )),
+            ));
+        }
+        Ok(model_record_html("Parameter", self.name(), &rows))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// IPython calls this automatically when formatting model members in lists.
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "Parameter(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -809,14 +963,61 @@ impl PyCoupling {
             })
     }
 
-    /// Return a concise representation containing the coupling name.
+    /// Summarize the defining data as well as the coupling name.
     ///
     /// Examples
     /// --------
     /// >>> print(next(c for c in model.couplings if c.orders.get("QED", 0) > 0))
     ///
     fn __repr__(&self) -> String {
-        format!("Coupling(name='{}')", self.inner().name)
+        format!(
+            "Coupling({:?}, expression={}, orders={:?}, value={})",
+            self.name(),
+            self.inner().expression.to_canonical_string(),
+            self.inner().orders,
+            display_value(self.inner().value)
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Leave this object as the final expression in a notebook cell.
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(model_record_html(
+            "Coupling",
+            self.name(),
+            &[
+                ("Definition", model_expression_html(py, self.expression())?),
+                ("Orders", escape_html(&format!("{:?}", self.inner().orders))),
+                ("Value", escape_html(&display_value(self.inner().value))),
+            ],
+        ))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// IPython calls this automatically when formatting model members in lists.
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "Coupling(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -844,7 +1045,7 @@ pub struct PyVertexRule {
 }
 
 impl PyVertexRule {
-    fn new(id: VertexRuleId, model: Arc<Model>) -> Self {
+    pub(crate) fn new(id: VertexRuleId, model: Arc<Model>) -> Self {
         Self { id, model }
     }
 
@@ -947,14 +1148,157 @@ impl PyVertexRule {
         self.inner().coupling_orders(&self.model)
     }
 
-    /// Return a concise representation containing the vertex-rule name.
+    /// Summarize the defining data as well as the vertex-rule name.
     ///
     /// Examples
     /// --------
     /// >>> print(next(v for v in model.vertex_rules if "e-" in v.particles))
     ///
     fn __repr__(&self) -> String {
-        format!("VertexRule(name='{}')", self.inner().name)
+        let colors = self
+            .inner()
+            .color_structures
+            .iter()
+            .map(AtomCore::to_canonical_string)
+            .collect::<Vec<_>>();
+        let lorentz = self
+            .inner()
+            .lorentz_structures
+            .iter()
+            .map(|id| {
+                let l = self.model.lorentz_structure_by_id(*id).unwrap();
+                format!("{}={}", l.name, l.structure.to_canonical_string())
+            })
+            .collect::<Vec<_>>();
+        let couplings = self
+            .inner()
+            .couplings
+            .iter()
+            .enumerate()
+            .flat_map(|(c, row)| {
+                row.iter().enumerate().filter_map(move |(l, id)| {
+                    id.map(|id| {
+                        let g = self.model.coupling_by_id(id).unwrap();
+                        format!(
+                            "({c},{l}): {}={}",
+                            g.name,
+                            g.expression.to_canonical_string()
+                        )
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        format!(
+            "VertexRule({:?}, particles={:?}, color=[{}], lorentz=[{}], couplings=[{}])",
+            self.name(),
+            self.particles(),
+            colors.join(", "),
+            lorentz.join(", "),
+            couplings.join(", ")
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Leave this object as the final expression in a notebook cell.
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        let particles = self
+            .particles()
+            .iter()
+            .enumerate()
+            .map(|(i, p)| format!("{}: {}", i + 1, escape_html(p)))
+            .collect::<Vec<_>>()
+            .join(" &nbsp;·&nbsp; ");
+        let colors = self
+            .color_structures()
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                Ok(format!(
+                    "<div>C<sub>{i}</sub> = {}</div>",
+                    model_expression_html(py, c.clone())?
+                ))
+            })
+            .collect::<PyResult<Vec<_>>>()?
+            .join("");
+        let lorentz = self
+            .inner()
+            .lorentz_structures
+            .iter()
+            .enumerate()
+            .map(|(i, id)| {
+                let l = self.model.lorentz_structure_by_id(*id).unwrap();
+                let expr = model_expression_html(
+                    py,
+                    PythonExpression {
+                        expr: l.structure.clone(),
+                    },
+                )?;
+                Ok(format!(
+                    "<div>L<sub>{i}</sub> ({}) = {expr}</div>",
+                    escape_html(&l.name)
+                ))
+            })
+            .collect::<PyResult<Vec<_>>>()?
+            .join("");
+        let mut couplings = String::new();
+        for (c, row) in self.inner().couplings.iter().enumerate() {
+            for (l, id) in row.iter().enumerate() {
+                if let Some(id) = id {
+                    let g = self.model.coupling_by_id(*id).unwrap();
+                    let expr = model_expression_html(
+                        py,
+                        PythonExpression {
+                            expr: g.expression.clone(),
+                        },
+                    )?;
+                    couplings.push_str(&format!("<div><code>{}</code> C<sub>{c}</sub> L<sub>{l}</sub>; &nbsp; <code>{}</code> = {expr}</div>", escape_html(&g.name), escape_html(&g.name)));
+                }
+            }
+        }
+        if couplings.is_empty() {
+            couplings.push_str("No nonzero couplings");
+        }
+        Ok(model_record_html(
+            "Vertex rule",
+            self.name(),
+            &[
+                ("Particles (leg order)", particles),
+                ("Color structures", colors),
+                ("Lorentz structures", lorentz),
+                ("Coupling terms", couplings),
+                (
+                    "Orders",
+                    escape_html(&format!("{:?}", self.coupling_orders())),
+                ),
+            ],
+        ))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// IPython calls this automatically when formatting model members in lists.
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "VertexRule(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -1022,7 +1366,7 @@ impl PyLorentzStructure {
         }
     }
 
-    /// Return a concise representation containing the structure name.
+    /// Summarize the defining data as well as the structure name.
     ///
     /// Examples
     /// --------
@@ -1030,7 +1374,52 @@ impl PyLorentzStructure {
     /// >>> print(model.lorentz_structure(vertex.lorentz_structures[0]))
     ///
     fn __repr__(&self) -> String {
-        format!("LorentzStructure(name='{}')", self.inner().name)
+        format!(
+            "LorentzStructure({:?}, spins={:?}, structure={})",
+            self.name(),
+            self.inner().spins,
+            self.inner().structure.to_canonical_string()
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Leave this object as the final expression in a notebook cell.
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(model_record_html(
+            "Lorentz structure",
+            self.name(),
+            &[
+                ("Spins (UFO)", format!("{:?}", self.inner().spins)),
+                ("Structure", model_expression_html(py, self.structure())?),
+            ],
+        ))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// IPython calls this automatically when formatting model members in lists.
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "LorentzStructure(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -1107,14 +1496,64 @@ impl PyPropagator {
         }
     }
 
-    /// Return a concise representation containing the propagator name.
+    /// Summarize the defining data as well as the propagator name.
     ///
     /// Examples
     /// --------
     /// >>> print(model.propagators[0])
     ///
     fn __repr__(&self) -> String {
-        format!("Propagator(name='{}')", self.inner().name)
+        format!(
+            "Propagator({:?}, particle={:?}, numerator={}, denominator={})",
+            self.name(),
+            self.particle(),
+            self.inner().numerator.to_canonical_string(),
+            self.inner().denominator.to_canonical_string()
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Leave this object as the final expression in a notebook cell.
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(model_record_html(
+            "Propagator",
+            self.name(),
+            &[
+                ("Particle", escape_html(self.particle())),
+                ("Numerator", model_expression_html(py, self.numerator())?),
+                (
+                    "Denominator",
+                    model_expression_html(py, self.denominator())?,
+                ),
+            ],
+        ))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// IPython calls this automatically when formatting model members in lists.
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "Propagator(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -1181,14 +1620,67 @@ impl PyModelFunction {
             .map(|expr| PythonExpression { expr })
     }
 
-    /// Return a concise representation containing the function name.
+    /// Summarize the defining data as well as the function name.
     ///
     /// Examples
     /// --------
     /// >>> print(model.functions[0])
     ///
     fn __repr__(&self) -> String {
-        format!("ModelFunction(name='{}')", self.inner().name)
+        format!(
+            "ModelFunction({:?}, arguments={:?}, expression={})",
+            self.name(),
+            self.inner().arguments,
+            self.inner()
+                .expression
+                .as_ref()
+                .map_or_else(|| "not defined".to_owned(), AtomCore::to_canonical_string)
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Leave this object as the final expression in a notebook cell.
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        let expression = self
+            .expression()
+            .map(|e| model_expression_html(py, e))
+            .transpose()?
+            .unwrap_or_else(|| "Not defined in the model".to_owned());
+        Ok(model_record_html(
+            "Model function",
+            self.name(),
+            &[
+                ("Arguments", escape_html(&self.inner().arguments.join(", "))),
+                ("Definition", expression),
+            ],
+        ))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// IPython calls this automatically when formatting model members in lists.
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "ModelFunction(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -1249,14 +1741,70 @@ impl PyFormFactor {
             .map(|expr| PythonExpression { expr })
     }
 
-    /// Return a concise representation containing the form-factor name.
+    /// Summarize the defining data as well as the form-factor name.
     ///
     /// Examples
     /// --------
     /// >>> print(model.form_factors[0])
     ///
     fn __repr__(&self) -> String {
-        format!("FormFactor(name='{}')", self.inner().name)
+        format!(
+            "FormFactor({:?}, type={:?}, value={})",
+            self.name(),
+            self.inner().type_name,
+            self.inner()
+                .value
+                .as_ref()
+                .map_or_else(|| "not defined".to_owned(), AtomCore::to_canonical_string)
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Leave this object as the final expression in a notebook cell.
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        let expression = self
+            .value()
+            .map(|e| model_expression_html(py, e))
+            .transpose()?
+            .unwrap_or_else(|| "Not defined in the model".to_owned());
+        Ok(model_record_html(
+            "Form factor",
+            self.name(),
+            &[
+                (
+                    "Type",
+                    escape_html(self.inner().type_name.as_deref().unwrap_or("unspecified")),
+                ),
+                ("Value", expression),
+            ],
+        ))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// IPython calls this automatically when formatting model members in lists.
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "FormFactor(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -1916,6 +2464,46 @@ impl PyModel {
         Model::from_json(json).map(Self::from).map_err(error::model)
     }
 
+    /// Define a process with model-validated external states and sector restrictions.
+    /// The returned process is immutable; loops and other calculation choices are
+    /// arguments to its generate_diagrams, generate_amplitude and generate_cross_section methods.
+    ///
+    /// Examples
+    /// --------
+    /// >>> process = model.process(["e-", "e+"], ["a", "a"], vertex_allow=["V_98"])
+    /// >>> amplitude = process.generate_amplitude(loops=0)
+    ///
+    /// Parameters
+    /// ----------
+    /// incoming : sequence[Particle | ParticleSelector | str | int]
+    ///     Ordered incoming external states.
+    /// outgoing : sequence[Particle | ParticleSelector | str | int]
+    ///     Ordered outgoing external states.
+    /// particle_veto : sequence[Particle | ParticleSelector | str | int] or None, optional
+    ///     Excluded species, including their antiparticles.
+    /// vertex_allow : sequence[VertexRule | str] or None, optional
+    ///     Allowed interactions. None allows all; an empty list allows none.
+    /// vertex_veto : sequence[VertexRule | str] or None, optional
+    ///     Excluded interactions.
+    #[pyo3(signature = (incoming, outgoing, *, particle_veto=None, vertex_allow=None, vertex_veto=None))]
+    fn process(
+        &self,
+        incoming: Vec<SelectorInput>,
+        outgoing: Vec<SelectorInput>,
+        particle_veto: Option<Vec<SelectorInput>>,
+        vertex_allow: Option<Vec<VertexInput>>,
+        vertex_veto: Option<Vec<VertexInput>>,
+    ) -> PyResult<PyProcess> {
+        PyProcess::from_model(
+            self,
+            incoming,
+            outgoing,
+            particle_veto,
+            vertex_allow,
+            vertex_veto,
+        )
+    }
+
     /// Return the model name.
     #[getter]
     fn name(&self) -> &str {
@@ -2372,7 +2960,7 @@ impl PyModel {
             .map_err(error::model)
     }
 
-    /// Return a concise representation containing the name and particle count.
+    /// Summarize the defining data as well as the name and particle count.
     ///
     /// Examples
     /// --------

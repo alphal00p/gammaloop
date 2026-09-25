@@ -14,13 +14,13 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
+    CLISettings,
     commands::generate::parse_process_spec_string,
     completion::CompletionArgExt,
     state::{GraphImportOptions, ProcessRef, State},
-    CLISettings,
 };
 use color_eyre::Result;
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Import {
@@ -324,10 +324,12 @@ mod tests {
             "../../../../../assets/models/json/scalars/scalars_2p_3p.json"
         ))?;
         let generated = Process::new(["scalar_1"], ["scalar_1", "scalar_1"])
-            .with_loop_count(1, 1)?
             .generate_cross_section(
                 Arc::new(model.clone()),
-                &GenerationOptions::default().threads(1).max_vertices(4),
+                &GenerationOptions::default()
+                    .with_loop_count(1, 1)?
+                    .threads(1)
+                    .max_vertices(4),
             )?;
         assert!(!generated.diagrams.is_empty());
         let dot = generated
@@ -343,9 +345,11 @@ mod tests {
         let imported = Import::load_graph_file(&path, &model)?;
 
         assert_eq!(imported.len(), generated.diagrams.len());
-        assert!(imported
-            .iter()
-            .all(|graph| !graph.finalized_cuts.is_empty()));
+        assert!(
+            imported
+                .iter()
+                .all(|graph| !graph.finalized_cuts.is_empty())
+        );
         Ok(())
     }
 }

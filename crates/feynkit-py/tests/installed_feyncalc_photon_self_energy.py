@@ -15,16 +15,12 @@ from symbolica.community.hep import oneloop
 from symbolica.community.spenso import TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
-generated = (
-    fk.Process(model, [22], [22])
-    .with_loop_count(1, 1)
-    .generate_diagrams(
-        max_vertices=2,
-        maximum_bridges=None,
-        vertex_allow=["V_98"],
-        numerator_grouping=None,
-        progress=None,
-    )
+generated = model.process([22], [22], vertex_allow=["V_98"]).generate_diagrams(
+    loops=1,
+    max_vertices=2,
+    maximum_bridges=None,
+    numerator_grouping=None,
+    progress=None,
 )
 assert len(generated.diagrams) == 1
 diagram = generated.diagrams[0]

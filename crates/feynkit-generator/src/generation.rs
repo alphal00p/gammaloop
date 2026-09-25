@@ -1328,7 +1328,10 @@ impl Generator {
         {
             return Err(ProcessError::MultipleAmplitudeFinalStates.into());
         }
-        let options = options.resolve_selectors(&self.model)?;
+        process.validate_in(&self.model)?;
+        let options = process
+            .restrict_options(options)
+            .resolve_selectors(&self.model)?;
         let options = &options;
         self.validate_options(generation_type, options)?;
         process.validate_covariant_cut_filters(&self.model, options, generation_type)?;
@@ -1336,7 +1339,7 @@ impl Generator {
             process.covariant_cut_states(&self.model, generation_type)?,
         )?;
         let process = &expanded_process;
-        let resolved = ResolvedProcess::new(&self.model, process, generation_type)?;
+        let resolved = ResolvedProcess::new(&self.model, process, generation_type, options)?;
         let signatures = InteractionSignatures::new(&self.model, options)?;
         let external_edges = resolved.external_edges(&self.model)?;
         let generation_signatures: Vec<_> = signatures.keys().cloned().collect();
@@ -1347,7 +1350,7 @@ impl Generator {
         // Fast cut filter switch multiplicity is no longer a separate CLI option;
         // FeynKit owns the physical-cut filtering strategy.
         let mut settings = GenerationSettings::new()
-            .max_loops(*process.loop_count().end())
+            .max_loops(*options.loop_count().end())
             .allow_self_loops(options.allow_self_loops)
             .allow_zero_flow_edges(options.allow_zero_flow_edges)
             .progress_fn(Box::new(move |_| {
@@ -1369,7 +1372,7 @@ impl Generator {
                 GenerationError::ArithmeticOverflow("the Symbolica vertex limit"),
             )?);
         }
-        if let Some(maximum) = options.max_bridges(*process.loop_count().start()) {
+        if let Some(maximum) = options.max_bridges(*options.loop_count().start()) {
             settings = settings.max_bridges(maximum);
         }
         let abort_options = options.clone();
@@ -1388,7 +1391,7 @@ impl Generator {
         // Sort for reproducible generated IDs, then discard contributions below
         // the requested loop range before more expensive processing.
         raw_graphs.sort_by(|left, right| left.0.cmp(&right.0));
-        raw_graphs.retain(|(graph, _)| process.loop_count().contains(&graph.num_loops()));
+        raw_graphs.retain(|(graph, _)| options.loop_count().contains(&graph.num_loops()));
         let mut filtered_graphs = Vec::with_capacity(raw_graphs.len());
         let total = raw_graphs.len();
         options.report_progress("topology_filters", 0, Some(total));
@@ -1708,7 +1711,7 @@ impl Generator {
                 comparison_diagrams,
                 &self.model,
                 &NumeratorGrouping::None,
-                process.symmetrizes_left_right(),
+                options.symmetrizes_left_right(),
                 options,
             )?
         } else {
@@ -1716,7 +1719,7 @@ impl Generator {
                 comparison_diagrams,
                 &self.model,
                 &options.numerator_grouping,
-                process.symmetrizes_left_right(),
+                options.symmetrizes_left_right(),
                 options,
             )?
         };
@@ -3607,6 +3610,7 @@ impl ResolvedProcess {
         model: &Model,
         process: &Process,
         generation_type: GenerationType,
+        options: &GenerationOptions,
     ) -> Result<Self, GenerationError> {
         let resolve = |selector: &ParticleSelector| -> Result<Particle, GenerationError> {
             Ok(model.particle_by_id(selector.resolve(model)?)?.clone())
@@ -3623,10 +3627,10 @@ impl ResolvedProcess {
                 .iter()
                 .map(|alternative| alternative.iter().map(resolve).collect())
                 .collect::<Result<_, _>>()?,
-            symmetrize_initial: process.symmetrizes_initial(),
-            symmetrize_final: process.symmetrizes_final(),
-            symmetrize_left_right: process.symmetrizes_left_right(),
-            symmetrize_external_fermions: process.symmetrizes_external_fermions(),
+            symmetrize_initial: options.symmetrizes_initial(),
+            symmetrize_final: options.symmetrizes_final(),
+            symmetrize_left_right: options.symmetrizes_left_right(),
+            symmetrize_external_fermions: options.symmetrizes_external_fermions(),
         })
     }
 
@@ -4818,8 +4822,6 @@ mod tests {
 
     fn scalar_cross_section_process() -> Process {
         Process::new(["phi", "phi"], ["phi", "phi"])
-            .with_loop_count(1, 1)
-            .unwrap()
     }
 
     fn particle(model: &Model, pdg: i64) -> ParticleId {
@@ -4840,10 +4842,12 @@ mod tests {
     #[test]
     fn loop_one_particle_irreducibility_preserves_trees_in_mixed_ranges() {
         let generator = Generator::new(scalar_model());
-        let process = Process::new(["phi", "phi"], ["phi", "phi"])
+        let process = Process::new(["phi", "phi"], ["phi", "phi"]);
+        let options = GenerationOptions::default()
             .with_loop_count(0, 1)
-            .unwrap();
-        let options = GenerationOptions::default().threads(1).max_vertices(4);
+            .unwrap()
+            .threads(1)
+            .max_vertices(4);
         let automatic = options
             .clone()
             .with_graph_filter(GenerationFilter::LoopOneParticleIrreducible);
@@ -4890,8 +4894,8 @@ mod tests {
 
         let loops_only = generator
             .generate(
-                &process.with_loop_count(1, 1).unwrap(),
-                &automatic,
+                &process,
+                &automatic.with_loop_count(1, 1).unwrap(),
                 GenerationType::Amplitude,
             )
             .unwrap();
@@ -4905,13 +4909,14 @@ mod tests {
     #[test]
     fn generates_tree_and_one_loop_diagrams() {
         let generator = Generator::new(scalar_model());
-        let process = Process::new(["phi"], ["phi", "phi"])
-            .with_loop_count(0, 1)
-            .unwrap();
+        let process = Process::new(["phi"], ["phi", "phi"]);
         let generated = generator
             .generate(
                 &process,
-                &GenerationOptions::default().allow_self_loops(true),
+                &GenerationOptions::default()
+                    .with_loop_count(0, 1)
+                    .unwrap()
+                    .allow_self_loops(true),
                 GenerationType::Amplitude,
             )
             .unwrap();
@@ -4928,10 +4933,12 @@ mod tests {
     #[test]
     fn finalizes_external_fermion_projectors_unless_explicitly_overridden() {
         let generator = Generator::new(fermion_model());
-        let process = Process::new([1_i64, -1], [1_i64, -1])
+        let process = Process::new([1_i64, -1], [1_i64, -1]);
+        let options = GenerationOptions::default()
             .with_loop_count(0, 0)
-            .unwrap();
-        let options = GenerationOptions::default().threads(1).max_vertices(2);
+            .unwrap()
+            .threads(1)
+            .max_vertices(2);
         let generated = generator
             .generate(&process, &options, GenerationType::Amplitude)
             .unwrap();
@@ -4970,13 +4977,15 @@ mod tests {
     fn compton_cuts_preserve_the_requested_particle_charge() {
         let generator = Generator::new(fermion_model());
         for pdg in [1_i64, -1] {
-            let process = Process::new([pdg, 22], [pdg, 22])
-                .with_loop_count(1, 1)
-                .unwrap();
+            let process = Process::new([pdg, 22], [pdg, 22]);
             let generated = generator
                 .generate(
                     &process,
-                    &GenerationOptions::default().threads(1).max_vertices(4),
+                    &GenerationOptions::default()
+                        .with_loop_count(1, 1)
+                        .unwrap()
+                        .threads(1)
+                        .max_vertices(4),
                     GenerationType::CrossSection,
                 )
                 .unwrap();
@@ -5013,13 +5022,15 @@ mod tests {
         let model = fermion_model();
         let generator = Generator::new(model);
         for pdg in [1_i64, -1] {
-            let process = Process::new([pdg, 22], [pdg, 22])
-                .with_loop_count(1, 1)
-                .unwrap();
+            let process = Process::new([pdg, 22], [pdg, 22]);
             let generated = generator
                 .generate(
                     &process,
-                    &GenerationOptions::default().threads(1).max_vertices(4),
+                    &GenerationOptions::default()
+                        .with_loop_count(1, 1)
+                        .unwrap()
+                        .threads(1)
+                        .max_vertices(4),
                     GenerationType::CrossSection,
                 )
                 .unwrap();
@@ -5039,13 +5050,15 @@ mod tests {
     #[test]
     fn normalized_cross_section_fermion_chains_keep_valid_cuts() {
         let generator = Generator::new(fermion_model());
-        let process = Process::new([1_i64, -1], [22_i64])
-            .with_loop_count(0, 1)
-            .unwrap();
+        let process = Process::new([1_i64, -1], [22_i64]);
         let generated = generator
             .generate(
                 &process,
-                &GenerationOptions::default().threads(1).max_vertices(4),
+                &GenerationOptions::default()
+                    .with_loop_count(0, 1)
+                    .unwrap()
+                    .threads(1)
+                    .max_vertices(4),
                 GenerationType::CrossSection,
             )
             .unwrap();
@@ -5148,6 +5161,7 @@ mod tests {
             &model,
             &Process::new([22_i64, 22], [22_i64, 22]),
             GenerationType::CrossSection,
+            &GenerationOptions::default(),
         )
         .unwrap();
         let mut graph = Graph::new();
@@ -5393,7 +5407,11 @@ mod tests {
     fn forced_cuts_retain_only_the_requested_typed_edge_set() {
         let generator = Generator::new(scalar_model());
         let process = scalar_cross_section_process();
-        let options = GenerationOptions::default().threads(1).max_vertices(4);
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .threads(1)
+            .max_vertices(4);
         let generated = generator
             .generate(&process, &options, GenerationType::CrossSection)
             .unwrap();
@@ -5435,6 +5453,8 @@ mod tests {
         let result = Generator::new(scalar_model()).generate(
             &scalar_cross_section_process(),
             &GenerationOptions::default()
+                .with_loop_count(1, 1)
+                .unwrap()
                 .threads(1)
                 .max_vertices(4)
                 .forced_cuts([unknown]),
@@ -5452,7 +5472,11 @@ mod tests {
     fn forced_cut_filtering_precedes_numerator_grouping() {
         let generator = Generator::new(scalar_model());
         let process = scalar_cross_section_process();
-        let options = GenerationOptions::default().threads(1).max_vertices(4);
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .threads(1)
+            .max_vertices(4);
         let generated = generator
             .generate(&process, &options, GenerationType::CrossSection)
             .unwrap();
@@ -5631,6 +5655,7 @@ mod tests {
             &model,
             &Process::new([1_i64, -1], Vec::<i64>::new()),
             GenerationType::Amplitude,
+            &GenerationOptions::default(),
         )
         .unwrap();
         let mut graph = Graph::new();
@@ -5690,10 +5715,11 @@ mod tests {
 
         let symmetrized = ResolvedProcess::new(
             &model,
-            &Process::new([1_i64, -1], Vec::<i64>::new())
+            &Process::new([1_i64, -1], Vec::<i64>::new()),
+            GenerationType::Amplitude,
+            &GenerationOptions::default()
                 .symmetrize_initial(true)
                 .symmetrize_external_fermions(true),
-            GenerationType::Amplitude,
         )
         .unwrap()
         .normalize_fermion_flows(&graph, &model)
@@ -5725,6 +5751,7 @@ mod tests {
             &model,
             &Process::new([1_i64, -1], Vec::<i64>::new()),
             GenerationType::Amplitude,
+            &GenerationOptions::default(),
         )
         .unwrap();
         let mut graph = Graph::new();
@@ -5833,11 +5860,12 @@ mod tests {
         for enabled in [false, true] {
             let process = ResolvedProcess::new(
                 &model,
-                &Process::new([1000_i64], [1000_i64, 1000, 1000])
+                &Process::new([1000_i64], [1000_i64, 1000, 1000]),
+                GenerationType::CrossSection,
+                &GenerationOptions::default()
                     .with_loop_count(3, 3)
                     .unwrap()
                     .symmetrize_left_right(enabled),
-                GenerationType::CrossSection,
             )
             .unwrap();
             let canonical = graphs
@@ -5857,8 +5885,9 @@ mod tests {
         let model = fermion_model();
         let process = ResolvedProcess::new(
             &model,
-            &Process::new([1_i64, -1], [22_i64]).symmetrize_left_right(true),
+            &Process::new([1_i64, -1], [22_i64]),
             GenerationType::CrossSection,
+            &GenerationOptions::default().symmetrize_left_right(true),
         )
         .unwrap();
         let mut graph = Graph::new();
@@ -5999,8 +6028,13 @@ mod tests {
     #[test]
     fn canonical_parallel_edges_are_ordered_by_signed_pdg() {
         let model = standard_model();
-        let process =
-            ResolvedProcess::new(&model, &photon_process(), GenerationType::Amplitude).unwrap();
+        let process = ResolvedProcess::new(
+            &model,
+            &photon_process(),
+            GenerationType::Amplitude,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
         let grouping = NumeratorGrouping::UpToSign(GraphGroupingOptions::default());
 
         for particles in [[-4_i64, 251_i64], [4_i64, -251_i64]] {
@@ -6746,6 +6780,8 @@ mod tests {
     fn generated_qcd_loop_numerators_are_spenso_ready() {
         let model = standard_model();
         let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
             .threads(1)
             .max_vertices(2)
             .with_graph_filter(GenerationFilter::CouplingOrders(BTreeMap::from([
@@ -6760,7 +6796,7 @@ mod tests {
             ));
         let generated = Generator::new(model)
             .generate(
-                &Process::new(["g"], ["g"]).with_loop_count(1, 1).unwrap(),
+                &Process::new(["g"], ["g"]),
                 &options,
                 GenerationType::Amplitude,
             )
@@ -6870,6 +6906,7 @@ mod tests {
             &model,
             &Process::new([9000005_i64, 9000005], [9000005_i64, 9000005]),
             GenerationType::Amplitude,
+            &GenerationOptions::default(),
         )
         .unwrap();
         let mut signs = Vec::new();
@@ -6927,8 +6964,10 @@ mod tests {
         let generator = Generator::new(standard_model());
         let generated = generator
             .generate(
-                &Process::new(["g"], ["g"]).with_loop_count(1, 1).unwrap(),
+                &Process::new(["g"], ["g"]),
                 &GenerationOptions::default()
+                    .with_loop_count(1, 1)
+                    .unwrap()
                     .threads(1)
                     .max_vertices(2)
                     .with_graph_filter(GenerationFilter::VertexAllow(vec![VertexSelector::Name(
@@ -7101,8 +7140,10 @@ mod tests {
         for (fermion_loops, expected_diagrams) in [(0, 1), (1, 0)] {
             let generated = generator
                 .generate(
-                    &Process::new(["g"], ["g"]).with_loop_count(1, 1).unwrap(),
+                    &Process::new(["g"], ["g"]),
                     &GenerationOptions::default()
+                        .with_loop_count(1, 1)
+                        .unwrap()
                         .threads(1)
                         .max_vertices(2)
                         .with_graph_filter(GenerationFilter::VertexAllow(vec![
@@ -7438,6 +7479,7 @@ mod tests {
             &model,
             &Process::new([-11_i64, 11], [5_i64, -5, 25]),
             GenerationType::CrossSection,
+            &GenerationOptions::default(),
         )
         .unwrap();
         // These graphs contain the requested species, but neither has an
@@ -7468,6 +7510,7 @@ mod tests {
             &model,
             &Process::new([22_i64, 22], [22_i64]),
             GenerationType::CrossSection,
+            &GenerationOptions::default(),
         )
         .unwrap();
         let mut graph = Graph::new();
@@ -7531,8 +7574,8 @@ mod tests {
     #[test]
     fn external_canonical_classes_keep_global_left_right_symmetry_out_of_raw_generation() {
         let model = fermion_model();
-        let classes = |process: Process, generation_type| {
-            ResolvedProcess::new(&model, &process, generation_type)
+        let classes = |process: Process, generation_type, options: GenerationOptions| {
+            ResolvedProcess::new(&model, &process, generation_type, &options)
                 .unwrap()
                 .external_edges(&model)
                 .unwrap()
@@ -7540,9 +7583,13 @@ mod tests {
                 .map(|(node, _)| node.external_class.unwrap())
                 .collect::<Vec<_>>()
         };
-        let process = Process::new([1_i64, -1, 22], Vec::<i64>::new()).symmetrize_initial(true);
+        let process = Process::new([1_i64, -1, 22], Vec::<i64>::new());
         assert_eq!(
-            classes(process.clone(), GenerationType::Amplitude),
+            classes(
+                process.clone(),
+                GenerationType::Amplitude,
+                GenerationOptions::default().symmetrize_initial(true)
+            ),
             vec![
                 ExternalCanonicalClass::Exact {
                     state: ExternalState::Incoming,
@@ -7557,8 +7604,11 @@ mod tests {
         );
         assert_eq!(
             classes(
-                process.symmetrize_external_fermions(true),
-                GenerationType::Amplitude
+                process,
+                GenerationType::Amplitude,
+                GenerationOptions::default()
+                    .symmetrize_initial(true)
+                    .symmetrize_external_fermions(true)
             ),
             vec![
                 ExternalCanonicalClass::WithinState(ExternalState::Incoming),
@@ -7567,9 +7617,13 @@ mod tests {
             ]
         );
 
-        let cross_section = Process::new([1_i64, -1], [22_i64]).symmetrize_initial(true);
+        let cross_section = Process::new([1_i64, -1], [22_i64]);
         assert_eq!(
-            classes(cross_section, GenerationType::CrossSection),
+            classes(
+                cross_section,
+                GenerationType::CrossSection,
+                GenerationOptions::default().symmetrize_initial(true)
+            ),
             vec![
                 ExternalCanonicalClass::WithinState(ExternalState::Incoming),
                 ExternalCanonicalClass::WithinState(ExternalState::Incoming),
@@ -7584,9 +7638,13 @@ mod tests {
             ]
         );
 
-        let left_right = Process::new([1_i64, -1], [22_i64]).symmetrize_left_right(true);
+        let left_right = Process::new([1_i64, -1], [22_i64]);
         assert_eq!(
-            classes(left_right, GenerationType::CrossSection),
+            classes(
+                left_right,
+                GenerationType::CrossSection,
+                GenerationOptions::default().symmetrize_left_right(true)
+            ),
             vec![
                 ExternalCanonicalClass::Exact {
                     state: ExternalState::Incoming,

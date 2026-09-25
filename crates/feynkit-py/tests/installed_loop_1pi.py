@@ -14,21 +14,23 @@ def identities(result: hep.GenerationResult, loops: int) -> set[str]:
     return {diagram.id for diagram in result.diagrams if diagram.loop_count == loops}
 
 
-for constructor_loops in (True, False):
+for factory_filters in (True, False):
 
     def generate(
         loops: tuple[int, int] = (0, 1),
         maximum_bridges: int | None | EllipsisType = ...,
     ) -> hep.GenerationResult:
-        if constructor_loops:
-            method = hep.Process(model, states, states, loops=loops).generate_diagrams
+        if factory_filters:
+            process = model.process(states, states, vertex_allow=["V_3_SCALAR_000"])
         else:
-            process = hep.Process(model, states, states).with_loop_count(*loops)
-            method = process.generate_diagrams
+            process = model.process(states, states).with_filters(
+                vertex_allow=["V_3_SCALAR_000"]
+            )
+        method = process.generate_diagrams
         return method(
             max_vertices=4,
             threads=1,
-            vertex_allow=["V_3_SCALAR_000"],
+            loops=loops,
             self_energy=None,
             tadpoles=None,
             zero_snails=None,
@@ -57,11 +59,11 @@ for method in (
     assert inspect.signature(method).parameters["maximum_bridges"].default is Ellipsis
 
 standard_model = hep.Model.standard_model()
-diphoton = hep.Process(standard_model, ["e-", "e+"], ["a", "a"]).generate_diagrams(
+diphoton = standard_model.process(["e-", "e+"], ["a", "a"]).generate_diagrams(
     progress=None
 )
 assert len(diphoton.diagrams) == 2
 assert all(diagram.loop_count == 0 for diagram in diphoton.diagrams)
 print(
-    "Loop-only 1PI default: constructor and builder loops, mixed ranges, explicit limits and diphoton passed"
+    "Loop-only 1PI default: factory and copied restrictions, per-call loops, mixed ranges, explicit limits and diphoton passed"
 )

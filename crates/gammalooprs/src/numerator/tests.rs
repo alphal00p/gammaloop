@@ -919,10 +919,9 @@ fn one_loop_lbl_concretize() {
 #[test]
 fn dumb_four_gluon() {
     let model = load_generic_model("sm");
-    let process = Process::new(Vec::<i64>::new(), Vec::<i64>::new())
-        .with_loop_count(2, 2)
-        .unwrap();
-    let options = GenerationOptions::default()
+    let process = Process::new(Vec::<i64>::new(), Vec::<i64>::new());
+    let options = GenerationOptions::default().with_loop_count(2, 2)
+        .unwrap()
         .allow_self_loops(true)
         .max_vertices(1)
         .numerator_grouping(NumeratorGrouping::None)

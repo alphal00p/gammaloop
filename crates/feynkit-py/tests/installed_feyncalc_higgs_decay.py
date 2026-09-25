@@ -53,7 +53,7 @@ for pdgs, mass, yukawa, yukawa_mass in (
     ((-24, 24), mw, None, None),
     ((23, 23), mz, None, None),
 ):
-    generated = fk.Process(model, [25], list(pdgs)).generate_diagrams(
+    generated = model.process([25], list(pdgs)).generate_diagrams(
         max_vertices=1, numerator_grouping=None, progress=None
     )
     assert len(generated.diagrams) == 1

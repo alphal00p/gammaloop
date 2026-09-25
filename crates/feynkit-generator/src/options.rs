@@ -345,6 +345,11 @@ type CancellationCheck = Arc<dyn Fn() -> bool + Send + Sync + 'static>;
 pub struct GenerationOptions {
     pub(crate) threads: Option<usize>,
     pub(crate) max_vertices: Option<usize>,
+    symmetrize_initial: bool,
+    symmetrize_final: bool,
+    symmetrize_left_right: bool,
+    symmetrize_external_fermions: bool,
+
     pub(crate) allow_self_loops: bool,
     pub(crate) allow_zero_flow_edges: bool,
     pub(crate) graph_filters: Vec<GenerationFilter>,
@@ -380,6 +385,11 @@ pub struct GenerationOptions {
 struct GenerationOptionsPersistent {
     threads: Option<usize>,
     max_vertices: Option<usize>,
+    symmetrize_initial: bool,
+    symmetrize_final: bool,
+    symmetrize_left_right: bool,
+    symmetrize_external_fermions: bool,
+
     allow_self_loops: bool,
     allow_zero_flow_edges: bool,
     graph_filters: Vec<GenerationFilter>,
@@ -402,6 +412,11 @@ impl From<&GenerationOptions> for GenerationOptionsPersistent {
         Self {
             threads: options.threads,
             max_vertices: options.max_vertices,
+            symmetrize_initial: options.symmetrize_initial,
+            symmetrize_final: options.symmetrize_final,
+            symmetrize_left_right: options.symmetrize_left_right,
+            symmetrize_external_fermions: options.symmetrize_external_fermions,
+
             allow_self_loops: options.allow_self_loops,
             allow_zero_flow_edges: options.allow_zero_flow_edges,
             graph_filters: options.graph_filters.clone(),
@@ -496,6 +511,11 @@ impl Default for GenerationOptions {
         Self {
             threads: None,
             max_vertices: None,
+            symmetrize_initial: false,
+            symmetrize_final: false,
+            symmetrize_left_right: false,
+            symmetrize_external_fermions: false,
+
             allow_self_loops: false,
             allow_zero_flow_edges: false,
             graph_filters: Vec::new(),
@@ -520,6 +540,71 @@ impl Default for GenerationOptions {
 }
 
 impl GenerationOptions {
+    pub fn with_loop_count(
+        mut self,
+        minimum: usize,
+        maximum: usize,
+    ) -> Result<Self, crate::ProcessError> {
+        if minimum > maximum {
+            return Err(crate::ProcessError::InvalidLoopRange { minimum, maximum });
+        }
+        self.graph_filters
+            .retain(|filter| !matches!(filter, GenerationFilter::LoopCountRange(_)));
+        self.graph_filters
+            .push(GenerationFilter::LoopCountRange((minimum, maximum)));
+        Ok(self)
+    }
+
+    pub fn symmetrize_initial(mut self, enabled: bool) -> Self {
+        self.symmetrize_initial = enabled;
+        self
+    }
+
+    pub fn symmetrize_final(mut self, enabled: bool) -> Self {
+        self.symmetrize_final = enabled;
+        self
+    }
+
+    pub fn symmetrize_left_right(mut self, enabled: bool) -> Self {
+        self.symmetrize_left_right = enabled;
+        self
+    }
+
+    /// Include amplitude fermions in enabled external-state symmetry classes.
+    ///
+    /// This is disabled by default. Cross-section symmetry is unchanged by
+    /// this amplitude-specific policy switch.
+    pub fn symmetrize_external_fermions(mut self, enabled: bool) -> Self {
+        self.symmetrize_external_fermions = enabled;
+        self
+    }
+
+    pub fn loop_count(&self) -> RangeInclusive<usize> {
+        self.graph_filters
+            .iter()
+            .find_map(|filter| match filter {
+                GenerationFilter::LoopCountRange((minimum, maximum)) => Some(*minimum..=*maximum),
+                _ => None,
+            })
+            .unwrap_or(0..=0)
+    }
+
+    pub fn symmetrizes_initial(&self) -> bool {
+        self.symmetrize_initial
+    }
+
+    pub fn symmetrizes_final(&self) -> bool {
+        self.symmetrize_final
+    }
+
+    pub fn symmetrizes_left_right(&self) -> bool {
+        self.symmetrize_left_right
+    }
+
+    pub fn symmetrizes_external_fermions(&self) -> bool {
+        self.symmetrize_external_fermions
+    }
+
     fn from_persistent(persistent: GenerationOptionsPersistent) -> Result<Self, String> {
         let parse = |expression: String, field: &str| {
             Atom::parse(
@@ -532,6 +617,11 @@ impl GenerationOptions {
         Ok(Self {
             threads: persistent.threads,
             max_vertices: persistent.max_vertices,
+            symmetrize_initial: persistent.symmetrize_initial,
+            symmetrize_final: persistent.symmetrize_final,
+            symmetrize_left_right: persistent.symmetrize_left_right,
+            symmetrize_external_fermions: persistent.symmetrize_external_fermions,
+
             allow_self_loops: persistent.allow_self_loops,
             allow_zero_flow_edges: persistent.allow_zero_flow_edges,
             graph_filters: persistent.graph_filters,
@@ -864,6 +954,19 @@ impl GenerationOptions {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn cp_symmetrization_is_an_explicit_serialized_opt_in() {
+        let options = GenerationOptions::default();
+        assert!(!options.symmetrizes_left_right());
+        for enabled in [false, true] {
+            let options = options.clone().symmetrize_left_right(enabled);
+            let definition = serde_json::to_value(&options).unwrap();
+            assert_eq!(definition["symmetrize_left_right"], enabled);
+            let decoded: GenerationOptions = serde_json::from_value(definition).unwrap();
+            assert_eq!(decoded.symmetrizes_left_right(), enabled);
+        }
+    }
+
     use symbolica::atom::Atom;
 
     use super::{GenerationFilter, GenerationOptions, GraphGroupingOptions, NumeratorGrouping};

@@ -116,11 +116,12 @@ for kind, incoming, outgoing, loops, vertices, count in [
         2,
     ),
 ]:
-    generated = hep.Process(model, incoming, outgoing).generate_diagrams(
+    generated = model.process(
+        incoming, outgoing, vertex_allow=vertices
+    ).generate_diagrams(
         loops=loops,
         max_vertices=len(incoming) + len(outgoing) - 2 + 2 * loops,
         maximum_bridges=0,
-        vertex_allow=vertices,
         self_energy=None,
         tadpoles=None,
         zero_snails=None,
@@ -486,19 +487,18 @@ for kind, incoming, outgoing, count, qcd_order in [
         "loops": 0,
         "max_vertices": 1,
         "maximum_bridges": None,
-        "vertex_allow": ct_vertices,
         "self_energy": None,
         "tadpoles": None,
         "zero_snails": None,
         "numerator_grouping": None,
         "progress": None,
     }
-    generated = hep.Process(ct_model, incoming, outgoing).generate_diagrams(
-        coupling_orders={"QCD": qcd_order, "CT": 1}, **options
-    )
+    generated = ct_model.process(
+        incoming, outgoing, vertex_allow=ct_vertices
+    ).generate_diagrams(coupling_orders={"QCD": qcd_order, "CT": 1}, **options)
     assert len(generated.diagrams) == count
     assert (
-        not hep.Process(ct_model, incoming, outgoing)
+        not ct_model.process(incoming, outgoing, vertex_allow=ct_vertices)
         .generate_diagrams(coupling_orders={"CT": 0}, **options)
         .diagrams
     )

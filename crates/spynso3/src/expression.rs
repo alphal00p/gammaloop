@@ -12,7 +12,10 @@ use idenso::{
         metric::MetricSimplifier,
         schoonschip::{Schoonschip, SchoonschipSettings},
     },
-    tensor::{SymbolicTensor, composition, inference::InterfaceInference},
+    tensor::{
+        SymbolicTensor, composition,
+        inference::{InterfaceInference, TensorInferenceError},
+    },
 };
 use pyo3::{
     exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError},
@@ -37,7 +40,7 @@ use spenso::{
         abstract_index::AbstractIndex,
         dimension::Dimension,
         partial::{PartialIndex, PartialStructure, PartialStructureExt},
-        representation::{LibraryRep, Minkowski, RepName, Representation},
+        representation::{LibraryRep, Minkowski, Representation},
         slot::{IsAbstractSlot, Slot},
     },
 };
@@ -46,7 +49,7 @@ use symbolica::{
         ConvertibleToExpression, ConvertibleToPatternRestriction, ConvertibleToReplaceWith,
         PythonExpression, PythonFormattedOutput, PythonReplacement, PythonTransformer,
     },
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomView, Symbol},
 };
 
 use crate::{
@@ -127,6 +130,16 @@ pub struct TensorExpression {
 }
 
 impl TensorExpression {
+    pub(crate) fn inference_error(error: TensorInferenceError) -> PyErr {
+        let message = match error {
+            TensorInferenceError::InvalidBuiltinSignature { factory, signature } => format!(
+                "predefined tensor `{factory}` requires {signature}; use TensorExpression.{factory}(...) to construct it"
+            ),
+            error => error.to_string(),
+        };
+        PyValueError::new_err(message)
+    }
+
     /// Construct from untrusted symbolic syntax. Infer missing structure and
     /// validate supplied interfaces here, before tensor operations may reuse them.
     pub fn from_atom_interface(
@@ -136,15 +149,14 @@ impl TensorExpression {
     ) -> PyResult<Py<Self>> {
         if let Some(interface) = interface.into() {
             let interface = InterfaceInference::merge_explicit_interface_sequence(&[interface])
-                .map_err(|error| PyValueError::new_err(error.to_string()))?
+                .map_err(Self::inference_error)?
                 .canonicalize_open_ports();
-            SymbolicTensor::validate_interface(&atom, &interface)
-                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            SymbolicTensor::validate_interface(&atom, &interface).map_err(Self::inference_error)?;
             return Self::from_known_parts(py, atom, interface, None, Vec::new());
         }
         let (name, name_args) = inferred_descriptor(atom.as_view());
         let value = if InterfaceInference::has_structured_syntax(atom.as_view()) {
-            SymbolicTensor::infer(atom).map_err(|error| PyValueError::new_err(error.to_string()))?
+            SymbolicTensor::infer(atom).map_err(Self::inference_error)?
         } else {
             SymbolicTensor::new(atom, PartialStructure::from_logical_slots([]))
         };
@@ -162,8 +174,8 @@ impl TensorExpression {
         name_args: Vec<Atom>,
     ) -> PyResult<Py<Self>> {
         let original_rank = interface.canonical().order();
-        let value = SymbolicTensor::checked_parts(atom, interface)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let value =
+            SymbolicTensor::checked_parts(atom, interface).map_err(Self::inference_error)?;
         let atom = value.expression;
         let interface = value.structure;
         // A contraction is a derived expression, not a declaration of the original stored data.
@@ -209,11 +221,26 @@ impl TensorExpression {
         py: Python<'_>,
         atom: Atom,
     ) -> PyResult<Py<TensorExpression>> {
-        let value = Self::structured(self_)
-            .with_transformed_expression(atom)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        let (name, args) = Self::transformed_descriptor(self_, &value.expression);
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        if atom == self_.as_super().expr {
+            return Py::new(py, (Self::clone(self_), PythonExpression { expr: atom }));
+        }
+        let interface = if atom.as_view().is_zero() {
+            self_.interface.clone()
+        } else if InterfaceInference::has_structured_syntax(atom.as_view()) {
+            SymbolicTensor::infer(atom.clone())
+                .map_err(Self::inference_error)?
+                .structure
+        } else if self_.interface.canonical().is_scalar() {
+            PartialStructure::from_logical_slots([])
+        } else {
+            return Err(PyValueError::new_err(
+                "Tensor transformation removed the tensor syntax of a non-scalar expression",
+            ));
+        };
+        // Descriptor identity depends on contractions of the inferred raw ports,
+        // even when the input and final result happen to have the same rank.
+        let (name, args) = Self::transformed_descriptor(self_, &atom);
+        Self::from_known_parts(py, atom, interface, name, args)
     }
 
     /// Wrap a tensor identity using the shared callback-aware interface proof.
@@ -224,7 +251,7 @@ impl TensorExpression {
     ) -> PyResult<Py<Self>> {
         let value = Self::structured(self_)
             .with_rewritten_expression(atom)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            .map_err(Self::inference_error)?;
         let atom = value.expression;
         let (name, args) = Self::transformed_descriptor(self_, &atom);
         Self::from_parts_unchecked(py, atom, value.structure, name, args)
@@ -238,7 +265,7 @@ impl TensorExpression {
     ) -> PyResult<Py<Self>> {
         let value = Self::structured(self_)
             .with_algebra_result(atom)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            .map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(self_, &value.expression);
         Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
     }
@@ -280,7 +307,7 @@ impl TensorExpression {
             return Self::from_preserved_atom(self_, py, atom);
         }
         SymbolicTensor::validate_interface(&atom, &self_.interface)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            .map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(self_, &atom);
         Self::from_known_parts(py, atom, self_.interface.clone(), name, args)
     }
@@ -493,7 +520,7 @@ impl TensorOperand {
             return if InterfaceInference::has_structured_syntax(atom.as_view()) {
                 SymbolicTensor::infer(atom)
                     .map(Self::Structured)
-                    .map_err(|error| PyValueError::new_err(error.to_string()))
+                    .map_err(TensorExpression::inference_error)
             } else {
                 Ok(Self::Scalar(atom))
             };
@@ -2377,13 +2404,7 @@ impl TensorExpression {
         } else {
             (None, Vec::new())
         };
-        Self::from_parts_unchecked(
-            py,
-            value.expression,
-            value.structure,
-            name,
-            args,
-        )
+        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
     }
 
     /// Assign all external ports in logical order, including already indexed ports.
@@ -2779,21 +2800,10 @@ impl TensorExpression {
         let TensorOperand::Structured(right) = TensorOperand::extract(rhs)? else {
             return Err(PyTypeError::new_err("outer() requires a tensor operand"));
         };
-        let left_slots = left.structure.logical_slots();
-        let right_slots = right.structure.logical_slots();
-        let collisions = composition::compatible_pairs(&left.structure, &right.structure)
-            .into_iter()
-            .filter(|pair| {
-                matches!(left_slots[pair.left].aind, PartialIndex::Explicit(_))
-                    && matches!(right_slots[pair.right].aind, PartialIndex::Explicit(_))
-            })
-            .collect::<Vec<_>>();
-        if !collisions.is_empty() {
-            return Err(PyValueError::new_err(format!(
-                "outer product cannot preserve equal explicit indices on compatible port pairs {collisions:?}; use distinct indices"
-            )));
-        }
-        Self::from_structured(py, left.outer(&right)).map(TensorDispatch::Expression)
+        left.outer(&right)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .and_then(|value| Self::from_structured(py, value))
+            .map(TensorDispatch::Expression)
     }
 
     /// Contract one selected pair of ordered interface positions.
@@ -3381,13 +3391,16 @@ mod tests {
         IndexTooling, IndexToolingError,
         representations::{Bispinor, ColorAdjoint, ColorFundamental},
     };
-    use spenso::structure::{dimension::Dimension, representation::ExtendibleReps};
+    use spenso::structure::{
+        dimension::Dimension,
+        representation::{ExtendibleReps, RepName},
+    };
     use symbolica::{atom::FunctionBuilder, symbol};
 
     fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
         InterfaceInference::default()
             .infer_validated(atom.as_view())
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .map_err(TensorExpression::inference_error)
     }
 
     fn explicit_interface(
@@ -5359,25 +5372,24 @@ mod tests {
     }
 
     #[test]
-    fn expansion_preserves_materialization_callback_count() {
-        use std::sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        };
+    fn expansion_does_not_replay_materialization_callbacks() {
+        use std::sync::{Arc, Mutex};
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
-            let calls = Arc::new(AtomicUsize::new(0));
+            let calls = Arc::new(Mutex::new(Vec::new()));
             let observed = Arc::clone(&calls);
             let callback = spenso::tensor_symbol!(
                 "expansion_materialization_callback",
-                norm = move |_, _| {
-                    observed.fetch_add(1, Ordering::Relaxed);
+                norm = move |node, _| {
+                    observed.lock().unwrap().push(node.to_owned());
                 }
             );
             let rep = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
             let tensor = FunctionBuilder::new(callback)
                 .add_arg(rep.to_symbolic([]))
                 .finish();
+            // Establish that the observer records actual normalization calls.
+            assert_eq!(*calls.lock().unwrap(), vec![tensor.clone()]);
             let x = Atom::var(symbol!("expansion_callback_x"));
             let atom = (x + Atom::one()) * tensor;
             let original = TensorExpression::from_atom_interface(
@@ -5385,13 +5397,14 @@ mod tests {
                 atom.clone(),
                 PartialStructure::from_logical_slots([rep.slot(PartialIndex::open(0))]),
             )?;
-            calls.store(0, Ordering::Relaxed);
+            calls.lock().unwrap().clear();
+            let expanded = atom.expand();
+            let expansion_calls = std::mem::take(&mut *calls.lock().unwrap());
             let expected =
-                TensorExpression::preserving_interface(&original.borrow(py), py, atom.expand())?;
-            let expected_calls = calls.swap(0, Ordering::Relaxed);
+                TensorExpression::preserving_interface(&original.borrow(py), py, expanded)?;
+            assert!(calls.lock().unwrap().is_empty());
             let actual = TensorExpression::expand(original.borrow(py), py, None, None)?;
-            assert!(expected_calls > 0);
-            assert_eq!(calls.load(Ordering::Relaxed), expected_calls);
+            assert_eq!(*calls.lock().unwrap(), expansion_calls);
             let actual = actual.borrow(py);
             let expected = expected.borrow(py);
             assert_eq!(actual.as_super().expr, expected.as_super().expr);
@@ -6041,6 +6054,57 @@ mod tests {
                 assert!(error.to_string().contains("cannot parse tensor network"));
                 assert!(error.to_string().contains("Invalid dot function"));
             }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn transformed_diagonal_leaf_clears_descriptor_only_when_raw_ports_contract() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let x = Atom::var(symbol!("diagonal_descriptor_x"));
+            let name = symbol!("diagonal_descriptor_data");
+            let original = TensorExpression::from_known_parts(
+                py,
+                &x + Atom::one(),
+                PartialStructure::from_logical_slots([]),
+                Some(name),
+                vec![Atom::num(7)],
+            )?;
+            let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+            let slot = representation
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(73201))
+                .to_atom();
+            let diagonal =
+                FunctionBuilder::new(spenso::tensor_symbol!("diagonal_descriptor_tensor"))
+                    .add_arg(&slot)
+                    .add_arg(&slot)
+                    .finish();
+            let raw = InterfaceInference::default()
+                .infer_validated(diagonal.as_view())
+                .unwrap();
+            assert_eq!(
+                raw.canonical().order(),
+                2,
+                "the fixture must expose an intermediate port pair"
+            );
+            let result =
+                TensorExpression::from_transformed_atom(&original.borrow(py), py, diagonal)?;
+            let result = result.borrow(py);
+            assert_eq!(result.interface.canonical().order(), 0);
+            assert!(result.name.is_none());
+            assert!(result.name_args.is_empty());
+
+            // A scalar rewrite with no port contraction retains explicitly assigned identity.
+            let scalar = TensorExpression::from_transformed_atom(
+                &original.borrow(py),
+                py,
+                x + Atom::num(2),
+            )?;
+            let scalar = scalar.borrow(py);
+            assert_eq!(scalar.name, Some(name));
+            assert_eq!(scalar.name_args, vec![Atom::num(7)]);
             Ok(())
         })
         .unwrap();

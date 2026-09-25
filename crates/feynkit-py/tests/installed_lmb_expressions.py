@@ -16,10 +16,10 @@ fk = importlib.import_module(
 )
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = (
-    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
-    .generate_diagrams(
-        loops=1, max_vertices=3, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=True
+    model.process(
+        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
     )
+    .generate_diagrams(loops=1, max_vertices=3, allow_self_loops=True)
     .diagrams
 )
 diagram = next(
@@ -177,12 +177,10 @@ for expression in (diagram.numerator_expression, diagram.denominator_expression)
 # Exercise multiple loops, alternate bases, indexed vectors, and compact dots.
 two_loop = next(
     iter(
-        fk.Process(model, ["scalar_0"], ["scalar_0"]).generate_diagrams(
-            loops=2,
-            max_vertices=4,
-            vertex_allow=["V_3_SCALAR_000"],
-            allow_self_loops=False,
-            progress=None,
+        model.process(
+            ["scalar_0"], ["scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+        ).generate_diagrams(
+            loops=2, max_vertices=4, allow_self_loops=False, progress=None
         )
     )
 )

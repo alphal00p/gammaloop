@@ -102,7 +102,10 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
         for method in class.methods.values_mut().flatten() {
             if matches!(
                 method.name,
-                "generate_diagrams" | "generate_amplitude" | "generate_cross_section"
+                "generate_diagrams"
+                    | "generate_amplitude"
+                    | "generate_cross_section"
+                    | "with_filters"
             ) {
                 for parameter in &mut method.parameters.keyword_only {
                     if parameter.type_info.name.contains("types.EllipsisType") {
@@ -357,21 +360,18 @@ assert scalar.antiparticle.name == "scalar_0"
 model = fk.Model.from_json(model.to_json(pretty=False))
 
 scalar = model.particle("scalar_0")
-process = fk.Process(model, [scalar], [1000, scalar.antiparticle])
-process = process.with_loop_count(0, 1)
+process = model.process([scalar], [1000, scalar.antiparticle], vertex_allow=["V_3_SCALAR_000"], particle_veto=[model.particle("scalar_1"), 1002])
 assert isinstance(process, fk.Process)
-assert process.loop_count == (0, 1)
+assert not hasattr(process, "loop_count")
 
 generation_arguments = dict(
     max_vertices=3,
     allow_self_loops=True,
-    vertex_allow=["V_3_SCALAR_000"],
-    particle_veto=[model.particle("scalar_1"), 1002],
     coupling_orders={"QCD": (0, None)},
     fermion_loop_count_range=(0, 0),
     factorized_loop_topologies_count_range=(0, 1),
 )
-generated = fk.Process(model, [scalar], [1000, scalar.antiparticle]).generate_diagrams(loops=(0, 1), **generation_arguments)
+generated = process.generate_diagrams(loops=(0, 1), **generation_arguments)
 assert len(generated) > 0
 assert generated[0].name == next(iter(generated)).name
 assert generated.report.completed
@@ -496,7 +496,7 @@ def assert_feynkit_error(error_type, operation):
 assert_feynkit_error(fk.ModelError, lambda: fk.Model.from_json("{}"))
 assert_feynkit_error(
     fk.GenerationError,
-    lambda: fk.Process(model, [], []).with_loop_count(2, 1),
+    lambda: model.process(["missing_particle"], []),
 )
 assert_feynkit_error(
     fk.DiagramError,
@@ -528,7 +528,7 @@ grouping_arguments = dict(
 )
 assert not hasattr(fk, "GenerationOptions")
 
-amplitude = fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
+amplitude = model.process(["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"])
 assert amplitude.generate_diagrams(max_vertices=3, **filter_arguments).report.completed
 for mode in ("none", "zeroes", "identical", "up_to_sign", "up_to_scalar"):
     grouping = fk.NumeratorGrouping(mode, **grouping_arguments)
@@ -556,23 +556,23 @@ for invalid_arguments in (
     dict(loops=(0, None)),
 ):
     try:
-        fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"]).generate_diagrams(**invalid_arguments)
+        model.process(["scalar_0"], ["scalar_0", "scalar_0"]).generate_diagrams(**invalid_arguments)
     except ValueError:
         pass
     else:
         raise AssertionError("invalid generation range was accepted")
 
 # Process generation accepts reusable exact/ranged orders.
-kwargs = dict(max_vertices=3, vertex_allow=["V_3_SCALAR_000"], coupling_orders={"QCD": 1})
+kwargs = dict(max_vertices=3, coupling_orders={"QCD": 1})
 exact = amplitude.generate_diagrams(**kwargs)
-ranged = fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"]).generate_diagrams(**dict(kwargs, coupling_orders={"QCD": (1, 1)}))
+ranged = model.process(["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(**dict(kwargs, coupling_orders={"QCD": (1, 1)}))
 assert len(exact) > 0
 assert [d.id for d in exact] == [d.id for d in ranged]
 assert [d.id for d in amplitude.generate_diagrams(**kwargs)] == [d.id for d in exact]
 assert kwargs["coupling_orders"] == {"QCD": 1}
 assert len(amplitude.generate_diagrams(**dict(kwargs, coupling_orders={"QCD": 0}))) == 0
-assert len(amplitude.generate_diagrams(**dict(kwargs, particle_veto=["scalar_0"]))) == 0
-assert len(amplitude.generate_diagrams(**dict(kwargs, vertex_veto=["V_3_SCALAR_000"]))) == 0
+assert len(amplitude.with_filters(particle_veto=["scalar_0"]).generate_diagrams(**kwargs)) == 0
+assert len(amplitude.with_filters(vertex_veto=["V_3_SCALAR_000"]).generate_diagrams(**kwargs)) == 0
 assert len(amplitude.generate_diagrams(select_diagrams=[exact[0]], **kwargs)) == 1
 assert len(amplitude.generate_diagrams(veto_diagrams=[d.id for d in exact], **kwargs)) == 0
 
@@ -588,7 +588,7 @@ token = fk.CancellationToken()
 token.cancel()
 assert not amplitude.generate_diagrams(cancellation_token=token, **kwargs).report.completed
 
-diagram = amplitude.with_loop_count(1, 1).generate_diagrams(max_vertices=3, vertex_allow=["V_3_SCALAR_000"]).diagrams[0]
+diagram = amplitude.with_filters(vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(loops=1, max_vertices=3).diagrams[0]
 assert_feynkit_error(
     fk.CffError,
     lambda: fk.CffGenerator(max_orientations=0).generate(diagram),
@@ -616,7 +616,7 @@ class Diagram:
 
     Examples
     --------
-    >>> diagram = fk.Process(model, [], []).generate_diagrams().diagrams[0]
+    >>> diagram = model.process([], []).generate_diagrams().diagrams[0]
     """
 
     @property

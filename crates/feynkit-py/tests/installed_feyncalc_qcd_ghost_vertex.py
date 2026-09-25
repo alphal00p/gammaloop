@@ -79,12 +79,11 @@ for pdg in (9000005, -9000005):
         ("self", [pdg], 1, 1),
     ):
         diagrams = (
-            hep.Process(model, [pdg], outgoing)
-            .with_loop_count(loops, loops)
+            model.process([pdg], outgoing, vertex_allow=["V_35", "V_36"])
             .generate_diagrams(
+                loops=loops,
                 max_vertices=len(outgoing) - 1 + 2 * loops,
                 maximum_bridges=0,
-                vertex_allow=["V_35", "V_36"],
                 self_energy=None,
                 tadpoles=None,
                 zero_snails=None,

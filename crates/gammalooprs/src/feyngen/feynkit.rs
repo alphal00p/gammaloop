@@ -689,10 +689,12 @@ mod tests {
     #[test]
     fn canonical_cross_section_generation_survives_runtime_enrichment_and_consumption() {
         let model = model();
-        let process = Process::new(["phi"], ["phi", "phi"])
+        let process = Process::new(["phi"], ["phi", "phi"]);
+        let options = GenerationOptions::default()
             .with_loop_count(1, 1)
-            .unwrap();
-        let options = GenerationOptions::default().threads(1).max_vertices(2);
+            .unwrap()
+            .threads(1)
+            .max_vertices(2);
         let generated = process
             .generate_cross_section(Arc::clone(&model), &options)
             .unwrap();

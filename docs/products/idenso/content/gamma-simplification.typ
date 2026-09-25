@@ -1923,7 +1923,7 @@ The remaining constructor cost is spread across repeated global analysis and
 normalization, beyond the now cheaper leaf-port extraction.
 
 The next retained refinement avoids rebuilding unchanged products and powers:
-`StructuredAtom` keeps its existing Atom storage until bracket normalization
+At that checkpoint, `StructuredAtom` kept its existing Atom storage until bracket normalization
 changes a child. The existing bounded inference cache also retains scalar dots
 whose operands already have reusable interfaces. Syntax validation reuses checks
 for directly readable leaves, with the first occurrence still visiting every
@@ -2057,6 +2057,9 @@ their validity. A zero retains its declared tensor shape, and unresolved ports
 remain distinct and ordered. Callback-sensitive rewrites check the resulting
 interface, including the metric counterexample above. External slots alone
 cannot establish internal index multiplicity, so necessary index checks remain.
+Result validation observes the normalized expression without materializing
+temporary indices or replaying user callbacks. Constructor inference retains
+its existing materialization behavior; both use the same inference machinery.
 
 Port rewriting borrows unchanged branches, including identity substitutions.
 Every sum branch still independently accounts for the requested ports; an

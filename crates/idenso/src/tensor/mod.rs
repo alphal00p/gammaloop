@@ -844,9 +844,9 @@ impl<S: std::fmt::Display> std::fmt::Display for SymbolicTensor<S> {
 #[test]
 fn structure_mapping_keeps_expression_and_typed_zero() {
     use spenso::structure::representation::{Minkowski, RepName};
-    let structure = OrderedStructure::new(vec![
+    let structure = OrderedStructure::<LibraryRep, AbstractIndex>::new(vec![
         Minkowski::default()
-            .new_rep(4.into())
+            .new_rep(Dimension::Concrete(4))
             .to_lib()
             .slot(AbstractIndex::Normal(431)),
     ])

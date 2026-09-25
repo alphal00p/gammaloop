@@ -36,13 +36,14 @@ for count in (1, 3, 5):
     start = monotonic()
     # A one-point tadpole needs unrestricted bridge counting. Retain selfloops
     # and zero external flow, and disable optional topology/numerator filters.
-    result = hep.Process(model, [photon], [photon] * (count - 1)).generate_diagrams(
+    result = model.process(
+        [photon], [photon] * (count - 1), vertex_allow=vertices
+    ).generate_diagrams(
         loops=1,
         max_vertices=count,
         allow_self_loops=True,
         allow_zero_flow_edges=True,
         maximum_bridges=None,
-        vertex_allow=vertices,
         self_energy=None,
         tadpoles=None,
         zero_snails=None,

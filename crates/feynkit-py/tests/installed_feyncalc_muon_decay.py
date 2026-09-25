@@ -18,12 +18,8 @@ vertices = [
     and any(p in ("e-", "e+", "mu-", "mu+") for p in v.particles)
 ]
 assert len(vertices) == 4
-generated = hep.Process(model, [13], [11, -12, 14]).generate_diagrams(
-    max_vertices=2,
-    maximum_bridges=None,
-    vertex_allow=vertices,
-    numerator_grouping=None,
-    progress=None,
+generated = model.process([13], [11, -12, 14], vertex_allow=vertices).generate_diagrams(
+    max_vertices=2, maximum_bridges=None, numerator_grouping=None, progress=None
 )
 assert len(generated.diagrams) == 1
 diagram = generated.diagrams[0]

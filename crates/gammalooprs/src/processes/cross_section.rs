@@ -1033,7 +1033,9 @@ impl CrossSection {
                 external_cache_id: 0,
                 base_external_cache_id: 0,
                 rotations: None,
-                symmetrize_left_right_states: process_definition.process.symmetrizes_left_right(),
+                symmetrize_left_right_states: process_definition
+                    .generation_options
+                    .symmetrizes_left_right(),
                 name: self.name.clone(),
                 external_connections: self.external_connections.clone(),
                 n_incoming: self.n_incmoming,

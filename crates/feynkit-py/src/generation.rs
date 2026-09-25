@@ -7,9 +7,9 @@ use std::{
 use feynkit_generator::{
     CancellationToken, DiagramGroup, EdgeColor, FilterScope, GenerationControl, GenerationFilter,
     GenerationOptions, GenerationProgress, GenerationReport, GenerationResult, GenerationType,
-    GraphGroupingOptions, GroupMember, NodeColor, NumeratorGrouping, ParticleSelector, Process,
-    SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions,
-    VertexSelector,
+    GraphGroupingOptions, GroupMember, ModelProcessExt, NodeColor, NumeratorGrouping,
+    ParticleSelector, Process, SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions,
+    TadpoleFilterOptions, VertexSelector,
 };
 use feynkit_graph::{DiagramId, EdgeId};
 use feynkit_model::Model;
@@ -402,16 +402,15 @@ impl<const UNBOUNDED: bool> PyStubType for OrderRangeInput<UNBOUNDED> {
 
 /// A scattering or decay process to pass to the diagram generator.
 ///
-/// A process records its incoming and outgoing particles, loop-order range,
-/// and optional external-state symmetrizations. External states accept loaded
+/// A process records its incoming and outgoing particles and model-sector restrictions. External states accept loaded
 /// :class:`Particle` objects as well as names, signed PDG codes, and explicit
 /// :class:`ParticleSelector` objects.
 ///
 /// Examples
 /// --------
 /// >>> import symbolica.community.feynkit as fk
-/// >>> process = fk.Process(model, ["e-", "e+"], ["mu-", "mu+"])
-/// >>> one_loop = process.with_loop_count(1, 1)
+/// >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
+/// >>> one_loop = process.generate_diagrams(loops=1)
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -424,63 +423,102 @@ impl<const UNBOUNDED: bool> PyStubType for OrderRangeInput<UNBOUNDED> {
 pub struct PyProcess {
     pub(crate) inner: Process,
     model: Arc<Model>,
-    final_state_symmetry: Option<bool>,
+}
+
+impl PyProcess {
+    pub(crate) fn from_model(
+        model: &PyModel,
+        incoming: Vec<SelectorInput>,
+        outgoing: Vec<SelectorInput>,
+        particle_veto: Option<Vec<SelectorInput>>,
+        vertex_allow: Option<Vec<VertexInput>>,
+        vertex_veto: Option<Vec<VertexInput>>,
+    ) -> PyResult<Self> {
+        let inner = model
+            .inner
+            .process(
+                incoming.into_iter().map(ParticleSelector::from),
+                outgoing.into_iter().map(ParticleSelector::from),
+            )
+            .map_err(error::generation)?
+            .with_filters(
+                particle_veto
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+                vertex_allow.map(|v| v.into_iter().map(Into::into).collect()),
+                vertex_veto
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            );
+        inner.validate_in(&model.inner).map_err(error::generation)?;
+        Ok(Self {
+            inner,
+            model: model.inner.clone(),
+        })
+    }
+
+    fn filter_summary(&self) -> String {
+        let mut filters = Vec::new();
+        if !self.inner.particle_veto().is_empty() {
+            filters.push(format!(
+                "particle_veto=[{}]",
+                self.inner
+                    .particle_veto()
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if let Some(allowed) = self.inner.vertex_allow() {
+            filters.push(format!(
+                "vertex_allow=[{}]",
+                allowed
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if !self.inner.vertex_veto().is_empty() {
+            filters.push(format!(
+                "vertex_veto=[{}]",
+                self.inner
+                    .vertex_veto()
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if filters.is_empty() {
+            String::new()
+        } else {
+            format!("; {}", filters.join(", "))
+        }
+    }
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyProcess {
-    /// Define a model-bound process independently of what will be generated.
-    ///
-    /// Examples
-    /// --------
-    /// >>> process = fk.Process(model, ["e-", "e+"], ["a", "a"])
-    /// >>> amplitude = process.generate_amplitude()
-    ///
-    /// Parameters
-    /// ----------
-    /// model : Model
-    ///     Particle model supplying the Feynman rules.
-    /// incoming : sequence[Particle | ParticleSelector | str | int]
-    ///     Ordered incoming external states.
-    /// outgoing : sequence[Particle | ParticleSelector | str | int]
-    ///     Ordered outgoing external states.
-    /// loops : int or tuple[int, int], optional
-    ///     Default exact loop order or inclusive range, initially zero.
-    #[new]
-    #[pyo3(signature = (model, incoming, outgoing, *, loops=OrderRangeInput::default()))]
-    fn new(
-        model: &PyModel,
-        incoming: Vec<SelectorInput>,
-        outgoing: Vec<SelectorInput>,
-        loops: OrderRangeInput,
-    ) -> PyResult<Self> {
-        let inner = Process::new(
-            incoming.into_iter().map(ParticleSelector::from),
-            outgoing.into_iter().map(ParticleSelector::from),
-        )
-        .with_loop_count(loops.minimum, loops.maximum.unwrap())
-        .map_err(error::process)?;
-        Ok(Self {
-            inner,
-            model: model.inner.clone(),
-            final_state_symmetry: None,
-        })
-    }
-
     /// The particle model supplying this process's Feynman rules.
     #[getter]
     fn model(&self) -> PyModel {
         self.model.clone().into()
     }
 
-    /// Format the external states, model, and default loop range.
+    /// Format the external states, model, and active particle/vertex restrictions.
     ///
     /// Examples
     /// --------
     /// >>> repr(process)
-    /// 'Process("sm": [e-, e+] -> [a, a]; loops=(0, 0))'
+    /// 'Process("sm": [e-, e+] -> [a, a])'
     fn __repr__(&self) -> String {
         let names = |state: &[ParticleSelector]| {
             state
@@ -490,7 +528,7 @@ impl PyProcess {
                 .join(", ")
         };
         format!(
-            "Process({:?}: [{}] -> {}; loops={:?})",
+            "Process({:?}: [{}] -> {}{})",
             self.model.name(),
             names(self.inner.incoming()),
             self.inner
@@ -499,31 +537,67 @@ impl PyProcess {
                 .map(|state| format!("[{}]", names(state)))
                 .collect::<Vec<_>>()
                 .join(" | "),
-            self.loop_count()
+            self.filter_summary()
         )
     }
 
-    /// Return a process restricted to an inclusive loop-count range.
+    /// Render a blob with the process's physical incoming and outgoing particles.
+    /// Alternative final states are displayed as separate schematics.
     ///
     /// Examples
     /// --------
-    /// >>> loop_process = process.with_loop_count(1, 2)
+    /// >>> svg = process.render()
     ///
     /// Parameters
     /// ----------
-    /// minimum : int
-    ///     Minimum number of loops to generate.
-    /// maximum : int
-    ///     Maximum number of loops to generate, inclusive.
-    fn with_loop_count(&self, minimum: usize, maximum: usize) -> PyResult<Self> {
-        self.inner
-            .clone()
-            .with_loop_count(minimum, maximum)
-            .map(|inner| Self {
-                inner,
-                ..self.clone()
-            })
-            .map_err(error::process)
+    /// config : linnet.RenderConfig or None, optional
+    ///     Particle-label, layout and drawing overrides shared with Feynman diagrams.
+    #[pyo3(signature = (*, config=None))]
+    fn render(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "linnet.RenderConfig | None", imports = ("linnet")))]
+        config: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<String> {
+        let resolve = |state: &[ParticleSelector]| {
+            state
+                .iter()
+                .map(|p| {
+                    p.resolve(&self.model)
+                        .map_err(|e| error::generation(e.into()))
+                })
+                .collect::<PyResult<Vec<_>>>()
+        };
+        let incoming = resolve(self.inner.incoming())?;
+        let outgoing = self
+            .inner
+            .outgoing_alternatives()
+            .iter()
+            .map(|state| resolve(state))
+            .collect::<PyResult<Vec<_>>>()?;
+        crate::display::process_svg(py, &self.model, &incoming, &outgoing, config)
+    }
+
+    /// Display the process schematic in SVG-aware frontends.
+    ///
+    /// Examples
+    /// --------
+    /// >>> process._repr_svg_()
+    fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
+        self.render(py, None)
+    }
+
+    /// Display the process blob, model and active restrictions in notebooks.
+    ///
+    /// Examples
+    /// --------
+    /// Leave ``process`` as the final expression in a notebook cell.
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        let svg = self.render(py, None)?;
+        Ok(format!(
+            "<figure class=\"feynkit-process\" style=\"max-width:100%;margin:.5rem 0\"><div style=\"max-width:100%;overflow-x:auto\">{svg}</div><figcaption style=\"font-size:.85em;opacity:.75\">{}</figcaption></figure>",
+            crate::display::escape_html(&self.__repr__())
+        ))
     }
 
     /// Return a process accepting any of the supplied final states.
@@ -532,7 +606,7 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
-    /// >>> process = fk.Process(model, [11, -11], [22, 22])
+    /// >>> process = model.process([11, -11], [22, 22])
     /// >>> inclusive = process.with_final_state_alternatives([[22, 22], [13, -13]])
     ///
     /// Parameters
@@ -543,55 +617,136 @@ impl PyProcess {
         &self,
         alternatives: Vec<Vec<SelectorInput>>,
     ) -> PyResult<Self> {
-        self.inner
+        let inner = self
+            .inner
             .clone()
             .with_final_state_alternatives(
                 alternatives
                     .into_iter()
                     .map(|state| state.into_iter().map(ParticleSelector::from)),
             )
-            .map(|inner| Self {
-                inner,
-                ..self.clone()
-            })
-            .map_err(error::process)
+            .map_err(error::process)?;
+        inner.validate_in(&self.model).map_err(error::generation)?;
+        Ok(Self {
+            inner,
+            ..self.clone()
+        })
     }
 
-    /// Return a process configured with the selected graph symmetries.
+    /// Return a process with updated particle and vertex restrictions.
+    /// Omitted fields are preserved; None clears a field. An empty vertex_allow
+    /// list permits no interactions, whereas None permits every interaction.
     ///
     /// Examples
     /// --------
-    /// >>> process = process.with_symmetrization(initial=True, final_state=True)
+    /// >>> qed = process.with_filters(vertex_allow=["V_98"])
+    /// >>> unrestricted = qed.with_filters(vertex_allow=None)
     ///
     /// Parameters
     /// ----------
-    /// initial : bool, optional
-    ///     Identify graphs related by permutations of initial-state particles.
-    /// final_state : bool, optional
-    ///     Identify graphs related by permutations of final-state particles.
-    /// left_right : bool, optional
-    ///     Identify cross-section graphs related by exchanging amplitude sides.
-    /// external_fermions : bool, optional
-    ///     Include amplitude fermions in enabled external-state symmetry classes.
-    #[pyo3(signature = (*, initial=false, final_state=false, left_right=false, external_fermions=false))]
-    fn with_symmetrization(
+    /// particle_veto : sequence[Particle | ParticleSelector | str | int] or None, optional
+    ///     Replace the excluded species, including their antiparticles.
+    /// vertex_allow : sequence[VertexRule | str] or None, optional
+    ///     Replace the allowed interaction rules.
+    /// vertex_veto : sequence[VertexRule | str] or None, optional
+    ///     Replace the excluded interaction rules.
+    #[pyo3(signature = (*, particle_veto=Some(Python::attach(|py| py.Ellipsis())), vertex_allow=Some(Python::attach(|py| py.Ellipsis())), vertex_veto=Some(Python::attach(|py| py.Ellipsis()))))]
+    #[pyo3(text_signature = "($self, *, particle_veto=..., vertex_allow=..., vertex_veto=...)")]
+    fn with_filters(
         &self,
-        initial: bool,
-        final_state: bool,
-        left_right: bool,
-        external_fermions: bool,
-    ) -> Self {
-        Self {
-            inner: self
-                .inner
-                .clone()
-                .symmetrize_initial(initial)
-                .symmetrize_final(final_state)
-                .symmetrize_left_right(left_right)
-                .symmetrize_external_fermions(external_fermions),
-            final_state_symmetry: Some(final_state),
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "typing.Sequence[Particle | ParticleSelector | str | int] | types.EllipsisType | None", imports = ("typing", "types")))]
+        particle_veto: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "typing.Sequence[VertexRule | str] | types.EllipsisType | None", imports = ("typing", "types")))]
+        vertex_allow: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr = "typing.Sequence[VertexRule | str] | types.EllipsisType | None", imports = ("typing", "types")))]
+        vertex_veto: Option<Py<PyAny>>,
+    ) -> PyResult<Self> {
+        let particle_veto = match particle_veto {
+            Some(v) if v.bind(py).is_instance_of::<PyEllipsis>() => {
+                self.inner.particle_veto().to_vec()
+            }
+            Some(v) => v
+                .extract::<Vec<SelectorInput>>(py)?
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            None => Vec::new(),
+        };
+        let vertex_allow = match vertex_allow {
+            Some(v) if v.bind(py).is_instance_of::<PyEllipsis>() => {
+                self.inner.vertex_allow().map(<[_]>::to_vec)
+            }
+            Some(v) => Some(
+                v.extract::<Vec<VertexInput>>(py)?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            ),
+            None => None,
+        };
+        let vertex_veto = match vertex_veto {
+            Some(v) if v.bind(py).is_instance_of::<PyEllipsis>() => {
+                self.inner.vertex_veto().to_vec()
+            }
+            Some(v) => v
+                .extract::<Vec<VertexInput>>(py)?
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            None => Vec::new(),
+        };
+        let inner = self
+            .inner
+            .clone()
+            .with_filters(particle_veto, vertex_allow, vertex_veto);
+        inner.validate_in(&self.model).map_err(error::generation)?;
+        Ok(Self {
+            inner,
             ..self.clone()
-        }
+        })
+    }
+
+    /// The excluded particle selectors, shared by every generation operation.
+    #[getter]
+    fn particle_veto(&self) -> Vec<PyParticleSelector> {
+        self.inner
+            .particle_veto()
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect()
+    }
+
+    /// Allowed model vertex rules; None permits every interaction.
+    #[getter]
+    fn vertex_allow(&self) -> Option<Vec<PyVertexRule>> {
+        self.inner.vertex_allow().map(|rules| {
+            rules
+                .iter()
+                .map(|rule| {
+                    PyVertexRule::new(
+                        rule.resolve(&self.model).expect("validated process vertex"),
+                        self.model.clone(),
+                    )
+                })
+                .collect()
+        })
+    }
+
+    /// Excluded model vertex rules.
+    #[getter]
+    fn vertex_veto(&self) -> Vec<PyVertexRule> {
+        self.inner
+            .vertex_veto()
+            .iter()
+            .map(|rule| {
+                PyVertexRule::new(
+                    rule.resolve(&self.model).expect("validated process vertex"),
+                    self.model.clone(),
+                )
+            })
+            .collect()
     }
 
     /// Generate and optionally group all diagrams matching a process.
@@ -608,9 +763,17 @@ impl PyProcess {
     ///
     /// Parameters
     /// ----------
-    /// loops : int or tuple[int, int] or None, optional
-    ///     Override the process loop range for this call. Cross sections count
+    /// loops : int or tuple[int, int], optional
+    ///     Exact order or inclusive range for this call, default zero. Cross sections count
     ///     loops in the sewn forward graph; two-particle tree cuts need loops=1.
+    /// symmetrize_initial : bool, optional
+    ///     Identify graphs related by initial-state permutations; default False.
+    /// symmetrize_final : bool or None, optional
+    ///     Identify final-state permutations; None uses True for cross sections and False for amplitudes.
+    /// symmetrize_left_right : bool, optional
+    ///     Identify cross-section graphs related by exchanging amplitude sides.
+    /// symmetrize_external_fermions : bool, optional
+    ///     Include amplitude fermions in enabled external-state symmetry classes.
     /// threads : int or None, optional
     ///     Number of worker threads; None uses the generator default.
     /// max_vertices : int or None, optional
@@ -621,12 +784,6 @@ impl PyProcess {
     ///     Permit internal edges with identically zero momentum flow.
     /// graph_prefix : str or None, optional
     ///     Prefix assigned to generated diagram names.
-    /// particle_veto : sequence[Particle | str | int] or None, optional
-    ///     Reject graphs containing these particles, model names, or signed PDG codes.
-    /// vertex_allow : sequence[VertexRule | str] or None, optional
-    ///     Keep only graphs whose vertices use these model rules or names.
-    /// vertex_veto : sequence[VertexRule | str] or None, optional
-    ///     Reject graphs containing these interaction vertices.
     /// maximum_bridges : int, None, or Ellipsis, optional
     ///     Omission or Ellipsis requires one-particle irreducibility only for diagrams
     ///     with loops; tree exchanges are allowed, including in mixed loop ranges.
@@ -692,23 +849,24 @@ impl PyProcess {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, loops=None, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=None, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, *, loops=None, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=None, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_diagrams(
         &self,
         py: Python<'_>,
-        loops: Option<OrderRangeInput>,
+        loops: OrderRangeInput,
+        symmetrize_initial: bool,
+        symmetrize_final: Option<bool>,
+        symmetrize_left_right: bool,
+        symmetrize_external_fermions: bool,
         threads: Option<usize>,
         max_vertices: Option<usize>,
         allow_self_loops: bool,
         allow_zero_flow_edges: bool,
         graph_prefix: Option<String>,
-        particle_veto: Option<Vec<ParticleInput>>,
-        vertex_allow: Option<Vec<VertexInput>>,
-        vertex_veto: Option<Vec<VertexInput>>,
         #[gen_stub(override_type(type_repr = "int | None | types.EllipsisType"))]
         maximum_bridges: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "SelfEnergyFilterOptions | types.EllipsisType | None", imports = ("types")))]
@@ -742,27 +900,21 @@ impl PyProcess {
         filter: Option<Py<PyAny>>,
     ) -> PyResult<PyGenerationResult> {
         let generation_type = GenerationType::Amplitude;
-        let mut process = self.inner.clone().symmetrize_final(
-            self.final_state_symmetry
-                .unwrap_or(generation_type == GenerationType::CrossSection),
-        );
-        if let Some(loops) = loops {
-            process = process
-                .with_loop_count(loops.minimum, loops.maximum.unwrap())
-                .map_err(error::process)?;
-        }
+        let process = self.inner.clone();
         let options = GenerationSettings::new(
             py,
             &process,
             generation_type,
+            loops,
+            symmetrize_initial,
+            symmetrize_final,
+            symmetrize_left_right,
+            symmetrize_external_fermions,
             threads,
             max_vertices,
             allow_self_loops,
             allow_zero_flow_edges,
             graph_prefix,
-            particle_veto,
-            vertex_allow,
-            vertex_veto,
             maximum_bridges,
             self_energy,
             tadpoles,
@@ -814,9 +966,17 @@ impl PyProcess {
     ///     Lorentz dimension of the amplitude; default four.
     /// real : list[Expression] or None, optional
     ///     Additional scalars assumed real under conjugation.
-    /// loops : int or tuple[int, int] or None, optional
-    ///     Override the process loop range for this call. Cross sections count
+    /// loops : int or tuple[int, int], optional
+    ///     Exact order or inclusive range for this call, default zero. Cross sections count
     ///     loops in the sewn forward graph; two-particle tree cuts need loops=1.
+    /// symmetrize_initial : bool, optional
+    ///     Identify graphs related by initial-state permutations; default False.
+    /// symmetrize_final : bool or None, optional
+    ///     Identify final-state permutations; None uses True for cross sections and False for amplitudes.
+    /// symmetrize_left_right : bool, optional
+    ///     Identify cross-section graphs related by exchanging amplitude sides.
+    /// symmetrize_external_fermions : bool, optional
+    ///     Include amplitude fermions in enabled external-state symmetry classes.
     /// threads : int or None, optional
     ///     Number of worker threads; None uses the generator default.
     /// max_vertices : int or None, optional
@@ -827,12 +987,6 @@ impl PyProcess {
     ///     Permit internal edges with identically zero momentum flow.
     /// graph_prefix : str or None, optional
     ///     Prefix assigned to generated diagram names.
-    /// particle_veto : sequence[Particle | str | int] or None, optional
-    ///     Reject graphs containing these particles, model names, or signed PDG codes.
-    /// vertex_allow : sequence[VertexRule | str] or None, optional
-    ///     Keep only graphs whose vertices use these model rules or names.
-    /// vertex_veto : sequence[VertexRule | str] or None, optional
-    ///     Reject graphs containing these interaction vertices.
     /// maximum_bridges : int, None, or Ellipsis, optional
     ///     Omission or Ellipsis requires one-particle irreducibility only for diagrams
     ///     with loops; tree exchanges are allowed, including in mixed loop ranges.
@@ -898,9 +1052,9 @@ impl PyProcess {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, dimension=None, real=None, loops=None, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, dimension=None, real=None, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=None, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, *, dimension=None, real=None, loops=None, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, dimension=None, real=None, loops=0, symmetrize_initial=False, symmetrize_final=None, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_amplitude(
@@ -908,15 +1062,16 @@ impl PyProcess {
         py: Python<'_>,
         dimension: Option<ConvertibleToExpression>,
         real: Option<Vec<PythonExpression>>,
-        loops: Option<OrderRangeInput>,
+        loops: OrderRangeInput,
+        symmetrize_initial: bool,
+        symmetrize_final: Option<bool>,
+        symmetrize_left_right: bool,
+        symmetrize_external_fermions: bool,
         threads: Option<usize>,
         max_vertices: Option<usize>,
         allow_self_loops: bool,
         allow_zero_flow_edges: bool,
         graph_prefix: Option<String>,
-        particle_veto: Option<Vec<ParticleInput>>,
-        vertex_allow: Option<Vec<VertexInput>>,
-        vertex_veto: Option<Vec<VertexInput>>,
         #[gen_stub(override_type(type_repr = "int | None | types.EllipsisType"))]
         maximum_bridges: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "SelfEnergyFilterOptions | types.EllipsisType | None", imports = ("types")))]
@@ -950,27 +1105,21 @@ impl PyProcess {
         filter: Option<Py<PyAny>>,
     ) -> PyResult<PyAmplitude> {
         let generation_type = GenerationType::Amplitude;
-        let mut process = self.inner.clone().symmetrize_final(
-            self.final_state_symmetry
-                .unwrap_or(generation_type == GenerationType::CrossSection),
-        );
-        if let Some(loops) = loops {
-            process = process
-                .with_loop_count(loops.minimum, loops.maximum.unwrap())
-                .map_err(error::process)?;
-        }
+        let process = self.inner.clone();
         let options = GenerationSettings::new(
             py,
             &process,
             generation_type,
+            loops,
+            symmetrize_initial,
+            symmetrize_final,
+            symmetrize_left_right,
+            symmetrize_external_fermions,
             threads,
             max_vertices,
             allow_self_loops,
             allow_zero_flow_edges,
             graph_prefix,
-            particle_veto,
-            vertex_allow,
-            vertex_veto,
             maximum_bridges,
             self_energy,
             tadpoles,
@@ -1024,9 +1173,17 @@ impl PyProcess {
     ///
     /// Parameters
     /// ----------
-    /// loops : int or tuple[int, int] or None, optional
-    ///     Override the process loop range for this call. Cross sections count
+    /// loops : int or tuple[int, int], optional
+    ///     Exact order or inclusive range for this call, default zero. Cross sections count
     ///     loops in the sewn forward graph; two-particle tree cuts need loops=1.
+    /// symmetrize_initial : bool, optional
+    ///     Identify graphs related by initial-state permutations; default False.
+    /// symmetrize_final : bool or None, optional
+    ///     Identify final-state permutations; None uses True for cross sections and False for amplitudes.
+    /// symmetrize_left_right : bool, optional
+    ///     Identify cross-section graphs related by exchanging amplitude sides.
+    /// symmetrize_external_fermions : bool, optional
+    ///     Include amplitude fermions in enabled external-state symmetry classes.
     /// threads : int or None, optional
     ///     Number of worker threads; None uses the generator default.
     /// max_vertices : int or None, optional
@@ -1037,12 +1194,6 @@ impl PyProcess {
     ///     Permit internal edges with identically zero momentum flow.
     /// graph_prefix : str or None, optional
     ///     Prefix assigned to generated diagram names.
-    /// particle_veto : sequence[Particle | str | int] or None, optional
-    ///     Reject graphs containing these particles, model names, or signed PDG codes.
-    /// vertex_allow : sequence[VertexRule | str] or None, optional
-    ///     Keep only graphs whose vertices use these model rules or names.
-    /// vertex_veto : sequence[VertexRule | str] or None, optional
-    ///     Reject graphs containing these interaction vertices.
     /// maximum_bridges : int, None, or Ellipsis, optional
     ///     Omission or Ellipsis requires one-particle irreducibility only for diagrams
     ///     with loops; tree exchanges are allowed, including in mixed loop ranges.
@@ -1108,23 +1259,24 @@ impl PyProcess {
     ///     Shared token for cancelling a running generation task. Token cancellation
     ///     returns an incomplete result; Python signal-handler exceptions, including
     ///     KeyboardInterrupt, stop generation and propagate to the caller.
-    #[pyo3(signature = (*, loops=None, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
+    #[pyo3(signature = (*, loops=OrderRangeInput::default(), symmetrize_initial=false, symmetrize_final=None, symmetrize_left_right=false, symmetrize_external_fermions=false, threads=None, max_vertices=None, allow_self_loops=true, allow_zero_flow_edges=false, graph_prefix=None, maximum_bridges=Some(Python::attach(|py| py.Ellipsis())), self_energy=Some(Python::attach(|py| py.Ellipsis())), tadpoles=Some(Python::attach(|py| py.Ellipsis())), zero_snails=Some(Python::attach(|py| py.Ellipsis())), coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=Some(Python::attach(|py| py.Ellipsis())), blob_range=Some(Python::attach(|py| py.Ellipsis())), spectator_range=Some(Python::attach(|py| py.Ellipsis())), perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress=Some(Python::attach(|py| PyString::new(py, "auto").into_any().unbind())), filter=None))]
     #[pyo3(
-        text_signature = "($self, *, loops=None, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, particle_veto=None, vertex_allow=None, vertex_veto=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
+        text_signature = "($self, *, loops=0, symmetrize_initial=False, symmetrize_final=None, symmetrize_left_right=False, symmetrize_external_fermions=False, threads=None, max_vertices=None, allow_self_loops=True, allow_zero_flow_edges=False, graph_prefix=None, maximum_bridges=..., self_energy=..., tadpoles=..., zero_snails=..., coupling_orders=None, fermion_loop_count_range=None, factorized_loop_topologies_count_range=..., blob_range=..., spectator_range=..., perturbative_orders=None, sewn_tadpoles=None, cut_amplitude_coupling_orders=None, cut_amplitude_loop_count_range=None, select_diagrams=None, veto_diagrams=None, loop_momentum_bases=None, numerator_prefactor=None, projector=None, numerator_grouping=None, cancellation_token=None, progress='auto', filter=None)"
     )]
     #[allow(clippy::too_many_arguments)]
     fn generate_cross_section(
         &self,
         py: Python<'_>,
-        loops: Option<OrderRangeInput>,
+        loops: OrderRangeInput,
+        symmetrize_initial: bool,
+        symmetrize_final: Option<bool>,
+        symmetrize_left_right: bool,
+        symmetrize_external_fermions: bool,
         threads: Option<usize>,
         max_vertices: Option<usize>,
         allow_self_loops: bool,
         allow_zero_flow_edges: bool,
         graph_prefix: Option<String>,
-        particle_veto: Option<Vec<ParticleInput>>,
-        vertex_allow: Option<Vec<VertexInput>>,
-        vertex_veto: Option<Vec<VertexInput>>,
         #[gen_stub(override_type(type_repr = "int | None | types.EllipsisType"))]
         maximum_bridges: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr = "SelfEnergyFilterOptions | types.EllipsisType | None", imports = ("types")))]
@@ -1158,27 +1310,21 @@ impl PyProcess {
         filter: Option<Py<PyAny>>,
     ) -> PyResult<PyGenerationResult> {
         let generation_type = GenerationType::CrossSection;
-        let mut process = self.inner.clone().symmetrize_final(
-            self.final_state_symmetry
-                .unwrap_or(generation_type == GenerationType::CrossSection),
-        );
-        if let Some(loops) = loops {
-            process = process
-                .with_loop_count(loops.minimum, loops.maximum.unwrap())
-                .map_err(error::process)?;
-        }
+        let process = self.inner.clone();
         let options = GenerationSettings::new(
             py,
             &process,
             generation_type,
+            loops,
+            symmetrize_initial,
+            symmetrize_final,
+            symmetrize_left_right,
+            symmetrize_external_fermions,
             threads,
             max_vertices,
             allow_self_loops,
             allow_zero_flow_edges,
             graph_prefix,
-            particle_veto,
-            vertex_allow,
-            vertex_veto,
             maximum_bridges,
             self_energy,
             tadpoles,
@@ -1237,67 +1383,6 @@ impl PyProcess {
             .iter()
             .map(|state| state.iter().cloned().map(Into::into).collect())
             .collect()
-    }
-
-    /// Return the inclusive minimum and maximum loop counts.
-    ///
-    /// Examples
-    /// --------
-    /// >>> process.with_loop_count(1, 2).loop_count
-    /// (1, 2)
-    ///
-    #[getter]
-    fn loop_count(&self) -> (usize, usize) {
-        let range = self.inner.loop_count();
-        (*range.start(), *range.end())
-    }
-
-    /// Report whether initial-state permutations are identified.
-    ///
-    /// Examples
-    /// --------
-    /// >>> process.with_symmetrization(initial=True).symmetrizes_initial
-    /// True
-    ///
-    #[getter]
-    fn symmetrizes_initial(&self) -> bool {
-        self.inner.symmetrizes_initial()
-    }
-
-    /// Final-state symmetry override; None uses False for amplitudes and True for cross sections.
-    ///
-    /// Examples
-    /// --------
-    /// >>> process.with_symmetrization(final_state=True).symmetrizes_final
-    /// True
-    ///
-    #[getter]
-    fn symmetrizes_final(&self) -> Option<bool> {
-        self.final_state_symmetry
-    }
-
-    /// Report whether exchanging the two cross-section sides is identified.
-    ///
-    /// Examples
-    /// --------
-    /// >>> process.with_symmetrization(left_right=True).symmetrizes_left_right
-    /// True
-    ///
-    #[getter]
-    fn symmetrizes_left_right(&self) -> bool {
-        self.inner.symmetrizes_left_right()
-    }
-
-    /// Report whether amplitude fermions participate in enabled state symmetries.
-    ///
-    /// Examples
-    /// --------
-    /// >>> process.with_symmetrization(external_fermions=True).symmetrizes_external_fermions
-    /// True
-    ///
-    #[getter]
-    fn symmetrizes_external_fermions(&self) -> bool {
-        self.inner.symmetrizes_external_fermions()
     }
 }
 
@@ -1650,14 +1735,16 @@ impl GenerationSettings {
         py: Python<'_>,
         process: &Process,
         generation_type: GenerationType,
+        loops: OrderRangeInput,
+        symmetrize_initial: bool,
+        symmetrize_final: Option<bool>,
+        symmetrize_left_right: bool,
+        symmetrize_external_fermions: bool,
         threads: Option<usize>,
         max_vertices: Option<usize>,
         allow_self_loops: bool,
         allow_zero_flow_edges: bool,
         graph_prefix: Option<String>,
-        particle_veto: Option<Vec<ParticleInput>>,
-        vertex_allow: Option<Vec<VertexInput>>,
-        vertex_veto: Option<Vec<VertexInput>>,
         maximum_bridges: Option<Py<PyAny>>,
         self_energy: Option<Py<PyAny>>,
         tadpoles: Option<Py<PyAny>>,
@@ -1748,6 +1835,12 @@ impl GenerationSettings {
                 .transpose()?,
         };
         let mut inner = GenerationOptions::default()
+            .with_loop_count(loops.minimum, loops.maximum.unwrap())
+            .map_err(error::process)?
+            .symmetrize_initial(symmetrize_initial)
+            .symmetrize_final(symmetrize_final.unwrap_or(cross_section))
+            .symmetrize_left_right(symmetrize_left_right)
+            .symmetrize_external_fermions(symmetrize_external_fermions)
             .allow_self_loops(allow_self_loops)
             .allow_zero_flow_edges(allow_zero_flow_edges);
         if let Some(value) = threads {
@@ -1759,21 +1852,7 @@ impl GenerationSettings {
         if let Some(value) = graph_prefix {
             inner = inner.graph_prefix(value);
         }
-        if let Some(value) = particle_veto {
-            inner = inner.with_graph_filter(GenerationFilter::ParticleVeto(
-                value.into_iter().map(|particle| particle.0).collect(),
-            ));
-        }
-        if let Some(value) = vertex_allow {
-            inner = inner.with_graph_filter(GenerationFilter::VertexAllow(
-                value.into_iter().map(Into::into).collect(),
-            ));
-        }
-        if let Some(value) = vertex_veto {
-            inner = inner.with_graph_filter(GenerationFilter::VertexVeto(
-                value.into_iter().map(Into::into).collect(),
-            ));
-        }
+
         if let Some(value) = maximum_bridges {
             let filter = if value.bind(py).is_instance_of::<PyEllipsis>() {
                 GenerationFilter::LoopOneParticleIrreducible
@@ -2765,8 +2844,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 model = fk.Model.from_json(MODEL_JSON)
-process = fk.Process(model, [1000], [1000, 1000]).with_loop_count(1, 1)
-settings = dict(max_vertices=3, threads=2, vertex_allow=["V_3_SCALAR_000"])
+process = model.process([1000], [1000, 1000], vertex_allow=["V_3_SCALAR_000"])
+settings = dict(max_vertices=3, threads=2)
 context = MagicMock()
 indicator = context.__enter__.return_value
 marimo = SimpleNamespace(
@@ -2781,8 +2860,8 @@ marimo = SimpleNamespace(
 for via_model in (True, False):
     def generate(**kwargs):
         if via_model:
-            return fk.Process(model, [1000], [1000, 1000]).generate_diagrams(loops=1, **settings, **kwargs)
-        return process.generate_diagrams(**settings, **kwargs)
+            return model.process([1000], [1000, 1000], vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(loops=1, **settings, **kwargs)
+        return process.generate_diagrams(loops=1, **settings, **kwargs)
 
     method = process.generate_diagrams
     assert inspect.signature(method).parameters["progress"].default == "auto"
@@ -2905,7 +2984,7 @@ for via_model in (True, False):
             let code = CString::new(r#"
 import inspect
 model = fk.Model.from_json(MODEL_JSON)
-settings = dict(max_vertices=3, vertex_allow=["V_3_SCALAR_000"])
+settings = dict(max_vertices=3)
 explicit = dict(
     maximum_bridges=0, allow_self_loops=True,
     self_energy=fk.SelfEnergyFilterOptions(), tadpoles=fk.TadpoleFilterOptions(),
@@ -2914,9 +2993,9 @@ explicit = dict(
 for via_model in (True, False):
     def generate(incoming, outgoing, loops=0, **kwargs):
         if via_model:
-            return fk.Process(model, incoming, outgoing).generate_diagrams(loops=loops, **settings, **kwargs)
-        process = fk.Process(model, incoming, outgoing).with_loop_count(loops, loops)
-        return process.generate_diagrams(**settings, **kwargs)
+            return model.process(incoming, outgoing, vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(loops=loops, **settings, **kwargs)
+        process = model.process(incoming, outgoing, vertex_allow=["V_3_SCALAR_000"])
+        return process.generate_diagrams(loops=loops, **settings, **kwargs)
 
     stages = []
     implicit = generate([1000], [1000, 1000], loops=1, progress=lambda p: stages.append(p.stage))
@@ -2948,9 +3027,11 @@ for via_model in (True, False):
         tadpoles=None, zero_snails=None, factorized_loop_topologies_count_range=(1, 1))
     assert [d.to_json() for d in vacuum.diagrams] == [d.to_json() for d in configured_vacuum.diagrams]
 
-assert fk.Process(model, [1000], [1000]).symmetrizes_final is None
+assert not hasattr(model.process([1000], [1000]), "symmetrizes_final")
 for generate in (fk.Process.generate_diagrams, fk.Process.generate_amplitude, fk.Process.generate_cross_section):
     parameters = inspect.signature(generate).parameters
+    assert parameters["loops"].default == 0
+    assert parameters["symmetrize_final"].default is None
     assert parameters["maximum_bridges"].default is Ellipsis
     assert parameters["allow_self_loops"].default is True
     assert parameters["numerator_grouping"].default is None
@@ -2980,15 +3061,15 @@ for generate in (fk.Process.generate_diagrams, fk.Process.generate_amplitude, fk
 import threading
 
 model = fk.Model.from_json(MODEL_JSON)
-process = fk.Process(model, [1000], [1000, 1000]).with_loop_count(1, 1)
-settings = dict(max_vertices=3, threads=2, vertex_allow=["V_3_SCALAR_000"])
+process = model.process([1000], [1000, 1000], vertex_allow=["V_3_SCALAR_000"])
+settings = dict(max_vertices=3, threads=2)
 caller = threading.get_ident()
 
 for via_model in (True, False):
     def generate(**callbacks):
         if via_model:
-            return fk.Process(model, [1000], [1000, 1000]).generate_diagrams(loops=1, **settings, **callbacks)
-        return process.generate_diagrams(**settings, **callbacks)
+            return model.process([1000], [1000, 1000], vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(loops=1, **settings, **callbacks)
+        return process.generate_diagrams(loops=1, **settings, **callbacks)
 
     baseline = generate()
     assert baseline.report.completed and len(baseline) > 0
@@ -3072,8 +3153,8 @@ for via_model in (True, False):
 import signal
 
 model = fk.Model.from_json(MODEL_JSON)
-process = fk.Process(model, [1000], [1000, 1000]).with_loop_count(6, 6)
-settings = dict(max_vertices=13, threads=2, vertex_allow=["V_3_SCALAR_000"])
+process = model.process([1000], [1000, 1000], vertex_allow=["V_3_SCALAR_000"])
+settings = dict(max_vertices=13, threads=2)
 
 def interrupt(signum, frame):
     raise expected_error("generation interrupted")
@@ -3085,9 +3166,9 @@ try:
             signal.setitimer(signal.ITIMER_REAL, 0.05)
             try:
                 if via_model:
-                    fk.Process(model, [1000], [1000, 1000]).generate_diagrams(loops=6, **settings)
+                    model.process([1000], [1000, 1000], vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(loops=6, **settings)
                 else:
-                    process.generate_diagrams(**settings)
+                    process.generate_diagrams(loops=6, **settings)
             except expected_error as error:
                 assert str(error) == "generation interrupted"
             else:
@@ -3098,7 +3179,7 @@ finally:
     signal.signal(signal.SIGALRM, previous_handler)
 
 # Interruption belongs to one call; subsequent generation must still complete.
-result = fk.Process(model, [1000], [1000, 1000]).generate_diagrams(loops=0, **settings)
+result = model.process([1000], [1000, 1000], vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(loops=0, **settings)
 assert result.report.completed
 assert len(result) == 1
 "#,
@@ -3161,50 +3242,41 @@ except AttributeError:
 else:
     raise AssertionError("particle selectors must be immutable")
 
-mixed_process = fk.Process(model,
-    [particle, by_name, "scalar_2", 1001],
-    [particle.antiparticle],
-)
+by_name = fk.ParticleSelector.by_name("scalar_1")
+by_pdg = fk.ParticleSelector.by_pdg(1001)
+mixed_process = model.process([particle, by_name, "scalar_2", 1001], [particle.antiparticle])
 assert [
     selector.name if selector.is_name else selector.pdg
     for selector in mixed_process.incoming
-] == [1000, "1", "scalar_2", 1001]
+] == [1000, "scalar_1", "scalar_2", 1001]
 assert mixed_process.outgoing_alternatives[0][0].pdg == 1000
 
 sm_model = fk.Model.from_json(SM_MODEL_JSON)
 gluon = sm_model.particle_by_pdg(21)
-gluon_process = fk.Process(sm_model, [gluon], [gluon.antiparticle])
+gluon_process = sm_model.process([gluon], [gluon.antiparticle])
 assert gluon_process.incoming[0].pdg == 21
 assert gluon_process.outgoing_alternatives[0][0].pdg == 21
 
 bottom = sm_model.particle_by_pdg(5)
-bottom_process = fk.Process(sm_model, [bottom], [bottom.antiparticle])
+bottom_process = sm_model.process([bottom], [bottom.antiparticle])
 assert bottom_process.incoming[0].pdg == 5
 assert bottom_process.outgoing_alternatives[0][0].pdg == -5
 
-process = fk.Process(model,
-    [by_name, by_pdg],
-    [fk.ParticleSelector.by_name("out"), fk.ParticleSelector.by_pdg(-1)],
-).with_loop_count(1, 2)
+process = model.process([by_name, by_pdg], [fk.ParticleSelector.by_name("scalar_2"), fk.ParticleSelector.by_pdg(1000)])
 assert all(isinstance(selector, fk.ParticleSelector) for selector in process.incoming)
 assert process.incoming == [by_name, by_pdg]
-assert process.outgoing_alternatives[0][0].name == "out"
-assert process.outgoing_alternatives[0][1].pdg == -1
+assert process.outgoing_alternatives[0][0].name == "scalar_2"
+assert process.outgoing_alternatives[0][1].pdg == 1000
 
-round_tripped = fk.Process(model, process.incoming, process.outgoing_alternatives[0]).with_loop_count(*process.loop_count)
+round_tripped = model.process(process.incoming, process.outgoing_alternatives[0])
 assert round_tripped.incoming == process.incoming
 assert round_tripped.outgoing_alternatives == process.outgoing_alternatives
-assert round_tripped.loop_count == process.loop_count
+assert round_tripped.particle_veto == process.particle_veto
+assert not hasattr(process, "loop_count")
 
-cross_section = fk.Process(model, [particle, by_pdg], [by_name])
+cross_section = model.process([particle, by_pdg], [by_name])
 cross_section = cross_section.with_final_state_alternatives(
     [[particle.antiparticle], [by_name], [by_pdg], ["scalar_2"], [1002]],
-)
-cross_section = cross_section.with_symmetrization(
-    initial=True,
-    final_state=True,
-    left_right=True,
-    external_fermions=True,
 )
 assert cross_section.incoming[0].pdg == 1000
 assert cross_section.outgoing_alternatives[0][0].pdg == 1000
@@ -3214,17 +3286,13 @@ assert cross_section.outgoing_alternatives[1:] == [
     [fk.ParticleSelector.by_name("scalar_2")],
     [fk.ParticleSelector.by_pdg(1002)],
 ]
-assert cross_section.symmetrizes_initial
-assert cross_section.symmetrizes_final
-assert cross_section.symmetrizes_left_right
-assert cross_section.symmetrizes_external_fermions
 
 for particle_veto in ([particle, 1001], ["scalar_0"]):
-    assert len(fk.Process(model, [particle], [particle, particle]).generate_diagrams(particle_veto=particle_veto)) == 0
+    assert len(model.process([particle], [particle, particle]).with_filters(particle_veto=particle_veto).generate_diagrams()) == 0
 
 foreign_model = fk.Model.from_json(MODEL_JSON.replace("scalar_0", "foreign_scalar_0"))
 foreign_particle = foreign_model.particle("foreign_scalar_0")
-foreign_process = fk.Process(model, [foreign_particle], [foreign_particle.antiparticle])
+foreign_process = model.process([foreign_particle], [foreign_particle.antiparticle])
 assert foreign_process.incoming[0].pdg == 1000
 assert foreign_process.outgoing_alternatives[0][0].pdg == 1000
 "#,

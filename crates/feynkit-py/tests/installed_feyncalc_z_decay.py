@@ -59,7 +59,7 @@ for pdg, mass, weak_isospin, electric_charge in (
     assert particle.mass_expression == mass
     assert particle.weak_isospin == weak_isospin
     assert particle.charge == electric_charge
-    generated = fk.Process(model, [23], [pdg, -pdg]).generate_diagrams(
+    generated = model.process([23], [pdg, -pdg]).generate_diagrams(
         max_vertices=1, numerator_grouping=None, progress=None
     )
     assert len(generated.diagrams) == 1

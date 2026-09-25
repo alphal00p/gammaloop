@@ -94,12 +94,11 @@ for name, (particles, coupling_name) in vertices.items():
         ),
     ):
         diagrams = (
-            hep.Process(model, incoming, outgoing)
+            model.process(incoming, outgoing, vertex_allow=[name])
             .generate_diagrams(
                 loops=0,
                 max_vertices=1,
                 maximum_bridges=0,
-                vertex_allow=[name],
                 numerator_grouping=None,
                 progress=None,
             )
@@ -161,12 +160,11 @@ for label, tensor in (
         (["g"], ["ghG~", "ghG"], "V_35"),
     ):
         diagrams = (
-            hep.Process(probe_model, incoming, outgoing)
+            probe_model.process(incoming, outgoing, vertex_allow=[name])
             .generate_diagrams(
                 loops=0,
                 max_vertices=1,
                 maximum_bridges=0,
-                vertex_allow=[name],
                 numerator_grouping=None,
                 progress=None,
             )

@@ -83,19 +83,17 @@ for kind, incoming, outgoing, loops in [
     ("photon", [photon], [photon], 1),
     ("vertex", [electron], [photon, electron], 1),
 ]:
-    generated = (
-        hep.Process(model, incoming, outgoing)
-        .with_loop_count(loops, loops)
-        .generate_diagrams(
-            max_vertices=len(incoming) + len(outgoing) - 2 + 2 * loops,
-            maximum_bridges=0,
-            vertex_allow=vertices,
-            self_energy=None,
-            tadpoles=None,
-            zero_snails=None,
-            numerator_grouping=None,
-            progress=None,
-        )
+    generated = model.process(
+        incoming, outgoing, vertex_allow=vertices
+    ).generate_diagrams(
+        loops=loops,
+        max_vertices=len(incoming) + len(outgoing) - 2 + 2 * loops,
+        maximum_bridges=0,
+        self_energy=None,
+        tadpoles=None,
+        zero_snails=None,
+        numerator_grouping=None,
+        progress=None,
     )
     assert len(generated.diagrams) == 1
     diagram = generated.diagrams[0]
@@ -353,19 +351,18 @@ for kind, incoming, outgoing, count, qed_order in [
         "loops": 0,
         "max_vertices": 1,
         "maximum_bridges": None,
-        "vertex_allow": ct_vertices,
         "self_energy": None,
         "tadpoles": None,
         "zero_snails": None,
         "numerator_grouping": None,
         "progress": None,
     }
-    generated = hep.Process(ct_model, incoming, outgoing).generate_diagrams(
-        coupling_orders={"QED": qed_order, "CT": 1}, **options
-    )
+    generated = ct_model.process(
+        incoming, outgoing, vertex_allow=ct_vertices
+    ).generate_diagrams(coupling_orders={"QED": qed_order, "CT": 1}, **options)
     assert len(generated.diagrams) == count
     assert (
-        not hep.Process(ct_model, incoming, outgoing)
+        not ct_model.process(incoming, outgoing, vertex_allow=ct_vertices)
         .generate_diagrams(coupling_orders={"CT": 0}, **options)
         .diagrams
     )
@@ -548,11 +545,12 @@ for kind, incoming, outgoing in [
     ("photon", [massless_photon], [massless_photon]),
     ("vertex", [massless_electron], [massless_photon, massless_electron]),
 ]:
-    generated = hep.Process(massless_model, incoming, outgoing).generate_diagrams(
+    generated = massless_model.process(
+        incoming, outgoing, vertex_allow=massless_vertices
+    ).generate_diagrams(
         loops=1,
         max_vertices=len(incoming) + len(outgoing),
         maximum_bridges=0,
-        vertex_allow=massless_vertices,
         self_energy=None,
         tadpoles=None,
         zero_snails=None,

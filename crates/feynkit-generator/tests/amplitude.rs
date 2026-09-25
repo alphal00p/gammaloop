@@ -14,10 +14,10 @@ use symbolica::{
 fn photons() -> Vec<Arc<feynkit_graph::FeynmanDiagram>> {
     let model =
         Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
-    let process = Process::new(["e-", "e+"], ["a", "a"])
-        .with_loop_count(0, 0)
-        .unwrap();
+    let process = Process::new(["e-", "e+"], ["a", "a"]);
     let options = GenerationOptions::default()
+        .with_loop_count(0, 0)
+        .unwrap()
         .threads(1)
         .max_vertices(2)
         .numerator_grouping(NumeratorGrouping::None)
@@ -195,10 +195,10 @@ fn colored_fermion_interference_preserves_physical_leg_pairings() {
         })
         .map(|rule| rule.name.clone().into())
         .collect();
-    let process = Process::new(["b", "b"], ["b", "b"])
-        .with_loop_count(0, 0)
-        .unwrap();
+    let process = Process::new(["b", "b"], ["b", "b"]);
     let options = GenerationOptions::default()
+        .with_loop_count(0, 0)
+        .unwrap()
         .threads(1)
         .max_vertices(2)
         .with_graph_filter(GenerationFilter::VertexAllow(vertices));
@@ -285,10 +285,10 @@ fn one_process_generates_diagrams_amplitudes_and_cross_sections() {
             .expression()
     );
     let forward = process
-        .clone()
-        .with_loop_count(1, 1)
-        .unwrap()
-        .generate_cross_section(model.clone(), &options)
+        .generate_cross_section(
+            model.clone(),
+            &options.clone().with_loop_count(1, 1).unwrap(),
+        )
         .unwrap();
     assert!(!forward.diagrams.is_empty());
     assert!(
@@ -297,7 +297,7 @@ fn one_process_generates_diagrams_amplitudes_and_cross_sections() {
             .iter()
             .all(|diagram| diagram.loop_count() == 1 && !diagram.cuts().is_empty())
     );
-    assert_eq!(process.loop_count(), 0..=0);
+    assert_eq!(options.loop_count(), 0..=0);
     let token = feynkit_generator::CancellationToken::new();
     token.cancel();
     let cancelled = options.cancellation_token(token);

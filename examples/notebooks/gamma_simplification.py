@@ -2845,7 +2845,7 @@ def _(mo):
     `retained_factored_expansion_interface` records the measured release,
     controls, profile, and timing limits. The concurrent broader API audit
     modified the wrapper afterward; its newer source is outside this measured
-    checkpoint. The notebook environment contains the validated release.
+    checkpoint. Those measurements used the then-validated notebook release.
 
     **Shared symbolic tensor machinery:** Idenso's `SymbolicTensor<S>` now owns
     both explicit network tensors and tensors with a `PartialStructure` that

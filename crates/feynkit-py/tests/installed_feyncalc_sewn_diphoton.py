@@ -18,11 +18,12 @@ vertices = [
     == sorted([electron.name, electron.antiname, photon.name])
 ]
 assert len(vertices) == 1
-result = hep.Process(model, ["e-", "e+"], ["a", "a"]).generate_cross_section(
+result = model.process(
+    ["e-", "e+"], ["a", "a"], vertex_allow=vertices
+).generate_cross_section(
     loops=1,
     max_vertices=4,
     maximum_bridges=None,
-    vertex_allow=vertices,
     numerator_grouping=None,
     progress=None,
 )

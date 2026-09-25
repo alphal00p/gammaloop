@@ -497,9 +497,9 @@ fn select_target(
 fn generate_addbar() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError> {
     let model = standard_model()?;
     let process = Process::new(["a"], ["d", "d~"])
-        .with_final_state_alternatives([vec!["d", "d~"], vec!["d", "d~", "g"]])?
-        .with_loop_count(2, 2)?;
+        .with_final_state_alternatives([vec!["d", "d~"], vec!["d", "d~", "g"]])?;
     let options = GenerationOptions::default()
+        .with_loop_count(2, 2)?
         .threads(1)
         .max_vertices(4)
         .allow_zero_flow_edges(true)
@@ -518,8 +518,9 @@ fn generate_addbar() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError>
 
 fn generate_scalars() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError> {
     let model = scalar_model()?;
-    let process = Process::new(["scalar_1"], ["scalar_1", "scalar_1"]).with_loop_count(1, 1)?;
+    let process = Process::new(["scalar_1"], ["scalar_1", "scalar_1"]);
     let options = GenerationOptions::default()
+        .with_loop_count(1, 1)?
         .threads(1)
         .max_vertices(4)
         .allow_self_loops(true)
@@ -544,11 +545,11 @@ fn generate_epemttbar(model: &Model) -> Result<Vec<(Target, FeynmanDiagram)>, Dy
     // GL092 is the tree-level cross-section topology for the double-real
     // e+ e- -> t t~ H g g final state. Its four graph loops are the sewn
     // phase-space loops, not four virtual loops.
-    let process = Process::new(["e+", "e-"], ["t", "t~", "H", "g", "g"])
+    let process = Process::new(["e+", "e-"], ["t", "t~", "H", "g", "g"]);
+    let options = GenerationOptions::default()
         .with_loop_count(4, 4)?
         .symmetrize_final(true)
-        .symmetrize_left_right(true);
-    let options = GenerationOptions::default()
+        .symmetrize_left_right(true)
         .threads(1)
         .max_vertices(10)
         .with_graph_filter(GenerationFilter::VertexAllow(vec![

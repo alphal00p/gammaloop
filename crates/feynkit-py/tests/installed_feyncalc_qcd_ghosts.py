@@ -24,16 +24,14 @@ for outgoing, vertices, count in (
     ([-9000005, 9000005], ["V_76", "V_35"], 1),
     ([21, 21], ["V_76", "V_36"], 3),
 ):
-    generated = (
-        fk.Process(model, [5, -5], outgoing)
-        .with_loop_count(0, 0)
-        .generate_diagrams(
-            max_vertices=2,
-            maximum_bridges=None,
-            vertex_allow=vertices,
-            numerator_grouping=None,
-            progress=None,
-        )
+    generated = model.process(
+        [5, -5], outgoing, vertex_allow=vertices
+    ).generate_diagrams(
+        loops=0,
+        max_vertices=2,
+        maximum_bridges=None,
+        numerator_grouping=None,
+        progress=None,
     )
     assert len(generated.diagrams) == count
     generated_channels.append(generated)

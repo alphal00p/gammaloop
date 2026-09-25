@@ -53,7 +53,9 @@ def _():
 
 @app.cell
 def _(mo, model, table):
-    _generated = fk.Process(model, ["phi"], [9000001, "phi"]).generate_diagrams(loops=(0, 1), max_vertices=3, allow_self_loops=True)
+    _generated = model.process(["phi"], [9000001, "phi"]).generate_diagrams(
+        loops=(0, 1), max_vertices=3, allow_self_loops=True
+    )
 
     diagram = next(
         item
