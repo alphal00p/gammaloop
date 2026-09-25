@@ -56,7 +56,7 @@ class Amplitude:
         """
     def __new__(cls, diagrams: typing.Sequence[FeynmanDiagram], *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, real: typing.Optional[typing.Sequence[Expression]] = None) -> Amplitude:
         r"""
-        Align external ports and sum the weighted diagram operators.
+        Sum weighted diagram operators with matching graph external indices.
 
         Examples
         --------

@@ -4278,8 +4278,13 @@ mod tests {
                         expr: Atom::var(symbol!("unified_index_wrapper")),
                     },),
                 )?;
-                assert!(!wrapped.is_instance_of::<TensorExpression>());
-                assert!(tensor_type.call1((&wrapped,)).is_err());
+                assert!(wrapped.is_instance_of::<TensorExpression>());
+                let restored = tensor_type.call1((&wrapped,))?;
+                let restored = restored.extract::<PyRef<'_, TensorExpression>>()?;
+                let scoped = wrapped.extract::<PyRef<'_, TensorExpression>>()?;
+                assert_eq!(restored.as_super().expr, scoped.as_super().expr);
+                assert_eq!(restored.interface, scoped.interface);
+                assert_eq!(scoped.interface.canonical().order(), rank);
                 let cooked = tensor_type.call((&wrapped,), Some(&kwargs))?;
                 let cooked = cooked.extract::<Py<TensorExpression>>()?;
                 assert_eq!(cooked.borrow(py).interface.canonical().order(), rank);

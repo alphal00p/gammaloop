@@ -115,6 +115,13 @@ def check_types(
     assert_type(expression.cook_indices(sp.CookSettings.indices()), sp.TensorExpression)
     assert_type(library["A"], sp.Tensor)
     assert_type(library[expression], sp.Tensor)
+    assert_type(expression in library, bool)
+    assert_type("A" in library, bool)
+    assert_type(library.get(expression), sp.Tensor | None)
+    assert_type(library.get("A", None), sp.Tensor | None)
+    assert_type(library.get("A", tensor), sp.Tensor)
+    fallback: list[int] = []
+    assert_type(library.get("A", default=fallback), sp.Tensor | list[int])
     assert_type(library.keys(), list[sp.TensorExpression])
     assert_type(library.values(), list[sp.Tensor])
     assert_type(library.items(), list[tuple[sp.TensorExpression, sp.Tensor]])

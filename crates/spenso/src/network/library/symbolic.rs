@@ -627,6 +627,13 @@ impl<T: HasStructure<Structure = ExplicitKey<Aind>>, Aind: AbsInd> TensorLibrary
         self.explicit_dimension.keys()
     }
 
+    /// Whether a canonical signature has stored data or a dimension-dependent factory.
+    /// This does not invoke the factory or validate its concrete dimensions.
+    pub fn contains_key(&self, key: &ExplicitKey<Aind>) -> bool {
+        self.explicit_dimension.contains_key(key)
+            || self.generic_dimension.contains_key(&key.clone().into())
+    }
+
     /// Number of factories accepting generic dimensions.
     pub fn generic_len(&self) -> usize {
         self.generic_dimension.len()

@@ -1927,6 +1927,11 @@ impl SpensoModule {
             .to_string()
             .lines()
             .map(|line| {
+                // Legacy TypeVars require an unannotated assignment; the upstream
+                // variable generator currently always emits an annotation.
+                if let Some(value) = line.strip_prefix("_LibraryDefault: typing.TypeVar = ") {
+                    return format!("_LibraryDefault = {value}");
+                }
                 // These methods deliberately specialize Expression's scalar API. Keep
                 // both checkers' narrowly scoped override annotations on the definition.
                 if line.trim_start().starts_with("def ")

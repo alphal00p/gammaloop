@@ -2336,8 +2336,11 @@ leaves an approximate 8–12× ladder gap, not an improvement in our contractor.
 
 Here expression construction means emitting the already computed polynomial
 (coefficients and exponents) as Symbolica product and sum Atoms, including
-canonical normalization. Constructing the tensor wrapper and validating its
-interface are separate operations.
+canonical normalization. The expanded tracen recurrence builds that polynomial
+directly, without first constructing a Symbolica sum: monomial collection is
+deferred until the final coefficient list. The polynomial is an implementation
+choice, not a requirement of the trace identity. Constructing the tensor wrapper
+and validating its interface are separate operations.
 
 Even with the corrected Symbolica patches, conversion accounts for 76.61% of
 sampled tracen cycles: final Atom normalization takes 38.31%, other conversion

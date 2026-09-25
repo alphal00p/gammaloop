@@ -203,9 +203,13 @@ fn stub_names(module: &pyo3_stub_gen::generate::Module) -> BTreeSet<String> {
             module
                 .variables
                 .values()
-                // Private typing aliases describe annotations, not runtime exports.
+                // Private typing helpers describe annotations, not runtime exports.
                 .filter(|variable| {
-                    !(variable.name.starts_with('_') && variable.type_.name == "typing.TypeAlias")
+                    !(variable.name.starts_with('_')
+                        && matches!(
+                            variable.type_.name.as_str(),
+                            "typing.TypeAlias" | "typing.TypeVar"
+                        ))
                 })
                 .map(|variable| variable.name.to_owned()),
         )

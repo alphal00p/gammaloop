@@ -476,6 +476,8 @@ name identifies exactly one stored signature; ambiguous or absent names raise
 stored = library[structure]
 reference = stored.expression()
 signatures = library.keys()
+assert structure in library
+assert library.get("missing_tensor") is None
 for signature, tensor in library.items():
     print(signature, tensor.structure.shape)
 ```
@@ -485,6 +487,13 @@ iteration yields signatures and `len(library)` counts stored tensors. Returned
 tensors are independent copies: register an edited tensor again to replace the
 stored data. Dimension-dependent factories, such as metrics, can be accessed
 with an exact concrete signature but do not appear among stored entries.
+
+`key in library` checks whether lookup can resolve the signature, including
+dimension-dependent factories, without constructing component data.
+`library.get(key, default=None)` returns an independent tensor or the supplied
+default when the signature is absent. Both accept the same keys as indexing;
+ambiguous names and invalid keys still raise errors. In particular, a factory
+signature can be in an otherwise empty library while `len(library)` remains zero.
 
 Displaying a library in a notebook opens a compact catalogue of mathematical
 signatures. Select a tensor to inspect its components in the usual Memory grid
