@@ -36,14 +36,20 @@ partially updated model.
 
 Python accepts generation settings directly as keyword arguments. Exact coupling orders use
 integers; pairs specify inclusive bounds, with `None` for an unbounded coupling maximum.
-Filter objects specify which subgraphs to reject. Python's defaults are ported from the
-GammaLoop CLI: self-loops are permitted, zero-flow edges are rejected, and non-vacuum
+Filter objects specify which subgraphs to reject. Python permits self-loops,
+rejects zero-flow edges, and follows GammaLoop's defaults for subgraph rejection: non-vacuum
 processes filter self-energies, tadpoles and zero-momentum snails. Vacuum processes leave
 those filters off and require one factorized loop topology. Cross sections default to one
 cut blob, no spectators, and symmetrized final states.
 
-`maximum_bridges=0` is the Python default for every process. Use `maximum_bridges=None`
-to include unrestricted bridge topologies, such as tree-level exchange channels.
+The default `maximum_bridges=...` retains tree-level exchange channels and requires
+one-particle irreducibility for each diagram with loops. This decision uses the individual
+diagram's loop count, including when requesting a mixed range such as `loops=(0, 1)`.
+External legs do not count as bridges. An explicit integer, including `maximum_bridges=0`,
+limits bridges at every loop order; `maximum_bridges=None` disables the restriction.
+One-particle-reducible loop corrections are therefore opt-in when assembling a complete
+scattering amplitude. Rust exposes the same loop-only policy as
+`GenerationFilter::LoopOneParticleIrreducible`.
 Omitting `numerator_grouping` groups up to scalar rescaling; explicit `numerator_grouping=None`
 disables numerator comparison. Diagrams still contain their vertex, propagator and aggregate
 numerators. As in the current GammaLoop `--only-diagrams` path, generation does not construct

@@ -204,6 +204,9 @@ pub enum GenerationFilter {
     PerturbativeOrders(BTreeMap<String, usize>),
     FermionLoopCountRange((usize, usize)),
     FactorizedLoopTopologiesCountRange((usize, usize)),
+    /// Require positive-loop diagrams to be one-particle irreducible. Tree
+    /// exchange diagrams are retained; external legs never count as bridges.
+    LoopOneParticleIrreducible,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -240,6 +243,7 @@ pub enum GenerationFilterKind {
     PerturbativeOrders,
     FermionLoopCountRange,
     FactorizedLoopTopologiesCountRange,
+    LoopOneParticleIrreducible,
 }
 
 impl fmt::Display for GenerationFilterKind {
@@ -253,6 +257,7 @@ impl fmt::Display for GenerationFilterKind {
             Self::VertexAllow => "vertex_allow",
             Self::VertexVeto => "vertex_veto",
             Self::MaxNumberOfBridges => "max_number_of_bridges",
+            Self::LoopOneParticleIrreducible => "loop_one_particle_irreducible",
             Self::CouplingOrders => "coupling_orders",
             Self::LoopCountRange => "loop_count_range",
             Self::BlobRange => "blob_range",
@@ -275,6 +280,7 @@ impl GenerationFilter {
             Self::VertexAllow(_) => GenerationFilterKind::VertexAllow,
             Self::VertexVeto(_) => GenerationFilterKind::VertexVeto,
             Self::MaxNumberOfBridges(_) => GenerationFilterKind::MaxNumberOfBridges,
+            Self::LoopOneParticleIrreducible => GenerationFilterKind::LoopOneParticleIrreducible,
             Self::CouplingOrders(_) => GenerationFilterKind::CouplingOrders,
             Self::LoopCountRange(_) => GenerationFilterKind::LoopCountRange,
             Self::BlobRange(_) => GenerationFilterKind::BlobRange,
@@ -834,11 +840,17 @@ impl GenerationOptions {
         }
     }
 
-    pub(crate) fn max_bridges(&self) -> Option<usize> {
-        self.graph_filters.iter().find_map(|filter| match filter {
-            GenerationFilter::MaxNumberOfBridges(maximum) => Some(*maximum),
-            _ => None,
-        })
+    pub(crate) fn max_bridges(&self, minimum_loops: usize) -> Option<usize> {
+        // Early enumeration pruning is safe only if the requested range excludes
+        // trees. Mixed ranges apply the loop-only policy to each finished graph.
+        self.graph_filters
+            .iter()
+            .filter_map(|filter| match filter {
+                GenerationFilter::MaxNumberOfBridges(maximum) => Some(*maximum),
+                GenerationFilter::LoopOneParticleIrreducible if minimum_loops > 0 => Some(0),
+                _ => None,
+            })
+            .min()
     }
 
     pub(crate) fn cancellation_requested(&self) -> bool {

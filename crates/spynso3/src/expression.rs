@@ -2393,16 +2393,7 @@ impl TensorExpression {
         var: Option<ConvertibleToExpression>,
         via_poly: Option<bool>,
     ) -> PyResult<Py<Self>> {
-        let original = &self_.as_super().expr;
-        let mut inference = InterfaceInference::default();
-        let preserve_interface = var.is_none()
-            && !via_poly.unwrap_or(false)
-            && !original.as_view().needs_normalization()
-            && inference.expansion_preserves_leaf_interfaces(original.as_view())
-            && Self::validate_atom(original).is_ok()
-            && inference
-                .validate_interface(original, &self_.interface)
-                .is_ok();
+        let ordinary_expansion = var.is_none() && !via_poly.unwrap_or(false);
         let atom = if let Some(var) = var {
             let var = var.to_expression();
             if !matches!(var.expr, Atom::Var(_) | Atom::Fun(_)) {
@@ -2432,7 +2423,18 @@ impl TensorExpression {
         } else {
             self_.as_super().expr.expand()
         };
-        if preserve_interface {
+        let original = &self_.as_super().expr;
+        let mut inference = InterfaceInference::default();
+        if ordinary_expansion
+            && atom != *original
+            && !atom.as_view().is_zero()
+            && !original.as_view().needs_normalization()
+            && inference.expansion_preserves_leaf_interfaces(original.as_view())
+            && Self::validate_atom(original).is_ok()
+            && inference
+                .validate_interface(original, &self_.interface)
+                .is_ok()
+        {
             // Validate the smaller factored input once. The admitted leaf domain
             // preserves its exact ordered interface under ordinary distribution.
             let (name, args) = Self::transformed_descriptor(&self_, &atom);
