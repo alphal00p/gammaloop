@@ -49,8 +49,8 @@
   stroke-style(c: c, thickness: thickness, dash: dash)
 }
 
-/// Sink-half stroke helper. The default lightening makes the two halves encode
-/// the graph's source/sink split without requiring arrowheads.
+/// Sink-half stroke helper. With `orientation-split: true`, the lightening makes
+/// the two halves encode the graph's source/sink split without arrowheads.
 /// -> dictionary
 #let sink-stroke(
   c: palette.ink,
@@ -384,7 +384,7 @@
   default: default-edge,
   typst-fields: "plain",
   scope: (:),
-  orientation-split: true,
+  orientation-split: false,
   momentum-arrows: false,
   momentum-arrow-offset: momentum-arrow-defaults.offset,
   momentum-arrow-length: momentum-arrow-defaults.length,
@@ -432,7 +432,7 @@
   default: default-edge,
   typst-fields: "plain",
   scope: (:),
-  orientation-split: true,
+  orientation-split: false,
   momentum-arrows: false,
   momentum-arrow-offset: momentum-arrow-defaults.offset,
   momentum-arrow-length: momentum-arrow-defaults.length,
@@ -545,8 +545,10 @@
 }
 
 /// Bundle source-style, sink-style, edge-label and edge-label-style callbacks
-/// with shared options for `graph.style` or `linnest.draw`, without Python. Momentum arrows
-/// are opt-in; enabling them also enables combined particle and `q_(eid)` labels
+/// with shared options for `graph.style` or `linnest.draw`, without Python.
+/// Both halves use the source color by default. Set `orientation-split: true`
+/// to use the particle map's separate source and sink colors.
+/// Momentum arrows are opt-in; enabling them also enables combined particle and `q_(eid)` labels
 /// unless `show-momentum` is explicitly set. Arrow length never clamps labels.
 /// Prepared external labels retain their outward endpoint position by default;
 /// explicit momentum shifts or `momentum-label-anchor` select path-relative placement.
@@ -625,7 +627,7 @@
   default: default-edge,
   typst-fields: "plain",
   scope: (:),
-  orientation-split: true,
+  orientation-split: false,
   momentum-arrows: false,
   momentum-arrow-offset: momentum-arrow-defaults.offset,
   momentum-arrow-length: momentum-arrow-defaults.length,

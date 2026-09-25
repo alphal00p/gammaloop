@@ -35,7 +35,8 @@ the earlier diagram `to_svg()` method and returns SVG text, including hover info
 SVG figures have a transparent background. Their palette follows the browser's
 light/dark preference when opened separately; inline figures also follow explicit
 Marimo and Jupyter notebook themes. Both modes use the website diagram palette,
-including its neutral and charged-particle colours and lightened sink strokes.
+including its neutral and charged-particle colours. Each edge uses one colour
+by default; `orientation-split` enables lightened sink halves.
 The native module embeds the compatible Linnest/Kurvst source, Wasm files, and shared
 physics styles. Particle metadata selects dashed scalar lines, fermion arrows,
 photon waves, gluon coils, and mathematical labels from the model's TeX names.
@@ -90,6 +91,19 @@ hyphenated names as `just draw --input`: `show-particle`, `show-edge-index`,
 `momentum-arrow-stroke`, `momentum-label-gap`, `momentum-label-side`, and
 `momentum-label-slide`, among others. Catalogue pagination
 (`rows` and `columns`) applies to `just draw`, rather than an individual SVG.
+
+To distinguish the source and sink halves by colour:
+
+// docs-example: compile
+```python
+from linnet import RenderConfig
+
+settings = RenderConfig(template_options={"orientation-split": True})
+svg = diagram.render(config=settings)
+```
+
+The equivalent controls are `physics.style(orientation-split: true)` in direct
+Typst and `just draw --input orientation-split=true`.
 
 // docs-example: compile
 ```python
