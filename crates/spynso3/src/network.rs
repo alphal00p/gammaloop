@@ -1383,7 +1383,10 @@ impl SpensoNet {
         #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]
         config: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
-        Ok(display::network::html(&self.render(py, config)?))
+        Ok(display::network::html(
+            &self.render(py, config)?,
+            &self.status(),
+        ))
     }
 
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]

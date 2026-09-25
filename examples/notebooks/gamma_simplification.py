@@ -2994,7 +2994,7 @@ def _(mo):
     remaining Rust-side work; they are not Python-wrapper costs. This build uses
     Symbolica `06906976` **without** the isolated `poly-emission.patch` and
     `poly-presence.patch` experiments. Their combined end-to-end tracen effect
-    has not been measured; **73.14% is not a post-patch profile**.
+    had not been measured at this checkpoint; **73.14% is not a post-patch profile**.
     All **207** exact Python records, **117** HEP component checks, and three
     new proof regressions pass. Rust checks pass **469** Idenso and **114/115**
     binding tests; the known wrapped-index failure and snapshot exclusion remain.

@@ -2267,13 +2267,15 @@ Within the core, free tracen's polynomial-to-Atom conversion
 (`to_expression_with_map`) accounts for 73.14% inclusively. This is Rust-side
 Symbolica result construction. This profile uses the pinned Symbolica
 `06906976` without the isolated `poly-emission.patch` and `poly-presence.patch`
-experiments described above. Their combined effect on this complete tracen
-pipeline has not been measured; the 73.14% share is not a post-patch result.
+experiments described above. At this checkpoint their combined effect on the
+complete tracen pipeline had not been measured; the 73.14% share is not a
+post-patch result.
 Axial epsilon cleanup accounts for 64.23% inclusively, including nested
 Schoonschip scans; the length-12 trace kernel itself accounts for 14.73%.
 These inclusive shares overlap other profile categories and must not be added.
-The axial scalar-spectator path still excludes gamma5 from its terminal shortcut,
-and epsilon cleanup invokes Schoonschip before checking for epsilon-pair work.
+At this checkpoint the axial scalar-spectator path excluded gamma5 from its
+terminal shortcut, and epsilon cleanup invoked Schoonschip before checking for
+epsilon-pair work.
 
 The final build passes 207 exact Python behavior records and 117 HEP component
 comparisons. Current-worktree Rust checks pass 469 Idenso tests and 114 of 115

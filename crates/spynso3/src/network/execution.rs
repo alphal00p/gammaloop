@@ -20,17 +20,17 @@ use pyo3_stub_gen_derive::remove_gen_stub;
 pub(crate) struct ExecutionStatus {
     /// Number of remaining graph nodes, including leaves and operations.
     #[pyo3(get)]
-    nodes: usize,
+    pub(crate) nodes: usize,
     /// Number of remaining operation nodes.
     #[pyo3(get)]
-    operations: usize,
+    pub(crate) operations: usize,
     /// Number of internal slot edges, including self traces.
     #[pyo3(get)]
-    contractions: usize,
+    pub(crate) contractions: usize,
     /// True when one leaf remains, without pending operations or contractions.
     #[pyo3(get)]
-    complete: bool,
-    ready: Vec<String>,
+    pub(crate) complete: bool,
+    pub(crate) ready: Vec<String>,
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -82,7 +82,7 @@ impl SpensoNet {
 
     /// Snapshot of remaining operations and contractions; does not execute the graph.
     #[getter]
-    fn status(&self) -> ExecutionStatus {
+    pub(crate) fn status(&self) -> ExecutionStatus {
         let mut graph = self.network.graph.clone();
         graph.cache_expr_tree_roots();
         let nodes = graph.n_nodes();
