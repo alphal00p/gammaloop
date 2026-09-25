@@ -180,8 +180,8 @@ kind = "Architecture diagram"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-09-21"
-review_ref = "11fe63d82a13abc0fc16c2fc6296c880a52c0572"
+reviewed_at = "2026-09-25"
+review_ref = "4571823a2854a9bd60b3c7b07ee27cb15b960dfd"
 products = ["spenso", "idenso"]
 topics = ["parsing", "tensor-network"]
 review_triggers = ["crates/spenso/src/network/parsing/**", "crates/idenso/src/tensor/mod.rs"]
@@ -195,7 +195,9 @@ anchor = "pub enum ShorthandParsing {"
 # Reviewed 2026-09-17: Documented scalar-weighted compact vectors and fallible target materialization with canonical layouts.
 # Reviewed 2026-09-21: Documented input-index reservation and fresh internal
 # dummies for separately lowered positive-power copies.
-digest = "1893dbba07975a89ef771c44cb432872363bd571"
+# Reviewed 2026-09-25: Documented borrowed scalar summands, whole-sum reuse,
+# and one-shot scalar accumulation before n-ary tensor-network addition.
+digest = "bd148e50a697af51b0503822e3be0a1d3cc8229c"
 
 [[section.note]]
 id = "schoonschip-network"
@@ -302,11 +304,11 @@ title = "Spenso implementation architecture"
 summary = "Tensor structures and payloads, direct contraction, network graph/store execution, Symbolica parsing, serialization and ownership boundaries, invariants, and tests."
 source = "docs/architecture/spenso-architecture.typ"
 kind = "System architecture"
-status = "Implemented · reviewed 2026-09-21"
+status = "Implemented · reviewed 2026-09-25"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-09-21"
-review_ref = "11fe63d82a13abc0fc16c2fc6296c880a52c0572"
+reviewed_at = "2026-09-25"
+review_ref = "4571823a2854a9bd60b3c7b07ee27cb15b960dfd"
 products = ["spenso"]
 topics = ["tensor structure", "contraction", "tensor network", "parallelism", "parsing", "serialization"]
 review_triggers = ["crates/spenso/Cargo.toml", "crates/spenso/src/structure.rs", "crates/spenso/src/structure/**", "crates/spenso/src/tensors/**", "crates/spenso/src/contraction.rs", "crates/spenso/src/contraction/**", "crates/spenso/src/network/**", "crates/spenso/src/shadowing/**", "crates/spenso/src/symbolic_parallelism.rs", "crates/spenso/src/symbolica_init.rs"]
@@ -360,7 +362,9 @@ anchor = "pub struct ParseSettings {"
 # Reviewed 2026-09-17: Documented fallible materialization, retained sum boundaries, odd powers, and live store ownership.
 # Reviewed 2026-09-21: Documented input-index reservation and fresh internal
 # dummies for separately lowered positive-power copies.
-digest = "1893dbba07975a89ef771c44cb432872363bd571"
+# Reviewed 2026-09-25: Documented whole-sum reuse and batched scalar
+# accumulation at the existing parser-to-network boundary.
+digest = "bd148e50a697af51b0503822e3be0a1d3cc8229c"
 
 [[section.note.scope]]
 path = "crates/spenso/src/symbolic_parallelism.rs"

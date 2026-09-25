@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Spenso source on
-2026-09-21.
+2026-09-25.
 
 This note covers the `spenso` Rust crate. `spenso-macros`, `spenso-hep-lib`, and `spynso3` are
 separate packages: they provide derives, concrete physics tensors, and a Python adapter rather
@@ -155,6 +155,11 @@ names before allocating dummies, and parser clones share that reservation set an
 Positive powers that lower shorthand with internal dummies reparse each copy from the original
 base, giving it fresh internal indices while retaining explicit boundary slots. Callers combining
 independently parsed expressions must still manage index namespaces deliberately.
+
+Scalar precontraction preserves normalized sum structure: wholly scalar sums reuse
+the input atom, and mixed sums batch their pure-scalar terms in one `Atom::add_many`
+before n-ary network addition. Compatibility checking still visits every summand
+unless first-term structure discovery is requested.
 
 The detailed dispatch and shorthand behavior are recorded in the
 #link("parsing-flow.typ")[Symbolica-to-network parsing flow]. Syntax and rewrite ownership across
