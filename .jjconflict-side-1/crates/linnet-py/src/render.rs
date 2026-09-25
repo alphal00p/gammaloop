@@ -39,7 +39,10 @@ const SUBGRAPH_STYLE: &str = "subgraph.typ";
 #[include = "src/**/*.typ"]
 #[include = "typst.toml"]
 #[include = "linnest.wasm"]
+#[include = "ec-layout.wasm"]
 #[include = "LICENSE"]
+#[include = "LICENSE.ec-layout"]
+#[include = "LICENSE.clarabel"]
 struct EmbeddedLinnestPackage;
 
 #[derive(RustEmbed)]
@@ -998,6 +1001,12 @@ mod tests {
             .contains_key("crates/linnest/typst/src/graph.typ"));
         assert!(
             fs::metadata(prepared.root.join("crates/linnest/typst/linnest.wasm"))
+                .unwrap()
+                .len()
+                > 0
+        );
+        assert!(
+            fs::metadata(prepared.root.join("crates/linnest/typst/ec-layout.wasm"))
                 .unwrap()
                 .len()
                 > 0

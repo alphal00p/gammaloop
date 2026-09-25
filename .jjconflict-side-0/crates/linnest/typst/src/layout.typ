@@ -2,6 +2,7 @@
 #import "subgraph.typ" as subgraph-module
 
 #let _plugin = plugin("../linnest.wasm")
+#let _embedding-plugin = plugin("../ec-layout.wasm")
 
 #let _option-rules = (
   spring: (strength: "number", length: "number", "rest-length-scale": "number"),
@@ -51,7 +52,15 @@
   solver: (
     "initial-repulsion": "number",
     "repulsion-growth": "number",
-    algorithm: ("force", "anneal", "tree", "dot", "stable-layered", "railroad"),
+    algorithm: (
+      "force",
+      "anneal",
+      "tree",
+      "dot",
+      "stable-layered",
+      "railroad",
+      "impred",
+    ),
     steps: "integer",
     epochs: "integer",
     seed: "integer",
@@ -457,7 +466,8 @@
   /// Layout algorithm. Use `"force"` for direct force integration, `"anneal"`
   /// for simulated annealing against the spring energy, `"tree"` for a
   /// traversal-tree placement, `"dot"` for a Graphviz-like layered placement,
-  /// or `"stable-layered"` for a stable railroad-inspired layered placement.
+  /// `"stable-layered"` for a stable railroad-inspired layered placement, or
+  /// `"impred"` for constrained planarization and topology-preserving relaxation.
   /// -> string
   layout-algo: "force",
   /// Node movement policy. `"layout"` lets the layout algorithm move nodes.
@@ -517,6 +527,34 @@
   /// mostly zooms the result instead of retuning the force ratios. Applies to
   /// both modes. -> float
   length-scale: 0.35,
+  /// ImPrEd iteration budget. -> int
+  impred-steps: 1500,
+  /// ImPrEd target route spacing. -> float
+  impred-spacing: 2.4,
+  /// ImPrEd point repulsion multiplier. -> float
+  impred-repulsion: 2.5,
+  /// ImPrEd route attraction multiplier. -> float
+  impred-attraction: 2.5,
+  /// Correction for multiple parallel edges. -> float
+  impred-parallel-balance: 1.0,
+  /// Topology-normalized external pull. -> float
+  impred-pull: 0.45,
+  /// External pull normalization exponent. -> float
+  impred-pull-balance: 1.0,
+  /// Pull transmitted to constrained external attachments. -> float
+  impred-pull-attachment: 4.0,
+  /// Maximum intermediate points on each external route, from zero to three. -> int
+  impred-external-max-points: 2,
+  /// Segment length threshold for subdivision, relative to spacing. -> float
+  impred-split-length-ratio: 1.5,
+  /// Chord length threshold for route contraction, relative to spacing. -> float
+  impred-contract-chord-ratio: 1.25,
+  /// ImPrEd node/edge clearance. -> float
+  impred-edge-clearance: 0.4,
+  /// ImPrEd point-to-segment repulsion multiplier. -> float
+  impred-node-edge-strength: 4.0,
+  // Normalize the same options without moving geometry.
+  _snapshot: false,
 ) = {
   spring = _checked-group("spring", spring)
   repulsion = _checked-group("repulsion", repulsion)
@@ -646,6 +684,56 @@
       subgraph-module._impl.validate(graph, subgraph),
     ))
   }
+  if _snapshot {
+    return cbor(_plugin.graph_layout_snapshot(
+      graph-module.graph-bytes(graph),
+      cbor.encode(settings),
+    ))
+  }
+  if settings.at("layout-algo") == "impred" {
+    if subgraph != none {
+      panic("ImPrEd currently requires a complete layout graph")
+    }
+    let snapshot = _plugin.graph_layout_snapshot(
+      graph-module.graph-bytes(graph),
+      cbor.encode(settings),
+    )
+    let seed = _embedding-plugin.initialize(bytes(json.encode((
+      diagram: json(_plugin.graph_impred_diagram(snapshot)),
+      scale: impred-spacing,
+      external_sides: true,
+    ))))
+    let options = (
+      impred-steps: impred-steps,
+      impred-spacing: impred-spacing,
+      impred-repulsion: impred-repulsion,
+      impred-attraction: impred-attraction,
+      impred-parallel-balance: impred-parallel-balance,
+      impred-pull: impred-pull,
+      impred-pull-balance: impred-pull-balance,
+      impred-pull-attachment: impred-pull-attachment,
+      impred-external-max-points: impred-external-max-points,
+      impred-split-length-ratio: impred-split-length-ratio,
+      impred-contract-chord-ratio: impred-contract-chord-ratio,
+      impred-edge-clearance: impred-edge-clearance,
+      impred-node-edge-strength: impred-node-edge-strength,
+    )
+    let result = cbor(_plugin.graph_impred_layout(
+      snapshot,
+      seed,
+      cbor.encode(options),
+    ))
+    let graph = graph-module.with-bytes(graph, bytes(result.graph))
+    if result.carriers.len() != graph-module.edges(graph).len() {
+      panic("ImPrEd carriers do not match the layout graph")
+    }
+    // Preserve the physical knots: the half-edge storage anchor is not an
+    // interpolation point in the Hobby curve designed for this carrier.
+    return graph-module.map(graph, edge: edge => (
+      layout-carrier: result.carriers.at(edge.edge),
+    ))
+  }
+  let graph = graph-module.map(graph, edge: _ => (layout-carrier: none))
   let graph-bytes = _plugin.layout_parsed_graph(
     graph-module.graph-bytes(graph),
     cbor.encode(settings),

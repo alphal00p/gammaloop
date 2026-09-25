@@ -985,9 +985,73 @@
 ]
 
 #let layout-concepts = [
-  === Layout Model
+  === Default diagram layout
 
-  `layout` starts from a traversal-tree placement, then optimizes the positions of
+  The shared renderer used by Python graph rendering, Feynman diagrams and
+  `just draw` defaults to `"impred"`. Direct Typst can request the same pipeline:
+
+  ```typ
+  #let g = layout(g,
+    layout-algo: "impred",
+    impred-parallel-balance: 1,
+    impred-pull: 0.45,
+  )
+  #draw(g)
+  ```
+
+  This runs EC-constrained planarization, then constrained ImPrEd relaxation.
+  Both stages execute inside the bundled native WASM plugins. No Python process
+  or external layout service is needed. The seed keeps incoming and outgoing
+  exterior groups consecutive; individually optimal edge insertions introduce
+  necessary crossings. Their sequence is a heuristic for the complete graph's
+  crossing number. All-incoming and all-outgoing diagrams use radial placement.
+
+  Relaxation preserves the carrier's crossing configuration while respecting
+  native pins and coordinate groups. Topology-normalized outward pull can
+  lengthen external legs, and long external segments may gain route points.
+  Parallel internal edges receive attraction divided by their multiplicity
+  raised to `impred-parallel-balance`; its default `1` enlarges self-energy
+  bundles relative to bridge edges. `0` disables that correction.
+
+  The final drawing uses Hobby through each complete physical route, then the
+  usual particle styling and joint momentum-arrow/label placement. Graph springs
+  and graph annealing are not additional default passes. Hobby smoothing and
+  decorative coils do not themselves carry the polyline crossing certificate.
+
+  #table(
+    columns: (auto, auto, 1fr),
+    [Option], [Default], [Meaning],
+    [`impred-spacing`], [`2.4`], [Characteristic force and movement length.],
+    [`impred-repulsion`], [`2.5`], [Point repulsion multiplier.],
+    [`impred-attraction`], [`2.5`], [Route-segment attraction multiplier.],
+    [`impred-parallel-balance`], [`1`], [Parallel-edge attraction exponent.],
+    [`impred-pull`], [`0.45`], [Base outward force on external endpoints.],
+    [`impred-pull-balance`], [`1`], [Topology-normalization exponent.],
+    [`impred-pull-attachment`], [`4`], [Extra demand from distributed attachments.],
+    [`impred-external-max-points`], [`2`], [Maximum extra external route points, from 0 to 3.],
+    [`impred-split-length-ratio`], [`1.5`], [External subdivision threshold relative to spacing.],
+    [`impred-contract-chord-ratio`], [`1.25`], [External contraction threshold; must be below the split threshold.],
+    [`impred-edge-clearance`], [`0.4`], [Node-to-edge clearance scale.],
+    [`impred-node-edge-strength`], [`4`], [Node-to-edge force multiplier.],
+    [`impred-steps`], [`1500`], [Number of relaxation iterations.],
+  )
+
+  The same names work through CLI input overrides:
+
+  ```sh
+  just draw --input impred-parallel-balance=1 --input impred-pull=0.45
+  ```
+
+  Explicit `"force"`, `"anneal"`, `"tree"`, `"dot"`, and `"stable-layered"`
+  layouts remain available. The low-level `layout(g)` function retains its
+  force default; the shared drawing renderer selects ImPrEd explicitly.
+  ImPrEd currently lays out the complete graph. For a partial layout pass using
+  `layout(..., subgraph: ...)`, select one of the existing algorithms below.
+  Drawing or highlighting a subgraph still uses the complete graph layout.
+
+  === Spring and annealing layout model
+
+  The `"force"` and `"anneal"` algorithms start from a traversal-tree placement, then optimizes the positions of
   graph nodes and edge control points. The initial tree spacing is
 
   $ L = lambda sqrt((W H) / max(n, 1)) $,
@@ -1092,9 +1156,9 @@
   point counts may differ between edges, but stay fixed during each solver run.
 
   Rendering fits a Hobby curve through the resulting points. Empty route lists
-  retain the usual single-point layout and curve construction. This enables an
-  ImPrEd route to seed a short ordinary force pass; the ordinary pass and Hobby
-  fit do not enforce ImPrEd's crossing-preservation constraints. A native
+  retain the usual single-point layout and curve construction. An explicitly
+  requested force pass may refine an ImPrEd result, but does not retain the
+  ImPrEd carrier's crossing certificate. A native
   `ForceLayoutStream` can start from a routed `TypstGraph`; its frames include
   complete source-to-sink `paths`, as well as node and central edge positions.
 

@@ -47,6 +47,28 @@ selectors and run the affected cell with its play button.
 - Switch the node store and inspect the payload checks. Node, edge, and endpoint dataclass
   instances remain attached by identity, including their shared runtime object.
 
+== Default layout and controls
+
+`Graph.to_svg()`, `Graph.render()` and Feynman diagram rendering use the shared
+EC-planarization and ImPrEd pipeline by default. The same implementation runs
+in direct Typst and in CLI drawings. Layout controls remain explicit:
+
+```python
+config = linnet.RenderConfig(
+    layouts=linnet.LayoutOptions(
+        algorithm=linnet.LayoutAlgorithm.Impred,
+        impred_parallel_balance=1.0,
+        impred_pull=0.45,
+        impred_external_max_points=2,
+    )
+)
+svg = graph.to_svg(config=config)
+```
+
+The #link("reference/typst/layout/")[layout guide] describes every ImPrEd control.
+Python uses underscores where the Typst names use hyphens. Explicit layouts
+such as `LayoutAlgorithm.Force` continue to select their respective algorithms.
+
 == The rendering boundary
 
 Returning a `Graph` from a cell invokes its interactive HTML representation. `graph.to_svg()`

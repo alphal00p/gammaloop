@@ -448,10 +448,16 @@
     "config.layout-defaults",
   )
   for pass in passes {
-    g = apply-layout(g, .._layout-pass(
+    let pass = _layout-pass(
       g,
       layout-defaults + _dictionary(pass, "config.layouts entry"),
-    ))
+    )
+    let algorithm = _dictionary(
+      pass.at("solver", default: (:)),
+      "layout solver",
+    ).at("algorithm", default: pass.at("layout-algo", default: "impred"))
+    pass.insert("layout-algo", algorithm)
+    g = apply-layout(g, ..pass)
   }
   g = _apply-label-offsets(g)
   draw(g, .._draw-options(config, g))

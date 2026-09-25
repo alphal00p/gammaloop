@@ -882,8 +882,6 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 [[package]]
 name = "clarabel"
 version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d950c870fad4feed732bc3f7da489d223ba3911eac0522e6512eed7e659cfafe"
 dependencies = [
  "amd",
  "cfg-if",
@@ -896,7 +894,6 @@ dependencies = [
  "serde-big-array",
  "serde_json",
  "thiserror 1.0.69",
- "web-time 0.2.4",
 ]
 
 [[package]]
@@ -2856,6 +2853,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hexf"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6618f4550dcd7d9ddb5126ab18d48dfa31aa952159cb832390bda464d3bc827e"
+dependencies = [
+ "hexf-parse",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "hexf-parse"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
+
+[[package]]
 name = "httpdate"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3275,7 +3288,7 @@ dependencies = [
  "unicode-width 0.2.2",
  "unit-prefix",
  "vt100",
- "web-time 1.1.0",
+ "web-time",
 ]
 
 [[package]]
@@ -3692,6 +3705,7 @@ dependencies = [
  "rkyv",
  "self_cell",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
  "wasm-minimal-protocol",
 ]
@@ -3705,6 +3719,7 @@ dependencies = [
  "bincode-trait-derive",
  "bitvec",
  "cgmath",
+ "clarabel",
  "criterion",
  "dot-parser",
  "duplicate 2.0.1",
@@ -3723,11 +3738,13 @@ dependencies = [
  "rand 0.8.6",
  "rkyv",
  "serde",
+ "serde_json",
  "serde_repr",
  "similar-asserts",
  "symbolica",
  "symbolica-utils",
  "thiserror 2.0.18",
+ "twofloat",
 ]
 
 [[package]]
@@ -7322,6 +7339,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "twofloat"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f25f7bfd28a043cba51ea618ad2d29c5fa991a1237a4c0b592b466fbbb60c5c"
+dependencies = [
+ "hexf",
+ "libm",
+ "num-traits",
+]
+
+[[package]]
 name = "typed-arena"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8442,16 +8470,6 @@ name = "web-sys"
 version = "0.3.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2eadbac71025cd7b0834f20d1fe8472e8495821b4e9801eb0a60bd1f19827602"
-dependencies = [
- "js-sys",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "web-time"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa30049b1c872b72c89866d458eae9f20380ab280ffd1b1e18df2d3e2d98cfe0"
 dependencies = [
  "js-sys",
  "wasm-bindgen",

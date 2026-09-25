@@ -1,6 +1,7 @@
 mod api;
 pub mod geom;
 mod graph_api;
+pub mod impred_projection;
 mod label_placement;
 pub use label_placement::{
     candidates_bytes as label_candidates_bytes, obstacle_boxes_bytes as label_obstacle_boxes_bytes,
@@ -19,28 +20,29 @@ pub use api::{
     parse_dot_graphs_bytes,
 };
 pub use graph_api::{
-    encode_graph_spec_bytes, graph_apply_structural_patches_bytes,
-    graph_archived_compass_subgraph_bytes, graph_archived_subgraph_bytes,
-    graph_compass_subgraph_bytes, graph_cycle_basis_bytes, graph_dot_bytes,
-    graph_edge_data_by_name_bytes, graph_edges_bytes, graph_edges_of_archived_subgraph_bytes,
-    graph_edges_of_bytes, graph_from_spec_bytes, graph_info_bytes, graph_join_by_edge_key_bytes,
-    graph_join_by_hedge_key_bytes, graph_node_data_by_name_bytes, graph_nodes_bytes,
-    graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,
-    graph_set_edge_data_by_name_bytes, graph_set_node_data_by_name_bytes,
+    GRAPH_SPEC_SCHEMA, GRAPH_SPEC_VERSION, TypstDotEdge, TypstDotEndpoint, TypstDotGraphInfo,
+    TypstDotNode, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstGraphSpecEnvelope,
+    TypstNodeSpec, TypstPlacementSpec, TypstPoint, encode_graph_spec_bytes,
+    graph_apply_structural_patches_bytes, graph_archived_compass_subgraph_bytes,
+    graph_archived_subgraph_bytes, graph_compass_subgraph_bytes, graph_cycle_basis_bytes,
+    graph_dot_bytes, graph_edge_data_by_name_bytes, graph_edges_bytes,
+    graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
+    graph_impred_diagram_bytes, graph_impred_layout_bytes, graph_info_bytes,
+    graph_join_by_edge_key_bytes, graph_join_by_hedge_key_bytes, graph_layout_snapshot_bytes,
+    graph_node_data_by_name_bytes, graph_nodes_bytes, graph_nodes_of_archived_subgraph_bytes,
+    graph_nodes_of_bytes, graph_set_edge_data_by_name_bytes, graph_set_node_data_by_name_bytes,
     graph_spanning_forests_bytes, graph_subgraph_bytes, graph_with_data_bytes,
-    subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes, TypstDotEdge,
-    TypstDotEndpoint, TypstDotGraphInfo, TypstDotNode, TypstEdgeSpec, TypstEndpointSpec,
-    TypstGraphSpec, TypstGraphSpecEnvelope, TypstNodeSpec, TypstPlacementSpec, TypstPoint,
-    GRAPH_SPEC_SCHEMA, GRAPH_SPEC_VERSION,
+    subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes,
 };
 pub use pin::PinConstraint;
 
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Rad, Vector2, Zero};
 use dot_parser::ast::CompassPt;
-use figment::{providers::Serialized, Figment, Profile};
+use figment::{Figment, Profile, providers::Serialized};
 use linnet::half_edge::swap::Swap;
 use linnet::{
     half_edge::{
+        EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
         involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, HedgeVec, Involution},
         layout::{
             force::{ForceLayoutConfig, ForceLayoutSession},
@@ -48,7 +50,7 @@ use linnet::{
                 LayeredConfig, LayeredEdgeRoute, LayeredGeometry, LayeredOutput, LayeredProfile,
                 LayeredRankAlign, LayeredRouteExit,
             },
-            simulatedanneale::{anneal, GeoSchedule, SAConfig},
+            simulatedanneale::{GeoSchedule, SAConfig, anneal},
             spring::{
                 Constraint, HasPointConstraint, LayoutPointIndex, LayoutState, ParamTuning,
                 PinnedLayoutNeighbor, PointConstraint, ShiftDirection, SpringChargeEnergy,
@@ -56,7 +58,6 @@ use linnet::{
         },
         nodestore::{DefaultNodeStore, NodeStorageOps},
         subgraph::{SuBitGraph, SubSetLike},
-        EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData, HedgeParseError},
 };
@@ -100,7 +101,7 @@ use getrandom::register_custom_getrandom;
 #[cfg(feature = "custom")]
 use wasm_random::custom_getrandom;
 
-use crate::geom::{tangent_angle_toward_c_side, GeomError};
+use crate::geom::{GeomError, tangent_angle_toward_c_side};
 
 #[cfg(feature = "custom")]
 register_custom_getrandom!(custom_getrandom);
@@ -1300,6 +1301,7 @@ enum LayoutAlgo {
     Anneal,
     Dot,
     Force,
+    Impred,
     #[serde(alias = "railroad")]
     StableLayered,
     Tree,
@@ -2352,6 +2354,12 @@ impl TypstGraph {
     }
 
     pub fn layout_with_subgraph(&mut self, subgraph: Option<&SuBitGraph>) -> Result<(), String> {
+        if matches!(self.layout_config.layout_algo, LayoutAlgo::Impred) {
+            return Err(
+                "ImPrEd requires the shared Typst pipeline to prepare a constrained EC seed"
+                    .to_owned(),
+            );
+        }
         self.validate_layout()?;
         if subgraph.is_some_and(SubSetLike::is_empty) {
             return Ok(());
@@ -2403,6 +2411,7 @@ impl TypstGraph {
                     LayoutAlgo::Anneal | LayoutAlgo::Force => {
                         self.partial_optimized_positions(tree_cfg, subgraph, &energy)
                     }
+                    LayoutAlgo::Impred => unreachable!("ImPrEd seed dispatch checked above"),
                 };
             self.apply_layout_constraints(&mut vertex_points, &mut edge_points);
             self.update_positions(
@@ -2898,7 +2907,9 @@ impl TypstGraph {
                 let state = session.into_state();
                 (state.vertex_points, state.edge_points, state.route_points)
             }
-            LayoutAlgo::Dot | LayoutAlgo::StableLayered | LayoutAlgo::Tree => unreachable!(),
+            LayoutAlgo::Dot | LayoutAlgo::StableLayered | LayoutAlgo::Tree | LayoutAlgo::Impred => {
+                unreachable!()
+            }
         }
     }
 
@@ -3330,7 +3341,7 @@ impl TypstGraph {
                         .partial_cmp(&right.1.x)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
-                .then_with(|| left.0 .0.cmp(&right.0 .0))
+                .then_with(|| left.0.0.cmp(&right.0.0))
         });
 
         let mut placed = Vec::<LayoutRect>::new();
@@ -3600,7 +3611,7 @@ impl TypstGraph {
         let layout_subgraph = match algo {
             LayoutAlgo::Tree => self.spanning_forest_of(&full),
             LayoutAlgo::Dot | LayoutAlgo::StableLayered => full.clone(),
-            LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+            LayoutAlgo::Anneal | LayoutAlgo::Force | LayoutAlgo::Impred => unreachable!(),
         };
         self.layout_positions_for_subgraph(cfg, algo, &layout_subgraph, &full, true)
     }
@@ -3614,7 +3625,7 @@ impl TypstGraph {
         let layout_subgraph = match algo {
             LayoutAlgo::Tree => self.spanning_forest_of(subgraph),
             LayoutAlgo::Dot | LayoutAlgo::StableLayered => subgraph.clone(),
-            LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+            LayoutAlgo::Anneal | LayoutAlgo::Force | LayoutAlgo::Impred => unreachable!(),
         };
         self.layout_positions_for_subgraph(cfg, algo, &layout_subgraph, subgraph, false)
     }
@@ -3640,7 +3651,7 @@ impl TypstGraph {
             LayoutAlgo::Dot | LayoutAlgo::StableLayered => {
                 self.dot_edge_layout_positions_from_current_nodes(cfg, selected_edges, false)
             }
-            LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+            LayoutAlgo::Anneal | LayoutAlgo::Force | LayoutAlgo::Impred => unreachable!(),
         };
         self.apply_initial_grouped_constraints(&mut pos_v, &mut pos_e);
         (pos_v, pos_e)
@@ -3876,7 +3887,7 @@ impl TypstGraph {
                 LayeredProfile::Stable,
                 true,
             ),
-            LayoutAlgo::Anneal | LayoutAlgo::Force => unreachable!(),
+            LayoutAlgo::Anneal | LayoutAlgo::Force | LayoutAlgo::Impred => unreachable!(),
         }
     }
 

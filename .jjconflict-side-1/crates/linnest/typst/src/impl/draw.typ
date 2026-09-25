@@ -1241,6 +1241,7 @@
     panic("edge-halves currently requires a paired edge with source and sink")
   }
 
+  let carrier = _data-fields(edge).at("layout-carrier", default: none)
   let source-route = _route-points(edge.source)
   let sink-route = _route-points(edge.sink)
   let points = (
@@ -1250,8 +1251,10 @@
     ..sink-route.rev(),
     _point(nodes.at(edge.sink.node).pos),
   )
-  let routed = source-route.len() > 0 or sink-route.len() > 0
-  let split = if routed {
+  let routed = carrier != none or source-route.len() > 0 or sink-route.len() > 0
+  let split = if carrier != none {
+    _routed-split-through(carrier, omega: omega, accuracy: accuracy)
+  } else if routed {
     _routed-split-through(points, omega: omega, accuracy: accuracy)
   } else {
     curve-api.split-through(points,
@@ -1261,9 +1264,16 @@
   }
   let split-outset = calc.max(0, options.at("split-gap", default: 0)) / 2
   let boundary = source-route.len() + 1
-  let source = if source-route.len() == 0 { split.parts.at(0) }
+  let half-length = if carrier == none { 0 } else {
+    curve-api.length(split.curve, accuracy: accuracy) / 2
+  }
+  let source = if carrier != none {
+    curve-api.trim(split.curve, end-outset: half-length, accuracy: accuracy)
+  } else if source-route.len() == 0 { split.parts.at(0) }
     else { curve-api.path(..split.parts.slice(0, boundary)) }
-  let sink = if sink-route.len() == 0 { split.parts.at(boundary) }
+  let sink = if carrier != none {
+    curve-api.trim(split.curve, start-outset: half-length, accuracy: accuracy)
+  } else if sink-route.len() == 0 { split.parts.at(boundary) }
     else { curve-api.path(..split.parts.slice(boundary)) }
   if routed {
     source = _trim-routed-path(source, start-outset: source-outset, accuracy: accuracy)
@@ -1367,7 +1377,11 @@
     _style-value(source-style, "route-points") == "ignore"
       and _style-value(sink-style, "route-points") == "ignore"
   ) {
-    edge + (source: edge.source + (route-points: ()), sink: edge.sink + (route-points: ()))
+    edge + (
+      data: _data-fields(edge) + (layout-carrier: none),
+      source: edge.source + (route-points: ()),
+      sink: edge.sink + (route-points: ()),
+    )
   } else { edge }
   let base = edge-halves(routed-edge, nodes, (
     omega: omega,
@@ -2587,13 +2601,18 @@
 
 #let _dangling-path(
   start, end, bend, style, dangling-at-start: false,
-  route-points: (), node-point: none, node-outset: 0, omega: 1.0,
+  route-points: (), node-point: none, node-outset: 0, omega: 1.0, carrier: none,
 ) = {
-  if route-points.len() > 0 and _style-value(style, "route-points") != "ignore" {
+  if (carrier != none or route-points.len() > 0) and _style-value(style, "route-points") != "ignore" {
     let start = if not dangling-at-start and node-point != none { _point(node-point) } else { _point(start) }
     let end = if dangling-at-start and node-point != none { _point(node-point) } else { _point(end) }
     let route = if dangling-at-start { route-points.rev() } else { route-points }
-    let path = _routed-split-through((start, ..route.map(_point), end), omega: omega).curve
+    // Explicit box anchors override only the carrier endpoint; interior knots
+    // still follow the accepted route. Automatic anchors resolve to node centers.
+    let points = if carrier == none { (start, ..route.map(_point), end) } else {
+      (start, ..carrier.slice(1, carrier.len() - 1), end)
+    }
+    let path = _routed-split-through(points, omega: omega).curve
     let segments = curve-api.segments(path)
     if segments.len() > 0 and _style-value(style, "dangling-tangent") != auto {
       let index = if dangling-at-start { 0 } else { segments.len() - 1 }
@@ -3090,6 +3109,7 @@
       edge.at("bend", default: none),
       source-geometry-style,
       route-points: _route-points(source-half-edge),
+      carrier: _data-fields(edge).at("layout-carrier", default: none),
       node-point: if source-anchor == auto { _node-pos(nodes.at(source-half-edge.node)) } else { none },
       node-outset: if source-anchor == auto { node-outsets.at(source-half-edge.node) } else { 0 },
       omega: edge-omega,
@@ -3116,6 +3136,7 @@
       sink-geometry-style,
       dangling-at-start: true,
       route-points: _route-points(sink-half-edge),
+      carrier: _data-fields(edge).at("layout-carrier", default: none),
       node-point: if sink-anchor == auto { _node-pos(nodes.at(sink-half-edge.node)) } else { none },
       node-outset: if sink-anchor == auto { node-outsets.at(sink-half-edge.node) } else { 0 },
       omega: edge-omega,
@@ -3892,6 +3913,7 @@
                 bend,
                 source-geometry-style,
                 route-points: _route-points(source-half-edge),
+                carrier: _data-fields(edge).at("layout-carrier", default: none),
                 node-point: if source-anchor == auto { _node-pos(nodes.at(source-half-edge.node)) } else { none },
                 node-outset: if source-anchor == auto { node-outsets.at(source-half-edge.node) } else { 0 },
                 omega: edge-omega,
@@ -4003,6 +4025,7 @@
                 sink-geometry-style,
                 dangling-at-start: true,
                 route-points: _route-points(sink-half-edge),
+                carrier: _data-fields(edge).at("layout-carrier", default: none),
                 node-point: if sink-anchor == auto { _node-pos(nodes.at(sink-half-edge.node)) } else { none },
                 node-outset: if sink-anchor == auto { node-outsets.at(sink-half-edge.node) } else { 0 },
                 omega: edge-omega,

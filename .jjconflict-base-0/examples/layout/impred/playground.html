@@ -63,7 +63,7 @@
     $('retry').hidden = state !== 'error'; $('pair').setAttribute('aria-busy', String(state === 'running'));
   }
   function save() {
-    try { localStorage.setItem(storageKey, JSON.stringify({diagram, stage, debug, parameters, forceDefaultsVersion: 1, layoutDefaultsVersion: 2})); } catch {}
+    try { localStorage.setItem(storageKey, JSON.stringify({diagram, stage, debug, parameters, forceDefaultsVersion: 1, layoutDefaultsVersion: 3})); } catch {}
     const url = new URL(location.href); url.searchParams.set('diagram', diagram); url.searchParams.set('stage', stage);
     for (const key of Object.keys(config.defaults)) {
       if (parameters[key] === config.defaults[key]) url.searchParams.delete(key);
@@ -240,7 +240,8 @@
       const query = new URLSearchParams(location.search);
       const previousDefaults = {...config.defaults, 'impred.pull_attachment':16, 'impred.split_length_ratio':3, 'impred.contract_chord_ratio':2};
       delete previousDefaults['impred.parallel_attraction_balance'];
-      const migratePreviousPreset = saved?.layoutDefaultsVersion !== 2 && Object.entries(previousDefaults).every(([key,value]) => saved?.parameters?.[key] === value);
+      const previousParallelDefaults = {...config.defaults, 'impred.parallel_attraction_balance':0.5};
+      const migratePreviousPreset = (saved?.layoutDefaultsVersion !== 2 && Object.entries(previousDefaults).every(([key,value]) => saved?.parameters?.[key] === value)) || (saved?.layoutDefaultsVersion !== 3 && Object.entries(previousParallelDefaults).every(([key,value]) => saved?.parameters?.[key] === value));
       const wantedDiagram = query.get('diagram') || saved?.diagram || diagram;
       diagram = config.cases.some(c => c.id === wantedDiagram) ? wantedDiagram : config.cases[0].id;
       const wantedStage = query.get('stage') || saved?.stage || stage; stage = order.includes(wantedStage) ? wantedStage : 'impred';

@@ -75,7 +75,7 @@
     mark = mark.trim("\"")
     if mark == "none" { mark = none } else if mark == "auto" { mark = auto }
   }
-  let base = (end: "straight", stroke: arrow-stroke, scale: 1.1)
+  let base = (end: "straight", stroke: arrow-stroke, scale: 0.8)
   if mark == auto { base } else if mark == none { none } else if (
     type(mark) == dictionary
   ) {

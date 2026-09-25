@@ -8,6 +8,21 @@ import linnet as ln
 
 
 class RenderSourcesTests(unittest.TestCase):
+    def test_default_graph_render_uses_native_impred(self):
+        left, right = ln.node("left"), ln.node("right")
+        graph = ln.build(
+            left,
+            right,
+            ln.edge(ln.source(left), "first", ln.sink(right)),
+            ln.edge(ln.source(left), "second", ln.sink(right)),
+        )
+        explicit = ln.RenderConfig(
+            layouts=ln.LayoutOptions(algorithm=ln.LayoutAlgorithm.Impred)
+        )
+        rendered = graph.to_svg()
+        self.assertIn("<svg", rendered)
+        self.assertEqual(rendered, graph.to_svg(config=explicit))
+
     def test_configuration_and_imported_modules_are_snapshotted(self):
         with TemporaryDirectory() as directory:
             module_path = Path(directory) / "labels.typ"

@@ -33,6 +33,9 @@ struct EmbeddedTemplates;
 #[include = "src/**/*.typ"]
 #[include = "typst.toml"]
 #[include = "linnest.wasm"]
+#[include = "ec-layout.wasm"]
+#[include = "LICENSE.ec-layout"]
+#[include = "LICENSE.clarabel"]
 struct EmbeddedLinnestPackage;
 
 #[derive(RustEmbed)]
@@ -910,6 +913,9 @@ mod tests {
     fn embedded_packages_include_nested_sources() {
         assert!(EmbeddedLinnestPackage::get("src/impl/draw.typ").is_some());
         assert!(EmbeddedLinnestPackage::get("src/impl/subgraph.typ").is_some());
+        for module in ["linnest.wasm", "ec-layout.wasm"] {
+            assert!(!EmbeddedLinnestPackage::get(module).unwrap().data.is_empty());
+        }
         assert!(EmbeddedKurvstPackage::get("src/impl.typ").is_some());
     }
 
@@ -1287,11 +1293,12 @@ mod tests {
 
         let gamma_assertions =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/gamma-style-behavior.typ");
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         renderer
             .compile_template(
                 &gamma_assertions,
                 base.join("gamma-style-assertions.pdf"),
-                &[],
+                &[&repository],
             )
             .unwrap();
 

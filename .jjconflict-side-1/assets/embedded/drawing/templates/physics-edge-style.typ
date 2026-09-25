@@ -180,7 +180,7 @@
   length: 1.4,
   ratio: 0.5,
   stroke: _momentum-arrow-stroke,
-  mark: (end: "straight", scale: 1.1),
+  mark: (end: "straight", scale: 0.8),
 )
 
 /// Return an edge's particle name, stripping the quotes often present in DOT
@@ -498,7 +498,7 @@
   half-edge-index-prefix: [h],
   particle-prefix: none,
   label-separator: [, ],
-  label-size: 10pt,
+  label-size: 7.5pt,
   label-fill: red,
 ) = _impl.edge-label(edge, (
   map: map,
@@ -648,7 +648,7 @@
   half-edge-index-prefix: [h],
   particle-prefix: none,
   label-separator: [, ],
-  label-size: 10pt,
+  label-size: 7.5pt,
   label-fill: red,
 ) = (
   node-style: node-style,

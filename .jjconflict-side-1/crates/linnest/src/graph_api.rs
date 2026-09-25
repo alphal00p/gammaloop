@@ -4,6 +4,7 @@ use cgmath::{Point2, Rad, Vector2};
 use dot_parser::ast::CompassPt;
 use linnet::{
     half_edge::{
+        NodeIndex,
         builder::{HedgeData, HedgeGraphBuilder},
         involution::{
             ArchivedOrientation, EdgeData, EdgeIndex, Flow, Hedge, HedgePair, HedgeVec, Involution,
@@ -13,7 +14,6 @@ use linnet::{
         nodestore::{DefaultNodeStore, NodeStorageOps},
         subgraph::{Inclusion, SuBitGraph, SubSetLike},
         swap::Swap,
-        NodeIndex,
     },
     parser::{
         ArchivedDotEdgeView, ArchivedDotEndpointView, ArchivedDotGraphView, ArchivedDotVertexView,
@@ -22,7 +22,7 @@ use linnet::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{default_figment, PinConstraint, TypstEdge, TypstGraph, TypstHedge, TypstNode};
+use crate::{PinConstraint, TypstEdge, TypstGraph, TypstHedge, TypstNode, default_figment};
 
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
@@ -480,6 +480,163 @@ fn aligned_copy(bytes: &[u8]) -> rkyv::AlignedVec {
 
 fn encode_typst_graph(graph: &TypstGraph) -> Result<Vec<u8>, String> {
     to_rkyv_bytes::<_, 4096>(graph)
+}
+
+/// Export the measured graph through serde rather than the build-specific archive.
+/// The host computes a layout without taking ownership of Typst content or styles.
+pub fn graph_layout_snapshot_bytes(arg: &[u8], options: &[u8]) -> Result<Vec<u8>, String> {
+    use figment::{Figment, Profile, providers::Serialized};
+
+    let mut graph = decode_typst_graph(arg)?;
+    let options: ciborium::Value = decode_cbor(options, "layout options")?;
+    graph.layout_config = Figment::from(Serialized::from(options, Profile::Default))
+        .extract()
+        .map_err(|error| format!("Invalid layout snapshot options: {error}"))?;
+    graph.validate_layout()?;
+    encode_cbor(&graph)
+}
+
+impl TypstGraph {
+    /// Decode a measured snapshot across WASM/native word sizes. Bitvec's serde
+    /// representation embeds its storage word width, so rebuild each node crown
+    /// with the destination width before deserializing the native graph.
+    pub fn from_layout_snapshot(snapshot: &serde_json::Value) -> Result<Self, String> {
+        let mut snapshot = snapshot.clone();
+        let nodes = snapshot
+            .pointer_mut("/graph/node_store/nodes")
+            .and_then(serde_json::Value::as_array_mut)
+            .ok_or("Layout snapshot has no node crowns")?;
+        for node in nodes {
+            let set = node
+                .get_mut("set")
+                .ok_or("Layout snapshot node has no crown")?;
+            if set.get("order").and_then(serde_json::Value::as_str) != Some("bitvec::order::Lsb0") {
+                return Err("Layout snapshot requires Lsb0 node crowns".to_owned());
+            }
+            let integer = |value: Option<&serde_json::Value>| {
+                value
+                    .and_then(serde_json::Value::as_u64)
+                    .ok_or("Invalid layout crown integer")
+            };
+            let width = integer(set.pointer("/head/width"))? as usize;
+            let head = integer(set.pointer("/head/index"))? as usize;
+            let bits = integer(set.get("bits"))? as usize;
+            if !matches!(width, 32 | 64) || head >= width {
+                return Err("Invalid layout crown storage width or head".to_owned());
+            }
+            let words = set
+                .get("data")
+                .and_then(serde_json::Value::as_array)
+                .ok_or("Layout crown has no storage words")?;
+            let end = head
+                .checked_add(bits)
+                .ok_or("Layout crown length overflow")?;
+            if words.len() != end.div_ceil(width) {
+                return Err("Layout crown storage does not match its bit count".to_owned());
+            }
+            let words = words
+                .iter()
+                .map(|word| integer(Some(word)))
+                .collect::<Result<Vec<_>, _>>()?;
+            if width == 32 && words.iter().any(|word| *word > u32::MAX as u64) {
+                return Err("Layout crown word exceeds its storage width".to_owned());
+            }
+            let native_width = usize::BITS as usize;
+            let mut packed = vec![0u64; bits.div_ceil(native_width)];
+            for bit in 0..bits {
+                let source = head + bit;
+                if (words[source / width] >> (source % width)) & 1 != 0 {
+                    packed[bit / native_width] |= 1 << (bit % native_width);
+                }
+            }
+            set["head"] = serde_json::json!({"width": native_width, "index": 0});
+            set["data"] = serde_json::json!(packed);
+        }
+        serde_json::from_value(snapshot)
+            .map_err(|error| format!("Invalid layout snapshot: {error}"))
+    }
+}
+
+/// Return the physical incidence passed to the EC seed plugin.
+pub fn graph_impred_diagram_bytes(snapshot: &[u8]) -> Result<Vec<u8>, String> {
+    let snapshot: serde_json::Value = decode_cbor(snapshot, "ImPrEd graph snapshot")?;
+    let graph = TypstGraph::from_layout_snapshot(&snapshot)?;
+    let diagram = graph.impred_diagram().map_err(|error| error.to_string())?;
+    serde_json::to_vec(&diagram).map_err(|error| error.to_string())
+}
+
+/// Relax a certified EC carrier while retaining native graph ownership.
+/// The complete physical routes accompany the archived graph so Hobby never
+/// interpolates an extra bookkeeping point at the half-edge storage boundary.
+pub fn graph_impred_layout_bytes(
+    snapshot: &[u8],
+    seed: &[u8],
+    options: &[u8],
+) -> Result<Vec<u8>, String> {
+    use crate::impred_projection::ProjectionSession;
+    use linnet::half_edge::layout::impred::ImpredConfig;
+
+    let snapshot: serde_json::Value = decode_cbor(snapshot, "ImPrEd graph snapshot")?;
+    let mut graph = TypstGraph::from_layout_snapshot(&snapshot)?;
+    let options: serde_json::Value = decode_cbor(options, "ImPrEd layout options")?;
+    let mut settings =
+        serde_json::to_value(ImpredConfig::default()).map_err(|error| error.to_string())?;
+    for (option, field) in [
+        ("steps", "steps"),
+        ("spacing", "target"),
+        ("repulsion", "repulsion"),
+        ("attraction", "attraction"),
+        ("parallel-balance", "parallel_attraction_balance"),
+        ("pull", "pull"),
+        ("pull-balance", "pull_balance"),
+        ("external-max-points", "external_max_points"),
+        ("split-length-ratio", "split_length_ratio"),
+        ("contract-chord-ratio", "contract_chord_ratio"),
+        ("edge-clearance", "edge_clearance"),
+        ("node-edge-strength", "node_edge_strength"),
+    ] {
+        if let Some(value) = options.get(format!("impred-{option}")) {
+            settings[field] = value.clone();
+        }
+    }
+    let config: ImpredConfig = serde_json::from_value(settings)
+        .map_err(|error| format!("Invalid ImPrEd options: {error}"))?;
+    let attachment = match options.get("impred-pull-attachment") {
+        Some(value) => value
+            .as_f64()
+            .ok_or("ImPrEd attachment pull must be numeric")?,
+        None => 4.0,
+    };
+    if !attachment.is_finite() || attachment < 0.0 {
+        return Err("ImPrEd attachment pull must be finite and nonnegative".to_owned());
+    }
+    graph.layout_config.spring.external_pull_attachment = attachment;
+    let seed =
+        serde_json::from_slice(seed).map_err(|error| format!("Invalid EC layout seed: {error}"))?;
+    let (session, _) =
+        ProjectionSession::initialize(graph, seed).map_err(|error| error.to_string())?;
+    let mut layout = session.impred_layout().map_err(|error| error.to_string())?;
+    layout.solve(config)?;
+    let graph = session
+        .apply_impred_layout(&layout)
+        .map_err(|error| error.to_string())?;
+    let carriers: Vec<Vec<_>> = layout
+        .routes
+        .iter()
+        .map(|route| route.iter().map(|&point| layout.positions[point]).collect())
+        .collect();
+    #[derive(Serialize)]
+    struct ResultGeometry {
+        graph: Vec<u8>,
+        carriers: Vec<Vec<[f64; 2]>>,
+    }
+    let result = ResultGeometry {
+        graph: encode_typst_graph(&graph)?,
+        carriers,
+    };
+    let mut bytes = Vec::new();
+    ciborium::into_writer(&result, &mut bytes).map_err(|error| error.to_string())?;
+    Ok(bytes)
 }
 
 fn typst_graph_from_dot(dot: DotGraph) -> TypstGraph {
@@ -2799,6 +2956,71 @@ mod tests {
     use super::*;
     use ciborium::Value;
 
+    #[test]
+    fn layout_snapshot_preserves_constraints_and_measured_fields() {
+        let graph =
+            TypstGraph::parse("digraph { a [pos=\"1,2!\",\"layout-width\"=3]; a -> b [id=0]; }")
+                .unwrap();
+        let bytes = encode_typst_graph(&graph).unwrap();
+        let options =
+            BTreeMap::from([("layout-algo", "impred"), ("external-pull-attachment", "4")]);
+        let snapshot =
+            graph_layout_snapshot_bytes(&bytes, &encode_cbor(&options).unwrap()).unwrap();
+        let mut restored: TypstGraph = decode_cbor(&snapshot, "snapshot").unwrap();
+        assert!(matches!(
+            restored.layout_config.layout_algo,
+            crate::LayoutAlgo::Impred
+        ));
+        assert_eq!(restored.layout_config.spring.external_pull_attachment, 4.0);
+        assert_eq!(
+            encode_cbor(&restored.graph).unwrap(),
+            encode_cbor(&graph.graph).unwrap()
+        );
+        assert!(
+            restored
+                .layout_with_subgraph(None)
+                .unwrap_err()
+                .contains("shared Typst pipeline to prepare a constrained EC seed")
+        );
+    }
+
+    #[test]
+    fn layout_snapshot_reconstructs_wasm32_node_crowns() {
+        let source = format!("digraph {{ {} }}", "a -> b;".repeat(36));
+        let graph = TypstGraph::parse(&source).unwrap();
+        let mut snapshot = serde_json::to_value(&graph).unwrap();
+        for node in snapshot
+            .pointer_mut("/graph/node_store/nodes")
+            .unwrap()
+            .as_array_mut()
+            .unwrap()
+        {
+            let set = &mut node["set"];
+            let bits = set["bits"].as_u64().unwrap() as usize;
+            let old_width = set["head"]["width"].as_u64().unwrap() as usize;
+            let old = set["data"].as_array().unwrap();
+            let mut words = vec![0u32; bits.div_ceil(32)];
+            for bit in 0..bits {
+                if (old[bit / old_width].as_u64().unwrap() >> (bit % old_width)) & 1 != 0 {
+                    words[bit / 32] |= 1 << (bit % 32);
+                }
+            }
+            set["head"]["width"] = serde_json::json!(32);
+            set["data"] = serde_json::json!(words);
+        }
+        let restored = TypstGraph::from_layout_snapshot(&snapshot).unwrap();
+        assert_eq!(
+            encode_cbor(&restored).unwrap(),
+            encode_cbor(&graph).unwrap()
+        );
+        snapshot["graph"]["node_store"]["nodes"][0]["set"]["head"]["width"] = serde_json::json!(16);
+        assert!(
+            TypstGraph::from_layout_snapshot(&snapshot)
+                .unwrap_err()
+                .contains("storage width")
+        );
+    }
+
     fn cut_fixture(orientation: Orientation) -> TypstGraph {
         let mut builder = DotBuilder::new();
         for (index, name) in ["b", "c", "isolated"].into_iter().enumerate() {
@@ -3421,7 +3643,24 @@ mod tests {
             assert!(changed, "No serialized {field} found");
             let graph: TypstGraph =
                 decode_cbor(&encode_cbor(&value).unwrap(), "corrupt graph").unwrap();
-            assert!(cut_result(
+            assert!(
+                cut_result(
+                    &graph,
+                    &[TypstCutEntry {
+                        left: 0,
+                        right: 1,
+                        winding: 2
+                    }]
+                )
+                .is_err()
+            );
+        }
+        let mut graph = cut_fixture(Orientation::Default);
+        graph.graph.node_store = HedgeGraphBuilder::<TypstEdge, TypstNode, TypstHedge>::new()
+            .build::<DefaultNodeStore<TypstNode>>()
+            .node_store;
+        assert!(
+            cut_result(
                 &graph,
                 &[TypstCutEntry {
                     left: 0,
@@ -3429,21 +3668,8 @@ mod tests {
                     winding: 2
                 }]
             )
-            .is_err());
-        }
-        let mut graph = cut_fixture(Orientation::Default);
-        graph.graph.node_store = HedgeGraphBuilder::<TypstEdge, TypstNode, TypstHedge>::new()
-            .build::<DefaultNodeStore<TypstNode>>()
-            .node_store;
-        assert!(cut_result(
-            &graph,
-            &[TypstCutEntry {
-                left: 0,
-                right: 1,
-                winding: 2
-            }]
-        )
-        .is_err());
+            .is_err()
+        );
     }
 
     #[test]
@@ -3513,11 +3739,13 @@ mod tests {
             .unwrap();
             let output = decode_typst_graph(&result.graph).unwrap();
             for edge in [0, 3, 4] {
-                assert!(output[EdgeIndex(edge)]
-                    .cut_name()
-                    .unwrap()
-                    .unwrap()
-                    .starts_with("k."));
+                assert!(
+                    output[EdgeIndex(edge)]
+                        .cut_name()
+                        .unwrap()
+                        .unwrap()
+                        .starts_with("k.")
+                );
                 if !payload_only {
                     assert_eq!(output[EdgeIndex(edge)].data, graph[EdgeIndex(0)].data);
                 }
@@ -3833,10 +4061,11 @@ mod tests {
                 "placement",
             )
             .unwrap();
-            assert!(spec
-                .resolve(&[], "test")
-                .unwrap_err()
-                .contains("finite number"));
+            assert!(
+                spec.resolve(&[], "test")
+                    .unwrap_err()
+                    .contains("finite number")
+            );
         }
         for z in [
             Value::Integer((-3).into()),
@@ -3869,11 +4098,13 @@ mod tests {
             ("ref-depth", Value::Integer(0.into())),
             ("z-mode", Value::Text("group".into())),
         ] {
-            assert!(decode_cbor::<TypstPlacementSpec>(
-                &encode_cbor(&BTreeMap::from([(key, value)])).unwrap(),
-                "placement",
-            )
-            .is_err());
+            assert!(
+                decode_cbor::<TypstPlacementSpec>(
+                    &encode_cbor(&BTreeMap::from([(key, value)])).unwrap(),
+                    "placement",
+                )
+                .is_err()
+            );
         }
     }
 

@@ -40,9 +40,21 @@
   native-data: native-data,
 )
 
+// Carrier knots cache geometry owned by the native graph. They remain useful
+// across styling, but must not outlive position/route or topology changes.
+#let _without-layout-carriers(native-data) = {
+  native-data.edges = native-data.edges.map(data => {
+    if type(data) == dictionary and data.keys().contains("layout-carrier") {
+      let _ = data.remove("layout-carrier")
+    }
+    data
+  })
+  native-data
+}
+
 #let with-bytes(graph, graph-bytes) = _graph-object(
   graph-bytes,
-  _native-data(graph),
+  _without-layout-carriers(_native-data(graph)),
 )
 
 #let _array-at(values, index) = if index == none {
@@ -1372,6 +1384,17 @@
     }
   }
 
+  let geometry-changed = (
+    (structural-patches.nodes + structural-patches.edges).any(patch => (
+      patch.keys().any(key => key in ("pos", "shift"))
+    )) or structural-patches.hedges.any(patch => (
+      patch.keys().contains("route-points")
+    ))
+  )
+  if geometry-changed {
+    native-data = _without-layout-carriers(native-data)
+  }
+
   if structural-changed {
     graph_ = _graph-object(
       _plugin.graph_apply_structural_patches(
@@ -1945,7 +1968,7 @@
   }))
   _graph-object(
     result.graph,
-    _join-native-data(result, _native-data(left), _native-data(right)),
+    _without-layout-carriers(_join-native-data(result, _native-data(left), _native-data(right))),
   )
 }
 
@@ -2075,7 +2098,7 @@
     )
     native.boundaries.push(b + (node: node, edge: edge.edge))
   }
-  let output = _graph-object(result.graph, native)
+  let output = _graph-object(result.graph, _without-layout-carriers(native))
   if boundary == none { output } else {
     let created = result.boundaries.map(b => (b.node, b.edge))
     let patch = record => if (
