@@ -249,6 +249,9 @@ impl TensorExpression {
         py: Python<'_>,
         atom: Atom,
     ) -> PyResult<Py<Self>> {
+        if atom == self_.as_super().expr {
+            return Py::new(py, (Self::clone(self_), PythonExpression { expr: atom }));
+        }
         let value = Self::structured(self_)
             .with_rewritten_expression(atom)
             .map_err(Self::inference_error)?;
@@ -263,6 +266,9 @@ impl TensorExpression {
         py: Python<'_>,
         atom: Atom,
     ) -> PyResult<Py<Self>> {
+        if atom == self_.as_super().expr {
+            return Py::new(py, (Self::clone(self_), PythonExpression { expr: atom }));
+        }
         let value = Self::structured(self_)
             .with_algebra_result(atom)
             .map_err(Self::inference_error)?;
@@ -2764,19 +2770,14 @@ impl TensorExpression {
                 "a non-scalar tensor cannot be used as a denominator",
             ));
         }
-        let lhs = match TensorOperand::extract(lhs)? {
-            TensorOperand::Scalar(lhs) => lhs,
-            TensorOperand::Structured(lhs) if lhs.is_scalar() => lhs.expression,
-            TensorOperand::Structured(_) => {
-                return Err(PyTypeError::new_err(
-                    "tensor division requires a scalar numerator",
-                ));
-            }
+        let (lhs, structure) = match TensorOperand::extract(lhs)? {
+            TensorOperand::Scalar(lhs) => (lhs, value.structure),
+            TensorOperand::Structured(lhs) => (lhs.expression, lhs.structure),
         };
         Self::from_known_parts(
             py,
             lhs.as_ref() / value.expression.as_ref(),
-            value.structure,
+            structure,
             None,
             Vec::new(),
         )

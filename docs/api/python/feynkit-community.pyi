@@ -4725,27 +4725,6 @@ class Model:
         name : str
             Coupling name.
         """
-    def expand_couplings(self, expression: Expression) -> Expression:
-        r"""
-        Replace named UFO vertex coefficients by their analytic expressions.
-
-        Generated diagrams retain coefficient symbols such as ``UFO::GC_11``
-        so numerical calculations can use the model's precomputed coupling
-        values. Call this method when inspecting or manipulating a numerator in
-        terms of Lagrangian parameters such as ``UFO::G`` or ``UFO::ee``. The
-        input expression and the stored diagram are unchanged.
-
-        Examples
-        --------
-        >>> stored = diagram.numerator_expression()
-        >>> analytic = model.expand_couplings(stored)
-        >>> analytic  # native Symbolica expression in model parameters
-
-        Parameters
-        ----------
-        expression : Expression
-            Symbolica expression containing named couplings from this model.
-        """
     def vertex_rule(self, name: builtins.str) -> VertexRule:
         r"""
         Look up a vertex rule by name.
@@ -4904,6 +4883,40 @@ class Model:
             The IPython pretty-printer object.
         cycle : bool
             Whether this object is part of a recursive formatting cycle.
+        """
+    @typing.overload
+    def expand_couplings(self, expression: TensorExpression) -> TensorExpression:
+        r"""
+        Expand UFO coefficients while preserving the ordered tensor interface.
+
+        Tensor zeros retain their original ports. The input is unchanged.
+
+        Examples
+        --------
+        >>> numerator = diagram.numerator_expression()
+        >>> analytic = model.expand_couplings(numerator)
+        >>> assert analytic.structure.slots == numerator.structure.slots
+
+        Parameters
+        ----------
+        expression : TensorExpression
+            Tensor expression containing named couplings from this model.
+        """
+    @typing.overload
+    def expand_couplings(self, expression: Expression) -> Expression:
+        r"""
+        Replace named UFO coefficients by their analytic model expressions.
+
+        The input and the stored model are unchanged.
+
+        Examples
+        --------
+        >>> analytic = model.expand_couplings(S("UFO::GC_11"))
+
+        Parameters
+        ----------
+        expression : Expression
+            Symbolica expression containing named couplings from this model.
         """
 
 class ModelError(FeynkitError):
