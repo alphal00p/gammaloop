@@ -1870,7 +1870,7 @@ class TensorExpression(Expression):
         """
     def simplify(self, settings: typing.Optional[SimplifySettings] = None) -> TensorExpression:
         r"""
-        Apply Idenso's gamma-algebra simplifier and re-infer the tensor interface.
+        Apply the selected algebra identities while retaining the ordered external interface.
 
         Apply selected algebra passes to a fixed point and return a tensor expression.
 
@@ -1959,7 +1959,7 @@ class TensorExpression(Expression):
         """
     def simplify_metrics(self) -> TensorExpression:
         r"""
-        Contract metric and identity tensors and re-infer the external interface.
+        Contract metric and identity tensors while retaining the ordered external interface.
 
         Simplifies contractions involving metric tensors and identity tensors.
 
@@ -1998,7 +1998,7 @@ class TensorExpression(Expression):
         """
     def simplify_color(self, settings: typing.Optional[ColorSimplifySettings] = None) -> TensorExpression:
         r"""
-        Apply Idenso's SU(N) color-algebra simplifier and re-infer the interface.
+        Apply Idenso's SU(N) color-algebra simplifier while retaining the external interface.
 
         Simplify registered Spenso color chains, traces, generators, and structure constants.
 
@@ -2289,7 +2289,7 @@ class TensorExpression(Expression):
         r"""
         Flatten nested representation-index payloads using index cooking by default.
 
-        Convert complex nested index structures into flattened symbolic names.
+        Transform both the expression and its stored explicit slots, retaining logical order.
 
         Transforms hierarchical index expressions within tensor function arguments
         into simplified, flat symbolic representations. This "cooking" process is
@@ -2431,7 +2431,7 @@ class TensorExpression(Expression):
 
         Raises `ValueError` when the expression cannot be parsed as a tensor network.
 
-        Lists the dangling (external, uncontracted) indices present in the expression.
+        Uses the stored logical slot order when all external ports are indexed.
 
         Identifies and returns all indices that are not summed over (i.e., not dummy
         indices). These are the "free" indices that appear in the final result and
@@ -2649,7 +2649,7 @@ class TensorExpression(Expression):
         """
     def collect_chains(self, representation: Representation) -> TensorExpression:
         r"""
-        Join adjacent open chains for `representation` and re-infer the interface.
+        Join adjacent open chains for `representation`, retaining the external interface.
 
         Join adjacent open chains for the supplied representation.
         """

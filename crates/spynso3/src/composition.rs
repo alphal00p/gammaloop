@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use spenso::{
     network::{
+        library::symbolic::ETS,
         parsing::{
             AtomStructureExt, ChainNestingError, StrictTensorFilter, StructureInferenceMode,
         },
@@ -13,7 +14,7 @@ use spenso::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         partial::{PartialIndex, PartialSlot, PartialStructure, PartialStructureExt},
         representation::{LibraryRep, RepName, Representation},
-        slot::{DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotMatcher},
+        slot::{DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotMatch, SlotMatcher},
     },
 };
 use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
@@ -808,17 +809,18 @@ fn reorder_presentation_ports(
     }
 }
 
-fn rewrite_ports(
-    value: AtomView<'_>,
+fn rewrite_ports<'a>(
+    value: AtomView<'a>,
     slots: &[PartialSlot],
     replacements: &HashMap<usize, Atom>,
     state: &mut PortRewriteState,
-) -> Atom {
+) -> AtomOrView<'a> {
     match value {
         AtomView::Add(add) => {
             let initial = state.clone();
             let mut common = None::<PortRewriteState>;
-            let sum = add.iter().fold(Atom::Zero, |sum, term| {
+            let mut sum = value.needs_normalization().then_some(Atom::Zero);
+            for (position, term) in add.iter().enumerate() {
                 let mut local = initial.clone();
                 let term = rewrite_ports(term, slots, replacements, &mut local);
                 if let Some(common) = &mut common {
@@ -831,68 +833,112 @@ fn rewrite_ports(
                 } else {
                     common = Some(local);
                 }
-                sum + term
-            });
+                if sum.is_some() || !matches!(term, AtomOrView::View(_)) {
+                    // Earlier borrowed terms are byte-identical and had no
+                    // callbacks. Preserve the old fold order once anything changes.
+                    let prefix = sum.unwrap_or_else(|| {
+                        add.iter()
+                            .take(position)
+                            .fold(Atom::Zero, |sum, term| sum + term)
+                    });
+                    sum = Some(prefix + term.as_view());
+                }
+            }
             *state = common.unwrap_or(initial);
-            sum
+            sum.map_or_else(|| value.into(), Into::into)
         }
-        AtomView::Mul(mul) => mul.iter().fold(Atom::num(1), |product, factor| {
-            let tensorial = factor.is_tensorial(StrictTensorFilter::Tagged)
-                || matches!(
-                    factor,
-                    AtomView::Fun(fun)
-                        if fun.get_symbol() == *shadowing::SYM
-                            || fun.get_symbol() == *shadowing::ANTISYM
-                            || fun.get_symbol() == *shadowing::CYCLIC
-                );
-            product
-                * if tensorial {
+        AtomView::Mul(mul) => {
+            let mut product = value.needs_normalization().then(|| Atom::num(1));
+            for (position, factor) in mul.iter().enumerate() {
+                let tensorial = factor.is_tensorial(StrictTensorFilter::Tagged)
+                    || matches!(
+                        factor,
+                        AtomView::Fun(fun)
+                            if fun.get_symbol() == *shadowing::SYM
+                                || fun.get_symbol() == *shadowing::ANTISYM
+                                || fun.get_symbol() == *shadowing::CYCLIC
+                    );
+                let factor = if tensorial {
                     rewrite_ports(factor, slots, replacements, state)
                 } else {
-                    factor.to_owned()
+                    factor.into()
+                };
+                if product.is_some() || !matches!(factor, AtomOrView::View(_)) {
+                    let prefix = product.unwrap_or_else(|| {
+                        mul.iter()
+                            .take(position)
+                            .fold(Atom::num(1), |product, factor| product * factor)
+                    });
+                    product = Some(prefix * factor.as_view());
                 }
-        }),
+            }
+            product.map_or_else(|| value.into(), Into::into)
+        }
         AtomView::Pow(pow) => {
             let (base, exponent) = pow.get_base_exp();
-            rewrite_ports(base, slots, replacements, state).pow(exponent.to_owned())
+            let base = rewrite_ports(base, slots, replacements, state);
+            if !value.needs_normalization() && matches!(base, AtomOrView::View(_)) {
+                value.into()
+            } else {
+                base.as_view().pow(exponent).into()
+            }
         }
         AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.trace => {
             let mut args = fun.iter();
-            let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
+            let mut rewritten = Vec::with_capacity(fun.get_nargs());
             if let Some(rep) = args.next() {
-                rebuilt = rebuilt.add_arg(rep);
+                rewritten.push(rep.into());
             }
             for arg in args {
-                rebuilt = rebuilt.add_arg(rewrite_ports(arg, slots, replacements, state));
+                rewritten.push(rewrite_ports(arg, slots, replacements, state));
             }
-            rebuilt.finish()
+            if !value.needs_normalization()
+                && fun.get_symbol().get_normalization_function().is_none()
+                && fun.get_symbol().get_evaluation_info().is_none()
+                && rewritten
+                    .iter()
+                    .all(|arg| matches!(arg, AtomOrView::View(_)))
+            {
+                value.into()
+            } else {
+                FunctionBuilder::new(fun.get_symbol())
+                    .add_args(rewritten)
+                    .finish()
+                    .into()
+            }
         }
         // A dot's rank-one channel is internal and therefore does not consume
         // positions in the dot expression's external interface.
-        AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.dot => value.to_owned(),
+        AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.dot => value.into(),
         AtomView::Fun(fun) => {
             let tensor_leaf = is_tensor_leaf_head(fun.get_symbol());
-            let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
+            let mut rewritten = Vec::with_capacity(fun.get_nargs());
             for arg in fun.iter() {
-                if direct_structural_port(arg) {
+                let replacement = if direct_structural_port(arg) {
                     if let Some(position) = matching_interface_position(arg, slots, &state.claimed)
                     {
                         state.claimed[position] = true;
                         if let Some(replacement) = replacements.get(&position) {
+                            // Even an identical replacement must be recorded in
+                            // every branch of a sum before unchanged atoms are reused.
                             state.applied[position] = true;
-                            rebuilt = rebuilt.add_arg(replacement);
+                            if replacement.as_view() == arg {
+                                arg.into()
+                            } else {
+                                replacement.clone().into()
+                            }
                         } else {
-                            rebuilt = rebuilt.add_arg(arg);
+                            arg.into()
                         }
                     } else {
                         // Contracted dummy slots and representation-valued metadata
                         // are not part of the surviving public interface.
-                        rebuilt = rebuilt.add_arg(arg);
+                        arg.into()
                     }
                 } else if tensor_leaf {
                     // Scalar metadata belongs to this tensor leaf. Nested
                     // representations inside it are not public tensor ports.
-                    rebuilt = rebuilt.add_arg(arg);
+                    arg.into()
                 } else if is_composite_head(fun.get_symbol())
                     && !arg.is_tensorial(StrictTensorFilter::Tagged)
                     && !matches!(
@@ -903,14 +949,44 @@ fn rewrite_ports(
                                 || nested.get_symbol() == *shadowing::CYCLIC
                     )
                 {
-                    rebuilt = rebuilt.add_arg(arg);
+                    arg.into()
                 } else {
-                    rebuilt = rebuilt.add_arg(rewrite_ports(arg, slots, replacements, state));
-                }
+                    rewrite_ports(arg, slots, replacements, state)
+                };
+                rewritten.push(replacement);
             }
-            rebuilt.finish()
+            if !value.needs_normalization()
+                && rewritten
+                    .iter()
+                    .all(|arg| matches!(arg, AtomOrView::View(_)))
+                && fun.get_symbol().get_evaluation_info().is_none()
+                && (fun.get_symbol().get_normalization_function().is_none()
+                    || (fun.get_symbol() == ETS.metric && fun.get_nargs() == 2 && {
+                        // MetricNormalization can call an arbitrary vector normalizer
+                        // only for a mixed explicit-slot / other-argument pair.
+                        let mut matcher = SlotMatcher::default();
+                        let mut args = fun.iter();
+                        !matches!(
+                            (
+                                matcher.classify(args.next().unwrap()),
+                                matcher.classify(args.next().unwrap())
+                            ),
+                            (SlotMatch::Explicit(_), SlotMatch::Other)
+                                | (SlotMatch::Other, SlotMatch::Explicit(_))
+                        )
+                    }))
+            {
+                value.into()
+            } else {
+                // Rebuilding callback-bearing heads remains observable even
+                // when their arguments, or the callback result, are unchanged.
+                FunctionBuilder::new(fun.get_symbol())
+                    .add_args(rewritten)
+                    .finish()
+                    .into()
+            }
         }
-        _ => value.to_owned(),
+        _ => value.into(),
     }
 }
 
@@ -924,7 +1000,7 @@ fn rewrite_interface_ports(
 
     let slots = value.interface.logical_slots();
     let mut state = PortRewriteState::new(slots.len());
-    let atom = rewrite_ports(value.atom.as_view(), &slots, replacements, &mut state);
+    let atom = rewrite_ports(value.atom.as_view(), &slots, replacements, &mut state).into_owned();
     if let Some(position) = replacements
         .keys()
         .copied()

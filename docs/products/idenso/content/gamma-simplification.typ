@@ -1974,6 +1974,46 @@ The targeted Rust suite passes 96 of 97 tests; the remaining wrapped-index
 assertion is the previously reproduced baseline failure. Clippy and formatting
 pass.
 
+Ordinary changed, nonzero typed expansion now reuses the ordered interface after
+validating the smaller factored input. Its admission check uses the existing
+slot and interface owners. Callback-sensitive leaves, exposed tensor powers,
+unresolved ports and other expansion modes retain output validation; unchanged
+and zero results avoid the added preflight. This does not remove validation from
+arbitrary transformations or assume that a supplied interface is certified.
+
+A baseline/candidate/baseline comparison of the complete typed ladder gives
+*27.740 / 20.358 / 28.684 s*. Initial expansion falls *8.687–9.250 → 1.849 s*,
+a *4.70–5.00×* improvement; the complete typed route improves *1.36–1.41×*.
+All eight stage Atoms and their typed logical interfaces agree, as does the
+FORM-certified 9,652-term result. All 105 expansion records and 68 constructor
+cases retain their results and errors. The targeted Rust suite passes 99 of 100
+tests, with the same pre-existing wrapped-index failure; Clippy and formatting
+pass. This is one candidate run bracketed by two baseline runs on the same CPU,
+not a statistical confidence interval.
+
+Fresh FORM takes *0.751 s* process wall (three-run median, 0.72 s internal CPU),
+so the typed operation sum remains *27.1×* larger, with the phase-sum boundary
+limitations above. The raw control moves 21.999 → 18.253 s despite not using
+the new shortcut; that variation is not claimed as an optimization gain.
+The earlier 17.740 s raw result is a separate checkpoint. Trace controls remain
+approximately unchanged; no trace-kernel gain is attributed to this change.
+
+Typed multiplication still consumes 10.603 s in the candidate run. A separate
+profile of the final multiplication, with exact expanded-result checks, takes
+9.136 and 8.273 s over two calls. Of 1,689 samples within those calls, port
+rewriting owns 90.30% of sampled user cycles, multiplicity validation 5.00%,
+and product normalization 3.93%. Sum extension and copying dominate the sampled
+instructions: identity index substitutions still reconstruct the large sum.
+These are sampled-cycle estimates, not exact wall-time shares. Borrowing
+unchanged rewrite branches is a subsequent opportunity, with callback and
+per-summand port bookkeeping preserved.
+
+The `retained_factored_expansion_interface` archive entry includes the frozen
+source, installed release, paired measurements, profile and validation.
+The concurrent broader tensor API audit changed the wrapper after this release
+was built; those newer source changes are preserved and are not certified by
+this checkpoint's timings or checks.
+
 An executed counterexample clarifies the next interface-retention boundary.
 A valid rank-one `g(a,b)*T(a)` can invoke a custom normalizer that turns `T(b)`
 into scalar one after index substitution. The current wrapper rejects the lost
