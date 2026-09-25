@@ -169,42 +169,5 @@ fn main() {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use symbolica::domains::float::{Float, FloatField};
-
-    #[test]
-    fn compound_variables_preserve_rounded_coefficient_multiplication_order() {
-        let field = FloatField::from_rep(Float::with_val(53, 0));
-        let x = Atom::var(symbol!("emission_boundary::x"));
-        let y = Atom::var(symbol!("emission_boundary::y"));
-        for [a, b, c] in [[0.1, 0.2, 0.3], [1.0e16, 1.0e-16, 0.3], [1.1, 1.3, 1.7]] {
-            let mut variables = [
-                Atom::num(Float::with_val(53, a)) * &x,
-                Atom::num(Float::with_val(53, b)) * &y,
-            ];
-            variables.sort();
-            let coefficient = Float::with_val(53, c);
-            // The general emitter appends its coefficient after variable factors.
-            // Moving it first changes rounded arithmetic, even for one monomial.
-            let expected = (&variables[0] * &variables[1]) * Atom::num(coefficient.clone());
-            let polynomial = MultivariatePolynomial::<_, u8>::from_coefficient_list(
-                vec![coefficient],
-                vec![1, 1],
-                vec![
-                    PolyVariable::Function(
-                        symbol!("emission_boundary::map_a"),
-                        variables[0].clone(),
-                    ),
-                    PolyVariable::Function(
-                        symbol!("emission_boundary::map_b"),
-                        variables[1].clone(),
-                    ),
-                ]
-                .into(),
-                &field,
-            );
-            assert_eq!(polynomial.to_expression(), expected, "{a} * {b} * {c}");
-        }
-    }
-}
+#[path = "polynomial_emission_tests.rs"]
+mod tests;

@@ -1,5 +1,5 @@
 // Synced from symbolica-typst-plugin cf7b9fe59ba3fc7fe9ea70b875f5660ee2addd7a.
-// Local extensions preserve tensor power grouping, complex signs, and rational coefficients.
+// Local extensions preserve tensor/complex grouping, signs, and rational coefficients.
 // Generic, document-side rendering for a `symbolica` Atom render tree.
 // Rust owns algebra and exact payloads; Typst owns presentation.
 
@@ -268,12 +268,20 @@
   _lookup(config.classes, _classes(node))
 }
 
+// Inspect top-level operators: a minus inside a scientific exponent does not
+// turn a numeric coefficient into a sum.
+#let _has-additive-terms(visual) = {
+  repr(visual.func()) == "sequence" and visual.children.slice(1).any(
+    term => term == _math-body($+$) or term == _math-body($-$),
+  )
+}
+
 #let _negative-number(node) = {
   if _kind(node) != "number" { return none }
   let source = _source(node)
   if type(source) != str or not source.starts-with("-") { return none }
-  // A complex coefficient's leading minus belongs only to its real part.
-  if source.contains("𝑖") { return none }
+  // A sum-valued coefficient's leading minus belongs only to its first term.
+  if _has-additive-terms(_source-content(source)) { return none }
   let positive = node
   positive.insert("source", source.slice(1))
   let text = _field(positive, ("text", "value"), default: none)
@@ -543,7 +551,9 @@
         if _kind(base-node) in ("sum", "product", "power") or (
           _kind(base-node) == "number" and (
             _negative-number(base-node) != none or (
-              type(_source(base-node)) == str and _source(base-node).contains("/")
+              type(_source(base-node)) == str and (
+                _source(base-node).contains("/") or _source(base-node).contains("𝑖")
+              )
             )
           )
         ) { base = _parenthesize(base) }
@@ -585,7 +595,10 @@
         let visible = if minus { factors.slice(1) } else { factors }
         let body = visible.map(factor => {
           let visual = render-node(factor, exact: exact, roots: roots)
-          if _kind(factor) == "sum" and factors.len() > 1 { _parenthesize(visual) } else { visual }
+          let additive = _kind(factor) == "sum" or (
+            _kind(factor) == "number" and _has-additive-terms(visual)
+          )
+          if additive and factors.len() > 1 { _parenthesize(visual) } else { visual }
         }).join([ ])
         if minus { _math-body($-#body$) } else { body }
       }

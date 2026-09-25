@@ -2,8 +2,9 @@
 
 import re
 import unittest
+import xml.etree.ElementTree as ET
 
-from symbolica import PrintMode, S
+from symbolica import E, PrintMode, S
 from symbolica.community.spenso import (
     DisplaySettings,
     Representation,
@@ -26,6 +27,42 @@ def mathml(expression):
 
 
 class TensorPrintTests(unittest.TestCase):
+    def test_complex_coefficients_keep_their_mathml_grouping(self):
+        for source in (
+            "(1+1i)*x",
+            "(-1+2i)*x",
+            "(1/2+1i/3)*x",
+            "x+(-1+2i)*y",
+            "(1+1i)^x",
+            "(2i)^x",
+        ):
+            with self.subTest(source=source):
+                expression = TensorExpression(E(source))
+                original = expression.to_expression()
+                root = ET.fromstring(mathml(expression))
+                groups = [
+                    node
+                    for node in root.iter("mrow")
+                    if len(node) >= 2
+                    and node[0].tag == "mo"
+                    and node[0].text == "("
+                    and node[-1].tag == "mo"
+                    and node[-1].text == ")"
+                ]
+                self.assertEqual(len(groups), 1)
+                self.assertEqual(expression.to_expression(), original)
+                if "^" in source:
+                    self.assertIs(root.find(".//msup")[0], groups[0])
+
+    def test_pure_imaginary_factors_stay_compact(self):
+        for source in ("1i*x", "-2i*x", "1i*x/2", "x-2i*y"):
+            with self.subTest(source=source):
+                root = ET.fromstring(mathml(TensorExpression(E(source))))
+                operators = [node.text for node in root.iter("mo")]
+                self.assertNotIn("(", operators)
+                self.assertNotIn(")", operators)
+                self.assertNotIn("+", operators)
+
     def test_head_mapping_keeps_arguments_coordinates_and_styles(self):
         name = TensorName(
             "tensor_print_tests::Jbar",

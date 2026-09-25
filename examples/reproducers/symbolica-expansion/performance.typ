@@ -162,6 +162,20 @@ contains paired samples, executable driver sources, build identities and exact
 output checks. The patches in `patches/` target Symbolica `06906976`; they are
 experiments and are not applied to this repository's dependency.
 
+The original emission patch changed the general fallback's coefficient order.
+A later review found two counterexamples: a one-bit rounding difference for
+53-bit coefficients with compound variable mappings, and reversed normalization
+callback order for raw variable/coefficient expressions. The current patch
+preserves the original fallback order and converts each coefficient once.
+The historical primitive timings below describe the original patch; the
+corrected full-host comparison is recorded separately in the gamma guide.
+The two permanent regression tests pass on the pinned baseline and corrected
+patch, and fail on the original patch. Run them with:
+
+```sh
+cargo test --release --locked --bin polynomial_emission
+```
+
 `poly-emission.patch` emits normalized square-free monomials directly when their
 variables are distinct normalized symbols or function calls. Other variable
 forms, aliases and powers retain the existing normalization. The separate
