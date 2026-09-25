@@ -349,7 +349,7 @@ impl SymbolicTensor<PartialStructure> {
 }
 
 impl InterfaceInference {
-    fn intrinsic_normalization_head(symbol: Symbol) -> bool {
+    pub(crate) fn intrinsic_normalization_head(symbol: Symbol) -> bool {
         symbol.get_evaluation_info().is_none()
             && (symbol == ETS.metric || symbol.get_normalization_function().is_none())
     }

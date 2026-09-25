@@ -384,3 +384,26 @@ The later integrated opt-in API addresses that outer-cleanup boundary. See the
 simplification documentation] and `expanded_trace_live_integration` in the
 contraction parity record for its implementation and validation. The historical
 measurements above do not describe the current API's performance.
+
+== Corrected conversion in the full host
+
+The corrected emission patch and unchanged presence patch were subsequently
+measured in a copied full Idenso/Spynso host, preserving all other package
+versions, features and dependency relationships. Against the saved host,
+complete tracen calls improve 18.508 to 13.088 ms at length 12 and 363.202 to
+265.865 ms at length 14. Dispatch, result wrapping and recombination with a
+factored scalar spectator are included; source construction and checks are not.
+These figures replace neither the earlier isolated primitive clocks nor the
+unpatched production dependency. Trace4 and ladder controls show no reliable gain;
+the raw ladder median is 0.7% slower.
+
+Both new permanent regressions pass the pinned baseline and corrected patch,
+and fail the original patch. The final host also passes the ten earlier boundary
+tests, the Laurent case, 207 exact Python behavior records and 117 HEP component
+checks. Scoped Clippy, formatting and the standalone Cargo tests pass.
+The corrected conversion still occupies 76.61% of sampled tracen cycles,
+including 38.31% in final Atom normalization; coefficient-list construction
+accounts for 14.33% separately. These are sampled cycle shares, not wall-time
+phases. The `corrected_emission_full_host_followup` entry in
+#link("primitive_measurements.json")[the primitive record] retains the separate
+build, profiles, corrected patch, original failing examples and full timings.

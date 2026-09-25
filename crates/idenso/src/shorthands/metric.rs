@@ -15,7 +15,6 @@ use spenso::{
         store::NetworkStore,
         tags::SPENSO_TAG,
     },
-    shadowing::TensorCollectExt,
     structure::{
         HasName, Reindexed, TensorStructure, ToSymbolic,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
@@ -27,7 +26,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomType, AtomView, FunctionBuilder, Symbol},
     function,
     id::{
-        Condition, FilterFn, Match, MatchSettings, MatchStack, PatternRestriction, Replacement,
+        Condition, Match, MatchSettings, MatchStack, PatternRestriction, Replacement,
         WildcardRestriction,
     },
     symbol,
@@ -96,64 +95,8 @@ pub fn canonize_impl(view: AtomView) -> Atom {
         .replace_multiple(&redual_reps)
 }
 
-pub fn not_wraped_aind(header: Symbol) -> impl FilterFn + 'static {
-    move |a| match a {
-        Match::FunctionName(f) => *f != header,
-        Match::Single(a) => {
-            if let Some(n) = a.get_symbol() {
-                n != header
-            } else {
-                true
-            }
-        }
-        _ => false,
-    }
-}
-
 pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
-    let mut expr = view.collect_tensors();
-    let dim = RS.d_;
-    let dima = Atom::var(dim);
-
-    let mut reps = vec![];
-    for i in LibraryRep::all_self_duals().chain(LibraryRep::all_inline_metrics()) {
-        reps.push(
-            Replacement::new(
-                i.to_symbolic([dim, RS.a_]).to_pattern(),
-                i.to_symbolic([dima.clone(), function!(header, Atom::var(RS.a_))]),
-            )
-            .when(RS.a_.filter_match(not_wraped_aind(header)))
-            .min_level(0)
-            .max_level(Some(1)),
-        );
-    }
-
-    for i in LibraryRep::all_dualizables() {
-        let di = i.dual();
-        reps.push(
-            Replacement::new(
-                i.to_symbolic([dim, RS.a_]).to_pattern(),
-                i.to_symbolic([dima.clone(), function!(header, Atom::var(RS.a_))]),
-            )
-            .when(RS.a_.filter_match(not_wraped_aind(header)))
-            .min_level(0)
-            .max_level(Some(1)),
-        );
-        reps.push(
-            Replacement::new(
-                di.to_symbolic([dim, RS.a_]).to_pattern(),
-                di.to_symbolic([dima.clone(), function!(header, Atom::var(RS.a_))]),
-            )
-            .when(RS.a_.filter_match(not_wraped_aind(header)))
-            .min_level(0)
-            .max_level(Some(1)),
-        );
-    }
-    let mut atom = Atom::new();
-    while expr.replace_multiple_into(&reps, &mut atom) {
-        std::mem::swap(&mut expr, &mut atom);
-    }
-    expr
+    AbstractIndex::wrap_expression(view, header)
 }
 
 fn dangling_indices<Aind: ParseableAind + AbsInd + DummyAind>(

@@ -164,7 +164,17 @@ custom `Schoonschipify` strategies plug into Spenso's `ContractionStrategy`; the
 Spenso's graph or store.
 
 The direct pattern path exposed by `schoonschip_with_settings` applies the local metric/function
-replacement families without building the full network. The network path is preferable when
+replacement families without building the full network. Its initial scan records pending
+contractions, dot identities, bracket scopes, and whether normalization can invoke user code.
+For intrinsic normalization without brackets, dot rewrites remove index occurrences, so the
+input's contraction candidate remains a conservative guide without rescanning the result.
+The dot stage reports when an odd tensor power exposes a factor; that flag carries pending
+contraction work beyond the contractor's fixed point. Otherwise intrinsic cleanup completes
+the direct pass. Callback-sensitive expressions and compound opaque slot metadata retain
+result scans and the observable discovery/replacement order. Bracket scopes retain their
+normalization schedule because opening a scope can expose further products.
+
+The network path is preferable when
 contraction topology and ordering matter. Their exact behavior and settings are detailed in the
 #link("schoonschip-net-parsing.typ")[Schoonschip network parsing note].
 

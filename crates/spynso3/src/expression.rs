@@ -649,7 +649,7 @@ impl TensorExpression {
     /// Construct a tensor expression, preserving existing tensor metadata or inferring it.
     ///
     /// Pass `cook_indices=CookSettings.indices()` to flatten nested index payloads before
-    /// inferring the tensor interface, including expressions returned by `wrap_indices()`.
+    /// inferring the tensor interface for arbitrary nested index expressions.
     /// Custom settings control the index encoding, source filters, and output tags.
     #[new]
     #[pyo3(signature = (expression, *, cook_indices = None))]
@@ -1712,39 +1712,27 @@ impl TensorExpression {
         python_terms(self_.as_super().expr.expand_in_patterns(&patterns))
     }
 
-    /// Wrap every abstract-index payload with `header` and return an ordinary expression.
+    /// Put all explicit indices in a named scope, preserving the tensor interface.
     ///
-    /// Wrapped payloads are not Spenso abstract indices until they are cooked, so the result
-    /// intentionally has no `TensorExpression` interface.
+    /// Scoped copies contract internally as before, but their indices are distinct
+    /// from the original. Alphabet display uses primed labels for scoped indices.
+    /// Applying the same outer scope twice is idempotent; different scopes nest.
     ///
-    /// Wrap all abstract indices with a header symbol
-    ///
-    /// # Arguments
-    /// - `self`: input expression containing tensor indices
-    /// - `header`: symbol to use as the wrapper function for all indices
-    ///
-    /// # Returns
-    /// Expression with all indices wrapped by the header symbol.
-    ///
-    /// # Examples:
-    /// ```python
-    /// from symbolica.community.spenso import TensorName, Slot, Representation
-    /// import symbolica as sp
-    /// from symbolica.community.spenso import TensorExpression
-    ///
-    /// T = TensorName("T")
-    /// rep = Representation.euc(3)
-    /// # With slots (creates TensorExpression)
-    /// mu = rep("mu")
-    /// nu = rep("nu")
-    /// x = sp.S("x")
-    /// tensor_with_args = T(x, mu, nu)  # T(x; mu, nu)
-    /// print(tensor_with_args)
-    /// print(tensor_with_args.wrap_indices(sp.S('wrap')))
-    ///
-    /// ```
-    fn wrap_indices(self_: PyRef<'_, Self>, header: Symbol) -> PythonExpression {
-        self_.as_super().expr.wrap_indices(header).into()
+    /// >>> conjugate = tensor.dirac_adjoint().wrap_indices(S("bra"))
+    fn wrap_indices(self_: PyRef<'_, Self>, py: Python<'_>, header: Symbol) -> PyResult<Py<Self>> {
+        let slots = self_.interface.logical_slots().into_iter().map(|mut slot| {
+            if let PartialIndex::Explicit(index) = slot.aind {
+                slot.aind = PartialIndex::Explicit(index.scoped(header));
+            }
+            slot
+        });
+        Self::from_known_parts(
+            py,
+            self_.as_super().expr.wrap_indices(header),
+            PartialStructure::from_logical_slots(slots),
+            self_.name,
+            self_.name_args.clone(),
+        )
     }
 
     /// Flatten nested representation-index payloads using index cooking by default.
@@ -1772,24 +1760,14 @@ impl TensorExpression {
     ///
     /// # Examples:
     /// ```python
-    /// from symbolica.community.spenso import TensorName, Slot, Representation
-    /// import symbolica as sp
-    /// from symbolica.community.spenso import CookSettings, TensorExpression
+    /// from symbolica import S
+    /// from symbolica.community.spenso import CookSettings, Representation, TensorName
     ///
-    /// T = TensorName("T")
     /// rep = Representation.euc(3)
-    /// # With slots (creates TensorExpression)
-    /// mu = rep("mu")
-    /// nu = rep("nu")
-    /// x = sp.S("x")
-    /// tensor_with_args = T(x, mu, nu)  # T(x; mu, nu)
-    /// print(tensor_with_args)
-    /// print(
-    ///     TensorExpression(
-    ///         tensor_with_args.wrap_indices(sp.S("wrap")),
-    ///         cook_indices=CookSettings.indices(),
-    ///     )
-    /// )
+    /// template = TensorName("T")(rep, rep)
+    /// nested = S("outer")(S("mu"))
+    /// # Cook an arbitrary payload when filling the tensor's open ports.
+    /// tensor = template(nested, "nu", cook_indices=CookSettings.indices())
     /// ```
     #[pyo3(signature = (settings = None))]
     fn cook_indices(
@@ -4428,7 +4406,7 @@ mod tests {
     }
 
     #[test]
-    fn wrap_indices_returns_an_ordinary_expression() {
+    fn wrap_indices_preserves_tensor_expression() {
         idenso::representations::initialize();
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
@@ -4457,10 +4435,12 @@ mod tests {
             );
 
             let header = symbolica::symbol!("wrapped_index_header");
-            let wrapped = TensorExpression::wrap_indices(expression.bind(py).borrow(), header);
-            assert_eq!(wrapped.expr, atom.wrap_indices(header));
-            let wrapped = wrapped.into_pyobject(py)?;
-            assert!(!wrapped.is_instance_of::<TensorExpression>());
+            let wrapped = TensorExpression::wrap_indices(expression.bind(py).borrow(), py, header)?;
+            assert_eq!(
+                wrapped.borrow(py).as_super().expr,
+                atom.wrap_indices(header)
+            );
+            assert!(wrapped.bind(py).is_instance_of::<TensorExpression>());
             Ok(())
         })
         .unwrap();

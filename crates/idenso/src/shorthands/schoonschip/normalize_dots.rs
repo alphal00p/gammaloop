@@ -58,16 +58,37 @@ pub(crate) struct DotNormalizer {
     slots: SlotMatcher,
     rank_one: &'static str,
     metric: Symbol,
+    exposes_product: bool,
+}
+
+/// An odd tensor power exposes a factor which a subsequent contraction
+/// can consume. Even powers and nested-vector identities only remove indices.
+pub(super) struct DotNormalization {
+    pub(super) expression: Atom,
+    pub(super) exposes_product: bool,
 }
 
 impl DotNormalizer {
     pub(super) fn run(view: AtomView<'_>) -> Atom {
+        Self::normalize(view).expression
+    }
+
+    pub(super) fn normalize(view: AtomView<'_>) -> DotNormalization {
         let mut normalizer = Self {
             slots: SlotMatcher::default(),
             rank_one: &T.rank1,
             metric: ETS.metric,
+            exposes_product: false,
         };
-        match normalizer.normalize_node(view) {
+        let expression = normalizer.apply(view);
+        DotNormalization {
+            expression,
+            exposes_product: normalizer.exposes_product,
+        }
+    }
+
+    fn apply(&mut self, view: AtomView<'_>) -> Atom {
+        match self.normalize_node(view) {
             DotRewrite::Rewritten(result) => return result,
             DotRewrite::Opaque => return view.to_owned(),
             DotRewrite::Descend => {}
@@ -75,10 +96,10 @@ impl DotNormalizer {
         // replace_map treats even an unchanged pruning assignment as a change,
         // rebuilding its ancestors. A visitor can skip opaque payloads without
         // that work when no nested-vector or power identity applies.
-        if !normalizer.has_rewrite(view) {
+        if !self.has_rewrite(view) {
             return view.to_owned();
         }
-        view.replace_map(|atom, _, out| match normalizer.normalize_node(atom) {
+        view.replace_map(|atom, _, out| match self.normalize_node(atom) {
             DotRewrite::Rewritten(result) => **out = result,
             DotRewrite::Opaque => out.set_from_view(&atom),
             DotRewrite::Descend => {}
@@ -186,6 +207,7 @@ impl DotNormalizer {
         };
         let paired = square.pow(exponent / 2);
         Some(if exponent % 2 == 1 {
+            self.exposes_product = true;
             base * paired.as_view()
         } else {
             paired
@@ -210,6 +232,27 @@ mod tests {
     use spenso::{dualizable_dual_, rep_, structure::abstract_index::AIND_SYMBOLS};
     use symbolica::{function, symbol};
     use symbolica_utils::PatternReplacement;
+
+    #[test]
+    fn normalization_reports_new_product_sources() {
+        crate::test_support::test_initialize();
+        let vector = T.rank_one_tensor_symbol("dot_pending_vector");
+        let vector = function!(vector, spenso::mink!(4, 73219));
+        let metric = g!(spenso::mink!(4, 73219), spenso::mink!(4, 73223));
+        for base in [vector, metric] {
+            for exponent in [-4, -3, 2, 3, 4, 5] {
+                let input = base.clone().pow(exponent);
+                let result = DotNormalizer::normalize(input.as_view());
+                assert_eq!(result.expression, DotNormalizer::run(input.as_view()));
+                assert_eq!(result.exposes_product, exponent > 1 && exponent % 2 == 1);
+                let nested = Atom::var(symbol!("dot_pending_scalar")) + &input;
+                assert_eq!(
+                    DotNormalizer::normalize(nested.as_view()).exposes_product,
+                    result.exposes_product
+                );
+            }
+        }
+    }
 
     static ASYMMETRIC_SCHOONSCHIP_VECTOR_IN_VECTOR: LazyLock<[Replacement; 1]> =
         LazyLock::new(|| {

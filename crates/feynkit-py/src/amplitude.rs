@@ -122,7 +122,7 @@ pub struct PyAmplitude {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyAmplitude {
-    /// Align external ports and sum the weighted diagram operators.
+    /// Sum weighted diagram operators with matching graph external indices.
     ///
     /// Examples
     /// --------
@@ -238,7 +238,7 @@ impl PyAmplitude {
     /// --------
     /// >>> operator = amplitude.expression().factor()
     fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
-        TensorExpression::from_atom_interface(py, self.inner.expression(), None)
+        TensorExpression::from_atom_interface(py, self.inner.expression(), self.inner.structure())
     }
     /// Conjugate scalar coefficients, color tensors, and Dirac chains.
     ///

@@ -3001,6 +3001,42 @@ def _(mo):
     Clippy and formatting pass. Sources, raw observations and FORM comparisons
     are stored under `shared_tensor_trace_interface_followup` in the archive.
 
+    **Axial shortcut and corrected conversion (separate comparisons):** the
+    retained Idenso change admits free 4D axial words with exact scalar
+    spectators into the existing terminal evaluator. It preserves the previous
+    expanded representation and leaves repeated indices, compact vectors,
+    rounded coefficients and callback-bearing contexts on the full pass.
+
+    | Change and input | Before | After | Speedup |
+    | --- | ---: | ---: | ---: |
+    | Idenso: axial trace4, length 12 | 9.164 ms | 1.369 ms | 6.69× |
+    | Symbolica experiment: tracen, length 10 | 1.525 ms | 1.114 ms | 1.37× |
+    | Symbolica experiment: tracen, length 12 | 18.508 ms | 13.088 ms | 1.41× |
+    | Symbolica experiment: tracen, length 14 | 363.202 ms | 265.865 ms | 1.37× |
+
+    Both candidates use the same saved baseline. The Symbolica patches remain
+    **isolated experiments**; production still uses unpatched `06906976`.
+    The corrected patch restores fallback floating-point and callback order;
+    both new regressions fail the original patch and pass the correction.
+    No combined gain is inferred. All **207 exact** and **117 HEP component**
+    checks pass for each candidate.
+
+    Trace4 length 8 remains near **0.23 ms**, length-14 reruns near **184 ms**,
+    and the typed ladder near **8.8 s**, with no reliable ladder improvement.
+    The conversion experiment's raw route is **0.7% slower** in the median.
+    Fresh FORM body CPU is **4.167 ms** (tracen 12), **53.667 ms** (tracen 14),
+    and **0.592 ms** (axial 12), excluding the spectator and Python wrapping.
+    The full ladder FORM process varies from **0.753 s** at the earlier
+    checkpoint to **1.111 s** now: we retain an approximate **8–12×** gap.
+
+    **The conversion profile now includes the corrected patches:** it still
+    takes **76.61%** of sampled tracen cycles, including **38.31%** in final
+    Atom normalization. Coefficient-list construction takes **14.33%** separately.
+    Axial epsilon cleanup disappears; the kernel takes **76.23%**, and wrapping
+    with source-interface validation **17.22%**. These are sampled cycle shares.
+    Sources, full ranges, exact checks and FORM programs are preserved under
+    `shared_tensor_axial_and_conversion_followup` in the parity archive.
+
     **Partial-network follow-up:** a closed subcase with vertices **1, 2, 8**
     produces **64 scalar terms**. The baseline expand-first route takes about
     **5.56 ms**; network contraction with local sum distribution takes
@@ -3207,7 +3243,6 @@ def _(
                 _result = (
                     TensorExpression((_result * _factor).expand())
                     .schoonschip()
-                    .normalize_dots()
                     .to_expression()
                     .expand()
                 )

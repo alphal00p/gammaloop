@@ -1,6 +1,6 @@
 use std::{
     cmp::Reverse,
-    collections::{BTreeMap, BinaryHeap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet},
     fmt::Write,
 };
 
@@ -48,7 +48,7 @@ use tabled::{
 
 use crate::Spensor;
 use idenso::tensor::{SymbolicTensor, composition};
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::{abstract_index::AbstractIndex, partial::PartialStructure};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pymethods};
@@ -376,7 +376,7 @@ fn display_options_with_settings(
 /// Rich renderers receive these as notation records over the original Atom tree.
 #[derive(Default)]
 struct IndexAliases {
-    entries: HashMap<(Symbol, Atom), (usize, IndexDisplay)>,
+    entries: HashMap<(Symbol, Atom), (Option<usize>, IndexDisplay)>,
 }
 
 impl IndexAliases {
@@ -410,6 +410,23 @@ impl IndexAliases {
                 **output = value.to_owned();
             }
         });
+        let scoped = slots
+            .iter()
+            .filter_map(|(representation, index)| {
+                let (scopes, base) = Self::scope_parts(index.as_view());
+                (!scopes.is_empty())
+                    .then(|| (*representation, index.clone(), scopes, base.to_owned()))
+            })
+            .collect::<Vec<_>>();
+        let scope_order = scoped
+            .iter()
+            .map(|(_, _, scopes, _)| scopes.clone())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .enumerate()
+            .map(|(i, scope)| (scope, i + 1))
+            .collect::<BTreeMap<_, _>>();
+        slots.extend(scoped.iter().map(|(rep, _, _, base)| (*rep, base.clone())));
         let mut occupied: HashMap<Symbol, HashSet<String>> = HashMap::new();
         let mut pending = BTreeMap::new();
         for (representation, index) in slots {
@@ -501,9 +518,102 @@ impl IndexAliases {
             let Some(display) = display else { continue };
             aliases
                 .entries
-                .insert((representation, index), (position, display));
+                .insert((representation, index), (Some(position), display));
+        }
+        let mut scoped_displays = Vec::new();
+        for (representation, index, scopes, base) in scoped {
+            let Some(metadata) = RepresentationMetadata::from_symbol(representation) else {
+                continue;
+            };
+            let base_display = aliases
+                .entries
+                .get(&(representation, base.clone()))
+                .map(|(_, display)| display.clone())
+                .or_else(|| {
+                    usize::try_from(base.as_view())
+                        .ok()
+                        .and_then(|position| metadata.index_palette.resolve(position))
+                })
+                .or_else(|| match base.as_view() {
+                    AtomView::Var(var) => {
+                        IndexDisplay::from_symbol(var.get_symbol()).or_else(|| {
+                            IndexDisplay::symbol(var.get_symbol().get_stripped_name()).ok()
+                        })
+                    }
+                    _ => IndexDisplay::text(base.to_canonical_string()).ok(),
+                });
+            if let Some(display) = base_display {
+                scoped_displays.push((representation, index, scopes, display));
+            }
+        }
+        for (scope, mut count) in scope_order {
+            let group = scoped_displays
+                .iter()
+                .filter(|(_, _, scopes, _)| *scopes == scope)
+                .collect::<Vec<_>>();
+            let decorated = loop {
+                let primes = IndexDisplay::text("′".repeat(count)).unwrap();
+                let decorated = group
+                    .iter()
+                    .map(|(rep, index, _, display)| {
+                        (
+                            *rep,
+                            index.clone(),
+                            display.clone().with_top(primes.clone()),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                if decorated.iter().all(|(rep, _, display)| {
+                    !occupied
+                        .get(rep)
+                        .is_some_and(|used| used.contains(&Self::label_key(display)))
+                }) {
+                    break decorated;
+                }
+                count += 1;
+            };
+            for (rep, index, display) in decorated {
+                occupied
+                    .entry(rep)
+                    .or_default()
+                    .insert(Self::label_key(&display));
+                aliases.entries.insert((rep, index), (None, display));
+            }
         }
         aliases
+    }
+
+    fn scope_parts(mut index: AtomView<'_>) -> (Vec<String>, AtomView<'_>) {
+        let mut scopes = Vec::new();
+        while let AtomView::Fun(function) = index {
+            if function.get_symbol() != AbstractIndex::scope_symbol() || function.get_nargs() != 2 {
+                break;
+            }
+            let mut args = function.iter();
+            let AtomView::Var(scope) = args.next().unwrap() else {
+                break;
+            };
+            scopes.push(scope.get_symbol().get_name().to_owned());
+            index = args.next().unwrap();
+        }
+        (scopes, index)
+    }
+
+    fn argument_key(index: AtomView<'_>) -> String {
+        match index {
+            AtomView::Var(var) => format!("(\"var\",{:?})", var.get_symbol().get_name()),
+            AtomView::Fun(fun) => format!(
+                "(\"fun\",{:?},({}))",
+                fun.get_symbol().get_name(),
+                fun.iter()
+                    .map(|arg| format!("{},", Self::argument_key(arg)))
+                    .collect::<String>()
+            ),
+            _ => usize::try_from(index).map_or_else(
+                |_| format!("{:?}", index.to_canonical_string()),
+                |n| n.to_string(),
+            ),
+        }
     }
 
     fn compound(index: AtomView<'_>) -> Option<(Symbol, Vec<usize>)> {
@@ -582,13 +692,13 @@ impl IndexAliases {
             else {
                 return;
             };
-            let replacement = if style == "graph" {
+            let replacement = if style == "graph" || position.is_none() {
                 let Ok(symbol) = register_math_display_symbol(display, "spenso::display") else {
                     return;
                 };
                 Atom::var(symbol)
             } else {
-                Atom::num(*position as i64)
+                Atom::num(position.unwrap() as i64)
             };
             **output = FunctionBuilder::new(function.get_symbol())
                 .add_arg(dimension)
@@ -602,15 +712,18 @@ impl IndexAliases {
             .entries
             .iter()
             .map(|((representation, index), (position, display))| {
-                let (head, arguments) = Self::compound(index.as_view()).unwrap();
-                let arguments = arguments
+                let AtomView::Fun(function) = index.as_view() else {
+                    unreachable!()
+                };
+                let head = function.get_symbol();
+                let arguments = function
                     .iter()
-                    .map(|argument| format!("{argument},"))
+                    .map(|argument| format!("{},", Self::argument_key(argument)))
                     .collect::<String>();
-                let label = if style == "graph" {
+                let label = if style == "graph" || position.is_none() {
                     format!("${}$", display.to_typst_source())
                 } else {
-                    position.to_string()
+                    position.unwrap().to_string()
                 };
                 format!(
                     "({:?},{:?},({arguments}),{label}),",
@@ -2234,6 +2347,36 @@ mod tests {
     }
 
     #[test]
+    fn scoped_index_aliases_preserve_base_letters_and_manual_labels() {
+        let index = graph_index("display_index_tests::hedge", &[0, 1]);
+        let scope = symbol!("display_index_tests::bra");
+        let scoped = AbstractIndex::try_from(index.as_view())
+            .unwrap()
+            .scoped(scope)
+            .to_atom();
+        let atom = indexed_test_tensor([index.clone(), scoped.clone()]);
+        let original = atom.clone();
+        let aliases = IndexAliases::for_atom(&atom, "alphabet");
+        let rep = spenso::structure::representation::Minkowski {}.to_symbol();
+        let base = &aliases.entries[&(rep, index.clone())].1;
+        let prime = IndexDisplay::text("′").unwrap();
+        assert_eq!(
+            aliases.entries[&(rep, scoped.clone())].1,
+            base.clone().with_top(prime.clone())
+        );
+        let manual =
+            register_math_display_symbol(&base.clone().with_top(prime), "display_index_tests")
+                .unwrap();
+        let occupied = indexed_test_tensor([index, scoped.clone(), Atom::var(manual)]);
+        let aliases = IndexAliases::for_atom(&occupied, "alphabet");
+        assert_eq!(
+            aliases.entries[&(rep, scoped)].1,
+            base.clone().with_top(IndexDisplay::text("′′").unwrap())
+        );
+        assert_eq!(atom, original);
+    }
+
+    #[test]
     fn compound_index_alphabet_reserves_numeric_manual_and_wrapped_labels() {
         let manual = register_math_display_symbol(
             &IndexDisplay::symbol("rho").unwrap(),
@@ -2252,7 +2395,7 @@ mod tests {
         let mut positions = aliases
             .entries
             .values()
-            .map(|(position, _)| *position)
+            .filter_map(|(position, _)| *position)
             .collect::<Vec<_>>();
         positions.sort();
         assert_eq!(positions, [4, 6, 7, 8, 9]);

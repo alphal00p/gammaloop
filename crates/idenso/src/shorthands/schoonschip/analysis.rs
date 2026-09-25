@@ -6,7 +6,10 @@ use spenso::{
 };
 use symbolica::atom::{AtomView, Symbol};
 
-/// Call-local observations of one expression, invalidated by any rewrite.
+use crate::tensor::inference::InterfaceInference;
+
+/// Call-local observations of one expression. Intrinsic dot rewrites may retain
+/// the contraction candidate: they remove indices rather than introduce them.
 /// A compound opaque payload leaves head observations incomplete; consumers
 /// must then defer to the individual simplifiers.
 pub(crate) struct SimplificationCandidates<const N: usize> {
@@ -15,6 +18,7 @@ pub(crate) struct SimplificationCandidates<const N: usize> {
     pub(crate) dots: bool,
     pub(crate) symbols: [bool; N],
     pub(crate) complete: bool,
+    pub(crate) intrinsic: bool,
 }
 
 impl<const N: usize> SimplificationCandidates<N> {
@@ -30,6 +34,7 @@ impl<const N: usize> SimplificationCandidates<N> {
             dots: false,
             symbols: [false; N],
             complete: true,
+            intrinsic: true,
         };
         candidates.repeated_indices =
             expression.has_repeated_explicit_indices_with_observer(|node, slot| match node {
@@ -37,14 +42,18 @@ impl<const N: usize> SimplificationCandidates<N> {
                     let id = function.get_symbol_id();
                     candidates.observe_symbol(id, bracket, &symbols);
                     let entry = &mut rank_one_heads[(id.wrapping_mul(0x9e37_79b9) >> 28) as usize];
-                    let tagged = match *entry {
-                        Some((cached, tagged)) if cached == id => tagged,
+                    let (tagged, intrinsic) = match *entry {
+                        Some((cached, tagged, intrinsic)) if cached == id => (tagged, intrinsic),
                         _ => {
                             let tagged = function.get_symbol().has_tag(rank_one);
-                            *entry = Some((id, tagged));
-                            tagged
+                            let intrinsic = InterfaceInference::intrinsic_normalization_head(
+                                function.get_symbol(),
+                            );
+                            *entry = Some((id, tagged, intrinsic));
+                            (tagged, intrinsic)
                         }
                     };
+                    candidates.intrinsic &= intrinsic;
                     if tagged && !candidates.dots {
                         let slots = vector_slots.get_or_insert_with(SlotMatcher::default);
                         candidates.dots = !slots
@@ -57,6 +66,10 @@ impl<const N: usize> SimplificationCandidates<N> {
                             // A variance wrapper can hide the representation
                             // head from the observer's outer function node.
                             if slot.representation().wrapper().is_some() {
+                                candidates.intrinsic &=
+                                    InterfaceInference::intrinsic_normalization_head(
+                                        slot.representation().head(),
+                                    );
                                 candidates.observe_symbol(
                                     slot.representation().head().get_id(),
                                     bracket,
@@ -132,6 +145,7 @@ impl<const N: usize> SimplificationCandidates<N> {
         self.brackets = true;
         self.dots = true;
         self.complete = false;
+        self.intrinsic = false;
     }
 }
 
@@ -143,6 +157,29 @@ mod tests {
         atom::{Atom, AtomCore},
         parser::ParseSettings,
     };
+
+    #[test]
+    fn intrinsic_observations_exclude_callbacks_and_hidden_payloads() {
+        crate::test_support::test_initialize();
+        let callback = spenso::tensor_symbol!("analysis_callback", norm = |_, _| {});
+        let plain = Atom::parse(
+            "g(mink(4,a),mink(4,b))*T(mink(4,a))",
+            "spenso",
+            ParseSettings::symbolica(),
+        )
+        .unwrap();
+        assert!(SimplificationCandidates::scan(plain.as_view(), []).intrinsic);
+        // The observer must continue after finding a repeated index, including
+        // into scalar function metadata where normalization is still observable.
+        let callback = symbolica::function!(callback, plain.clone());
+        for expression in [callback.clone(), &plain * &callback] {
+            assert!(!SimplificationCandidates::scan(expression.as_view(), []).intrinsic);
+        }
+        for source in ["T(mink(f(x),a))", "T(mink(4,f(a)))", "T(dind(cof(3,f(a))))"] {
+            let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
+            assert!(!SimplificationCandidates::scan(expression.as_view(), []).intrinsic);
+        }
+    }
 
     #[test]
     fn scalar_powers_do_not_request_dot_normalization() {
