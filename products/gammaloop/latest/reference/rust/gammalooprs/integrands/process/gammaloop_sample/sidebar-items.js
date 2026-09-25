@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["DiscreteGraphSample","GammaLoopSample"]};
+window.SIDEBAR_ITEMS = {};

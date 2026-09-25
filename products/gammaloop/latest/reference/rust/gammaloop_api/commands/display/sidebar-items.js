@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Display","DisplaySettingsTarget","IntegrandDisplayCategory"],"struct":["DisplayProcessNamedSettingsArgs"]};
+window.SIDEBAR_ITEMS = {"enum":["Display","DisplaySettingsTarget","IntegrandDisplayCategory","MetadataDisplayFormat"],"struct":["DisplayProcessNamedSettingsArgs"]};

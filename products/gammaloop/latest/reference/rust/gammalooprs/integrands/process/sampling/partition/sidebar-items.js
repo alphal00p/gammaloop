@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SamplingPartitionMode"],"struct":["SamplingChannelScore","SamplingPartition","SamplingScoreFunction"]};

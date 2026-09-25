@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["THRESHOLD_COUNTERTERM_SCHEMA_VERSION"],"struct":["ThresholdCountertermCut","ThresholdCountertermMultiplier","ThresholdCountertermSpec","ThresholdCountertermThreshold","ThresholdCountertermVariant"]};

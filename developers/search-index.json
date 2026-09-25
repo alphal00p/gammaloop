@@ -90,6 +90,12 @@
     "kind": "developer current implemented heading"
   },
   {
+    "title": "Threshold directives and solve groups",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#threshold-directives-and-solve-groups",
+    "kind": "developer current implemented heading"
+  },
+  {
     "title": "3. Evaluation and Integration Flow",
     "summary": "GammaLoop architecture",
     "href": "architecture/gammaloop-architecture/#3-evaluation-and-integration-flow",
@@ -99,6 +105,12 @@
     "title": "3.1 Differential event-processing runtime",
     "summary": "GammaLoop architecture",
     "href": "architecture/gammaloop-architecture/#3-1-differential-event-processing-runtime",
+    "kind": "developer current implemented heading"
+  },
+  {
+    "title": "Canonical sampling channels",
+    "summary": "GammaLoop architecture",
+    "href": "architecture/gammaloop-architecture/#canonical-sampling-channels",
     "kind": "developer current implemented heading"
   },
   {
@@ -177,6 +189,12 @@
     "title": "Ownership and data flow",
     "summary": "Integration dashboard architecture",
     "href": "architecture/integration-dashboard/#ownership-and-data-flow",
+    "kind": "developer current implemented heading"
+  },
+  {
+    "title": "Signed and componentwise absolute views",
+    "summary": "Integration dashboard architecture",
+    "href": "architecture/integration-dashboard/#signed-and-componentwise-absolute-views",
     "kind": "developer current implemented heading"
   },
   {
@@ -2010,9 +2028,9 @@
     "kind": "developer archived record heading"
   },
   {
-    "title": "Implementation status (2026-03-21)",
+    "title": "Implementation status (2026-08-07)",
     "summary": "Ratatui integration dashboard implementation history",
-    "href": "architecture/ratatui-integration-dashboard-history/#implementation-status-2026-03-21",
+    "href": "architecture/ratatui-integration-dashboard-history/#implementation-status-2026-08-07",
     "kind": "developer archived record heading"
   },
   {

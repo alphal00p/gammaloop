@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Integrand","IntegrandSettings"],"mod":["builtin","evaluation","process"],"struct":["UnitSurfaceIntegrand","UnitSurfaceSettings","UnitVolumeIntegrand","UnitVolumeSettings"],"trait":["HasIntegrand"]};
+window.SIDEBAR_ITEMS = {"enum":["Integrand"],"mod":["evaluation","process"],"trait":["HasIntegrand"]};

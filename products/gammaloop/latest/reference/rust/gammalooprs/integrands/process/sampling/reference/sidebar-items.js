@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["GaussianReferenceFunction","ReferenceMoments","ReferenceSampleEvaluation","ReferenceSamplingReport"]};

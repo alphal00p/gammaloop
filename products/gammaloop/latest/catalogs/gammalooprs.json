@@ -67,7 +67,7 @@
             "source": {
               "identifier": "gammalooprs::GammaLoopContext",
               "file": "crates/gammalooprs/src/lib.rs",
-              "line": 44,
+              "line": 42,
               "column": 1
             }
           },
@@ -111,7 +111,7 @@
             "source": {
               "identifier": "gammalooprs::HasModel",
               "file": "crates/gammalooprs/src/lib.rs",
-              "line": 46,
+              "line": 44,
               "column": 1
             }
           },
@@ -166,7 +166,7 @@
             "source": {
               "identifier": "gammalooprs::GammaLoopContextContainer",
               "file": "crates/gammalooprs/src/lib.rs",
-              "line": 64,
+              "line": 62,
               "column": 1
             }
           },
@@ -276,7 +276,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::HasIntegrand",
               "file": "crates/gammalooprs/src/integrands/mod.rs",
-              "line": 73,
+              "line": 24,
               "column": 1
             }
           },
@@ -289,7 +289,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Dispatches evaluation and observable handling across built-in and generated process integrands."
+              "body": "The only production integrand container. Sampling acceptance tests use\n[`ProcessIntegrand`] with a reference overlay, so no standalone unit-volume\nor profile integrand is kept as a second owner of parameterization logic."
             },
             "summary": "Dispatches evaluation and observable handling across built-in and generated process integrands.",
             "signature": "pub enum Integrand {}",
@@ -305,66 +305,6 @@
               }
             ],
             "members": [
-              {
-                "name": "UnitSurface",
-                "kind": "variant",
-                "docs": {
-                  "format": "rust-markdown",
-                  "body": "Built-in diagnostic integrand over a unit hypersurface."
-                },
-                "signature": null,
-                "default": null,
-                "members": [
-                  {
-                    "name": "0",
-                    "kind": "field",
-                    "docs": null,
-                    "signature": "UnitSurfaceIntegrand",
-                    "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "UnitVolume",
-                "kind": "variant",
-                "docs": {
-                  "format": "rust-markdown",
-                  "body": "Built-in diagnostic integrand over a unit integration volume."
-                },
-                "signature": null,
-                "default": null,
-                "members": [
-                  {
-                    "name": "0",
-                    "kind": "field",
-                    "docs": null,
-                    "signature": "UnitVolumeIntegrand",
-                    "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "HFunctionTest",
-                "kind": "variant",
-                "docs": {
-                  "format": "rust-markdown",
-                  "body": "One-dimensional diagnostic integrand for the configured H-function profile."
-                },
-                "signature": null,
-                "default": null,
-                "members": [
-                  {
-                    "name": "0",
-                    "kind": "field",
-                    "docs": null,
-                    "signature": "HFunctionTestIntegrand",
-                    "default": null,
-                    "members": []
-                  }
-                ]
-              },
               {
                 "name": "ProcessIntegrand",
                 "kind": "variant",
@@ -389,7 +329,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::Integrand",
               "file": "crates/gammalooprs/src/integrands/mod.rs",
-              "line": 109,
+              "line": 64,
               "column": 1
             }
           },
@@ -477,7 +417,7 @@
             "source": {
               "identifier": "gammalooprs::settings::GlobalSettings",
               "file": "crates/gammalooprs/src/settings/mod.rs",
-              "line": 25,
+              "line": 24,
               "column": 1
             }
           },
@@ -525,17 +465,6 @@
                   "body": "Per-integrand overrides for external model parameters."
                 },
                 "signature": "RuntimeModelSettings",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "hard_coded_integrand",
-                "kind": "field",
-                "docs": {
-                  "format": "rust-markdown",
-                  "body": "Optional built-in test integrand used instead of a generated process integrand."
-                },
-                "signature": "Option < IntegrandSettings >",
                 "default": null,
                 "members": []
               },
@@ -642,7 +571,7 @@
             "source": {
               "identifier": "gammalooprs::settings::RuntimeSettings",
               "file": "crates/gammalooprs/src/settings/mod.rs",
-              "line": 52,
+              "line": 51,
               "column": 1
             }
           },
@@ -697,7 +626,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::SingleSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 394,
+              "line": 599,
               "column": 1
             }
           },
@@ -763,7 +692,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::BatchSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 620,
+              "line": 825,
               "column": 1
             }
           },
@@ -818,7 +747,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::PreciseSingleSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 638,
+              "line": 843,
               "column": 1
             }
           },
@@ -873,7 +802,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::PreciseBatchSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 646,
+              "line": 851,
               "column": 1
             }
           },
@@ -1093,7 +1022,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramSnapshot",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 1984,
+              "line": 1986,
               "column": 1
             }
           },
@@ -1143,7 +1072,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramSnapshot::merge",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 2080,
+              "line": 2082,
               "column": 1
             }
           },
@@ -1193,7 +1122,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramSnapshot::rebin",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 2209,
+              "line": 2211,
               "column": 1
             }
           },
@@ -1424,7 +1353,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramAccumulatorState",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 2269,
+              "line": 2271,
               "column": 1
             }
           },
@@ -1467,7 +1396,7 @@
             "source": {
               "identifier": "gammalooprs::observables::HistogramAccumulatorState::snapshot",
               "file": "crates/gammalooprs/src/observables/mod.rs",
-              "line": 2507,
+              "line": 2509,
               "column": 1
             }
           },
@@ -1499,7 +1428,7 @@
             "source": {
               "identifier": "gammalooprs::set_interrupt_handler",
               "file": "crates/gammalooprs/src/lib.rs",
-              "line": 84,
+              "line": 82,
               "column": 1
             }
           },
@@ -1531,7 +1460,7 @@
             "source": {
               "identifier": "gammalooprs::request_interrupt",
               "file": "crates/gammalooprs/src/lib.rs",
-              "line": 93,
+              "line": 91,
               "column": 1
             }
           },
@@ -1566,7 +1495,7 @@
             "source": {
               "identifier": "gammalooprs::is_interrupt_requested",
               "file": "crates/gammalooprs/src/lib.rs",
-              "line": 103,
+              "line": 101,
               "column": 1
             }
           },
@@ -1598,7 +1527,7 @@
             "source": {
               "identifier": "gammalooprs::clear_interrupt_request",
               "file": "crates/gammalooprs/src/lib.rs",
-              "line": 123,
+              "line": 121,
               "column": 1
             }
           }

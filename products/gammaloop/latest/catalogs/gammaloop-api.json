@@ -186,12 +186,34 @@
                 "signature": "Option < PathBuf >",
                 "default": null,
                 "members": []
+              },
+              {
+                "name": "processes",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Restrict loading to these process names (all integrands in each process)."
+                },
+                "signature": "Option < Vec < String > >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrands",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Restrict loading to these integrand names or PROCESS@INTEGRAND pairs."
+                },
+                "signature": "Option < Vec < String > >",
+                "default": null,
+                "members": []
               }
             ],
             "source": {
               "identifier": "gammaloop_api::StateLoadOption",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 579,
+              "line": 589,
               "column": 1
             }
           },
@@ -290,7 +312,7 @@
             "source": {
               "identifier": "gammaloop_api::LoadedState",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 611,
+              "line": 625,
               "column": 1
             }
           },
@@ -333,7 +355,7 @@
             "source": {
               "identifier": "gammaloop_api::StateLoadOption::load",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 718,
+              "line": 734,
               "column": 1
             }
           },
@@ -376,7 +398,7 @@
             "source": {
               "identifier": "gammaloop_api::LoadedState::cli_session",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 632,
+              "line": 646,
               "column": 1
             }
           },
@@ -513,7 +535,7 @@
             "source": {
               "identifier": "gammaloop_api::state::CommandHistory",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1020,
+              "line": 1022,
               "column": 1
             }
           },
@@ -556,7 +578,7 @@
             "source": {
               "identifier": "gammaloop_api::state::CommandHistory::from_raw_string",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1176,
+              "line": 1178,
               "column": 1
             }
           },
@@ -633,7 +655,7 @@
             "source": {
               "identifier": "gammaloop_api::state::RunHistory",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1209,
+              "line": 1211,
               "column": 1
             }
           },
@@ -676,7 +698,7 @@
             "source": {
               "identifier": "gammaloop_api::state::RunHistory::load",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1485,
+              "line": 1487,
               "column": 1
             }
           },
@@ -753,7 +775,7 @@
             "source": {
               "identifier": "gammaloop_api::state::State",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1580,
+              "line": 1582,
               "column": 1
             }
           },
@@ -810,7 +832,7 @@
             "source": {
               "identifier": "gammaloop_api::state::State::get_integrand_info",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 2208,
+              "line": 2256,
               "column": 1
             }
           },
@@ -953,7 +975,7 @@
             "source": {
               "identifier": "gammaloop_api::integrand_info::IntegrandInfo",
               "file": "crates/gammaloop-api/src/integrand_info.rs",
-              "line": 270,
+              "line": 359,
               "column": 1
             }
           },
@@ -1276,6 +1298,17 @@
                 "members": []
               },
               {
+                "name": "reference_gaussian",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Integrate a Gaussian acceptance target, e.g. '{\"width\":300}' or\n`'{\"width\":300,\"center\":[1,2,3]}'`. Re is normalization; Im is the raw\nsecond moment divided by its known expectation (both targets are one).\nOmitted/empty center means centered. Omission requests physics; repeat\nthe same descriptor when resuming a reference workspace."
+                },
+                "signature": "Option < GaussianReferenceFunction >",
+                "default": null,
+                "members": []
+              },
+              {
                 "name": "restart",
                 "kind": "field",
                 "docs": {
@@ -1477,7 +1510,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::integrate::Integrate",
               "file": "crates/gammaloop-api/src/commands/integrate.rs",
-              "line": 67,
+              "line": 68,
               "column": 1
             }
           },
@@ -1534,7 +1567,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::integrate::Integrate::run",
               "file": "crates/gammaloop-api/src/commands/integrate.rs",
-              "line": 1675,
+              "line": 1696,
               "column": 1
             }
           },
@@ -1600,7 +1633,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::integrate::IntegrationOutput",
               "file": "crates/gammaloop-api/src/commands/integrate.rs",
-              "line": 183,
+              "line": 193,
               "column": 1
             }
           },
@@ -1759,7 +1792,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::EvaluateSamples",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 75,
+              "line": 76,
               "column": 1
             }
           },
@@ -1809,7 +1842,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_sample",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 383,
+              "line": 384,
               "column": 1
             }
           },
@@ -1859,7 +1892,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_samples",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 372,
+              "line": 373,
               "column": 1
             }
           },
@@ -2013,7 +2046,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::EvaluateSamplesPrecise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 214,
+              "line": 215,
               "column": 1
             }
           },
@@ -2063,7 +2096,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_sample_precise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 352,
+              "line": 353,
               "column": 1
             }
           },
@@ -2113,7 +2146,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_samples_precise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 341,
+              "line": 342,
               "column": 1
             }
           },
@@ -2210,7 +2243,7 @@
             "source": {
               "identifier": "gammaloop_api::state::StateFolderKind",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1668,
+              "line": 1684,
               "column": 1
             }
           },
@@ -2253,7 +2286,7 @@
             "source": {
               "identifier": "gammaloop_api::state::classify_state_folder",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1686,
+              "line": 1702,
               "column": 1
             }
           },
@@ -2341,7 +2374,7 @@
             "source": {
               "identifier": "gammaloop_api::CLISettings",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 336,
+              "line": 346,
               "column": 1
             }
           },
@@ -2429,7 +2462,7 @@
             "source": {
               "identifier": "gammaloop_api::CLISettings",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 336,
+              "line": 346,
               "column": 1
             }
           }

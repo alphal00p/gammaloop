@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["LUCTKinematicPoint","LUCounterTermEvaluators","LUThresholdHelperEvaluators"]};
+window.SIDEBAR_ITEMS = {"struct":["LUCTKinematicPoint","LUCounterTermEvaluators","LUSharedOverlaps","LUThresholdHelperEvaluators"]};

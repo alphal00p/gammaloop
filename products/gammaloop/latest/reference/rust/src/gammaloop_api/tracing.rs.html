@@ -305,7 +305,7 @@
 <a href=#304 id=304 data-nosnippet>304</a></span><span class="kw">pub fn </span>set_file_log_filter(user_spec: <span class="kw">impl </span>AsRef&lt;str&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#305 id=305 data-nosnippet>305</a>    <span class="kw">let </span>user_spec = <span class="kw">if let </span><span class="prelude-val">Some</span>(file) = log_filter_env_override(ENV_FILE_LOG_FILTER) {
 <a href=#306 id=306 data-nosnippet>306</a>        <span class="kw">if </span>std::env::var(ENV_NO_GL_HARD_WARNINGS).is_err() {
-<a href=#307 id=307 data-nosnippet>307</a>            <span class="macro">println!</span>(
+<a href=#307 id=307 data-nosnippet>307</a>            <span class="macro">eprintln!</span>(
 <a href=#308 id=308 data-nosnippet>308</a>                <span class="string">"WARNING, file log filter is set to {file}, will override settings {}"</span>,
 <a href=#309 id=309 data-nosnippet>309</a>                user_spec.as_ref()
 <a href=#310 id=310 data-nosnippet>310</a>            );
@@ -373,7 +373,7 @@
 <a href=#372 id=372 data-nosnippet>372</a></span><span class="kw">pub fn </span>set_stderr_log_filter(user_spec: <span class="kw">impl </span>AsRef&lt;str&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#373 id=373 data-nosnippet>373</a>    <span class="kw">let </span>user_spec = <span class="kw">if let </span><span class="prelude-val">Some</span>(display) = log_filter_env_override(ENV_DISPLAY_LOG_FILTER) {
 <a href=#374 id=374 data-nosnippet>374</a>        <span class="kw">if </span>std::env::var(ENV_NO_GL_HARD_WARNINGS).is_err() {
-<a href=#375 id=375 data-nosnippet>375</a>            <span class="macro">println!</span>(
+<a href=#375 id=375 data-nosnippet>375</a>            <span class="macro">eprintln!</span>(
 <a href=#376 id=376 data-nosnippet>376</a>                <span class="string">"WARNING, display log filter is set to {display}, will override settings {}"</span>,
 <a href=#377 id=377 data-nosnippet>377</a>                user_spec.as_ref()
 <a href=#378 id=378 data-nosnippet>378</a>            );

@@ -624,104 +624,130 @@
 <a href=#623 id=623 data-nosnippet>623</a>        </span>};
 <a href=#624 id=624 data-nosnippet>624</a>        <span class="kw">let </span>no_valid_production_ids = BTreeSet::new();
 <a href=#625 id=625 data-nosnippet>625</a>        <span class="kw">let </span>indices = cff.terms.keys().copied().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
-<a href=#626 id=626 data-nosnippet>626</a>        <span class="comment">// Convert this reduced CFF's energy-factor convention once. Any
-<a href=#627 id=627 data-nosnippet>627</a>        // localized finite coefficient keeps its existing forest signs.
-<a href=#628 id=628 data-nosnippet>628</a>        </span><span class="kw">let </span>production_prefactor = Atom::num(cff.production_prefactor_factor());
-<a href=#629 id=629 data-nosnippet>629</a>        <span class="kw">let </span>ids = <span class="self">self</span>.orientation.orientation_ids()<span class="question-mark">?</span>;
-<a href=#630 id=630 data-nosnippet>630</a>        <span class="kw">if </span>ids.is_empty() {
-<a href=#631 id=631 data-nosnippet>631</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#632 id=632 data-nosnippet>632</a>                <span class="string">"orientation pattern selects no production energy maps"
-<a href=#633 id=633 data-nosnippet>633</a>            </span>));
-<a href=#634 id=634 data-nosnippet>634</a>        }
-<a href=#635 id=635 data-nosnippet>635</a>        <span class="attr">#[allow(clippy::type_complexity)]
-<a href=#636 id=636 data-nosnippet>636</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>terms: Vec&lt;(
-<a href=#637 id=637 data-nosnippet>637</a>            OrientationID,
-<a href=#638 id=638 data-nosnippet>638</a>            <span class="prelude-ty">Option</span>&lt;Vec&lt;LinearEnergyExpr&gt;&gt;,
-<a href=#639 id=639 data-nosnippet>639</a>            BTreeMap&lt;CutCFFIndex, Atom&gt;,
-<a href=#640 id=640 data-nosnippet>640</a>        )&gt; = Vec::new();
-<a href=#641 id=641 data-nosnippet>641</a>        <span class="comment">// Full maps recover selectors for graph tree edges contracted by the
-<a href=#642 id=642 data-nosnippet>642</a>        // CFF source, not only the explicit UV subgraph. The former coarse
-<a href=#643 id=643 data-nosnippet>643</a>        // convention at to_contract alone is not a production projection.
-<a href=#644 id=644 data-nosnippet>644</a>        </span><span class="kw">let </span>internal_edges = graph.paired_edges(<span class="kw-2">&amp;</span>contract_subgraph);
-<a href=#645 id=645 data-nosnippet>645</a>        <span class="kw">for </span>(index, cff_term) <span class="kw">in </span>cff.terms {
-<a href=#646 id=646 data-nosnippet>646</a>            <span class="kw">let </span>valid_production_ids = valid_production_ids.as_ref().map(|valid_by_index| {
-<a href=#647 id=647 data-nosnippet>647</a>                valid_by_index
-<a href=#648 id=648 data-nosnippet>648</a>                    .get(<span class="kw-2">&amp;</span>index)
-<a href=#649 id=649 data-nosnippet>649</a>                    .unwrap_or(<span class="kw-2">&amp;</span>no_valid_production_ids)
-<a href=#650 id=650 data-nosnippet>650</a>            });
-<a href=#651 id=651 data-nosnippet>651</a>            <span class="kw">for </span>reduced <span class="kw">in </span>cff_term.orientations {
-<a href=#652 id=652 data-nosnippet>652</a>                <span class="comment">// A generalized carrier map can be under-resolved even for a
-<a href=#653 id=653 data-nosnippet>653</a>                // stored root residue. Keep that branch-owned numerator map
-<a href=#654 id=654 data-nosnippet>654</a>                // separate from the resolved production orientation selected
-<a href=#655 id=655 data-nosnippet>655</a>                // solely to partition the ordinary runtime orientation sum.
-<a href=#656 id=656 data-nosnippet>656</a>                </span><span class="kw">let </span>source_edge_energy_map = <span class="prelude-val">Some</span>(reduced.orientation.edge_energy_map.clone());
-<a href=#657 id=657 data-nosnippet>657</a>                <span class="kw">let </span>reduced_expression = <span class="kw-2">&amp;</span>reduced.expression * <span class="kw-2">&amp;</span>production_prefactor;
-<a href=#658 id=658 data-nosnippet>658</a>                <span class="kw">let </span>localized = <span class="self">self</span>.localized_orientation_terms(
-<a href=#659 id=659 data-nosnippet>659</a>                    graph,
-<a href=#660 id=660 data-nosnippet>660</a>                    <span class="kw-2">&amp;</span>reduced.orientation,
-<a href=#661 id=661 data-nosnippet>661</a>                    <span class="kw-2">&amp;</span>reduced_expression,
-<a href=#662 id=662 data-nosnippet>662</a>                    <span class="kw-2">&amp;</span>contract_subgraph,
-<a href=#663 id=663 data-nosnippet>663</a>                    <span class="kw-2">&amp;</span>internal_edges,
-<a href=#664 id=664 data-nosnippet>664</a>                    valid_production_ids,
-<a href=#665 id=665 data-nosnippet>665</a>                    reduced.production_orientation_id,
-<a href=#666 id=666 data-nosnippet>666</a>                )<span class="question-mark">?</span>;
-<a href=#667 id=667 data-nosnippet>667</a>                <span class="kw">for </span>(id, expression) <span class="kw">in </span>localized {
-<a href=#668 id=668 data-nosnippet>668</a>                    <span class="kw">let </span>branch = terms
-<a href=#669 id=669 data-nosnippet>669</a>                        .iter()
-<a href=#670 id=670 data-nosnippet>670</a>                        .position(|(selector_id, energy_map, <span class="kw">_</span>)| {
-<a href=#671 id=671 data-nosnippet>671</a>                            <span class="kw-2">*</span>selector_id == id &amp;&amp; energy_map == <span class="kw-2">&amp;</span>source_edge_energy_map
-<a href=#672 id=672 data-nosnippet>672</a>                        })
-<a href=#673 id=673 data-nosnippet>673</a>                        .unwrap_or_else(|| {
-<a href=#674 id=674 data-nosnippet>674</a>                            terms.push((
-<a href=#675 id=675 data-nosnippet>675</a>                                id,
-<a href=#676 id=676 data-nosnippet>676</a>                                source_edge_energy_map.clone(),
-<a href=#677 id=677 data-nosnippet>677</a>                                indices.iter().map(|index| (<span class="kw-2">*</span>index, Atom::Zero)).collect(),
-<a href=#678 id=678 data-nosnippet>678</a>                            ));
-<a href=#679 id=679 data-nosnippet>679</a>                            terms.len() - <span class="number">1
-<a href=#680 id=680 data-nosnippet>680</a>                        </span>});
-<a href=#681 id=681 data-nosnippet>681</a>                    <span class="kw-2">*</span>terms[branch]
-<a href=#682 id=682 data-nosnippet>682</a>                        .<span class="number">2
-<a href=#683 id=683 data-nosnippet>683</a>                        </span>.get_mut(<span class="kw-2">&amp;</span>index)
-<a href=#684 id=684 data-nosnippet>684</a>                        .expect(<span class="string">"all projected CFF branch keys were initialized"</span>) += expression;
-<a href=#685 id=685 data-nosnippet>685</a>                }
-<a href=#686 id=686 data-nosnippet>686</a>            }
-<a href=#687 id=687 data-nosnippet>687</a>        }
-<a href=#688 id=688 data-nosnippet>688</a>
-<a href=#689 id=689 data-nosnippet>689</a>        <span class="prelude-val">Ok</span>(OrientationIntegrands(
-<a href=#690 id=690 data-nosnippet>690</a>            terms
-<a href=#691 id=691 data-nosnippet>691</a>                .into_iter()
-<a href=#692 id=692 data-nosnippet>692</a>                .map(|(selector_id, source_edge_energy_map, integrands)| {
-<a href=#693 id=693 data-nosnippet>693</a>                    OrientationIntegrandBranch {
-<a href=#694 id=694 data-nosnippet>694</a>                        selector_id,
-<a href=#695 id=695 data-nosnippet>695</a>                        source_edge_energy_map,
-<a href=#696 id=696 data-nosnippet>696</a>                        integrands: integrands.into_iter().collect(),
-<a href=#697 id=697 data-nosnippet>697</a>                    }
-<a href=#698 id=698 data-nosnippet>698</a>                })
-<a href=#699 id=699 data-nosnippet>699</a>                .collect(),
-<a href=#700 id=700 data-nosnippet>700</a>        ))
-<a href=#701 id=701 data-nosnippet>701</a>    }
-<a href=#702 id=702 data-nosnippet>702</a>
-<a href=#703 id=703 data-nosnippet>703</a>    <span class="attr">#[cfg(test)]
-<a href=#704 id=704 data-nosnippet>704</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>map_numerator(
-<a href=#705 id=705 data-nosnippet>705</a>        <span class="self">self</span>,
-<a href=#706 id=706 data-nosnippet>706</a>        graph: <span class="kw-2">&amp;</span>Graph,
-<a href=#707 id=707 data-nosnippet>707</a>        orientation_id: OrientationID,
-<a href=#708 id=708 data-nosnippet>708</a>        source_edge_energy_map: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>[LinearEnergyExpr]&gt;,
-<a href=#709 id=709 data-nosnippet>709</a>        numerator: <span class="kw-2">&amp;</span>Atom,
-<a href=#710 id=710 data-nosnippet>710</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Atom&gt; {
-<a href=#711 id=711 data-nosnippet>711</a>        <span class="self">self</span>.orientation
-<a href=#712 id=712 data-nosnippet>712</a>            .map_numerator(graph, orientation_id, source_edge_energy_map, numerator)
-<a href=#713 id=713 data-nosnippet>713</a>    }
+<a href=#626 id=626 data-nosnippet>626</a>        <span class="kw">let </span>source_orientation_count = cff
+<a href=#627 id=627 data-nosnippet>627</a>            .terms
+<a href=#628 id=628 data-nosnippet>628</a>            .values()
+<a href=#629 id=629 data-nosnippet>629</a>            .map(|term| term.orientations.len())
+<a href=#630 id=630 data-nosnippet>630</a>            .sum::&lt;usize&gt;();
+<a href=#631 id=631 data-nosnippet>631</a>        <span class="kw">let </span>source_variant_count = cff
+<a href=#632 id=632 data-nosnippet>632</a>            .terms
+<a href=#633 id=633 data-nosnippet>633</a>            .values()
+<a href=#634 id=634 data-nosnippet>634</a>            .flat_map(|term| <span class="kw-2">&amp;</span>term.orientations)
+<a href=#635 id=635 data-nosnippet>635</a>            .map(|term| term.orientation.variants.len())
+<a href=#636 id=636 data-nosnippet>636</a>            .sum::&lt;usize&gt;();
+<a href=#637 id=637 data-nosnippet>637</a>        <span class="comment">// Convert this reduced CFF's energy-factor convention once. Any
+<a href=#638 id=638 data-nosnippet>638</a>        // localized finite coefficient keeps its existing forest signs.
+<a href=#639 id=639 data-nosnippet>639</a>        </span><span class="kw">let </span>production_prefactor = Atom::num(cff.production_prefactor_factor());
+<a href=#640 id=640 data-nosnippet>640</a>        <span class="kw">let </span>ids = <span class="self">self</span>.orientation.orientation_ids()<span class="question-mark">?</span>;
+<a href=#641 id=641 data-nosnippet>641</a>        <span class="kw">if </span>ids.is_empty() {
+<a href=#642 id=642 data-nosnippet>642</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#643 id=643 data-nosnippet>643</a>                <span class="string">"orientation pattern selects no production energy maps"
+<a href=#644 id=644 data-nosnippet>644</a>            </span>));
+<a href=#645 id=645 data-nosnippet>645</a>        }
+<a href=#646 id=646 data-nosnippet>646</a>        <span class="attr">#[allow(clippy::type_complexity)]
+<a href=#647 id=647 data-nosnippet>647</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>terms: Vec&lt;(
+<a href=#648 id=648 data-nosnippet>648</a>            OrientationID,
+<a href=#649 id=649 data-nosnippet>649</a>            <span class="prelude-ty">Option</span>&lt;Vec&lt;LinearEnergyExpr&gt;&gt;,
+<a href=#650 id=650 data-nosnippet>650</a>            BTreeMap&lt;CutCFFIndex, Atom&gt;,
+<a href=#651 id=651 data-nosnippet>651</a>        )&gt; = Vec::new();
+<a href=#652 id=652 data-nosnippet>652</a>        <span class="comment">// Full maps recover selectors for graph tree edges contracted by the
+<a href=#653 id=653 data-nosnippet>653</a>        // CFF source, not only the explicit UV subgraph. The former coarse
+<a href=#654 id=654 data-nosnippet>654</a>        // convention at to_contract alone is not a production projection.
+<a href=#655 id=655 data-nosnippet>655</a>        </span><span class="kw">let </span>internal_edges = graph.paired_edges(<span class="kw-2">&amp;</span>contract_subgraph);
+<a href=#656 id=656 data-nosnippet>656</a>        <span class="kw">for </span>(index, cff_term) <span class="kw">in </span>cff.terms {
+<a href=#657 id=657 data-nosnippet>657</a>            <span class="kw">let </span>valid_production_ids = valid_production_ids.as_ref().map(|valid_by_index| {
+<a href=#658 id=658 data-nosnippet>658</a>                valid_by_index
+<a href=#659 id=659 data-nosnippet>659</a>                    .get(<span class="kw-2">&amp;</span>index)
+<a href=#660 id=660 data-nosnippet>660</a>                    .unwrap_or(<span class="kw-2">&amp;</span>no_valid_production_ids)
+<a href=#661 id=661 data-nosnippet>661</a>            });
+<a href=#662 id=662 data-nosnippet>662</a>            <span class="kw">for </span>reduced <span class="kw">in </span>cff_term.orientations {
+<a href=#663 id=663 data-nosnippet>663</a>                <span class="comment">// A generalized carrier map can be under-resolved even for a
+<a href=#664 id=664 data-nosnippet>664</a>                // stored root residue. Keep that branch-owned numerator map
+<a href=#665 id=665 data-nosnippet>665</a>                // separate from the resolved production orientation selected
+<a href=#666 id=666 data-nosnippet>666</a>                // solely to partition the ordinary runtime orientation sum.
+<a href=#667 id=667 data-nosnippet>667</a>                </span><span class="kw">let </span>source_edge_energy_map = <span class="prelude-val">Some</span>(reduced.orientation.edge_energy_map.clone());
+<a href=#668 id=668 data-nosnippet>668</a>                <span class="kw">let </span>reduced_expression = <span class="kw-2">&amp;</span>reduced.expression * <span class="kw-2">&amp;</span>production_prefactor;
+<a href=#669 id=669 data-nosnippet>669</a>                <span class="kw">let </span>localized = <span class="self">self</span>.localized_orientation_terms(
+<a href=#670 id=670 data-nosnippet>670</a>                    graph,
+<a href=#671 id=671 data-nosnippet>671</a>                    <span class="kw-2">&amp;</span>reduced.orientation,
+<a href=#672 id=672 data-nosnippet>672</a>                    <span class="kw-2">&amp;</span>reduced_expression,
+<a href=#673 id=673 data-nosnippet>673</a>                    <span class="kw-2">&amp;</span>contract_subgraph,
+<a href=#674 id=674 data-nosnippet>674</a>                    <span class="kw-2">&amp;</span>internal_edges,
+<a href=#675 id=675 data-nosnippet>675</a>                    valid_production_ids,
+<a href=#676 id=676 data-nosnippet>676</a>                    reduced.production_orientation_id,
+<a href=#677 id=677 data-nosnippet>677</a>                )<span class="question-mark">?</span>;
+<a href=#678 id=678 data-nosnippet>678</a>                <span class="kw">for </span>(id, expression) <span class="kw">in </span>localized {
+<a href=#679 id=679 data-nosnippet>679</a>                    <span class="kw">let </span>branch = terms
+<a href=#680 id=680 data-nosnippet>680</a>                        .iter()
+<a href=#681 id=681 data-nosnippet>681</a>                        .position(|(selector_id, energy_map, <span class="kw">_</span>)| {
+<a href=#682 id=682 data-nosnippet>682</a>                            <span class="kw-2">*</span>selector_id == id &amp;&amp; energy_map == <span class="kw-2">&amp;</span>source_edge_energy_map
+<a href=#683 id=683 data-nosnippet>683</a>                        })
+<a href=#684 id=684 data-nosnippet>684</a>                        .unwrap_or_else(|| {
+<a href=#685 id=685 data-nosnippet>685</a>                            terms.push((
+<a href=#686 id=686 data-nosnippet>686</a>                                id,
+<a href=#687 id=687 data-nosnippet>687</a>                                source_edge_energy_map.clone(),
+<a href=#688 id=688 data-nosnippet>688</a>                                indices.iter().map(|index| (<span class="kw-2">*</span>index, Atom::Zero)).collect(),
+<a href=#689 id=689 data-nosnippet>689</a>                            ));
+<a href=#690 id=690 data-nosnippet>690</a>                            terms.len() - <span class="number">1
+<a href=#691 id=691 data-nosnippet>691</a>                        </span>});
+<a href=#692 id=692 data-nosnippet>692</a>                    <span class="kw-2">*</span>terms[branch]
+<a href=#693 id=693 data-nosnippet>693</a>                        .<span class="number">2
+<a href=#694 id=694 data-nosnippet>694</a>                        </span>.get_mut(<span class="kw-2">&amp;</span>index)
+<a href=#695 id=695 data-nosnippet>695</a>                        .expect(<span class="string">"all projected CFF branch keys were initialized"</span>) += expression;
+<a href=#696 id=696 data-nosnippet>696</a>                }
+<a href=#697 id=697 data-nosnippet>697</a>            }
+<a href=#698 id=698 data-nosnippet>698</a>        }
+<a href=#699 id=699 data-nosnippet>699</a>
+<a href=#700 id=700 data-nosnippet>700</a>        <span class="kw">if </span>terms.is_empty() {
+<a href=#701 id=701 data-nosnippet>701</a>            <span class="comment">// A reduced cograph can have no residue at the selected threshold.
+<a href=#702 id=702 data-nosnippet>702</a>            // Preserve that zero on its cut-order support, just as for a zero
+<a href=#703 id=703 data-nosnippet>703</a>            // integrated coefficient, before entering the nonempty direct lane.
+<a href=#704 id=704 data-nosnippet>704</a>            </span><span class="macro">debug_tags!</span>(#generation, #uv, #integrated, #projection;
+<a href=#705 id=705 data-nosnippet>705</a>                stage = <span class="string">"empty_cff_projection"</span>,
+<a href=#706 id=706 data-nosnippet>706</a>                source_orientation_count,
+<a href=#707 id=707 data-nosnippet>707</a>                source_variant_count,
+<a href=#708 id=708 data-nosnippet>708</a>                contracted = %to_contract.string_label(),
+<a href=#709 id=709 data-nosnippet>709</a>                residue_selector = <span class="question-mark">?</span><span class="self">self</span>.cutset.residue_selector,
+<a href=#710 id=710 data-nosnippet>710</a>                <span class="string">"Retaining a zero CFF projection on the selected cut orders"
+<a href=#711 id=711 data-nosnippet>711</a>            </span>);
+<a href=#712 id=712 data-nosnippet>712</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(OrientationIntegrands::from_ids_and_indices(ids, <span class="kw-2">&amp;</span>indices));
+<a href=#713 id=713 data-nosnippet>713</a>        }
 <a href=#714 id=714 data-nosnippet>714</a>
-<a href=#715 id=715 data-nosnippet>715</a>    <span class="doccomment">/// Materialize the opaque selector carried by an exact production-map
-<a href=#716 id=716 data-nosnippet>716</a>    /// branch. Explicit sums omit its runtime selector.
-<a href=#717 id=717 data-nosnippet>717</a>    </span><span class="attr">#[cfg(test)]
-<a href=#718 id=718 data-nosnippet>718</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>residue_map_key_selector(<span class="self">self</span>, id: OrientationID) -&gt; Atom {
-<a href=#719 id=719 data-nosnippet>719</a>        <span class="kw">if </span>!<span class="self">self</span>.orientation.explicit_orientation_sum_only {
-<a href=#720 id=720 data-nosnippet>720</a>            id.atom()
-<a href=#721 id=721 data-nosnippet>721</a>        } <span class="kw">else </span>{
-<a href=#722 id=722 data-nosnippet>722</a>            Atom::one()
-<a href=#723 id=723 data-nosnippet>723</a>        }
-<a href=#724 id=724 data-nosnippet>724</a>    }
-<a href=#725 id=725 data-nosnippet>725</a>}
+<a href=#715 id=715 data-nosnippet>715</a>        <span class="prelude-val">Ok</span>(OrientationIntegrands(
+<a href=#716 id=716 data-nosnippet>716</a>            terms
+<a href=#717 id=717 data-nosnippet>717</a>                .into_iter()
+<a href=#718 id=718 data-nosnippet>718</a>                .map(|(selector_id, source_edge_energy_map, integrands)| {
+<a href=#719 id=719 data-nosnippet>719</a>                    OrientationIntegrandBranch {
+<a href=#720 id=720 data-nosnippet>720</a>                        selector_id,
+<a href=#721 id=721 data-nosnippet>721</a>                        source_edge_energy_map,
+<a href=#722 id=722 data-nosnippet>722</a>                        integrands: integrands.into_iter().collect(),
+<a href=#723 id=723 data-nosnippet>723</a>                    }
+<a href=#724 id=724 data-nosnippet>724</a>                })
+<a href=#725 id=725 data-nosnippet>725</a>                .collect(),
+<a href=#726 id=726 data-nosnippet>726</a>        ))
+<a href=#727 id=727 data-nosnippet>727</a>    }
+<a href=#728 id=728 data-nosnippet>728</a>
+<a href=#729 id=729 data-nosnippet>729</a>    <span class="attr">#[cfg(test)]
+<a href=#730 id=730 data-nosnippet>730</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>map_numerator(
+<a href=#731 id=731 data-nosnippet>731</a>        <span class="self">self</span>,
+<a href=#732 id=732 data-nosnippet>732</a>        graph: <span class="kw-2">&amp;</span>Graph,
+<a href=#733 id=733 data-nosnippet>733</a>        orientation_id: OrientationID,
+<a href=#734 id=734 data-nosnippet>734</a>        source_edge_energy_map: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>[LinearEnergyExpr]&gt;,
+<a href=#735 id=735 data-nosnippet>735</a>        numerator: <span class="kw-2">&amp;</span>Atom,
+<a href=#736 id=736 data-nosnippet>736</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Atom&gt; {
+<a href=#737 id=737 data-nosnippet>737</a>        <span class="self">self</span>.orientation
+<a href=#738 id=738 data-nosnippet>738</a>            .map_numerator(graph, orientation_id, source_edge_energy_map, numerator)
+<a href=#739 id=739 data-nosnippet>739</a>    }
+<a href=#740 id=740 data-nosnippet>740</a>
+<a href=#741 id=741 data-nosnippet>741</a>    <span class="doccomment">/// Materialize the opaque selector carried by an exact production-map
+<a href=#742 id=742 data-nosnippet>742</a>    /// branch. Explicit sums omit its runtime selector.
+<a href=#743 id=743 data-nosnippet>743</a>    </span><span class="attr">#[cfg(test)]
+<a href=#744 id=744 data-nosnippet>744</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>residue_map_key_selector(<span class="self">self</span>, id: OrientationID) -&gt; Atom {
+<a href=#745 id=745 data-nosnippet>745</a>        <span class="kw">if </span>!<span class="self">self</span>.orientation.explicit_orientation_sum_only {
+<a href=#746 id=746 data-nosnippet>746</a>            id.atom()
+<a href=#747 id=747 data-nosnippet>747</a>        } <span class="kw">else </span>{
+<a href=#748 id=748 data-nosnippet>748</a>            Atom::one()
+<a href=#749 id=749 data-nosnippet>749</a>        }
+<a href=#750 id=750 data-nosnippet>750</a>    }
+<a href=#751 id=751 data-nosnippet>751</a>}
 </code></pre></div></section></main></body></html>

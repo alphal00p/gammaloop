@@ -145,17 +145,57 @@
 <a href=#144 id=144 data-nosnippet>144</a>
 <a href=#145 id=145 data-nosnippet>145</a><span class="attr">#[cfg(test)]
 <a href=#146 id=146 data-nosnippet>146</a></span><span class="kw">mod </span>tests {
-<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">use </span><span class="kw">super</span>::dot_attr_value;
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">use </span>linnet::parser::DotGraph;
 <a href=#148 id=148 data-nosnippet>148</a>
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">const </span>RAW_DOT_VALUE: <span class="kw-2">&amp;</span>str = <span class="string">"quote:\" slash:\\ lf:\n cr:\r tab:\t"</span>;
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">const </span>ESCAPED_DOT_VALUE: <span class="kw-2">&amp;</span>str = <span class="string">r#"quote:\" slash:\\ lf:\n cr:\r tab:\t"#</span>;
-<a href=#151 id=151 data-nosnippet>151</a>
-<a href=#152 id=152 data-nosnippet>152</a>    <span class="attr">#[test]
-<a href=#153 id=153 data-nosnippet>153</a>    </span><span class="kw">fn </span>dot_values_escape_quoted_string_content() {
-<a href=#154 id=154 data-nosnippet>154</a>        <span class="macro">assert_eq!</span>(
-<a href=#155 id=155 data-nosnippet>155</a>            dot_attr_value(RAW_DOT_VALUE),
-<a href=#156 id=156 data-nosnippet>156</a>            <span class="macro">format!</span>(<span class="string">r#""{ESCAPED_DOT_VALUE}""#</span>)
-<a href=#157 id=157 data-nosnippet>157</a>        );
-<a href=#158 id=158 data-nosnippet>158</a>    }
-<a href=#159 id=159 data-nosnippet>159</a>}
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="kw">use </span><span class="kw">super</span>::dot_attr_value;
+<a href=#150 id=150 data-nosnippet>150</a>
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">const </span>RAW_DOT_VALUE: <span class="kw-2">&amp;</span>str = <span class="string">"quote:\" slash:\\ lf:\n cr:\r tab:\t"</span>;
+<a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">const </span>ESCAPED_DOT_VALUE: <span class="kw-2">&amp;</span>str = <span class="string">r#"quote:\" slash:\\ lf:\n cr:\r tab:\t"#</span>;
+<a href=#153 id=153 data-nosnippet>153</a>
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="attr">#[test]
+<a href=#155 id=155 data-nosnippet>155</a>    </span><span class="kw">fn </span>dot_values_escape_quoted_string_content() {
+<a href=#156 id=156 data-nosnippet>156</a>        <span class="macro">assert_eq!</span>(
+<a href=#157 id=157 data-nosnippet>157</a>            dot_attr_value(RAW_DOT_VALUE),
+<a href=#158 id=158 data-nosnippet>158</a>            <span class="macro">format!</span>(<span class="string">r#""{ESCAPED_DOT_VALUE}""#</span>)
+<a href=#159 id=159 data-nosnippet>159</a>        );
+<a href=#160 id=160 data-nosnippet>160</a>    }
+<a href=#161 id=161 data-nosnippet>161</a>
+<a href=#162 id=162 data-nosnippet>162</a>    <span class="attr">#[test]
+<a href=#163 id=163 data-nosnippet>163</a>    </span><span class="kw">fn </span>dot_statement_value_survives_dot_round_trip() {
+<a href=#164 id=164 data-nosnippet>164</a>        <span class="kw">let </span><span class="kw-2">mut </span>graph: DotGraph = DotGraph::from_string(<span class="string">"digraph G {}"</span>).unwrap();
+<a href=#165 id=165 data-nosnippet>165</a>        graph
+<a href=#166 id=166 data-nosnippet>166</a>            .global_data
+<a href=#167 id=167 data-nosnippet>167</a>            .statements
+<a href=#168 id=168 data-nosnippet>168</a>            .insert(<span class="string">"escaped"</span>.to_string(), RAW_DOT_VALUE.to_string());
+<a href=#169 id=169 data-nosnippet>169</a>
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span>reparsed: DotGraph = DotGraph::from_string(graph.debug_dot()).unwrap();
+<a href=#171 id=171 data-nosnippet>171</a>
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="macro">assert_eq!</span>(reparsed.global_data.statements[<span class="string">"escaped"</span>], RAW_DOT_VALUE);
+<a href=#173 id=173 data-nosnippet>173</a>    }
+<a href=#174 id=174 data-nosnippet>174</a>
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="attr">#[test]
+<a href=#176 id=176 data-nosnippet>176</a>    </span><span class="kw">fn </span>literal_multiline_dot_string_is_preserved() {
+<a href=#177 id=177 data-nosnippet>177</a>        <span class="kw">let </span>graph: DotGraph = DotGraph::from_string(
+<a href=#178 id=178 data-nosnippet>178</a>            <span class="string">"digraph G { graph [embedded=\"schema_version = 1\n\ncuts = []\"] }"</span>,
+<a href=#179 id=179 data-nosnippet>179</a>        )
+<a href=#180 id=180 data-nosnippet>180</a>        .unwrap();
+<a href=#181 id=181 data-nosnippet>181</a>
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="macro">assert_eq!</span>(
+<a href=#183 id=183 data-nosnippet>183</a>            graph.global_data.statements[<span class="string">"embedded"</span>],
+<a href=#184 id=184 data-nosnippet>184</a>            <span class="string">"schema_version = 1\n\ncuts = []"
+<a href=#185 id=185 data-nosnippet>185</a>        </span>);
+<a href=#186 id=186 data-nosnippet>186</a>    }
+<a href=#187 id=187 data-nosnippet>187</a>
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="attr">#[test]
+<a href=#189 id=189 data-nosnippet>189</a>    </span><span class="kw">fn </span>dot_statements_preserve_unicode_and_embedded_language_escapes() {
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">let </span>raw = <span class="string">"eta:η theta:θ regex:\\d quote:\" newline:\n"</span>;
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span><span class="kw-2">mut </span>graph: DotGraph = DotGraph::from_string(<span class="string">"digraph G {}"</span>).unwrap();
+<a href=#192 id=192 data-nosnippet>192</a>        graph
+<a href=#193 id=193 data-nosnippet>193</a>            .global_data
+<a href=#194 id=194 data-nosnippet>194</a>            .statements
+<a href=#195 id=195 data-nosnippet>195</a>            .insert(<span class="string">"embedded"</span>.into(), raw.into());
+<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">let </span>reparsed: DotGraph = DotGraph::from_string(graph.debug_dot()).unwrap();
+<a href=#197 id=197 data-nosnippet>197</a>        <span class="macro">assert_eq!</span>(reparsed.global_data.statements[<span class="string">"embedded"</span>], raw);
+<a href=#198 id=198 data-nosnippet>198</a>    }
+<a href=#199 id=199 data-nosnippet>199</a>}
 </code></pre></div></section></main></body></html>

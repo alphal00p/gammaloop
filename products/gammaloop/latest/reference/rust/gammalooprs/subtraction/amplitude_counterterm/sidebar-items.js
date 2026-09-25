@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["AmplitudeCountertermAtom","AmplitudeCountertermData","AmplitudeCountertermEvaluation","AmplitudeCountertermEvaluator","AmplitudeLocalCountertermEvaluation","OverlapGroupWithKinematics","OverlapStructureWithKinematics"]};
+window.SIDEBAR_ITEMS = {"struct":["AmplitudeCountertermAtom","AmplitudeCountertermComponentEvaluation","AmplitudeCountertermData","AmplitudeCountertermEvaluation","AmplitudeCountertermEvaluator","AmplitudeLocalCountertermEvaluation","OverlapGroupWithKinematics","OverlapStructureWithKinematics"]};

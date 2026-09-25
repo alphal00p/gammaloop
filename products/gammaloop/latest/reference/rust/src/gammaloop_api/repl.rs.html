@@ -5540,852 +5540,871 @@
 <a href=#5539 id=5539 data-nosnippet>5539</a>    }
 <a href=#5540 id=5540 data-nosnippet>5540</a>
 <a href=#5541 id=5541 data-nosnippet>5541</a>    <span class="attr">#[test]
-<a href=#5542 id=5542 data-nosnippet>5542</a>    </span><span class="kw">fn </span>completion_filters_display_integrand_categories_by_integrand_kind() {
-<a href=#5543 id=5543 data-nosnippet>5543</a>        <span class="kw">let </span>completion_state = generate_completion_state();
-<a href=#5544 id=5544 data-nosnippet>5544</a>
-<a href=#5545 id=5545 data-nosnippet>5545</a>        <span class="kw">let </span>xs_values = completion_values(
-<a href=#5546 id=5546 data-nosnippet>5546</a>            <span class="string">"display integrand -p epem_xs -i subtracted --category "</span>,
-<a href=#5547 id=5547 data-nosnippet>5547</a>            <span class="kw-2">&amp;</span>completion_state,
-<a href=#5548 id=5548 data-nosnippet>5548</a>        );
-<a href=#5549 id=5549 data-nosnippet>5549</a>        <span class="macro">assert!</span>(xs_values.contains(<span class="kw-2">&amp;</span><span class="string">"generation"</span>.to_string()));
-<a href=#5550 id=5550 data-nosnippet>5550</a>        <span class="macro">assert!</span>(xs_values.contains(<span class="kw-2">&amp;</span><span class="string">"orientation"</span>.to_string()));
-<a href=#5551 id=5551 data-nosnippet>5551</a>        <span class="macro">assert!</span>(xs_values.contains(<span class="kw-2">&amp;</span><span class="string">"loop_momentum_basis"</span>.to_string()));
-<a href=#5552 id=5552 data-nosnippet>5552</a>        <span class="macro">assert!</span>(xs_values.contains(<span class="kw-2">&amp;</span><span class="string">"cuts"</span>.to_string()));
-<a href=#5553 id=5553 data-nosnippet>5553</a>
-<a href=#5554 id=5554 data-nosnippet>5554</a>        <span class="kw">let </span>amp_values = completion_values(
-<a href=#5555 id=5555 data-nosnippet>5555</a>            <span class="string">"display integrand -p triangle -i LO --category "</span>,
-<a href=#5556 id=5556 data-nosnippet>5556</a>            <span class="kw-2">&amp;</span>completion_state,
-<a href=#5557 id=5557 data-nosnippet>5557</a>        );
-<a href=#5558 id=5558 data-nosnippet>5558</a>        <span class="macro">assert!</span>(amp_values.contains(<span class="kw-2">&amp;</span><span class="string">"generation"</span>.to_string()));
-<a href=#5559 id=5559 data-nosnippet>5559</a>        <span class="macro">assert!</span>(amp_values.contains(<span class="kw-2">&amp;</span><span class="string">"orientation"</span>.to_string()));
-<a href=#5560 id=5560 data-nosnippet>5560</a>        <span class="macro">assert!</span>(amp_values.contains(<span class="kw-2">&amp;</span><span class="string">"loop_momentum_basis"</span>.to_string()));
-<a href=#5561 id=5561 data-nosnippet>5561</a>        <span class="macro">assert!</span>(!amp_values.contains(<span class="kw-2">&amp;</span><span class="string">"cuts"</span>.to_string()));
-<a href=#5562 id=5562 data-nosnippet>5562</a>    }
+<a href=#5542 id=5542 data-nosnippet>5542</a>    </span><span class="kw">fn </span>completion_offers_metadata_display_formats_and_plural_graph_selector() {
+<a href=#5543 id=5543 data-nosnippet>5543</a>        <span class="kw">let </span>state = generate_completion_state();
+<a href=#5544 id=5544 data-nosnippet>5544</a>        <span class="kw">for </span>flag <span class="kw">in </span>[<span class="string">"--show_sampling"</span>, <span class="string">"--show_threshold_subtraction"</span>] {
+<a href=#5545 id=5545 data-nosnippet>5545</a>            <span class="kw">let </span>values = completion_values(
+<a href=#5546 id=5546 data-nosnippet>5546</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"display integrands -p epem_xs -i subtracted {flag} "</span>),
+<a href=#5547 id=5547 data-nosnippet>5547</a>                <span class="kw-2">&amp;</span>state,
+<a href=#5548 id=5548 data-nosnippet>5548</a>            );
+<a href=#5549 id=5549 data-nosnippet>5549</a>            <span class="macro">assert_eq!</span>(values, <span class="macro">vec!</span>[<span class="string">"pretty"</span>.to_string(), <span class="string">"toml"</span>.to_string()]);
+<a href=#5550 id=5550 data-nosnippet>5550</a>        }
+<a href=#5551 id=5551 data-nosnippet>5551</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5552 id=5552 data-nosnippet>5552</a>            <span class="string">"display integrands -p epem_xs -i subtracted --show_sampling pretty --graph G"</span>,
+<a href=#5553 id=5553 data-nosnippet>5553</a>            <span class="kw-2">&amp;</span>state,
+<a href=#5554 id=5554 data-nosnippet>5554</a>        );
+<a href=#5555 id=5555 data-nosnippet>5555</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"GL0"</span>.to_string()));
+<a href=#5556 id=5556 data-nosnippet>5556</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"GL2"</span>.to_string()));
+<a href=#5557 id=5557 data-nosnippet>5557</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"GL1"</span>.to_string()));
+<a href=#5558 id=5558 data-nosnippet>5558</a>    }
+<a href=#5559 id=5559 data-nosnippet>5559</a>
+<a href=#5560 id=5560 data-nosnippet>5560</a>    <span class="attr">#[test]
+<a href=#5561 id=5561 data-nosnippet>5561</a>    </span><span class="kw">fn </span>completion_filters_display_integrand_categories_by_integrand_kind() {
+<a href=#5562 id=5562 data-nosnippet>5562</a>        <span class="kw">let </span>completion_state = generate_completion_state();
 <a href=#5563 id=5563 data-nosnippet>5563</a>
-<a href=#5564 id=5564 data-nosnippet>5564</a>    <span class="attr">#[test]
-<a href=#5565 id=5565 data-nosnippet>5565</a>    </span><span class="kw">fn </span>completion_offers_select_master_graphs_for_selected_integrand() {
-<a href=#5566 id=5566 data-nosnippet>5566</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5567 id=5567 data-nosnippet>5567</a>            <span class="string">"select -p triangle -i LO --with-graph-names GL"</span>,
-<a href=#5568 id=5568 data-nosnippet>5568</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5569 id=5569 data-nosnippet>5569</a>        );
-<a href=#5570 id=5570 data-nosnippet>5570</a>
-<a href=#5571 id=5571 data-nosnippet>5571</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"GL0"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5572 id=5572 data-nosnippet>5572</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"GL1"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5573 id=5573 data-nosnippet>5573</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"GL2"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5574 id=5574 data-nosnippet>5574</a>    }
-<a href=#5575 id=5575 data-nosnippet>5575</a>
-<a href=#5576 id=5576 data-nosnippet>5576</a>    <span class="attr">#[test]
-<a href=#5577 id=5577 data-nosnippet>5577</a>    </span><span class="kw">fn </span>completion_offers_select_master_graphs_for_single_integrand_process() {
-<a href=#5578 id=5578 data-nosnippet>5578</a>        <span class="kw">let </span><span class="kw-2">mut </span>completion_state = generate_completion_state();
-<a href=#5579 id=5579 data-nosnippet>5579</a>        completion_state.process_entries = <span class="macro">vec!</span>[ProcessCompletionEntry {
-<a href=#5580 id=5580 data-nosnippet>5580</a>            id: <span class="number">0</span>,
-<a href=#5581 id=5581 data-nosnippet>5581</a>            name: <span class="string">"triangle"</span>.to_string(),
-<a href=#5582 id=5582 data-nosnippet>5582</a>            kind: ProcessKind::Amplitude,
-<a href=#5583 id=5583 data-nosnippet>5583</a>            integrand_names: <span class="macro">vec!</span>[<span class="string">"LO"</span>.to_string()],
-<a href=#5584 id=5584 data-nosnippet>5584</a>        }];
-<a href=#5585 id=5585 data-nosnippet>5585</a>        completion_state
-<a href=#5586 id=5586 data-nosnippet>5586</a>            .integrand_detail_entries
-<a href=#5587 id=5587 data-nosnippet>5587</a>            .retain(|entry| entry.process_name == <span class="string">"triangle" </span>&amp;&amp; entry.integrand_name == <span class="string">"LO"</span>);
-<a href=#5588 id=5588 data-nosnippet>5588</a>
-<a href=#5589 id=5589 data-nosnippet>5589</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5590 id=5590 data-nosnippet>5590</a>            <span class="string">"select -p triangle --with-graph-names GL"</span>,
-<a href=#5591 id=5591 data-nosnippet>5591</a>            <span class="kw-2">&amp;</span>completion_state,
-<a href=#5592 id=5592 data-nosnippet>5592</a>        );
-<a href=#5593 id=5593 data-nosnippet>5593</a>
-<a href=#5594 id=5594 data-nosnippet>5594</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"GL0"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5595 id=5595 data-nosnippet>5595</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"GL1"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5596 id=5596 data-nosnippet>5596</a>    }
-<a href=#5597 id=5597 data-nosnippet>5597</a>
-<a href=#5598 id=5598 data-nosnippet>5598</a>    <span class="attr">#[test]
-<a href=#5599 id=5599 data-nosnippet>5599</a>    </span><span class="kw">fn </span>completion_offers_select_raised_signatures_for_selected_integrand() {
-<a href=#5600 id=5600 data-nosnippet>5600</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5601 id=5601 data-nosnippet>5601</a>            <span class="string">"select -p epem_xs -i subtracted --with-raised-propagator-signatures "</span>,
-<a href=#5602 id=5602 data-nosnippet>5602</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5603 id=5603 data-nosnippet>5603</a>        );
-<a href=#5604 id=5604 data-nosnippet>5604</a>
-<a href=#5605 id=5605 data-nosnippet>5605</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[]"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5606 id=5606 data-nosnippet>5606</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[2,3]"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5607 id=5607 data-nosnippet>5607</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"ANY_RAISING"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5608 id=5608 data-nosnippet>5608</a>    }
-<a href=#5609 id=5609 data-nosnippet>5609</a>
-<a href=#5610 id=5610 data-nosnippet>5610</a>    <span class="attr">#[test]
-<a href=#5611 id=5611 data-nosnippet>5611</a>    </span><span class="kw">fn </span>completion_describes_select_any_raising_signature() {
-<a href=#5612 id=5612 data-nosnippet>5612</a>        <span class="kw">let </span>suggestions = completion_suggestions(
-<a href=#5613 id=5613 data-nosnippet>5613</a>            <span class="string">"select -p epem_xs -i subtracted --without-raised-propagator-signatures ANY"</span>,
-<a href=#5614 id=5614 data-nosnippet>5614</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5615 id=5615 data-nosnippet>5615</a>        );
+<a href=#5564 id=5564 data-nosnippet>5564</a>        <span class="kw">let </span>xs_values = completion_values(
+<a href=#5565 id=5565 data-nosnippet>5565</a>            <span class="string">"display integrand -p epem_xs -i subtracted --category "</span>,
+<a href=#5566 id=5566 data-nosnippet>5566</a>            <span class="kw-2">&amp;</span>completion_state,
+<a href=#5567 id=5567 data-nosnippet>5567</a>        );
+<a href=#5568 id=5568 data-nosnippet>5568</a>        <span class="macro">assert!</span>(xs_values.contains(<span class="kw-2">&amp;</span><span class="string">"generation"</span>.to_string()));
+<a href=#5569 id=5569 data-nosnippet>5569</a>        <span class="macro">assert!</span>(xs_values.contains(<span class="kw-2">&amp;</span><span class="string">"orientation"</span>.to_string()));
+<a href=#5570 id=5570 data-nosnippet>5570</a>        <span class="macro">assert!</span>(xs_values.contains(<span class="kw-2">&amp;</span><span class="string">"loop_momentum_basis"</span>.to_string()));
+<a href=#5571 id=5571 data-nosnippet>5571</a>        <span class="macro">assert!</span>(xs_values.contains(<span class="kw-2">&amp;</span><span class="string">"cuts"</span>.to_string()));
+<a href=#5572 id=5572 data-nosnippet>5572</a>
+<a href=#5573 id=5573 data-nosnippet>5573</a>        <span class="kw">let </span>amp_values = completion_values(
+<a href=#5574 id=5574 data-nosnippet>5574</a>            <span class="string">"display integrand -p triangle -i LO --category "</span>,
+<a href=#5575 id=5575 data-nosnippet>5575</a>            <span class="kw-2">&amp;</span>completion_state,
+<a href=#5576 id=5576 data-nosnippet>5576</a>        );
+<a href=#5577 id=5577 data-nosnippet>5577</a>        <span class="macro">assert!</span>(amp_values.contains(<span class="kw-2">&amp;</span><span class="string">"generation"</span>.to_string()));
+<a href=#5578 id=5578 data-nosnippet>5578</a>        <span class="macro">assert!</span>(amp_values.contains(<span class="kw-2">&amp;</span><span class="string">"orientation"</span>.to_string()));
+<a href=#5579 id=5579 data-nosnippet>5579</a>        <span class="macro">assert!</span>(amp_values.contains(<span class="kw-2">&amp;</span><span class="string">"loop_momentum_basis"</span>.to_string()));
+<a href=#5580 id=5580 data-nosnippet>5580</a>        <span class="macro">assert!</span>(!amp_values.contains(<span class="kw-2">&amp;</span><span class="string">"cuts"</span>.to_string()));
+<a href=#5581 id=5581 data-nosnippet>5581</a>    }
+<a href=#5582 id=5582 data-nosnippet>5582</a>
+<a href=#5583 id=5583 data-nosnippet>5583</a>    <span class="attr">#[test]
+<a href=#5584 id=5584 data-nosnippet>5584</a>    </span><span class="kw">fn </span>completion_offers_select_master_graphs_for_selected_integrand() {
+<a href=#5585 id=5585 data-nosnippet>5585</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5586 id=5586 data-nosnippet>5586</a>            <span class="string">"select -p triangle -i LO --with-graph-names GL"</span>,
+<a href=#5587 id=5587 data-nosnippet>5587</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5588 id=5588 data-nosnippet>5588</a>        );
+<a href=#5589 id=5589 data-nosnippet>5589</a>
+<a href=#5590 id=5590 data-nosnippet>5590</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"GL0"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5591 id=5591 data-nosnippet>5591</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"GL1"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5592 id=5592 data-nosnippet>5592</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"GL2"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5593 id=5593 data-nosnippet>5593</a>    }
+<a href=#5594 id=5594 data-nosnippet>5594</a>
+<a href=#5595 id=5595 data-nosnippet>5595</a>    <span class="attr">#[test]
+<a href=#5596 id=5596 data-nosnippet>5596</a>    </span><span class="kw">fn </span>completion_offers_select_master_graphs_for_single_integrand_process() {
+<a href=#5597 id=5597 data-nosnippet>5597</a>        <span class="kw">let </span><span class="kw-2">mut </span>completion_state = generate_completion_state();
+<a href=#5598 id=5598 data-nosnippet>5598</a>        completion_state.process_entries = <span class="macro">vec!</span>[ProcessCompletionEntry {
+<a href=#5599 id=5599 data-nosnippet>5599</a>            id: <span class="number">0</span>,
+<a href=#5600 id=5600 data-nosnippet>5600</a>            name: <span class="string">"triangle"</span>.to_string(),
+<a href=#5601 id=5601 data-nosnippet>5601</a>            kind: ProcessKind::Amplitude,
+<a href=#5602 id=5602 data-nosnippet>5602</a>            integrand_names: <span class="macro">vec!</span>[<span class="string">"LO"</span>.to_string()],
+<a href=#5603 id=5603 data-nosnippet>5603</a>        }];
+<a href=#5604 id=5604 data-nosnippet>5604</a>        completion_state
+<a href=#5605 id=5605 data-nosnippet>5605</a>            .integrand_detail_entries
+<a href=#5606 id=5606 data-nosnippet>5606</a>            .retain(|entry| entry.process_name == <span class="string">"triangle" </span>&amp;&amp; entry.integrand_name == <span class="string">"LO"</span>);
+<a href=#5607 id=5607 data-nosnippet>5607</a>
+<a href=#5608 id=5608 data-nosnippet>5608</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5609 id=5609 data-nosnippet>5609</a>            <span class="string">"select -p triangle --with-graph-names GL"</span>,
+<a href=#5610 id=5610 data-nosnippet>5610</a>            <span class="kw-2">&amp;</span>completion_state,
+<a href=#5611 id=5611 data-nosnippet>5611</a>        );
+<a href=#5612 id=5612 data-nosnippet>5612</a>
+<a href=#5613 id=5613 data-nosnippet>5613</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"GL0"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5614 id=5614 data-nosnippet>5614</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"GL1"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5615 id=5615 data-nosnippet>5615</a>    }
 <a href=#5616 id=5616 data-nosnippet>5616</a>
-<a href=#5617 id=5617 data-nosnippet>5617</a>        <span class="kw">let </span>suggestion = suggestions
-<a href=#5618 id=5618 data-nosnippet>5618</a>            .iter()
-<a href=#5619 id=5619 data-nosnippet>5619</a>            .find(|suggestion| suggestion.value == <span class="string">"ANY_RAISING"</span>)
-<a href=#5620 id=5620 data-nosnippet>5620</a>            .expect(<span class="string">"ANY_RAISING should be suggested for raised-propagator signatures"</span>);
-<a href=#5621 id=5621 data-nosnippet>5621</a>        <span class="macro">assert_eq!</span>(
-<a href=#5622 id=5622 data-nosnippet>5622</a>            suggestion.description.as_deref(),
-<a href=#5623 id=5623 data-nosnippet>5623</a>            <span class="prelude-val">Some</span>(<span class="string">"Any non-empty raised-propagator signature"</span>)
-<a href=#5624 id=5624 data-nosnippet>5624</a>        );
-<a href=#5625 id=5625 data-nosnippet>5625</a>    }
-<a href=#5626 id=5626 data-nosnippet>5626</a>
-<a href=#5627 id=5627 data-nosnippet>5627</a>    <span class="attr">#[test]
-<a href=#5628 id=5628 data-nosnippet>5628</a>    </span><span class="kw">fn </span>completion_offers_select_amplitude_graph_raised_signatures() {
-<a href=#5629 id=5629 data-nosnippet>5629</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5630 id=5630 data-nosnippet>5630</a>            <span class="string">"select -p epem_xs -i subtracted --amplitude-graphs --with-raised-propagator-signatures "</span>,
-<a href=#5631 id=5631 data-nosnippet>5631</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5632 id=5632 data-nosnippet>5632</a>        );
-<a href=#5633 id=5633 data-nosnippet>5633</a>
-<a href=#5634 id=5634 data-nosnippet>5634</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[]"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5635 id=5635 data-nosnippet>5635</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[4]"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5636 id=5636 data-nosnippet>5636</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"[2,3]"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5637 id=5637 data-nosnippet>5637</a>    }
-<a href=#5638 id=5638 data-nosnippet>5638</a>
-<a href=#5639 id=5639 data-nosnippet>5639</a>    <span class="attr">#[test]
-<a href=#5640 id=5640 data-nosnippet>5640</a>    </span><span class="kw">fn </span>completion_offers_select_raised_cut_signatures_for_cross_sections() {
-<a href=#5641 id=5641 data-nosnippet>5641</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5642 id=5642 data-nosnippet>5642</a>            <span class="string">"select -p epem_xs -i subtracted --with-raised-cuts-signatures "</span>,
-<a href=#5643 id=5643 data-nosnippet>5643</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5644 id=5644 data-nosnippet>5644</a>        );
+<a href=#5617 id=5617 data-nosnippet>5617</a>    <span class="attr">#[test]
+<a href=#5618 id=5618 data-nosnippet>5618</a>    </span><span class="kw">fn </span>completion_offers_select_raised_signatures_for_selected_integrand() {
+<a href=#5619 id=5619 data-nosnippet>5619</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5620 id=5620 data-nosnippet>5620</a>            <span class="string">"select -p epem_xs -i subtracted --with-raised-propagator-signatures "</span>,
+<a href=#5621 id=5621 data-nosnippet>5621</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5622 id=5622 data-nosnippet>5622</a>        );
+<a href=#5623 id=5623 data-nosnippet>5623</a>
+<a href=#5624 id=5624 data-nosnippet>5624</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[]"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5625 id=5625 data-nosnippet>5625</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[2,3]"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5626 id=5626 data-nosnippet>5626</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"ANY_RAISING"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5627 id=5627 data-nosnippet>5627</a>    }
+<a href=#5628 id=5628 data-nosnippet>5628</a>
+<a href=#5629 id=5629 data-nosnippet>5629</a>    <span class="attr">#[test]
+<a href=#5630 id=5630 data-nosnippet>5630</a>    </span><span class="kw">fn </span>completion_describes_select_any_raising_signature() {
+<a href=#5631 id=5631 data-nosnippet>5631</a>        <span class="kw">let </span>suggestions = completion_suggestions(
+<a href=#5632 id=5632 data-nosnippet>5632</a>            <span class="string">"select -p epem_xs -i subtracted --without-raised-propagator-signatures ANY"</span>,
+<a href=#5633 id=5633 data-nosnippet>5633</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5634 id=5634 data-nosnippet>5634</a>        );
+<a href=#5635 id=5635 data-nosnippet>5635</a>
+<a href=#5636 id=5636 data-nosnippet>5636</a>        <span class="kw">let </span>suggestion = suggestions
+<a href=#5637 id=5637 data-nosnippet>5637</a>            .iter()
+<a href=#5638 id=5638 data-nosnippet>5638</a>            .find(|suggestion| suggestion.value == <span class="string">"ANY_RAISING"</span>)
+<a href=#5639 id=5639 data-nosnippet>5639</a>            .expect(<span class="string">"ANY_RAISING should be suggested for raised-propagator signatures"</span>);
+<a href=#5640 id=5640 data-nosnippet>5640</a>        <span class="macro">assert_eq!</span>(
+<a href=#5641 id=5641 data-nosnippet>5641</a>            suggestion.description.as_deref(),
+<a href=#5642 id=5642 data-nosnippet>5642</a>            <span class="prelude-val">Some</span>(<span class="string">"Any non-empty raised-propagator signature"</span>)
+<a href=#5643 id=5643 data-nosnippet>5643</a>        );
+<a href=#5644 id=5644 data-nosnippet>5644</a>    }
 <a href=#5645 id=5645 data-nosnippet>5645</a>
-<a href=#5646 id=5646 data-nosnippet>5646</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[]"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5647 id=5647 data-nosnippet>5647</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[2,2]"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5648 id=5648 data-nosnippet>5648</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"ANY_RAISING"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5649 id=5649 data-nosnippet>5649</a>    }
-<a href=#5650 id=5650 data-nosnippet>5650</a>
-<a href=#5651 id=5651 data-nosnippet>5651</a>    <span class="attr">#[test]
-<a href=#5652 id=5652 data-nosnippet>5652</a>    </span><span class="kw">fn </span>completion_raised_cut_signatures_ignore_amplitude_graphs_mode() {
-<a href=#5653 id=5653 data-nosnippet>5653</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5654 id=5654 data-nosnippet>5654</a>            <span class="string">"select -p epem_xs -i subtracted --amplitude-graphs --with-raised-cuts-signatures "</span>,
-<a href=#5655 id=5655 data-nosnippet>5655</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5656 id=5656 data-nosnippet>5656</a>        );
+<a href=#5646 id=5646 data-nosnippet>5646</a>    <span class="attr">#[test]
+<a href=#5647 id=5647 data-nosnippet>5647</a>    </span><span class="kw">fn </span>completion_offers_select_amplitude_graph_raised_signatures() {
+<a href=#5648 id=5648 data-nosnippet>5648</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5649 id=5649 data-nosnippet>5649</a>            <span class="string">"select -p epem_xs -i subtracted --amplitude-graphs --with-raised-propagator-signatures "</span>,
+<a href=#5650 id=5650 data-nosnippet>5650</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5651 id=5651 data-nosnippet>5651</a>        );
+<a href=#5652 id=5652 data-nosnippet>5652</a>
+<a href=#5653 id=5653 data-nosnippet>5653</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[]"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5654 id=5654 data-nosnippet>5654</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[4]"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5655 id=5655 data-nosnippet>5655</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"[2,3]"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5656 id=5656 data-nosnippet>5656</a>    }
 <a href=#5657 id=5657 data-nosnippet>5657</a>
-<a href=#5658 id=5658 data-nosnippet>5658</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[2,2]"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5659 id=5659 data-nosnippet>5659</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"[4]"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5660 id=5660 data-nosnippet>5660</a>    }
-<a href=#5661 id=5661 data-nosnippet>5661</a>
-<a href=#5662 id=5662 data-nosnippet>5662</a>    <span class="attr">#[test]
-<a href=#5663 id=5663 data-nosnippet>5663</a>    </span><span class="kw">fn </span>completion_describes_select_any_raising_cut_signature() {
-<a href=#5664 id=5664 data-nosnippet>5664</a>        <span class="kw">let </span>suggestions = completion_suggestions(
-<a href=#5665 id=5665 data-nosnippet>5665</a>            <span class="string">"select -p epem_xs -i subtracted --without-raised-cuts-signatures ANY"</span>,
-<a href=#5666 id=5666 data-nosnippet>5666</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5667 id=5667 data-nosnippet>5667</a>        );
-<a href=#5668 id=5668 data-nosnippet>5668</a>
-<a href=#5669 id=5669 data-nosnippet>5669</a>        <span class="kw">let </span>suggestion = suggestions
-<a href=#5670 id=5670 data-nosnippet>5670</a>            .iter()
-<a href=#5671 id=5671 data-nosnippet>5671</a>            .find(|suggestion| suggestion.value == <span class="string">"ANY_RAISING"</span>)
-<a href=#5672 id=5672 data-nosnippet>5672</a>            .expect(<span class="string">"ANY_RAISING should be suggested for raised-cut signatures"</span>);
-<a href=#5673 id=5673 data-nosnippet>5673</a>        <span class="macro">assert_eq!</span>(
-<a href=#5674 id=5674 data-nosnippet>5674</a>            suggestion.description.as_deref(),
-<a href=#5675 id=5675 data-nosnippet>5675</a>            <span class="prelude-val">Some</span>(<span class="string">"Any non-empty raised-cut signature"</span>)
-<a href=#5676 id=5676 data-nosnippet>5676</a>        );
-<a href=#5677 id=5677 data-nosnippet>5677</a>    }
-<a href=#5678 id=5678 data-nosnippet>5678</a>
-<a href=#5679 id=5679 data-nosnippet>5679</a>    <span class="attr">#[test]
-<a href=#5680 id=5680 data-nosnippet>5680</a>    </span><span class="kw">fn </span>completion_offers_select_cycle_signatures_and_tokens() {
-<a href=#5681 id=5681 data-nosnippet>5681</a>        <span class="kw">let </span>observed = completion_values(
-<a href=#5682 id=5682 data-nosnippet>5682</a>            <span class="string">"select -p epem_xs -i subtracted --with-cycle-signatures "</span>,
-<a href=#5683 id=5683 data-nosnippet>5683</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5684 id=5684 data-nosnippet>5684</a>        );
-<a href=#5685 id=5685 data-nosnippet>5685</a>        <span class="macro">assert!</span>(observed.contains(<span class="kw-2">&amp;</span><span class="string">"[(3,21)]"</span>.to_string()), <span class="string">"{observed:?}"</span>);
-<a href=#5686 id=5686 data-nosnippet>5686</a>        <span class="macro">assert!</span>(
-<a href=#5687 id=5687 data-nosnippet>5687</a>            observed.contains(<span class="kw-2">&amp;</span><span class="string">"[(fermion)]"</span>.to_string()),
-<a href=#5688 id=5688 data-nosnippet>5688</a>            <span class="string">"{observed:?}"
-<a href=#5689 id=5689 data-nosnippet>5689</a>        </span>);
-<a href=#5690 id=5690 data-nosnippet>5690</a>
-<a href=#5691 id=5691 data-nosnippet>5691</a>        <span class="kw">let </span>token_values = completion_values(
-<a href=#5692 id=5692 data-nosnippet>5692</a>            <span class="string">"select -p triangle -i LO --with-cycle-signatures [(f"</span>,
-<a href=#5693 id=5693 data-nosnippet>5693</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5694 id=5694 data-nosnippet>5694</a>        );
-<a href=#5695 id=5695 data-nosnippet>5695</a>        <span class="macro">assert!</span>(
-<a href=#5696 id=5696 data-nosnippet>5696</a>            token_values.contains(<span class="kw-2">&amp;</span><span class="string">"[(fermion"</span>.to_string()),
-<a href=#5697 id=5697 data-nosnippet>5697</a>            <span class="string">"{token_values:?}"
-<a href=#5698 id=5698 data-nosnippet>5698</a>        </span>);
-<a href=#5699 id=5699 data-nosnippet>5699</a>        <span class="macro">assert!</span>(
-<a href=#5700 id=5700 data-nosnippet>5700</a>            !token_values.contains(<span class="kw-2">&amp;</span><span class="string">"e+"</span>.to_string()),
-<a href=#5701 id=5701 data-nosnippet>5701</a>            <span class="string">"{token_values:?}"
-<a href=#5702 id=5702 data-nosnippet>5702</a>        </span>);
-<a href=#5703 id=5703 data-nosnippet>5703</a>    }
-<a href=#5704 id=5704 data-nosnippet>5704</a>
-<a href=#5705 id=5705 data-nosnippet>5705</a>    <span class="attr">#[test]
-<a href=#5706 id=5706 data-nosnippet>5706</a>    </span><span class="kw">fn </span>completion_offers_select_amplitude_graph_cycle_signatures() {
-<a href=#5707 id=5707 data-nosnippet>5707</a>        <span class="kw">let </span>observed = completion_values(
-<a href=#5708 id=5708 data-nosnippet>5708</a>            <span class="string">"select -p epem_xs -i subtracted --amplitude-graphs --with-cycle-signatures "</span>,
-<a href=#5709 id=5709 data-nosnippet>5709</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5710 id=5710 data-nosnippet>5710</a>        );
-<a href=#5711 id=5711 data-nosnippet>5711</a>
-<a href=#5712 id=5712 data-nosnippet>5712</a>        <span class="macro">assert!</span>(observed.contains(<span class="kw-2">&amp;</span><span class="string">"[(11,21)]"</span>.to_string()), <span class="string">"{observed:?}"</span>);
-<a href=#5713 id=5713 data-nosnippet>5713</a>        <span class="macro">assert!</span>(!observed.contains(<span class="kw-2">&amp;</span><span class="string">"[(3,21)]"</span>.to_string()), <span class="string">"{observed:?}"</span>);
-<a href=#5714 id=5714 data-nosnippet>5714</a>    }
-<a href=#5715 id=5715 data-nosnippet>5715</a>
-<a href=#5716 id=5716 data-nosnippet>5716</a>    <span class="attr">#[test]
-<a href=#5717 id=5717 data-nosnippet>5717</a>    </span><span class="kw">fn </span>completion_offers_select_vertex_rules_inside_lists() {
-<a href=#5718 id=5718 data-nosnippet>5718</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5719 id=5719 data-nosnippet>5719</a>            <span class="string">"select -p triangle -i LO --with-vertices [V_6,"</span>,
-<a href=#5720 id=5720 data-nosnippet>5720</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5721 id=5721 data-nosnippet>5721</a>        );
-<a href=#5722 id=5722 data-nosnippet>5722</a>
-<a href=#5723 id=5723 data-nosnippet>5723</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[V_6,V_9"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5724 id=5724 data-nosnippet>5724</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[V_6,V_36"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5725 id=5725 data-nosnippet>5725</a>    }
-<a href=#5726 id=5726 data-nosnippet>5726</a>
-<a href=#5727 id=5727 data-nosnippet>5727</a>    <span class="attr">#[test]
-<a href=#5728 id=5728 data-nosnippet>5728</a>    </span><span class="kw">fn </span>completion_describes_select_vertex_particles() {
-<a href=#5729 id=5729 data-nosnippet>5729</a>        <span class="kw">let </span>suggestions = completion_suggestions(
-<a href=#5730 id=5730 data-nosnippet>5730</a>            <span class="string">"select -p triangle -i LO --with-vertices [V_6,"</span>,
-<a href=#5731 id=5731 data-nosnippet>5731</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5732 id=5732 data-nosnippet>5732</a>        );
-<a href=#5733 id=5733 data-nosnippet>5733</a>
-<a href=#5734 id=5734 data-nosnippet>5734</a>        <span class="kw">let </span>suggestion = suggestions
-<a href=#5735 id=5735 data-nosnippet>5735</a>            .iter()
-<a href=#5736 id=5736 data-nosnippet>5736</a>            .find(|suggestion| suggestion.value == <span class="string">"[V_6,V_9"</span>)
-<a href=#5737 id=5737 data-nosnippet>5737</a>            .expect(<span class="string">"V_9 should be suggested after the comma"</span>);
-<a href=#5738 id=5738 data-nosnippet>5738</a>        <span class="macro">assert_eq!</span>(
-<a href=#5739 id=5739 data-nosnippet>5739</a>            suggestion.description.as_deref(),
-<a href=#5740 id=5740 data-nosnippet>5740</a>            <span class="prelude-val">Some</span>(<span class="string">"Particles: e-, e+, a"</span>)
-<a href=#5741 id=5741 data-nosnippet>5741</a>        );
-<a href=#5742 id=5742 data-nosnippet>5742</a>    }
-<a href=#5743 id=5743 data-nosnippet>5743</a>
-<a href=#5744 id=5744 data-nosnippet>5744</a>    <span class="attr">#[test]
-<a href=#5745 id=5745 data-nosnippet>5745</a>    </span><span class="kw">fn </span>completion_offers_select_particle_signatures_inside_lists() {
-<a href=#5746 id=5746 data-nosnippet>5746</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5747 id=5747 data-nosnippet>5747</a>            <span class="string">"select -p triangle -i LO --with-particles ["</span>,
-<a href=#5748 id=5748 data-nosnippet>5748</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5749 id=5749 data-nosnippet>5749</a>        );
-<a href=#5750 id=5750 data-nosnippet>5750</a>
-<a href=#5751 id=5751 data-nosnippet>5751</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[g"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5752 id=5752 data-nosnippet>5752</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[h"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5753 id=5753 data-nosnippet>5753</a>    }
-<a href=#5754 id=5754 data-nosnippet>5754</a>
-<a href=#5755 id=5755 data-nosnippet>5755</a>    <span class="attr">#[test]
-<a href=#5756 id=5756 data-nosnippet>5756</a>    </span><span class="kw">fn </span>completion_does_not_offer_existing_integrands_for_free_form_names() {
-<a href=#5757 id=5757 data-nosnippet>5757</a>        <span class="kw">let </span>completion_state = CompletionState {
-<a href=#5758 id=5758 data-nosnippet>5758</a>            process_entries: sample_process_entries(),
-<a href=#5759 id=5759 data-nosnippet>5759</a>            ..CompletionState::default()
-<a href=#5760 id=5760 data-nosnippet>5760</a>        };
-<a href=#5761 id=5761 data-nosnippet>5761</a>
-<a href=#5762 id=5762 data-nosnippet>5762</a>        <span class="kw">let </span>values = completion_values(<span class="string">"generate amp --integrand-name "</span>, <span class="kw-2">&amp;</span>completion_state);
-<a href=#5763 id=5763 data-nosnippet>5763</a>
-<a href=#5764 id=5764 data-nosnippet>5764</a>        <span class="macro">assert!</span>(values.is_empty());
-<a href=#5765 id=5765 data-nosnippet>5765</a>    }
-<a href=#5766 id=5766 data-nosnippet>5766</a>
-<a href=#5767 id=5767 data-nosnippet>5767</a>    <span class="attr">#[test]
-<a href=#5768 id=5768 data-nosnippet>5768</a>    </span><span class="kw">fn </span>completion_does_not_offer_selectors_for_select_output_names() {
-<a href=#5769 id=5769 data-nosnippet>5769</a>        <span class="kw">let </span>completion_state = generate_completion_state();
-<a href=#5770 id=5770 data-nosnippet>5770</a>
-<a href=#5771 id=5771 data-nosnippet>5771</a>        <span class="kw">let </span>integrand_values = completion_values(
-<a href=#5772 id=5772 data-nosnippet>5772</a>            <span class="string">"select -p triangle -i LO --with-graph-names GL0 --output_integrand "</span>,
-<a href=#5773 id=5773 data-nosnippet>5773</a>            <span class="kw-2">&amp;</span>completion_state,
-<a href=#5774 id=5774 data-nosnippet>5774</a>        );
-<a href=#5775 id=5775 data-nosnippet>5775</a>        <span class="macro">assert!</span>(integrand_values.is_empty(), <span class="string">"{integrand_values:?}"</span>);
-<a href=#5776 id=5776 data-nosnippet>5776</a>
-<a href=#5777 id=5777 data-nosnippet>5777</a>        <span class="kw">let </span>process_values = completion_values(
-<a href=#5778 id=5778 data-nosnippet>5778</a>            <span class="string">"select -p triangle -i LO --with-graph-names GL0 --output_process "</span>,
-<a href=#5779 id=5779 data-nosnippet>5779</a>            <span class="kw-2">&amp;</span>completion_state,
-<a href=#5780 id=5780 data-nosnippet>5780</a>        );
-<a href=#5781 id=5781 data-nosnippet>5781</a>        <span class="macro">assert!</span>(process_values.is_empty(), <span class="string">"{process_values:?}"</span>);
-<a href=#5782 id=5782 data-nosnippet>5782</a>    }
-<a href=#5783 id=5783 data-nosnippet>5783</a>
-<a href=#5784 id=5784 data-nosnippet>5784</a>    <span class="attr">#[test]
-<a href=#5785 id=5785 data-nosnippet>5785</a>    </span><span class="kw">fn </span>completion_keeps_select_output_flags_available_after_variadic_values() {
-<a href=#5786 id=5786 data-nosnippet>5786</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5787 id=5787 data-nosnippet>5787</a>            <span class="string">"select -p triangle -i LO --with-graph-names GL0 --out"</span>,
-<a href=#5788 id=5788 data-nosnippet>5788</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5789 id=5789 data-nosnippet>5789</a>        );
-<a href=#5790 id=5790 data-nosnippet>5790</a>
-<a href=#5791 id=5791 data-nosnippet>5791</a>        <span class="macro">assert!</span>(
-<a href=#5792 id=5792 data-nosnippet>5792</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"--output_integrand"</span>.to_string()),
-<a href=#5793 id=5793 data-nosnippet>5793</a>            <span class="string">"{values:?}"
-<a href=#5794 id=5794 data-nosnippet>5794</a>        </span>);
-<a href=#5795 id=5795 data-nosnippet>5795</a>        <span class="macro">assert!</span>(
-<a href=#5796 id=5796 data-nosnippet>5796</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"--output_process"</span>.to_string()),
-<a href=#5797 id=5797 data-nosnippet>5797</a>            <span class="string">"{values:?}"
-<a href=#5798 id=5798 data-nosnippet>5798</a>        </span>);
-<a href=#5799 id=5799 data-nosnippet>5799</a>    }
-<a href=#5800 id=5800 data-nosnippet>5800</a>
-<a href=#5801 id=5801 data-nosnippet>5801</a>    <span class="attr">#[test]
-<a href=#5802 id=5802 data-nosnippet>5802</a>    </span><span class="kw">fn </span>completion_offers_global_settings_paths() {
-<a href=#5803 id=5803 data-nosnippet>5803</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5804 id=5804 data-nosnippet>5804</a>            <span class="string">"set global kv global.generation.eva"</span>,
-<a href=#5805 id=5805 data-nosnippet>5805</a>            <span class="kw-2">&amp;</span>CompletionState::default(),
-<a href=#5806 id=5806 data-nosnippet>5806</a>        );
-<a href=#5807 id=5807 data-nosnippet>5807</a>
-<a href=#5808 id=5808 data-nosnippet>5808</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"global.generation.evaluator."</span>.to_string()));
-<a href=#5809 id=5809 data-nosnippet>5809</a>    }
-<a href=#5810 id=5810 data-nosnippet>5810</a>
-<a href=#5811 id=5811 data-nosnippet>5811</a>    <span class="attr">#[test]
-<a href=#5812 id=5812 data-nosnippet>5812</a>    </span><span class="kw">fn </span>completion_offers_global_log_directive_paths() {
-<a href=#5813 id=5813 data-nosnippet>5813</a>        <span class="kw">let </span>values = completion_values(<span class="string">"set global kv global."</span>, <span class="kw-2">&amp;</span>CompletionState::default());
-<a href=#5814 id=5814 data-nosnippet>5814</a>
-<a href=#5815 id=5815 data-nosnippet>5815</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"global.display_directive="</span>.to_string()));
-<a href=#5816 id=5816 data-nosnippet>5816</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"global.logfile_directive="</span>.to_string()));
-<a href=#5817 id=5817 data-nosnippet>5817</a>    }
-<a href=#5818 id=5818 data-nosnippet>5818</a>
-<a href=#5819 id=5819 data-nosnippet>5819</a>    <span class="attr">#[test]
-<a href=#5820 id=5820 data-nosnippet>5820</a>    </span><span class="kw">fn </span>completion_does_not_offer_removed_dummy_global_setting() {
-<a href=#5821 id=5821 data-nosnippet>5821</a>        <span class="kw">let </span>values = completion_values(<span class="string">"set global kv "</span>, <span class="kw-2">&amp;</span>CompletionState::default());
-<a href=#5822 id=5822 data-nosnippet>5822</a>
-<a href=#5823 id=5823 data-nosnippet>5823</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"dummy="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5824 id=5824 data-nosnippet>5824</a>    }
-<a href=#5825 id=5825 data-nosnippet>5825</a>
-<a href=#5826 id=5826 data-nosnippet>5826</a>    <span class="attr">#[test]
-<a href=#5827 id=5827 data-nosnippet>5827</a>    </span><span class="kw">fn </span>completion_offers_runtime_settings_paths_for_set_process_after_flags() {
-<a href=#5828 id=5828 data-nosnippet>5828</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5829 id=5829 data-nosnippet>5829</a>            <span class="string">"set process -p triangle -i LO kv integ"</span>,
-<a href=#5830 id=5830 data-nosnippet>5830</a>            <span class="kw-2">&amp;</span>CompletionState::default(),
-<a href=#5831 id=5831 data-nosnippet>5831</a>        );
-<a href=#5832 id=5832 data-nosnippet>5832</a>
-<a href=#5833 id=5833 data-nosnippet>5833</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"integrator."</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5834 id=5834 data-nosnippet>5834</a>    }
-<a href=#5835 id=5835 data-nosnippet>5835</a>
-<a href=#5836 id=5836 data-nosnippet>5836</a>    <span class="attr">#[test]
-<a href=#5837 id=5837 data-nosnippet>5837</a>    </span><span class="kw">fn </span>completion_offers_observable_update_paths_after_name() {
-<a href=#5838 id=5838 data-nosnippet>5838</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5839 id=5839 data-nosnippet>5839</a>            <span class="string">"set process -p triangle -i LO update observable top_pt_hist x_"</span>,
-<a href=#5840 id=5840 data-nosnippet>5840</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5841 id=5841 data-nosnippet>5841</a>        );
-<a href=#5842 id=5842 data-nosnippet>5842</a>
-<a href=#5843 id=5843 data-nosnippet>5843</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"x_max="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5844 id=5844 data-nosnippet>5844</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"x_min="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5845 id=5845 data-nosnippet>5845</a>    }
-<a href=#5846 id=5846 data-nosnippet>5846</a>
-<a href=#5847 id=5847 data-nosnippet>5847</a>    <span class="attr">#[test]
-<a href=#5848 id=5848 data-nosnippet>5848</a>    </span><span class="kw">fn </span>completion_offers_observable_add_paths_for_histogram_metadata() {
-<a href=#5849 id=5849 data-nosnippet>5849</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5850 id=5850 data-nosnippet>5850</a>            <span class="string">"set process -p triangle -i LO add observable top_pt_hist t"</span>,
-<a href=#5851 id=5851 data-nosnippet>5851</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5852 id=5852 data-nosnippet>5852</a>        );
-<a href=#5853 id=5853 data-nosnippet>5853</a>
-<a href=#5854 id=5854 data-nosnippet>5854</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"title="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5855 id=5855 data-nosnippet>5855</a>        <span class="macro">assert!</span>(
-<a href=#5856 id=5856 data-nosnippet>5856</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"type_description="</span>.to_string()),
-<a href=#5857 id=5857 data-nosnippet>5857</a>            <span class="string">"{values:?}"
-<a href=#5858 id=5858 data-nosnippet>5858</a>        </span>);
-<a href=#5859 id=5859 data-nosnippet>5859</a>    }
-<a href=#5860 id=5860 data-nosnippet>5860</a>
-<a href=#5861 id=5861 data-nosnippet>5861</a>    <span class="attr">#[test]
-<a href=#5862 id=5862 data-nosnippet>5862</a>    </span><span class="kw">fn </span>completion_offers_observable_update_paths_for_optional_histogram_metadata() {
-<a href=#5863 id=5863 data-nosnippet>5863</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5864 id=5864 data-nosnippet>5864</a>            <span class="string">"set process -p triangle -i LO update observable top_pt_hist t"</span>,
-<a href=#5865 id=5865 data-nosnippet>5865</a>            <span class="kw-2">&amp;</span>generate_completion_state_without_optional_histogram_metadata(),
-<a href=#5866 id=5866 data-nosnippet>5866</a>        );
-<a href=#5867 id=5867 data-nosnippet>5867</a>
-<a href=#5868 id=5868 data-nosnippet>5868</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"title="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5869 id=5869 data-nosnippet>5869</a>        <span class="macro">assert!</span>(
-<a href=#5870 id=5870 data-nosnippet>5870</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"type_description="</span>.to_string()),
-<a href=#5871 id=5871 data-nosnippet>5871</a>            <span class="string">"{values:?}"
-<a href=#5872 id=5872 data-nosnippet>5872</a>        </span>);
-<a href=#5873 id=5873 data-nosnippet>5873</a>    }
-<a href=#5874 id=5874 data-nosnippet>5874</a>
-<a href=#5875 id=5875 data-nosnippet>5875</a>    <span class="attr">#[test]
-<a href=#5876 id=5876 data-nosnippet>5876</a>    </span><span class="kw">fn </span>completion_offers_observable_update_enum_values() {
-<a href=#5877 id=5877 data-nosnippet>5877</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5878 id=5878 data-nosnippet>5878</a>            <span class="string">"set process -p triangle -i LO update observable top_pt_hist phase="</span>,
-<a href=#5879 id=5879 data-nosnippet>5879</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5880 id=5880 data-nosnippet>5880</a>        );
-<a href=#5881 id=5881 data-nosnippet>5881</a>
-<a href=#5882 id=5882 data-nosnippet>5882</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"real"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5883 id=5883 data-nosnippet>5883</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"imag"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5884 id=5884 data-nosnippet>5884</a>    }
-<a href=#5885 id=5885 data-nosnippet>5885</a>
-<a href=#5886 id=5886 data-nosnippet>5886</a>    <span class="attr">#[test]
-<a href=#5887 id=5887 data-nosnippet>5887</a>    </span><span class="kw">fn </span>completion_offers_selector_update_paths_after_name() {
-<a href=#5888 id=5888 data-nosnippet>5888</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5889 id=5889 data-nosnippet>5889</a>            <span class="string">"set process -p triangle -i LO update selector top_cut entry_"</span>,
-<a href=#5890 id=5890 data-nosnippet>5890</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5891 id=5891 data-nosnippet>5891</a>        );
-<a href=#5892 id=5892 data-nosnippet>5892</a>
-<a href=#5893 id=5893 data-nosnippet>5893</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"entry_index="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5894 id=5894 data-nosnippet>5894</a>        <span class="macro">assert!</span>(
-<a href=#5895 id=5895 data-nosnippet>5895</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"entry_selection="</span>.to_string()),
-<a href=#5896 id=5896 data-nosnippet>5896</a>            <span class="string">"{values:?}"
-<a href=#5897 id=5897 data-nosnippet>5897</a>        </span>);
-<a href=#5898 id=5898 data-nosnippet>5898</a>    }
-<a href=#5899 id=5899 data-nosnippet>5899</a>
-<a href=#5900 id=5900 data-nosnippet>5900</a>    <span class="attr">#[test]
-<a href=#5901 id=5901 data-nosnippet>5901</a>    </span><span class="kw">fn </span>completion_offers_selector_update_paths_for_optional_value_range_bounds() {
-<a href=#5902 id=5902 data-nosnippet>5902</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5903 id=5903 data-nosnippet>5903</a>            <span class="string">"set process -p triangle -i LO update selector top_cut m"</span>,
-<a href=#5904 id=5904 data-nosnippet>5904</a>            <span class="kw-2">&amp;</span>generate_completion_state_without_optional_histogram_metadata(),
-<a href=#5905 id=5905 data-nosnippet>5905</a>        );
-<a href=#5906 id=5906 data-nosnippet>5906</a>
-<a href=#5907 id=5907 data-nosnippet>5907</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"max="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5908 id=5908 data-nosnippet>5908</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"min="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5909 id=5909 data-nosnippet>5909</a>    }
-<a href=#5910 id=5910 data-nosnippet>5910</a>
-<a href=#5911 id=5911 data-nosnippet>5911</a>    <span class="attr">#[test]
-<a href=#5912 id=5912 data-nosnippet>5912</a>    </span><span class="kw">fn </span>completion_offers_quantity_update_paths_after_name() {
-<a href=#5913 id=5913 data-nosnippet>5913</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5914 id=5914 data-nosnippet>5914</a>            <span class="string">"set process -p triangle -i LO update quantity top_pt p"</span>,
-<a href=#5915 id=5915 data-nosnippet>5915</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5916 id=5916 data-nosnippet>5916</a>        );
-<a href=#5917 id=5917 data-nosnippet>5917</a>
-<a href=#5918 id=5918 data-nosnippet>5918</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"pdgs="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5919 id=5919 data-nosnippet>5919</a>    }
-<a href=#5920 id=5920 data-nosnippet>5920</a>
-<a href=#5921 id=5921 data-nosnippet>5921</a>    <span class="attr">#[test]
-<a href=#5922 id=5922 data-nosnippet>5922</a>    </span><span class="kw">fn </span>completion_offers_existing_quantity_names_for_process_update() {
-<a href=#5923 id=5923 data-nosnippet>5923</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5924 id=5924 data-nosnippet>5924</a>            <span class="string">"set process -p triangle update quantity "</span>,
-<a href=#5925 id=5925 data-nosnippet>5925</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5926 id=5926 data-nosnippet>5926</a>        );
-<a href=#5927 id=5927 data-nosnippet>5927</a>
-<a href=#5928 id=5928 data-nosnippet>5928</a>        <span class="macro">assert_eq!</span>(values, <span class="macro">vec!</span>[<span class="string">"top_pt"</span>.to_string()]);
-<a href=#5929 id=5929 data-nosnippet>5929</a>    }
-<a href=#5930 id=5930 data-nosnippet>5930</a>
-<a href=#5931 id=5931 data-nosnippet>5931</a>    <span class="attr">#[test]
-<a href=#5932 id=5932 data-nosnippet>5932</a>    </span><span class="kw">fn </span>completion_offers_quantity_kinds_for_process_add() {
-<a href=#5933 id=5933 data-nosnippet>5933</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5934 id=5934 data-nosnippet>5934</a>            <span class="string">"set process -p triangle add quantity my_quantity "</span>,
-<a href=#5935 id=5935 data-nosnippet>5935</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5936 id=5936 data-nosnippet>5936</a>        );
-<a href=#5937 id=5937 data-nosnippet>5937</a>
-<a href=#5938 id=5938 data-nosnippet>5938</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"particle"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5939 id=5939 data-nosnippet>5939</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"jet"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5940 id=5940 data-nosnippet>5940</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"integral"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5941 id=5941 data-nosnippet>5941</a>    }
-<a href=#5942 id=5942 data-nosnippet>5942</a>
-<a href=#5943 id=5943 data-nosnippet>5943</a>    <span class="attr">#[test]
-<a href=#5944 id=5944 data-nosnippet>5944</a>    </span><span class="kw">fn </span>completion_shows_type_hint_for_process_add_name() {
-<a href=#5945 id=5945 data-nosnippet>5945</a>        <span class="kw">let </span>suggestions = completion_suggestions(
-<a href=#5946 id=5946 data-nosnippet>5946</a>            <span class="string">"set process -p triangle add quantity "</span>,
-<a href=#5947 id=5947 data-nosnippet>5947</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5948 id=5948 data-nosnippet>5948</a>        );
+<a href=#5658 id=5658 data-nosnippet>5658</a>    <span class="attr">#[test]
+<a href=#5659 id=5659 data-nosnippet>5659</a>    </span><span class="kw">fn </span>completion_offers_select_raised_cut_signatures_for_cross_sections() {
+<a href=#5660 id=5660 data-nosnippet>5660</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5661 id=5661 data-nosnippet>5661</a>            <span class="string">"select -p epem_xs -i subtracted --with-raised-cuts-signatures "</span>,
+<a href=#5662 id=5662 data-nosnippet>5662</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5663 id=5663 data-nosnippet>5663</a>        );
+<a href=#5664 id=5664 data-nosnippet>5664</a>
+<a href=#5665 id=5665 data-nosnippet>5665</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[]"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5666 id=5666 data-nosnippet>5666</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[2,2]"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5667 id=5667 data-nosnippet>5667</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"ANY_RAISING"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5668 id=5668 data-nosnippet>5668</a>    }
+<a href=#5669 id=5669 data-nosnippet>5669</a>
+<a href=#5670 id=5670 data-nosnippet>5670</a>    <span class="attr">#[test]
+<a href=#5671 id=5671 data-nosnippet>5671</a>    </span><span class="kw">fn </span>completion_raised_cut_signatures_ignore_amplitude_graphs_mode() {
+<a href=#5672 id=5672 data-nosnippet>5672</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5673 id=5673 data-nosnippet>5673</a>            <span class="string">"select -p epem_xs -i subtracted --amplitude-graphs --with-raised-cuts-signatures "</span>,
+<a href=#5674 id=5674 data-nosnippet>5674</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5675 id=5675 data-nosnippet>5675</a>        );
+<a href=#5676 id=5676 data-nosnippet>5676</a>
+<a href=#5677 id=5677 data-nosnippet>5677</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[2,2]"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5678 id=5678 data-nosnippet>5678</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"[4]"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5679 id=5679 data-nosnippet>5679</a>    }
+<a href=#5680 id=5680 data-nosnippet>5680</a>
+<a href=#5681 id=5681 data-nosnippet>5681</a>    <span class="attr">#[test]
+<a href=#5682 id=5682 data-nosnippet>5682</a>    </span><span class="kw">fn </span>completion_describes_select_any_raising_cut_signature() {
+<a href=#5683 id=5683 data-nosnippet>5683</a>        <span class="kw">let </span>suggestions = completion_suggestions(
+<a href=#5684 id=5684 data-nosnippet>5684</a>            <span class="string">"select -p epem_xs -i subtracted --without-raised-cuts-signatures ANY"</span>,
+<a href=#5685 id=5685 data-nosnippet>5685</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5686 id=5686 data-nosnippet>5686</a>        );
+<a href=#5687 id=5687 data-nosnippet>5687</a>
+<a href=#5688 id=5688 data-nosnippet>5688</a>        <span class="kw">let </span>suggestion = suggestions
+<a href=#5689 id=5689 data-nosnippet>5689</a>            .iter()
+<a href=#5690 id=5690 data-nosnippet>5690</a>            .find(|suggestion| suggestion.value == <span class="string">"ANY_RAISING"</span>)
+<a href=#5691 id=5691 data-nosnippet>5691</a>            .expect(<span class="string">"ANY_RAISING should be suggested for raised-cut signatures"</span>);
+<a href=#5692 id=5692 data-nosnippet>5692</a>        <span class="macro">assert_eq!</span>(
+<a href=#5693 id=5693 data-nosnippet>5693</a>            suggestion.description.as_deref(),
+<a href=#5694 id=5694 data-nosnippet>5694</a>            <span class="prelude-val">Some</span>(<span class="string">"Any non-empty raised-cut signature"</span>)
+<a href=#5695 id=5695 data-nosnippet>5695</a>        );
+<a href=#5696 id=5696 data-nosnippet>5696</a>    }
+<a href=#5697 id=5697 data-nosnippet>5697</a>
+<a href=#5698 id=5698 data-nosnippet>5698</a>    <span class="attr">#[test]
+<a href=#5699 id=5699 data-nosnippet>5699</a>    </span><span class="kw">fn </span>completion_offers_select_cycle_signatures_and_tokens() {
+<a href=#5700 id=5700 data-nosnippet>5700</a>        <span class="kw">let </span>observed = completion_values(
+<a href=#5701 id=5701 data-nosnippet>5701</a>            <span class="string">"select -p epem_xs -i subtracted --with-cycle-signatures "</span>,
+<a href=#5702 id=5702 data-nosnippet>5702</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5703 id=5703 data-nosnippet>5703</a>        );
+<a href=#5704 id=5704 data-nosnippet>5704</a>        <span class="macro">assert!</span>(observed.contains(<span class="kw-2">&amp;</span><span class="string">"[(3,21)]"</span>.to_string()), <span class="string">"{observed:?}"</span>);
+<a href=#5705 id=5705 data-nosnippet>5705</a>        <span class="macro">assert!</span>(
+<a href=#5706 id=5706 data-nosnippet>5706</a>            observed.contains(<span class="kw-2">&amp;</span><span class="string">"[(fermion)]"</span>.to_string()),
+<a href=#5707 id=5707 data-nosnippet>5707</a>            <span class="string">"{observed:?}"
+<a href=#5708 id=5708 data-nosnippet>5708</a>        </span>);
+<a href=#5709 id=5709 data-nosnippet>5709</a>
+<a href=#5710 id=5710 data-nosnippet>5710</a>        <span class="kw">let </span>token_values = completion_values(
+<a href=#5711 id=5711 data-nosnippet>5711</a>            <span class="string">"select -p triangle -i LO --with-cycle-signatures [(f"</span>,
+<a href=#5712 id=5712 data-nosnippet>5712</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5713 id=5713 data-nosnippet>5713</a>        );
+<a href=#5714 id=5714 data-nosnippet>5714</a>        <span class="macro">assert!</span>(
+<a href=#5715 id=5715 data-nosnippet>5715</a>            token_values.contains(<span class="kw-2">&amp;</span><span class="string">"[(fermion"</span>.to_string()),
+<a href=#5716 id=5716 data-nosnippet>5716</a>            <span class="string">"{token_values:?}"
+<a href=#5717 id=5717 data-nosnippet>5717</a>        </span>);
+<a href=#5718 id=5718 data-nosnippet>5718</a>        <span class="macro">assert!</span>(
+<a href=#5719 id=5719 data-nosnippet>5719</a>            !token_values.contains(<span class="kw-2">&amp;</span><span class="string">"e+"</span>.to_string()),
+<a href=#5720 id=5720 data-nosnippet>5720</a>            <span class="string">"{token_values:?}"
+<a href=#5721 id=5721 data-nosnippet>5721</a>        </span>);
+<a href=#5722 id=5722 data-nosnippet>5722</a>    }
+<a href=#5723 id=5723 data-nosnippet>5723</a>
+<a href=#5724 id=5724 data-nosnippet>5724</a>    <span class="attr">#[test]
+<a href=#5725 id=5725 data-nosnippet>5725</a>    </span><span class="kw">fn </span>completion_offers_select_amplitude_graph_cycle_signatures() {
+<a href=#5726 id=5726 data-nosnippet>5726</a>        <span class="kw">let </span>observed = completion_values(
+<a href=#5727 id=5727 data-nosnippet>5727</a>            <span class="string">"select -p epem_xs -i subtracted --amplitude-graphs --with-cycle-signatures "</span>,
+<a href=#5728 id=5728 data-nosnippet>5728</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5729 id=5729 data-nosnippet>5729</a>        );
+<a href=#5730 id=5730 data-nosnippet>5730</a>
+<a href=#5731 id=5731 data-nosnippet>5731</a>        <span class="macro">assert!</span>(observed.contains(<span class="kw-2">&amp;</span><span class="string">"[(11,21)]"</span>.to_string()), <span class="string">"{observed:?}"</span>);
+<a href=#5732 id=5732 data-nosnippet>5732</a>        <span class="macro">assert!</span>(!observed.contains(<span class="kw-2">&amp;</span><span class="string">"[(3,21)]"</span>.to_string()), <span class="string">"{observed:?}"</span>);
+<a href=#5733 id=5733 data-nosnippet>5733</a>    }
+<a href=#5734 id=5734 data-nosnippet>5734</a>
+<a href=#5735 id=5735 data-nosnippet>5735</a>    <span class="attr">#[test]
+<a href=#5736 id=5736 data-nosnippet>5736</a>    </span><span class="kw">fn </span>completion_offers_select_vertex_rules_inside_lists() {
+<a href=#5737 id=5737 data-nosnippet>5737</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5738 id=5738 data-nosnippet>5738</a>            <span class="string">"select -p triangle -i LO --with-vertices [V_6,"</span>,
+<a href=#5739 id=5739 data-nosnippet>5739</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5740 id=5740 data-nosnippet>5740</a>        );
+<a href=#5741 id=5741 data-nosnippet>5741</a>
+<a href=#5742 id=5742 data-nosnippet>5742</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[V_6,V_9"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5743 id=5743 data-nosnippet>5743</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[V_6,V_36"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5744 id=5744 data-nosnippet>5744</a>    }
+<a href=#5745 id=5745 data-nosnippet>5745</a>
+<a href=#5746 id=5746 data-nosnippet>5746</a>    <span class="attr">#[test]
+<a href=#5747 id=5747 data-nosnippet>5747</a>    </span><span class="kw">fn </span>completion_describes_select_vertex_particles() {
+<a href=#5748 id=5748 data-nosnippet>5748</a>        <span class="kw">let </span>suggestions = completion_suggestions(
+<a href=#5749 id=5749 data-nosnippet>5749</a>            <span class="string">"select -p triangle -i LO --with-vertices [V_6,"</span>,
+<a href=#5750 id=5750 data-nosnippet>5750</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5751 id=5751 data-nosnippet>5751</a>        );
+<a href=#5752 id=5752 data-nosnippet>5752</a>
+<a href=#5753 id=5753 data-nosnippet>5753</a>        <span class="kw">let </span>suggestion = suggestions
+<a href=#5754 id=5754 data-nosnippet>5754</a>            .iter()
+<a href=#5755 id=5755 data-nosnippet>5755</a>            .find(|suggestion| suggestion.value == <span class="string">"[V_6,V_9"</span>)
+<a href=#5756 id=5756 data-nosnippet>5756</a>            .expect(<span class="string">"V_9 should be suggested after the comma"</span>);
+<a href=#5757 id=5757 data-nosnippet>5757</a>        <span class="macro">assert_eq!</span>(
+<a href=#5758 id=5758 data-nosnippet>5758</a>            suggestion.description.as_deref(),
+<a href=#5759 id=5759 data-nosnippet>5759</a>            <span class="prelude-val">Some</span>(<span class="string">"Particles: e-, e+, a"</span>)
+<a href=#5760 id=5760 data-nosnippet>5760</a>        );
+<a href=#5761 id=5761 data-nosnippet>5761</a>    }
+<a href=#5762 id=5762 data-nosnippet>5762</a>
+<a href=#5763 id=5763 data-nosnippet>5763</a>    <span class="attr">#[test]
+<a href=#5764 id=5764 data-nosnippet>5764</a>    </span><span class="kw">fn </span>completion_offers_select_particle_signatures_inside_lists() {
+<a href=#5765 id=5765 data-nosnippet>5765</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5766 id=5766 data-nosnippet>5766</a>            <span class="string">"select -p triangle -i LO --with-particles ["</span>,
+<a href=#5767 id=5767 data-nosnippet>5767</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5768 id=5768 data-nosnippet>5768</a>        );
+<a href=#5769 id=5769 data-nosnippet>5769</a>
+<a href=#5770 id=5770 data-nosnippet>5770</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[g"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5771 id=5771 data-nosnippet>5771</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"[h"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5772 id=5772 data-nosnippet>5772</a>    }
+<a href=#5773 id=5773 data-nosnippet>5773</a>
+<a href=#5774 id=5774 data-nosnippet>5774</a>    <span class="attr">#[test]
+<a href=#5775 id=5775 data-nosnippet>5775</a>    </span><span class="kw">fn </span>completion_does_not_offer_existing_integrands_for_free_form_names() {
+<a href=#5776 id=5776 data-nosnippet>5776</a>        <span class="kw">let </span>completion_state = CompletionState {
+<a href=#5777 id=5777 data-nosnippet>5777</a>            process_entries: sample_process_entries(),
+<a href=#5778 id=5778 data-nosnippet>5778</a>            ..CompletionState::default()
+<a href=#5779 id=5779 data-nosnippet>5779</a>        };
+<a href=#5780 id=5780 data-nosnippet>5780</a>
+<a href=#5781 id=5781 data-nosnippet>5781</a>        <span class="kw">let </span>values = completion_values(<span class="string">"generate amp --integrand-name "</span>, <span class="kw-2">&amp;</span>completion_state);
+<a href=#5782 id=5782 data-nosnippet>5782</a>
+<a href=#5783 id=5783 data-nosnippet>5783</a>        <span class="macro">assert!</span>(values.is_empty());
+<a href=#5784 id=5784 data-nosnippet>5784</a>    }
+<a href=#5785 id=5785 data-nosnippet>5785</a>
+<a href=#5786 id=5786 data-nosnippet>5786</a>    <span class="attr">#[test]
+<a href=#5787 id=5787 data-nosnippet>5787</a>    </span><span class="kw">fn </span>completion_does_not_offer_selectors_for_select_output_names() {
+<a href=#5788 id=5788 data-nosnippet>5788</a>        <span class="kw">let </span>completion_state = generate_completion_state();
+<a href=#5789 id=5789 data-nosnippet>5789</a>
+<a href=#5790 id=5790 data-nosnippet>5790</a>        <span class="kw">let </span>integrand_values = completion_values(
+<a href=#5791 id=5791 data-nosnippet>5791</a>            <span class="string">"select -p triangle -i LO --with-graph-names GL0 --output_integrand "</span>,
+<a href=#5792 id=5792 data-nosnippet>5792</a>            <span class="kw-2">&amp;</span>completion_state,
+<a href=#5793 id=5793 data-nosnippet>5793</a>        );
+<a href=#5794 id=5794 data-nosnippet>5794</a>        <span class="macro">assert!</span>(integrand_values.is_empty(), <span class="string">"{integrand_values:?}"</span>);
+<a href=#5795 id=5795 data-nosnippet>5795</a>
+<a href=#5796 id=5796 data-nosnippet>5796</a>        <span class="kw">let </span>process_values = completion_values(
+<a href=#5797 id=5797 data-nosnippet>5797</a>            <span class="string">"select -p triangle -i LO --with-graph-names GL0 --output_process "</span>,
+<a href=#5798 id=5798 data-nosnippet>5798</a>            <span class="kw-2">&amp;</span>completion_state,
+<a href=#5799 id=5799 data-nosnippet>5799</a>        );
+<a href=#5800 id=5800 data-nosnippet>5800</a>        <span class="macro">assert!</span>(process_values.is_empty(), <span class="string">"{process_values:?}"</span>);
+<a href=#5801 id=5801 data-nosnippet>5801</a>    }
+<a href=#5802 id=5802 data-nosnippet>5802</a>
+<a href=#5803 id=5803 data-nosnippet>5803</a>    <span class="attr">#[test]
+<a href=#5804 id=5804 data-nosnippet>5804</a>    </span><span class="kw">fn </span>completion_keeps_select_output_flags_available_after_variadic_values() {
+<a href=#5805 id=5805 data-nosnippet>5805</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5806 id=5806 data-nosnippet>5806</a>            <span class="string">"select -p triangle -i LO --with-graph-names GL0 --out"</span>,
+<a href=#5807 id=5807 data-nosnippet>5807</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5808 id=5808 data-nosnippet>5808</a>        );
+<a href=#5809 id=5809 data-nosnippet>5809</a>
+<a href=#5810 id=5810 data-nosnippet>5810</a>        <span class="macro">assert!</span>(
+<a href=#5811 id=5811 data-nosnippet>5811</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"--output_integrand"</span>.to_string()),
+<a href=#5812 id=5812 data-nosnippet>5812</a>            <span class="string">"{values:?}"
+<a href=#5813 id=5813 data-nosnippet>5813</a>        </span>);
+<a href=#5814 id=5814 data-nosnippet>5814</a>        <span class="macro">assert!</span>(
+<a href=#5815 id=5815 data-nosnippet>5815</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"--output_process"</span>.to_string()),
+<a href=#5816 id=5816 data-nosnippet>5816</a>            <span class="string">"{values:?}"
+<a href=#5817 id=5817 data-nosnippet>5817</a>        </span>);
+<a href=#5818 id=5818 data-nosnippet>5818</a>    }
+<a href=#5819 id=5819 data-nosnippet>5819</a>
+<a href=#5820 id=5820 data-nosnippet>5820</a>    <span class="attr">#[test]
+<a href=#5821 id=5821 data-nosnippet>5821</a>    </span><span class="kw">fn </span>completion_offers_global_settings_paths() {
+<a href=#5822 id=5822 data-nosnippet>5822</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5823 id=5823 data-nosnippet>5823</a>            <span class="string">"set global kv global.generation.eva"</span>,
+<a href=#5824 id=5824 data-nosnippet>5824</a>            <span class="kw-2">&amp;</span>CompletionState::default(),
+<a href=#5825 id=5825 data-nosnippet>5825</a>        );
+<a href=#5826 id=5826 data-nosnippet>5826</a>
+<a href=#5827 id=5827 data-nosnippet>5827</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"global.generation.evaluator."</span>.to_string()));
+<a href=#5828 id=5828 data-nosnippet>5828</a>    }
+<a href=#5829 id=5829 data-nosnippet>5829</a>
+<a href=#5830 id=5830 data-nosnippet>5830</a>    <span class="attr">#[test]
+<a href=#5831 id=5831 data-nosnippet>5831</a>    </span><span class="kw">fn </span>completion_offers_global_log_directive_paths() {
+<a href=#5832 id=5832 data-nosnippet>5832</a>        <span class="kw">let </span>values = completion_values(<span class="string">"set global kv global."</span>, <span class="kw-2">&amp;</span>CompletionState::default());
+<a href=#5833 id=5833 data-nosnippet>5833</a>
+<a href=#5834 id=5834 data-nosnippet>5834</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"global.display_directive="</span>.to_string()));
+<a href=#5835 id=5835 data-nosnippet>5835</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"global.logfile_directive="</span>.to_string()));
+<a href=#5836 id=5836 data-nosnippet>5836</a>    }
+<a href=#5837 id=5837 data-nosnippet>5837</a>
+<a href=#5838 id=5838 data-nosnippet>5838</a>    <span class="attr">#[test]
+<a href=#5839 id=5839 data-nosnippet>5839</a>    </span><span class="kw">fn </span>completion_does_not_offer_removed_dummy_global_setting() {
+<a href=#5840 id=5840 data-nosnippet>5840</a>        <span class="kw">let </span>values = completion_values(<span class="string">"set global kv "</span>, <span class="kw-2">&amp;</span>CompletionState::default());
+<a href=#5841 id=5841 data-nosnippet>5841</a>
+<a href=#5842 id=5842 data-nosnippet>5842</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"dummy="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5843 id=5843 data-nosnippet>5843</a>    }
+<a href=#5844 id=5844 data-nosnippet>5844</a>
+<a href=#5845 id=5845 data-nosnippet>5845</a>    <span class="attr">#[test]
+<a href=#5846 id=5846 data-nosnippet>5846</a>    </span><span class="kw">fn </span>completion_offers_runtime_settings_paths_for_set_process_after_flags() {
+<a href=#5847 id=5847 data-nosnippet>5847</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5848 id=5848 data-nosnippet>5848</a>            <span class="string">"set process -p triangle -i LO kv integ"</span>,
+<a href=#5849 id=5849 data-nosnippet>5849</a>            <span class="kw-2">&amp;</span>CompletionState::default(),
+<a href=#5850 id=5850 data-nosnippet>5850</a>        );
+<a href=#5851 id=5851 data-nosnippet>5851</a>
+<a href=#5852 id=5852 data-nosnippet>5852</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"integrator."</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5853 id=5853 data-nosnippet>5853</a>    }
+<a href=#5854 id=5854 data-nosnippet>5854</a>
+<a href=#5855 id=5855 data-nosnippet>5855</a>    <span class="attr">#[test]
+<a href=#5856 id=5856 data-nosnippet>5856</a>    </span><span class="kw">fn </span>completion_offers_observable_update_paths_after_name() {
+<a href=#5857 id=5857 data-nosnippet>5857</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5858 id=5858 data-nosnippet>5858</a>            <span class="string">"set process -p triangle -i LO update observable top_pt_hist x_"</span>,
+<a href=#5859 id=5859 data-nosnippet>5859</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5860 id=5860 data-nosnippet>5860</a>        );
+<a href=#5861 id=5861 data-nosnippet>5861</a>
+<a href=#5862 id=5862 data-nosnippet>5862</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"x_max="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5863 id=5863 data-nosnippet>5863</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"x_min="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5864 id=5864 data-nosnippet>5864</a>    }
+<a href=#5865 id=5865 data-nosnippet>5865</a>
+<a href=#5866 id=5866 data-nosnippet>5866</a>    <span class="attr">#[test]
+<a href=#5867 id=5867 data-nosnippet>5867</a>    </span><span class="kw">fn </span>completion_offers_observable_add_paths_for_histogram_metadata() {
+<a href=#5868 id=5868 data-nosnippet>5868</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5869 id=5869 data-nosnippet>5869</a>            <span class="string">"set process -p triangle -i LO add observable top_pt_hist t"</span>,
+<a href=#5870 id=5870 data-nosnippet>5870</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5871 id=5871 data-nosnippet>5871</a>        );
+<a href=#5872 id=5872 data-nosnippet>5872</a>
+<a href=#5873 id=5873 data-nosnippet>5873</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"title="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5874 id=5874 data-nosnippet>5874</a>        <span class="macro">assert!</span>(
+<a href=#5875 id=5875 data-nosnippet>5875</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"type_description="</span>.to_string()),
+<a href=#5876 id=5876 data-nosnippet>5876</a>            <span class="string">"{values:?}"
+<a href=#5877 id=5877 data-nosnippet>5877</a>        </span>);
+<a href=#5878 id=5878 data-nosnippet>5878</a>    }
+<a href=#5879 id=5879 data-nosnippet>5879</a>
+<a href=#5880 id=5880 data-nosnippet>5880</a>    <span class="attr">#[test]
+<a href=#5881 id=5881 data-nosnippet>5881</a>    </span><span class="kw">fn </span>completion_offers_observable_update_paths_for_optional_histogram_metadata() {
+<a href=#5882 id=5882 data-nosnippet>5882</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5883 id=5883 data-nosnippet>5883</a>            <span class="string">"set process -p triangle -i LO update observable top_pt_hist t"</span>,
+<a href=#5884 id=5884 data-nosnippet>5884</a>            <span class="kw-2">&amp;</span>generate_completion_state_without_optional_histogram_metadata(),
+<a href=#5885 id=5885 data-nosnippet>5885</a>        );
+<a href=#5886 id=5886 data-nosnippet>5886</a>
+<a href=#5887 id=5887 data-nosnippet>5887</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"title="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5888 id=5888 data-nosnippet>5888</a>        <span class="macro">assert!</span>(
+<a href=#5889 id=5889 data-nosnippet>5889</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"type_description="</span>.to_string()),
+<a href=#5890 id=5890 data-nosnippet>5890</a>            <span class="string">"{values:?}"
+<a href=#5891 id=5891 data-nosnippet>5891</a>        </span>);
+<a href=#5892 id=5892 data-nosnippet>5892</a>    }
+<a href=#5893 id=5893 data-nosnippet>5893</a>
+<a href=#5894 id=5894 data-nosnippet>5894</a>    <span class="attr">#[test]
+<a href=#5895 id=5895 data-nosnippet>5895</a>    </span><span class="kw">fn </span>completion_offers_observable_update_enum_values() {
+<a href=#5896 id=5896 data-nosnippet>5896</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5897 id=5897 data-nosnippet>5897</a>            <span class="string">"set process -p triangle -i LO update observable top_pt_hist phase="</span>,
+<a href=#5898 id=5898 data-nosnippet>5898</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5899 id=5899 data-nosnippet>5899</a>        );
+<a href=#5900 id=5900 data-nosnippet>5900</a>
+<a href=#5901 id=5901 data-nosnippet>5901</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"real"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5902 id=5902 data-nosnippet>5902</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"imag"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5903 id=5903 data-nosnippet>5903</a>    }
+<a href=#5904 id=5904 data-nosnippet>5904</a>
+<a href=#5905 id=5905 data-nosnippet>5905</a>    <span class="attr">#[test]
+<a href=#5906 id=5906 data-nosnippet>5906</a>    </span><span class="kw">fn </span>completion_offers_selector_update_paths_after_name() {
+<a href=#5907 id=5907 data-nosnippet>5907</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5908 id=5908 data-nosnippet>5908</a>            <span class="string">"set process -p triangle -i LO update selector top_cut entry_"</span>,
+<a href=#5909 id=5909 data-nosnippet>5909</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5910 id=5910 data-nosnippet>5910</a>        );
+<a href=#5911 id=5911 data-nosnippet>5911</a>
+<a href=#5912 id=5912 data-nosnippet>5912</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"entry_index="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5913 id=5913 data-nosnippet>5913</a>        <span class="macro">assert!</span>(
+<a href=#5914 id=5914 data-nosnippet>5914</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"entry_selection="</span>.to_string()),
+<a href=#5915 id=5915 data-nosnippet>5915</a>            <span class="string">"{values:?}"
+<a href=#5916 id=5916 data-nosnippet>5916</a>        </span>);
+<a href=#5917 id=5917 data-nosnippet>5917</a>    }
+<a href=#5918 id=5918 data-nosnippet>5918</a>
+<a href=#5919 id=5919 data-nosnippet>5919</a>    <span class="attr">#[test]
+<a href=#5920 id=5920 data-nosnippet>5920</a>    </span><span class="kw">fn </span>completion_offers_selector_update_paths_for_optional_value_range_bounds() {
+<a href=#5921 id=5921 data-nosnippet>5921</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5922 id=5922 data-nosnippet>5922</a>            <span class="string">"set process -p triangle -i LO update selector top_cut m"</span>,
+<a href=#5923 id=5923 data-nosnippet>5923</a>            <span class="kw-2">&amp;</span>generate_completion_state_without_optional_histogram_metadata(),
+<a href=#5924 id=5924 data-nosnippet>5924</a>        );
+<a href=#5925 id=5925 data-nosnippet>5925</a>
+<a href=#5926 id=5926 data-nosnippet>5926</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"max="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5927 id=5927 data-nosnippet>5927</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"min="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5928 id=5928 data-nosnippet>5928</a>    }
+<a href=#5929 id=5929 data-nosnippet>5929</a>
+<a href=#5930 id=5930 data-nosnippet>5930</a>    <span class="attr">#[test]
+<a href=#5931 id=5931 data-nosnippet>5931</a>    </span><span class="kw">fn </span>completion_offers_quantity_update_paths_after_name() {
+<a href=#5932 id=5932 data-nosnippet>5932</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5933 id=5933 data-nosnippet>5933</a>            <span class="string">"set process -p triangle -i LO update quantity top_pt p"</span>,
+<a href=#5934 id=5934 data-nosnippet>5934</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5935 id=5935 data-nosnippet>5935</a>        );
+<a href=#5936 id=5936 data-nosnippet>5936</a>
+<a href=#5937 id=5937 data-nosnippet>5937</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"pdgs="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5938 id=5938 data-nosnippet>5938</a>    }
+<a href=#5939 id=5939 data-nosnippet>5939</a>
+<a href=#5940 id=5940 data-nosnippet>5940</a>    <span class="attr">#[test]
+<a href=#5941 id=5941 data-nosnippet>5941</a>    </span><span class="kw">fn </span>completion_offers_existing_quantity_names_for_process_update() {
+<a href=#5942 id=5942 data-nosnippet>5942</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5943 id=5943 data-nosnippet>5943</a>            <span class="string">"set process -p triangle update quantity "</span>,
+<a href=#5944 id=5944 data-nosnippet>5944</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5945 id=5945 data-nosnippet>5945</a>        );
+<a href=#5946 id=5946 data-nosnippet>5946</a>
+<a href=#5947 id=5947 data-nosnippet>5947</a>        <span class="macro">assert_eq!</span>(values, <span class="macro">vec!</span>[<span class="string">"top_pt"</span>.to_string()]);
+<a href=#5948 id=5948 data-nosnippet>5948</a>    }
 <a href=#5949 id=5949 data-nosnippet>5949</a>
-<a href=#5950 id=5950 data-nosnippet>5950</a>        <span class="macro">assert!</span>(
-<a href=#5951 id=5951 data-nosnippet>5951</a>            suggestions
-<a href=#5952 id=5952 data-nosnippet>5952</a>                .iter()
-<a href=#5953 id=5953 data-nosnippet>5953</a>                .any(|suggestion| suggestion.description.as_deref() == <span class="prelude-val">Some</span>(<span class="string">"expects a string"</span>)),
-<a href=#5954 id=5954 data-nosnippet>5954</a>            <span class="string">"{suggestions:?}"
-<a href=#5955 id=5955 data-nosnippet>5955</a>        </span>);
-<a href=#5956 id=5956 data-nosnippet>5956</a>    }
-<a href=#5957 id=5957 data-nosnippet>5957</a>
-<a href=#5958 id=5958 data-nosnippet>5958</a>    <span class="attr">#[test]
-<a href=#5959 id=5959 data-nosnippet>5959</a>    </span><span class="kw">fn </span>completion_offers_selector_kinds_for_process_add() {
-<a href=#5960 id=5960 data-nosnippet>5960</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5961 id=5961 data-nosnippet>5961</a>            <span class="string">"set process -p triangle add selector my_cut "</span>,
-<a href=#5962 id=5962 data-nosnippet>5962</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5963 id=5963 data-nosnippet>5963</a>        );
-<a href=#5964 id=5964 data-nosnippet>5964</a>
-<a href=#5965 id=5965 data-nosnippet>5965</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"value_range"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5966 id=5966 data-nosnippet>5966</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"count_range"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#5967 id=5967 data-nosnippet>5967</a>    }
+<a href=#5950 id=5950 data-nosnippet>5950</a>    <span class="attr">#[test]
+<a href=#5951 id=5951 data-nosnippet>5951</a>    </span><span class="kw">fn </span>completion_offers_quantity_kinds_for_process_add() {
+<a href=#5952 id=5952 data-nosnippet>5952</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5953 id=5953 data-nosnippet>5953</a>            <span class="string">"set process -p triangle add quantity my_quantity "</span>,
+<a href=#5954 id=5954 data-nosnippet>5954</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5955 id=5955 data-nosnippet>5955</a>        );
+<a href=#5956 id=5956 data-nosnippet>5956</a>
+<a href=#5957 id=5957 data-nosnippet>5957</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"particle"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5958 id=5958 data-nosnippet>5958</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"jet"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5959 id=5959 data-nosnippet>5959</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"integral"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5960 id=5960 data-nosnippet>5960</a>    }
+<a href=#5961 id=5961 data-nosnippet>5961</a>
+<a href=#5962 id=5962 data-nosnippet>5962</a>    <span class="attr">#[test]
+<a href=#5963 id=5963 data-nosnippet>5963</a>    </span><span class="kw">fn </span>completion_shows_type_hint_for_process_add_name() {
+<a href=#5964 id=5964 data-nosnippet>5964</a>        <span class="kw">let </span>suggestions = completion_suggestions(
+<a href=#5965 id=5965 data-nosnippet>5965</a>            <span class="string">"set process -p triangle add quantity "</span>,
+<a href=#5966 id=5966 data-nosnippet>5966</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5967 id=5967 data-nosnippet>5967</a>        );
 <a href=#5968 id=5968 data-nosnippet>5968</a>
-<a href=#5969 id=5969 data-nosnippet>5969</a>    <span class="attr">#[test]
-<a href=#5970 id=5970 data-nosnippet>5970</a>    </span><span class="kw">fn </span>completion_offers_quantity_names_for_observable_quantity_references() {
-<a href=#5971 id=5971 data-nosnippet>5971</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5972 id=5972 data-nosnippet>5972</a>            <span class="string">"set process -p triangle -i LO add observable my_hist quantity="</span>,
-<a href=#5973 id=5973 data-nosnippet>5973</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5974 id=5974 data-nosnippet>5974</a>        );
-<a href=#5975 id=5975 data-nosnippet>5975</a>
-<a href=#5976 id=5976 data-nosnippet>5976</a>        <span class="macro">assert_eq!</span>(values, <span class="macro">vec!</span>[<span class="string">"top_pt"</span>.to_string()]);
-<a href=#5977 id=5977 data-nosnippet>5977</a>    }
-<a href=#5978 id=5978 data-nosnippet>5978</a>
-<a href=#5979 id=5979 data-nosnippet>5979</a>    <span class="attr">#[test]
-<a href=#5980 id=5980 data-nosnippet>5980</a>    </span><span class="kw">fn </span>completion_offers_existing_selector_names_for_process_remove() {
-<a href=#5981 id=5981 data-nosnippet>5981</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5982 id=5982 data-nosnippet>5982</a>            <span class="string">"set process -p triangle remove selector "</span>,
-<a href=#5983 id=5983 data-nosnippet>5983</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5984 id=5984 data-nosnippet>5984</a>        );
-<a href=#5985 id=5985 data-nosnippet>5985</a>
-<a href=#5986 id=5986 data-nosnippet>5986</a>        <span class="macro">assert_eq!</span>(values, <span class="macro">vec!</span>[<span class="string">"top_cut"</span>.to_string()]);
-<a href=#5987 id=5987 data-nosnippet>5987</a>    }
-<a href=#5988 id=5988 data-nosnippet>5988</a>
-<a href=#5989 id=5989 data-nosnippet>5989</a>    <span class="attr">#[test]
-<a href=#5990 id=5990 data-nosnippet>5990</a>    </span><span class="kw">fn </span>completion_offers_display_quantity_names() {
-<a href=#5991 id=5991 data-nosnippet>5991</a>        <span class="kw">let </span>values = completion_values(
-<a href=#5992 id=5992 data-nosnippet>5992</a>            <span class="string">"display quantities -p triangle "</span>,
-<a href=#5993 id=5993 data-nosnippet>5993</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#5994 id=5994 data-nosnippet>5994</a>        );
-<a href=#5995 id=5995 data-nosnippet>5995</a>
-<a href=#5996 id=5996 data-nosnippet>5996</a>        <span class="macro">assert_eq!</span>(values, <span class="macro">vec!</span>[<span class="string">"top_pt"</span>.to_string()]);
-<a href=#5997 id=5997 data-nosnippet>5997</a>    }
-<a href=#5998 id=5998 data-nosnippet>5998</a>
-<a href=#5999 id=5999 data-nosnippet>5999</a>    <span class="attr">#[test]
-<a href=#6000 id=6000 data-nosnippet>6000</a>    </span><span class="kw">fn </span>completion_offers_process_and_integrand_selectors_for_display_quantities() {
-<a href=#6001 id=6001 data-nosnippet>6001</a>        <span class="kw">let </span>completion_state = generate_completion_state();
-<a href=#6002 id=6002 data-nosnippet>6002</a>
-<a href=#6003 id=6003 data-nosnippet>6003</a>        <span class="kw">let </span>process_values = completion_values(<span class="string">"display quantities -p t"</span>, <span class="kw-2">&amp;</span>completion_state);
-<a href=#6004 id=6004 data-nosnippet>6004</a>        <span class="macro">assert_eq!</span>(process_values, <span class="macro">vec!</span>[<span class="string">"triangle"</span>.to_string()]);
-<a href=#6005 id=6005 data-nosnippet>6005</a>
-<a href=#6006 id=6006 data-nosnippet>6006</a>        <span class="kw">let </span>integrand_values =
-<a href=#6007 id=6007 data-nosnippet>6007</a>            completion_values(<span class="string">"display quantities -p triangle -i "</span>, <span class="kw-2">&amp;</span>completion_state);
-<a href=#6008 id=6008 data-nosnippet>6008</a>        <span class="macro">assert!</span>(integrand_values.contains(<span class="kw-2">&amp;</span><span class="string">"LO"</span>.to_string()));
-<a href=#6009 id=6009 data-nosnippet>6009</a>        <span class="macro">assert!</span>(integrand_values.contains(<span class="kw-2">&amp;</span><span class="string">"NLO"</span>.to_string()));
-<a href=#6010 id=6010 data-nosnippet>6010</a>    }
-<a href=#6011 id=6011 data-nosnippet>6011</a>
-<a href=#6012 id=6012 data-nosnippet>6012</a>    <span class="attr">#[test]
-<a href=#6013 id=6013 data-nosnippet>6013</a>    </span><span class="kw">fn </span>completion_offers_command_block_names_for_display_command_block() {
-<a href=#6014 id=6014 data-nosnippet>6014</a>        <span class="kw">let </span>completion_state = CompletionState {
-<a href=#6015 id=6015 data-nosnippet>6015</a>            commands_block_names: <span class="macro">vec!</span>[<span class="string">"alpha"</span>.to_string(), <span class="string">"beta"</span>.to_string()],
-<a href=#6016 id=6016 data-nosnippet>6016</a>            ..CompletionState::default()
-<a href=#6017 id=6017 data-nosnippet>6017</a>        };
-<a href=#6018 id=6018 data-nosnippet>6018</a>
-<a href=#6019 id=6019 data-nosnippet>6019</a>        <span class="kw">let </span>values = completion_values(<span class="string">"display command_block "</span>, <span class="kw-2">&amp;</span>completion_state);
-<a href=#6020 id=6020 data-nosnippet>6020</a>
-<a href=#6021 id=6021 data-nosnippet>6021</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"alpha"</span>.to_string()));
-<a href=#6022 id=6022 data-nosnippet>6022</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"beta"</span>.to_string()));
-<a href=#6023 id=6023 data-nosnippet>6023</a>    }
+<a href=#5969 id=5969 data-nosnippet>5969</a>        <span class="macro">assert!</span>(
+<a href=#5970 id=5970 data-nosnippet>5970</a>            suggestions
+<a href=#5971 id=5971 data-nosnippet>5971</a>                .iter()
+<a href=#5972 id=5972 data-nosnippet>5972</a>                .any(|suggestion| suggestion.description.as_deref() == <span class="prelude-val">Some</span>(<span class="string">"expects a string"</span>)),
+<a href=#5973 id=5973 data-nosnippet>5973</a>            <span class="string">"{suggestions:?}"
+<a href=#5974 id=5974 data-nosnippet>5974</a>        </span>);
+<a href=#5975 id=5975 data-nosnippet>5975</a>    }
+<a href=#5976 id=5976 data-nosnippet>5976</a>
+<a href=#5977 id=5977 data-nosnippet>5977</a>    <span class="attr">#[test]
+<a href=#5978 id=5978 data-nosnippet>5978</a>    </span><span class="kw">fn </span>completion_offers_selector_kinds_for_process_add() {
+<a href=#5979 id=5979 data-nosnippet>5979</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5980 id=5980 data-nosnippet>5980</a>            <span class="string">"set process -p triangle add selector my_cut "</span>,
+<a href=#5981 id=5981 data-nosnippet>5981</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5982 id=5982 data-nosnippet>5982</a>        );
+<a href=#5983 id=5983 data-nosnippet>5983</a>
+<a href=#5984 id=5984 data-nosnippet>5984</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"value_range"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5985 id=5985 data-nosnippet>5985</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"count_range"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#5986 id=5986 data-nosnippet>5986</a>    }
+<a href=#5987 id=5987 data-nosnippet>5987</a>
+<a href=#5988 id=5988 data-nosnippet>5988</a>    <span class="attr">#[test]
+<a href=#5989 id=5989 data-nosnippet>5989</a>    </span><span class="kw">fn </span>completion_offers_quantity_names_for_observable_quantity_references() {
+<a href=#5990 id=5990 data-nosnippet>5990</a>        <span class="kw">let </span>values = completion_values(
+<a href=#5991 id=5991 data-nosnippet>5991</a>            <span class="string">"set process -p triangle -i LO add observable my_hist quantity="</span>,
+<a href=#5992 id=5992 data-nosnippet>5992</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#5993 id=5993 data-nosnippet>5993</a>        );
+<a href=#5994 id=5994 data-nosnippet>5994</a>
+<a href=#5995 id=5995 data-nosnippet>5995</a>        <span class="macro">assert_eq!</span>(values, <span class="macro">vec!</span>[<span class="string">"top_pt"</span>.to_string()]);
+<a href=#5996 id=5996 data-nosnippet>5996</a>    }
+<a href=#5997 id=5997 data-nosnippet>5997</a>
+<a href=#5998 id=5998 data-nosnippet>5998</a>    <span class="attr">#[test]
+<a href=#5999 id=5999 data-nosnippet>5999</a>    </span><span class="kw">fn </span>completion_offers_existing_selector_names_for_process_remove() {
+<a href=#6000 id=6000 data-nosnippet>6000</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6001 id=6001 data-nosnippet>6001</a>            <span class="string">"set process -p triangle remove selector "</span>,
+<a href=#6002 id=6002 data-nosnippet>6002</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6003 id=6003 data-nosnippet>6003</a>        );
+<a href=#6004 id=6004 data-nosnippet>6004</a>
+<a href=#6005 id=6005 data-nosnippet>6005</a>        <span class="macro">assert_eq!</span>(values, <span class="macro">vec!</span>[<span class="string">"top_cut"</span>.to_string()]);
+<a href=#6006 id=6006 data-nosnippet>6006</a>    }
+<a href=#6007 id=6007 data-nosnippet>6007</a>
+<a href=#6008 id=6008 data-nosnippet>6008</a>    <span class="attr">#[test]
+<a href=#6009 id=6009 data-nosnippet>6009</a>    </span><span class="kw">fn </span>completion_offers_display_quantity_names() {
+<a href=#6010 id=6010 data-nosnippet>6010</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6011 id=6011 data-nosnippet>6011</a>            <span class="string">"display quantities -p triangle "</span>,
+<a href=#6012 id=6012 data-nosnippet>6012</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6013 id=6013 data-nosnippet>6013</a>        );
+<a href=#6014 id=6014 data-nosnippet>6014</a>
+<a href=#6015 id=6015 data-nosnippet>6015</a>        <span class="macro">assert_eq!</span>(values, <span class="macro">vec!</span>[<span class="string">"top_pt"</span>.to_string()]);
+<a href=#6016 id=6016 data-nosnippet>6016</a>    }
+<a href=#6017 id=6017 data-nosnippet>6017</a>
+<a href=#6018 id=6018 data-nosnippet>6018</a>    <span class="attr">#[test]
+<a href=#6019 id=6019 data-nosnippet>6019</a>    </span><span class="kw">fn </span>completion_offers_process_and_integrand_selectors_for_display_quantities() {
+<a href=#6020 id=6020 data-nosnippet>6020</a>        <span class="kw">let </span>completion_state = generate_completion_state();
+<a href=#6021 id=6021 data-nosnippet>6021</a>
+<a href=#6022 id=6022 data-nosnippet>6022</a>        <span class="kw">let </span>process_values = completion_values(<span class="string">"display quantities -p t"</span>, <span class="kw-2">&amp;</span>completion_state);
+<a href=#6023 id=6023 data-nosnippet>6023</a>        <span class="macro">assert_eq!</span>(process_values, <span class="macro">vec!</span>[<span class="string">"triangle"</span>.to_string()]);
 <a href=#6024 id=6024 data-nosnippet>6024</a>
-<a href=#6025 id=6025 data-nosnippet>6025</a>    <span class="attr">#[test]
-<a href=#6026 id=6026 data-nosnippet>6026</a>    </span><span class="kw">fn </span>completion_offers_boolean_values_for_settings_leaf() {
-<a href=#6027 id=6027 data-nosnippet>6027</a>        <span class="kw">let </span>values = completion_values(
-<a href=#6028 id=6028 data-nosnippet>6028</a>            <span class="string">"set global kv global.generation.evaluator.iterative_orientation_optimization="</span>,
-<a href=#6029 id=6029 data-nosnippet>6029</a>            <span class="kw-2">&amp;</span>CompletionState::default(),
-<a href=#6030 id=6030 data-nosnippet>6030</a>        );
-<a href=#6031 id=6031 data-nosnippet>6031</a>
-<a href=#6032 id=6032 data-nosnippet>6032</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"false"</span>.to_string()));
-<a href=#6033 id=6033 data-nosnippet>6033</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"true"</span>.to_string()));
-<a href=#6034 id=6034 data-nosnippet>6034</a>    }
-<a href=#6035 id=6035 data-nosnippet>6035</a>
-<a href=#6036 id=6036 data-nosnippet>6036</a>    <span class="attr">#[test]
-<a href=#6037 id=6037 data-nosnippet>6037</a>    </span><span class="kw">fn </span>completion_offers_enum_values_for_settings_leaf() {
-<a href=#6038 id=6038 data-nosnippet>6038</a>        <span class="kw">let </span>values = completion_values(
-<a href=#6039 id=6039 data-nosnippet>6039</a>            <span class="string">"set global kv global.log_style.log_format="</span>,
-<a href=#6040 id=6040 data-nosnippet>6040</a>            <span class="kw-2">&amp;</span>CompletionState::default(),
-<a href=#6041 id=6041 data-nosnippet>6041</a>        );
-<a href=#6042 id=6042 data-nosnippet>6042</a>
-<a href=#6043 id=6043 data-nosnippet>6043</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Long"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6044 id=6044 data-nosnippet>6044</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Short"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6045 id=6045 data-nosnippet>6045</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Min"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6046 id=6046 data-nosnippet>6046</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"None"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6047 id=6047 data-nosnippet>6047</a>    }
-<a href=#6048 id=6048 data-nosnippet>6048</a>
-<a href=#6049 id=6049 data-nosnippet>6049</a>    <span class="attr">#[test]
-<a href=#6050 id=6050 data-nosnippet>6050</a>    </span><span class="kw">fn </span>completion_shows_type_hint_for_non_boolean_settings_leaf() {
-<a href=#6051 id=6051 data-nosnippet>6051</a>        <span class="kw">let </span>suggestions = completion_suggestions(
-<a href=#6052 id=6052 data-nosnippet>6052</a>            <span class="string">"set default-runtime kv integrator.n_start="</span>,
-<a href=#6053 id=6053 data-nosnippet>6053</a>            <span class="kw-2">&amp;</span>CompletionState::default(),
-<a href=#6054 id=6054 data-nosnippet>6054</a>        );
-<a href=#6055 id=6055 data-nosnippet>6055</a>
-<a href=#6056 id=6056 data-nosnippet>6056</a>        <span class="macro">assert!</span>(
-<a href=#6057 id=6057 data-nosnippet>6057</a>            suggestions
-<a href=#6058 id=6058 data-nosnippet>6058</a>                .iter()
-<a href=#6059 id=6059 data-nosnippet>6059</a>                .any(|suggestion| suggestion.description.as_deref() == <span class="prelude-val">Some</span>(<span class="string">"expects an integer"</span>)),
-<a href=#6060 id=6060 data-nosnippet>6060</a>            <span class="string">"{suggestions:?}"
-<a href=#6061 id=6061 data-nosnippet>6061</a>        </span>);
-<a href=#6062 id=6062 data-nosnippet>6062</a>    }
-<a href=#6063 id=6063 data-nosnippet>6063</a>
-<a href=#6064 id=6064 data-nosnippet>6064</a>    <span class="attr">#[test]
-<a href=#6065 id=6065 data-nosnippet>6065</a>    </span><span class="kw">fn </span>completion_uses_schema_hint_for_clustered_pdgs_key() {
-<a href=#6066 id=6066 data-nosnippet>6066</a>        <span class="kw">let </span>suggestions = completion_suggestions(
-<a href=#6067 id=6067 data-nosnippet>6067</a>            <span class="string">"set process -p triangle add quantity jets jet clustered_p"</span>,
-<a href=#6068 id=6068 data-nosnippet>6068</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#6069 id=6069 data-nosnippet>6069</a>        );
-<a href=#6070 id=6070 data-nosnippet>6070</a>
-<a href=#6071 id=6071 data-nosnippet>6071</a>        <span class="kw">let </span>suggestion = suggestions
-<a href=#6072 id=6072 data-nosnippet>6072</a>            .iter()
-<a href=#6073 id=6073 data-nosnippet>6073</a>            .find(|suggestion| suggestion.value == <span class="string">"clustered_pdgs="</span>)
-<a href=#6074 id=6074 data-nosnippet>6074</a>            .unwrap();
-<a href=#6075 id=6075 data-nosnippet>6075</a>        <span class="kw">let </span>description = suggestion.description.as_deref().unwrap();
-<a href=#6076 id=6076 data-nosnippet>6076</a>        <span class="macro">assert!</span>(description.contains(<span class="string">"PDG IDs allowed to be clustered"</span>));
-<a href=#6077 id=6077 data-nosnippet>6077</a>        <span class="macro">assert!</span>(description.contains(<span class="string">"[-1,1,21,82]"</span>));
-<a href=#6078 id=6078 data-nosnippet>6078</a>    }
-<a href=#6079 id=6079 data-nosnippet>6079</a>
-<a href=#6080 id=6080 data-nosnippet>6080</a>    <span class="attr">#[test]
-<a href=#6081 id=6081 data-nosnippet>6081</a>    </span><span class="kw">fn </span>completion_offers_clustered_pdgs_example_value() {
-<a href=#6082 id=6082 data-nosnippet>6082</a>        <span class="kw">let </span>suggestions = completion_suggestions(
-<a href=#6083 id=6083 data-nosnippet>6083</a>            <span class="string">"set process -p triangle add quantity jets jet clustered_pdgs="</span>,
-<a href=#6084 id=6084 data-nosnippet>6084</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#6085 id=6085 data-nosnippet>6085</a>        );
-<a href=#6086 id=6086 data-nosnippet>6086</a>
-<a href=#6087 id=6087 data-nosnippet>6087</a>        <span class="macro">assert!</span>(
-<a href=#6088 id=6088 data-nosnippet>6088</a>            suggestions.iter().any(|suggestion| {
-<a href=#6089 id=6089 data-nosnippet>6089</a>                suggestion
-<a href=#6090 id=6090 data-nosnippet>6090</a>                    .description
-<a href=#6091 id=6091 data-nosnippet>6091</a>                    .as_deref()
-<a href=#6092 id=6092 data-nosnippet>6092</a>                    .is_some_and(|description| {
-<a href=#6093 id=6093 data-nosnippet>6093</a>                        description.contains(<span class="string">"PDG IDs allowed to be clustered"</span>)
-<a href=#6094 id=6094 data-nosnippet>6094</a>                            &amp;&amp; description.contains(<span class="string">"[-1,1,21,82]"</span>)
-<a href=#6095 id=6095 data-nosnippet>6095</a>                    })
-<a href=#6096 id=6096 data-nosnippet>6096</a>            }),
-<a href=#6097 id=6097 data-nosnippet>6097</a>            <span class="string">"{suggestions:?}"
-<a href=#6098 id=6098 data-nosnippet>6098</a>        </span>);
-<a href=#6099 id=6099 data-nosnippet>6099</a>        <span class="macro">assert!</span>(
-<a href=#6100 id=6100 data-nosnippet>6100</a>            suggestions
-<a href=#6101 id=6101 data-nosnippet>6101</a>                .iter()
-<a href=#6102 id=6102 data-nosnippet>6102</a>                .all(|suggestion| suggestion.description.as_deref() != <span class="prelude-val">Some</span>(<span class="string">"expects null"</span>)),
-<a href=#6103 id=6103 data-nosnippet>6103</a>            <span class="string">"{suggestions:?}"
-<a href=#6104 id=6104 data-nosnippet>6104</a>        </span>);
-<a href=#6105 id=6105 data-nosnippet>6105</a>    }
-<a href=#6106 id=6106 data-nosnippet>6106</a>
-<a href=#6107 id=6107 data-nosnippet>6107</a>    <span class="attr">#[test]
-<a href=#6108 id=6108 data-nosnippet>6108</a>    </span><span class="kw">fn </span>completion_offers_quantity_computation_fields_for_process_add() {
-<a href=#6109 id=6109 data-nosnippet>6109</a>        <span class="kw">let </span>values = completion_values(
-<a href=#6110 id=6110 data-nosnippet>6110</a>            <span class="string">"set process -p triangle add quantity my_quantity jet p"</span>,
-<a href=#6111 id=6111 data-nosnippet>6111</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#6112 id=6112 data-nosnippet>6112</a>        );
-<a href=#6113 id=6113 data-nosnippet>6113</a>
-<a href=#6114 id=6114 data-nosnippet>6114</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"pair_quantity="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6115 id=6115 data-nosnippet>6115</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"pairing="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6116 id=6116 data-nosnippet>6116</a>    }
-<a href=#6117 id=6117 data-nosnippet>6117</a>
-<a href=#6118 id=6118 data-nosnippet>6118</a>    <span class="attr">#[test]
-<a href=#6119 id=6119 data-nosnippet>6119</a>    </span><span class="kw">fn </span>completion_offers_quantity_ordering_fields_for_process_add() {
-<a href=#6120 id=6120 data-nosnippet>6120</a>        <span class="kw">let </span>values = completion_values(
-<a href=#6121 id=6121 data-nosnippet>6121</a>            <span class="string">"set process -p triangle add quantity my_quantity jet o"</span>,
-<a href=#6122 id=6122 data-nosnippet>6122</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#6123 id=6123 data-nosnippet>6123</a>        );
-<a href=#6124 id=6124 data-nosnippet>6124</a>
-<a href=#6125 id=6125 data-nosnippet>6125</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"order="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6126 id=6126 data-nosnippet>6126</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"ordering="</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6127 id=6127 data-nosnippet>6127</a>    }
-<a href=#6128 id=6128 data-nosnippet>6128</a>
-<a href=#6129 id=6129 data-nosnippet>6129</a>    <span class="attr">#[test]
-<a href=#6130 id=6130 data-nosnippet>6130</a>    </span><span class="kw">fn </span>completion_offers_pair_quantity_enum_values() {
-<a href=#6131 id=6131 data-nosnippet>6131</a>        <span class="kw">let </span>values = completion_values(
-<a href=#6132 id=6132 data-nosnippet>6132</a>            <span class="string">"set process -p triangle add quantity my_quantity jet pair_quantity="</span>,
-<a href=#6133 id=6133 data-nosnippet>6133</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#6134 id=6134 data-nosnippet>6134</a>        );
-<a href=#6135 id=6135 data-nosnippet>6135</a>
-<a href=#6136 id=6136 data-nosnippet>6136</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"DeltaR"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6137 id=6137 data-nosnippet>6137</a>    }
-<a href=#6138 id=6138 data-nosnippet>6138</a>
-<a href=#6139 id=6139 data-nosnippet>6139</a>    <span class="attr">#[test]
-<a href=#6140 id=6140 data-nosnippet>6140</a>    </span><span class="kw">fn </span>completion_offers_quantity_ordering_enum_values() {
-<a href=#6141 id=6141 data-nosnippet>6141</a>        <span class="kw">let </span>values = completion_values(
-<a href=#6142 id=6142 data-nosnippet>6142</a>            <span class="string">"set process -p triangle add quantity my_quantity particle ordering="</span>,
-<a href=#6143 id=6143 data-nosnippet>6143</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#6144 id=6144 data-nosnippet>6144</a>        );
-<a href=#6145 id=6145 data-nosnippet>6145</a>
-<a href=#6146 id=6146 data-nosnippet>6146</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"PT"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6147 id=6147 data-nosnippet>6147</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Energy"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6148 id=6148 data-nosnippet>6148</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"AbsRapidity"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6149 id=6149 data-nosnippet>6149</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Quantity"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6150 id=6150 data-nosnippet>6150</a>    }
-<a href=#6151 id=6151 data-nosnippet>6151</a>
-<a href=#6152 id=6152 data-nosnippet>6152</a>    <span class="attr">#[test]
-<a href=#6153 id=6153 data-nosnippet>6153</a>    </span><span class="kw">fn </span>completion_offers_quantity_order_enum_values() {
-<a href=#6154 id=6154 data-nosnippet>6154</a>        <span class="kw">let </span>values = completion_values(
-<a href=#6155 id=6155 data-nosnippet>6155</a>            <span class="string">"set process -p triangle add quantity my_quantity particle order="</span>,
-<a href=#6156 id=6156 data-nosnippet>6156</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#6157 id=6157 data-nosnippet>6157</a>        );
-<a href=#6158 id=6158 data-nosnippet>6158</a>
-<a href=#6159 id=6159 data-nosnippet>6159</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Ascending"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6160 id=6160 data-nosnippet>6160</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Descending"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6161 id=6161 data-nosnippet>6161</a>    }
-<a href=#6162 id=6162 data-nosnippet>6162</a>
-<a href=#6163 id=6163 data-nosnippet>6163</a>    <span class="attr">#[test]
-<a href=#6164 id=6164 data-nosnippet>6164</a>    </span><span class="kw">fn </span>completion_does_not_repeat_used_options_by_short_or_long_form() {
-<a href=#6165 id=6165 data-nosnippet>6165</a>        <span class="kw">let </span>values =
-<a href=#6166 id=6166 data-nosnippet>6166</a>            completion_values(<span class="string">"integrate --process triangle "</span>, <span class="kw-2">&amp;</span>CompletionState::default());
-<a href=#6167 id=6167 data-nosnippet>6167</a>
-<a href=#6168 id=6168 data-nosnippet>6168</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"-p"</span>.to_string()));
-<a href=#6169 id=6169 data-nosnippet>6169</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"--process"</span>.to_string()));
-<a href=#6170 id=6170 data-nosnippet>6170</a>    }
-<a href=#6171 id=6171 data-nosnippet>6171</a>
-<a href=#6172 id=6172 data-nosnippet>6172</a>    <span class="attr">#[test]
-<a href=#6173 id=6173 data-nosnippet>6173</a>    </span><span class="kw">fn </span>completion_does_not_append_whitespace_for_settings_assignment_keys() {
-<a href=#6174 id=6174 data-nosnippet>6174</a>        <span class="kw">let </span>suggestions = completion_suggestions(
-<a href=#6175 id=6175 data-nosnippet>6175</a>            <span class="string">"set global kv global.generation.evaluator.iterative_orientation_optimization"</span>,
-<a href=#6176 id=6176 data-nosnippet>6176</a>            <span class="kw-2">&amp;</span>CompletionState::default(),
-<a href=#6177 id=6177 data-nosnippet>6177</a>        );
-<a href=#6178 id=6178 data-nosnippet>6178</a>
-<a href=#6179 id=6179 data-nosnippet>6179</a>        <span class="kw">let </span>suggestion = suggestions
-<a href=#6180 id=6180 data-nosnippet>6180</a>            .iter()
-<a href=#6181 id=6181 data-nosnippet>6181</a>            .find(|suggestion| {
-<a href=#6182 id=6182 data-nosnippet>6182</a>                suggestion.value
-<a href=#6183 id=6183 data-nosnippet>6183</a>                    == <span class="string">"global.generation.evaluator.iterative_orientation_optimization="
-<a href=#6184 id=6184 data-nosnippet>6184</a>            </span>})
-<a href=#6185 id=6185 data-nosnippet>6185</a>            .unwrap();
-<a href=#6186 id=6186 data-nosnippet>6186</a>        <span class="macro">assert!</span>(!suggestion.append_whitespace);
-<a href=#6187 id=6187 data-nosnippet>6187</a>    }
-<a href=#6188 id=6188 data-nosnippet>6188</a>
-<a href=#6189 id=6189 data-nosnippet>6189</a>    <span class="attr">#[test]
-<a href=#6190 id=6190 data-nosnippet>6190</a>    </span><span class="kw">fn </span>completion_prefers_options_first_when_new_flags_can_start() {
-<a href=#6191 id=6191 data-nosnippet>6191</a>        <span class="kw">let </span>suggestions =
-<a href=#6192 id=6192 data-nosnippet>6192</a>            completion_suggestions(<span class="string">"generate amp g g &gt; "</span>, <span class="kw-2">&amp;</span>generate_completion_state());
-<a href=#6193 id=6193 data-nosnippet>6193</a>
-<a href=#6194 id=6194 data-nosnippet>6194</a>        <span class="macro">assert!</span>(suggestions.first().unwrap().value.starts_with(<span class="string">'-'</span>));
-<a href=#6195 id=6195 data-nosnippet>6195</a>    }
-<a href=#6196 id=6196 data-nosnippet>6196</a>
-<a href=#6197 id=6197 data-nosnippet>6197</a>    <span class="attr">#[test]
-<a href=#6198 id=6198 data-nosnippet>6198</a>    </span><span class="kw">fn </span>completion_offers_generate_particles_and_arrow() {
-<a href=#6199 id=6199 data-nosnippet>6199</a>        <span class="kw">let </span>values = completion_values(<span class="string">"generate amp g "</span>, <span class="kw-2">&amp;</span>generate_completion_state());
-<a href=#6200 id=6200 data-nosnippet>6200</a>
-<a href=#6201 id=6201 data-nosnippet>6201</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"\\&gt;"</span>.to_string()));
-<a href=#6202 id=6202 data-nosnippet>6202</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"to"</span>.to_string()));
-<a href=#6203 id=6203 data-nosnippet>6203</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"g"</span>.to_string()));
-<a href=#6204 id=6204 data-nosnippet>6204</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"h"</span>.to_string()));
-<a href=#6205 id=6205 data-nosnippet>6205</a>    }
-<a href=#6206 id=6206 data-nosnippet>6206</a>
-<a href=#6207 id=6207 data-nosnippet>6207</a>    <span class="attr">#[test]
-<a href=#6208 id=6208 data-nosnippet>6208</a>    </span><span class="kw">fn </span>completion_offers_generate_process_option_starters_and_couplings() {
-<a href=#6209 id=6209 data-nosnippet>6209</a>        <span class="kw">let </span>values = completion_values(<span class="string">"generate amp g g &gt; h "</span>, <span class="kw-2">&amp;</span>generate_completion_state());
-<a href=#6210 id=6210 data-nosnippet>6210</a>
-<a href=#6211 id=6211 data-nosnippet>6211</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"/"</span>.to_string()));
-<a href=#6212 id=6212 data-nosnippet>6212</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"\\|"</span>.to_string()));
-<a href=#6213 id=6213 data-nosnippet>6213</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"QCD=="</span>.to_string()));
-<a href=#6214 id=6214 data-nosnippet>6214</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"QED\\&gt;="</span>.to_string()));
-<a href=#6215 id=6215 data-nosnippet>6215</a>    }
-<a href=#6216 id=6216 data-nosnippet>6216</a>
-<a href=#6217 id=6217 data-nosnippet>6217</a>    <span class="attr">#[test]
-<a href=#6218 id=6218 data-nosnippet>6218</a>    </span><span class="kw">fn </span>completion_offers_generate_xs_powered_coupling_skeletons() {
-<a href=#6219 id=6219 data-nosnippet>6219</a>        <span class="kw">let </span>values = completion_values(<span class="string">"generate xs g g &gt; h Q"</span>, <span class="kw-2">&amp;</span>generate_completion_state());
-<a href=#6220 id=6220 data-nosnippet>6220</a>
-<a href=#6221 id=6221 data-nosnippet>6221</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"QCD^"</span>.to_string()));
-<a href=#6222 id=6222 data-nosnippet>6222</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"QED^"</span>.to_string()));
-<a href=#6223 id=6223 data-nosnippet>6223</a>    }
-<a href=#6224 id=6224 data-nosnippet>6224</a>
-<a href=#6225 id=6225 data-nosnippet>6225</a>    <span class="attr">#[test]
-<a href=#6226 id=6226 data-nosnippet>6226</a>    </span><span class="kw">fn </span>completion_offers_generate_perturbative_block_suggestions() {
-<a href=#6227 id=6227 data-nosnippet>6227</a>        <span class="kw">let </span>values = completion_values(<span class="string">"generate amp g g &gt; h ["</span>, <span class="kw-2">&amp;</span>generate_completion_state());
-<a href=#6228 id=6228 data-nosnippet>6228</a>
-<a href=#6229 id=6229 data-nosnippet>6229</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"\\[\\{1\\}"</span>.to_string()));
-<a href=#6230 id=6230 data-nosnippet>6230</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"\\[\\{\\{1\\}\\}"</span>.to_string()));
-<a href=#6231 id=6231 data-nosnippet>6231</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"\\[QED"</span>.to_string()));
-<a href=#6232 id=6232 data-nosnippet>6232</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"\\[QED="</span>.to_string()));
-<a href=#6233 id=6233 data-nosnippet>6233</a>    }
-<a href=#6234 id=6234 data-nosnippet>6234</a>
-<a href=#6235 id=6235 data-nosnippet>6235</a>    <span class="attr">#[test]
-<a href=#6236 id=6236 data-nosnippet>6236</a>    </span><span class="kw">fn </span>completion_offers_generate_value_enum_variants() {
-<a href=#6237 id=6237 data-nosnippet>6237</a>        <span class="kw">let </span>values = completion_values(
-<a href=#6238 id=6238 data-nosnippet>6238</a>            <span class="string">"generate amp g g &gt; h --numerator-grouping "</span>,
-<a href=#6239 id=6239 data-nosnippet>6239</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#6240 id=6240 data-nosnippet>6240</a>        );
-<a href=#6241 id=6241 data-nosnippet>6241</a>
-<a href=#6242 id=6242 data-nosnippet>6242</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"no_grouping"</span>.to_string()));
-<a href=#6243 id=6243 data-nosnippet>6243</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"only_detect_zeroes"</span>.to_string()));
-<a href=#6244 id=6244 data-nosnippet>6244</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"group_identical_graphs_up_to_sign"</span>.to_string()));
-<a href=#6245 id=6245 data-nosnippet>6245</a>    }
-<a href=#6246 id=6246 data-nosnippet>6246</a>
-<a href=#6247 id=6247 data-nosnippet>6247</a>    <span class="attr">#[test]
-<a href=#6248 id=6248 data-nosnippet>6248</a>    </span><span class="kw">fn </span>completion_offers_generate_vertex_names_for_list_flags() {
-<a href=#6249 id=6249 data-nosnippet>6249</a>        <span class="kw">let </span>values = completion_values(
-<a href=#6250 id=6250 data-nosnippet>6250</a>            <span class="string">"generate amp g g &gt; h --veto-vertex-interactions V_"</span>,
-<a href=#6251 id=6251 data-nosnippet>6251</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#6252 id=6252 data-nosnippet>6252</a>        );
+<a href=#6025 id=6025 data-nosnippet>6025</a>        <span class="kw">let </span>integrand_values =
+<a href=#6026 id=6026 data-nosnippet>6026</a>            completion_values(<span class="string">"display quantities -p triangle -i "</span>, <span class="kw-2">&amp;</span>completion_state);
+<a href=#6027 id=6027 data-nosnippet>6027</a>        <span class="macro">assert!</span>(integrand_values.contains(<span class="kw-2">&amp;</span><span class="string">"LO"</span>.to_string()));
+<a href=#6028 id=6028 data-nosnippet>6028</a>        <span class="macro">assert!</span>(integrand_values.contains(<span class="kw-2">&amp;</span><span class="string">"NLO"</span>.to_string()));
+<a href=#6029 id=6029 data-nosnippet>6029</a>    }
+<a href=#6030 id=6030 data-nosnippet>6030</a>
+<a href=#6031 id=6031 data-nosnippet>6031</a>    <span class="attr">#[test]
+<a href=#6032 id=6032 data-nosnippet>6032</a>    </span><span class="kw">fn </span>completion_offers_command_block_names_for_display_command_block() {
+<a href=#6033 id=6033 data-nosnippet>6033</a>        <span class="kw">let </span>completion_state = CompletionState {
+<a href=#6034 id=6034 data-nosnippet>6034</a>            commands_block_names: <span class="macro">vec!</span>[<span class="string">"alpha"</span>.to_string(), <span class="string">"beta"</span>.to_string()],
+<a href=#6035 id=6035 data-nosnippet>6035</a>            ..CompletionState::default()
+<a href=#6036 id=6036 data-nosnippet>6036</a>        };
+<a href=#6037 id=6037 data-nosnippet>6037</a>
+<a href=#6038 id=6038 data-nosnippet>6038</a>        <span class="kw">let </span>values = completion_values(<span class="string">"display command_block "</span>, <span class="kw-2">&amp;</span>completion_state);
+<a href=#6039 id=6039 data-nosnippet>6039</a>
+<a href=#6040 id=6040 data-nosnippet>6040</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"alpha"</span>.to_string()));
+<a href=#6041 id=6041 data-nosnippet>6041</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"beta"</span>.to_string()));
+<a href=#6042 id=6042 data-nosnippet>6042</a>    }
+<a href=#6043 id=6043 data-nosnippet>6043</a>
+<a href=#6044 id=6044 data-nosnippet>6044</a>    <span class="attr">#[test]
+<a href=#6045 id=6045 data-nosnippet>6045</a>    </span><span class="kw">fn </span>completion_offers_boolean_values_for_settings_leaf() {
+<a href=#6046 id=6046 data-nosnippet>6046</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6047 id=6047 data-nosnippet>6047</a>            <span class="string">"set global kv global.generation.evaluator.iterative_orientation_optimization="</span>,
+<a href=#6048 id=6048 data-nosnippet>6048</a>            <span class="kw-2">&amp;</span>CompletionState::default(),
+<a href=#6049 id=6049 data-nosnippet>6049</a>        );
+<a href=#6050 id=6050 data-nosnippet>6050</a>
+<a href=#6051 id=6051 data-nosnippet>6051</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"false"</span>.to_string()));
+<a href=#6052 id=6052 data-nosnippet>6052</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"true"</span>.to_string()));
+<a href=#6053 id=6053 data-nosnippet>6053</a>    }
+<a href=#6054 id=6054 data-nosnippet>6054</a>
+<a href=#6055 id=6055 data-nosnippet>6055</a>    <span class="attr">#[test]
+<a href=#6056 id=6056 data-nosnippet>6056</a>    </span><span class="kw">fn </span>completion_offers_enum_values_for_settings_leaf() {
+<a href=#6057 id=6057 data-nosnippet>6057</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6058 id=6058 data-nosnippet>6058</a>            <span class="string">"set global kv global.log_style.log_format="</span>,
+<a href=#6059 id=6059 data-nosnippet>6059</a>            <span class="kw-2">&amp;</span>CompletionState::default(),
+<a href=#6060 id=6060 data-nosnippet>6060</a>        );
+<a href=#6061 id=6061 data-nosnippet>6061</a>
+<a href=#6062 id=6062 data-nosnippet>6062</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Long"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6063 id=6063 data-nosnippet>6063</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Short"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6064 id=6064 data-nosnippet>6064</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Min"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6065 id=6065 data-nosnippet>6065</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"None"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6066 id=6066 data-nosnippet>6066</a>    }
+<a href=#6067 id=6067 data-nosnippet>6067</a>
+<a href=#6068 id=6068 data-nosnippet>6068</a>    <span class="attr">#[test]
+<a href=#6069 id=6069 data-nosnippet>6069</a>    </span><span class="kw">fn </span>completion_shows_type_hint_for_non_boolean_settings_leaf() {
+<a href=#6070 id=6070 data-nosnippet>6070</a>        <span class="kw">let </span>suggestions = completion_suggestions(
+<a href=#6071 id=6071 data-nosnippet>6071</a>            <span class="string">"set default-runtime kv integrator.n_start="</span>,
+<a href=#6072 id=6072 data-nosnippet>6072</a>            <span class="kw-2">&amp;</span>CompletionState::default(),
+<a href=#6073 id=6073 data-nosnippet>6073</a>        );
+<a href=#6074 id=6074 data-nosnippet>6074</a>
+<a href=#6075 id=6075 data-nosnippet>6075</a>        <span class="macro">assert!</span>(
+<a href=#6076 id=6076 data-nosnippet>6076</a>            suggestions
+<a href=#6077 id=6077 data-nosnippet>6077</a>                .iter()
+<a href=#6078 id=6078 data-nosnippet>6078</a>                .any(|suggestion| suggestion.description.as_deref() == <span class="prelude-val">Some</span>(<span class="string">"expects an integer"</span>)),
+<a href=#6079 id=6079 data-nosnippet>6079</a>            <span class="string">"{suggestions:?}"
+<a href=#6080 id=6080 data-nosnippet>6080</a>        </span>);
+<a href=#6081 id=6081 data-nosnippet>6081</a>    }
+<a href=#6082 id=6082 data-nosnippet>6082</a>
+<a href=#6083 id=6083 data-nosnippet>6083</a>    <span class="attr">#[test]
+<a href=#6084 id=6084 data-nosnippet>6084</a>    </span><span class="kw">fn </span>completion_uses_schema_hint_for_clustered_pdgs_key() {
+<a href=#6085 id=6085 data-nosnippet>6085</a>        <span class="kw">let </span>suggestions = completion_suggestions(
+<a href=#6086 id=6086 data-nosnippet>6086</a>            <span class="string">"set process -p triangle add quantity jets jet clustered_p"</span>,
+<a href=#6087 id=6087 data-nosnippet>6087</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6088 id=6088 data-nosnippet>6088</a>        );
+<a href=#6089 id=6089 data-nosnippet>6089</a>
+<a href=#6090 id=6090 data-nosnippet>6090</a>        <span class="kw">let </span>suggestion = suggestions
+<a href=#6091 id=6091 data-nosnippet>6091</a>            .iter()
+<a href=#6092 id=6092 data-nosnippet>6092</a>            .find(|suggestion| suggestion.value == <span class="string">"clustered_pdgs="</span>)
+<a href=#6093 id=6093 data-nosnippet>6093</a>            .unwrap();
+<a href=#6094 id=6094 data-nosnippet>6094</a>        <span class="kw">let </span>description = suggestion.description.as_deref().unwrap();
+<a href=#6095 id=6095 data-nosnippet>6095</a>        <span class="macro">assert!</span>(description.contains(<span class="string">"PDG IDs allowed to be clustered"</span>));
+<a href=#6096 id=6096 data-nosnippet>6096</a>        <span class="macro">assert!</span>(description.contains(<span class="string">"[-1,1,21,82]"</span>));
+<a href=#6097 id=6097 data-nosnippet>6097</a>    }
+<a href=#6098 id=6098 data-nosnippet>6098</a>
+<a href=#6099 id=6099 data-nosnippet>6099</a>    <span class="attr">#[test]
+<a href=#6100 id=6100 data-nosnippet>6100</a>    </span><span class="kw">fn </span>completion_offers_clustered_pdgs_example_value() {
+<a href=#6101 id=6101 data-nosnippet>6101</a>        <span class="kw">let </span>suggestions = completion_suggestions(
+<a href=#6102 id=6102 data-nosnippet>6102</a>            <span class="string">"set process -p triangle add quantity jets jet clustered_pdgs="</span>,
+<a href=#6103 id=6103 data-nosnippet>6103</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6104 id=6104 data-nosnippet>6104</a>        );
+<a href=#6105 id=6105 data-nosnippet>6105</a>
+<a href=#6106 id=6106 data-nosnippet>6106</a>        <span class="macro">assert!</span>(
+<a href=#6107 id=6107 data-nosnippet>6107</a>            suggestions.iter().any(|suggestion| {
+<a href=#6108 id=6108 data-nosnippet>6108</a>                suggestion
+<a href=#6109 id=6109 data-nosnippet>6109</a>                    .description
+<a href=#6110 id=6110 data-nosnippet>6110</a>                    .as_deref()
+<a href=#6111 id=6111 data-nosnippet>6111</a>                    .is_some_and(|description| {
+<a href=#6112 id=6112 data-nosnippet>6112</a>                        description.contains(<span class="string">"PDG IDs allowed to be clustered"</span>)
+<a href=#6113 id=6113 data-nosnippet>6113</a>                            &amp;&amp; description.contains(<span class="string">"[-1,1,21,82]"</span>)
+<a href=#6114 id=6114 data-nosnippet>6114</a>                    })
+<a href=#6115 id=6115 data-nosnippet>6115</a>            }),
+<a href=#6116 id=6116 data-nosnippet>6116</a>            <span class="string">"{suggestions:?}"
+<a href=#6117 id=6117 data-nosnippet>6117</a>        </span>);
+<a href=#6118 id=6118 data-nosnippet>6118</a>        <span class="macro">assert!</span>(
+<a href=#6119 id=6119 data-nosnippet>6119</a>            suggestions
+<a href=#6120 id=6120 data-nosnippet>6120</a>                .iter()
+<a href=#6121 id=6121 data-nosnippet>6121</a>                .all(|suggestion| suggestion.description.as_deref() != <span class="prelude-val">Some</span>(<span class="string">"expects null"</span>)),
+<a href=#6122 id=6122 data-nosnippet>6122</a>            <span class="string">"{suggestions:?}"
+<a href=#6123 id=6123 data-nosnippet>6123</a>        </span>);
+<a href=#6124 id=6124 data-nosnippet>6124</a>    }
+<a href=#6125 id=6125 data-nosnippet>6125</a>
+<a href=#6126 id=6126 data-nosnippet>6126</a>    <span class="attr">#[test]
+<a href=#6127 id=6127 data-nosnippet>6127</a>    </span><span class="kw">fn </span>completion_offers_quantity_computation_fields_for_process_add() {
+<a href=#6128 id=6128 data-nosnippet>6128</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6129 id=6129 data-nosnippet>6129</a>            <span class="string">"set process -p triangle add quantity my_quantity jet p"</span>,
+<a href=#6130 id=6130 data-nosnippet>6130</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6131 id=6131 data-nosnippet>6131</a>        );
+<a href=#6132 id=6132 data-nosnippet>6132</a>
+<a href=#6133 id=6133 data-nosnippet>6133</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"pair_quantity="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6134 id=6134 data-nosnippet>6134</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"pairing="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6135 id=6135 data-nosnippet>6135</a>    }
+<a href=#6136 id=6136 data-nosnippet>6136</a>
+<a href=#6137 id=6137 data-nosnippet>6137</a>    <span class="attr">#[test]
+<a href=#6138 id=6138 data-nosnippet>6138</a>    </span><span class="kw">fn </span>completion_offers_quantity_ordering_fields_for_process_add() {
+<a href=#6139 id=6139 data-nosnippet>6139</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6140 id=6140 data-nosnippet>6140</a>            <span class="string">"set process -p triangle add quantity my_quantity jet o"</span>,
+<a href=#6141 id=6141 data-nosnippet>6141</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6142 id=6142 data-nosnippet>6142</a>        );
+<a href=#6143 id=6143 data-nosnippet>6143</a>
+<a href=#6144 id=6144 data-nosnippet>6144</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"order="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6145 id=6145 data-nosnippet>6145</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"ordering="</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6146 id=6146 data-nosnippet>6146</a>    }
+<a href=#6147 id=6147 data-nosnippet>6147</a>
+<a href=#6148 id=6148 data-nosnippet>6148</a>    <span class="attr">#[test]
+<a href=#6149 id=6149 data-nosnippet>6149</a>    </span><span class="kw">fn </span>completion_offers_pair_quantity_enum_values() {
+<a href=#6150 id=6150 data-nosnippet>6150</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6151 id=6151 data-nosnippet>6151</a>            <span class="string">"set process -p triangle add quantity my_quantity jet pair_quantity="</span>,
+<a href=#6152 id=6152 data-nosnippet>6152</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6153 id=6153 data-nosnippet>6153</a>        );
+<a href=#6154 id=6154 data-nosnippet>6154</a>
+<a href=#6155 id=6155 data-nosnippet>6155</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"DeltaR"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6156 id=6156 data-nosnippet>6156</a>    }
+<a href=#6157 id=6157 data-nosnippet>6157</a>
+<a href=#6158 id=6158 data-nosnippet>6158</a>    <span class="attr">#[test]
+<a href=#6159 id=6159 data-nosnippet>6159</a>    </span><span class="kw">fn </span>completion_offers_quantity_ordering_enum_values() {
+<a href=#6160 id=6160 data-nosnippet>6160</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6161 id=6161 data-nosnippet>6161</a>            <span class="string">"set process -p triangle add quantity my_quantity particle ordering="</span>,
+<a href=#6162 id=6162 data-nosnippet>6162</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6163 id=6163 data-nosnippet>6163</a>        );
+<a href=#6164 id=6164 data-nosnippet>6164</a>
+<a href=#6165 id=6165 data-nosnippet>6165</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"PT"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6166 id=6166 data-nosnippet>6166</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Energy"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6167 id=6167 data-nosnippet>6167</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"AbsRapidity"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6168 id=6168 data-nosnippet>6168</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Quantity"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6169 id=6169 data-nosnippet>6169</a>    }
+<a href=#6170 id=6170 data-nosnippet>6170</a>
+<a href=#6171 id=6171 data-nosnippet>6171</a>    <span class="attr">#[test]
+<a href=#6172 id=6172 data-nosnippet>6172</a>    </span><span class="kw">fn </span>completion_offers_quantity_order_enum_values() {
+<a href=#6173 id=6173 data-nosnippet>6173</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6174 id=6174 data-nosnippet>6174</a>            <span class="string">"set process -p triangle add quantity my_quantity particle order="</span>,
+<a href=#6175 id=6175 data-nosnippet>6175</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6176 id=6176 data-nosnippet>6176</a>        );
+<a href=#6177 id=6177 data-nosnippet>6177</a>
+<a href=#6178 id=6178 data-nosnippet>6178</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Ascending"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6179 id=6179 data-nosnippet>6179</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"Descending"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6180 id=6180 data-nosnippet>6180</a>    }
+<a href=#6181 id=6181 data-nosnippet>6181</a>
+<a href=#6182 id=6182 data-nosnippet>6182</a>    <span class="attr">#[test]
+<a href=#6183 id=6183 data-nosnippet>6183</a>    </span><span class="kw">fn </span>completion_does_not_repeat_used_options_by_short_or_long_form() {
+<a href=#6184 id=6184 data-nosnippet>6184</a>        <span class="kw">let </span>values =
+<a href=#6185 id=6185 data-nosnippet>6185</a>            completion_values(<span class="string">"integrate --process triangle "</span>, <span class="kw-2">&amp;</span>CompletionState::default());
+<a href=#6186 id=6186 data-nosnippet>6186</a>
+<a href=#6187 id=6187 data-nosnippet>6187</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"-p"</span>.to_string()));
+<a href=#6188 id=6188 data-nosnippet>6188</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"--process"</span>.to_string()));
+<a href=#6189 id=6189 data-nosnippet>6189</a>    }
+<a href=#6190 id=6190 data-nosnippet>6190</a>
+<a href=#6191 id=6191 data-nosnippet>6191</a>    <span class="attr">#[test]
+<a href=#6192 id=6192 data-nosnippet>6192</a>    </span><span class="kw">fn </span>completion_does_not_append_whitespace_for_settings_assignment_keys() {
+<a href=#6193 id=6193 data-nosnippet>6193</a>        <span class="kw">let </span>suggestions = completion_suggestions(
+<a href=#6194 id=6194 data-nosnippet>6194</a>            <span class="string">"set global kv global.generation.evaluator.iterative_orientation_optimization"</span>,
+<a href=#6195 id=6195 data-nosnippet>6195</a>            <span class="kw-2">&amp;</span>CompletionState::default(),
+<a href=#6196 id=6196 data-nosnippet>6196</a>        );
+<a href=#6197 id=6197 data-nosnippet>6197</a>
+<a href=#6198 id=6198 data-nosnippet>6198</a>        <span class="kw">let </span>suggestion = suggestions
+<a href=#6199 id=6199 data-nosnippet>6199</a>            .iter()
+<a href=#6200 id=6200 data-nosnippet>6200</a>            .find(|suggestion| {
+<a href=#6201 id=6201 data-nosnippet>6201</a>                suggestion.value
+<a href=#6202 id=6202 data-nosnippet>6202</a>                    == <span class="string">"global.generation.evaluator.iterative_orientation_optimization="
+<a href=#6203 id=6203 data-nosnippet>6203</a>            </span>})
+<a href=#6204 id=6204 data-nosnippet>6204</a>            .unwrap();
+<a href=#6205 id=6205 data-nosnippet>6205</a>        <span class="macro">assert!</span>(!suggestion.append_whitespace);
+<a href=#6206 id=6206 data-nosnippet>6206</a>    }
+<a href=#6207 id=6207 data-nosnippet>6207</a>
+<a href=#6208 id=6208 data-nosnippet>6208</a>    <span class="attr">#[test]
+<a href=#6209 id=6209 data-nosnippet>6209</a>    </span><span class="kw">fn </span>completion_prefers_options_first_when_new_flags_can_start() {
+<a href=#6210 id=6210 data-nosnippet>6210</a>        <span class="kw">let </span>suggestions =
+<a href=#6211 id=6211 data-nosnippet>6211</a>            completion_suggestions(<span class="string">"generate amp g g &gt; "</span>, <span class="kw-2">&amp;</span>generate_completion_state());
+<a href=#6212 id=6212 data-nosnippet>6212</a>
+<a href=#6213 id=6213 data-nosnippet>6213</a>        <span class="macro">assert!</span>(suggestions.first().unwrap().value.starts_with(<span class="string">'-'</span>));
+<a href=#6214 id=6214 data-nosnippet>6214</a>    }
+<a href=#6215 id=6215 data-nosnippet>6215</a>
+<a href=#6216 id=6216 data-nosnippet>6216</a>    <span class="attr">#[test]
+<a href=#6217 id=6217 data-nosnippet>6217</a>    </span><span class="kw">fn </span>completion_offers_generate_particles_and_arrow() {
+<a href=#6218 id=6218 data-nosnippet>6218</a>        <span class="kw">let </span>values = completion_values(<span class="string">"generate amp g "</span>, <span class="kw-2">&amp;</span>generate_completion_state());
+<a href=#6219 id=6219 data-nosnippet>6219</a>
+<a href=#6220 id=6220 data-nosnippet>6220</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"\\&gt;"</span>.to_string()));
+<a href=#6221 id=6221 data-nosnippet>6221</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"to"</span>.to_string()));
+<a href=#6222 id=6222 data-nosnippet>6222</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"g"</span>.to_string()));
+<a href=#6223 id=6223 data-nosnippet>6223</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"h"</span>.to_string()));
+<a href=#6224 id=6224 data-nosnippet>6224</a>    }
+<a href=#6225 id=6225 data-nosnippet>6225</a>
+<a href=#6226 id=6226 data-nosnippet>6226</a>    <span class="attr">#[test]
+<a href=#6227 id=6227 data-nosnippet>6227</a>    </span><span class="kw">fn </span>completion_offers_generate_process_option_starters_and_couplings() {
+<a href=#6228 id=6228 data-nosnippet>6228</a>        <span class="kw">let </span>values = completion_values(<span class="string">"generate amp g g &gt; h "</span>, <span class="kw-2">&amp;</span>generate_completion_state());
+<a href=#6229 id=6229 data-nosnippet>6229</a>
+<a href=#6230 id=6230 data-nosnippet>6230</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"/"</span>.to_string()));
+<a href=#6231 id=6231 data-nosnippet>6231</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"\\|"</span>.to_string()));
+<a href=#6232 id=6232 data-nosnippet>6232</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"QCD=="</span>.to_string()));
+<a href=#6233 id=6233 data-nosnippet>6233</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"QED\\&gt;="</span>.to_string()));
+<a href=#6234 id=6234 data-nosnippet>6234</a>    }
+<a href=#6235 id=6235 data-nosnippet>6235</a>
+<a href=#6236 id=6236 data-nosnippet>6236</a>    <span class="attr">#[test]
+<a href=#6237 id=6237 data-nosnippet>6237</a>    </span><span class="kw">fn </span>completion_offers_generate_xs_powered_coupling_skeletons() {
+<a href=#6238 id=6238 data-nosnippet>6238</a>        <span class="kw">let </span>values = completion_values(<span class="string">"generate xs g g &gt; h Q"</span>, <span class="kw-2">&amp;</span>generate_completion_state());
+<a href=#6239 id=6239 data-nosnippet>6239</a>
+<a href=#6240 id=6240 data-nosnippet>6240</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"QCD^"</span>.to_string()));
+<a href=#6241 id=6241 data-nosnippet>6241</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"QED^"</span>.to_string()));
+<a href=#6242 id=6242 data-nosnippet>6242</a>    }
+<a href=#6243 id=6243 data-nosnippet>6243</a>
+<a href=#6244 id=6244 data-nosnippet>6244</a>    <span class="attr">#[test]
+<a href=#6245 id=6245 data-nosnippet>6245</a>    </span><span class="kw">fn </span>completion_offers_generate_perturbative_block_suggestions() {
+<a href=#6246 id=6246 data-nosnippet>6246</a>        <span class="kw">let </span>values = completion_values(<span class="string">"generate amp g g &gt; h ["</span>, <span class="kw-2">&amp;</span>generate_completion_state());
+<a href=#6247 id=6247 data-nosnippet>6247</a>
+<a href=#6248 id=6248 data-nosnippet>6248</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"\\[\\{1\\}"</span>.to_string()));
+<a href=#6249 id=6249 data-nosnippet>6249</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"\\[\\{\\{1\\}\\}"</span>.to_string()));
+<a href=#6250 id=6250 data-nosnippet>6250</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"\\[QED"</span>.to_string()));
+<a href=#6251 id=6251 data-nosnippet>6251</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"\\[QED="</span>.to_string()));
+<a href=#6252 id=6252 data-nosnippet>6252</a>    }
 <a href=#6253 id=6253 data-nosnippet>6253</a>
-<a href=#6254 id=6254 data-nosnippet>6254</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"V_6"</span>.to_string()));
-<a href=#6255 id=6255 data-nosnippet>6255</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"V_9"</span>.to_string()));
-<a href=#6256 id=6256 data-nosnippet>6256</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"V_36"</span>.to_string()));
-<a href=#6257 id=6257 data-nosnippet>6257</a>    }
-<a href=#6258 id=6258 data-nosnippet>6258</a>
-<a href=#6259 id=6259 data-nosnippet>6259</a>    <span class="attr">#[test]
-<a href=#6260 id=6260 data-nosnippet>6260</a>    </span><span class="kw">fn </span>completion_keeps_generate_vertex_list_active_and_filters_existing_values() {
-<a href=#6261 id=6261 data-nosnippet>6261</a>        <span class="kw">let </span>values = completion_values(
-<a href=#6262 id=6262 data-nosnippet>6262</a>            <span class="string">"generate amp g g &gt; h --allowed-vertex-interactions V_6 "</span>,
-<a href=#6263 id=6263 data-nosnippet>6263</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#6264 id=6264 data-nosnippet>6264</a>        );
+<a href=#6254 id=6254 data-nosnippet>6254</a>    <span class="attr">#[test]
+<a href=#6255 id=6255 data-nosnippet>6255</a>    </span><span class="kw">fn </span>completion_offers_generate_value_enum_variants() {
+<a href=#6256 id=6256 data-nosnippet>6256</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6257 id=6257 data-nosnippet>6257</a>            <span class="string">"generate amp g g &gt; h --numerator-grouping "</span>,
+<a href=#6258 id=6258 data-nosnippet>6258</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6259 id=6259 data-nosnippet>6259</a>        );
+<a href=#6260 id=6260 data-nosnippet>6260</a>
+<a href=#6261 id=6261 data-nosnippet>6261</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"no_grouping"</span>.to_string()));
+<a href=#6262 id=6262 data-nosnippet>6262</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"only_detect_zeroes"</span>.to_string()));
+<a href=#6263 id=6263 data-nosnippet>6263</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"group_identical_graphs_up_to_sign"</span>.to_string()));
+<a href=#6264 id=6264 data-nosnippet>6264</a>    }
 <a href=#6265 id=6265 data-nosnippet>6265</a>
-<a href=#6266 id=6266 data-nosnippet>6266</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"V_6"</span>.to_string()));
-<a href=#6267 id=6267 data-nosnippet>6267</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"V_9"</span>.to_string()));
-<a href=#6268 id=6268 data-nosnippet>6268</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"V_36"</span>.to_string()));
-<a href=#6269 id=6269 data-nosnippet>6269</a>    }
-<a href=#6270 id=6270 data-nosnippet>6270</a>
-<a href=#6271 id=6271 data-nosnippet>6271</a>    <span class="attr">#[test]
-<a href=#6272 id=6272 data-nosnippet>6272</a>    </span><span class="kw">fn </span>completion_switches_back_to_flags_after_variadic_generate_values() {
-<a href=#6273 id=6273 data-nosnippet>6273</a>        <span class="kw">let </span>values = completion_values(
-<a href=#6274 id=6274 data-nosnippet>6274</a>            <span class="string">"generate amp g g &gt; h --allowed-vertex-interactions V_6 V_9 -"</span>,
-<a href=#6275 id=6275 data-nosnippet>6275</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
-<a href=#6276 id=6276 data-nosnippet>6276</a>        );
+<a href=#6266 id=6266 data-nosnippet>6266</a>    <span class="attr">#[test]
+<a href=#6267 id=6267 data-nosnippet>6267</a>    </span><span class="kw">fn </span>completion_offers_generate_vertex_names_for_list_flags() {
+<a href=#6268 id=6268 data-nosnippet>6268</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6269 id=6269 data-nosnippet>6269</a>            <span class="string">"generate amp g g &gt; h --veto-vertex-interactions V_"</span>,
+<a href=#6270 id=6270 data-nosnippet>6270</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6271 id=6271 data-nosnippet>6271</a>        );
+<a href=#6272 id=6272 data-nosnippet>6272</a>
+<a href=#6273 id=6273 data-nosnippet>6273</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"V_6"</span>.to_string()));
+<a href=#6274 id=6274 data-nosnippet>6274</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"V_9"</span>.to_string()));
+<a href=#6275 id=6275 data-nosnippet>6275</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"V_36"</span>.to_string()));
+<a href=#6276 id=6276 data-nosnippet>6276</a>    }
 <a href=#6277 id=6277 data-nosnippet>6277</a>
-<a href=#6278 id=6278 data-nosnippet>6278</a>        <span class="macro">assert!</span>(
-<a href=#6279 id=6279 data-nosnippet>6279</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"--only-diagrams"</span>.to_string()),
-<a href=#6280 id=6280 data-nosnippet>6280</a>            <span class="string">"{values:?}"
-<a href=#6281 id=6281 data-nosnippet>6281</a>        </span>);
-<a href=#6282 id=6282 data-nosnippet>6282</a>        <span class="macro">assert!</span>(
-<a href=#6283 id=6283 data-nosnippet>6283</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"--symmetrize-final-states"</span>.to_string()),
-<a href=#6284 id=6284 data-nosnippet>6284</a>            <span class="string">"{values:?}"
-<a href=#6285 id=6285 data-nosnippet>6285</a>        </span>);
-<a href=#6286 id=6286 data-nosnippet>6286</a>    }
-<a href=#6287 id=6287 data-nosnippet>6287</a>
-<a href=#6288 id=6288 data-nosnippet>6288</a>    <span class="attr">#[test]
-<a href=#6289 id=6289 data-nosnippet>6289</a>    </span><span class="kw">fn </span>completion_offers_builtin_model_restriction_suffixes() {
-<a href=#6290 id=6290 data-nosnippet>6290</a>        <span class="kw">let </span>values = completion_values(<span class="string">"import model sm-d"</span>, <span class="kw-2">&amp;</span>CompletionState::default());
-<a href=#6291 id=6291 data-nosnippet>6291</a>
-<a href=#6292 id=6292 data-nosnippet>6292</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"sm-default"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6293 id=6293 data-nosnippet>6293</a>    }
-<a href=#6294 id=6294 data-nosnippet>6294</a>
-<a href=#6295 id=6295 data-nosnippet>6295</a>    <span class="attr">#[test]
-<a href=#6296 id=6296 data-nosnippet>6296</a>    </span><span class="kw">fn </span>completion_offers_inline_graph_import() {
-<a href=#6297 id=6297 data-nosnippet>6297</a>        <span class="kw">let </span>values = completion_values(<span class="string">"import graphs --in"</span>, <span class="kw-2">&amp;</span>CompletionState::default());
-<a href=#6298 id=6298 data-nosnippet>6298</a>
-<a href=#6299 id=6299 data-nosnippet>6299</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"--inline-dot"</span>.to_string()), <span class="string">"{values:?}"</span>);
-<a href=#6300 id=6300 data-nosnippet>6300</a>    }
-<a href=#6301 id=6301 data-nosnippet>6301</a>
-<a href=#6302 id=6302 data-nosnippet>6302</a>    <span class="attr">#[test]
-<a href=#6303 id=6303 data-nosnippet>6303</a>    </span><span class="kw">fn </span>completion_offers_ir_profile_select_graphs_and_limits() {
-<a href=#6304 id=6304 data-nosnippet>6304</a>        <span class="kw">let </span>completion_state = CompletionState {
-<a href=#6305 id=6305 data-nosnippet>6305</a>            process_entries: sample_process_entries(),
-<a href=#6306 id=6306 data-nosnippet>6306</a>            ir_profile_entries: sample_ir_profile_entries(),
-<a href=#6307 id=6307 data-nosnippet>6307</a>            ..CompletionState::default()
-<a href=#6308 id=6308 data-nosnippet>6308</a>        };
-<a href=#6309 id=6309 data-nosnippet>6309</a>
-<a href=#6310 id=6310 data-nosnippet>6310</a>        <span class="kw">let </span>graph_values = completion_values(
-<a href=#6311 id=6311 data-nosnippet>6311</a>            <span class="string">"profile bulk -p epem_xs -i subtracted --select GL"</span>,
-<a href=#6312 id=6312 data-nosnippet>6312</a>            <span class="kw-2">&amp;</span>completion_state,
-<a href=#6313 id=6313 data-nosnippet>6313</a>        );
-<a href=#6314 id=6314 data-nosnippet>6314</a>        <span class="macro">assert!</span>(
-<a href=#6315 id=6315 data-nosnippet>6315</a>            graph_values.contains(<span class="kw-2">&amp;</span><span class="string">"GL1"</span>.to_string()),
-<a href=#6316 id=6316 data-nosnippet>6316</a>            <span class="string">"{graph_values:?}"
-<a href=#6317 id=6317 data-nosnippet>6317</a>        </span>);
-<a href=#6318 id=6318 data-nosnippet>6318</a>        <span class="macro">assert!</span>(
-<a href=#6319 id=6319 data-nosnippet>6319</a>            graph_values.contains(<span class="kw-2">&amp;</span><span class="string">"GL2"</span>.to_string()),
-<a href=#6320 id=6320 data-nosnippet>6320</a>            <span class="string">"{graph_values:?}"
-<a href=#6321 id=6321 data-nosnippet>6321</a>        </span>);
-<a href=#6322 id=6322 data-nosnippet>6322</a>
-<a href=#6323 id=6323 data-nosnippet>6323</a>        <span class="kw">let </span>limit_values = completion_values(
-<a href=#6324 id=6324 data-nosnippet>6324</a>            <span class="string">"profile bulk -p epem_xs -i subtracted --select GL1\\ "</span>,
-<a href=#6325 id=6325 data-nosnippet>6325</a>            <span class="kw-2">&amp;</span>completion_state,
-<a href=#6326 id=6326 data-nosnippet>6326</a>        );
-<a href=#6327 id=6327 data-nosnippet>6327</a>        <span class="macro">assert!</span>(
-<a href=#6328 id=6328 data-nosnippet>6328</a>            limit_values.contains(<span class="kw-2">&amp;</span><span class="string">"GL1\\ C\\[1,2\\]"</span>.to_string()),
-<a href=#6329 id=6329 data-nosnippet>6329</a>            <span class="string">"{limit_values:?}"
-<a href=#6330 id=6330 data-nosnippet>6330</a>        </span>);
-<a href=#6331 id=6331 data-nosnippet>6331</a>        <span class="macro">assert!</span>(
-<a href=#6332 id=6332 data-nosnippet>6332</a>            limit_values.contains(<span class="kw-2">&amp;</span><span class="string">"GL1\\ S\\(3\\)"</span>.to_string()),
-<a href=#6333 id=6333 data-nosnippet>6333</a>            <span class="string">"{limit_values:?}"
-<a href=#6334 id=6334 data-nosnippet>6334</a>        </span>);
-<a href=#6335 id=6335 data-nosnippet>6335</a>    }
-<a href=#6336 id=6336 data-nosnippet>6336</a>
-<a href=#6337 id=6337 data-nosnippet>6337</a>    <span class="kw">fn </span>visit_args(
-<a href=#6338 id=6338 data-nosnippet>6338</a>        cmd: <span class="kw-2">&amp;</span>clap::Command,
-<a href=#6339 id=6339 data-nosnippet>6339</a>        command_path: <span class="kw-2">&amp;mut </span>Vec&lt;String&gt;,
-<a href=#6340 id=6340 data-nosnippet>6340</a>        visit: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>[String], <span class="kw-2">&amp;</span>clap::Arg),
-<a href=#6341 id=6341 data-nosnippet>6341</a>    ) {
-<a href=#6342 id=6342 data-nosnippet>6342</a>        <span class="kw">for </span>arg <span class="kw">in </span>cmd.get_arguments() {
-<a href=#6343 id=6343 data-nosnippet>6343</a>            visit(command_path, arg);
-<a href=#6344 id=6344 data-nosnippet>6344</a>        }
-<a href=#6345 id=6345 data-nosnippet>6345</a>
-<a href=#6346 id=6346 data-nosnippet>6346</a>        <span class="kw">for </span>subcommand <span class="kw">in </span>cmd.get_subcommands() {
-<a href=#6347 id=6347 data-nosnippet>6347</a>            command_path.push(subcommand.get_name().to_string());
-<a href=#6348 id=6348 data-nosnippet>6348</a>            visit_args(subcommand, command_path, visit);
-<a href=#6349 id=6349 data-nosnippet>6349</a>            command_path.pop();
-<a href=#6350 id=6350 data-nosnippet>6350</a>        }
-<a href=#6351 id=6351 data-nosnippet>6351</a>    }
-<a href=#6352 id=6352 data-nosnippet>6352</a>
-<a href=#6353 id=6353 data-nosnippet>6353</a>    <span class="attr">#[test]
-<a href=#6354 id=6354 data-nosnippet>6354</a>    </span><span class="kw">fn </span>completion_metadata_covers_all_process_and_integrand_name_args() {
-<a href=#6355 id=6355 data-nosnippet>6355</a>        <span class="kw">let </span>command = Repl::command();
-<a href=#6356 id=6356 data-nosnippet>6356</a>        <span class="kw">let </span><span class="kw-2">mut </span>command_path = <span class="macro">vec!</span>[command.get_name().to_string()];
-<a href=#6357 id=6357 data-nosnippet>6357</a>        <span class="kw">let </span><span class="kw-2">mut </span>missing = Vec::new();
-<a href=#6358 id=6358 data-nosnippet>6358</a>        <span class="kw">let </span><span class="kw-2">mut </span>invalid_process_metadata = Vec::new();
-<a href=#6359 id=6359 data-nosnippet>6359</a>
-<a href=#6360 id=6360 data-nosnippet>6360</a>        visit_args(
-<a href=#6361 id=6361 data-nosnippet>6361</a>            <span class="kw-2">&amp;</span>command,
-<a href=#6362 id=6362 data-nosnippet>6362</a>            <span class="kw-2">&amp;mut </span>command_path,
-<a href=#6363 id=6363 data-nosnippet>6363</a>            <span class="kw-2">&amp;mut </span>|path, arg| <span class="kw">match </span>arg.get_long() {
-<a href=#6364 id=6364 data-nosnippet>6364</a>                <span class="prelude-val">Some</span>(<span class="string">"process"</span>) =&gt; <span class="kw">match </span>arg_value_completion(arg) {
-<a href=#6365 id=6365 data-nosnippet>6365</a>                    <span class="prelude-val">Some</span>(ArgValueCompletion::ProcessSelector(<span class="kw">_</span>)) =&gt; {}
-<a href=#6366 id=6366 data-nosnippet>6366</a>                    other =&gt; invalid_process_metadata.push(<span class="macro">format!</span>(
-<a href=#6367 id=6367 data-nosnippet>6367</a>                        <span class="string">"{} --process =&gt; {:?}"</span>,
-<a href=#6368 id=6368 data-nosnippet>6368</a>                        path.join(<span class="string">" "</span>),
-<a href=#6369 id=6369 data-nosnippet>6369</a>                        other
-<a href=#6370 id=6370 data-nosnippet>6370</a>                    )),
-<a href=#6371 id=6371 data-nosnippet>6371</a>                },
-<a href=#6372 id=6372 data-nosnippet>6372</a>                <span class="prelude-val">Some</span>(<span class="string">"integrand-name"</span>) <span class="kw">if </span>arg_value_completion(arg).is_none() =&gt; {
-<a href=#6373 id=6373 data-nosnippet>6373</a>                    missing.push(<span class="macro">format!</span>(<span class="string">"{} --integrand-name"</span>, path.join(<span class="string">" "</span>)));
-<a href=#6374 id=6374 data-nosnippet>6374</a>                }
-<a href=#6375 id=6375 data-nosnippet>6375</a>
-<a href=#6376 id=6376 data-nosnippet>6376</a>                <span class="kw">_ </span>=&gt; {}
-<a href=#6377 id=6377 data-nosnippet>6377</a>            },
-<a href=#6378 id=6378 data-nosnippet>6378</a>        );
-<a href=#6379 id=6379 data-nosnippet>6379</a>
-<a href=#6380 id=6380 data-nosnippet>6380</a>        <span class="macro">assert!</span>(
-<a href=#6381 id=6381 data-nosnippet>6381</a>            missing.is_empty(),
-<a href=#6382 id=6382 data-nosnippet>6382</a>            <span class="string">"missing completion metadata: {missing:?}"
-<a href=#6383 id=6383 data-nosnippet>6383</a>        </span>);
-<a href=#6384 id=6384 data-nosnippet>6384</a>        <span class="macro">assert!</span>(
-<a href=#6385 id=6385 data-nosnippet>6385</a>            invalid_process_metadata.is_empty(),
-<a href=#6386 id=6386 data-nosnippet>6386</a>            <span class="string">"invalid process completion metadata: {invalid_process_metadata:?}"
-<a href=#6387 id=6387 data-nosnippet>6387</a>        </span>);
-<a href=#6388 id=6388 data-nosnippet>6388</a>    }
-<a href=#6389 id=6389 data-nosnippet>6389</a>}
+<a href=#6278 id=6278 data-nosnippet>6278</a>    <span class="attr">#[test]
+<a href=#6279 id=6279 data-nosnippet>6279</a>    </span><span class="kw">fn </span>completion_keeps_generate_vertex_list_active_and_filters_existing_values() {
+<a href=#6280 id=6280 data-nosnippet>6280</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6281 id=6281 data-nosnippet>6281</a>            <span class="string">"generate amp g g &gt; h --allowed-vertex-interactions V_6 "</span>,
+<a href=#6282 id=6282 data-nosnippet>6282</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6283 id=6283 data-nosnippet>6283</a>        );
+<a href=#6284 id=6284 data-nosnippet>6284</a>
+<a href=#6285 id=6285 data-nosnippet>6285</a>        <span class="macro">assert!</span>(!values.contains(<span class="kw-2">&amp;</span><span class="string">"V_6"</span>.to_string()));
+<a href=#6286 id=6286 data-nosnippet>6286</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"V_9"</span>.to_string()));
+<a href=#6287 id=6287 data-nosnippet>6287</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"V_36"</span>.to_string()));
+<a href=#6288 id=6288 data-nosnippet>6288</a>    }
+<a href=#6289 id=6289 data-nosnippet>6289</a>
+<a href=#6290 id=6290 data-nosnippet>6290</a>    <span class="attr">#[test]
+<a href=#6291 id=6291 data-nosnippet>6291</a>    </span><span class="kw">fn </span>completion_switches_back_to_flags_after_variadic_generate_values() {
+<a href=#6292 id=6292 data-nosnippet>6292</a>        <span class="kw">let </span>values = completion_values(
+<a href=#6293 id=6293 data-nosnippet>6293</a>            <span class="string">"generate amp g g &gt; h --allowed-vertex-interactions V_6 V_9 -"</span>,
+<a href=#6294 id=6294 data-nosnippet>6294</a>            <span class="kw-2">&amp;</span>generate_completion_state(),
+<a href=#6295 id=6295 data-nosnippet>6295</a>        );
+<a href=#6296 id=6296 data-nosnippet>6296</a>
+<a href=#6297 id=6297 data-nosnippet>6297</a>        <span class="macro">assert!</span>(
+<a href=#6298 id=6298 data-nosnippet>6298</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"--only-diagrams"</span>.to_string()),
+<a href=#6299 id=6299 data-nosnippet>6299</a>            <span class="string">"{values:?}"
+<a href=#6300 id=6300 data-nosnippet>6300</a>        </span>);
+<a href=#6301 id=6301 data-nosnippet>6301</a>        <span class="macro">assert!</span>(
+<a href=#6302 id=6302 data-nosnippet>6302</a>            values.contains(<span class="kw-2">&amp;</span><span class="string">"--symmetrize-final-states"</span>.to_string()),
+<a href=#6303 id=6303 data-nosnippet>6303</a>            <span class="string">"{values:?}"
+<a href=#6304 id=6304 data-nosnippet>6304</a>        </span>);
+<a href=#6305 id=6305 data-nosnippet>6305</a>    }
+<a href=#6306 id=6306 data-nosnippet>6306</a>
+<a href=#6307 id=6307 data-nosnippet>6307</a>    <span class="attr">#[test]
+<a href=#6308 id=6308 data-nosnippet>6308</a>    </span><span class="kw">fn </span>completion_offers_builtin_model_restriction_suffixes() {
+<a href=#6309 id=6309 data-nosnippet>6309</a>        <span class="kw">let </span>values = completion_values(<span class="string">"import model sm-d"</span>, <span class="kw-2">&amp;</span>CompletionState::default());
+<a href=#6310 id=6310 data-nosnippet>6310</a>
+<a href=#6311 id=6311 data-nosnippet>6311</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"sm-default"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6312 id=6312 data-nosnippet>6312</a>    }
+<a href=#6313 id=6313 data-nosnippet>6313</a>
+<a href=#6314 id=6314 data-nosnippet>6314</a>    <span class="attr">#[test]
+<a href=#6315 id=6315 data-nosnippet>6315</a>    </span><span class="kw">fn </span>completion_offers_inline_graph_import() {
+<a href=#6316 id=6316 data-nosnippet>6316</a>        <span class="kw">let </span>values = completion_values(<span class="string">"import graphs --in"</span>, <span class="kw-2">&amp;</span>CompletionState::default());
+<a href=#6317 id=6317 data-nosnippet>6317</a>
+<a href=#6318 id=6318 data-nosnippet>6318</a>        <span class="macro">assert!</span>(values.contains(<span class="kw-2">&amp;</span><span class="string">"--inline-dot"</span>.to_string()), <span class="string">"{values:?}"</span>);
+<a href=#6319 id=6319 data-nosnippet>6319</a>    }
+<a href=#6320 id=6320 data-nosnippet>6320</a>
+<a href=#6321 id=6321 data-nosnippet>6321</a>    <span class="attr">#[test]
+<a href=#6322 id=6322 data-nosnippet>6322</a>    </span><span class="kw">fn </span>completion_offers_ir_profile_select_graphs_and_limits() {
+<a href=#6323 id=6323 data-nosnippet>6323</a>        <span class="kw">let </span>completion_state = CompletionState {
+<a href=#6324 id=6324 data-nosnippet>6324</a>            process_entries: sample_process_entries(),
+<a href=#6325 id=6325 data-nosnippet>6325</a>            ir_profile_entries: sample_ir_profile_entries(),
+<a href=#6326 id=6326 data-nosnippet>6326</a>            ..CompletionState::default()
+<a href=#6327 id=6327 data-nosnippet>6327</a>        };
+<a href=#6328 id=6328 data-nosnippet>6328</a>
+<a href=#6329 id=6329 data-nosnippet>6329</a>        <span class="kw">let </span>graph_values = completion_values(
+<a href=#6330 id=6330 data-nosnippet>6330</a>            <span class="string">"profile bulk -p epem_xs -i subtracted --select GL"</span>,
+<a href=#6331 id=6331 data-nosnippet>6331</a>            <span class="kw-2">&amp;</span>completion_state,
+<a href=#6332 id=6332 data-nosnippet>6332</a>        );
+<a href=#6333 id=6333 data-nosnippet>6333</a>        <span class="macro">assert!</span>(
+<a href=#6334 id=6334 data-nosnippet>6334</a>            graph_values.contains(<span class="kw-2">&amp;</span><span class="string">"GL1"</span>.to_string()),
+<a href=#6335 id=6335 data-nosnippet>6335</a>            <span class="string">"{graph_values:?}"
+<a href=#6336 id=6336 data-nosnippet>6336</a>        </span>);
+<a href=#6337 id=6337 data-nosnippet>6337</a>        <span class="macro">assert!</span>(
+<a href=#6338 id=6338 data-nosnippet>6338</a>            graph_values.contains(<span class="kw-2">&amp;</span><span class="string">"GL2"</span>.to_string()),
+<a href=#6339 id=6339 data-nosnippet>6339</a>            <span class="string">"{graph_values:?}"
+<a href=#6340 id=6340 data-nosnippet>6340</a>        </span>);
+<a href=#6341 id=6341 data-nosnippet>6341</a>
+<a href=#6342 id=6342 data-nosnippet>6342</a>        <span class="kw">let </span>limit_values = completion_values(
+<a href=#6343 id=6343 data-nosnippet>6343</a>            <span class="string">"profile bulk -p epem_xs -i subtracted --select GL1\\ "</span>,
+<a href=#6344 id=6344 data-nosnippet>6344</a>            <span class="kw-2">&amp;</span>completion_state,
+<a href=#6345 id=6345 data-nosnippet>6345</a>        );
+<a href=#6346 id=6346 data-nosnippet>6346</a>        <span class="macro">assert!</span>(
+<a href=#6347 id=6347 data-nosnippet>6347</a>            limit_values.contains(<span class="kw-2">&amp;</span><span class="string">"GL1\\ C\\[1,2\\]"</span>.to_string()),
+<a href=#6348 id=6348 data-nosnippet>6348</a>            <span class="string">"{limit_values:?}"
+<a href=#6349 id=6349 data-nosnippet>6349</a>        </span>);
+<a href=#6350 id=6350 data-nosnippet>6350</a>        <span class="macro">assert!</span>(
+<a href=#6351 id=6351 data-nosnippet>6351</a>            limit_values.contains(<span class="kw-2">&amp;</span><span class="string">"GL1\\ S\\(3\\)"</span>.to_string()),
+<a href=#6352 id=6352 data-nosnippet>6352</a>            <span class="string">"{limit_values:?}"
+<a href=#6353 id=6353 data-nosnippet>6353</a>        </span>);
+<a href=#6354 id=6354 data-nosnippet>6354</a>    }
+<a href=#6355 id=6355 data-nosnippet>6355</a>
+<a href=#6356 id=6356 data-nosnippet>6356</a>    <span class="kw">fn </span>visit_args(
+<a href=#6357 id=6357 data-nosnippet>6357</a>        cmd: <span class="kw-2">&amp;</span>clap::Command,
+<a href=#6358 id=6358 data-nosnippet>6358</a>        command_path: <span class="kw-2">&amp;mut </span>Vec&lt;String&gt;,
+<a href=#6359 id=6359 data-nosnippet>6359</a>        visit: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>[String], <span class="kw-2">&amp;</span>clap::Arg),
+<a href=#6360 id=6360 data-nosnippet>6360</a>    ) {
+<a href=#6361 id=6361 data-nosnippet>6361</a>        <span class="kw">for </span>arg <span class="kw">in </span>cmd.get_arguments() {
+<a href=#6362 id=6362 data-nosnippet>6362</a>            visit(command_path, arg);
+<a href=#6363 id=6363 data-nosnippet>6363</a>        }
+<a href=#6364 id=6364 data-nosnippet>6364</a>
+<a href=#6365 id=6365 data-nosnippet>6365</a>        <span class="kw">for </span>subcommand <span class="kw">in </span>cmd.get_subcommands() {
+<a href=#6366 id=6366 data-nosnippet>6366</a>            command_path.push(subcommand.get_name().to_string());
+<a href=#6367 id=6367 data-nosnippet>6367</a>            visit_args(subcommand, command_path, visit);
+<a href=#6368 id=6368 data-nosnippet>6368</a>            command_path.pop();
+<a href=#6369 id=6369 data-nosnippet>6369</a>        }
+<a href=#6370 id=6370 data-nosnippet>6370</a>    }
+<a href=#6371 id=6371 data-nosnippet>6371</a>
+<a href=#6372 id=6372 data-nosnippet>6372</a>    <span class="attr">#[test]
+<a href=#6373 id=6373 data-nosnippet>6373</a>    </span><span class="kw">fn </span>completion_metadata_covers_all_process_and_integrand_name_args() {
+<a href=#6374 id=6374 data-nosnippet>6374</a>        <span class="kw">let </span>command = Repl::command();
+<a href=#6375 id=6375 data-nosnippet>6375</a>        <span class="kw">let </span><span class="kw-2">mut </span>command_path = <span class="macro">vec!</span>[command.get_name().to_string()];
+<a href=#6376 id=6376 data-nosnippet>6376</a>        <span class="kw">let </span><span class="kw-2">mut </span>missing = Vec::new();
+<a href=#6377 id=6377 data-nosnippet>6377</a>        <span class="kw">let </span><span class="kw-2">mut </span>invalid_process_metadata = Vec::new();
+<a href=#6378 id=6378 data-nosnippet>6378</a>
+<a href=#6379 id=6379 data-nosnippet>6379</a>        visit_args(
+<a href=#6380 id=6380 data-nosnippet>6380</a>            <span class="kw-2">&amp;</span>command,
+<a href=#6381 id=6381 data-nosnippet>6381</a>            <span class="kw-2">&amp;mut </span>command_path,
+<a href=#6382 id=6382 data-nosnippet>6382</a>            <span class="kw-2">&amp;mut </span>|path, arg| <span class="kw">match </span>arg.get_long() {
+<a href=#6383 id=6383 data-nosnippet>6383</a>                <span class="prelude-val">Some</span>(<span class="string">"process"</span>) =&gt; <span class="kw">match </span>arg_value_completion(arg) {
+<a href=#6384 id=6384 data-nosnippet>6384</a>                    <span class="prelude-val">Some</span>(ArgValueCompletion::ProcessSelector(<span class="kw">_</span>)) =&gt; {}
+<a href=#6385 id=6385 data-nosnippet>6385</a>                    other =&gt; invalid_process_metadata.push(<span class="macro">format!</span>(
+<a href=#6386 id=6386 data-nosnippet>6386</a>                        <span class="string">"{} --process =&gt; {:?}"</span>,
+<a href=#6387 id=6387 data-nosnippet>6387</a>                        path.join(<span class="string">" "</span>),
+<a href=#6388 id=6388 data-nosnippet>6388</a>                        other
+<a href=#6389 id=6389 data-nosnippet>6389</a>                    )),
+<a href=#6390 id=6390 data-nosnippet>6390</a>                },
+<a href=#6391 id=6391 data-nosnippet>6391</a>                <span class="prelude-val">Some</span>(<span class="string">"integrand-name"</span>) <span class="kw">if </span>arg_value_completion(arg).is_none() =&gt; {
+<a href=#6392 id=6392 data-nosnippet>6392</a>                    missing.push(<span class="macro">format!</span>(<span class="string">"{} --integrand-name"</span>, path.join(<span class="string">" "</span>)));
+<a href=#6393 id=6393 data-nosnippet>6393</a>                }
+<a href=#6394 id=6394 data-nosnippet>6394</a>
+<a href=#6395 id=6395 data-nosnippet>6395</a>                <span class="kw">_ </span>=&gt; {}
+<a href=#6396 id=6396 data-nosnippet>6396</a>            },
+<a href=#6397 id=6397 data-nosnippet>6397</a>        );
+<a href=#6398 id=6398 data-nosnippet>6398</a>
+<a href=#6399 id=6399 data-nosnippet>6399</a>        <span class="macro">assert!</span>(
+<a href=#6400 id=6400 data-nosnippet>6400</a>            missing.is_empty(),
+<a href=#6401 id=6401 data-nosnippet>6401</a>            <span class="string">"missing completion metadata: {missing:?}"
+<a href=#6402 id=6402 data-nosnippet>6402</a>        </span>);
+<a href=#6403 id=6403 data-nosnippet>6403</a>        <span class="macro">assert!</span>(
+<a href=#6404 id=6404 data-nosnippet>6404</a>            invalid_process_metadata.is_empty(),
+<a href=#6405 id=6405 data-nosnippet>6405</a>            <span class="string">"invalid process completion metadata: {invalid_process_metadata:?}"
+<a href=#6406 id=6406 data-nosnippet>6406</a>        </span>);
+<a href=#6407 id=6407 data-nosnippet>6407</a>    }
+<a href=#6408 id=6408 data-nosnippet>6408</a>}
 </code></pre></div></section></main></body></html>

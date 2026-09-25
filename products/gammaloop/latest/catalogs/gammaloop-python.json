@@ -38,6 +38,69 @@
         "keywords": [],
         "source": null,
         "items": {
+          "AbsoluteIntegrationResult": {
+            "id": "AbsoluteIntegrationResult",
+            "name": "AbsoluteIntegrationResult",
+            "title": "AbsoluteIntegrationResult",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Componentwise absolute estimates, maxima, and discrete breakdown for an integration slot."
+            },
+            "summary": "Componentwise absolute estimates, maxima, and discrete breakdown for an integration slot.",
+            "signature": "class AbsoluteIntegrationResult:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [],
+            "members": [
+              {
+                "name": "integral",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def integral(self) -> IntegralEstimate:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "table_results",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def table_results(self) -> list[IntegrationTableComponentResult]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "max_weight_info",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def max_weight_info(self) -> list[MaxWeightInfoEntry]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "grid_breakdown",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def grid_breakdown(self) -> ComponentDiscreteBreakdown:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::AbsoluteIntegrationResult",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 13,
+              "column": 1
+            }
+          },
           "AdditionalWeight": {
             "id": "AdditionalWeight",
             "name": "AdditionalWeight",
@@ -87,7 +150,7 @@
             "source": {
               "identifier": "gammaloop-python::AdditionalWeight",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 13,
+              "line": 27,
               "column": 1
             }
           },
@@ -170,7 +233,7 @@
             "source": {
               "identifier": "gammaloop-python::BatchEvaluationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 29,
+              "line": 43,
               "column": 1
             }
           },
@@ -217,7 +280,7 @@
             "source": {
               "identifier": "gammaloop-python::ComponentDiscreteBreakdown",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 55,
+              "line": 69,
               "column": 1
             }
           },
@@ -311,24 +374,24 @@
                 "members": []
               },
               {
-                "name": "lmb_channel_id",
+                "name": "sampling_channel_id",
                 "kind": "getter",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Loop-momentum-basis multichannel identifier, when sampled explicitly."
+                  "body": "Canonical sampling channel identifier, when sampled explicitly."
                 },
-                "signature": "def lmb_channel_id(self) -> Optional[int]:",
+                "signature": "def sampling_channel_id(self) -> Optional[int]:",
                 "default": null,
                 "members": []
               },
               {
-                "name": "lmb_channel_edge_ids",
+                "name": "sampling_channel_edge_ids",
                 "kind": "getter",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Edge identifiers defining the selected loop-momentum basis, when available."
+                  "body": "Edge identifiers defining the selected sampling channel basis, when available."
                 },
-                "signature": "def lmb_channel_edge_ids(self) -> Optional[list[int]]:",
+                "signature": "def sampling_channel_edge_ids(self) -> Optional[list[int]]:",
                 "default": null,
                 "members": []
               }
@@ -336,7 +399,7 @@
             "source": {
               "identifier": "gammaloop-python::CutInfo",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 65,
+              "line": 79,
               "column": 1
             }
           },
@@ -391,7 +454,7 @@
             "source": {
               "identifier": "gammaloop-python::DiscreteBreakdown",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 111,
+              "line": 125,
               "column": 1
             }
           },
@@ -478,7 +541,7 @@
             "source": {
               "identifier": "gammaloop-python::DiscreteBreakdownEntry",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 123,
+              "line": 137,
               "column": 1
             }
           },
@@ -533,7 +596,7 @@
             "source": {
               "identifier": "gammaloop-python::DiscreteCoordinate",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 143,
+              "line": 157,
               "column": 1
             }
           },
@@ -792,7 +855,7 @@
             "source": {
               "identifier": "gammaloop-python::DotExportSettings",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 155,
+              "line": 169,
               "column": 1
             }
           },
@@ -835,9 +898,20 @@
                 "kind": "getter",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Complex integrand value before applying the parameterization Jacobian."
+                  "body": "Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight."
                 },
                 "signature": "def integrand_result(self) -> complex:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "absolute_integrand_result",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Componentwise absolute physical contributions summed over channel points, before the outer-grid weight."
+                },
+                "signature": "def absolute_integrand_result(self) -> Optional[complex]:",
                 "default": null,
                 "members": []
               },
@@ -966,7 +1040,7 @@
             "source": {
               "identifier": "gammaloop-python::EvaluationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 235,
+              "line": 249,
               "column": 1
             }
           },
@@ -1049,6 +1123,17 @@
                 "members": []
               },
               {
+                "name": "threshold_counterterms",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Addable threshold decomposition with physical occurrence metadata, when retained."
+                },
+                "signature": "def threshold_counterterms(self) -> Optional[ThresholdCountertermEventInfo]:",
+                "default": null,
+                "members": []
+              },
+              {
                 "name": "__str__",
                 "kind": "method",
                 "docs": {
@@ -1074,7 +1159,7 @@
             "source": {
               "identifier": "gammaloop-python::Event",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 304,
+              "line": 323,
               "column": 1
             }
           },
@@ -1138,7 +1223,7 @@
             "source": {
               "identifier": "gammaloop-python::EventGroup",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 343,
+              "line": 367,
               "column": 1
             }
           },
@@ -1213,7 +1298,7 @@
             "source": {
               "identifier": "gammaloop-python::FourMomentum",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 362,
+              "line": 386,
               "column": 1
             }
           },
@@ -1263,7 +1348,7 @@
                   "format": "python-docstring",
                   "body": "Load or create a GammaLoop state and initialize its CLI session.\n\nParameters\n----------\nstate_folder : path-like, optional\n    State directory to load or create. The default is ``./gammaloop_state``.\nboot_commands_path : path-like, optional\n    TOML run card whose commands are applied during startup.\nmodel_file : path-like, optional\n    Model file override used while loading or initializing the state.\ntrace_logs_filename : str, optional\n    File receiving native trace records for this session.\nlevel : LogLevel, optional\n    Terminal log-level override for this session.\nlogfile_level : LogLevel, optional\n    File log-level override for this session.\nlogging_prefix : object, optional\n    Native logging-prefix configuration.\nread_only_state : bool, default=False\n    Prevent writes whose target lies inside the active state directory and\n    disable file logging there. In-memory session changes remain possible.\nsettings_global_path : path-like, optional\n    TOML file overriding the global settings loaded at startup.\nsettings_runtime_defaults_path : path-like, optional\n    TOML file overriding the default runtime settings loaded at startup.\nclean_state : bool, default=False\n    Remove the resolved state path before startup. This is destructive and\n    cannot be combined with ``read_only_state=True``.\n\nReturns\n-------\nGammaLoopAPI\n    A stateful API instance sharing one state, history, and settings session.\n\nRaises\n------\nException\n    If startup options conflict, the state or settings cannot be loaded, a\n    boot command fails, or a boot card requests process exit.\n\nExamples\n--------\nOpen an existing generated state without permitting writes to it:\n\n```python\napi = GammaLoopAPI(state_folder=\"./state\", read_only_state=True)\n```"
                 },
-                "signature": "def __new__(cls, state_folder: Optional[str | os.PathLike | pathlib.Path] = None, boot_commands_path: Optional[str | os.PathLike | pathlib.Path] = None, model_file: Optional[str | os.PathLike | pathlib.Path] = None, trace_logs_filename: Optional[str] = None, level: Optional[LogLevel] = None, logfile_level: Optional[LogLevel] = None, logging_prefix: object | None = None, read_only_state: bool = False, settings_global_path: Optional[str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: Optional[str | os.PathLike | pathlib.Path] = None, clean_state: bool = False) -> GammaLoopAPI:",
+                "signature": "def __new__(cls, state_folder: Optional[str | os.PathLike | pathlib.Path] = None, boot_commands_path: Optional[str | os.PathLike | pathlib.Path] = None, model_file: Optional[str | os.PathLike | pathlib.Path] = None, trace_logs_filename: Optional[str] = None, level: Optional[LogLevel] = None, logfile_level: Optional[LogLevel] = None, logging_prefix: object | None = None, read_only_state: bool = False, settings_global_path: Optional[str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: Optional[str | os.PathLike | pathlib.Path] = None, clean_state: bool = False, processes: Optional[Sequence[str]] = None, integrands: Optional[Sequence[str]] = None) -> GammaLoopAPI:",
                 "default": null,
                 "members": [
                   {
@@ -1385,6 +1470,22 @@
                     },
                     "signature": "bool",
                     "default": "False",
+                    "members": []
+                  },
+                  {
+                    "name": "processes",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "Optional[Sequence[str]]",
+                    "default": "None",
+                    "members": []
+                  },
+                  {
+                    "name": "integrands",
+                    "kind": "parameter",
+                    "docs": null,
+                    "signature": "Optional[Sequence[str]]",
+                    "default": "None",
                     "members": []
                   }
                 ]
@@ -2146,7 +2247,7 @@
             "source": {
               "identifier": "gammaloop-python::GammaLoopAPI",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 388,
+              "line": 412,
               "column": 1
             }
           },
@@ -2548,7 +2649,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramAccumulator",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 979,
+              "line": 1003,
               "column": 1
             }
           },
@@ -2713,7 +2814,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramBin",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1156,
+              "line": 1180,
               "column": 1
             }
           },
@@ -2931,7 +3032,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramSnapshot",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1230,
+              "line": 1254,
               "column": 1
             }
           },
@@ -2995,7 +3096,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramStats",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1321,
+              "line": 1345,
               "column": 1
             }
           },
@@ -3082,7 +3183,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegralEstimate",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1342,
+              "line": 1366,
               "column": 1
             }
           },
@@ -3135,7 +3236,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandActiveThresholdCut",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1362,
+              "line": 1386,
               "column": 1
             }
           },
@@ -3221,7 +3322,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandCut",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1378,
+              "line": 1402,
               "column": 1
             }
           },
@@ -3307,7 +3408,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandCutThreshold",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1409,
+              "line": 1433,
               "column": 1
             }
           },
@@ -3366,12 +3467,34 @@
                 "signature": "def is_master(self) -> bool:",
                 "default": null,
                 "members": []
+              },
+              {
+                "name": "threshold_counterterm_directives",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Threshold directives requested for this graph, including implicit defaults."
+                },
+                "signature": "def threshold_counterterm_directives(self) -> list[ThresholdCountertermDirective]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "threshold_counterterms",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Resolved graph-local threshold registry, when generated metadata is available."
+                },
+                "signature": "def threshold_counterterms(self) -> Optional[ThresholdCountertermMetadataRegistry]:",
+                "default": null,
+                "members": []
               }
             ],
             "source": {
               "identifier": "gammaloop-python::IntegrandGraph",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1440,
+              "line": 1464,
               "column": 1
             }
           },
@@ -3490,7 +3613,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandGraphGroup",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1461,
+              "line": 1495,
               "column": 1
             }
           },
@@ -3642,7 +3765,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandInfo",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1507,
+              "line": 1541,
               "column": 1
             }
           },
@@ -3717,7 +3840,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandLoopMomentumBasis",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1568,
+              "line": 1602,
               "column": 1
             }
           },
@@ -3770,7 +3893,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandOrientation",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1594,
+              "line": 1628,
               "column": 1
             }
           },
@@ -3856,7 +3979,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandThresholdEsurface",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1610,
+              "line": 1644,
               "column": 1
             }
           },
@@ -3919,7 +4042,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationOutput",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1641,
+              "line": 1675,
               "column": 1
             }
           },
@@ -3983,7 +4106,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1654,
+              "line": 1688,
               "column": 1
             }
           },
@@ -4134,7 +4257,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationStatisticsSnapshot",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1664,
+              "line": 1698,
               "column": 1
             }
           },
@@ -4229,7 +4352,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationTableComponentResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1700,
+              "line": 1734,
               "column": 1
             }
           },
@@ -4292,7 +4415,7 @@
             "source": {
               "identifier": "gammaloop-python::MaxWeightInfoEntry",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1722,
+              "line": 1756,
               "column": 1
             }
           },
@@ -4324,9 +4447,20 @@
                 "kind": "getter",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Complex integrand value before applying the parameterization Jacobian."
+                  "body": "Complex physical contribution including map Jacobians and channel partitions, before the outer-grid weight."
                 },
                 "signature": "def integrand_result(self) -> complex:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "absolute_integrand_result",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Componentwise absolute physical contributions summed over channel points, before the outer-grid weight."
+                },
+                "signature": "def absolute_integrand_result(self) -> Optional[complex]:",
                 "default": null,
                 "members": []
               },
@@ -4444,7 +4578,7 @@
             "source": {
               "identifier": "gammaloop-python::SampleEvaluationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1736,
+              "line": 1770,
               "column": 1
             }
           },
@@ -4665,7 +4799,7 @@
             "source": {
               "identifier": "gammaloop-python::SettingsValue",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1795,
+              "line": 1834,
               "column": 1
             }
           },
@@ -4763,12 +4897,23 @@
                 "signature": "def grid_breakdown(self) -> ComponentDiscreteBreakdown:",
                 "default": null,
                 "members": []
+              },
+              {
+                "name": "absolute",
+                "kind": "getter",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Estimates of componentwise absolute physical contributions."
+                },
+                "signature": "def absolute(self) -> AbsoluteIntegrationResult:",
+                "default": null,
+                "members": []
               }
             ],
             "source": {
               "identifier": "gammaloop-python::SlotIntegrationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1887,
+              "line": 1926,
               "column": 1
             }
           },
@@ -4862,7 +5007,821 @@
             "source": {
               "identifier": "gammaloop-python::StabilityResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1911,
+              "line": 1955,
+              "column": 1
+            }
+          },
+          "ThresholdCountertermAssociationMetadata": {
+            "id": "ThresholdCountertermAssociationMetadata",
+            "name": "ThresholdCountertermAssociationMetadata",
+            "title": "ThresholdCountertermAssociationMetadata",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Association of a threshold surface with an eligible physical cut and its origin."
+            },
+            "summary": "Association of a threshold surface with an eligible physical cut and its origin.",
+            "signature": "class ThresholdCountertermAssociationMetadata:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [],
+            "members": [
+              {
+                "name": "cut_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def cut_id(self) -> Optional[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cut_edges",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def cut_edges(self) -> list[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "threshold_edges",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def threshold_edges(self) -> list[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "esurface_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def esurface_id(self) -> int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "eligible",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def eligible(self) -> bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "origin",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def origin(self) -> str:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::ThresholdCountertermAssociationMetadata",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 1988,
+              "column": 1
+            }
+          },
+          "ThresholdCountertermComponentMetadata": {
+            "id": "ThresholdCountertermComponentMetadata",
+            "name": "ThresholdCountertermComponentMetadata",
+            "title": "ThresholdCountertermComponentMetadata",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Signed threshold component with its contributing variants and evaluator references."
+            },
+            "summary": "Signed threshold component with its contributing variants and evaluator references.",
+            "signature": "class ThresholdCountertermComponentMetadata:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [],
+            "members": [
+              {
+                "name": "component_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def component_id(self) -> int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cut_group_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def cut_group_id(self) -> Optional[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "kind",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def kind(self) -> str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "variant_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def variant_ids(self) -> list[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "evaluator_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def evaluator_ids(self) -> list[Optional[int]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sign",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def sign(self) -> int:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::ThresholdCountertermComponentMetadata",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 2006,
+              "column": 1
+            }
+          },
+          "ThresholdCountertermComponentOccurrence": {
+            "id": "ThresholdCountertermComponentOccurrence",
+            "name": "ThresholdCountertermComponentOccurrence",
+            "title": "ThresholdCountertermComponentOccurrence",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Physical amplitude or local-unitarity occurrence of a threshold component."
+            },
+            "summary": "Physical amplitude or local-unitarity occurrence of a threshold component.",
+            "signature": "class ThresholdCountertermComponentOccurrence:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [],
+            "members": [
+              {
+                "name": "kind",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def kind(self) -> str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "raised_esurface_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def raised_esurface_id(self) -> Optional[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "overlap_groups",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def overlap_groups(self) -> list[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "left_threshold_order",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def left_threshold_order(self) -> Optional[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "right_threshold_order",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def right_threshold_order(self) -> Optional[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "lu_cut_order",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def lu_cut_order(self) -> Optional[int]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::ThresholdCountertermComponentOccurrence",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 2024,
+              "column": 1
+            }
+          },
+          "ThresholdCountertermComponentWeight": {
+            "id": "ThresholdCountertermComponentWeight",
+            "name": "ThresholdCountertermComponentWeight",
+            "title": "ThresholdCountertermComponentWeight",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Fully normalized threshold weight and its optional evaluation before the user multiplier."
+            },
+            "summary": "Fully normalized threshold weight and its optional evaluation before the user multiplier.",
+            "signature": "class ThresholdCountertermComponentWeight:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [],
+            "members": [
+              {
+                "name": "component_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def component_id(self) -> int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "occurrence",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def occurrence(self) -> ThresholdCountertermComponentOccurrence:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "multiplier_values",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def multiplier_values(self) -> list[float]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "effective_multiplier",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def effective_multiplier(self) -> float:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "bare",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def bare(self) -> Optional[Any]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "weighted",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def weighted(self) -> Any:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "evaluation_skipped",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def evaluation_skipped(self) -> bool:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::ThresholdCountertermComponentWeight",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 2042,
+              "column": 1
+            }
+          },
+          "ThresholdCountertermDirective": {
+            "id": "ThresholdCountertermDirective",
+            "name": "ThresholdCountertermDirective",
+            "title": "ThresholdCountertermDirective",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Requested threshold variant, selected edges, and optional multiplier before generation."
+            },
+            "summary": "Requested threshold variant, selected edges, and optional multiplier before generation.",
+            "signature": "class ThresholdCountertermDirective:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [],
+            "members": [
+              {
+                "name": "cut_edge_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def cut_edge_ids(self) -> list[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "threshold_edge_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def threshold_edge_ids(self) -> list[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "name",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def name(self) -> str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "implicit_default",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def implicit_default(self) -> bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "requested_subspace",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def requested_subspace(self) -> Optional[list[int]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "requested_parent_lmb",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def requested_parent_lmb(self) -> Optional[list[int]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "disabled",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def disabled(self) -> bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "multiplier",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def multiplier(self) -> Optional[ThresholdCountertermMultiplierMetadata]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::ThresholdCountertermDirective",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 2062,
+              "column": 1
+            }
+          },
+          "ThresholdCountertermEvaluatorMetadata": {
+            "id": "ThresholdCountertermEvaluatorMetadata",
+            "name": "ThresholdCountertermEvaluatorMetadata",
+            "title": "ThresholdCountertermEvaluatorMetadata",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Compiled threshold expression and the variants sharing its graph-local evaluator."
+            },
+            "summary": "Compiled threshold expression and the variants sharing its graph-local evaluator.",
+            "signature": "class ThresholdCountertermEvaluatorMetadata:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [],
+            "members": [
+              {
+                "name": "evaluator_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def evaluator_id(self) -> int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cut_group_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def cut_group_id(self) -> Optional[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "collection_evaluator_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def collection_evaluator_id(self) -> int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "expression",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def expression(self) -> str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "variant_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def variant_ids(self) -> list[int]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::ThresholdCountertermEvaluatorMetadata",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 2084,
+              "column": 1
+            }
+          },
+          "ThresholdCountertermEventInfo": {
+            "id": "ThresholdCountertermEventInfo",
+            "name": "ThresholdCountertermEventInfo",
+            "title": "ThresholdCountertermEventInfo",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Original event contribution and the addable threshold-component decomposition."
+            },
+            "summary": "Original event contribution and the addable threshold-component decomposition.",
+            "signature": "class ThresholdCountertermEventInfo:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [],
+            "members": [
+              {
+                "name": "original",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def original(self) -> Any:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "components",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def components(self) -> list[ThresholdCountertermComponentWeight]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::ThresholdCountertermEventInfo",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 2100,
+              "column": 1
+            }
+          },
+          "ThresholdCountertermMetadataRegistry": {
+            "id": "ThresholdCountertermMetadataRegistry",
+            "name": "ThresholdCountertermMetadataRegistry",
+            "title": "ThresholdCountertermMetadataRegistry",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Graph-local threshold variants, compiled evaluators, and addable components."
+            },
+            "summary": "Graph-local threshold variants, compiled evaluators, and addable components.",
+            "signature": "class ThresholdCountertermMetadataRegistry:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [],
+            "members": [
+              {
+                "name": "graph_name",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def graph_name(self) -> str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "variants",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def variants(self) -> list[ThresholdCountertermVariantMetadata]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "evaluators",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def evaluators(self) -> list[ThresholdCountertermEvaluatorMetadata]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "components",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def components(self) -> list[ThresholdCountertermComponentMetadata]:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::ThresholdCountertermMetadataRegistry",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 2110,
+              "column": 1
+            }
+          },
+          "ThresholdCountertermMultiplierMetadata": {
+            "id": "ThresholdCountertermMultiplierMetadata",
+            "name": "ThresholdCountertermMultiplierMetadata",
+            "title": "ThresholdCountertermMultiplierMetadata",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Symbolic multiplier expression and its function definitions and derivative policy."
+            },
+            "summary": "Symbolic multiplier expression and its function definitions and derivative policy.",
+            "signature": "class ThresholdCountertermMultiplierMetadata:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [],
+            "members": [
+              {
+                "name": "expression",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def expression(self) -> str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "function_map",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def function_map(self) -> dict[str, str]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "symmetrize",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def symmetrize(self) -> bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "opaque_derivatives",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def opaque_derivatives(self) -> bool:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::ThresholdCountertermMultiplierMetadata",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 2124,
+              "column": 1
+            }
+          },
+          "ThresholdCountertermVariantMetadata": {
+            "id": "ThresholdCountertermVariantMetadata",
+            "name": "ThresholdCountertermVariantMetadata",
+            "title": "ThresholdCountertermVariantMetadata",
+            "kind": "python-class",
+            "supported": false,
+            "required_features": [
+              "python_api",
+              "python_abi",
+              "python_stubgen"
+            ],
+            "docs": {
+              "format": "python-docstring",
+              "body": "Requested and resolved subspaces, associations, and activation of one threshold variant."
+            },
+            "summary": "Requested and resolved subspaces, associations, and activation of one threshold variant.",
+            "signature": "class ThresholdCountertermVariantMetadata:",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [],
+            "members": [
+              {
+                "name": "variant_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def variant_id(self) -> int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "name",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def name(self) -> str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "group_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def group_id(self) -> Optional[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cut_group_id",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def cut_group_id(self) -> Optional[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "associations",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def associations(self) -> list[ThresholdCountertermAssociationMetadata]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "side",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def side(self) -> str:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "threshold_esurface_ids",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def threshold_esurface_ids(self) -> list[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "requested_subspace",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def requested_subspace(self) -> Optional[list[int]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "resolved_subspace",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def resolved_subspace(self) -> list[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "requested_parent_lmb",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def requested_parent_lmb(self) -> Optional[list[int]]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "resolved_parent_lmb",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def resolved_parent_lmb(self) -> list[int]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "subspace_loop_count",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def subspace_loop_count(self) -> int:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "multiplier",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def multiplier(self) -> Optional[ThresholdCountertermMultiplierMetadata]:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "generated",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def generated(self) -> bool:",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "active",
+                "kind": "getter",
+                "docs": null,
+                "signature": "def active(self) -> bool:",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop-python::ThresholdCountertermVariantMetadata",
+              "file": "docs/api/python/gammaloop-python.pyi",
+              "line": 2138,
               "column": 1
             }
           },
@@ -4959,7 +5918,7 @@
             "source": {
               "identifier": "gammaloop-python::LogLevel",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1944,
+              "line": 2174,
               "column": 1
             }
           },
@@ -4989,7 +5948,7 @@
             "source": {
               "identifier": "gammaloop-python::atom_to_canonical_string",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1970,
+              "line": 2200,
               "column": 1
             }
           },
@@ -5019,7 +5978,7 @@
             "source": {
               "identifier": "gammaloop-python::evaluate_graph_overall_factor",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1998,
+              "line": 2228,
               "column": 1
             }
           },
@@ -5049,7 +6008,7 @@
             "source": {
               "identifier": "gammaloop-python::to_dots",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2028,
+              "line": 2258,
               "column": 1
             }
           }

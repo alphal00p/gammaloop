@@ -639,6 +639,17 @@
                 "members": []
               },
               {
+                "name": "symbol_from_label",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Restore a selection's display symbol without reconstructing its topology."
+                },
+                "signature": "fn symbol_from_label(label : String) -> symbolica :: atom :: Symbol { … }",
+                "default": null,
+                "members": []
+              },
+              {
                 "name": "from_base62",
                 "kind": "associated-function",
                 "docs": {
