@@ -13,13 +13,19 @@ use pyo3::{
 };
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
+use pyo3_stub_gen::{
+    derive::{
+        gen_methods_from_python, gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods,
+    },
+    inventory::submit,
+};
 
 use crate::{
     display::{escape_html, model_expression_html, model_record_html},
     error,
     generation::{PyProcess, SelectorInput, VertexInput},
 };
+use spynso3::expression::TensorExpression;
 use symbolica::{
     api::python::{ConvertibleToExpression, PythonExpression},
     atom::{Atom, AtomCore},
@@ -2644,21 +2650,32 @@ impl PyModel {
     /// so numerical calculations can use the model's precomputed coupling
     /// values. Call this method when inspecting or manipulating a numerator in
     /// terms of Lagrangian parameters such as ``UFO::G`` or ``UFO::ee``. The
-    /// input expression and the stored diagram are unchanged.
+    /// input expression and the stored diagram are unchanged. Tensor inputs
+    /// retain their ordered interface, including when a coupling vanishes.
     ///
     /// Examples
     /// --------
     /// >>> stored = diagram.numerator_expression()
     /// >>> analytic = model.expand_couplings(stored)
-    /// >>> analytic  # native Symbolica expression in model parameters
+    /// >>> assert isinstance(analytic, TensorExpression)
     ///
     /// Parameters
     /// ----------
-    /// expression : Expression
+    /// expression : TensorExpression or Expression
     ///     Symbolica expression containing named couplings from this model.
-    fn expand_couplings(&self, expression: &PythonExpression) -> PythonExpression {
-        PythonExpression {
-            expr: self.inner.expand_couplings(&expression.expr),
+    #[gen_stub(skip)]
+    fn expand_couplings(
+        &self,
+        py: Python<'_>,
+        expression: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        let input = expression.extract::<PyRef<'_, PythonExpression>>()?;
+        let result = self.inner.expand_couplings(&input.expr);
+        if expression.is_instance_of::<TensorExpression>() {
+            let tensor = expression.extract::<PyRef<'_, TensorExpression>>()?;
+            TensorExpression::preserving_interface(&tensor, py, result).map(Py::into_any)
+        } else {
+            Py::new(py, PythonExpression { expr: result }).map(Py::into_any)
         }
     }
 
@@ -3051,6 +3068,56 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyParameterCard>()?;
     module.add_class::<PyModel>()?;
     Ok(())
+}
+
+#[cfg(feature = "python_stubgen")]
+submit! {
+    gen_methods_from_python! {
+        r#"
+        import typing
+
+        class PyModel:
+            @typing.overload
+            def expand_couplings(
+                self,
+                expression: pyo3_stub_gen.RustType["TensorExpression"],
+            ) -> pyo3_stub_gen.RustType["TensorExpression"]:
+                """Expand UFO coefficients while preserving the ordered tensor interface.
+
+                Tensor zeros retain their original ports. The input is unchanged.
+
+                Examples
+                --------
+                >>> numerator = diagram.numerator_expression()
+                >>> analytic = model.expand_couplings(numerator)
+                >>> assert analytic.structure.slots == numerator.structure.slots
+
+                Parameters
+                ----------
+                expression : TensorExpression
+                    Tensor expression containing named couplings from this model.
+                """
+
+            @typing.overload
+            def expand_couplings(
+                self,
+                expression: pyo3_stub_gen.RustType["PythonExpression"],
+            ) -> pyo3_stub_gen.RustType["PythonExpression"]:
+                """Replace named UFO coefficients by their analytic model expressions.
+
+                The input and the stored model are unchanged.
+
+                Examples
+                --------
+                >>> analytic = model.expand_couplings(S("UFO::GC_11"))
+
+                Parameters
+                ----------
+                expression : Expression
+                    Symbolica expression containing named couplings from this model.
+                """
+        "#
+    }
 }
 
 #[cfg(test)]

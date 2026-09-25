@@ -124,7 +124,12 @@ impl SymbolicTensor<PartialStructure> {
     /// Retain this interface after scalar algebra which treats tensor leaves as opaque.
     pub fn with_algebra_result(&self, expression: Atom) -> InferenceResult<Self> {
         if expression == self.expression {
-            return Ok(self.clone());
+            return Ok(Self {
+                expression,
+                structure: self.structure.clone(),
+                is_metric: self.is_metric,
+                is_composite: self.is_composite,
+            });
         }
         if expression.as_view().is_zero()
             || (self.structure.open_positions().is_empty()
@@ -145,7 +150,12 @@ impl SymbolicTensor<PartialStructure> {
     /// Arbitrary replacements must validate or infer their new interface instead.
     pub fn with_rewritten_expression(&self, expression: Atom) -> InferenceResult<Self> {
         if expression == self.expression {
-            return Ok(self.clone());
+            return Ok(Self {
+                expression,
+                structure: self.structure.clone(),
+                is_metric: self.is_metric,
+                is_composite: self.is_composite,
+            });
         }
         if expression.as_view().is_zero()
             || (self.structure.open_positions().is_empty()
@@ -165,7 +175,12 @@ impl SymbolicTensor<PartialStructure> {
     /// Infer the result of an arbitrary symbolic transformation.
     pub fn with_transformed_expression(&self, expression: Atom) -> InferenceResult<Self> {
         if expression == self.expression {
-            return Ok(self.clone());
+            return Ok(Self {
+                expression,
+                structure: self.structure.clone(),
+                is_metric: self.is_metric,
+                is_composite: self.is_composite,
+            });
         }
         let structure = if expression.as_view().is_zero() {
             self.structure.clone()
@@ -1959,6 +1974,59 @@ mod tests {
             );
         }
         assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    }
+
+    #[test]
+    fn unchanged_results_preserve_layout_dispatch_flags_and_callback_state() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let head = spenso::tensor_symbol!(
+            "unchanged_result_callback",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let ports = [
+            ExtendibleReps::MINKOWSKI
+                .new_rep(Dimension::Concrete(4))
+                .slot(PartialIndex::Explicit(AbstractIndex::Normal(72017))),
+            ExtendibleReps::EUCLIDEAN
+                .new_rep(Dimension::Concrete(3))
+                .slot(PartialIndex::open(0)),
+        ];
+        let expression = FunctionBuilder::new(head)
+            .add_arg(17)
+            .add_args(ports.map(composition::port_atom))
+            .finish();
+        for expression in [expression, Atom::Zero] {
+            for (is_metric, is_composite) in
+                [(false, false), (false, true), (true, false), (true, true)]
+            {
+                let value = SymbolicTensor {
+                    expression: expression.clone(),
+                    structure: PartialStructure::from_logical_slots(ports),
+                    is_metric,
+                    is_composite,
+                };
+                for finish in [
+                    SymbolicTensor::<PartialStructure>::with_algebra_result,
+                    SymbolicTensor::<PartialStructure>::with_rewritten_expression,
+                    SymbolicTensor::<PartialStructure>::with_transformed_expression,
+                ] {
+                    calls.store(0, Ordering::Relaxed);
+                    INFERENCE_CALLS.with(|count| count.set(0));
+                    let result = finish(&value, value.expression.clone()).unwrap();
+                    assert_eq!(result, value);
+                    assert_eq!(calls.load(Ordering::Relaxed), 0);
+                    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+                }
+            }
+        }
     }
 
     #[test]

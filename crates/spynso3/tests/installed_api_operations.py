@@ -43,6 +43,25 @@ class TensorOperationsTests(unittest.TestCase):
         library.register(sp.Tensor.dense(replaced, [5.0, 6.0, 7.0, 8.0]))
         self.assertEqual(replaced.to_tensor(library)[:], [5.0, 6.0, 7.0, 8.0])
 
+    def test_scalar_tensor_denominator_accepts_an_open_expression(self):
+        tensor = self.A(self.rep("j"), self.rep("i"))
+        denominator = sp.TensorExpression(self.x)
+        # A plain Expression on the left dispatches to TensorExpression.__rtruediv__.
+        for numerator in (tensor.to_expression(), tensor, 0 * tensor):
+            expected = sp.TensorExpression(numerator)
+            quotient = denominator.__rtruediv__(numerator)
+            self.assertIsInstance(quotient, sp.TensorExpression)
+            self.assertEqual(quotient.structure.slots, expected.structure.slots)
+            self.assertEqual(
+                quotient.to_expression(), expected.to_expression() / self.x
+            )
+        quotient = tensor.to_expression() / denominator
+        self.assertIsInstance(quotient, sp.TensorExpression)
+        self.assertEqual(quotient, tensor / self.x)
+        self.assertEqual(self.y / denominator, self.y / self.x)
+        with self.assertRaisesRegex(ValueError, "denominator"):
+            self.x / tensor
+
     def test_noop_transforms_preserve_complete_metadata_in_fresh_objects(self):
         atomic = self.A(7, self.rep("i"), self.other("mu"))
         opened = self.A(7, self.rep, self.other)
