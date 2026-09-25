@@ -53,11 +53,10 @@ impl LocalRootConsistency {
         result: &NewtonIterationResult<T>,
         inside_radius: &F<T>,
         f_x_and_df_x: &impl Fn(&F<T>) -> (F<T>, F<T>),
-        e_cm: &F<T>,
     ) -> Self {
-        // The two symmetric probes below cost four function evaluations in total. Refuse rescue
-        // without probing when a caller attempted fewer iterations, so this diagnostic can never
-        // evaluate the E-surface more often than the failed Newton solve it is validating.
+        // The two symmetric probes cost four function evaluations per candidate. Refuse this
+        // check when the caller attempted fewer iterations, so each consistency check costs no
+        // more than the failed solve. Alternate-endpoint certification can check both candidates.
         const PROBE_EVALUATIONS: usize = 4;
         if result.num_iterations_used < PROBE_EVALUATIONS {
             return Self::invalid();
@@ -67,11 +66,9 @@ impl LocalRootConsistency {
         let two = result.solution.from_i64(2);
         let four = result.solution.from_i64(4);
         let eight = result.solution.from_i64(8);
-        let radial_scale = result
-            .solution
-            .abs()
-            .max(e_cm.abs())
-            .max(result.solution.epsilon());
+        // Radius and energy need not have the same units: for LU the root is a
+        // dimensionless rescaling. Probe and validate relative to the positive root itself.
+        let radial_scale = result.solution.abs();
         let newton_correction =
             result.error_of_function.abs() / result.derivative_at_solution.abs();
         let mut near_radius_step =
@@ -184,11 +181,7 @@ impl RadialRootObservation {
         let derivative_abs_t = result.derivative_at_solution.abs();
         let e_cm_t = e_cm.abs();
         let tolerance_t = tolerance.abs();
-        let radial_scale_t = result
-            .solution
-            .abs()
-            .max(e_cm_t.clone())
-            .max(precision_epsilon_t.clone());
+        let radial_scale_t = result.solution.abs();
         let roundoff_residual_scale_t = &precision_epsilon_t * &e_cm_t;
         let maximum_residual_t = &roundoff_residual_scale_t * &tolerance_t;
         let relative_newton_correction_t = &residual_t / &derivative_abs_t / &radial_scale_t;
@@ -299,13 +292,20 @@ impl RadialRootObservation {
 
 /// Transient diagnostics shared by the stability levels of one sample evaluation.
 ///
-/// A higher-precision solve may recover a residual-limited root when it reaches the
+/// At an exhausted sign bracket, the energy residual target is augmented by the energy
+/// change across that one representable radius interval: `|f| <= tau*epsilon*E_cm + |f'|*width`.
+/// Acceptance also requires local sign/slope consistency. This is a numerical root-resolution check under the solver's
+/// continuity assumption, not a forward-error bound for an arbitrary callback.
+/// If the last candidate remains uncertified, the other exhausted-bracket endpoint
+/// is checked under the same policy, without changing any already accepted result.
+///
+/// A higher-precision solve may also recover a residual-limited root when it reaches the
 /// original lower-precision accuracy target and clearly improves the same root. All
 /// structural solver failures remain errors in every precision.
 ///
 /// For lower and higher precisions `lo` and `hi`, rescue requires
 /// `|f_hi| <= tau * epsilon_lo * E_cm`,
-/// `|f_hi / f'_hi| / max(|r_hi|, E_cm) <= tau * epsilon_lo`, and
+/// `|f_hi / f'_hi| / |r_hi| <= tau * epsilon_lo`, and
 /// `max(|f_lo|, epsilon_lo * E_cm) / |f_hi| >= 8`, in addition to the bracket and
 /// two-scale local-root consistency checks.
 #[derive(Clone, Debug, Default)]
@@ -350,6 +350,7 @@ impl RadialRootDiagnostics {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn restart_precision_pass(&mut self) {
         self.current_precision_bits = None;
         self.current_occurrences.clear();
@@ -407,9 +408,11 @@ impl RadialRootDiagnostics {
             )
             .next_back()
             .map(|(_, observation)| observation.clone());
-        let local_consistency = previous
-            .is_some()
-            .then(|| LocalRootConsistency::check(result, inside_radius, &f_x_and_df_x, e_cm));
+        let bracket_width = upper_bound - lower_bound;
+        let midpoint = lower_bound + &bracket_width / inside_radius.from_i64(2);
+        let bracket_is_exhausted = midpoint == *lower_bound || midpoint == *upper_bound;
+        let local_consistency = (previous.is_some() || bracket_is_exhausted)
+            .then(|| LocalRootConsistency::check(result, inside_radius, &f_x_and_df_x));
         let current = RadialRootObservation::new(
             result,
             Some((lower_bound, upper_bound)),
@@ -417,6 +420,48 @@ impl RadialRootDiagnostics {
             tolerance,
             e_cm,
         );
+        // The exhausted bracket resolves the root only to its endpoint separation.
+        // Its Newton correction may therefore exceed the original energy-residual target
+        // divided by the derivative by at most that width; no fixed ulp multiplier is used.
+        let accepts_resolution =
+            |candidate: &NewtonIterationResult<T>, observation: &RadialRootObservation| {
+                let resolution_residual_limit = inside_radius.epsilon() * tolerance * e_cm
+                    + candidate.derivative_at_solution.abs() * &bracket_width;
+                let accepted = bracket_is_exhausted
+                    && is_finite(&resolution_residual_limit)
+                    && observation.values_are_finite()
+                    && observation.bracket_is_valid
+                    && candidate.solution > inside_radius.zero()
+                    && candidate.derivative_at_solution > inside_radius.zero()
+                    && observation
+                        .local_consistency
+                        .as_ref()
+                        .is_some_and(|consistency| consistency.is_valid)
+                    && candidate.error_of_function.abs() <= resolution_residual_limit;
+                if accepted {
+                    debug!(
+                        radial_root = %identity,
+                        occurrence = call_key.1,
+                        current_epsilon = %observation.precision_epsilon,
+                        current_residual = %observation.residual,
+                        original_residual_limit = %observation.maximum_residual,
+                        resolution_residual_limit = %resolution_residual_limit,
+                        bracket_width = %bracket_width,
+                        solution = %observation.solution,
+                        derivative = %observation.derivative,
+                        lower_bound = ?observation.lower_bound,
+                        upper_bound = ?observation.upper_bound,
+                        relative_newton_correction = %observation.relative_newton_correction,
+                        local_consistency = ?observation.local_consistency,
+                        "accepted a radial root at the representable bracket resolution"
+                    );
+                }
+                accepted
+            };
+        if accepts_resolution(result, &current) {
+            self.record_observation(call_key, current);
+            return Ok(result.clone());
+        }
         let precision_improvement = previous
             .as_ref()
             .and_then(|previous| current.precision_rescue_improvement(previous));
@@ -462,6 +507,48 @@ impl RadialRootDiagnostics {
             );
             self.record_observation(call_key, current);
             return Ok(result.clone());
+        }
+
+        // Preserve both accepted paths above. Exhaustion may leave the last
+        // candidate at the less accurate endpoint; test the other represented
+        // endpoint with the same residual budget and fresh consistency probes.
+        let alternate_radius = if result.solution == *lower_bound {
+            Some(upper_bound)
+        } else if result.solution == *upper_bound {
+            Some(lower_bound)
+        } else {
+            None
+        };
+        if bracket_is_exhausted
+            && lower_bound < upper_bound
+            && current.values_are_finite()
+            && current.bracket_is_valid
+            && result.solution > inside_radius.zero()
+            && result.derivative_at_solution > inside_radius.zero()
+            && let Some(radius) = alternate_radius
+        {
+            let (value, derivative) = f_x_and_df_x(radius);
+            let alternate = NewtonIterationResult {
+                solution: radius.clone(),
+                derivative_at_solution: derivative,
+                error_of_function: value,
+                num_iterations_used: result.num_iterations_used,
+            };
+            let observation = RadialRootObservation::new(
+                &alternate,
+                Some((lower_bound, upper_bound)),
+                Some(LocalRootConsistency::check(
+                    &alternate,
+                    inside_radius,
+                    &f_x_and_df_x,
+                )),
+                tolerance,
+                e_cm,
+            );
+            if accepts_resolution(&alternate, &observation) {
+                self.record_observation(call_key, observation);
+                return Ok(alternate);
+            }
         }
 
         if let Some(previous) = previous.as_ref() {
@@ -660,6 +747,16 @@ pub(crate) fn safeguarded_newton_iteration_and_derivative<T: FloatLike>(
         }
 
         let midpoint = (&lower_bound + &upper_bound) / &two;
+        // Once the bracket has no representable interior point, further iterations cannot
+        // improve it. Preserve enough iterations for the existing four-probe consistency
+        // check, and let precision diagnostics decide whether the residual can be rescued.
+        if iteration >= 4 && (midpoint == lower_bound || midpoint == upper_bound) {
+            return Err(SafeguardedNewtonError::DidNotConverge {
+                result: current_result,
+                lower_bound,
+                upper_bound,
+            });
+        }
         let newton_candidate = if is_finite(&value) && is_finite(&derivative) && derivative > zero {
             Some(&solution - &value / &derivative)
         } else {
@@ -759,7 +856,10 @@ mod tests {
     use std::cell::Cell;
 
     use super::*;
-    use crate::utils::f128;
+    use crate::{
+        momentum::ThreeMomentum,
+        utils::{ArbPrec, f128},
+    };
 
     const ROOT_TOLERANCE: i64 = 64;
 
@@ -1002,6 +1102,19 @@ mod tests {
             error,
             SafeguardedNewtonError::InvalidDerivative { .. }
         ));
+        let diagnosed = RadialRootDiagnostics::default()
+            .solve(
+                &RadialRootIdentity::new("structurally invalid derivative".into()),
+                &F(0.0),
+                &F(1.0),
+                |x| (x - F(1.0), F(0.0)),
+                &F(8.0),
+                40,
+                64,
+                &F(1.0),
+            )
+            .unwrap_err();
+        assert_eq!(format!("{diagnosed:?}"), format!("{error:?}"));
     }
 
     #[test]
@@ -1013,15 +1126,10 @@ mod tests {
             num_iterations_used: 40,
         };
         let calls = Cell::new(0);
-        let consistency = LocalRootConsistency::check(
-            &result,
-            &F(0.0),
-            &|radius| {
-                calls.set(calls.get() + 1);
-                (radius - F(0.5), F(1.0))
-            },
-            &F(1.0),
-        );
+        let consistency = LocalRootConsistency::check(&result, &F(0.0), &|radius| {
+            calls.set(calls.get() + 1);
+            (radius - F(0.5), F(1.0))
+        });
         assert!(consistency.is_valid);
         assert_eq!(calls.get(), 4);
 
@@ -1030,17 +1138,194 @@ mod tests {
             ..result
         };
         calls.set(0);
-        let consistency = LocalRootConsistency::check(
-            &short_solve_result,
-            &F(0.0),
-            &|radius| {
-                calls.set(calls.get() + 1);
-                (radius - F(0.5), F(1.0))
-            },
-            &F(1.0),
-        );
+        let consistency = LocalRootConsistency::check(&short_solve_result, &F(0.0), &|radius| {
+            calls.set(calls.get() + 1);
+            (radius - F(0.5), F(1.0))
+        });
         assert!(!consistency.is_valid);
         assert_eq!(calls.get(), 0);
+    }
+
+    #[test]
+    fn exhausted_bracket_resolves_a_stalled_lu_energy_root() {
+        fn solve_cut<T: FloatLike>(
+            diagnostics: &mut RadialRootDiagnostics,
+            identity: &RadialRootIdentity,
+        ) -> [Result<NewtonIterationResult<T>, SafeguardedNewtonError<T>>; 2] {
+            let zero = F::<T>::default();
+            let p = ThreeMomentum::new(
+                zero.from_i64(-1086),
+                zero.from_i64(679),
+                zero.from_i64(1658),
+            );
+            let q = ThreeMomentum::new(
+                zero.from_i64(-1141),
+                zero.from_i64(-1647),
+                zero.from_i64(-110),
+            );
+            let pq = &p + &q;
+            let e_cm = zero.from_i64(1000);
+            let guess = &e_cm / (p.norm() + q.norm() + pq.norm());
+            let function = |radius: &F<T>| {
+                let rp = &p * radius;
+                let rq = &q * radius;
+                let rpq = &rp + &rq;
+                let (energy_sum, derivative) = [(rp, &p, 125), (rq, &q, 173), (rpq, &pq, 173)]
+                    .into_iter()
+                    .fold(
+                        (zero.clone(), zero.clone()),
+                        |(sum, derivative), (mom, ray, mass)| {
+                            let mass = zero.from_i64(mass);
+                            let energy = (mom.norm_squared() + &mass * &mass).sqrt();
+                            (sum + &energy, derivative + mom * ray / energy)
+                        },
+                    );
+                (energy_sum - &e_cm, derivative)
+            };
+            let strict = safeguarded_newton_iteration_and_derivative(
+                &zero,
+                &guess,
+                function,
+                &zero.one(),
+                2000,
+                64,
+                &e_cm,
+            );
+            let diagnosed = diagnostics.solve(
+                identity,
+                &zero,
+                &guess,
+                function,
+                &zero.one(),
+                2000,
+                64,
+                &e_cm,
+            );
+            [strict, diagnosed]
+        }
+
+        // A smooth ttH energy sum has adjacent f64 root endpoints with residuals just
+        // above epsilon * Q. Strict residual convergence must fail without spinning for
+        // 2000 iterations; bracket-resolution acceptance must preserve the root's accuracy.
+        let identity = RadialRootIdentity::new("roundoff-limited ttH LU cut".to_string());
+        let mut diagnostics = RadialRootDiagnostics::default();
+        let [strict, diagnosed] = solve_cut::<f64>(&mut diagnostics, &identity);
+        let error = strict.unwrap_err();
+        let SafeguardedNewtonError::DidNotConverge {
+            result,
+            lower_bound,
+            upper_bound,
+        } = error
+        else {
+            panic!("expected a localized roundoff-limited root, got {error:?}");
+        };
+        assert!(result.num_iterations_used < 100);
+        assert!(result.error_of_function.abs() > F(f64::EPSILON * 1000.0));
+        let midpoint = (lower_bound + upper_bound) / F(2.0);
+        assert!(midpoint == lower_bound || midpoint == upper_bound);
+        assert!(result.derivative_at_solution > F(0.0));
+
+        let certified = diagnosed.unwrap();
+        assert_eq!(certified.solution, result.solution);
+        assert_eq!(certified.error_of_function, result.error_of_function);
+        assert!(
+            certified.error_of_function.abs()
+                <= F(f64::EPSILON * 1000.0)
+                    + certified.derivative_at_solution * (upper_bound - lower_bound)
+        );
+
+        let [_, resolved] = solve_cut::<f128>(&mut diagnostics, &identity);
+        let resolved = resolved.unwrap();
+        assert!(resolved.error_of_function.abs() < F::from_f64(f64::EPSILON * 1000.0));
+        assert!(resolved.derivative_at_solution > resolved.solution.zero());
+        assert!(
+            (resolved.solution - F::from_f64(result.solution.0)).abs()
+                < F::from_f64(f64::EPSILON * result.solution.0)
+        );
+
+        // A legitimate Arb-only evaluation has no lower-precision observations to inherit.
+        let [_, independent_arb] =
+            solve_cut::<ArbPrec>(&mut RadialRootDiagnostics::default(), &identity);
+        let independent_arb = independent_arb.unwrap();
+        assert!(independent_arb.derivative_at_solution > independent_arb.solution.zero());
+        assert!(
+            (independent_arb.solution - F::from_f64(result.solution.0)).abs()
+                < F::from_f64(f64::EPSILON * result.solution.0)
+        );
+    }
+
+    #[test]
+    fn exhausted_bracket_rejects_a_small_discontinuous_residual() {
+        let residual = F(1.125 * f64::EPSILON);
+        let function = |radius: &F<f64>| {
+            let value = if *radius == F(0.0) {
+                F(-1.0)
+            } else if *radius < F(0.5) {
+                -residual
+            } else {
+                residual
+            };
+            // Force the initial midpoint, then claim the non-root has a positive slope.
+            let derivative = if *radius == F(1.0) { F(0.0) } else { F(1.0) };
+            (value, derivative)
+        };
+        let error = RadialRootDiagnostics::default()
+            .solve(
+                &RadialRootIdentity::new("adjacent discontinuous non-root".to_string()),
+                &F(0.0),
+                &F(1.0),
+                function,
+                &F(1.0),
+                2000,
+                64,
+                &F(1.0),
+            )
+            .unwrap_err();
+        let SafeguardedNewtonError::DidNotConverge {
+            result,
+            lower_bound,
+            upper_bound,
+        } = error
+        else {
+            panic!("expected rejection of the discontinuity, got {error:?}");
+        };
+        let midpoint = (lower_bound + upper_bound) / F(2.0);
+        assert!(midpoint == lower_bound || midpoint == upper_bound);
+        assert!(residual > F(f64::EPSILON));
+        assert!(
+            residual
+                <= F(f64::EPSILON) + result.derivative_at_solution * (upper_bound - lower_bound)
+        );
+        assert!(
+            !LocalRootConsistency::check(&result, &F(0.0), &function).is_valid,
+            "an exhausted bracket and a sufficiently small residual do not certify a discontinuity"
+        );
+    }
+
+    #[test]
+    fn radial_root_accuracy_is_independent_of_energy_units() {
+        let result = NewtonIterationResult {
+            solution: F(0.25),
+            derivative_at_solution: F(2.0),
+            error_of_function: F(1.0e-15),
+            num_iterations_used: 4,
+        };
+        let observation = RadialRootObservation::new(&result, None, None, &F(1.0), &F(1.0));
+        let rescaled_result = NewtonIterationResult {
+            derivative_at_solution: result.derivative_at_solution * F(1024.0),
+            error_of_function: result.error_of_function * F(1024.0),
+            ..result
+        };
+        let rescaled_observation =
+            RadialRootObservation::new(&rescaled_result, None, None, &F(1.0), &F(1024.0));
+        assert_eq!(
+            observation.relative_newton_correction, rescaled_observation.relative_newton_correction,
+            "changing the energy unit cannot change the accuracy of dimensionless LU t"
+        );
+        assert_eq!(
+            observation.relative_residual_limit,
+            rescaled_observation.relative_residual_limit
+        );
     }
 
     #[test]
@@ -1127,13 +1412,15 @@ mod tests {
         let mut diagnostics = RadialRootDiagnostics::default();
         let identity = RadialRootIdentity::new("accidental exact f64 residual".to_string());
 
+        // 0.2 epsilon still forces an exact f64 zero, while allowing the higher-precision
+        // candidate's 3.7e-17 relative root correction (rather than its absolute residual).
         let f64_result = diagnostics
             .solve(
                 &identity,
                 &F(0.0),
                 &F(1.0),
                 |radius| (radius - F(0.3), F(1.0)),
-                &F(0.1),
+                &F(0.2),
                 40,
                 64,
                 &F(1.0),
@@ -1296,7 +1583,7 @@ mod tests {
         let lower_precision = diagnostics.observations[&lower_key].clone();
 
         assert!(matches!(
-            discontinuous_root::<f128>(&mut diagnostics, &identity, 1.0e-14),
+            discontinuous_root::<f128>(&mut diagnostics, &identity, 5.0e-15),
             Err(SafeguardedNewtonError::DidNotConverge { .. })
         ));
         let higher_precision = &diagnostics.observations[&higher_key];

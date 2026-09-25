@@ -275,10 +275,12 @@ integrand and update in-memory caches or observable snapshots, including in a re
 session. Rust-only callers that must retain the active precision use `evaluate_sample_precise` and
 `evaluate_samples_precise`.
 
-Point evaluation returns the integrand before the parameterization Jacobian. The
+Point evaluation returns the native contribution including map Jacobians and channel
+partition factors, before the outer-grid weight. The
 #link("guides/conventions/")[kinematics, normalization, and weights guide] defines the exact
-$I_"returned" J_"parameterization" w_"MC"$ relation used during integration and the correlated
-event-weight boundary.
+$I_"returned" J_"parameterization" w_"MC"$ relation, with the reported unapplied
+$J_"parameterization" = 1$ for parameterized samples, and the correlated event-weight
+boundary. Direct momentum inputs can omit the reported Jacobian.
 
 For a complete, source-backed run card and scripts that expose event groups, cut metadata,
 selectors, and merged histogram snapshots, follow the

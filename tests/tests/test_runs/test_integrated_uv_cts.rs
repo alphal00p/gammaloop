@@ -29,15 +29,15 @@ where
 {
     // Historical Arb local target, whose original parameter vector was not recorded:
     // 1.58065707259153789178502163142117068526463969013510333564276531480561962745854241380044043667161360949437009469502210362095446423045005192306907814379082388080206628068736848837078345292618746320848779749755287907430238646092292488091093980397229936469812174411521638680368115422804978273334133533394619e-3
-    // The precise API promotes each f64 input's shortest decimal spelling before
-    // recomputing this spherical linear parameterization in the active precision.
+    // The precise API preserves each sampled f64 coordinate's exact binary value
+    // before recomputing this spherical linear parameterization in native precision.
     assert!(orientation < 2);
     let one = decimal_scalar::<T>("1")?;
     let two = decimal_scalar::<T>("2")?;
     let four = decimal_scalar::<T>("4")?;
     let eight = decimal_scalar::<T>("8")?;
     let sixteen = decimal_scalar::<T>("16")?;
-    let x = decimal_scalar::<T>(&INSPECT_POINT[0].to_string())?;
+    let x = F(T::from_f64_exact_binary(INSPECT_POINT[0]));
     let radius = &x / (&one - &x);
     let radius_squared = &radius * &radius;
     let mass = decimal_scalar::<T>(&m_uv.to_string())?;
@@ -72,7 +72,7 @@ where
     let one = decimal_scalar::<T>("1")?;
     let four = decimal_scalar::<T>("4")?;
     let thirty_two = decimal_scalar::<T>("32")?;
-    let x = decimal_scalar::<T>(&INSPECT_POINT[0].to_string())?;
+    let x = F(T::from_f64_exact_binary(INSPECT_POINT[0]));
     let radius = &x / (&one - &x);
     let radius_squared = &radius * &radius;
     let pi = F(one.0.PI());
@@ -527,7 +527,7 @@ fn scalar_bubble_integrated() -> Result<()> {
                 .join("scalar_bubble_integrated")
                 .join("integration_workspace"),
         ),
-        n_cores: Some(1),
+        n_cores: Some(10),
         target: vec![
             format!(
                 "bubble_no_integrated_UV@scalar_bubble_below_thres={},{}",

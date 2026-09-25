@@ -31,7 +31,7 @@ use crate::{
     cff::surface::SurfaceCache,
     define_index,
     feyngen::diagram_generator::evaluate_overall_factor,
-    integrands::process::{ChannelIndex, LmbMultiChannelingSetup, ParamBuilder},
+    integrands::process::{LmbMultiChannelingSetup, ParamBuilder, SamplingChannelId},
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
     processes::DotExportSettings,
@@ -44,6 +44,7 @@ pub(crate) mod attribute_warnings;
 pub mod autogen;
 pub mod cuts;
 pub mod global;
+pub mod threshold_counterterms;
 
 #[derive(Clone, Copy, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Default)]
 pub struct VertexOrder(pub u8);
@@ -67,6 +68,8 @@ pub struct Graph {
     /// Only relevant for cross sections, but stored here for the parsing
     pub initial_state_cut: OrientedCut,
     pub polarizations: Vec<(PolDef, Atom)>,
+    /// Compact graph-local threshold-counterterm directives from the DOT input.
+    pub threshold_counterterms: autogen::Autogen<threshold_counterterms::ThresholdCountertermSpec>,
 }
 
 impl LogMessage for Graph {
@@ -217,6 +220,7 @@ impl Graph {
             improvement_settings: PhaseSpaceImprovementSettings::default(),
             f_64_cache: None,
             f_128_cache: None,
+            arb_cache: Default::default(),
         }
     }
 
@@ -255,7 +259,15 @@ impl Graph {
         );
 
         LmbMultiChannelingSetup {
-            channels,
+            master_edge_masses: Default::default(),
+            sampling_bridge: Default::default(),
+            sampling_bridge_quad: Default::default(),
+            sampling_bridge_fixed256: Default::default(),
+            sampling_bridge_arb: Default::default(),
+            sampling_source: Default::default(),
+            sampling_catalogue: Default::default(),
+            sampling_programs: Default::default(),
+            lmb_basis_ids: channels,
             graph: self.clone(),
             all_bases: lmbs.clone(),
         }
@@ -266,7 +278,7 @@ impl Graph {
         lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         override_lmb_heuristics: bool,
         fallback: LmbChannelFallback,
-    ) -> TiVec<ChannelIndex, LmbIndex> {
+    ) -> TiVec<SamplingChannelId, LmbIndex> {
         if override_lmb_heuristics {
             return lmbs
                 .iter_enumerated()
@@ -321,7 +333,7 @@ impl Graph {
         &self,
         lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         fallback: LmbChannelFallback,
-    ) -> TiVec<ChannelIndex, LmbIndex> {
+    ) -> TiVec<SamplingChannelId, LmbIndex> {
         let fallback_index = match fallback {
             LmbChannelFallback::CurrentGraphBasis => lmbs
                 .iter_enumerated()

@@ -40,7 +40,7 @@ use crate::{
     momentum::{Helicity, PolType},
     numerator::ParsingNet,
     utils::{
-        ArbPrec, F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128,
+        F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, VarFloat, f128,
         hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
     },
 };
@@ -919,19 +919,22 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
     }
 }
 
-impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
+impl<const N: u32> UpdateAndGetParams<VarFloat<N>> for ParamBuilder<f64>
+where
+    VarFloat<N>: FloatLike,
+{
     #[allow(clippy::too_many_arguments)]
     fn update_emr_and_get_params<'a>(
         &'a mut self,
         _cache: (bool, bool),
-        sample: &MomentumSample<ArbPrec>,
+        sample: &MomentumSample<VarFloat<N>>,
         graph: &Graph,
         helicities: &[Helicity],
-        additional_params: &[F<ArbPrec>],
-        left_threshold_params: Option<&ThresholdParams<ArbPrec>>,
-        right_threshold_params: Option<&ThresholdParams<ArbPrec>>,
-        lu_params: Option<&LUParams<ArbPrec>>,
-    ) -> InputParams<'a, ArbPrec> {
+        additional_params: &[F<VarFloat<N>>],
+        left_threshold_params: Option<&ThresholdParams<VarFloat<N>>>,
+        right_threshold_params: Option<&ThresholdParams<VarFloat<N>>>,
+        lu_params: Option<&LUParams<VarFloat<N>>>,
+    ) -> InputParams<'a, VarFloat<N>> {
         let multiplicative_offset = if let Some(dual_loops) = &sample.sample.dual_loop_moms {
             dual_loops.first().unwrap().px.values.len()
         } else {
@@ -942,12 +945,12 @@ impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
 
         let loop_mom_start = self.pairs.loop_moms_spatial.value_range.start * multiplicative_offset;
 
-        let mut values: Vec<Complex<F<ArbPrec>>> = self.values[value_index]
+        let mut values: Vec<Complex<F<VarFloat<N>>>> = self.values[value_index]
             .iter()
             .map(|value| {
                 Complex::new(
-                    F::<ArbPrec>::from_ff64(value.re),
-                    F::<ArbPrec>::from_ff64(value.im),
+                    F::<VarFloat<N>>::from_ff64(value.re),
+                    F::<VarFloat<N>>::from_ff64(value.im),
                 )
             })
             .collect();
@@ -1729,6 +1732,7 @@ mod tests {
         graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
         momentum::sample::{BareMomentumSample, LoopMomenta},
+        utils::{ArbPrec, SamplingFloat},
     };
 
     #[test]
@@ -1767,50 +1771,57 @@ mod tests {
     #[test]
     fn arb_parameter_baseline_uses_decimal_promotion() {
         test_initialise().unwrap();
-        let graph = dot!(
-            digraph arb_parameter_baseline {
-                edge [num=1 mass=0]
-                node [num=1]
-                A -> B [id=0]
-            }
-        )
-        .unwrap();
-        let mut param_builder = ParamBuilder::<f64>::new_empty();
-        param_builder.values = vec![vec![Complex::new(F(0.1_f64), F(-0.3_f64))]];
-        let sample = MomentumSample {
-            sample: BareMomentumSample {
-                loop_moms: LoopMomenta(Vec::new()),
-                dual_loop_moms: None,
-                loop_mom_cache_id: 0,
-                loop_mom_base_cache_id: 0,
-                external_moms: Vec::new().into(),
-                external_mom_cache_id: 0,
-                external_mom_base_cache_id: 0,
-                jacobian: F::<ArbPrec>::from_f64(1.0),
-                orientation: None,
-                parameterization_branch: None,
-            },
-        };
+        fn check<T: FloatLike>()
+        where
+            ParamBuilder<f64>: UpdateAndGetParams<T>,
+        {
+            let graph = dot!(
+                digraph arb_parameter_baseline {
+                    edge [num=1 mass=0]
+                    node [num=1]
+                    A -> B [id=0]
+                }
+            )
+            .unwrap();
+            let mut param_builder = ParamBuilder::<f64>::new_empty();
+            param_builder.values = vec![vec![Complex::new(F(0.1_f64), F(-0.3_f64))]];
+            let sample = MomentumSample {
+                sample: BareMomentumSample {
+                    loop_moms: LoopMomenta(Vec::new()),
+                    dual_loop_moms: None,
+                    loop_mom_cache_id: 0,
+                    loop_mom_base_cache_id: 0,
+                    external_moms: Vec::new().into(),
+                    external_mom_cache_id: 0,
+                    external_mom_base_cache_id: 0,
+                    jacobian: F::<T>::from_f64(1.0),
+                    orientation: None,
+                    parameterization_branch: None,
+                },
+            };
 
-        let lifted = <ParamBuilder<f64> as UpdateAndGetParams<ArbPrec>>::update_emr_and_get_params(
-            &mut param_builder,
-            (false, false),
-            &sample,
-            &graph,
-            &[],
-            &[],
-            None,
-            None,
-            None,
-        );
-        // These fractions give the decimal-promoted values at Arb precision.
-        let zero = F::<ArbPrec>::default();
-        let expected = Complex::new(
-            zero.from_i64(1) / zero.from_i64(10),
-            zero.from_i64(-3) / zero.from_i64(10),
-        );
+            let lifted = <ParamBuilder<f64> as UpdateAndGetParams<T>>::update_emr_and_get_params(
+                &mut param_builder,
+                (false, false),
+                &sample,
+                &graph,
+                &[],
+                &[],
+                None,
+                None,
+                None,
+            );
+            // These fractions give the decimal-promoted values at native precision.
+            let zero = F::<T>::default();
+            let direct = Complex::new(
+                zero.from_i64(1) / zero.from_i64(10),
+                zero.from_i64(-3) / zero.from_i64(10),
+            );
 
-        assert_eq!(lifted.as_slice(), &[expected]);
+            assert_eq!(lifted.as_slice(), &[direct]);
+        }
+        check::<ArbPrec>();
+        check::<SamplingFloat>();
     }
 }
 

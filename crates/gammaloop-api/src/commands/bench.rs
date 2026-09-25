@@ -128,7 +128,9 @@ pub struct Bench {
 #[derive(Debug, Clone, Copy, Serialize)]
 struct BenchBatchTiming {
     parameterization: f64,
+    canonical_sampling: f64,
     integrand: f64,
+    canonical_physical: f64,
     event_processing: f64,
     evaluator: f64,
     other: f64,
@@ -577,7 +579,9 @@ fn bench_batch_timing(
     }
 
     let mut parameterization = 0.0;
+    let mut canonical_sampling = 0.0;
     let mut integrand_inclusive = 0.0;
+    let mut canonical_physical = 0.0;
     let mut event_processing = 0.0;
     let mut evaluator = 0.0;
     for sample in &batch.samples {
@@ -586,29 +590,54 @@ fn bench_batch_timing(
             .evaluation_metadata
             .as_ref()
             .ok_or_else(|| eyre!("bench requires evaluation metadata"))?;
+        if metadata.canonical_sampling_preparation_time > metadata.parameterization_time
+            || metadata.evaluator_evaluation_time
+                + metadata.event_processing_time
+                + metadata.canonical_physical_preparation_time
+                > metadata.integrand_evaluation_time
+        {
+            return Err(eyre!(
+                "bench metadata timing subsets exceed their inclusive totals"
+            ));
+        }
         parameterization += metadata.parameterization_time.as_secs_f64();
+        canonical_sampling += metadata.canonical_sampling_preparation_time.as_secs_f64();
         integrand_inclusive += metadata.integrand_evaluation_time.as_secs_f64();
+        canonical_physical += metadata.canonical_physical_preparation_time.as_secs_f64();
         event_processing += metadata.event_processing_time.as_secs_f64();
         evaluator += metadata.evaluator_evaluation_time.as_secs_f64();
     }
 
     let inv_sample_count = 1.0 / sample_count as f64;
-    let parameterization = parameterization * inv_sample_count;
+    let canonical_sampling = canonical_sampling * inv_sample_count;
+    let parameterization = (parameterization * inv_sample_count - canonical_sampling).max(0.0);
+    let canonical_physical = canonical_physical * inv_sample_count;
     let evaluator = evaluator * inv_sample_count;
-    // integrand_evaluation_time is inclusive of evaluator calls. Keep the
-    // displayed rows disjoint by showing the non-evaluator integrand residual.
-    let integrand = (integrand_inclusive * inv_sample_count - evaluator).max(0.0);
+    // integrand_evaluation_time includes evaluator, event and canonical physical
+    // preparation work. Keep displayed rows disjoint by subtracting those subsets.
     let event_processing = event_processing * inv_sample_count;
+    let integrand = (integrand_inclusive * inv_sample_count
+        - evaluator
+        - event_processing
+        - canonical_physical)
+        .max(0.0);
     // Keep Total as the wall-clock time around evaluate_samples. The metadata
     // rows below are subtracted from that wrapper timing so other/overhead
     // captures unclassified evaluation work plus evaluate_samples overhead.
     let total = total_timing.as_secs_f64() * inv_sample_count;
-    let known = parameterization + integrand + event_processing + evaluator;
+    let known = parameterization
+        + canonical_sampling
+        + integrand
+        + canonical_physical
+        + event_processing
+        + evaluator;
     let other = (total - known).max(0.0);
 
     Ok(BenchBatchTiming {
         parameterization,
+        canonical_sampling,
         integrand,
+        canonical_physical,
         event_processing,
         evaluator,
         other,
@@ -685,17 +714,31 @@ fn update_bench_progress(
 fn bench_rows(batch_timings: &[BenchBatchTiming]) -> Vec<BenchRow> {
     let mut rows = vec![
         BenchRow {
-            category: "parameterization",
+            category: "sampling other",
             timings: batch_timings
                 .iter()
                 .map(|timing| timing.parameterization)
                 .collect(),
         },
         BenchRow {
-            category: "integrand",
+            category: "canonical sampling",
+            timings: batch_timings
+                .iter()
+                .map(|timing| timing.canonical_sampling)
+                .collect(),
+        },
+        BenchRow {
+            category: "physical other",
             timings: batch_timings
                 .iter()
                 .map(|timing| timing.integrand)
+                .collect(),
+        },
+        BenchRow {
+            category: "canonical physical",
+            timings: batch_timings
+                .iter()
+                .map(|timing| timing.canonical_physical)
                 .collect(),
         },
         BenchRow {
@@ -929,7 +972,9 @@ mod tests {
         let table = super::render_bench_table(&[
             super::BenchBatchTiming {
                 parameterization: 1.0e-7,
+                canonical_sampling: 0.0,
                 integrand: 4.0e-4,
+                canonical_physical: 0.0,
                 event_processing: 0.0,
                 evaluator: 1.7e-2,
                 other: 1.0e-5,
@@ -937,7 +982,9 @@ mod tests {
             },
             super::BenchBatchTiming {
                 parameterization: 1.2e-7,
+                canonical_sampling: 0.0,
                 integrand: 4.2e-4,
+                canonical_physical: 0.0,
                 event_processing: 0.0,
                 evaluator: 1.8e-2,
                 other: 1.0e-5,
@@ -956,7 +1003,7 @@ mod tests {
 
     #[test]
     fn bench_timing_uses_wrapper_total_and_metadata_components() {
-        let batch = BatchSampleEvaluationResult {
+        let mut batch = BatchSampleEvaluationResult {
             samples: vec![
                 sample_with_metadata(
                     Duration::from_micros(10),
@@ -968,7 +1015,7 @@ mod tests {
                 sample_with_metadata(
                     Duration::from_micros(14),
                     Duration::from_micros(2),
-                    Duration::from_micros(6),
+                    Duration::from_micros(7),
                     Duration::from_micros(4),
                     Duration::from_micros(2),
                 ),
@@ -977,14 +1024,49 @@ mod tests {
             numerical_stability: None,
         };
 
+        // These nested counters must be displayed once, without changing the
+        // inclusive sampling/physical totals or the integration checkpoint ABI.
+        for sample in &mut batch.samples {
+            let metadata = sample.evaluation.evaluation_metadata.as_mut().unwrap();
+            metadata.canonical_sampling_preparation_time = Duration::from_nanos(500);
+            metadata.canonical_physical_preparation_time = Duration::from_nanos(250);
+        }
         let timing = bench_batch_timing(Duration::from_micros(30), &batch).unwrap();
 
         assert_close(timing.total, 15.0e-6);
-        assert_close(timing.parameterization, 1.5e-6);
-        assert_close(timing.integrand, 2.0e-6);
+        assert_close(timing.parameterization, 1.0e-6);
+        assert_close(timing.canonical_sampling, 0.5e-6);
+        assert_close(timing.integrand, 0.75e-6);
+        assert_close(timing.canonical_physical, 0.25e-6);
         assert_close(timing.event_processing, 1.5e-6);
         assert_close(timing.evaluator, 3.5e-6);
-        assert_close(timing.other, 6.5e-6);
+        assert_close(timing.other, 7.5e-6);
+        assert_close(
+            timing.parameterization
+                + timing.canonical_sampling
+                + timing.integrand
+                + timing.canonical_physical
+                + timing.event_processing
+                + timing.evaluator
+                + timing.other,
+            timing.total,
+        );
+        let metadata = batch.samples[0]
+            .evaluation
+            .evaluation_metadata
+            .as_mut()
+            .unwrap();
+        metadata.canonical_sampling_preparation_time =
+            metadata.parameterization_time + Duration::from_nanos(1);
+        assert!(bench_batch_timing(Duration::from_micros(30), &batch).is_err());
+        let metadata = batch.samples[0]
+            .evaluation
+            .evaluation_metadata
+            .as_mut()
+            .unwrap();
+        metadata.canonical_sampling_preparation_time = Duration::ZERO;
+        metadata.canonical_physical_preparation_time = metadata.integrand_evaluation_time;
+        assert!(bench_batch_timing(Duration::from_micros(30), &batch).is_err());
     }
 
     fn sample_with_metadata(
@@ -1010,5 +1092,52 @@ mod tests {
             (actual - expected).abs() <= 1.0e-12,
             "expected {expected:e}, got {actual:e}"
         );
+    }
+
+    #[test]
+    fn minimal_integrand_settings_disable_benchmark_overhead_without_touching_subtraction() {
+        use gammalooprs::settings::runtime::{RotationSetting, StabilityRecordingSettings};
+
+        use super::{apply_minimal_integrand_settings, RuntimeSettings, StabilityLevelSetting};
+
+        let mut settings = RuntimeSettings::default();
+        settings.general.enable_cache = true;
+        settings.general.debug_cache = true;
+        settings.general.generate_events = true;
+        settings.general.store_additional_weights_in_event = true;
+        settings.stability.rotation_axis = vec![RotationSetting::Pi2X {}, RotationSetting::Pi2Y {}];
+        settings.stability.levels = vec![
+            StabilityLevelSetting::default_double(),
+            StabilityLevelSetting::default_quad(),
+            StabilityLevelSetting::default_arb(),
+        ];
+        settings.stability.check_on_norm = true;
+        settings.stability.escalate_if_exact_zero = true;
+        settings.stability.loop_momenta_norm_escalation_factor = 2.0;
+        settings.stability.recording = Some(StabilityRecordingSettings {
+            record_rotated_results: true,
+            record_all_stability_levels: true,
+            record_loop_momenta_escalation: true,
+        });
+        let original_subtraction = settings.subtraction.clone();
+
+        apply_minimal_integrand_settings(&mut settings);
+
+        assert!(!settings.general.enable_cache);
+        assert!(!settings.general.debug_cache);
+        assert!(!settings.general.generate_events);
+        assert!(!settings.general.store_additional_weights_in_event);
+        assert!(settings.observables.is_empty());
+        assert!(settings.selectors.values().all(|selector| !selector.active));
+        assert!(settings.stability.rotation_axis.is_empty());
+        assert_eq!(
+            settings.stability.levels,
+            vec![StabilityLevelSetting::default_double()]
+        );
+        assert!(!settings.stability.check_on_norm);
+        assert!(!settings.stability.escalate_if_exact_zero);
+        assert_eq!(settings.stability.loop_momenta_norm_escalation_factor, -1.0);
+        assert_eq!(settings.stability.recording, None);
+        assert_eq!(settings.subtraction, original_subtraction);
     }
 }

@@ -25,6 +25,8 @@ pub use clustering::{ClusteringResult, Jet, JetAlgorithm, JetClustering};
 pub use events::{
     AdditionalWeightKey, CutInfo, Event, EventGroup, EventGroupList, GenericAdditionalWeightInfo,
     GenericEvent, GenericEventGroup, GenericEventGroupList,
+    GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
+    ThresholdCountertermComponentOccurrence,
 };
 
 pub type QuantitiesSettings = BTreeMap<String, QuantitySettings>;
@@ -37,7 +39,7 @@ pub struct HistogramProcessInfo {
     pub graph_to_group_id: Vec<usize>,
     pub graph_group_master_names: Vec<String>,
     pub orientation_labels_by_group: Vec<Vec<String>>,
-    pub lmb_channel_labels_by_group: Vec<Vec<String>>,
+    pub sampling_channel_labels_by_group: Vec<Vec<String>>,
 }
 
 #[derive(
@@ -574,7 +576,7 @@ pub enum QuantitySettings {
     GraphId {},
     GraphGroupId {},
     OrientationId {},
-    LmbChannelId {},
+    SamplingChannelId {},
 }
 
 impl QuantitySettings {
@@ -591,7 +593,7 @@ impl QuantitySettings {
             QuantitySettings::GraphId {} => Ok(QuantitySettings::GraphId {}),
             QuantitySettings::GraphGroupId {} => Ok(QuantitySettings::GraphGroupId {}),
             QuantitySettings::OrientationId {} => Ok(QuantitySettings::OrientationId {}),
-            QuantitySettings::LmbChannelId {} => Ok(QuantitySettings::LmbChannelId {}),
+            QuantitySettings::SamplingChannelId {} => Ok(QuantitySettings::SamplingChannelId {}),
         }
     }
 
@@ -909,7 +911,7 @@ pub enum DiscreteBinDomainSettings {
     GraphIds,
     GraphGroupIds,
     OrientationIds,
-    LmbChannelIds,
+    SamplingChannelIds,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -921,7 +923,7 @@ pub enum DiscreteBinLabelsSettings {
     GraphName,
     GraphGroupMasterName,
     Orientation,
-    LmbChannelEdgeIds,
+    SamplingChannelEdgeIds,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -1565,7 +1567,7 @@ enum MetadataQuantityKind {
     GraphId,
     GraphGroupId,
     OrientationId,
-    LmbChannelId,
+    SamplingChannelId,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1583,8 +1585,8 @@ impl MetadataQuantityDefinition {
             MetadataQuantityKind::OrientationId => {
                 event.cut_info.orientation_id.map(|id| id as isize)
             }
-            MetadataQuantityKind::LmbChannelId => {
-                event.cut_info.lmb_channel_id.map(|id| id as isize)
+            MetadataQuantityKind::SamplingChannelId => {
+                event.cut_info.sampling_channel_id.map(|id| id as isize)
             }
         };
         let Some(bin_id) = value else {
@@ -1666,9 +1668,9 @@ impl ObservableDefinition {
                     kind: MetadataQuantityKind::OrientationId,
                 })
             }
-            QuantitySettings::LmbChannelId {} => {
+            QuantitySettings::SamplingChannelId {} => {
                 ObservableDefinition::Metadata(MetadataQuantityDefinition {
-                    kind: MetadataQuantityKind::LmbChannelId,
+                    kind: MetadataQuantityKind::SamplingChannelId,
                 })
             }
         })
@@ -3770,22 +3772,22 @@ fn resolve_discrete_histogram_layout(
             })?;
             (0, labels.len() as isize - 1)
         }
-        DiscreteBinDomainSettings::LmbChannelIds => {
+        DiscreteBinDomainSettings::SamplingChannelIds => {
             let info = process_info.ok_or_else(|| {
                 eyre!(
-                    "Observable '{}' uses LmbChannelIds but no process information is available.",
+                    "Observable '{}' uses SamplingChannelIds but no process information is available.",
                     observable_name
                 )
             })?;
             let group_id = graph_group_context.ok_or_else(|| {
                 eyre!(
-                    "Observable '{}' uses LmbChannelIds but no singleton graph-group context could be resolved from its selections.",
+                    "Observable '{}' uses SamplingChannelIds but no singleton graph-group context could be resolved from its selections.",
                     observable_name
                 )
             })?;
-            let labels = info.lmb_channel_labels_by_group.get(group_id).ok_or_else(|| {
+            let labels = info.sampling_channel_labels_by_group.get(group_id).ok_or_else(|| {
                 eyre!(
-                    "Observable '{}' resolved graph-group {} for LmbChannelIds, but no LMB-channel metadata is available.",
+                    "Observable '{}' resolved graph-group {} for SamplingChannelIds, but no sampling-channel metadata is available.",
                     observable_name,
                     group_id
                 )
@@ -3892,33 +3894,33 @@ fn resolve_discrete_histogram_layout(
                 .map(Some)
                 .collect()
         }
-        Some(DiscreteBinLabelsSettings::LmbChannelEdgeIds) => {
-            if !matches!(quantity_settings, QuantitySettings::LmbChannelId {}) {
+        Some(DiscreteBinLabelsSettings::SamplingChannelEdgeIds) => {
+            if !matches!(quantity_settings, QuantitySettings::SamplingChannelId {}) {
                 return Err(eyre!(
-                    "Observable '{}' uses LmbChannelEdgeIds labels, but its quantity is not lmb_channel_id.",
+                    "Observable '{}' uses SamplingChannelEdgeIds labels, but its quantity is not sampling_channel_id.",
                     observable_name
                 ));
             }
             let info = process_info.ok_or_else(|| {
                 eyre!(
-                    "Observable '{}' uses LmbChannelEdgeIds labels but no process information is available.",
+                    "Observable '{}' uses SamplingChannelEdgeIds labels but no process information is available.",
                     observable_name
                 )
             })?;
             let group_id = graph_group_context.ok_or_else(|| {
                 eyre!(
-                    "Observable '{}' uses LmbChannelEdgeIds labels but no singleton graph-group context could be resolved from its selections.",
+                    "Observable '{}' uses SamplingChannelEdgeIds labels but no singleton graph-group context could be resolved from its selections.",
                     observable_name
                 )
             })?;
-            info.lmb_channel_labels_by_group
+            info.sampling_channel_labels_by_group
                 .get(group_id)
                 .ok_or_else(|| {
                     eyre!(
-                        "Observable '{}' resolved graph group {} for LmbChannelEdgeIds labels, but the process only exposes {} graph groups.",
+                        "Observable '{}' resolved graph group {} for SamplingChannelEdgeIds labels, but the process only exposes {} graph groups.",
                         observable_name,
                         group_id,
-                        info.lmb_channel_labels_by_group.len()
+                        info.sampling_channel_labels_by_group.len()
                     )
                 })?
                 .iter()
@@ -4758,7 +4760,7 @@ max = 0
                 "group2".to_string(),
             ],
             orientation_labels_by_group: vec![Vec::new(), Vec::new(), Vec::new()],
-            lmb_channel_labels_by_group: vec![Vec::new(), Vec::new(), Vec::new()],
+            sampling_channel_labels_by_group: vec![Vec::new(), Vec::new(), Vec::new()],
         };
 
         let resolved = resolve_graph_group_context(
@@ -4797,7 +4799,7 @@ max = 0
             graph_to_group_id: Vec::new(),
             graph_group_master_names: vec!["group0".to_string()],
             orientation_labels_by_group: vec![Vec::new()],
-            lmb_channel_labels_by_group: vec![Vec::new()],
+            sampling_channel_labels_by_group: vec![Vec::new()],
         };
 
         let err = resolve_graph_group_context(

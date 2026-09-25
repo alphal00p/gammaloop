@@ -29,10 +29,10 @@ filter = "test(integration)"
 test-group = "integration"
 
 [[profile.default.overrides]]
-# Each NLO acceptance internally launches ten integration workers. Account for
+# The numerical acceptances internally launch ten integration workers. Account for
 # those workers in nextest's scheduler and cap these acceptances with the
 # existing integration-test group.
-filter = "test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/)"
+filter = "test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/) or test(=test_integrated_uv_cts::scalar_bubble_integrated) or test(=sunrise_scalar_1_uv) or test(=dotted_sunrise_uv)"
 test-group = "integration"
 threads-required = 10
 
@@ -51,6 +51,32 @@ filter = "test(bench) or test(benchmark)"
 filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/)"
 slow-timeout = { period = "5m", terminate-after = 2 }
 
+[[profile.default.overrides]]
+# Saved-state acceptance evaluates 8192 points per fixture, including two LU-h
+# mixture inverses at the fixed-Arb proposal budget. Its measured unoptimized
+# runtime is over eight minutes; retain the sample counts and numerical criteria.
+filter = "test(=state::tests::saved_generated_process_runs_reference_acceptance_after_reload)"
+slow-timeout = { period = "1m", terminate-after = 15 }
+
+[[profile.default.overrides]]
+# The conditional nine-dimensional cut fixture evaluates 8192 points in each
+# native frame, exceeding the generic one-minute timeout.
+filter = "test(=processes::raised_cross_section_tests::conditional_cut_sampling_preserves_both_sides_and_raised_sum)"
+slow-timeout = { period = "1m", terminate-after = 5 }
+
+[[profile.default.overrides]]
+# The hosted kite checks 8192 summed joint/ordinary draws after its bounded
+# physical and native-retry gates. The initial probe projects about eight
+# minutes for fixed-Arb preparation in the unoptimized build; allow headroom.
+filter = "test(=processes::raised_cross_section_tests::hosted_joint_kite_preserves_original_equations_and_physical_sum)"
+slow-timeout = { period = "1m", terminate-after = 15 }
+
+[[profile.default.overrides]]
+# The generated kite checks 8192 summed joint-map draws, including fixed-Arb
+# proposal preparation and directed domain certificates, in the unoptimized build.
+filter = "test(=integrands::process::amplitude::sampling_tests::generated_kite_sampling_uses_physical_six_dimensional_surfaces)"
+slow-timeout = { period = "5m", terminate-after = 6 }
+
 [profile.default.junit]
 # Default JUnit output location
 path = "target/nextest/default/junit.xml"
@@ -67,7 +93,7 @@ default-filter = "not test(/(^|::)(slow|failing)::/) and not (binary(/pysecdec/)
 # These tests construct large evaluators or launch their own integration workers.
 # Reserve the complete local budget without changing their modes or sample counts.
 # Spectacles is named "integrated", so the generic "integration" rule misses it.
-filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/) or test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/) or test(/(^|::)scalar_spectacles_integrated_uv_factorizes_over_bridge$/)"
+filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/) or test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/) or test(=test_integrated_uv_cts::scalar_bubble_integrated) or test(=sunrise_scalar_1_uv) or test(=dotted_sunrise_uv) or test(/(^|::)scalar_spectacles_integrated_uv_factorizes_over_bridge$/)"
 threads-required = 5
 # Report long executions without turning a timeout into a pass or dropping a test.
 slow-timeout = "1m"
@@ -91,8 +117,12 @@ threads-required = 5
 [profile.ci]
 default-filter = "not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec))"
 slow-timeout = { period = "120s", terminate-after = 2 }
-# Use all available cores in CI for faster execution
-test-threads = "num-cpus"
+# Keep CI's test scheduler bounded. The host exposes 384 CPUs, while several
+# tests start their own evaluator/integration workers; scheduling one process
+# per host CPU starves those workers and caused otherwise short fixtures to hit
+# the CI timeout. Resource-heavy tests retain their explicit
+# threads-required reservations below.
+test-threads = 16
 # More verbose output for debugging CI failures
 failure-output = "immediate-final"
 success-output = "never"
@@ -133,10 +163,17 @@ slow-timeout = { period = "5m", terminate-after = 2 }
 filter = "test(integration) or test(heavy) or test(memory) or test(large)"
 
 [[profile.ci.overrides]]
-# The NLO acceptances launch ten internal integration workers. Reserve the same
-# resources explicitly and allow the two-iteration numerical integrations to
+# These single-worker numerical tests can exceed four minutes on hosted runners
+# while their fixed-statistics integrations keep advancing. Preserve the sample
+# budgets and assertions, with bounded headroom for the complete integrations.
+filter = "test(=scalar_virtual_phase_conventions::scalar_virtual_triangle_mirrors_match_signed_born_interference) or test(=scalar_phase_conventions::scalar_born_six_body_mc_matches_phase_space) or test(/^dod[012]_bubble_uv$/) or test(=epem_a_bbx_amp_uv) or test(=se1l_uv)"
+slow-timeout = { period = "5m", terminate-after = 2 }
+
+[[profile.ci.overrides]]
+# The numerical acceptances launch ten internal integration workers. Reserve the same
+# resources explicitly and allow the fixed-statistics numerical integrations to
 # complete; profile.default still supplies other matching per-test settings.
-filter = "test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/)"
+filter = "test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/) or test(=test_integrated_uv_cts::scalar_bubble_integrated) or test(=sunrise_scalar_1_uv) or test(=dotted_sunrise_uv)"
 test-group = "integration"
 threads-required = 10
 slow-timeout = { period = "15m", terminate-after = 2 }
@@ -173,10 +210,17 @@ slow-timeout = { period = "5m", terminate-after = 2 }
 # use only the selected profile and profile.default. Keep these resource and
 # timeout policies in sync with profile.ci for both CI entry points.
 [[profile.ci_gammaloop.overrides]]
-# The NLO acceptances launch ten internal integration workers. Reserve the same
-# resources explicitly and allow the two-iteration numerical integrations to
+# These single-worker numerical tests can exceed four minutes on hosted runners
+# while their fixed-statistics integrations keep advancing. Preserve the sample
+# budgets and assertions, with bounded headroom for the complete integrations.
+filter = "test(=scalar_virtual_phase_conventions::scalar_virtual_triangle_mirrors_match_signed_born_interference) or test(=scalar_phase_conventions::scalar_born_six_body_mc_matches_phase_space) or test(/^dod[012]_bubble_uv$/) or test(=epem_a_bbx_amp_uv) or test(=se1l_uv)"
+slow-timeout = { period = "5m", terminate-after = 2 }
+
+[[profile.ci_gammaloop.overrides]]
+# The numerical acceptances launch ten internal integration workers. Reserve the same
+# resources explicitly and allow the fixed-statistics numerical integrations to
 # complete; profile.default still supplies other matching per-test settings.
-filter = "test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/)"
+filter = "test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/) or test(=test_integrated_uv_cts::scalar_bubble_integrated) or test(=sunrise_scalar_1_uv) or test(=dotted_sunrise_uv)"
 test-group = "integration"
 threads-required = 10
 slow-timeout = { period = "15m", terminate-after = 2 }

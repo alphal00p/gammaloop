@@ -32,7 +32,17 @@ path = "crates/gammaloop-api/src/state.rs"
 symbol = "gammaloop_api::state::State::load"
 anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
-digest = "fc4591bc6eef0ba4923ac63d1b731daac5f63851"
+# Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
+# No architecture impact 2026-09-23: test momentum chunks use fixed-size arrays;
+# state loading and persistence behavior are unchanged.
+# No architecture impact 2026-09-24: the legacy-command test asserts absent
+# optional metadata-display flags; state loading and persistence are unchanged.
+# Reviewed 2026-09-24: state version 10 persists and restores UFO and Linnet
+# printer registrations before model/archive parsing; regeneration and callback
+# ownership are documented in architecture-current.typ.
+# Reviewed 2026-09-25: sampling files now share process::sampling ownership;
+# only module/import paths changed, with numerical and persistence contracts unchanged.
+digest = "c2c7f88951d6467295977b12f17861b2e866a42e"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -41,7 +51,10 @@ anchor = "fn default_workspace_path(&self"
 # Reviewed 2026-09-14: fallible grid constructors changed only test fixtures;
 # integration-workspace and persistence boundaries remain unchanged.
 # Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
-digest = "0cce8b9517824d09e6199882611aec7d213b638d"
+# Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
+# No architecture impact 2026-09-23: corrected the JSON example code span;
+# command behavior and dashboard ownership are unchanged.
+digest = "da178138da46666acf41dc7a4abeebfab4bfec9c"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -49,7 +62,13 @@ symbol = "gammalooprs::integrands::evaluation::EvaluationResult"
 anchor = "pub struct EvaluationResult {"
 # Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
 # No architecture impact 2026-09-17: added Rustdoc for the existing batch numerical-stability histogram field; behavior and ownership are unchanged.
-digest = "104e338be360ec1012cf05306b8bb030b5f02382"
+# Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
+# Reviewed 2026-09-23: Amplitude norm stability uses phase-invariant complex
+# magnitudes and a private channel norm sum; public absolute components and
+# cross-section phase checks retain their documented meaning.
+# Reviewed 2026-09-25: sampling files now share process::sampling ownership;
+# only module/import paths changed, with numerical and persistence contracts unchanged.
+digest = "c8f88a5d709900a7f5c45dd5061e27be80238904"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/process/mod.rs"
@@ -61,21 +80,36 @@ anchor = "pub fn warm_up(&mut self, model"
 # Reviewed 2026-09-14: canonical tensor layouts and fallible Symbolica APIs
 # preserve the documented warm-up and state-ownership boundaries.
 # Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
-digest = "494f658d62db3b36edff0167d40af1db0e3d2abb"
+# Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
+# Reviewed 2026-09-23: Amplitude norm stability uses phase-invariant complex
+# magnitudes and a private channel norm sum; public absolute components and
+# cross-section phase checks retain their documented meaning.
+# Reviewed 2026-09-24: explicit generated LMB selectors and read-only metadata
+# share the canonical catalogue owner documented in architecture-current.typ;
+# warm-up and numerical preparation retain their existing ownership.
+# Reviewed 2026-09-25: sampling files now share process::sampling ownership;
+# only module/import paths changed, with numerical and persistence contracts unchanged.
+digest = "175b2d6e4d117b737887425692af2a433ff748b5"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
 symbol = "gammalooprs::observables::events::GenericEvent"
 anchor = "pub struct GenericEvent<T: FloatLike> {"
 # Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
-digest = "cf345383c29509544300cf56c82770b55f583d66"
+# Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
+# Reviewed 2026-09-23: JSON omission and occurrence tags are preserved; binary
+# event serialization retains optional-field markers and enum discriminants.
+# Reviewed 2026-09-23: Added native-precision and iterated-occurrence round-trip
+# tests; the documented production serialization contract is unchanged.
+digest = "0f98f614b94643fa398bd8ea5b2d3c222e64e665"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/mod.rs"
 symbol = "gammalooprs::observables::EventProcessingRuntime"
 anchor = "pub struct EventProcessingRuntime {"
 # Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
-digest = "0e9f5871bb077b18f33ef7d5a7070ed64c760dc3"
+# Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
+digest = "13634a816c1858ff5d75d2a06d0584e3b1db08c2"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/python.rs"
@@ -84,13 +118,19 @@ anchor = "struct GammaLoopAPI {"
 # No architecture impact: the 2026-09-02 doctest correction only marks Python
 # examples as Python in rendered/exported documentation; binding behavior is unchanged.
 # Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
-digest = "5c921473780c0508d16336138d7b9dc455a35746"
+# Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
+# Reviewed 2026-09-23: Stub-generation inventory includes threshold metadata and
+# absolute-result classes; runtime Python registration and behavior are unchanged.
+# Reviewed 2026-09-23: Getter prose distinguishes physical contributions from
+# outer-grid weights; the typed integration entrypoint remains disabled.
+digest = "c64cf7ed332416136a0a570965ea8a77c099eac7"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
 symbol = "gammalooprs module topology"
 anchor = "pub mod cff;"
-digest = "25cda2dff8fd5a5c01f6b00c42311089a120e503"
+# Reviewed 2026-09-23: No architecture impact: obsolete root test-module exports were removed; production module ownership is unchanged.
+digest = "41d3e5da3e5b11fbfb34c30432192c7d3ed53e16"
 
 [[section.note.scope]]
 # No-impact attestation 2026-08-28: tadpole-filter validation failures now
@@ -129,14 +169,18 @@ anchor = "fn dashboard_event_loop(receiver"
 # Reviewed 2026-09-14: only grid constructors in test fixtures changed;
 # status flow, renderer ownership, and terminal lifecycle are unchanged.
 # Reviewed 2026-09-17: Documented stability medians, interrupted diagnostic previews, version-checked resume, and read-only output paths; completed-iteration checkpoint ownership is preserved.
-digest = "0cce8b9517824d09e6199882611aec7d213b638d"
+# Reviewed 2026-09-23: The dashboard documents signed/absolute view ownership, unchanged sampling/RNG behavior, and version-3 completed-iteration resume.
+# No architecture impact 2026-09-23: corrected the JSON example code span;
+# command behavior and dashboard ownership are unchanged.
+digest = "da178138da46666acf41dc7a4abeebfab4bfec9c"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
 symbol = "gammalooprs::integrate::RatatuiDashboardState"
 anchor = "pub struct RatatuiDashboardState {"
 # Reviewed 2026-09-17: Documented stability medians, interrupted diagnostic previews, version-checked resume, and read-only output paths; completed-iteration checkpoint ownership is preserved.
-digest = "610a03118d0781df9c304461e4596c5d77976e00"
+# Reviewed 2026-09-23: The dashboard documents signed/absolute view ownership, unchanged sampling/RNG behavior, and version-3 completed-iteration resume.
+digest = "566f096dcc09bbb2f96582a90fe5dd9aadf41f8d"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/mod.rs"
@@ -145,7 +189,8 @@ anchor = "mod render_ratatui;"
 # Reviewed 2026-09-14: test fixtures now unwrap fallible grid construction;
 # status flow and test assertions are unchanged.
 # Reviewed 2026-09-17: Documented stability medians, interrupted diagnostic previews, version-checked resume, and read-only output paths; completed-iteration checkpoint ownership is preserved.
-digest = "072f59e9f948dfd506d679e8407c4dc13094d397"
+# Reviewed 2026-09-23: The dashboard documents signed/absolute view ownership, unchanged sampling/RNG behavior, and version-3 completed-iteration resume.
+digest = "99898153512e499c10534bb5bd31e2e42b63c662"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -487,7 +532,9 @@ digest = "2c3b0f19a5d4a991b493c75e3b0bb3294be302d6"
 path = "crates/linnet/src/half_edge/subgraph.rs"
 symbol = "linnet::half_edge::subgraph::SubGraphLike"
 anchor = "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {"
-digest = "05983dad9fdb3db00351c9e536a439ce48efd94b"
+# Reviewed 2026-09-24: the existing subset printer can be restored from its
+# label, as documented in linnet-architecture.typ; topology ownership is unchanged.
+digest = "1a5c8409404365debe91a930a4c464b4e0a5c327"
 
 [[section.note.scope]]
 # Documentation-impact attestation 2026-08-21: malformed DOT endpoint,
@@ -506,7 +553,8 @@ anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = Default
 # No-impact attestation 2026-09-14: fixed-size byte chunks replace the
 # deprecated iterator in label decoding; the even-length guard and parsing
 # behavior are unchanged.
-digest = "ad1cf0bfc2cdffcff10c69ccc87c0495c025eecc"
+# Reviewed 2026-09-23: DOT interchange documents preserved literal whitespace inside multiline global attributes.
+digest = "075b13acb171934ea04a1ef527db0bd6a9e40025"
 
 [[section.note]]
 id = "vakint-architecture"
@@ -907,7 +955,9 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # No-impact attestation 2026-09-22: stage the three graph fixtures linked by
 # the CFF architecture note. The terminal documentation source gains those
 # files; Cargo producer inputs and the documented cache boundaries are unchanged.
-digest = "270e978a3a6565a3c88cf370aead34009350d307"
+# Reviewed 2026-09-25: include the three graph inputs linked by the sampling and
+# threshold guides in the existing hermetic documentation source set.
+digest = "e122d9de5ddc9d9aea5994792a648553db25eb77"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -928,7 +978,9 @@ symbol = "workspace package source ownership"
 anchor = "documentationCatalogAnnotatedItemSourcePaths ="
 end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-09-17: No cache architecture impact: only compile-time graph and parametric numerator fixture roots were added to existing package source selections.
-digest = "e797c9caa3351e63c9999f97b06ad5ba829e76c0"
+# No cache architecture impact 2026-09-24: the GL638 embedded fixture and scalar
+# box subprocess fixture extend existing compile-time and runtime test inputs.
+digest = "2c98c08201e1a25ece06f9abdcf7ef826621b47c"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

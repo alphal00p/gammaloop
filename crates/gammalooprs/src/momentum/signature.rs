@@ -95,8 +95,114 @@ impl LoopExtSignature {
     }
 
     pub(crate) fn equality_up_to_sign(&self, other: &Self) -> bool {
-        self.internal.first_abs() == other.internal.first_abs()
-            && self.external.first_abs() == other.external.first_abs()
+        self == other
+            || (self.internal.len() == other.internal.len()
+                && self.external.len() == other.external.len()
+                && self
+                    .internal
+                    .iter()
+                    .zip(other.internal.iter())
+                    .all(|(a, b)| *a == -*b)
+                && self
+                    .external
+                    .iter()
+                    .zip(other.external.iter())
+                    .all(|(a, b)| *a == -*b))
+    }
+
+    /// Sampling may identify energies in an exact represented spatial frame.
+    /// This does not change structural routing equality used by raised edges.
+    pub(crate) fn spatial_equality_up_to_sign<T: FloatLike>(
+        &self,
+        other: &Self,
+        externals: &ExternalThreeMomenta<F<T>>,
+    ) -> eyre::Result<bool> {
+        use crate::integrands::process::sampling::maps::SamplingEvaluationError;
+        use rug::{Float, float::Round};
+        const PRECISION: u32 = 2048;
+        if self.internal.len() != other.internal.len()
+            || self.external.len() != other.external.len()
+            || self.external.len() != externals.len()
+        {
+            return Err(eyre::eyre!(
+                "spatial route comparison requires equal routing dimensions and the complete external frame"
+            ));
+        }
+        if externals
+            .iter()
+            .flat_map(|p| [&p.px, &p.py, &p.pz])
+            .any(|value| !value.0.is_finite())
+        {
+            return Err(SamplingEvaluationError::Unrepresentable {
+                operation: "spatial route comparison",
+                detail: "nonfinite original external component".into(),
+            }
+            .into());
+        }
+        if self.equality_up_to_sign(other) {
+            return Ok(true);
+        }
+        let mut uncertain = false;
+        for sign in [1, -1] {
+            if !self
+                .internal
+                .iter()
+                .zip(other.internal.iter())
+                .all(|(a, b)| *a == if sign == 1 { *b } else { -*b })
+            {
+                continue;
+            }
+            // Differences can be +/-2, which SignatureLike cannot represent.
+            let coefficients = self
+                .external
+                .to_momtrop_format()
+                .into_iter()
+                .zip(other.external.to_momtrop_format())
+                .map(|(a, b)| a - sign * b)
+                .collect::<Vec<_>>();
+            let mut sums: [[Float; 2]; 3] = std::array::from_fn(|_| {
+                [Float::with_val(PRECISION, 0), Float::with_val(PRECISION, 0)]
+            });
+            for (&coefficient, momentum) in coefficients.iter().zip(externals) {
+                if coefficient == 0 {
+                    continue;
+                }
+                for (sum, component) in
+                    sums.iter_mut()
+                        .zip([&momentum.px, &momentum.py, &momentum.pz])
+                {
+                    let (mut lo, mut hi) = component.0.mpfr_enclosure(PRECISION);
+                    if coefficient < 0 {
+                        std::mem::swap(&mut lo, &mut hi);
+                    }
+                    let lo = Float::with_val_round(PRECISION, &lo * coefficient, Round::Down).0;
+                    let hi = Float::with_val_round(PRECISION, &hi * coefficient, Round::Up).0;
+                    sum[0] = Float::with_val_round(PRECISION, &sum[0] + &lo, Round::Down).0;
+                    sum[1] = Float::with_val_round(PRECISION, &sum[1] + &hi, Round::Up).0;
+                }
+            }
+            if sums.iter().flatten().any(|value| !value.is_finite()) {
+                return Err(SamplingEvaluationError::Unrepresentable {
+                    operation: "spatial route comparison",
+                    detail: "nonfinite directed external sum".into(),
+                }
+                .into());
+            }
+            if sums.iter().any(|[lo, hi]| lo > &0 || hi < &0) {
+                continue;
+            }
+            if sums.iter().all(|[lo, hi]| lo == &0 && hi == &0) {
+                return Ok(true);
+            }
+            uncertain = true;
+        }
+        if uncertain {
+            return Err(SamplingEvaluationError::UncertainGeometry {
+                detail: format!("spatial routing equality is unresolved at {PRECISION}-bit directed precision: {self:?} versus {other:?}"),
+            }
+            .into());
+        }
+        Ok(false)
     }
 }
 
@@ -604,5 +710,160 @@ impl LoopExtSignature {
         let external_moms: ExternalThreeMomenta<F<T>> =
             external_moms.iter().map(|m| m.spatial.clone()).collect();
         self.compute_momentum(loop_moms, &external_moms)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LoopExtSignature;
+
+    #[test]
+    fn affine_signature_equality_uses_one_global_sign() {
+        let a = LoopExtSignature::from((vec![1], vec![1]));
+        let independent_reversal = LoopExtSignature::from((vec![-1], vec![1]));
+        assert!(!a.equality_up_to_sign(&independent_reversal));
+        assert!(a.equality_up_to_sign(&LoopExtSignature::from((vec![-1], vec![-1]))));
+        for (internal, external) in [
+            (vec![0, 1], vec![0, 0]),
+            (vec![0, 0], vec![-1, 1]),
+            (vec![0, 0], vec![0, 0]),
+            (vec![], vec![]),
+        ] {
+            let reversed = LoopExtSignature::from((
+                internal.iter().map(|value| -*value).collect(),
+                external.iter().map(|value| -*value).collect(),
+            ));
+            assert!(LoopExtSignature::from((internal, external)).equality_up_to_sign(&reversed));
+        }
+        assert!(
+            !LoopExtSignature::from((vec![1], vec![]))
+                .equality_up_to_sign(&LoopExtSignature::from((vec![], vec![1])))
+        );
+        assert!(!a.equality_up_to_sign(&LoopExtSignature::from((vec![1, 0], vec![1]))));
+    }
+
+    #[test]
+    fn spatial_routing_equality_certifies_native_external_frames() {
+        use crate::{
+            integrands::process::sampling::maps::SamplingEvaluationError,
+            momentum::{ThreeMomentum, sample::ExternalThreeMomenta},
+            utils::{ArbPrec, F, FloatLike, QuadFloat},
+        };
+        fn check<T: FloatLike>() {
+            let one = F::<T>::default().one();
+            let zero = one.zero();
+            let left = LoopExtSignature::from((vec![1], vec![0, 0]));
+            let right = LoopExtSignature::from((vec![1], vec![1, 1]));
+            let beam = ThreeMomentum::new(one.from_i64(2), zero.clone(), one.from_i64(3));
+            let cm = ExternalThreeMomenta::from_iter([beam.clone(), -beam]);
+            assert!(!left.equality_up_to_sign(&right));
+            assert!(left.spatial_equality_up_to_sign(&right, &cm).unwrap());
+            let reversed = LoopExtSignature::from((vec![-1], vec![-1, -1]));
+            assert!(left.spatial_equality_up_to_sign(&reversed, &cm).unwrap());
+
+            // A common boost and even a tiny nonzero represented displacement
+            // break the fixed-frame identity; neither has a norm tolerance.
+            for displacement in [one.clone(), one.epsilon().square()] {
+                let mut shifted = cm.clone();
+                for momentum in &mut shifted {
+                    // Preserve the tiny original input on a zero-valued axis.
+                    momentum.py += &displacement;
+                }
+                assert!(!left.spatial_equality_up_to_sign(&right, &shifted).unwrap());
+            }
+            let a = LoopExtSignature::from((vec![1], vec![1, 0]));
+            let wrong_sign = LoopExtSignature::from((vec![-1], vec![1, 0]));
+            assert!(!a.spatial_equality_up_to_sign(&wrong_sign, &cm).unwrap());
+            // With matching internal signs, the external difference is +2.
+            let doubled = LoopExtSignature::from((vec![1], vec![-1, 0]));
+            assert!(!a.spatial_equality_up_to_sign(&doubled, &cm).unwrap());
+
+            let big = &one / one.epsilon().square();
+            let medium = big.sqrt();
+            let values = [big.clone(), medium.clone(), one.clone(), -medium, -big];
+            assert_eq!(
+                values.iter().fold(zero.clone(), |sum, value| sum + value),
+                zero
+            );
+            let cancelled = ExternalThreeMomenta::from_iter(
+                values.map(|x| ThreeMomentum::new(x, zero.clone(), zero.clone())),
+            );
+            let empty = LoopExtSignature::from((vec![1], vec![0; 5]));
+            let sum = LoopExtSignature::from((vec![1], vec![1; 5]));
+            assert!(!empty.spatial_equality_up_to_sign(&sum, &cancelled).unwrap());
+
+            // These original binary64 values span more than the fixed 2048-bit
+            // certificate budget, also when represented exactly in Quad/Arb.
+            let huge = F(T::from_f64_exact_binary(2.0_f64.powi(1023)));
+            let tiny = F(T::from_f64_exact_binary(f64::from_bits(1)));
+            let unresolved = ExternalThreeMomenta::from_iter(
+                [huge.clone(), tiny, -huge]
+                    .map(|x| ThreeMomentum::new(x, zero.clone(), zero.clone())),
+            );
+            let empty = LoopExtSignature::from((vec![1], vec![0; 3]));
+            let sum = LoopExtSignature::from((vec![1], vec![1; 3]));
+            let error = empty
+                .spatial_equality_up_to_sign(&sum, &unresolved)
+                .unwrap_err();
+            assert!(matches!(
+                error.downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::UncertainGeometry { .. })
+            ));
+
+            let mut nonfinite = cm.clone();
+            nonfinite.iter_mut().next().unwrap().px = F(T::from_f64_exact_binary(f64::INFINITY));
+            // Input validation precedes even the structural fast path.
+            let error = left
+                .spatial_equality_up_to_sign(&left, &nonfinite)
+                .unwrap_err();
+            assert!(matches!(
+                error.downcast_ref::<SamplingEvaluationError>(),
+                Some(SamplingEvaluationError::Unrepresentable { .. })
+            ));
+            assert!(
+                left.spatial_equality_up_to_sign(&right, &ExternalThreeMomenta::<F<T>>::default())
+                    .is_err()
+            );
+        }
+        check::<f64>();
+        check::<QuadFloat>();
+        check::<ArbPrec>();
+    }
+
+    #[test]
+    fn raised_edge_comparison_preserves_complete_affine_routing() {
+        use crate::{
+            dot,
+            graph::{Graph, parse::from_dot::IntoGraph},
+            initialisation::test_initialise,
+        };
+        use linnet::half_edge::involution::EdgeIndex;
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph raised_affine_signature {
+            ext [style=invis]
+            edge [num=1 mass=0]
+            node [num=1]
+            ext -> a [id=0]
+            a -> b [id=1]
+            b -> c [id=2]
+            c -> a [id=3]
+            ext -> c [id=4]
+        })
+        .unwrap();
+        let groups = graph.get_raised_edge_groups();
+        assert!(groups.iter().any(|group| group.len() >= 2));
+        for group in groups {
+            for pair in group.windows(2) {
+                assert!(graph.loop_momentum_basis.edges_are_raised(pair[0], pair[1]));
+            }
+        }
+        // Deliberately supplied affine rows isolate the caller contract; they
+        // are not a new physical routing assignment for this graph.
+        let mut basis = graph.loop_momentum_basis.clone();
+        basis.edge_signatures[EdgeIndex(1)] = LoopExtSignature::from((vec![1], vec![1, 0]));
+        basis.edge_signatures[EdgeIndex(2)] = LoopExtSignature::from((vec![-1], vec![1, 0]));
+        assert!(!basis.edges_are_raised(EdgeIndex(1), EdgeIndex(2)));
+        basis.edge_signatures[EdgeIndex(2)] = LoopExtSignature::from((vec![-1], vec![-1, 0]));
+        assert!(basis.edges_are_raised(EdgeIndex(1), EdgeIndex(2)));
     }
 }

@@ -1,0 +1,287 @@
+# GL638 advanced sampling with optimized-LMB fallback production card.
+# Phase-normalized DOT inputs use num = "1"; regenerate any pre-existing state after this change.
+#
+# Integration trains the real part while --show-phase both and per-iteration JSON retain real and imaginary observables.
+# The process specification on the graph import selects the tth@NNLO process
+# cuts, while the DOT supplies the explicit threshold-counterterm metadata.
+# Run the complete workflow with
+# `... card.toml run all`; named generation/integration knobs can be overridden
+# with `-D name=value`, for example `run integrate -D n_start=81920`.
+
+# This variant keeps the curated LU/threshold channels and adds the complete
+# optimized-LMB channel selection. It intentionally omits the dedicated
+# soft_6_12 channel used by the original advanced card.
+# Higgs-aware metadata: full-UV generation passes for all 936 orientations.
+# Exact coincident radial roots remain an evaluation limitation. Focused channels
+# improve selected corners but do not establish global finite variance; see
+# docs/products/gammaloop/content/sampling.typ and threshold-subtraction.typ.
+# From the repository root: gammaloop THIS_CARD run all
+# Selected orientation: gammaloop -s NEW_STATE THIS_CARD run generate_o0
+# Steering: run pilot -D mapping=power -D radial_power=2 -D workspace=NEW_WORKSPACE
+# Generation defaults to ALL orientations and clears any earlier restriction.
+# The explicit full sum avoids repeated per-orientation evaluator calls.
+# Use -D explicit_sum=false to retain individual-orientation diagnostics;
+# generate_o0..o3 set this automatically. A custom orientation_pattern needs it too.
+# Keep separate states for all/o0/o1/o2/o3. Compilation or sum changes need regeneration.
+# Integration presets default to 50 cores with 81920-point iterations; use
+# -D integration_cores=50 for longer runs and -D training_phase=imag to train Im.
+# Tune the radial scale with -D radial_scale=0.3 and compare independent pilot runs.
+# Set -D n_max=POINTS explicitly for the intended run budget.
+# Symmetric local-CT localization: -D ct_gaussian_width=0.1 or
+# -D ct_sliver_width=0.1. Widths multiply Q, or r-star with ct_dynamic_width=true.
+# Add -D ct_smooth_sliver=true for a smooth compact boundary. A narrow hard
+# sliver can spoil soft cancellation across cuts near its boundary.
+# These controls leave the integrated-CT normalization unchanged.
+# h_sigma and h_power below steer the LU rescaling profile, independently of
+# the local threshold-CT Gaussian and sliver settings.
+# Use -D stability_check_on_norm=false to check Re and Im separately; norm
+# agreement alone need not resolve a small component beside a much larger one.
+# Physical stability follows training_phase: with real (the production default),
+# only Re and |Re| drive precision rescue; reference observables still check both.
+# Generic Euler probes avoid exact coordinate permutations that can preserve
+# cancellation errors. Steer their angles with stability_alpha/beta/gamma.
+# Existing workspaces resume. Explicit reset: -D restart=--restart.
+# The dashboard's `a` key shows absolute Re/Im integrals; per-iteration JSON
+# retains these estimates, precision statistics and replayable maximum points.
+
+[cli_settings.state]
+folder = "./examples/cli/epem_a_ttxh/NNLO/gammaloop_state_GL638_advanced_sampling_optimized_lmbs"
+name = "epem_a_tth_NNLO_GL638_advanced_sampling_optimized_lmbs"
+
+[cli_settings.global.generation]
+explicit_orientation_sum_only = true
+
+[cli_settings.global.generation.evaluator]
+do_algebra = false
+iterative_orientation_optimization = false
+store_atom = true
+compile = false
+summed = false
+summed_function_map = false
+
+[cli_settings.global.generation.compile]
+compilation_mode = "assembly"
+optimization_level = "O3"
+fast_math = false
+unsafe_math = false
+
+[cli_settings.global.generation.uv]
+softct = false
+inner_products = true
+subtract_uv = true
+generate_integrated = true
+local_uv_cts_from_expanded_4d_integrands = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = true
+esurface_existence_threshold = 1.0e-14
+skip_thresholds_that_are_cuts = true
+
+[default_runtime_settings.kinematics]
+e_cm = 600.0
+externals = { type = "constant", data = { momenta = [[300.0, 0.0, 0.0, 300.0], [300.0, 0.0, 0.0, -300.0]], helicities = ["summed_averaged", "summed_averaged"] } }
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+integral_unit = "picobarn"
+enable_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+renormalization_localization_scale = 600.0
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = ["set model MT=173 MH=125 WT=0 ymt=173 aS=0.118 aEWM1=132.507 Gf=1.166390e-05 MZ=91.188"]
+
+[[command_blocks]]
+name = "configure_generation"
+commands = ["""set global kv
+  global.generation.explicit_orientation_sum_only=$(explicit_sum:true)
+  global.generation.orientation_pattern.pat='$(orientation_pattern:null)'
+  global.generation.evaluator.compile=$(compile:false)
+  global.generation.threshold_subtraction.esurface_existence_threshold=$(generation_threshold_tolerance:1e-14)
+  global.n_cores.generate=$(generate_cores:4) global.n_cores.compile=$(generate_cores:4)
+"""]
+
+# One runtime block supplies generation defaults and resets loaded integrands
+# before integration. All thresholds sharing a group retain their common
+# overlap/center treatment; LMB sampling controls below are independent of it.
+[[command_blocks]]
+name = "configure_runtime"
+commands = ["""set default-runtime string '
+  [general]
+  mu_r = $(mu_r:91.188)
+  m_uv = $(m_uv:50.0)
+  [subtraction]
+  disable_threshold_subtraction = $(disable_threshold_subtraction:false)
+  esurface_existence_threshold = $(threshold_tolerance:1e-14)
+  [subtraction.local_ct_settings.uv_localisation]
+  gaussian_width = $(ct_gaussian_width:1.0)
+  sliver_width = $(ct_sliver_width:10.0)
+  smooth_sliver = $(ct_smooth_sliver:false)
+  dynamic_width = $(ct_dynamic_width:false)
+  force_uv_dampers_to_one = false
+  [sampling]
+  default_channel_selection = []
+  graphs = "monte_carlo"
+  orientations = "summed"
+  sampling_multichanneling = true
+  sampling_channels = "$(sampling_channels:monte_carlo)"
+  sampling_channel_weight = "$(sampling_channel_weight:map_density)"
+  alpha = $(alpha:3.0)
+  coordinate_system = "spherical"
+  mapping = "$(mapping:linear)"
+  b = $(radial_scale:0.3)
+  power = $(radial_power:2.0)
+  [sampling.channel_selection]
+  GL638 = $(graph_sampling_selection:["auto:optimized_lmb", "lu_cut_0", "lu_cut_1", "lu_cut_2", "lu_cut_3", "lu_cut_4", "lu_cut_5", "cut1_joint_HZ", "cut3_right_5_10"])
+  [h_function]
+  function = "poly_exponential"
+  sigma = $(h_sigma:1.0)
+  power = $(h_power:3)
+[sampling.channel_definitions.GL638.lu_cut_0]
+around = "phase_space(cut(2,6,12,13))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [0]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_1]
+around = "phase_space(cut(2,6,10))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [1]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_2]
+around = "phase_space(cut(2,6,7,13,14))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [2]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_3]
+around = "phase_space(cut(2,4,12))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [3]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_4]
+around = "phase_space(cut(2,4,10,13))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [4]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.lu_cut_5]
+around = "phase_space(cut(2,4,7,14))"
+parent_lmb = [3, 4, 7, 10]
+subspace_lmb = [3, 4, 7, 10]
+on_cut = [5]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.cut1_joint_HZ]
+around = "then(block(lmb(6,10),phase_space(cut(2,6,10))),complement(7),block(lmb(3),at_cut(cut(2,6,10),intersect(surface(2,4,12),surface(3,10,13)))))"
+parent_lmb = [3,6,7,10]
+on_cut = [1]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+[sampling.channel_definitions.GL638.cut3_right_5_10]
+around = "then(block(lmb(4,12),phase_space(cut(2,4,12))),complement(7),block(lmb(5),at_cut(cut(2,4,12),surface(5,10))))"
+parent_lmb = [4,5,7,12]
+subspace_lmb = []
+on_cut = [3]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", broad_fraction = 0.02 }
+
+  [integrator]
+  integrated_phase = "$(training_phase:real)"
+  n_start = $(n_start:81920)
+  n_increase = 0
+  n_max = $(n_max:10000000000)
+  seed = $(seed:62001)
+  n_bins = $(n_bins:16)
+  min_samples_for_update = $(min_samples_for_update:64)
+  continuous_dim_learning_rate = $(continuous_learning_rate:0.25)
+  discrete_dim_learning_rate = $(discrete_learning_rate:0.25)
+  train_on_avg = false
+  [integrator.observables_output]
+  format = ["json"]
+  [stability]
+  min_abs_wgt_for_escalation = $(min_abs_wgt_for_escalation:1e-12)
+  integrated_energy_dimension = $(integrated_energy_dimension:-2)
+  check_on_norm = $(stability_check_on_norm:false)
+  rotation_axis = [{ type = "euler_angles", alpha = $(stability_alpha:0.1), beta = $(stability_beta:0.2), gamma = $(stability_gamma:0.3) }]
+  levels = [
+    { precision = "Double", required_precision_for_re = $(double_precision:1e-6), required_precision_for_im = $(double_precision:1e-6), escalate_for_large_weight_threshold = 0.9 },
+    { precision = "Quad", required_precision_for_re = $(quad_precision:1e-10), required_precision_for_im = $(quad_precision:1e-10), escalate_for_large_weight_threshold = -1.0 },
+    { precision = "Arb", ecm_relative_tolerance_for_re = $(ecm_relative_tolerance_for_re:1e-100), ecm_relative_tolerance_for_im = 0.0, required_precision_for_re = $(arb_precision:1e-12), required_precision_for_im = $(arb_precision:1e-12), escalate_for_large_weight_threshold = -1.0 },
+  ]
+'"""]
+
+[[command_blocks]]
+name = "generate_diagrams"
+commands = [
+  "import model sm-default.json",
+  "run set_model_parameters configure_runtime",
+  "import graphs $(graph_path:./examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot) --process-spec 'e+ e- > t t~ h | e+ e- g t t~ h d d~ ghG ghG~ a QCD^2==4 QED^2==6 [{{4}} QCD=2]' -p epem_a_tth -i NNLO -o",
+  "save dot",
+]
+
+[[command_blocks]]
+name = "generate_integrands"
+commands = [
+  "run configure_generation",
+  "generate existing -p epem_a_tth -i NNLO",
+  "save state -o",
+  "display integrand -p epem_a_tth -i NNLO --show-threshold-functions",
+]
+
+[[command_blocks]]
+name = "generate"
+commands = ["run generate_diagrams generate_integrands"]
+
+[[command_blocks]]
+name = "generate_o0"
+commands = ["run generate -D explicit_sum=false -D 'orientation_pattern=(+,+,+,+,-,-,-,+,-,0,+,0,+,-,+)'"]
+
+[[command_blocks]]
+name = "generate_o1"
+commands = ["run generate -D explicit_sum=false -D 'orientation_pattern=(+,+,+,-,-,-,-,+,-,0,+,0,+,-,-)'"]
+
+[[command_blocks]]
+name = "generate_o2"
+commands = ["run generate -D explicit_sum=false -D 'orientation_pattern=(+,+,+,-,-,-,-,+,-,0,+,0,+,+,+)'"]
+
+[[command_blocks]]
+name = "generate_o3"
+commands = ["run generate -D explicit_sum=false -D 'orientation_pattern=(+,+,+,-,-,-,-,+,-,0,+,0,+,+,-)'"]
+
+[[command_blocks]]
+name = "integrate_common"
+commands = [
+  "run set_model_parameters configure_runtime",
+  "set process -p epem_a_tth -i NNLO defaults",
+  """integrate -p epem_a_tth -i NNLO --n-cores $(integration_cores:50)
+    --workspace-path $(workspace:./examples/cli/epem_a_ttxh/NNLO/workspaces/GL638_advanced_sampling_with_optimized_lmbs_workspace)
+    --renderer $(renderer:ratatui) --show-phase both
+    --write-results-for-each-iteration --batch-timing 2 $(restart:)
+  """,
+]
+
+[[command_blocks]]
+name = "pilot"
+commands = ["run integrate_common -D n_start=$(n_start:81920) -D n_max=$(n_max:81920)"]
+
+[[command_blocks]]
+name = "integrate"
+commands = ["run integrate_common -D n_start=$(n_start:81920) -D n_max=$(n_max:10000000000)"]
+
+[[command_blocks]]
+name = "check_settings"
+commands = ["run configure_generation configure_runtime", "display settings global", "display settings default-runtime"]
+
+[[command_blocks]]
+name = "all"
+commands = ["run generate integrate"]

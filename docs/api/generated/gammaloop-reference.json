@@ -60,6 +60,66 @@
           "possible_values": []
         },
         {
+          "id": "processes",
+          "long": "processes",
+          "short": null,
+          "aliases": [],
+          "action": "append",
+          "arity": {
+            "min": 1,
+            "max": null
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "PROCESS"
+          ],
+          "help": "Load only the named processes (including all of their integrands). Combined with --integrands by union; implies read-only state and no saving",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "integrands",
+          "long": "integrands",
+          "short": null,
+          "aliases": [],
+          "action": "append",
+          "arity": {
+            "min": 1,
+            "max": null
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "INTEGRAND|PROCESS@INTEGRAND"
+          ],
+          "help": "Load integrands by name, or as PROCESS@INTEGRAND pairs. Bare names match every process; implies read-only state and no saving",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
           "id": "boot_commands_path",
           "long": null,
           "short": null,
@@ -918,7 +978,13 @@
       "generated_help": false,
       "short_flag": null,
       "long_flag": null,
-      "aliases": [],
+      "aliases": [
+        {
+          "name": "integrands",
+          "kind": "name",
+          "visible": true
+        }
+      ],
       "arguments": [
         {
           "id": "process",
@@ -1086,6 +1152,126 @@
             "false"
           ],
           "possible_values": []
+        },
+        {
+          "id": "show_threshold_functions",
+          "long": "show-threshold-functions",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Show full threshold-counterterm multiplier expressions and flags",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
+          "possible_values": []
+        },
+        {
+          "id": "show_sampling",
+          "long": "show_sampling",
+          "short": null,
+          "aliases": [
+            {
+              "name": "show-sampling",
+              "kind": "long_flag",
+              "visible": true
+            }
+          ],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "MODE"
+          ],
+          "help": "Show only resolved sampling channels; omit --graph to include all master graphs",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [
+            "show_threshold_subtraction"
+          ],
+          "requires": [
+            "integrand_name",
+            "process"
+          ],
+          "defaults": [],
+          "possible_values": [
+            "pretty",
+            "toml"
+          ]
+        },
+        {
+          "id": "show_threshold_subtraction",
+          "long": "show_threshold_subtraction",
+          "short": null,
+          "aliases": [
+            {
+              "name": "show-threshold-subtraction",
+              "kind": "long_flag",
+              "visible": true
+            }
+          ],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "MODE"
+          ],
+          "help": "Show only generation-time threshold metadata; TOML requires one master graph",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [
+            "show_sampling"
+          ],
+          "requires": [
+            "integrand_name",
+            "process"
+          ],
+          "defaults": [],
+          "possible_values": [
+            "pretty",
+            "toml"
+          ]
         },
         {
           "id": "help",
@@ -7831,6 +8017,36 @@
           "possible_values": []
         },
         {
+          "id": "reference_gaussian",
+          "long": "reference-gaussian",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "JSON"
+          ],
+          "help": "Integrate a Gaussian acceptance target, e.g. '{\"width\":300}' or `'{\"width\":300,\"center\":[1,2,3]}'`. Re is normalization; Im is the raw second moment divided by its known expectation (both targets are one). Omitted/empty center means centered. Omission requests physics; repeat the same descriptor when resuming a reference workspace",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
           "id": "restart",
           "long": "restart",
           "short": "r",
@@ -13301,6 +13517,36 @@
           "possible_values": []
         },
         {
+          "id": "axis_labels",
+          "long": "axis-label",
+          "short": null,
+          "aliases": [],
+          "action": "append",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "LABEL"
+          ],
+          "help": "Human-readable label for each approach axis, in axis order",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
           "id": "n_points",
           "long": "n-points",
           "short": null,
@@ -13328,6 +13574,36 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "possible_values": []
+        },
+        {
+          "id": "skip_midpoint",
+          "long": "skip-midpoint",
+          "short": null,
+          "aliases": [],
+          "action": "set_true",
+          "arity": {
+            "min": 0,
+            "max": 0
+          },
+          "takes_values": false,
+          "value_required": false,
+          "value_names": [],
+          "help": "Do not evaluate the midpoint at t = 0",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "false"
+          ],
           "possible_values": []
         },
         {
@@ -13423,6 +13699,70 @@
           "conflicts_with": [],
           "defaults": [
             "0.000001"
+          ],
+          "possible_values": []
+        },
+        {
+          "id": "max_abs_t",
+          "long": "max-abs-t",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "MAX_ABS_T"
+          ],
+          "help": "Largest |t| evaluated on either side of the midpoint",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "1"
+          ],
+          "possible_values": []
+        },
+        {
+          "id": "parameter_name",
+          "long": "parameter-name",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "NAME"
+          ],
+          "help": "Name of the physical parameter t in point(t) = midpoint + t * axis",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [
+            "t"
           ],
           "possible_values": []
         },
@@ -18295,51 +18635,6 @@
       "possible_values": []
     },
     {
-      "path": "runtime.integrand.h_function.enabled_dampening",
-      "value_type": "boolean",
-      "description": "Apply the damping profile; disabling it leaves the corresponding factor equal to one.",
-      "required": false,
-      "default": null,
-      "possible_values": []
-    },
-    {
-      "path": "runtime.integrand.h_function.function",
-      "value_type": "HFunction",
-      "description": "Functional form of the counterterm damping profile.",
-      "required": false,
-      "default": null,
-      "possible_values": [
-        "exponential",
-        "exponential_ct",
-        "poly_exponential",
-        "poly_left_right_exponential"
-      ]
-    },
-    {
-      "path": "runtime.integrand.h_function.power",
-      "value_type": "integer | null",
-      "description": "Optional polynomial power overriding the profile's built-in choice.",
-      "required": false,
-      "default": null,
-      "possible_values": []
-    },
-    {
-      "path": "runtime.integrand.h_function.sigma",
-      "value_type": "number",
-      "description": "Characteristic width of the damping profile.",
-      "required": false,
-      "default": null,
-      "possible_values": []
-    },
-    {
-      "path": "runtime.integrand.n_3d_momenta",
-      "value_type": "integer",
-      "description": "Number of independent three-momenta used to construct the unit-surface test dimension.",
-      "required": false,
-      "default": null,
-      "possible_values": []
-    },
-    {
       "path": "runtime.integrator.bin_number_evolution",
       "value_type": "array | null",
       "description": "Optional per-iteration bin counts, overriding the fixed `n_bins` value as training proceeds.",
@@ -18580,7 +18875,7 @@
     {
       "path": "runtime.sampling.alpha",
       "value_type": "number",
-      "description": "Exponent controlling the sharpness of multichannel weights.",
+      "description": "Exponent of each selected loop edge's on-shell energy in an OSE channel score.",
       "required": false,
       "default": 3.0,
       "possible_values": []
@@ -18591,6 +18886,22 @@
       "description": "Scale parameter of the selected radial mapping.",
       "required": false,
       "default": 1.0,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.sampling.channel_definitions",
+      "value_type": "object",
+      "description": "Named channel definitions keyed first by graph name, then by channel name.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.sampling.channel_selection",
+      "value_type": "object",
+      "description": "Channel selectors keyed by graph name, overriding the default selection.",
+      "required": false,
+      "default": null,
       "possible_values": []
     },
     {
@@ -18610,6 +18921,14 @@
         "spherical_product_common_radial",
         "tropical"
       ]
+    },
+    {
+      "path": "runtime.sampling.default_channel_selection",
+      "value_type": "array<string>",
+      "description": "Default channel selectors for graphs without a graph-specific selection.",
+      "required": false,
+      "default": null,
+      "possible_values": []
     },
     {
       "path": "runtime.sampling.graph_names",
@@ -18636,36 +18955,6 @@
       "description": "Explicit loop-momentum-basis identifiers keyed by graph name.",
       "required": false,
       "default": null,
-      "possible_values": []
-    },
-    {
-      "path": "runtime.sampling.lmb_channel_weight",
-      "value_type": "LmbChannelWeight",
-      "description": "Rule used to construct the relative probability of each loop-momentum-basis channel.",
-      "required": false,
-      "default": "ose",
-      "possible_values": [
-        "inverse_jacobian",
-        "ose"
-      ]
-    },
-    {
-      "path": "runtime.sampling.lmb_channels",
-      "value_type": "SumMode",
-      "description": "Whether loop-momentum-basis channels are summed or sampled discretely.",
-      "required": false,
-      "default": "summed",
-      "possible_values": [
-        "monte_carlo",
-        "summed"
-      ]
-    },
-    {
-      "path": "runtime.sampling.lmb_multichanneling",
-      "value_type": "boolean",
-      "description": "Enable multichannel sampling over loop-momentum bases.",
-      "required": false,
-      "default": false,
       "possible_values": []
     },
     {
@@ -18700,6 +18989,38 @@
       "possible_values": []
     },
     {
+      "path": "runtime.sampling.sampling_channel_weight",
+      "value_type": "SamplingChannelWeight",
+      "description": "Rule used to construct the relative probability of each resolved sampling channel.",
+      "required": false,
+      "default": "map_density",
+      "possible_values": [
+        "inverse_jacobian",
+        "map_density",
+        "ose",
+        "singularity_proxy"
+      ]
+    },
+    {
+      "path": "runtime.sampling.sampling_channels",
+      "value_type": "SumMode",
+      "description": "Whether resolved sampling channels are summed or sampled discretely.",
+      "required": false,
+      "default": "summed",
+      "possible_values": [
+        "monte_carlo",
+        "summed"
+      ]
+    },
+    {
+      "path": "runtime.sampling.sampling_multichanneling",
+      "value_type": "boolean",
+      "description": "Enable multichannel sampling over the resolved graph-aware channels.",
+      "required": false,
+      "default": false,
+      "possible_values": []
+    },
+    {
       "path": "runtime.selectors",
       "value_type": "object",
       "description": "Named event-selection predicates applied before observable accumulation.",
@@ -18724,30 +19045,60 @@
       "possible_values": []
     },
     {
+      "path": "runtime.stability.integrated_energy_dimension",
+      "value_type": "integer | null",
+      "description": "Energy dimension of the integrated physical quantity after flux\nnormalization and before conversion to output units. Required when an\nE_cm-relative tolerance is enabled for a physical evaluation; reference\nfunctions carry their own known dimensions. Direct momentum evaluations\nsubtract the dimension of their missing spatial integration measure.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
       "path": "runtime.stability.levels",
       "value_type": "array<StabilityLevelSetting>",
       "description": "Ordered numerical-precision levels and tolerances used during stability escalation.",
       "required": false,
       "default": [
         {
+          "ecm_relative_tolerance_for_im": 0.0,
+          "ecm_relative_tolerance_for_re": 0.0,
           "escalate_for_large_weight_threshold": 0.9,
           "precision": "Double",
           "required_precision_for_im": 0.00001,
           "required_precision_for_re": 0.00001
         },
         {
+          "ecm_relative_tolerance_for_im": 0.0,
+          "ecm_relative_tolerance_for_re": 0.0,
           "escalate_for_large_weight_threshold": -1.0,
           "precision": "Quad",
           "required_precision_for_im": 0.00001,
           "required_precision_for_re": 0.00001
         },
         {
+          "ecm_relative_tolerance_for_im": 0.0,
+          "ecm_relative_tolerance_for_re": 0.0,
           "escalate_for_large_weight_threshold": -1.0,
           "precision": "Arb",
           "required_precision_for_im": 0.00001,
           "required_precision_for_re": 0.00001
         }
       ],
+      "possible_values": []
+    },
+    {
+      "path": "runtime.stability.levels[].ecm_relative_tolerance_for_im",
+      "value_type": "number",
+      "description": "Independent dimensionless imaginary-component tolerance, with the same\nE_cm-relative convention as `ecm_relative_tolerance_for_re`.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.stability.levels[].ecm_relative_tolerance_for_re",
+      "value_type": "number",
+      "description": "Dimensionless real-component probe disagreement relative to E_cm raised\nto the observable's declared energy dimension, with its output-unit\nconversion. Includes every sample factor and the outer grid weight;\ndirect momentum densities account for the missing spatial measure.\nZero disables this alternative to relative accuracy. This is not the\nintegrator's target standard error.",
+      "required": false,
+      "default": null,
       "possible_values": []
     },
     {
@@ -18792,6 +19143,14 @@
       "description": "Escalate when the loop-momentum norm exceeds this factor; a negative value disables it.",
       "required": false,
       "default": -1.0,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.stability.min_abs_wgt_for_escalation",
+      "value_type": "number",
+      "description": "Suppress non-final stability escalation for negligible weighted probes.\nWhen positive, a probe is allowed to remain at its current precision if\nits largest absolute weighted rotation result is below this fraction of\nan absolute-component integral estimate whose relative standard error\nis at most ten percent. Zero disables this waiver.",
+      "required": false,
+      "default": 0.0,
       "possible_values": []
     },
     {
@@ -18965,6 +19324,14 @@
       "description": "Width of the transition region used by the ultraviolet sliver damper.",
       "required": false,
       "default": 10.0,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.subtraction.local_ct_settings.uv_localisation.smooth_sliver",
+      "value_type": "boolean",
+      "description": "Make the compact sliver profile smooth at its support boundary.",
+      "required": false,
+      "default": false,
       "possible_values": []
     },
     {

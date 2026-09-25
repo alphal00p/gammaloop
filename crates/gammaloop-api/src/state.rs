@@ -1,3 +1,5 @@
+#[cfg(test)]
+use gammalooprs::integrands::process::EvaluationTarget;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     fs::{self},
@@ -21,7 +23,7 @@ use gammalooprs::{
     processes::{Amplitude, CrossSection},
     utils::serde_utils::IsDefault,
 };
-use linnet::half_edge::subgraph::SubGraphLike;
+use linnet::half_edge::subgraph::{SuBitGraph, SubGraphLike, SubSetLike};
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
@@ -44,7 +46,7 @@ use gammalooprs::{
         GenerationProgressObserver, GenerationProgressObserverGuard, GenerationProgressPhase,
         GraphGenerationStats, GraphGroupSelectionMode, GraphGroupSelectionPlan,
         GraphGroupSelectionReport, GraphGroupSelectionSpec, NamedGraphGenerationReport, Process,
-        ProcessCollection, ProcessDefinition, ProcessList,
+        ProcessCollection, ProcessDefinition, ProcessList, ProcessLoadSelection,
     },
     settings::{
         global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings,
@@ -1590,25 +1592,39 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
+// Version 10 records UFO and subgraph printer registrations, including symbols removed
+// from a restricted model. Older archives cannot restore those callbacks and must be regenerated.
+// Version 9 combines the Symbolica 3 evaluator/CFF payloads with advanced sampling
+// and multiplier layouts. Earlier states must be regenerated.
+// Version 8 adds multiplier function-map metadata and on-shell energy inputs to
+// the positional bincode layouts. Older generated states must be regenerated.
 // Version 7 stores CFF coefficients using native Rational encoding.
+// Version 7 stores master-topology amplitude metadata and removes the coerced
+// common-parent LU subspaces. Older generated states must be regenerated.
 // Version 6 removes obsolete deferred-integrand fields from the positional
 // amplitude and cut-integrand layouts.
 // Version 5 persists component-local generated-CFF ownership and prefactor
 // metadata. Older states use a previous positional bincode layout and must be
 // regenerated rather than decoded as the new expression type.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 7;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 10;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct StateManifest {
     version: u32,
+    #[serde(default)]
+    ufo_print_symbols: Vec<String>,
+    #[serde(default)]
+    linnet_subgraph_print_labels: Vec<String>,
 }
 
 impl Default for StateManifest {
     fn default() -> Self {
         Self {
             version: CURRENT_STATE_MANIFEST_VERSION,
+            ufo_print_symbols: Vec::new(),
+            linnet_subgraph_print_labels: Vec::new(),
         }
     }
 }
@@ -1735,7 +1751,32 @@ fn load_state_manifest(save_path: &Path) -> Result<StateManifest> {
 }
 
 fn save_state_manifest(save_path: &Path) -> Result<()> {
-    let manifest = StateManifest::default();
+    // Symbolica exports the entire symbol registry, including couplings removed from the
+    // active model by restrictions. Its archive cannot serialize their print callbacks.
+    let mut ufo_print_symbols: Vec<_> = symbolica::state::State::symbol_iter()
+        .filter(|(symbol, _)| {
+            symbol.get_namespace() == "UFO" && symbol.get_print_function().is_some()
+        })
+        .map(|(symbol, _)| symbol.get_stripped_name().to_owned())
+        .collect();
+    ufo_print_symbols.sort_unstable();
+    let mut linnet_subgraph_print_labels: Vec<_> = symbolica::state::State::symbol_iter()
+        .filter(|(symbol, _)| {
+            symbol.get_namespace() == "linnet" && symbol.get_print_function().is_some()
+        })
+        .filter_map(|(symbol, _)| {
+            symbol
+                .get_stripped_name()
+                .strip_prefix("S_")
+                .map(str::to_owned)
+        })
+        .collect();
+    linnet_subgraph_print_labels.sort_unstable();
+    let manifest = StateManifest {
+        ufo_print_symbols,
+        linnet_subgraph_print_labels,
+        ..StateManifest::default()
+    };
     let raw_manifest =
         toml::to_string_pretty(&manifest).context("Trying to serialize state manifest to TOML")?;
     fs::write(save_path.join(STATE_MANIFEST_FILE), raw_manifest).with_context(|| {
@@ -1916,12 +1957,19 @@ fn load_integrand_generation_summaries(
                     summary_path.display()
                 )
             })?;
-            let summary = serde_json::from_str(&raw_summary).with_context(|| {
-                format!(
-                    "Trying to parse integrand generation summary {}",
-                    summary_path.display()
-                )
-            })?;
+            let mut summary: IntegrandGenerationSummary = serde_json::from_str(&raw_summary)
+                .with_context(|| {
+                    format!(
+                        "Trying to parse integrand generation summary {}",
+                        summary_path.display()
+                    )
+                })?;
+            // Reports persist the process id from the state that generated them. A
+            // selective load renumbers the in-memory process list densely, so the
+            // summary must follow its owning process rather than retain a stale id.
+            for report in &mut summary.reports {
+                report.process_id = process_id;
+            }
             summaries.insert(
                 IntegrandGenerationSummaryKey {
                     process_id,
@@ -3247,6 +3295,15 @@ impl State {
         model_path: Option<PathBuf>,
         trace_logs_filename: Option<String>,
     ) -> Result<Self> {
+        Self::load_with_selection(save_path, model_path, trace_logs_filename, None)
+    }
+
+    pub fn load_with_selection(
+        save_path: PathBuf,
+        model_path: Option<PathBuf>,
+        trace_logs_filename: Option<String>,
+        selection: Option<&ProcessLoadSelection>,
+    ) -> Result<Self> {
         // let root_folder = root_folder.join("gammaloop_state");
         let manifest = load_state_manifest(&save_path)?;
         validate_state_layout(&manifest, &save_path)?;
@@ -3255,6 +3312,15 @@ impl State {
         // tracing dispatch and escape ANSI styling in all subsequent GammaLoop output.
         let mut loaded_state = State::new(&save_path, trace_logs_filename);
         debug!("Loading state manifest version {}", manifest.version);
+
+        // Restore even symbols absent from the restricted model before parsing expressions
+        // or importing the archive: Symbolica cannot attach callbacks to a plain symbol later.
+        for name in &manifest.ufo_print_symbols {
+            let _ = UFOSymbol::from(name);
+        }
+        for label in &manifest.linnet_subgraph_print_labels {
+            let _ = SuBitGraph::symbol_from_label(label.clone());
+        }
 
         // Load the model before importing Symbolica state so UFO symbols retain their custom print
         // callbacks; the import then remaps serialized symbol ids onto those definitions.
@@ -3292,8 +3358,8 @@ impl State {
             model: &model,
         };
 
-        let process_list =
-            ProcessList::load(&save_path, context).context("Trying to load processList")?;
+        let process_list = ProcessList::load_with_selection(&save_path, context, selection)
+            .context("Trying to load processList")?;
 
         loaded_state.process_list = process_list;
         loaded_state.model = model;
@@ -3446,7 +3512,7 @@ mod tests {
     use gammalooprs::{
         graph::Graph,
         initialisation::test_initialise,
-        integrands::process::ActiveF64Backend,
+        integrands::process::{ActiveF64Backend, GaussianReferenceFunction},
         model::InputParamCard,
         momentum::{Dep, ExternalMomenta, Helicity},
         processes::{
@@ -3478,13 +3544,27 @@ mod tests {
     #[test]
     fn state_load_preserves_ufo_custom_printer() {
         if let Some(state_path) = std::env::var_os(STATE_LOAD_ORDER_CHILD) {
-            let _state = State::load(state_path.into(), None, None).unwrap();
-            // A one-character symbol is unquoted by Symbolica's default Typst printer, so the
-            // quotes prove that loading the model installed GammaLoop's UFO callback first.
-            let rendered = Atom::from(UFOSymbol::from("G"))
-                .printer(SpensoPrintSettings::typst_options())
-                .to_string();
-            assert_eq!(rendered, r#""G""#);
+            for _ in 0..2 {
+                let _state = State::load(PathBuf::from(&state_path), None, None).unwrap();
+                for name in ["G", "orphan_ufo_printer"] {
+                    let symbol = UFOSymbol::from(name);
+                    assert!(symbol.0.get_print_function().is_some(), "{name}");
+                    let rendered = Atom::from(symbol)
+                        .printer(SpensoPrintSettings::typst_options())
+                        .to_string();
+                    assert_eq!(rendered, format!("\"{name}\""));
+                }
+                for label in ["Dd0E4", "1⦻2"] {
+                    let symbol = symbolica::get_symbol!(&format!("linnet::S_{label}")).unwrap();
+                    assert!(symbol.get_print_function().is_some(), "{label}");
+                    assert_eq!(
+                        Atom::var(symbol)
+                            .printer(SpensoPrintSettings::typst_options())
+                            .to_string(),
+                        format!("#S(g,\"{label}\")")
+                    );
+                }
+            }
             return;
         }
 
@@ -3492,13 +3572,28 @@ mod tests {
         let mut state = State::new(temp.path(), None);
         state.model = load_generic_model("sm");
         state.model_parameters = InputParamCard::default_from_model(&state.model);
+        // Reproduce a coupling removed by a restriction: it survives in Symbolica's
+        // global registry but has no declaration in the saved model.
+        let _ = UFOSymbol::from("orphan_ufo_printer");
+        for label in ["Dd0E4", "1⦻2"] {
+            let _ = SuBitGraph::symbol_from_label(label.to_owned());
+        }
         state.save(temp.path(), true, false).unwrap();
+        let manifest = load_state_manifest(temp.path()).unwrap();
+        assert!(manifest
+            .ufo_print_symbols
+            .contains(&"orphan_ufo_printer".to_owned()));
+        assert!(!fs::read_to_string(temp.path().join("model.json"))
+            .unwrap()
+            .contains("orphan_ufo_printer"));
 
         let output = Command::new(std::env::current_exe().unwrap())
             .arg(STATE_LOAD_ORDER_TEST)
             .arg("--exact")
             .arg("--nocapture")
             .env(STATE_LOAD_ORDER_CHILD, temp.path())
+            .env_remove("GL_ALL_LOG_FILTER")
+            .env("GL_DISPLAY_FILTER", "warn")
             .output()
             .unwrap();
         let transcript = format!(
@@ -3512,9 +3607,8 @@ mod tests {
             output.status
         );
         assert!(
-            !transcript.contains(
-                "Imported symbol UFO::G was previously defined with user-defined functions"
-            ),
+            !transcript.contains("Imported symbol UFO::")
+                && !transcript.contains("Imported symbol linnet::S_"),
             "{transcript}"
         );
     }
@@ -4274,6 +4368,7 @@ mod tests {
                 helicities: vec![Helicity::PLUS, Helicity::MINUS],
                 f_64_cache: None,
                 f_128_cache: None,
+                arb_cache: Default::default(),
             },
         };
 
@@ -4302,8 +4397,8 @@ mod tests {
 [sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = false
-lmb_channels = "summed"
+sampling_multichanneling = false
+sampling_channels = "summed"
 coordinate_system = "tropical"
 mapping = "linear"
 b = 1.0
@@ -4555,12 +4650,18 @@ b = 1.0
                 graphs,
                 categories,
                 hide_non_existing_thresholds,
+                show_threshold_functions,
+                show_sampling,
+                show_threshold_subtraction,
             }) => {
                 assert_eq!(process, Some(ProcessRef::Id(12)));
                 assert_eq!(integrand_name, None);
                 assert!(graphs.is_empty());
                 assert!(categories.is_empty());
                 assert!(!hide_non_existing_thresholds);
+                assert!(!show_threshold_functions);
+                assert_eq!(show_sampling, None);
+                assert_eq!(show_threshold_subtraction, None);
             }
             other => panic!("Expected display integrand command, got {other:?}"),
         }
@@ -4811,6 +4912,7 @@ commands = ["quit -n"]
         let temp = tempdir().unwrap();
         let future_manifest = StateManifest {
             version: CURRENT_STATE_MANIFEST_VERSION + 1,
+            ..StateManifest::default()
         };
         fs::write(
             temp.path().join(STATE_MANIFEST_FILE),
@@ -4892,6 +4994,854 @@ commands = ["quit -n"]
                 }
             }
         }
+    }
+
+    #[test]
+    fn saved_generated_process_runs_reference_acceptance_after_reload() -> Result<()> {
+        use gammalooprs::{
+            graph::GroupId,
+            settings::runtime::{
+                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
+                StabilityLevelSetting,
+            },
+        };
+        use symbolica::numerical_integration::Sample;
+
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let bubble = build_generated_scalar_bubble_state_with_external_backend();
+        let mut kite = State::new_test();
+        kite.model = load_generic_model("scalars");
+        kite.model.get_parameter_mut("mass_scalar_1")?.value = Some(Complex::new_re(F(1.0)));
+        kite.model_parameters = InputParamCard::default_from_model(&kite.model);
+        kite.import_graphs(
+            Graph::from_path(
+                crate::test_workspace_root().join("tests/resources/graphs/massive_kite.dot"),
+                &kite.model,
+            )?,
+            GraphImportOptions {
+                process_name: Some("sampling_kite".into()),
+                process_id: None,
+                process_definition: None,
+                integrand_name: Some("default".into()),
+                overwrite: false,
+                append: false,
+            },
+        )?;
+        let global: GlobalSettings = toml::from_str(
+            r#"
+[n_cores]
+generate = 1
+[generation]
+override_lmb_heuristics = true
+[generation.uv]
+subtract_uv = false
+generate_integrated = false
+[generation.evaluator]
+compile = false
+summed = false
+summed_function_map = true
+iterative_orientation_optimization = false
+"#,
+        )?;
+        let mut runtime: RuntimeSettings = toml::from_str(
+            r#"
+[general]
+evaluator_method = "SummedFunctionMap"
+integral_unit = "none"
+enable_cache = false
+[kinematics]
+e_cm = 5.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[5.0, 0.0, 0.0, 0.0], "dependent"]
+helicities = [0, 0]
+[sampling]
+graphs = "summed"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "summed"
+power = 2.0
+default_channel_selection = ["C", "D", "ordinary"]
+[sampling.channel_definitions.massive_kite.C]
+around = "surface(2,4,6)"
+parent_lmb = [4,6]
+subspace_lmb = [4,6]
+[sampling.channel_definitions.massive_kite.D]
+around = "surface(3,5,6)"
+parent_lmb = [4,6]
+subspace_lmb = [4,6]
+[sampling.channel_definitions.massive_kite.ordinary]
+around = "lmb(4,6)"
+parent_lmb = [4,6]
+[stability]
+rotation_axis = [{type = "x"}, {type = "y"}]
+"#,
+        )?;
+        runtime.stability.levels = vec![StabilityLevelSetting::default_double()];
+        kite.generate_integrands(&global, (&runtime).into())?;
+
+        // Reuse the same saved-process acceptance path for a physical cut. Two
+        // names deliberately share its geometry while retaining distinct radial
+        // proposals; the broad components give the shifted Gaussian full support.
+        let mut cut = State::new_test();
+        cut.model = kite.model.clone();
+        cut.model_parameters = InputParamCard::default_from_model(&cut.model);
+        cut.import_graphs(
+            Graph::from_string(
+                r#"digraph sampling_cut_bubble {
+                    num=1; edge [pdg=1001]; node [num=1];
+                    ext [style=invis, is_cut=0];
+                    ext -> a [id=0];
+                    a -> b [id=1, lmb_id=0];
+                    a -> b [id=2];
+                    b -> ext [id=3];
+                }"#,
+                &cut.model,
+            )?,
+            GraphImportOptions {
+                process_name: Some("sampling_cut".into()),
+                process_id: None,
+                process_definition: None,
+                integrand_name: Some("default".into()),
+                overwrite: false,
+                append: false,
+            },
+        )?;
+        let mut cut_runtime: RuntimeSettings = toml::from_str(
+            r#"
+[general]
+evaluator_method = "SummedFunctionMap"
+integral_unit = "none"
+enable_cache = false
+[kinematics]
+e_cm = 5.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[5.0, 0.0, 0.0, 0.0]]
+helicities = ["summed_averaged"]
+[sampling]
+graphs = "summed"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "summed"
+sampling_channel_weight = "map_density"
+power = 2.0
+default_channel_selection = ["matched", "wide"]
+[sampling.channel_definitions.sampling_cut_bubble.matched]
+around = "phase_space(cut(1,2))"
+parent_lmb = [1]
+subspace_lmb = [1]
+radial_profile = "lu_h"
+[sampling.channel_definitions.sampling_cut_bubble.wide]
+around = "phase_space(cut(1,2))"
+parent_lmb = [1]
+subspace_lmb = [1]
+radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, shape = 1.5, broad_fraction = 0.08 }
+"#,
+        )?;
+        cut_runtime.stability.levels = vec![StabilityLevelSetting::default_double()];
+        // Eager dual-program construction in an unoptimized test build needs
+        // the same larger stack as the graph-generation fixtures.
+        std::thread::scope(|scope| {
+            std::thread::Builder::new()
+                .stack_size(64 * 1024 * 1024)
+                .spawn_scoped(scope, || {
+                    cut.generate_integrands(&global, (&cut_runtime).into())
+                })?
+                .join()
+                .unwrap()
+        })?;
+
+        for (mut state, reference) in [
+            (
+                bubble,
+                GaussianReferenceFunction::new(2.0, vec![0.7, -0.4, 0.2])?,
+            ),
+            (
+                kite,
+                GaussianReferenceFunction::new(1.2, vec![0.4, -0.3, 0.2, -0.2, 0.1, 0.35])?,
+            ),
+            (
+                cut,
+                GaussianReferenceFunction::new(1.5, vec![0.2, -0.3, 0.1])?,
+            ),
+        ] {
+            let temp = tempdir()?;
+            let saved = temp.path().join("saved");
+            state.save(&saved, true, false)?;
+            let mut loaded = State::load(saved, None, None)?;
+            loaded.activate_loaded_integrand_backends(false)?;
+            let integrand = loaded.process_list.get_integrand_mut(0, "default")?;
+            std::thread::scope(|scope| {
+                std::thread::Builder::new()
+                    .stack_size(64 * 1024 * 1024)
+                    .spawn_scoped(scope, || integrand.warm_up(&loaded.model))?
+                    .join()
+                    .unwrap()
+            })?;
+
+            // Exercise the complete saved-process parameterization with genuine
+            // multidimensional Halton points. Finiteness, normalization, moments
+            // and Jacobian propagation are independent of a trained integration
+            // grid. The deterministic dispersion is not a randomized-MC error.
+            let coordinates = (1..=8192)
+                .map(|index| {
+                    [2, 3, 5, 7, 11, 13]
+                        .iter()
+                        .take(reference.center().len())
+                        .map(|&base| {
+                            let (mut index, mut fraction, mut value) = (index, 1.0, 0.0);
+                            while index > 0 {
+                                fraction /= base as f64;
+                                value += (index % base) as f64 * fraction;
+                                index /= base;
+                            }
+                            value
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            let report = integrand.evaluate_reference_coordinates(&coordinates, &reference)?;
+            assert_eq!(report.sample_count, coordinates.len());
+            assert_eq!(report.finite_sample_count, coordinates.len());
+            assert!((report.normalization - 1.0).abs() < 2.0e-2, "{report:?}");
+            assert!(
+                (report.second_moment - report.expected_second_moment).abs() < 2.0e-1,
+                "{report:?}"
+            );
+
+            if reference.center().len() == 6 {
+                // The same saved three-channel catalogue must also reproduce
+                // the full threshold-subtracted amplitude under explicit MC
+                // selection; the reference overlay cannot stand in for this gate.
+                let original_settings = integrand.get_settings().clone();
+                let SamplingSettings::MultiChanneling(multichanneling) =
+                    original_settings.sampling.clone()
+                else {
+                    panic!("expected summed kite channels")
+                };
+                let ids = integrand.group_sampling_channel_ids(
+                    GroupId(0),
+                    &multichanneling.parameterization_settings,
+                )?;
+                assert_eq!(ids.len(), 3);
+                let xs = vec![F(0.19), F(0.27), F(0.61), F(0.39), F(0.72), F(0.58)];
+                let summed_sample = Sample::Continuous(F(1.0), xs.clone());
+                let summed = integrand
+                    .evaluate_samples_raw(
+                        EvaluationTarget::Physical(&loaded.model),
+                        std::slice::from_ref(&summed_sample),
+                        0,
+                        false,
+                        false,
+                        Complex::new_zero(),
+                    )?
+                    .samples
+                    .remove(0);
+                let summed_reference =
+                    integrand.evaluate_reference_sample_detailed(&summed_sample, &reference)?;
+                let mut settings = original_settings.clone();
+                settings.sampling =
+                    SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                        sample_orientations: false,
+                        sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(
+                            multichanneling,
+                        ),
+                        ..Default::default()
+                    });
+                *integrand.get_mut_settings() = settings;
+                integrand.warm_up(&loaded.model)?;
+                let mut expected = Complex::<F<f64>>::new_zero();
+                let mut expected_reference = (0.0, 0.0);
+                for channel_id in ids {
+                    let sample = Sample::Discrete(
+                        F(1.0),
+                        0,
+                        Some(Box::new(Sample::Discrete(
+                            F(1.0),
+                            channel_id.0,
+                            Some(Box::new(Sample::Continuous(F(1.0), xs.clone()))),
+                        ))),
+                    );
+                    let result = integrand
+                        .evaluate_samples_raw(
+                            EvaluationTarget::Physical(&loaded.model),
+                            std::slice::from_ref(&sample),
+                            0,
+                            false,
+                            false,
+                            Complex::new_zero(),
+                        )?
+                        .samples
+                        .remove(0);
+                    expected += result.integrand_result * result.parameterization_jacobian.unwrap();
+                    let result =
+                        integrand.evaluate_reference_sample_detailed(&sample, &reference)?;
+                    let jacobian = result.evaluation.parameterization_jacobian.unwrap().0;
+                    expected_reference.0 += result.evaluation.integrand_result.re.0 * jacobian;
+                    expected_reference.1 += result.moments.second_moment.0 * jacobian;
+                }
+                let actual = summed.integrand_result * summed.parameterization_jacobian.unwrap();
+                let scale = expected.re.0.abs() + expected.im.0.abs();
+                assert!(scale > 1.0e-18 && scale.is_finite());
+                assert!(
+                    (actual.re.0 - expected.re.0).abs() + (actual.im.0 - expected.im.0).abs()
+                        < 1.0e-9 * scale
+                );
+                let jacobian = summed_reference
+                    .evaluation
+                    .parameterization_jacobian
+                    .unwrap()
+                    .0;
+                for (actual, expected) in [
+                    (
+                        summed_reference.evaluation.integrand_result.re.0 * jacobian,
+                        expected_reference.0,
+                    ),
+                    (
+                        summed_reference.moments.second_moment.0 * jacobian,
+                        expected_reference.1,
+                    ),
+                ] {
+                    assert!((actual - expected).abs() < 1.0e-10 * expected.abs().max(1.0));
+                }
+            }
+
+            // The loaded-state command uses the real sampling/training grids,
+            // worker clones, native target and complex statistics. Re and Im
+            // are normalization and normalized raw moment, not physical phases.
+            std::thread::scope(|scope| {
+                std::thread::Builder::new()
+                    .stack_size(64 * 1024 * 1024)
+                    .spawn_scoped(scope, || -> Result<()> {
+                        use crate::commands::integrate::Integrate;
+                        use gammalooprs::integrands::Integrand;
+                        use gammalooprs::integrate::{
+                            havana_integrate, slot_workspace_path, workspace_manifest_path,
+                            workspace_state_path, HavanaIntegrateRequest, IntegrationSlot,
+                            IntegrationState, IntegrationStatusKind, IntegrationWorkspaceManifest,
+                            IterationBatchingSettings, SamplingCorrelationMode, SlotMeta,
+                            WorkspaceSnapshotControl,
+                        };
+                        use gammalooprs::utils::serde_utils::SmartSerde;
+                        use symbolica::numerical_integration::{Grid, MonteCarloRng};
+
+                        let process = loaded.process_list.get_integrand_mut(0, "default")?;
+                        let settings = process.get_mut_settings();
+                        settings.integrator.n_bins = 8;
+                        settings.integrator.min_samples_for_update = 4;
+                        settings.integrator.n_start = 256;
+                        settings.integrator.n_increase = 0;
+                        settings.integrator.n_max = 512;
+                        settings.integrator.seed = 7331;
+                        let mut command = Integrate::from_slots([(ProcessRef::Id(0), "default")]);
+                        command.n_cores = Some(2);
+                        command.workspace_path = Some(temp.path().join("reference_full"));
+                        command.batch_size = Some(64);
+                        command.batch_timing = 0.0;
+                        // Exercise centered shorthand as well as shifted descriptors.
+                        command.reference_gaussian = Some(
+                            if process.kind_name() == "amplitude" && reference.center().len() == 3 {
+                                GaussianReferenceFunction::new(reference.width(), vec![])?
+                            } else {
+                                reference.clone()
+                            },
+                        );
+                        let resolved = command
+                            .reference_gaussian
+                            .as_ref()
+                            .unwrap()
+                            .for_integrand(process)?;
+                        let mut cli = CLISettings::default();
+                        cli.state.folder = temp.path().join("saved");
+                        cli.session.set_user_requested_read_only_state(true);
+                        let source_path = generated_integrand_artifact_path(
+                            &cli.state.folder,
+                            &loaded.process_list.processes[0],
+                            "default",
+                        )
+                        .join("integrand.bin");
+                        let before_source = fs::read(&source_path)?;
+                        let full = command.run(&mut loaded, &cli)?;
+                        let result = full.result.single_slot().unwrap();
+                        assert_eq!(result.integral.neval, 512);
+                        assert_eq!(result.target, Some(Complex::new(F(1.0), F(1.0))));
+                        for (mean, error) in [
+                            (result.integral.result.re.0, result.integral.error.re.0),
+                            (result.integral.result.im.0, result.integral.error.im.0),
+                        ] {
+                            assert!(mean.is_finite() && error.is_finite() && error > 0.0);
+                            assert!(
+                                (mean - 1.0).abs() < 6.0 * error,
+                                "reference mean={mean}, error={error}"
+                            );
+                        }
+                        assert!(full.observables.is_empty());
+                        let meta = SlotMeta {
+                            process_name: result.process.clone(),
+                            integrand_name: result.integrand.clone(),
+                        };
+                        let manifest = IntegrationWorkspaceManifest::from_file(
+                            workspace_manifest_path(&full.workspace_path),
+                            "reference manifest",
+                        )?;
+                        assert_eq!(manifest.reference_gaussians, vec![Some(resolved.clone())]);
+                        assert_eq!(
+                            manifest.reference_observable_convention.as_deref(),
+                            Some(GaussianReferenceFunction::INTEGRATION_CONVENTION)
+                        );
+
+                        // Produce a completed first-iteration checkpoint using the same
+                        // engine and interrupt hook, then resume it through the CLI owner.
+                        let partial = temp.path().join("reference_resume");
+                        fs::create_dir_all(slot_workspace_path(&partial, &meta))?;
+                        fs::copy(
+                            workspace_manifest_path(&full.workspace_path),
+                            workspace_manifest_path(&partial),
+                        )?;
+                        fs::copy(
+                            slot_workspace_path(&full.workspace_path, &meta).join("settings.toml"),
+                            slot_workspace_path(&partial, &meta).join("settings.toml"),
+                        )?;
+                        let process = loaded.process_list.get_integrand_mut(0, "default")?.clone();
+                        let settings = process.get_settings().clone();
+                        let mut slot = IntegrationSlot::new(
+                            meta,
+                            settings.clone(),
+                            loaded.model.clone(),
+                            Integrand::ProcessIntegrand(Box::new(process)),
+                            Some(Complex::new(F(1.0), F(1.0))),
+                        );
+                        slot.reference_gaussian = Some(resolved.clone());
+                        let stopped = havana_integrate(
+                            HavanaIntegrateRequest {
+                                slots: vec![slot],
+                                sampling_correlation_mode: SamplingCorrelationMode::Correlated,
+                                n_cores: 2,
+                                state: None,
+                                workspace: Some(partial.clone()),
+                                output_control: WorkspaceSnapshotControl::default(),
+                                batching: IterationBatchingSettings {
+                                    batch_size: Some(64),
+                                    batch_timing_seconds: 0.0,
+                                    ..Default::default()
+                                },
+                                view_options: command.build_render_options(&[settings], false),
+                            },
+                            |status| {
+                                if status.kind() == IntegrationStatusKind::Iteration {
+                                    gammalooprs::request_interrupt();
+                                }
+                                Ok(())
+                            },
+                        );
+                        gammalooprs::clear_interrupt_request();
+                        stopped?;
+                        let bytes = fs::read(workspace_state_path(&partial))?;
+                        let (checkpoint, _): (IntegrationState, usize) =
+                            bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                        assert_eq!(checkpoint.iter, 1);
+                        assert_eq!(checkpoint.num_points, 256);
+                        // A draw from the trained checkpoint proves that both observables
+                        // retain actual non-unit grid probabilities exactly once.
+                        let serialized = serde_json::to_value(&checkpoint)?;
+                        let mut grid: Grid<F<f64>> = serde_json::from_value(
+                            serialized["sampling_states"][0]["grid"].clone(),
+                        )?;
+                        let mut rng = MonteCarloRng::new(42, 0);
+                        let mut point = Sample::new();
+                        grid.sample(&mut rng, &mut point);
+                        assert!((point.get_weight().0 - 1.0).abs() > 1.0e-6);
+                        let process = loaded.process_list.get_integrand_mut(0, "default")?;
+                        let detailed =
+                            process.evaluate_reference_sample_detailed(&point, &resolved)?;
+                        let pair = process
+                            .evaluate_samples_raw(
+                                EvaluationTarget::Reference(&resolved),
+                                &[point.clone()],
+                                0,
+                                false,
+                                false,
+                                Complex::new_zero(),
+                            )?
+                            .samples
+                            .remove(0);
+                        assert_eq!(pair.integrator_weight, point.get_weight());
+                        assert!(
+                            (pair.integrand_result.re.0
+                                - detailed.evaluation.integrand_result.re.0)
+                                .abs()
+                                < 1.0e-12
+                        );
+                        assert!(
+                            (pair.integrand_result.im.0
+                                - detailed.moments.second_moment.0
+                                    / resolved.expected_second_moment::<f64>().0)
+                                .abs()
+                                < 1.0e-12
+                        );
+
+                        command.workspace_path = Some(partial.clone());
+                        let resumed = command.run(&mut loaded, &cli)?;
+                        let actual = &resumed.result.single_slot().unwrap().integral;
+                        assert_eq!(actual.neval, result.integral.neval);
+                        assert_eq!(actual.result, result.integral.result);
+                        assert_eq!(actual.error, result.integral.error);
+                        assert_eq!(fs::read(&source_path)?, before_source);
+                        // A mismatch must fail before saved settings are restored.
+                        loaded
+                            .process_list
+                            .get_integrand_mut(0, "default")?
+                            .get_mut_settings()
+                            .integrator
+                            .seed = 19;
+                        let mut physical = command.clone();
+                        physical.reference_gaussian = None;
+                        let unchanged = fs::read(workspace_state_path(&partial))?;
+                        assert!(physical
+                            .run(&mut loaded, &cli)
+                            .unwrap_err()
+                            .to_string()
+                            .contains("physical/reference"));
+                        assert_eq!(
+                            loaded
+                                .process_list
+                                .get_integrand_mut(0, "default")?
+                                .get_settings()
+                                .integrator
+                                .seed,
+                            19
+                        );
+                        assert_eq!(fs::read(workspace_state_path(&partial))?, unchanged);
+                        command.target = vec!["1,2".into()];
+                        assert!(command
+                            .run(&mut loaded, &cli)
+                            .unwrap_err()
+                            .to_string()
+                            .contains("contradictory"));
+                        Ok(())
+                    })?
+                    .join()
+                    .unwrap()
+            })?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn summed_sampling_matches_explicit_canonical_channels() -> Result<()> {
+        use gammalooprs::{
+            graph::GroupId,
+            settings::runtime::{
+                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
+                StabilityLevelSetting,
+            },
+        };
+        use symbolica::numerical_integration::Sample;
+
+        use gammalooprs::integrands::evaluation::StabilityStatus;
+
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let mut state = build_generated_scalar_bubble_state_with_external_backend();
+        state.activate_loaded_integrand_backends(false)?;
+        let integrand = state.process_list.get_integrand_mut(0, "default")?;
+        let mut settings: RuntimeSettings = toml::from_str(
+            r#"
+[kinematics]
+e_cm = 2.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[0.5, 0.2, 0.3, 0.1], "dependent"]
+helicities = [0, 0]
+[sampling]
+graphs = "summed"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "summed"
+default_channel_selection = ["auto:lmb"]
+[stability]
+rotation_axis = [{type = "x"}, {type = "y"}]
+"#,
+        )?;
+        settings.stability.levels = vec![StabilityLevelSetting::default_double()];
+        let SamplingSettings::MultiChanneling(multichanneling) = settings.sampling.clone() else {
+            panic!("expected summed sampling settings");
+        };
+        let channel_ids = integrand
+            .group_sampling_channel_ids(GroupId(0), &multichanneling.parameterization_settings)?;
+        assert_eq!(
+            channel_ids.len(),
+            2,
+            "bubble must exercise two distinct affine LMB charts"
+        );
+        let coordinates = [
+            vec![F(0.27), F(0.36), F(0.71)],
+            vec![F(0.62), F(0.24), F(0.53)],
+        ];
+        let samples = coordinates
+            .iter()
+            .map(|xs| Sample::Continuous(F(1.0), xs.clone()))
+            .collect::<Vec<_>>();
+        *integrand.get_mut_settings() = settings.clone();
+        integrand.warm_up(&state.model)?;
+        let reference = GaussianReferenceFunction::new(2.0, vec![0.7, -0.4, 0.2])?;
+        let summed_reference = samples
+            .iter()
+            .map(|sample| integrand.evaluate_reference_sample_detailed(sample, &reference))
+            .collect::<Result<Vec<_>>>()?;
+        let summed = integrand.evaluate_samples_raw(
+            EvaluationTarget::Physical(&state.model),
+            &samples,
+            0,
+            false,
+            false,
+            Complex::new_zero(),
+        )?;
+
+        settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            sample_orientations: false,
+            sampling_type: DiscreteGraphSamplingType::SamplingMultiChanneling(
+                multichanneling.clone(),
+            ),
+            ..Default::default()
+        });
+        *integrand.get_mut_settings() = settings.clone();
+        integrand.warm_up(&state.model)?;
+        let mut expected = vec![Complex::<F<f64>>::new_zero(); coordinates.len()];
+        let mut expected_reference = vec![(0.0, 0.0); coordinates.len()];
+        for channel_id in channel_ids {
+            let samples = coordinates
+                .iter()
+                .map(|xs| {
+                    Sample::Discrete(
+                        F(1.0),
+                        0,
+                        Some(Box::new(Sample::Discrete(
+                            F(1.0),
+                            channel_id.0,
+                            Some(Box::new(Sample::Continuous(F(1.0), xs.clone()))),
+                        ))),
+                    )
+                })
+                .collect::<Vec<_>>();
+            for (expected, sample) in expected_reference.iter_mut().zip(&samples) {
+                let result = integrand.evaluate_reference_sample_detailed(sample, &reference)?;
+                let jacobian = result.evaluation.parameterization_jacobian.unwrap().0;
+                expected.0 += result.evaluation.integrand_result.re.0 * jacobian;
+                expected.1 += result.moments.second_moment.0 * jacobian;
+            }
+            let result = integrand.evaluate_samples_raw(
+                EvaluationTarget::Physical(&state.model),
+                &samples,
+                0,
+                false,
+                false,
+                Complex::new_zero(),
+            )?;
+            for (total, sample) in expected.iter_mut().zip(result.samples) {
+                *total +=
+                    sample.integrand_result * sample.parameterization_jacobian.unwrap_or(F(1.0));
+            }
+        }
+        // Check both ways of summing channels. The physical evaluator and
+        // stability rotations must see the same maps as explicit MC selections.
+        settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            sample_orientations: false,
+            sampling_type: DiscreteGraphSamplingType::MultiChanneling(multichanneling),
+            ..Default::default()
+        });
+        *integrand.get_mut_settings() = settings;
+        integrand.warm_up(&state.model)?;
+        let samples = samples
+            .into_iter()
+            .map(|sample| Sample::Discrete(F(1.0), 0, Some(Box::new(sample))))
+            .collect::<Vec<_>>();
+        let group_summed_reference = samples
+            .iter()
+            .map(|sample| integrand.evaluate_reference_sample_detailed(sample, &reference))
+            .collect::<Result<Vec<_>>>()?;
+        for results in [summed_reference, group_summed_reference] {
+            for (result, expected) in results.iter().zip(&expected_reference) {
+                let jacobian = result.evaluation.parameterization_jacobian.unwrap().0;
+                for (actual, expected) in [
+                    (
+                        result.evaluation.integrand_result.re.0 * jacobian,
+                        expected.0,
+                    ),
+                    (result.moments.second_moment.0 * jacobian, expected.1),
+                ] {
+                    assert!(
+                        (actual - expected).abs() < 1.0e-11 * expected.abs().max(1.0),
+                        "summed reference {actual} differs from explicit channel sum {expected}"
+                    );
+                }
+            }
+        }
+        let group_summed = integrand.evaluate_samples_raw(
+            EvaluationTarget::Physical(&state.model),
+            &samples,
+            0,
+            false,
+            false,
+            Complex::new_zero(),
+        )?;
+        for result in [summed, group_summed] {
+            for (sample, expected) in result.samples.iter().zip(&expected) {
+                let value =
+                    sample.integrand_result * sample.parameterization_jacobian.unwrap_or(F(1.0));
+                let scale = expected.re.0.abs() + expected.im.0.abs();
+                assert!(
+                    scale > 1.0e-18 && scale.is_finite(),
+                    "invalid oracle {expected}"
+                );
+                let error = (value - expected).re.0.abs() + (value - expected).im.0.abs();
+                assert!(
+                    error < scale * 1.0e-10,
+                    "summed {value} differs from explicit channels {expected}"
+                );
+                assert!(!sample.evaluation_metadata.is_nan);
+                assert!(
+                    sample
+                        .evaluation_metadata
+                        .stability_results
+                        .iter()
+                        .all(|level| matches!(level.status, StabilityStatus::Stable(_))),
+                    "rotation invariance failed"
+                );
+            }
+        }
+        // Default selected-LMB sampling must be converted at the same boundary
+        // as the reference overlay. Compare both targets to an independently
+        // reconstructed raw point, including the nonzero external shift.
+        use gammalooprs::{
+            integrands::process::{
+                sampling::context::SamplingMapContext, GraphTerm, MomentumSpaceEvaluationInput,
+                ProcessIntegrand, ProcessIntegrandImpl, SamplingMapComponent,
+                SamplingMapDefinition, SamplingMapKernel,
+            },
+            momentum::ThreeMomentum,
+        };
+        let mut settings = integrand.get_settings().clone();
+        let mut parameterization = settings.sampling.get_parameterization_settings().unwrap();
+        parameterization
+            .lmb_basis_ids
+            .insert("bubble".into(), vec![1]);
+        parameterization.sampling_channels.default_channel_selection =
+            vec!["auto:optimized_lmb".into()];
+        settings.sampling = SamplingSettings::Default(parameterization.clone());
+        *integrand.get_mut_settings() = settings.clone();
+        integrand.warm_up(&state.model)?;
+        let frame = {
+            let ProcessIntegrand::Amplitude(amplitude) = integrand else {
+                unreachable!()
+            };
+            let term = &amplitude.data.graph_terms[0];
+            let basis = term.selected_lmb_basis_id(&parameterization)?;
+            assert_eq!(usize::from(basis), 1);
+            let externals = settings
+                .kinematics
+                .externals
+                .get_dependent_externals::<f64>(amplitude.get_dependent_momenta_constructor())?;
+            let externals = externals
+                .iter()
+                .map(|p| {
+                    [
+                        p.temporal.value.0,
+                        p.spatial.px.0,
+                        p.spatial.py.0,
+                        p.spatial.pz.0,
+                    ]
+                })
+                .collect::<Vec<_>>();
+            let setup = term.sampling_setup();
+            setup.lmb_frame_map(&setup.all_bases[basis], &externals)?
+        };
+        let kernel = SamplingMapKernel::new(
+            SamplingMapDefinition::Lmb(vec![0]),
+            parameterization,
+            settings.kinematics.e_cm,
+            1,
+        )?;
+        let xs = [0.27, 0.36, 0.71];
+        let selected =
+            SamplingMapComponent::forward(&kernel, &xs, &mut SamplingMapContext::detached(&[]))?;
+        let raw = frame.forward(&selected.point, &mut SamplingMapContext::detached(&[]))?;
+        let sampling_jacobian = selected.jacobian * raw.jacobian;
+        let sample = Sample::Continuous(F(1.0), xs.into_iter().map(F).collect());
+        let reference_result = integrand.evaluate_reference_sample_detailed(&sample, &reference)?;
+        let distance_squared = raw
+            .point
+            .iter()
+            .zip(reference.center())
+            .map(|(x, c)| (x - c).powi(2))
+            .sum::<f64>();
+        let expected = (-distance_squared / (2.0 * reference.width().powi(2))).exp()
+            / (2.0 * std::f64::consts::PI * reference.width().powi(2)).powf(1.5);
+        // X-space results and moments now contain their native Jacobian.
+        // Undo the independently reconstructed map factor for this raw-frame oracle.
+        assert_eq!(
+            reference_result.evaluation.parameterization_jacobian,
+            Some(F(1.0))
+        );
+        assert!(
+            (reference_result.evaluation.integrand_result.re.0 / sampling_jacobian - expected)
+                .abs()
+                < expected * 1.0e-12
+        );
+        let radius_squared = raw.point.iter().map(|x| x * x).sum::<f64>();
+        assert!(
+            (reference_result.moments.second_moment.0 / sampling_jacobian
+                - expected * radius_squared)
+                .abs()
+                < 1.0e-12
+        );
+        let physical = integrand
+            .evaluate_samples_raw(
+                EvaluationTarget::Physical(&state.model),
+                &[sample],
+                0,
+                false,
+                false,
+                Complex::new_zero(),
+            )?
+            .samples
+            .remove(0);
+        let raw_result = integrand.evaluate_momentum_configuration(
+            &state.model,
+            &MomentumSpaceEvaluationInput {
+                loop_momenta: raw
+                    .point
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
+                    .map(|p| ThreeMomentum {
+                        px: F(p[0]),
+                        py: F(p[1]),
+                        pz: F(p[2]),
+                    })
+                    .collect(),
+                integrator_weight: F(1.0),
+                graph_id: Some(0),
+                group_id: None,
+                orientation: None,
+                channel_id: None,
+            },
+            false,
+        )?;
+        assert_eq!(physical.parameterization_jacobian, Some(F(1.0)));
+        let delta = physical.integrand_result / Complex::new_re(F(sampling_jacobian))
+            - raw_result.integrand_result;
+        let scale = raw_result.integrand_result.re.0.abs() + raw_result.integrand_result.im.0.abs();
+        assert!(scale > 1.0e-18 && scale.is_finite());
+        assert!(delta.re.0.abs() + delta.im.0.abs() < 1.0e-10 * scale);
+        Ok(())
     }
 
     #[test]

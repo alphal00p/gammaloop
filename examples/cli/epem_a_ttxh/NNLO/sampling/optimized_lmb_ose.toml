@@ -1,0 +1,15 @@
+# Runtime overlay for a loaded GL638 state: ordinary optimized LMBs only.
+# All physics, threshold metadata and integration/stability settings are retained.
+# Compare against inverse-density weighting by setting sampling_channel_weight
+# to "map_density"; alpha only affects OSE scores.
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+sampling_channel_weight = "ose"
+alpha = 3.0
+default_channel_selection = ["auto:optimized_lmb"]
+
+[sampling.channel_selection]
+GL638 = ["auto:optimized_lmb"]

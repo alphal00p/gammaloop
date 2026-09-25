@@ -159,6 +159,8 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     env:
       SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
+      # Hosted runners have fewer CPUs than the local CI profile's 16-test cap.
+      NEXTEST_TEST_THREADS: num-cpus
     steps:
       - uses: actions/checkout@v4
         with:

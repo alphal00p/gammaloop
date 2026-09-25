@@ -974,6 +974,39 @@ fn run_scalar_3l_cross_section_case_impl(
                 arb_started.elapsed()
             );
         }
+        assert_complex_approx_eq(
+            complex_ff64(&cff_4d_result.sample.evaluation.integrand_result),
+            complex_ff64(&cff_3d_result.sample.evaluation.integrand_result),
+            format!(
+                "scalar {} {label} Double total: CFF local-4D vs CFF local-3D",
+                case.graph
+            ),
+        );
+        // Retain the Double total checks above. Individual UV-subtracted event
+        // components suffer cancellations hidden at the complete-integrand scale;
+        // compare those factorized payloads in Quad at the same strict tolerance.
+        for cli in [&mut cff_3d, &mut cff_4d] {
+            cli.run_command(&format!(
+                r#"set process -p {process} -i {integrand} string '
+[stability]
+levels = [{{ precision = "Quad", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 }}]
+'"#,
+            ))?;
+        }
+        let cff_3d_result = evaluate_xspace_process_with_events(
+            &mut cff_3d,
+            &process,
+            &integrand,
+            &sample_point,
+            &[],
+        )?;
+        let cff_4d_result = evaluate_xspace_process_with_events(
+            &mut cff_4d,
+            &process,
+            &integrand,
+            &sample_point,
+            &[],
+        )?;
         assert_evaluation_outputs_match(
             &cff_4d_result.sample.evaluation,
             &cff_3d_result.sample.evaluation,

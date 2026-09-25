@@ -18,11 +18,15 @@ use tabled::{
 };
 
 use crate::observables::{
-    EventGroupList, GenericEventGroupList, HistogramAccumulatorState, HistogramMedianPosition,
-    HistogramSnapshot, ObservablePhase, ObservableSnapshotBundle, ObservableValueTransform,
+    AdditionalWeightKey, EventGroupList, GenericEventGroupList, HistogramAccumulatorState,
+    HistogramMedianPosition, HistogramSnapshot, ObservablePhase, ObservableSnapshotBundle,
+    ObservableValueTransform,
     events::{format_complex_generic, format_optional_real_generic, format_real_generic},
 };
 use crate::{
+    integrands::process::{
+        sampling::context::SamplingProposalPolicies, sampling::reference::ReferenceMoments,
+    },
     settings::runtime::{IntegrationStatisticsSnapshot, Precision},
     utils::{
         ArbPrec, F, FloatLike, duration_from_secs_f64_saturating, f128, format_evaluation_time,
@@ -33,6 +37,14 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct GraphEvaluationResult<T: FloatLike> {
     pub integrand_result: Complex<F<T>>,
+    /// Componentwise absolute values after physical cancellation at each point,
+    /// summed over distinct sampling-channel points of the same outer draw.
+    pub absolute_integrand_result: Option<Complex<F<T>>>,
+    /// Private amplitude stability monitor: sum of complex norms at distinct
+    /// channel points, after common-point physical cancellation. Unlike the
+    /// componentwise absolute report, it is invariant under helicity phases.
+    pub(crate) channel_norm_sum: Option<F<T>>,
+    pub reference_moments: Option<ReferenceMoments<T>>,
     pub event_groups: GenericEventGroupList<T>,
     pub event_processing_time: Duration,
     pub generated_event_count: usize,
@@ -43,6 +55,9 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
     pub fn zero(zero: F<T>) -> Self {
         Self {
             integrand_result: Complex::new_re(zero),
+            absolute_integrand_result: None,
+            channel_norm_sum: None,
+            reference_moments: None,
             event_groups: GenericEventGroupList::default(),
             event_processing_time: Duration::ZERO,
             generated_event_count: 0,
@@ -52,31 +67,67 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
 
     pub fn merge_in_place(&mut self, mut other: Self) {
         self.integrand_result += other.integrand_result;
+        if let Some(absolute) = other.absolute_integrand_result {
+            if let Some(current) = &mut self.absolute_integrand_result {
+                *current += absolute;
+            } else {
+                self.absolute_integrand_result = Some(absolute);
+            }
+        }
+        if let Some(norm) = other.channel_norm_sum {
+            if let Some(current) = &mut self.channel_norm_sum {
+                *current += norm;
+            } else {
+                self.channel_norm_sum = Some(norm);
+            }
+        }
+        if let Some(moments) = other.reference_moments {
+            if let Some(current) = &mut self.reference_moments {
+                current.merge_in_place(moments);
+            } else {
+                self.reference_moments = Some(moments);
+            }
+        }
         self.event_groups.append(&mut other.event_groups);
         self.event_processing_time += other.event_processing_time;
         self.generated_event_count += other.generated_event_count;
         self.accepted_event_count += other.accepted_event_count;
     }
 
-    pub fn into_f64(self) -> GraphEvaluationResult<f64> {
-        GraphEvaluationResult {
-            integrand_result: Complex::new(
-                self.integrand_result.re.into_ff64(),
-                self.integrand_result.im.into_ff64(),
-            ),
-            event_groups: self.event_groups.to_f64(),
-            event_processing_time: self.event_processing_time,
-            generated_event_count: self.generated_event_count,
-            accepted_event_count: self.accepted_event_count,
+    /// Apply one sampling factor to the physical value/events or reference
+    /// value/moments at the same boundary. Channel sums must not reweight a
+    /// moment reconstructed from just one representative momentum point.
+    pub(crate) fn apply_sampling_factor(&mut self, factor: F<T>) {
+        if let Some(absolute) = &mut self.absolute_integrand_result {
+            *absolute *= factor.abs();
         }
+        if let Some(norm) = &mut self.channel_norm_sum {
+            *norm *= factor.abs();
+        }
+        if let Some(moments) = &mut self.reference_moments {
+            moments.rescale(&factor);
+        }
+        let factor = Complex::new_re(factor);
+        self.integrand_result *= &factor;
+        crate::integrands::process::apply_full_event_multiplicative_factor_precise(
+            &mut self.event_groups,
+            &factor,
+        );
     }
 }
 
 /// The result of an evaluation of the integrand
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationResult {
-    /// Integrand value before any parameterization Jacobian is applied.
+    /// Native map/partition/physics contribution, including its Jacobian.
+    /// The separately reported unapplied top-level Jacobian is unity. Summed
+    /// sampling channels likewise include their individual
+    /// map Jacobians and partition factors and report a unit top-level Jacobian.
     pub integrand_result: Complex<F<f64>>,
+    /// Unweighted by the outer grid. Distinct channel points contribute their
+    /// absolute physical values before summing, preserving their covariance.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub absolute_integrand_result: Option<Complex<F<f64>>>,
     pub parameterization_jacobian: Option<F<f64>>,
     /// Monte Carlo sample weight supplied by the integrator/grid, excluding the parameterization Jacobian.
     pub integrator_weight: F<f64>,
@@ -87,6 +138,8 @@ pub struct EvaluationResult {
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationResultOutput {
     pub integrand_result: Complex<F<f64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub absolute_integrand_result: Option<Complex<F<f64>>>,
     pub parameterization_jacobian: Option<F<f64>>,
     pub integrator_weight: F<f64>,
     pub event_groups: EventGroupList,
@@ -95,7 +148,11 @@ pub struct EvaluationResultOutput {
 
 #[derive(Clone, Debug)]
 pub struct GenericEvaluationResult<T: FloatLike> {
+    /// Runtime-only acceptance data, retained until the selected native precision
+    /// has passed both value and moment checks. Physical output schemas omit it.
+    pub(crate) reference_moments: Option<ReferenceMoments<T>>,
     pub integrand_result: Complex<F<T>>,
+    pub absolute_integrand_result: Option<Complex<F<T>>>,
     pub parameterization_jacobian: Option<F<T>>,
     pub integrator_weight: F<T>,
     pub event_groups: GenericEventGroupList<T>,
@@ -105,6 +162,7 @@ pub struct GenericEvaluationResult<T: FloatLike> {
 #[derive(Clone, Debug)]
 pub struct GenericEvaluationResultOutput<T: FloatLike> {
     pub integrand_result: Complex<F<T>>,
+    pub absolute_integrand_result: Option<Complex<F<T>>>,
     pub parameterization_jacobian: Option<F<T>>,
     pub integrator_weight: F<T>,
     pub event_groups: GenericEventGroupList<T>,
@@ -112,9 +170,129 @@ pub struct GenericEvaluationResultOutput<T: FloatLike> {
 }
 
 impl<T: FloatLike> GenericEvaluationResult<T> {
+    /// Narrow only the final native map/partition/physics contribution at the
+    /// ordinary integration/reporting boundary. Precise APIs retain this value.
+    pub(crate) fn try_into_f64(self) -> eyre::Result<EvaluationResult> {
+        use eyre::WrapErr;
+
+        let one = self.integrator_weight.one();
+        let remaining_factor =
+            self.parameterization_jacobian.as_ref().unwrap_or(&one) * &self.integrator_weight;
+        eyre::ensure!(
+            remaining_factor.0.is_finite(),
+            "nonfinite remaining native integration factor {remaining_factor}"
+        );
+        // Ordinary final rounding may yield zero. A small intermediate must still
+        // be retained if any unapplied factor can promote its contribution.
+        // None keeps the strict policy for separately stored factors and auxiliary
+        // entries whose complete remaining multiplier is unavailable.
+        let check = |value: &F<T>, remaining: Option<&F<T>>| -> eyre::Result<()> {
+            let reported = value.into_f64();
+            if value.0.is_finite() {
+                if !reported.is_finite() {
+                    return Err(eyre::eyre!(
+                        "native value {value} overflows the f64 integration/reporting boundary"
+                    ));
+                }
+                if reported == 0.0 && value != &value.zero() {
+                    let complete = remaining.map(|factor| value * factor);
+                    if complete.as_ref().is_none_or(|weighted| {
+                        // A completed contribution below binary64's normal
+                        // range is an exponentially suppressed tail and may
+                        // be rounded to zero at the reporting boundary.  A
+                        // remaining factor that promotes it into the normal
+                        // range must still be preserved and therefore fails.
+                        !weighted.0.is_finite()
+                            || weighted.abs() >= F::<T>::from_f64(f64::MIN_POSITIVE)
+                    }) {
+                        return Err(eyre::eyre!(
+                            "native value {value} rounds to zero before remaining factor {}; complete contribution {} cannot be preserved at the f64 integration/reporting boundary",
+                            remaining.map_or_else(
+                                || "separately stored factorized component".to_owned(),
+                                ToString::to_string
+                            ),
+                            complete
+                                .as_ref()
+                                .map_or_else(|| "not combined".to_owned(), ToString::to_string)
+                        ));
+                    }
+                }
+            }
+            Ok(())
+        };
+        // These factors remain separate in ordinary output. Each must survive
+        // conversion even when their complete native product rounds to zero.
+        check(&self.integrator_weight, None).wrap_err("integrator_weight")?;
+        if let Some(jacobian) = &self.parameterization_jacobian {
+            check(jacobian, None).wrap_err("parameterization_jacobian")?;
+        }
+        for (field, weight) in std::iter::once(("integrand_result", &self.integrand_result)).chain(
+            self.absolute_integrand_result
+                .iter()
+                .map(|weight| ("absolute_integrand_result", weight)),
+        ) {
+            for (component, value) in [("re", &weight.re), ("im", &weight.im)] {
+                check(value, Some(&remaining_factor))
+                    .wrap_err_with(|| format!("{field}.{component}"))?;
+            }
+        }
+        for (group_index, group) in self.event_groups.iter().enumerate() {
+            for (event_index, event) in group.iter().enumerate() {
+                // Event totals already contain their full native sampling factor.
+                for (component, value) in [("re", &event.weight.re), ("im", &event.weight.im)] {
+                    check(value, Some(&one)).wrap_err_with(|| {
+                        format!("event_groups[{group_index}][{event_index}].weight.{component}")
+                    })?;
+                }
+                // Auxiliary components remain factorized, but their complete
+                // multiplier is known. Bound each component's possible contribution
+                // to BOTH final phases before allowing an underflowed tail to round
+                // to zero; a complex factor may promote real weight into imaginary.
+                let component_factor = event
+                    .additional_weights
+                    .weights
+                    .get(&AdditionalWeightKey::FullMultiplicativeFactor)
+                    .filter(|factor| factor.re.0.is_finite() && factor.im.0.is_finite())
+                    .map(|factor| {
+                        let real = factor.re.abs();
+                        let imag = factor.im.abs();
+                        if real > imag { real } else { imag }
+                    });
+                for (key, weight) in &event.additional_weights.weights {
+                    let remaining = if *key == AdditionalWeightKey::FullMultiplicativeFactor {
+                        None
+                    } else {
+                        component_factor.as_ref()
+                    };
+                    for (component, value) in [("re", &weight.re), ("im", &weight.im)] {
+                        check(value, remaining).wrap_err_with(|| {
+                            format!("event_groups[{group_index}][{event_index}].additional_weights[{key:?}].{component}")
+                        })?;
+                    }
+                }
+            }
+        }
+        Ok(EvaluationResult {
+            integrand_result: Complex::new(
+                self.integrand_result.re.into_ff64(),
+                self.integrand_result.im.into_ff64(),
+            ),
+            absolute_integrand_result: self
+                .absolute_integrand_result
+                .map(|value| Complex::new(value.re.into_ff64(), value.im.into_ff64())),
+            parameterization_jacobian: self
+                .parameterization_jacobian
+                .map(|value| value.into_ff64()),
+            integrator_weight: self.integrator_weight.into_ff64(),
+            event_groups: self.event_groups.to_f64(),
+            evaluation_metadata: self.evaluation_metadata,
+        })
+    }
+
     pub fn into_output(self, minimal_output: bool) -> GenericEvaluationResultOutput<T> {
         GenericEvaluationResultOutput {
             integrand_result: self.integrand_result,
+            absolute_integrand_result: self.absolute_integrand_result,
             parameterization_jacobian: self.parameterization_jacobian,
             integrator_weight: self.integrator_weight,
             event_groups: self.event_groups,
@@ -138,6 +316,14 @@ pub enum PreciseEvaluationResult {
 }
 
 impl PreciseEvaluationResult {
+    pub(crate) fn try_into_f64(self) -> eyre::Result<EvaluationResult> {
+        match self {
+            Self::Double(result) => result.try_into_f64(),
+            Self::Quad(result) => result.try_into_f64(),
+            Self::Arb(result) => result.try_into_f64(),
+        }
+    }
+
     pub fn into_output(self, minimal_output: bool) -> PreciseEvaluationResultOutput {
         match self {
             PreciseEvaluationResult::Double(result) => {
@@ -175,6 +361,7 @@ impl EvaluationResult {
     pub fn zero() -> Self {
         Self {
             integrand_result: Complex::new_zero(),
+            absolute_integrand_result: None,
             parameterization_jacobian: None,
             integrator_weight: F(0.0),
             event_groups: EventGroupList::default(),
@@ -185,6 +372,7 @@ impl EvaluationResult {
     pub fn into_output(self, minimal_output: bool) -> EvaluationResultOutput {
         EvaluationResultOutput {
             integrand_result: self.integrand_result,
+            absolute_integrand_result: self.absolute_integrand_result,
             parameterization_jacobian: self.parameterization_jacobian,
             integrator_weight: self.integrator_weight,
             event_groups: self.event_groups,
@@ -193,10 +381,12 @@ impl EvaluationResult {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn fmt_evaluation_result_output<T: FloatLike>(
     f: &mut std::fmt::Formatter<'_>,
     precision: Option<Precision>,
     integrand_result: &Complex<F<T>>,
+    absolute_integrand_result: Option<&Complex<F<T>>>,
     parameterization_jacobian: Option<&F<T>>,
     integrator_weight: &F<T>,
     event_groups: &GenericEventGroupList<T>,
@@ -228,6 +418,16 @@ fn fmt_evaluation_result_output<T: FloatLike>(
         },
     ]);
 
+    if let Some(absolute) = absolute_integrand_result {
+        summary_rows.push(EvaluationSummaryRow {
+            field: "absolute physical contribution (|Re|, |Im|)".to_string(),
+            value: format!(
+                "({}, {})",
+                format_real_generic(&absolute.re),
+                format_real_generic(&absolute.im)
+            ),
+        });
+    }
     writeln!(f, "{}", "Evaluation result".bold().bright_green())?;
     writeln!(f, "{}", Table::new(summary_rows).with(Style::rounded()))?;
     if let Some(metadata) = evaluation_metadata {
@@ -318,6 +518,7 @@ impl Display for EvaluationResultOutput {
             f,
             None,
             &self.integrand_result,
+            self.absolute_integrand_result.as_ref(),
             self.parameterization_jacobian.as_ref(),
             &self.integrator_weight,
             &self.event_groups,
@@ -332,6 +533,7 @@ impl<T: FloatLike> Display for GenericEvaluationResultOutput<T> {
             f,
             None,
             &self.integrand_result,
+            self.absolute_integrand_result.as_ref(),
             self.parameterization_jacobian.as_ref(),
             &self.integrator_weight,
             &self.event_groups,
@@ -347,6 +549,7 @@ impl Display for PreciseEvaluationResultOutput {
                 f,
                 Some(Precision::Double),
                 &result.integrand_result,
+                result.absolute_integrand_result.as_ref(),
                 result.parameterization_jacobian.as_ref(),
                 &result.integrator_weight,
                 &result.event_groups,
@@ -356,6 +559,7 @@ impl Display for PreciseEvaluationResultOutput {
                 f,
                 Some(Precision::Quad),
                 &result.integrand_result,
+                result.absolute_integrand_result.as_ref(),
                 result.parameterization_jacobian.as_ref(),
                 &result.integrator_weight,
                 &result.event_groups,
@@ -365,6 +569,7 @@ impl Display for PreciseEvaluationResultOutput {
                 f,
                 Some(Precision::Arb),
                 &result.integrand_result,
+                result.absolute_integrand_result.as_ref(),
                 result.parameterization_jacobian.as_ref(),
                 &result.integrator_weight,
                 &result.event_groups,
@@ -934,9 +1139,25 @@ pub struct LoopMomentaEscalationMetrics {
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationMetaData {
     pub total_timing: Duration,
+    /// All actual target calls across native attempts and rotations; includes
+    /// evaluator/event work and excludes separately timed sampling maps and
+    /// host-adoption certificates, even when these run inside a target body.
     pub integrand_evaluation_time: Duration,
+    /// Subset of physical time: one canonical representative-cut/overlap prepass.
+    /// Report separately while native primal roots are still solved again, so
+    /// repeated preparation cannot inflate the sampling-budget denominator.
+    pub canonical_physical_preparation_time: Duration,
+    /// All actual evaluator calls across attempts and rotations, including work
+    /// performed before a target fails; a subset of integrand_evaluation_time.
     pub evaluator_evaluation_time: Duration,
+    /// Source/map/partition work across all attempts and replays. Canonical
+    /// policy preparation is inclusive and charged once, never again per child.
+    /// Host-only adoption work is included here and excluded from physical time.
     pub parameterization_time: Duration,
+    /// Subset of sampling time: the one canonical source/map/partition preparation,
+    /// including failed preparation. Native materialization and adoption remain
+    /// in the remaining parameterization time.
+    pub canonical_sampling_preparation_time: Duration,
     pub event_processing_time: Duration,
     pub generated_event_count: usize,
     pub accepted_event_count: usize,
@@ -948,6 +1169,8 @@ pub struct EvaluationMetaData {
     pub(crate) threshold_counterterm_error: Option<String>,
     #[serde(skip)]
     pub(crate) radial_root_diagnostics: RadialRootDiagnostics,
+    #[serde(skip)]
+    pub(crate) sampling_proposal_policies: SamplingProposalPolicies,
 }
 
 impl Display for EvaluationMetaData {
@@ -970,8 +1193,16 @@ impl Display for EvaluationMetaData {
                 value: format_duration(self.parameterization_time),
             },
             EvaluationSummaryRow {
+                field: "canonical sampling (included)".to_string(),
+                value: format_duration(self.canonical_sampling_preparation_time),
+            },
+            EvaluationSummaryRow {
                 field: "integrand evaluation time".to_string(),
                 value: format_duration(self.integrand_evaluation_time),
+            },
+            EvaluationSummaryRow {
+                field: "canonical physical (included)".to_string(),
+                value: format_duration(self.canonical_physical_preparation_time),
             },
             EvaluationSummaryRow {
                 field: "evaluator evaluation time".to_string(),
@@ -1016,8 +1247,10 @@ impl EvaluationMetaData {
         Self {
             total_timing: Duration::ZERO,
             integrand_evaluation_time: Duration::ZERO,
+            canonical_physical_preparation_time: Duration::ZERO,
             evaluator_evaluation_time: Duration::ZERO,
             parameterization_time: Duration::ZERO,
+            canonical_sampling_preparation_time: Duration::ZERO,
             event_processing_time: Duration::ZERO,
             generated_event_count: 0,
             accepted_event_count: 0,
@@ -1027,6 +1260,7 @@ impl EvaluationMetaData {
             stability_results: Vec::new(),
             threshold_counterterm_error: None,
             radial_root_diagnostics: RadialRootDiagnostics::default(),
+            sampling_proposal_policies: SamplingProposalPolicies::default(),
         }
     }
 
@@ -1220,7 +1454,7 @@ impl StatisticsCounter {
         Self::avg_duration(self.sum_total_evaluation_time, self.num_evals)
     }
 
-    /// Compute the average time spent in the original integrand evaluation call.
+    /// Compute the average physical time across all attempts and rotations.
     pub(crate) fn get_avg_integrand_timing(&self) -> Duration {
         Self::avg_duration(self.sum_integrand_evaluation_time, self.num_evals)
     }

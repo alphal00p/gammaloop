@@ -5,7 +5,10 @@ use linnet::half_edge::involution::EdgeVec;
 use spenso::algebra::complex::Complex;
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
-    domains::{dual::HyperDual, float::Real},
+    domains::{
+        dual::{DualNumberStructure, HyperDual},
+        float::Real,
+    },
     evaluate::{FunctionMap, OptimizationSettings},
     function, parse,
     poly::PolyVariable,
@@ -18,7 +21,10 @@ use crate::{
     GammaLoopContext,
     cff::esurface::Esurface,
     graph::{LmbIndex, LoopMomentumBasis},
-    integrands::process::GenericEvaluator,
+    integrands::{
+        evaluation::EvaluationMetaData,
+        process::{GenericEvaluator, evaluators::evaluate_evaluator},
+    },
     momentum::{
         Energy, FourMomentum,
         sample::{MomentumSample, SubspaceData},
@@ -54,8 +60,9 @@ fn evaluate_uv_damper<T: FloatLike>(
     };
 
     let delta_r = radius - radius_star;
+    let sliver_width = F::from_f64(settings.sliver_width) * normalizing_scale;
 
-    if delta_r.abs() > F::from_f64(settings.sliver_width) * normalizing_scale {
+    if delta_r.abs() > sliver_width || (settings.smooth_sliver && delta_r.abs() == sliver_width) {
         return radius.zero();
     }
 
@@ -63,7 +70,13 @@ fn evaluate_uv_damper<T: FloatLike>(
     let width = F::from_f64(settings.gaussian_width) * normalizing_scale;
     let width_sq = &width * &width;
 
-    (-delta_r_sq / width_sq).exp()
+    let mut exponent = -&delta_r_sq / width_sq;
+    if settings.smooth_sliver {
+        // This even bump is one at the pole and flat to all orders at the edge.
+        let gap = sliver_width.square() - &delta_r_sq;
+        exponent -= delta_r_sq / gap;
+    }
+    exponent.exp()
 }
 
 fn evaluate_uv_damper_dual<T: FloatLike>(
@@ -83,8 +96,12 @@ fn evaluate_uv_damper_dual<T: FloatLike>(
     };
 
     let delta_r = radius.clone() - radius_star.clone();
+    let sliver_width =
+        new_constant(radius, &F::from_f64(settings.sliver_width)) * normalizing_scale.clone();
 
-    if delta_r.values[0].abs() > F::from_f64(settings.sliver_width) * &normalizing_scale.values[0] {
+    if delta_r.values[0].abs() > sliver_width.values[0]
+        || (settings.smooth_sliver && delta_r.values[0].abs() == sliver_width.values[0])
+    {
         return new_constant(radius, &radius.values[0].zero());
     }
 
@@ -92,7 +109,12 @@ fn evaluate_uv_damper_dual<T: FloatLike>(
     let width = new_constant(radius, &F::from_f64(settings.gaussian_width)) * normalizing_scale;
     let width_sq = width.clone() * width;
 
-    (-delta_r_sq / width_sq).exp()
+    let mut exponent = -delta_r_sq.clone() / width_sq;
+    if settings.smooth_sliver {
+        let gap = sliver_width.clone() * sliver_width - delta_r_sq.clone();
+        exponent -= delta_r_sq / gap;
+    }
+    exponent.exp()
 }
 
 fn evaluate_integrated_ct_normalisation<T: FloatLike>(
@@ -105,7 +127,9 @@ fn evaluate_integrated_ct_normalisation<T: FloatLike>(
         IntegratedCounterTermRange::Infinite {
             h_function_settings,
         } => {
-            let h = utils::h(&(radius_star / radius), None, None, h_function_settings);
+            // The helper's inverse radial measure leaves dr, so this density must
+            // integrate to one in r: dr / r_star = d(r / r_star).
+            let h = utils::h(&(radius / radius_star), None, None, h_function_settings);
             h * (radius_star).inv()
         }
         IntegratedCounterTermRange::Compact {} => {
@@ -125,7 +149,7 @@ fn evaluate_integrated_ct_normalisation_dual<T: FloatLike>(
             h_function_settings,
         } => {
             let h = utils::h_dual(
-                &(radius_star.clone() / radius.clone()),
+                &(radius.clone() / radius_star.clone()),
                 None,
                 None,
                 h_function_settings,
@@ -150,23 +174,28 @@ impl RstarTDependenceEvaluator {
         self.implicit_function_theorem.is_some()
     }
 
-    fn evaluate<T: FloatLike>(&mut self, input: RstarTDependenceInput<'_, T>) -> HyperDual<F<T>> {
+    fn evaluate_alpha<T: FloatLike>(
+        &mut self,
+        input: RstarTDependenceInput<'_, T>,
+        evaluation_metadata: &mut EvaluationMetaData,
+    ) -> HyperDual<F<T>> {
         let RstarTDependenceInput {
             t_star,
-            radius_star,
+            alpha,
             overlap_center,
             subspace,
             unrescaled_momentum_sample,
+            representative_sample,
             masses,
             threshold_esurface,
             lmb,
             all_lmbs,
         } = input;
         debug!("t-star: {}", t_star);
-        debug!("r-star: {}", radius_star);
+        debug!("projection alpha: {}", alpha);
 
         let dual = HyperDual::new(self.dual_shape_for_esurface_evaluation.clone());
-        let dual_rstar = dual.variable(0, radius_star.clone());
+        let dual_alpha = dual.variable(0, alpha.clone());
         let dual_t = dual.variable(1, t_star.clone());
 
         let rescale_tstar = unrescaled_momentum_sample
@@ -179,11 +208,24 @@ impl RstarTDependenceEvaluator {
             .map(|fm: &FourMomentum<F<T>>| fm.spatial.map_ref(&|x| new_constant(&dual, x)))
             .collect();
 
-        let lmb_transform = rescale_tstar.lmb_transform(
+        let mut lmb_transform = rescale_tstar.lmb_transform(
             lmb,
             subspace.get_lmb(all_lmbs),
             &dualized_externals_three_momenta,
         );
+
+        // The derivative ray comes from raw generation data, while its base is
+        // the actual transformed representative used by the projection solve.
+        // Retain every derivative, aligning the base before differentiating eta.
+        for (momentum, base) in lmb_transform
+            .0
+            .iter_mut()
+            .zip(representative_sample.loop_moms().iter())
+        {
+            momentum.px.values[0] = base.px.clone();
+            momentum.py.values[0] = base.py.clone();
+            momentum.pz.values[0] = base.pz.clone();
+        }
 
         let dualized_overlap_center = overlap_center
             .iter()
@@ -196,27 +238,6 @@ impl RstarTDependenceEvaluator {
             .map(|(momentum, center)| momentum.clone() - center.clone())
             .collect::<crate::momentum::sample::LoopMomenta<_>>();
 
-        let zero: HyperDual<F<T>> = new_constant(&dual, &radius_star.zero());
-
-        let shifted_radius_squared: HyperDual<F<T>> = match subspace.as_subspace_simple() {
-            None => shifted_t_dependent_momenta
-                .iter()
-                .map(|momentum| momentum.norm_squared())
-                .fold(zero.clone(), |acc, norm_squared| acc + norm_squared),
-            Some(indices) => shifted_t_dependent_momenta
-                .iter_enumerated()
-                .filter(|(loop_index, _)| indices.contains(loop_index))
-                .map(|(_, momentum)| momentum.norm_squared())
-                .fold(zero, |acc, norm_squared| acc + norm_squared),
-        };
-
-        let shifted_radius = shifted_radius_squared.sqrt();
-        let inverse_shifted_radius =
-            new_constant(&shifted_radius, &radius_star.one()) / shifted_radius.clone();
-
-        let unit_shifted_t_dependent_momenta = shifted_t_dependent_momenta
-            .rescale(&inverse_shifted_radius, subspace.as_subspace_simple());
-
         let dualized_external_fourmomenta = dualized_externals_three_momenta
             .into_iter()
             .zip(unrescaled_momentum_sample.external_moms())
@@ -228,8 +249,10 @@ impl RstarTDependenceEvaluator {
             })
             .collect();
 
-        let rescale_rstar = unit_shifted_t_dependent_momenta
-            .rescale(&dual_rstar, subspace.as_subspace_simple())
+        // The same IFT backend differentiates the dimensionless root. Keep the
+        // raw active displacement so null directions never enter a normalization.
+        let rescale_rstar = shifted_t_dependent_momenta
+            .rescale(&dual_alpha, subspace.as_subspace_simple())
             .iter()
             .zip(dualized_overlap_center.iter())
             .map(|(momentum, center)| momentum.clone() + center.clone())
@@ -244,34 +267,42 @@ impl RstarTDependenceEvaluator {
 
         debug!("Dual e-surface: {}", dual_esurface);
 
+        // HyperDual stores Taylor coefficients, whereas the generated IFT
+        // parameters are ordinary mixed partial derivatives.
         let params = dual_esurface.values[1..]
             .iter()
-            .map(|x| Complex::new_re(x.clone()))
+            .zip(dual_esurface.get_shape().into_iter().skip(1))
+            .map(|(coefficient, orders)| {
+                let derivative = orders
+                    .iter()
+                    .flat_map(|order| 2..=*order)
+                    .fold(coefficient.clone(), |value, factor| {
+                        value * coefficient.from_usize(factor)
+                    });
+                Complex::new_re(derivative)
+            })
             .collect_vec();
 
         debug!("Parameters for implicit function theorem: {:#?}", params);
 
-        let result = T::get_evaluator(
+        let result = evaluate_evaluator(
             self.implicit_function_theorem
                 .as_mut()
-                .expect("r_star(t) evaluator requested without t-derivative support"),
-        )(&params)
+                .expect("alpha(t) evaluator requested without t-derivative support"),
+            &params,
+            evaluation_metadata,
+        )
         .into_iter()
         .map(DualOrNot::unwrap_real)
         .collect_vec();
 
         debug!("Result from implicit function theorem: {:#?}", result);
 
-        let mut dual_values = vec![radius_star.clone()];
-        let mut n_factorial = 1;
-
+        let mut dual_values = vec![alpha.clone()];
+        let mut n_factorial = alpha.one();
         for (i, result) in result.into_iter().enumerate() {
-            if i > 0 {
-                n_factorial *= i;
-                dual_values.push(result.re / F::from_f64(n_factorial as f64));
-            } else {
-                dual_values.push(result.re);
-            }
+            n_factorial *= alpha.from_usize(i + 1);
+            dual_values.push(result.re / &n_factorial);
         }
 
         HyperDual::from_values(simple_n_deriv_shape(dual_values.len() - 1), dual_values)
@@ -280,17 +311,20 @@ impl RstarTDependenceEvaluator {
 
 pub(crate) struct RstarTDependenceInput<'a, T: FloatLike> {
     pub t_star: &'a F<T>,
-    pub radius_star: &'a F<T>,
+    pub alpha: &'a F<T>,
     pub overlap_center: &'a crate::momentum::sample::LoopMomenta<F<T>>,
     pub subspace: &'a SubspaceData,
     pub unrescaled_momentum_sample: &'a MomentumSample<T>,
+    pub representative_sample: &'a MomentumSample<T>,
     pub masses: &'a EdgeVec<F<T>>,
     pub threshold_esurface: &'a Esurface,
     pub lmb: &'a LoopMomentumBasis,
     pub all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
 }
 
-// use the chain rule to express the t-derivatives of r_star in terms of the t and r derivatives of η(r_star(t), t)
+// Use the chain rule to express derivatives of the projection root in terms of
+// the mixed derivatives of eta(root(t), t). The neutral symbolic program names
+// that scalar r_star; runtime supplies alpha and forms the physical radius later.
 pub(crate) fn generate_rstar_t_dependence_evaluator(
     num_t_derivatives: usize,
 ) -> Result<RstarTDependenceEvaluator> {
@@ -410,7 +444,272 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::hyperdual_utils::new_from_values;
+    use crate::{
+        integrands::process::GenericEvaluatorFloat,
+        processes::cross_section::CrossSectionGraph,
+        settings::runtime::{HFunction, HFunctionSettings},
+        utils::hyperdual_utils::new_from_values,
+    };
+
+    #[test]
+    fn integrated_ct_profiles_preserve_the_radial_residue() {
+        for (function, power) in [
+            (HFunction::Exponential, None),
+            (HFunction::PolyExponential, None),
+            (HFunction::PolyExponential, Some(4)),
+            (HFunction::PolyExponential, Some(16)),
+            // This profile's p=0 normalization is a focused regression
+            // check. Higher powers need log-space quadrature because their
+            // integrable x -> 0 peak is too narrow for a uniform grid.
+            (HFunction::PolyLeftRightExponential, None),
+        ] {
+            for sigma in [0.5, 2.0] {
+                let settings = IntegratedCounterTermSettings {
+                    range: IntegratedCounterTermRange::Infinite {
+                        h_function_settings: HFunctionSettings {
+                            function: function.clone(),
+                            sigma,
+                            power,
+                            ..Default::default()
+                        },
+                    },
+                };
+                for radius_star in [0.3, 3.0] {
+                    // The generated helper cancels r^(3L-1) from the measure.
+                    // Gaussian profiles are negligible after 8 sigma. The
+                    // left/right exponential has only exponential (rather than
+                    // Gaussian) tails, so integrate it over a wider finite
+                    // window before comparing its analytic normalization.
+                    let tail_multiple = if function == HFunction::PolyLeftRightExponential {
+                        64.0
+                    } else {
+                        8.0
+                    };
+                    let step = tail_multiple * sigma * radius_star / 2048.0;
+                    let integral: f64 = (0..2048)
+                        .map(|i| {
+                            evaluate_integrated_ct_normalisation(
+                                &F((i as f64 + 0.5) * step),
+                                &F(radius_star),
+                                &F(1.0),
+                                &settings,
+                            )
+                            .0
+                        })
+                        .sum::<f64>()
+                        * step;
+                    let tolerance = if function == HFunction::PolyLeftRightExponential {
+                        1.0e-8
+                    } else {
+                        2.0e-12
+                    };
+                    assert!(
+                        (integral - 1.0).abs() < tolerance,
+                        "{function:?}, power={power:?}, sigma={sigma}, r_star={radius_star}: {integral}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn integrated_ct_profile_dual_matches_normalized_density_derivatives() {
+        let sigma = 0.6_f64;
+        let radius_star = 1.7_f64;
+        let settings = IntegratedCounterTermSettings {
+            range: IntegratedCounterTermRange::Infinite {
+                h_function_settings: HFunctionSettings {
+                    function: HFunction::Exponential,
+                    sigma,
+                    ..Default::default()
+                },
+            },
+        };
+        let shape = HyperDual::new(simple_n_deriv_shape(2));
+        let dual_star = new_from_values(&shape, &[F(radius_star), F(1.0), F(0.0)]);
+        for radius in [0.2_f64, 1.4, 4.0] {
+            let dual_radius = new_from_values(&shape, &[F(radius), F(0.0), F(0.0)]);
+            let actual = evaluate_integrated_ct_normalisation_dual(
+                &dual_radius,
+                &dual_star,
+                &F(1.0),
+                &settings,
+            );
+            // Analytic half-Gaussian density and its first two r_star derivatives.
+            let x = radius / (sigma * radius_star);
+            let density =
+                2.0 * (-x * x).exp() / (std::f64::consts::PI.sqrt() * sigma * radius_star);
+            let log_derivative = (2.0 * x * x - 1.0) / radius_star;
+            let second_log_derivative = (1.0 - 6.0 * x * x) / radius_star.powi(2);
+            let expected = [
+                density,
+                density * log_derivative,
+                density * (log_derivative.powi(2) + second_log_derivative) / 2.0,
+            ];
+            for (actual, expected) in actual.values.iter().zip(expected) {
+                assert!((actual.0 - expected).abs() < 2.0e-13 * expected.abs().max(1.0));
+            }
+        }
+    }
+
+    #[test]
+    fn uv_smooth_sliver_preserves_pole_symmetry_and_hard_mode() {
+        for dynamic_width in [false, true] {
+            let settings = UVLocalisationSettings {
+                smooth_sliver: true,
+                sliver_width: 0.5,
+                dynamic_width,
+                ..Default::default()
+            };
+            let radius_star = F(2.0_f64);
+            let e_cm = F(4.0_f64);
+            let half_width = if dynamic_width { 1.0 } else { 2.0 };
+            assert_eq!(
+                evaluate_uv_damper(&radius_star, &radius_star, &e_cm, &settings),
+                F(1.0)
+            );
+            for fraction in [0.25, 0.75] {
+                let delta = F(fraction * half_width);
+                assert_eq!(
+                    evaluate_uv_damper(&(radius_star + delta), &radius_star, &e_cm, &settings),
+                    evaluate_uv_damper(&(radius_star - delta), &radius_star, &e_cm, &settings)
+                );
+            }
+            let hard = UVLocalisationSettings {
+                smooth_sliver: false,
+                ..settings.clone()
+            };
+            for sign in [-1.0, 1.0] {
+                let edge = F(radius_star.0 + sign * half_width);
+                assert_eq!(
+                    evaluate_uv_damper(&edge, &radius_star, &e_cm, &settings),
+                    F(0.0)
+                );
+                // The existing hard sliver includes its endpoints.
+                assert_eq!(
+                    evaluate_uv_damper(&edge, &radius_star, &e_cm, &hard),
+                    F((-0.25_f64).exp())
+                );
+            }
+            let forced = UVLocalisationSettings {
+                force_uv_dampers_to_one: true,
+                ..settings
+            };
+            assert_eq!(
+                evaluate_uv_damper(&F(100.0), &radius_star, &e_cm, &forced),
+                F(1.0)
+            );
+        }
+    }
+
+    #[test]
+    fn uv_smooth_sliver_dual_matches_derivatives_and_flat_boundary() {
+        let shape = HyperDual::new(simple_n_deriv_shape(2));
+        let radius_star = new_from_values(&shape, &[F(2.0_f64), F(0.7), F(0.0)]);
+        for dynamic_width in [false, true] {
+            let settings = UVLocalisationSettings {
+                smooth_sliver: true,
+                sliver_width: 0.5,
+                dynamic_width,
+                ..Default::default()
+            };
+            let scale = if dynamic_width { 2.0 } else { 4.0 };
+            let scale_derivative = if dynamic_width { 0.7 } else { 0.0 };
+            for u in [-0.4_f64, 0.0, 0.125] {
+                let radius = new_from_values(&shape, &[F(2.0 + u * scale), F(0.3), F(0.0)]);
+                let actual = evaluate_uv_damper_dual(&radius, &radius_star, &F(4.0), &settings);
+                // Differentiate the dimensionless even profile, including S(t).
+                let gap = 0.25 - u * u;
+                let value = (-u * u - u * u / gap).exp();
+                let log_first = -2.0 * u - 0.5 * u / gap.powi(2);
+                let log_second = -2.0 - 0.5 / gap.powi(2) - 2.0 * u * u / gap.powi(3);
+                let u_first = (-0.4 - u * scale_derivative) / scale;
+                let u_second = -2.0 * scale_derivative * u_first / scale;
+                let expected = [
+                    value,
+                    value * log_first * u_first,
+                    value
+                        * ((log_first.powi(2) + log_second) * u_first.powi(2)
+                            + log_first * u_second)
+                        / 2.0,
+                ];
+                let scalar = evaluate_uv_damper(
+                    &radius.values[0],
+                    &radius_star.values[0],
+                    &F(4.0),
+                    &settings,
+                );
+                assert!((actual.values[0].0 - scalar.0).abs() < 2.0e-14);
+                for (actual, expected) in actual.values.iter().zip(expected) {
+                    assert!((actual.0 - expected).abs() < 2.0e-13 * expected.abs().max(1.0));
+                }
+            }
+            for u in [-0.6_f64, -0.5, -0.4995, 0.4995, 0.5, 0.6] {
+                let radius = new_from_values(&shape, &[F(2.0 + u * scale), F(0.3), F(0.0)]);
+                let actual = evaluate_uv_damper_dual(&radius, &radius_star, &F(4.0), &settings);
+                for coefficient in actual.values {
+                    assert!(coefficient.0.abs() < 1.0e-190);
+                    if u.abs() >= 0.5 {
+                        assert_eq!(coefficient, F(0.0));
+                    }
+                }
+            }
+            let forced = UVLocalisationSettings {
+                force_uv_dampers_to_one: true,
+                ..settings
+            };
+            let radius = new_from_values(&shape, &[F(100.0), F(0.3), F(0.0)]);
+            assert_eq!(
+                evaluate_uv_damper_dual(&radius, &radius_star, &F(4.0), &forced).values,
+                vec![F(1.0), F(0.0), F(0.0)]
+            );
+        }
+    }
+
+    #[test]
+    fn uv_smooth_sliver_helper_preserves_signed_radial_principal_value() {
+        crate::initialisation::test_initialise().unwrap();
+        let settings = UVLocalisationSettings {
+            smooth_sliver: true,
+            sliver_width: 1.5,
+            ..Default::default()
+        };
+        for loop_count in [1, 2] {
+            let (pieces, _) =
+                CrossSectionGraph::single_th_prefactor_helper_atoms(1, loop_count, false, false);
+            let mut helper = GenericEvaluator::new_from_raw_params(
+                [pieces.local],
+                &CrossSectionGraph::single_th_prefactor_helper_params(1, false),
+                &FunctionMap::new(),
+                vec![],
+                OptimizationSettings::default(),
+                None,
+                &EvaluatorSettings::default(),
+            )
+            .unwrap()
+            .into_eager_only();
+            for radius_star in [0.5, 2.0] {
+                // Equal midpoint bins pair around the pole. W > r_star in the
+                // first case requires the helper's negative-radius mirror term.
+                let step = 1.0 / 2048.0;
+                let steps = ((radius_star + settings.sliver_width) / step) as usize;
+                let mut integral = 0.0;
+                for i in 0..steps {
+                    let radius = F((i as f64 + 0.5) * step);
+                    let plus = evaluate_uv_damper(&radius, &F(radius_star), &F(1.0), &settings);
+                    let minus = evaluate_uv_damper(&(-radius), &F(radius_star), &F(1.0), &settings);
+                    let params = [F(1.0), F(1.0), radius, F(radius_star), plus, minus, F(0.0)]
+                        .map(Complex::new_re);
+                    let value = f64::get_evaluator_single(&mut helper)(&params);
+                    integral += value.re.0 * radius.0.powi(3 * loop_count as i32 - 1) * step;
+                }
+                assert!(
+                    integral.abs() < 1.0e-10,
+                    "{loop_count} loops, r_star={radius_star}: PV={integral}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn uv_damper_can_be_forced_to_one() {

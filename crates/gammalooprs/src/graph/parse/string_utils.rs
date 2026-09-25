@@ -144,6 +144,8 @@ impl FromStripedStr for usize {
 
 #[cfg(test)]
 mod tests {
+    use linnet::parser::DotGraph;
+
     use super::dot_attr_value;
 
     const RAW_DOT_VALUE: &str = "quote:\" slash:\\ lf:\n cr:\r tab:\t";
@@ -155,5 +157,43 @@ mod tests {
             dot_attr_value(RAW_DOT_VALUE),
             format!(r#""{ESCAPED_DOT_VALUE}""#)
         );
+    }
+
+    #[test]
+    fn dot_statement_value_survives_dot_round_trip() {
+        let mut graph: DotGraph = DotGraph::from_string("digraph G {}").unwrap();
+        graph
+            .global_data
+            .statements
+            .insert("escaped".to_string(), RAW_DOT_VALUE.to_string());
+
+        let reparsed: DotGraph = DotGraph::from_string(graph.debug_dot()).unwrap();
+
+        assert_eq!(reparsed.global_data.statements["escaped"], RAW_DOT_VALUE);
+    }
+
+    #[test]
+    fn literal_multiline_dot_string_is_preserved() {
+        let graph: DotGraph = DotGraph::from_string(
+            "digraph G { graph [embedded=\"schema_version = 1\n\ncuts = []\"] }",
+        )
+        .unwrap();
+
+        assert_eq!(
+            graph.global_data.statements["embedded"],
+            "schema_version = 1\n\ncuts = []"
+        );
+    }
+
+    #[test]
+    fn dot_statements_preserve_unicode_and_embedded_language_escapes() {
+        let raw = "eta:η theta:θ regex:\\d quote:\" newline:\n";
+        let mut graph: DotGraph = DotGraph::from_string("digraph G {}").unwrap();
+        graph
+            .global_data
+            .statements
+            .insert("embedded".into(), raw.into());
+        let reparsed: DotGraph = DotGraph::from_string(graph.debug_dot()).unwrap();
+        assert_eq!(reparsed.global_data.statements["embedded"], raw);
     }
 }

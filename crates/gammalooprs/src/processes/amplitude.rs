@@ -28,11 +28,14 @@ use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
         CutCFFIndex,
-        esurface::{GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceId},
+        esurface::{GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
     },
     graph::{
         GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
         cuts::{CutSet, ResidueSelector},
+        threshold_counterterms::{
+            ThresholdCountertermMultiplier, ThresholdCountertermSpec, ThresholdCountertermVariant,
+        },
     },
     integrands::process::{
         GenericEvaluator, LmbMultiChannelingSetup,
@@ -41,10 +44,16 @@ use crate::{
         param_builder::FnMapEntry,
     },
     model::ArcParticle,
-    momentum::{sample::ExternalIndex, signature::SignatureLike},
+    momentum::{
+        sample::{ExternalIndex, SubspaceData},
+        signature::SignatureLike,
+    },
     processes::{
         DotExportSettings, EvaluatorSettings, GraphGenerationStats, GraphGroupSelectionPlan,
-        GraphGroupSelectionSpec, NamedGraphGenerationReport, StandaloneExportSettings,
+        GraphGroupSelectionSpec, NamedGraphGenerationReport,
+        ResolvedThresholdCountertermAssociation, ResolvedThresholdCountertermVariant,
+        ResolvedThresholdCounterterms, SingleThresholdPieces, StandaloneExportSettings,
+        ThresholdCountertermOrigin, ThresholdCountertermSide, ThresholdCountertermVariantId,
         build_derivative_structure_atom, params_for_derivative_order,
     },
     settings::{
@@ -62,7 +71,7 @@ use eyre::{Context, eyre};
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        involution::{EdgeVec, Flow, HedgePair},
+        involution::{EdgeIndex, Flow, HedgePair},
         subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetOps},
     },
     parser::DotGraph,
@@ -379,6 +388,74 @@ impl Amplitude {
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
         // preprocess each graph individually
+        // Threshold directives of every member use the master's edge IDs and topology.
+        // The supplied graph group is responsible for aligning their physical meaning.
+        for group in &self.graph_group_structure {
+            if group.into_iter().all(|id| {
+                self.graphs[id]
+                    .graph
+                    .threshold_counterterms
+                    .is_legacy_equivalent()
+            }) {
+                // Metadata-free groups retain their native member geometry and shared full-space solve.
+                for graph_id in group {
+                    self.graphs[graph_id].derived_data.threshold_topology = None;
+                }
+                continue;
+            }
+            let master = &self.graphs[group.master()].graph;
+            let topology = (
+                master.clone(),
+                master.generate_loop_momentum_bases_of(&master.no_dummy()),
+            );
+            for graph_id in group {
+                self.graphs[graph_id]
+                    .graph
+                    .threshold_counterterms
+                    .validate_for_graph(&topology.0)?;
+                self.graphs[graph_id].derived_data.threshold_topology = Some(topology.clone());
+            }
+            let mut explicit = BTreeMap::new();
+            let all_lmbs = &self.graphs[group.master()]
+                .derived_data
+                .threshold_topology
+                .as_ref()
+                .unwrap()
+                .1;
+            for id in group {
+                for (label, subspace, description) in
+                    self.graphs[id].explicit_threshold_group_members()?
+                {
+                    explicit
+                        .entry(label)
+                        .or_insert_with(Vec::new)
+                        .push((subspace.solve_signature(all_lmbs), description));
+                }
+            }
+            let conflicts = explicit
+                .into_iter()
+                .filter_map(|(label, members)| {
+                    (members.iter().map(|(key, _)| key).unique().count() > 1).then(|| {
+                        format!(
+                            "group_id={label}: {}",
+                            members
+                                .into_iter()
+                                .map(|(key, description)| format!(
+                                    "{description}, signed cycles {key:?}"
+                                ))
+                                .join("; ")
+                        )
+                    })
+                })
+                .collect_vec();
+            if !conflicts.is_empty() {
+                return Err(eyre!(
+                    "Amplitude group master '{}' has incompatible threshold solve groups:\n{}",
+                    self.graphs[group.master()].graph.name,
+                    conflicts.join("\n")
+                ));
+            }
+        }
         let integrand_name = self.name.clone();
 
         let preprocess_span = if generation_progress::detailed_progress_enabled() {
@@ -440,6 +517,25 @@ impl Amplitude {
         drop(preprocess_span_enter);
         drop(preprocess_span);
 
+        // Groups containing non-default variants need the variant evaluator lane throughout,
+        // including members whose directives reproduce their defaults.
+        for group in &self.graph_group_structure {
+            if group.into_iter().any(|id| {
+                self.graphs[id]
+                    .derived_data
+                    .resolved_threshold_counterterms
+                    .as_ref()
+                    .is_some_and(|resolved| !resolved.legacy_equivalent)
+            }) {
+                for id in group {
+                    if let Some(resolved) =
+                        &mut self.graphs[id].derived_data.resolved_threshold_counterterms
+                    {
+                        resolved.legacy_equivalent = false;
+                    }
+                }
+            }
+        }
         self.generate_grouped_derived_data()?;
 
         Ok(preprocess_reports)
@@ -748,6 +844,54 @@ pub struct AmplitudeGraph {
     pub derived_data: AmplitudeDerivedData,
 }
 
+#[derive(Clone)]
+struct ResolvedAmplitudeThresholdCountertermDraft {
+    name: String,
+    group_id: Option<usize>,
+    origin: ThresholdCountertermOrigin,
+    disable: bool,
+    requested_subspace: Option<Vec<EdgeIndex>>,
+    requested_parent_lmb: Option<Vec<EdgeIndex>>,
+    multiplier: Option<ThresholdCountertermMultiplier>,
+    subspace: SubspaceData,
+}
+
+impl ResolvedAmplitudeThresholdCountertermDraft {
+    fn is_compatible_with(
+        &self,
+        other: &Self,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> bool {
+        self.name == other.name
+            && self.group_id == other.group_id
+            && self.disable == other.disable
+            && self.multiplier == other.multiplier
+            && self
+                .subspace
+                .has_equivalent_embedding(&other.subspace, all_lmbs)
+    }
+}
+
+struct ResolvedAmplitudeThresholdAssociationDraft {
+    esurface_id: EsurfaceID,
+    threshold_edges: Vec<EdgeIndex>,
+    origin: ThresholdCountertermOrigin,
+    variant_subspaces: Vec<SubspaceData>,
+}
+
+struct ResolvedAmplitudeThresholdGroupDraft {
+    raised_esurface_group: RaisedEsurfaceGroup,
+    associations: Vec<ResolvedAmplitudeThresholdAssociationDraft>,
+    variants: Vec<ResolvedAmplitudeThresholdCountertermDraft>,
+}
+
+struct AmplitudeThresholdCountertermBuild {
+    legacy_counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
+    variants: TiVec<ThresholdCountertermVariantId, AmplitudeThresholdCountertermVariant>,
+    resolved: ResolvedThresholdCounterterms,
+    raised_esurface_ids: TiVec<EsurfaceID, RaisedEsurfaceId>,
+}
+
 pub struct AnalyticalEvaluationConfig<'a> {
     pub model: &'a Model,
     pub refresh_model_values: bool,
@@ -764,6 +908,7 @@ impl AmplitudeGraph {
         AmplitudeGraph {
             graph,
             derived_data: AmplitudeDerivedData {
+                threshold_topology: None,
                 all_mighty_integrand: Atom::Zero,
                 all_mighty_numerators: Vec::new(),
                 cff_expression: None,
@@ -772,6 +917,8 @@ impl AmplitudeGraph {
                 tropical_sampler: None,
                 multi_channeling_setup: None,
                 threshold_counterterms: TiVec::new(),
+                threshold_counterterm_variants: TiVec::new(),
+                resolved_threshold_counterterms: None,
                 raised_data: RaisedEsurfaceData {
                     raised_groups: TiVec::new(),
                     pass_two_evaluator: None,
@@ -812,7 +959,11 @@ impl AmplitudeGraph {
         writer: &mut W,
         settings: &DotExportSettings,
     ) -> Result<(), std::io::Error> {
-        self.graph.dot_serialize_io(writer, settings)
+        if let Some(graph) = self.graph_with_materialized_threshold_counterterms(settings) {
+            graph.dot_serialize_io(writer, settings)
+        } else {
+            self.graph.dot_serialize_io(writer, settings)
+        }
     }
 
     pub(crate) fn write_dot_fmt<W: fmt::Write>(
@@ -820,7 +971,36 @@ impl AmplitudeGraph {
         writer: &mut W,
         settings: &DotExportSettings,
     ) -> Result<(), std::fmt::Error> {
-        self.graph.dot_serialize_fmt(writer, settings)
+        if let Some(graph) = self.graph_with_materialized_threshold_counterterms(settings) {
+            graph.dot_serialize_fmt(writer, settings)
+        } else {
+            self.graph.dot_serialize_fmt(writer, settings)
+        }
+    }
+
+    fn graph_with_materialized_threshold_counterterms(
+        &self,
+        settings: &DotExportSettings,
+    ) -> Option<Graph> {
+        // Non-master members retain their supplied metadata; implicit native defaults must
+        // not become explicit master-topology directives when the graph is reimported.
+        if !settings.include_autogenerated_fields
+            || (self.graph.group_id.is_some() && !self.graph.is_group_master)
+        {
+            return None;
+        }
+        let resolved = self.derived_data.resolved_threshold_counterterms.as_ref()?;
+        let all_lmbs = self
+            .derived_data
+            .threshold_topology
+            .as_ref()
+            .map(|(_, lmbs)| lmbs)
+            .or(self.derived_data.lmbs.as_ref())?;
+        let mut graph = self.graph.clone();
+        graph.threshold_counterterms = crate::graph::autogen::Autogen::explicit(
+            resolved.materialized_spec(&self.graph.threshold_counterterms, all_lmbs),
+        );
+        Some(graph)
     }
 
     #[instrument(skip_all, err)]
@@ -924,17 +1104,26 @@ impl AmplitudeGraph {
                     })
                     .collect(),
             );
-            self.derived_data.raised_data = raised_data;
 
-            let (threshold_counterterms, raised_esurface_ids) = self
-                .build_threshold_counterterm_parametric_integrand(
-                    settings,
-                    vk,
-                    locked_runtime_settings,
-                    model,
-                )?;
-            self.derived_data.threshold_counterterms = threshold_counterterms;
-            self.derived_data.raised_esurface_ids = raised_esurface_ids;
+            let build = self.build_threshold_counterterm_parametric_integrand(
+                &raised_data,
+                settings,
+                vk,
+                locked_runtime_settings,
+                model,
+            )?;
+            self.derived_data.threshold_counterterms = build.legacy_counterterms;
+            self.derived_data.threshold_counterterm_variants = build.variants;
+            self.derived_data.resolved_threshold_counterterms = Some(build.resolved);
+            self.derived_data.raised_esurface_ids = build.raised_esurface_ids;
+            self.derived_data.raised_data = raised_data;
+        } else {
+            self.derived_data.resolved_threshold_counterterms = None;
+            self.derived_data.threshold_counterterms.clear();
+            self.derived_data.threshold_counterterm_variants.clear();
+            self.derived_data.raised_esurface_ids.clear();
+            self.derived_data.raised_data.raised_groups.clear();
+            self.derived_data.raised_data.pass_two_evaluator = None;
         }
 
         Ok(GraphGenerationStats {
@@ -1289,58 +1478,339 @@ impl AmplitudeGraph {
         Ok(())
     }
 
-    #[instrument(skip_all, err)]
-    fn build_threshold_counterterm_parametric_integrand(
-        &mut self,
+    fn configured_amplitude_threshold_variants(
+        spec: &ThresholdCountertermSpec,
+        threshold_edges: &[EdgeIndex],
+    ) -> Vec<(ThresholdCountertermVariant, ThresholdCountertermOrigin)> {
+        let configured = spec
+            .cuts
+            .iter()
+            .find(|cut| cut.edges.is_empty())
+            .and_then(|cut| {
+                cut.thresholds
+                    .iter()
+                    .find(|threshold| threshold.edges == threshold_edges)
+            })
+            .filter(|threshold| !threshold.counterterms.is_empty());
+
+        match configured {
+            Some(threshold) => threshold
+                .counterterms
+                .iter()
+                .cloned()
+                .map(|mut variant| {
+                    if let Some(multiplier) = &mut variant.multiplier {
+                        for (name, definition) in &spec.function_map {
+                            multiplier
+                                .function_map
+                                .entry(name.clone())
+                                .or_insert_with(|| definition.clone());
+                        }
+                    }
+                    (variant, ThresholdCountertermOrigin::Explicit)
+                })
+                .collect(),
+            None => vec![(
+                ThresholdCountertermVariant {
+                    name: Some("default".to_string()),
+                    subspace: None,
+                    parent_lmb: None,
+                    disable: false,
+                    multiplier: None,
+                    group_id: None,
+                },
+                ThresholdCountertermOrigin::Autogenerated,
+            )],
+        }
+    }
+
+    fn preferred_amplitude_parent_lmb(&self) -> Result<LmbIndex> {
+        let (topology, all_lmbs) = self.derived_data.threshold_topology.as_ref().map_or_else(
+            || {
+                (
+                    &self.graph,
+                    self.derived_data
+                        .lmbs
+                        .as_ref()
+                        .expect("amplitude threshold resolution requires loop-momentum bases"),
+                )
+            },
+            |(graph, lmbs)| (graph, lmbs),
+        );
+        if let Some((lmb_index, _)) = all_lmbs
+            .iter_enumerated()
+            .find(|(_, lmb)| lmb.loop_edges == topology.loop_momentum_basis.loop_edges)
+        {
+            return Ok(lmb_index);
+        }
+
+        all_lmbs
+            .iter_enumerated()
+            .next()
+            .map(|(lmb_index, _)| lmb_index)
+            .ok_or_else(|| eyre!("Graph '{}' has no generated LMBs", self.graph.name))
+    }
+
+    fn resolve_amplitude_threshold_variant_subspace(
+        &self,
+        variant: &ThresholdCountertermVariant,
+        legacy_subspace: &SubspaceData,
+        context: &str,
+    ) -> Result<SubspaceData> {
+        let (topology, all_lmbs) = self.derived_data.threshold_topology.as_ref().map_or_else(
+            || {
+                (
+                    &self.graph,
+                    self.derived_data
+                        .lmbs
+                        .as_ref()
+                        .expect("amplitude threshold resolution requires loop-momentum bases"),
+                )
+            },
+            |(graph, lmbs)| (graph, lmbs),
+        );
+        let containing_subgraph = topology.no_dummy();
+        let build_in_parent = |parent_lmb_index| match &variant.subspace {
+            Some(requested_basis_edges) => SubspaceData::new_from_parent_basis_edges(
+                requested_basis_edges,
+                &containing_subgraph,
+                parent_lmb_index,
+                topology,
+                all_lmbs,
+            ),
+            None => SubspaceData::new_with_user_selected_lmb(
+                containing_subgraph.clone(),
+                parent_lmb_index,
+                topology,
+                all_lmbs,
+            ),
+        };
+
+        if let Some(requested_parent_lmb) = &variant.parent_lmb {
+            let matching_lmbs = all_lmbs
+                .iter_enumerated()
+                .filter_map(|(lmb_index, lmb)| {
+                    lmb.loop_edges
+                        .iter()
+                        .eq(requested_parent_lmb.iter())
+                        .then_some(lmb_index)
+                })
+                .collect_vec();
+            if matching_lmbs.is_empty() {
+                return Err(eyre!(
+                    "{context} requests parent_lmb {:?}, which is not among graph '{}' generated LMBs",
+                    requested_parent_lmb,
+                    self.graph.name,
+                ));
+            }
+            let mut built = matching_lmbs
+                .iter()
+                .map(|&lmb_index| build_in_parent(lmb_index).map(|subspace| (lmb_index, subspace)))
+                .collect::<Result<Vec<_>>>()
+                .with_context(|| {
+                    format!("{context} is incompatible with its requested parent_lmb")
+                })?;
+            let (_, selected) = built.remove(0);
+            if built
+                .iter()
+                .all(|(_, candidate)| selected.has_equivalent_embedding(candidate, all_lmbs))
+            {
+                return Ok(selected);
+            }
+            return Err(eyre!(
+                "{context} parent_lmb {:?} has genuinely different generated embeddings",
+                requested_parent_lmb,
+            ));
+        }
+
+        if variant.subspace.is_none() {
+            return Ok(legacy_subspace.clone());
+        }
+
+        let preferred_parent = legacy_subspace.parent_lmb_index();
+        if let Ok(subspace) = build_in_parent(preferred_parent) {
+            return Ok(subspace);
+        }
+
+        let mut compatible = Vec::new();
+        let mut rejections = Vec::new();
+        for (lmb_index, lmb) in all_lmbs.iter_enumerated() {
+            if lmb_index == preferred_parent {
+                continue;
+            }
+            match build_in_parent(lmb_index) {
+                Ok(subspace) => compatible.push((lmb_index, subspace)),
+                Err(error) => rejections.push(format!("parent {:?}: {error:#}", lmb.loop_edges,)),
+            }
+        }
+
+        match compatible.len() {
+            1 => Ok(compatible.pop().unwrap().1),
+            0 => Err(eyre!(
+                "{context} cannot resolve subspace {:?} in any generated parent LMB. Rejections:\n{}",
+                variant.subspace,
+                rejections.join("\n"),
+            )),
+            _ => {
+                let (_, selected) = compatible.remove(0);
+                if compatible
+                    .iter()
+                    .all(|(_, candidate)| selected.has_equivalent_embedding(candidate, all_lmbs))
+                {
+                    Ok(selected)
+                } else {
+                    Err(eyre!(
+                        "{context} subspace {:?} has multiple genuinely different non-preferred parent LMB embeddings {:?}; specify parent_lmb",
+                        variant.subspace,
+                        compatible
+                            .iter()
+                            .map(|(lmb_index, _)| &all_lmbs[*lmb_index].loop_edges)
+                            .collect_vec(),
+                    ))
+                }
+            }
+        }
+    }
+
+    fn explicit_threshold_group_members(&self) -> Result<Vec<(usize, SubspaceData, String)>> {
+        let (topology, all_lmbs) = self.derived_data.threshold_topology.as_ref().map_or_else(
+            || {
+                (
+                    &self.graph,
+                    self.derived_data
+                        .lmbs
+                        .as_ref()
+                        .expect("threshold validation requires LMBs"),
+                )
+            },
+            |(graph, lmbs)| (graph, lmbs),
+        );
+        let default = SubspaceData::new_with_user_selected_lmb(
+            topology.no_dummy(),
+            self.preferred_amplitude_parent_lmb()?,
+            topology,
+            all_lmbs,
+        )?;
+        self.graph
+            .threshold_counterterms
+            .cuts
+            .iter()
+            .flat_map(|cut| &cut.thresholds)
+            .flat_map(|threshold| {
+                threshold.counterterms.iter().filter_map(move |variant| {
+                    variant.group_id.map(|label| (threshold, variant, label))
+                })
+            })
+            .map(|(threshold, variant, label)| {
+                let description = format!(
+                    "graph '{}' threshold {:?} variant '{}' parent {:?} subspace {:?}",
+                    self.graph.name,
+                    threshold.edges,
+                    variant.name.as_deref().unwrap_or("default"),
+                    variant.parent_lmb,
+                    variant.subspace
+                );
+                self.resolve_amplitude_threshold_variant_subspace(variant, &default, &description)
+                    .map(|subspace| (label, subspace, description))
+            })
+            .collect()
+    }
+
+    fn resolve_amplitude_threshold_counterterm_directives(
+        &self,
+        raised_data: &RaisedEsurfaceData,
         settings: &GenerationSettings,
-        vakint: &Vakint,
         locked_runtime_settings: &LockedRuntimeSettings,
         model: &Model,
     ) -> Result<(
-        TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
+        ResolvedThresholdCounterterms,
         TiVec<EsurfaceID, RaisedEsurfaceId>,
     )> {
-        let _progress_guard =
-            generation_progress::enter_detailed_progress_span("Building Threshold Counterterms");
-        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
-        let production_expression = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .expect("cff_expression should have been created");
-
         let global_cff = self
             .derived_data
             .cff_expression
             .as_ref()
             .expect("cff_expression should have been created");
-        let esurface_raising = &self.derived_data.raised_data;
-        let mut counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom> = ti_vec![
-            AmplitudeCountertermAtom::new();
-            esurface_raising.raised_groups.len()
-        ];
+        let (topology, all_lmbs) = self.derived_data.threshold_topology.as_ref().map_or_else(
+            || {
+                (
+                    &self.graph,
+                    self.derived_data
+                        .lmbs
+                        .as_ref()
+                        .expect("amplitude threshold resolution requires loop-momentum bases"),
+                )
+            },
+            |(graph, lmbs)| (graph, lmbs),
+        );
+        let preferred_parent = self.preferred_amplitude_parent_lmb()?;
+        let legacy_subspace = SubspaceData::new_with_user_selected_lmb(
+            topology.no_dummy(),
+            preferred_parent,
+            topology,
+            all_lmbs,
+        )
+        .with_context(|| {
+            format!(
+                "Graph '{}' cannot construct its legacy maximal amplitude threshold subspace",
+                self.graph.name,
+            )
+        })?;
+
+        let mut explicit = BTreeMap::new();
+        for (label, subspace, description) in self.explicit_threshold_group_members()? {
+            explicit
+                .entry(label)
+                .or_insert_with(Vec::new)
+                .push((subspace.solve_signature(all_lmbs), description));
+        }
+        let conflicts = explicit
+            .into_iter()
+            .filter_map(|(label, members)| {
+                (members.iter().map(|(key, _)| key).unique().count() > 1).then(|| {
+                    format!(
+                        "group_id={label}: {}",
+                        members
+                            .into_iter()
+                            .map(|(key, description)| format!(
+                                "{description}, signed cycles {key:?}"
+                            ))
+                            .join("; ")
+                    )
+                })
+            })
+            .collect_vec();
+        if !conflicts.is_empty() {
+            return Err(eyre!(
+                "Amplitude graph '{}' has incompatible threshold solve groups:\n{}",
+                self.graph.name,
+                conflicts.join("\n")
+            ));
+        }
+
         let mut raised_esurface_ids: TiVec<EsurfaceID, Option<RaisedEsurfaceId>> =
             ti_vec![None; global_cff.expression.surfaces.esurface_cache.len()];
-
-        for (raised_esurface_id, raised_group) in esurface_raising.raised_groups.iter_enumerated() {
+        for (raised_esurface_id, raised_group) in raised_data.raised_groups.iter_enumerated() {
             for &esurface_id in &raised_group.esurface_ids {
                 raised_esurface_ids[esurface_id] = Some(raised_esurface_id);
             }
         }
-        let raised_esurface_ids: TiVec<EsurfaceID, RaisedEsurfaceId> = raised_esurface_ids
+        let raised_esurface_ids = raised_esurface_ids
             .into_iter()
-            .map(|raised_esurface_id| {
-                raised_esurface_id
-                    .expect("every esurface should belong to exactly one raised-esurface group")
+            .enumerate()
+            .map(|(esurface_id, raised_esurface_id)| {
+                raised_esurface_id.ok_or_else(|| {
+                    eyre!(
+                        "Graph '{}' E-surface {esurface_id} is missing from raised-esurface data",
+                        self.graph.name,
+                    )
+                })
             })
-            .collect();
-
-        let mut cuts = vec![];
+            .collect::<Result<TiVec<EsurfaceID, RaisedEsurfaceId>>>()?;
 
         let external_filter: SuBitGraph = self.graph.external_filter();
-        let mut incoming_externals = vec![];
-        let mut outgoing_externals = vec![];
-
+        let mut incoming_externals = Vec::new();
+        let mut outgoing_externals = Vec::new();
         for (edge, edge_id, _) in self.graph.iter_edges_of(&external_filter) {
             match edge {
                 HedgePair::Unpaired {
@@ -1352,51 +1822,353 @@ impl AmplitudeGraph {
                 _ => unreachable!("the external filter must contain only unpaired edges"),
             }
         }
-
-        for raised_data in esurface_raising
-            .raised_groups
+        let masses = settings
+            .threshold_subtraction
+            .check_esurface_at_generation
+            .then(|| self.graph.get_real_mass_vector(model));
+        // The complete CFF is retained for 3D UV construction; threshold activity
+        // follows the requested orientation selection independently.
+        let selected_esurface_ids = global_cff
+            .expression
+            .orientations
             .iter()
-            .filter(|raised_group| raised_group.max_occurence > 0)
-            .cloned()
-        {
-            let esurface_id = raised_data.esurface_ids[0];
-            let esurface = &global_cff.expression.surfaces.esurface_cache[esurface_id];
+            .filter(|orientation| settings.orientation_pattern.filter(*orientation))
+            .flat_map(|orientation| {
+                orientation
+                    .iter_denominator_nodes()
+                    .filter_map(|node| match node.data {
+                        crate::cff::surface::HybridSurfaceID::Esurface(esurface_id) => {
+                            Some(esurface_id)
+                        }
+                        _ => None,
+                    })
+            })
+            .collect::<AHashSet<_>>();
 
-            if esurface.external_shift.is_empty() {
-                continue;
-            }
+        let configured_thresholds = self
+            .graph
+            .threshold_counterterms
+            .cuts
+            .iter()
+            .flat_map(|cut| cut.thresholds.iter().map(|threshold| &threshold.edges))
+            .collect_vec();
+        if !configured_thresholds.is_empty() {
+            // A selected orientation need not contain every configured threshold. Validate the
+            // declarations against topology-wide bond identities so those absent only from the
+            // selected CFF remain dormant without accepting a valid-edge typo silently. Bonds
+            // crossing an edge contracted by amplitude CFF generation cannot become E-surfaces.
+            let contracted_edges = topology
+                .iter_edges_of(
+                    &topology
+                        .tree_edges
+                        .subtract(&topology.initial_state_cut)
+                        .subtract(&topology.external_filter::<SuBitGraph>()),
+                )
+                .map(|(_, edge_id, _)| edge_id)
+                .collect::<AHashSet<_>>();
+            let no_dummy = topology.no_dummy();
+            let external_count = topology
+                .iter_edges_of(&no_dummy)
+                .filter(|(pair, _, _)| matches!(pair, HedgePair::Unpaired { .. }))
+                .count();
+            let topology_thresholds = topology
+                .underlying
+                .all_bonds_of(&no_dummy, &(1..))
+                .into_iter()
+                .filter_map(|bond| {
+                    let mut edges = Vec::new();
+                    let mut bond_external_count = 0;
+                    for (pair, edge_id, _) in topology.iter_edges_of(&bond) {
+                        match pair {
+                            HedgePair::Split { .. } => edges.push(edge_id),
+                            HedgePair::Unpaired { .. } => bond_external_count += 1,
+                            HedgePair::Paired { .. } => {
+                                unreachable!("a topology bond contains only boundary half-edges")
+                            }
+                        }
+                    }
+                    edges.sort_unstable();
+                    (!edges.is_empty()
+                        && !edges.iter().any(|edge| contracted_edges.contains(edge))
+                        && bond_external_count > 0
+                        && bond_external_count < external_count)
+                        .then_some(edges)
+                })
+                .collect::<AHashSet<_>>();
 
-            let is_known_existing_at_generation =
-                settings.threshold_subtraction.check_esurface_at_generation;
-            if is_known_existing_at_generation {
-                let masses: EdgeVec<F<f64>> = self.graph.get_real_mass_vector(model);
-                let lmb = &self.graph.loop_momentum_basis;
-                if !locked_runtime_settings.existence_check(
-                    esurface,
-                    &masses,
-                    &self.graph.get_external_signature(),
-                    lmb,
-                    settings.threshold_subtraction.esurface_existence_threshold,
-                ) {
-                    continue;
+            for threshold_edges in configured_thresholds {
+                if !topology_thresholds.contains(threshold_edges) {
+                    return Err(eyre!(
+                        "Amplitude graph '{}' threshold_counterterms threshold {:?} does not match a topology-discovered E-surface",
+                        self.graph.name,
+                        threshold_edges,
+                    ));
                 }
             }
+        }
 
-            if settings
-                .threshold_subtraction
-                .assume_positive_external_energies
-                && !is_known_existing_at_generation
-                && !esurface.external_shift_is_strictly_negative_for_positive_energies(
-                    &incoming_externals,
-                    &outgoing_externals,
+        let mut group_drafts = Vec::new();
+        let mut legacy_equivalent = true;
+        for (raised_esurface_id, raised_group) in raised_data.raised_groups.iter_enumerated() {
+            let selected_group_esurface_ids = raised_group
+                .esurface_ids
+                .iter()
+                .copied()
+                .filter(|esurface_id| selected_esurface_ids.contains(esurface_id))
+                .collect_vec();
+            let Some(&representative_esurface_id) = selected_group_esurface_ids.first() else {
+                debug!(
+                    "Leaving amplitude graph '{}' raised threshold group {} dormant because none of its E-surfaces occurs in the selected orientations",
+                    self.graph.name, raised_esurface_id.0,
+                );
+                continue;
+            };
+            let representative_esurface =
+                &global_cff.expression.surfaces.esurface_cache[representative_esurface_id];
+            if representative_esurface.external_shift.is_empty() {
+                continue;
+            }
+            if let Some(masses) = &masses
+                && !locked_runtime_settings.existence_check(
+                    representative_esurface,
+                    masses,
+                    &self.graph.get_external_signature(),
+                    &self.graph.loop_momentum_basis,
+                    settings.threshold_subtraction.esurface_existence_threshold,
                 )
             {
                 continue;
             }
+            if settings
+                .threshold_subtraction
+                .assume_positive_external_energies
+                && masses.is_none()
+                && !representative_esurface
+                    .external_shift_is_strictly_negative_for_positive_energies(
+                        &incoming_externals,
+                        &outgoing_externals,
+                    )
+            {
+                continue;
+            }
 
+            let mut associations = Vec::new();
+            let mut representative_variants =
+                None::<Vec<ResolvedAmplitudeThresholdCountertermDraft>>;
+            for &esurface_id in &selected_group_esurface_ids {
+                let mut threshold_edges = global_cff.expression.surfaces.esurface_cache
+                    [esurface_id]
+                    .energies
+                    .iter()
+                    .copied()
+                    .collect_vec();
+                threshold_edges.sort_unstable();
+                let configured = Self::configured_amplitude_threshold_variants(
+                    &self.graph.threshold_counterterms,
+                    &threshold_edges,
+                );
+                let mut variants = Vec::with_capacity(configured.len());
+                for (variant, origin) in configured {
+                    if !variant.disable
+                        && variant
+                            .multiplier
+                            .as_ref()
+                            .is_some_and(|multiplier| multiplier.symmetrize)
+                    {
+                        unimplemented!(
+                            "symmetrized threshold-counterterm multipliers are not implemented (amplitude graph '{}', threshold {:?}, variant '{}')",
+                            self.graph.name,
+                            threshold_edges,
+                            variant.name.as_deref().unwrap_or("default"),
+                        );
+                    }
+                    let name = variant
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| "default".to_string());
+                    let context = format!(
+                        "amplitude graph '{}' threshold {:?} variant '{}'",
+                        self.graph.name, threshold_edges, name,
+                    );
+                    let subspace = self.resolve_amplitude_threshold_variant_subspace(
+                        &variant,
+                        &legacy_subspace,
+                        &context,
+                    )?;
+                    variants.push(ResolvedAmplitudeThresholdCountertermDraft {
+                        name,
+                        group_id: variant.group_id,
+                        origin,
+                        disable: variant.disable,
+                        requested_subspace: variant.subspace,
+                        requested_parent_lmb: variant.parent_lmb,
+                        multiplier: variant.multiplier,
+                        subspace,
+                    });
+                }
+                let association_origin = variants
+                    .first()
+                    .map(|variant| variant.origin)
+                    .unwrap_or(ThresholdCountertermOrigin::Autogenerated);
+                let variant_subspaces = variants
+                    .iter()
+                    .map(|variant| variant.subspace.clone())
+                    .collect();
+
+                if let Some(expected) = &representative_variants {
+                    if variants.len() != expected.len()
+                        || variants.iter().zip(expected).any(|(variant, expected)| {
+                            !variant.is_compatible_with(expected, all_lmbs)
+                        })
+                    {
+                        return Err(eyre!(
+                            "Amplitude graph '{}' raised threshold {:?} resolves incompatible variants for E-surfaces {} and {}: threshold {:?} [{}]; threshold {:?} [{}]. Constituents of one raised residue must retain the same variant names, group IDs, subspaces and multipliers",
+                            self.graph.name,
+                            raised_group.esurface_ids,
+                            representative_esurface_id.0,
+                            esurface_id.0,
+                            representative_esurface.energies,
+                            expected
+                                .iter()
+                                .map(|variant| format!(
+                                    "'{}' group_id={:?} parent={:?} cycles={:?}",
+                                    variant.name,
+                                    variant.group_id,
+                                    variant.requested_parent_lmb,
+                                    variant.subspace.solve_signature(all_lmbs)
+                                ))
+                                .join("; "),
+                            threshold_edges,
+                            variants
+                                .iter()
+                                .map(|variant| format!(
+                                    "'{}' group_id={:?} parent={:?} cycles={:?}",
+                                    variant.name,
+                                    variant.group_id,
+                                    variant.requested_parent_lmb,
+                                    variant.subspace.solve_signature(all_lmbs)
+                                ))
+                                .join("; "),
+                        ));
+                    }
+                } else {
+                    representative_variants = Some(variants);
+                }
+                associations.push(ResolvedAmplitudeThresholdAssociationDraft {
+                    esurface_id,
+                    threshold_edges,
+                    origin: association_origin,
+                    variant_subspaces,
+                });
+            }
+
+            let variants = representative_variants.unwrap_or_default();
+            if variants.len() != 1
+                || variants[0].disable
+                || variants[0].group_id.is_some()
+                || variants[0].multiplier.is_some()
+                || !variants[0]
+                    .subspace
+                    .has_equivalent_embedding(&legacy_subspace, all_lmbs)
+            {
+                legacy_equivalent = false;
+            }
+            group_drafts.push(ResolvedAmplitudeThresholdGroupDraft {
+                raised_esurface_group: raised_group.clone(),
+                associations,
+                variants,
+            });
+        }
+
+        let mut variants =
+            TiVec::<ThresholdCountertermVariantId, ResolvedThresholdCountertermVariant>::new();
+        for group in group_drafts {
+            for (variant_index, variant) in group.variants.into_iter().enumerate() {
+                if variant.disable {
+                    continue;
+                }
+                let parent_lmb_index = variant.subspace.parent_lmb_index();
+                variants.push(ResolvedThresholdCountertermVariant {
+                    name: variant.name,
+                    group_id: variant.group_id,
+                    cut_group_id: None,
+                    associations: group
+                        .associations
+                        .iter()
+                        .map(|association| {
+                            let subspace = association.variant_subspaces[variant_index].clone();
+                            ResolvedThresholdCountertermAssociation {
+                                cut_id: None,
+                                cut_edges: Vec::new(),
+                                threshold_edges: association.threshold_edges.clone(),
+                                esurface_id: association.esurface_id,
+                                requires_explicit_parent_lmb: subspace.parent_lmb_index()
+                                    != legacy_subspace.parent_lmb_index(),
+                                subspace,
+                                eligible: true,
+                                origin: association.origin,
+                            }
+                        })
+                        .collect(),
+                    side: ThresholdCountertermSide::Amplitude,
+                    threshold_esurface_ids: group.raised_esurface_group.esurface_ids.clone(),
+                    raised_esurface_group: group.raised_esurface_group.clone(),
+                    requested_subspace: variant.requested_subspace,
+                    requested_parent_lmb: variant.requested_parent_lmb,
+                    resolved_parent_lmb: all_lmbs[parent_lmb_index].loop_edges.clone().into(),
+                    subspace_loop_count: variant.subspace.loopcount(),
+                    subspace: variant.subspace,
+                    multiplier: variant.multiplier,
+                });
+            }
+        }
+
+        Ok((
+            ResolvedThresholdCounterterms {
+                legacy_equivalent,
+                variants,
+                cross_section_cut_groups: TiVec::new(),
+            },
+            raised_esurface_ids,
+        ))
+    }
+
+    #[instrument(skip_all, err)]
+    fn build_threshold_counterterm_parametric_integrand(
+        &mut self,
+        raised_data: &RaisedEsurfaceData,
+        settings: &GenerationSettings,
+        vakint: &Vakint,
+        locked_runtime_settings: &LockedRuntimeSettings,
+        model: &Model,
+    ) -> Result<AmplitudeThresholdCountertermBuild> {
+        let _progress_guard =
+            generation_progress::enter_detailed_progress_span("Building Threshold Counterterms");
+        let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
+        let production_expression = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .expect("cff_expression should have been created");
+        let (resolved, raised_esurface_ids) = self
+            .resolve_amplitude_threshold_counterterm_directives(
+                raised_data,
+                settings,
+                locked_runtime_settings,
+                model,
+            )?;
+        let mut cuts = Vec::with_capacity(resolved.variants.len());
+        for variant in &resolved.variants {
             let mut cut_union: SuBitGraph = self.graph.empty_subgraph();
-
-            for energy in esurface.energies.iter() {
+            let representative_esurface = &self
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .expect("cff_expression should have been created")
+                .expression
+                .surfaces
+                .esurface_cache[variant.raised_esurface_group.esurface_ids[0]];
+            for energy in &representative_esurface.energies {
                 let (_, hedge_pair) = self.graph[energy];
                 match hedge_pair {
                     HedgePair::Paired { source, sink } => {
@@ -1410,7 +2182,7 @@ impl AmplitudeGraph {
             let cutset = CutSet {
                 residue_selector: ResidueSelector {
                     lu: None,
-                    left_th_cut: Some(raised_data.clone()),
+                    left_th_cut: Some(variant.raised_esurface_group.clone()),
                     right_th_cut: None,
                 },
                 union: cut_union,
@@ -1419,9 +2191,7 @@ impl AmplitudeGraph {
 
             cuts.push(cutset);
         }
-
         let cut_structure = CutStructure { cuts };
-
         let exprs: Vec<_> = settings.uv.orchestrator.parametric_integrands(
             &mut self.graph,
             cut_structure,
@@ -1435,7 +2205,11 @@ impl AmplitudeGraph {
             &settings.uv,
         )?;
 
-        for expr in exprs.into_iter() {
+        let mut variants =
+            TiVec::<ThresholdCountertermVariantId, AmplitudeThresholdCountertermVariant>::new();
+        for ((variant_id, variant), expr) in
+            resolved.variants.iter_enumerated().zip(exprs.into_iter())
+        {
             let loop_number = self.graph.n_loops(&self.graph.underlying.full_filter());
             let jacobian_factor = Atom::var(GS.radius_star_left).pow(loop_number as i32 * 3 - 1);
 
@@ -1443,7 +2217,22 @@ impl AmplitudeGraph {
             let counterterm_atom = AmplitudeCountertermAtom {
                 parametric: expr.integrands,
             };
-            let raised_group = expr.cuts.residue_selector.left_th_cut.unwrap();
+            let raised_group = expr.cuts.residue_selector.left_th_cut.ok_or_else(|| {
+                eyre!(
+                    "Threshold orchestrator amplitude result {} for graph '{}' has no threshold residue selector",
+                    variant_id.0,
+                    self.graph.name,
+                )
+            })?;
+            if raised_group != variant.raised_esurface_group {
+                return Err(eyre!(
+                    "Threshold orchestrator amplitude result {} for graph '{}' returned raised group {:?}, expected {:?}",
+                    variant_id.0,
+                    self.graph.name,
+                    raised_group.esurface_ids,
+                    variant.raised_esurface_group.esurface_ids,
+                ));
+            }
             let raised_esurface_id = raised_esurface_ids[raised_group.esurface_ids[0]];
             debug!("raised_esurface_id: {}", raised_esurface_id.0);
 
@@ -1453,10 +2242,39 @@ impl AmplitudeGraph {
                 }
             }
 
-            counterterms[raised_esurface_id] = counterterm_atom;
+            variants.push(AmplitudeThresholdCountertermVariant {
+                raised_esurface_id,
+                atom: counterterm_atom,
+            });
         }
+        let legacy_counterterms = if resolved.legacy_equivalent {
+            let mut legacy_counterterms = ti_vec![
+                AmplitudeCountertermAtom::new();
+                raised_data.raised_groups.len()
+            ];
+            for variant in &variants {
+                if legacy_counterterms[variant.raised_esurface_id].is_generated() {
+                    return Err(eyre!(
+                        "Legacy-equivalent amplitude graph '{}' generated duplicate threshold variants for raised group {}",
+                        self.graph.name,
+                        variant.raised_esurface_id.0,
+                    ));
+                }
+                legacy_counterterms[variant.raised_esurface_id] = variant.atom.clone();
+            }
+            legacy_counterterms
+        } else {
+            // The generalized runtime consumes `variants` directly and deliberately leaves the
+            // homogeneous raised-surface lane empty so duplicate geometry keeps independent IDs.
+            TiVec::new()
+        };
 
-        Ok((counterterms, raised_esurface_ids))
+        Ok(AmplitudeThresholdCountertermBuild {
+            legacy_counterterms,
+            variants,
+            resolved,
+            raised_esurface_ids,
+        })
     }
 
     #[instrument(skip_all)]
@@ -1609,10 +2427,24 @@ impl AmplitudeGraph {
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
+pub struct AmplitudeThresholdCountertermVariant {
+    pub raised_esurface_id: RaisedEsurfaceId,
+    pub atom: AmplitudeCountertermAtom,
+}
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeDerivedData {
+    /// Master topology and coordinates used to interpret graph-group threshold metadata.
+    pub threshold_topology: Option<(Graph, TiVec<LmbIndex, LoopMomentumBasis>)>,
     pub all_mighty_integrand: Atom,
     pub all_mighty_numerators: Vec<Arc<FnMapEntry>>,
+    /// Compatibility storage used by the current homogeneous amplitude runtime.
     pub threshold_counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
+    /// Canonical variant-indexed symbolic storage. Duplicate geometric thresholds remain distinct.
+    pub threshold_counterterm_variants:
+        TiVec<ThresholdCountertermVariantId, AmplitudeThresholdCountertermVariant>,
+    pub resolved_threshold_counterterms: Option<ResolvedThresholdCounterterms>,
     pub raised_data: RaisedEsurfaceData,
     pub raised_esurface_ids: TiVec<EsurfaceID, RaisedEsurfaceId>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
@@ -1681,6 +2513,19 @@ impl Amplitude {
     pub fn from_graph_list(name: impl ToString, mut graphs: Vec<Graph>) -> Result<Self> {
         let mut amplitude: Amplitude = Amplitude::new(name);
         amplitude.graph_group_structure = complete_group_parsing(&mut graphs)?;
+        for group in &amplitude.graph_group_structure {
+            ThresholdCountertermSpec::validate_group_ids(
+                group
+                    .into_iter()
+                    .map(|id| &*graphs[id].threshold_counterterms),
+            )
+            .with_context(|| {
+                format!(
+                    "Invalid threshold group IDs for amplitude group master '{}'",
+                    graphs[group.master()].name,
+                )
+            })?;
+        }
 
         for amplitude_graph in graphs {
             amplitude.add_graph(amplitude_graph)?;
@@ -1731,7 +2576,10 @@ impl Amplitude {
     }
 }
 
-pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -> Atom {
+fn threshold_counterterm_helper_atoms(
+    order: u8,
+    loop_number: usize,
+) -> (SingleThresholdPieces<Atom>, Atom) {
     let loop_3 = loop_number as i64 * 3;
 
     let laurent_coeff_indices = (1..=order).map(|i| -(i as i8));
@@ -1760,28 +2608,48 @@ pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -
 
     let integrated_prefactor = -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction;
 
-    let mut result = (local_prefactor + integrated_prefactor) * laurent_coeffs.next().unwrap();
+    let leading_laurent_coeff = laurent_coeffs.next().unwrap();
+    let mut raised_local = Atom::Zero;
 
     for pow in 2..=order {
-        result += laurent_coeffs.next().unwrap()
+        raised_local += laurent_coeffs.next().unwrap()
             * &jacobian_ratio
             * (Atom::one() / delta_r_plus.pow(pow as i64)
                 + Atom::one() / delta_r_minus.pow(pow as i64));
     }
 
+    let local = local_prefactor.clone() * &leading_laurent_coeff + &raised_local;
+    let integrated = integrated_prefactor.clone() * &leading_laurent_coeff;
+    // Keep the no-directive helper structurally identical to the historical single-output lane.
+    let legacy = (local_prefactor + integrated_prefactor) * leading_laurent_coeff + raised_local;
+
     debug!(
-        "Threshold counterterm helper atom for order {} and loop number {}: {}",
-        order, loop_number, result
+        "Threshold counterterm helper atoms for order {} and loop number {}: local={}, integrated={}, legacy={}",
+        order, loop_number, local, integrated, legacy,
     );
-    result
+    (SingleThresholdPieces { local, integrated }, legacy)
 }
 
-pub(crate) fn threshold_counterterm_helper(
+enum ThresholdCountertermHelperOutputs {
+    Legacy,
+    Pieces,
+    LegacyAndPieces,
+}
+
+fn build_threshold_counterterm_helper(
     order: u8,
     loop_number: usize,
     evaluator_settings: &EvaluatorSettings,
+    outputs: ThresholdCountertermHelperOutputs,
 ) -> GenericEvaluator {
-    let atom = threshold_counterterm_helper_atom(order, loop_number);
+    let (pieces, legacy) = threshold_counterterm_helper_atoms(order, loop_number);
+    let atoms = match outputs {
+        ThresholdCountertermHelperOutputs::Legacy => vec![legacy],
+        ThresholdCountertermHelperOutputs::Pieces => vec![pieces.local, pieces.integrated],
+        ThresholdCountertermHelperOutputs::LegacyAndPieces => {
+            vec![legacy, pieces.local, pieces.integrated]
+        }
+    };
     let fn_map = FunctionMap::default();
 
     let mut params = params_for_derivative_order(order)
@@ -1802,7 +2670,7 @@ pub(crate) fn threshold_counterterm_helper(
     params.push(hfunction);
 
     GenericEvaluator::new_from_raw_params(
-        [atom],
+        atoms,
         &params,
         &fn_map,
         vec![],
@@ -1814,23 +2682,2234 @@ pub(crate) fn threshold_counterterm_helper(
     .into_eager_only()
 }
 
+pub(crate) fn threshold_counterterm_helper(
+    order: u8,
+    loop_number: usize,
+    evaluator_settings: &EvaluatorSettings,
+) -> GenericEvaluator {
+    build_threshold_counterterm_helper(
+        order,
+        loop_number,
+        evaluator_settings,
+        ThresholdCountertermHelperOutputs::Legacy,
+    )
+}
+
+pub(crate) fn threshold_counterterm_pieces_helper(
+    order: u8,
+    loop_number: usize,
+    evaluator_settings: &EvaluatorSettings,
+) -> GenericEvaluator {
+    build_threshold_counterterm_helper(
+        order,
+        loop_number,
+        evaluator_settings,
+        ThresholdCountertermHelperOutputs::Pieces,
+    )
+}
+
+pub(crate) fn threshold_counterterm_recording_helper(
+    order: u8,
+    loop_number: usize,
+    evaluator_settings: &EvaluatorSettings,
+) -> GenericEvaluator {
+    build_threshold_counterterm_helper(
+        order,
+        loop_number,
+        evaluator_settings,
+        ThresholdCountertermHelperOutputs::LegacyAndPieces,
+    )
+}
+
 #[cfg(test)]
 pub mod test {
 
+    use std::{
+        fs,
+        io::Cursor,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
     use crate::{
-        cff::expression::OrientationID,
+        DependentMomentaConstructor, GammaLoopContextContainer,
+        cff::{esurface::ExistingEsurfaceId, expression::OrientationID},
         dot,
-        graph::{GraphGroupPosition, parse::IntoGraph},
+        graph::{
+            FeynmanGraph, Graph, GraphGroupPosition,
+            autogen::Autogen,
+            parse::IntoGraph,
+            threshold_counterterms::{
+                ThresholdCountertermCut, ThresholdCountertermMultiplier, ThresholdCountertermSpec,
+                ThresholdCountertermThreshold, ThresholdCountertermVariant,
+            },
+        },
         initialisation::test_initialise,
-        integrands::process::amplitude::AmplitudeGraphTerm,
-        processes::AmplitudeGraph,
+        integrands::process::{
+            MomentumSpaceEvaluationInput, ProcessIntegrand, amplitude::AmplitudeGraphTerm,
+        },
+        momentum::{
+            Dep, ExternalMomenta, Helicity, ThreeMomentum,
+            sample::{LoopIndex, MomentumSample},
+        },
+        processes::{
+            AmplitudeGraph, DotExportSettings, ThresholdCountertermComponentKind,
+            ThresholdCountertermOrigin, ThresholdCountertermSide,
+        },
         settings::{
             GlobalSettings, RuntimeSettings,
             global::{GenerationSettings, OrientationPattern, ThresholdSubtractionSettings},
+            runtime::kinematic::{
+                Externals, KinematicsSettings, improvement::PhaseSpaceImprovementSettings,
+            },
         },
-        utils::load_generic_model,
+        subtraction::amplitude_counterterm::AmplitudeCountertermComponentEvaluation,
+        utils::{ArbPrec, F, load_generic_model},
     };
+    use itertools::Itertools;
+    use spenso::algebra::complex::Complex;
+    use symbolica::state::State;
     use typed_index_collections::TiVec;
+
+    #[test]
+    fn metadata_free_amplitude_group_retains_native_member_geometry() {
+        std::thread::Builder::new()
+            .stack_size(32 * 1024 * 1024)
+            .spawn(|| {
+                test_initialise().unwrap();
+                let model = load_generic_model("scalars");
+                let graphs = Graph::from_string(
+                    include_str!(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/../../tests/resources/graphs/grouped_subtraction/group.dot"
+                    )),
+                    &model,
+                )
+                .unwrap();
+                let mut amplitude =
+                    super::Amplitude::from_graph_list("native_group_defaults", graphs).unwrap();
+                let settings = GenerationSettings {
+                    threshold_subtraction: ThresholdSubtractionSettings {
+                        enable_thresholds: true,
+                        assume_positive_external_energies: false,
+                        check_esurface_at_generation: false,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(1)
+                    .build()
+                    .unwrap();
+                amplitude
+                    .preprocess(&model, &settings, &(&RuntimeSettings::default()).into(), &pool)
+                    .unwrap();
+                let master = &amplitude.graphs[amplitude.graph_group_structure[super::GroupId(0)].master()];
+                assert!(amplitude.graphs.iter().any(|member| member.graph.n_edges() > master.graph.n_edges()));
+                for member in &amplitude.graphs {
+                    let resolved = member.derived_data.resolved_threshold_counterterms.as_ref().unwrap();
+                    assert!(resolved.legacy_equivalent);
+                    assert!(!resolved.variants.is_empty());
+                    let lmbs = member.derived_data.lmbs.as_ref().unwrap();
+                    for variant in &resolved.variants {
+                        assert_eq!(
+                            variant.subspace.get_lmb(lmbs).edge_signatures,
+                            member.graph.loop_momentum_basis.edge_signatures,
+                            "implicit full-space defaults must retain the member's physical propagator routing",
+                        );
+                    }
+                }
+                let mut exported = String::new();
+                for member in &amplitude.graphs {
+                    member.write_dot_fmt(&mut exported, &DotExportSettings {
+                        include_autogenerated_fields: true,
+                        ..Default::default()
+                    }).unwrap();
+                }
+                let reimported = super::Amplitude::from_graph_list(
+                    "native_group_defaults_roundtrip", Graph::from_string(&exported, &model).unwrap()
+                ).unwrap();
+                assert!(reimported.graphs[1].graph.threshold_counterterms.autogenerated,
+                    "export must not reinterpret a native default as explicit master metadata");
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn amplitude_group_ids_are_contiguous_across_members() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(
+            digraph shared_group_id_namespace {
+                graph [group_id=0]
+                edge [particle=scalar_0]
+                node [num=1]
+                e [style=invis]
+                e -> A:0 [id=3]
+                B:1 -> e [id=2]
+                A -> B [id=1]
+                A -> B [id=0 lmb_id=0]
+            },
+            "scalars"
+        )
+        .unwrap();
+        let members = (0..2)
+            .map(|group_id| {
+                let mut member = graph.clone();
+                member.name = format!("namespace_member_{group_id}");
+                member.is_group_master = group_id == 0;
+                member.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
+                    schema_version: 1,
+                    function_map: Default::default(),
+                    cuts: vec![ThresholdCountertermCut {
+                        edges: Vec::new(),
+                        thresholds: vec![ThresholdCountertermThreshold {
+                            edges: vec![super::EdgeIndex(0), super::EdgeIndex(1)],
+                            counterterms: vec![ThresholdCountertermVariant {
+                                name: Some(format!("group_{group_id}")),
+                                group_id: Some(group_id),
+                                subspace: Some(vec![super::EdgeIndex(0)]),
+                                parent_lmb: Some(vec![super::EdgeIndex(0)]),
+                                disable: true,
+                                multiplier: None,
+                            }],
+                        }],
+                    }],
+                });
+                // The second member carries only label 1; label 0 belongs to its master.
+                member
+                    .threshold_counterterms
+                    .validate_for_graph(&member)
+                    .unwrap();
+                member
+            })
+            .collect();
+        let amplitude = super::Amplitude::from_graph_list("shared_namespace", members).unwrap();
+        assert_eq!(amplitude.graph_group_structure.len(), 1);
+        assert_eq!(amplitude.graphs.len(), 2);
+    }
+
+    #[test]
+    fn amplitude_directive_defaults_and_explicit_variants_use_the_empty_cut() {
+        let threshold_edges = vec![super::EdgeIndex::from(0), super::EdgeIndex::from(1)];
+        let mut spec = ThresholdCountertermSpec {
+            schema_version: 1,
+            function_map: Default::default(),
+            cuts: vec![ThresholdCountertermCut {
+                edges: Vec::new(),
+                thresholds: vec![ThresholdCountertermThreshold {
+                    edges: threshold_edges.clone(),
+                    counterterms: Vec::new(),
+                }],
+            }],
+        };
+
+        let default =
+            super::AmplitudeGraph::configured_amplitude_threshold_variants(&spec, &threshold_edges);
+        assert_eq!(default.len(), 1);
+        assert_eq!(default[0].0.name.as_deref(), Some("default"));
+        assert_eq!(default[0].1, ThresholdCountertermOrigin::Autogenerated);
+
+        spec.cuts[0].thresholds[0].counterterms = vec![
+            ThresholdCountertermVariant {
+                group_id: None,
+                name: Some("disabled".to_string()),
+                subspace: None,
+                parent_lmb: Some(vec![super::EdgeIndex::from(0)]),
+                disable: true,
+                multiplier: None,
+            },
+            ThresholdCountertermVariant {
+                group_id: None,
+                name: Some("duplicate".to_string()),
+                subspace: None,
+                parent_lmb: Some(vec![super::EdgeIndex::from(0)]),
+                disable: false,
+                multiplier: None,
+            },
+        ];
+        spec.function_map = [
+            ("shared".to_string(), "7".to_string()),
+            ("scale".to_string(), "2".to_string()),
+        ]
+        .into();
+        spec.cuts[0].thresholds[0].counterterms[1].multiplier =
+            Some(ThresholdCountertermMultiplier {
+                expression: "shared*scale".to_string(),
+                function_map: [("scale".to_string(), "3".to_string())].into(),
+                symmetrize: false,
+                opaque_derivatives: true,
+            });
+        let explicit =
+            super::AmplitudeGraph::configured_amplitude_threshold_variants(&spec, &threshold_edges);
+        assert_eq!(explicit.len(), 2);
+        assert!(explicit[0].0.disable);
+        let definitions = &explicit[1].0.multiplier.as_ref().unwrap().function_map;
+        assert_eq!(definitions["shared"], "7");
+        assert_eq!(definitions["scale"], "3");
+        assert_eq!(spec.function_map["scale"], "2");
+        assert!(
+            explicit
+                .iter()
+                .all(|(_, origin)| *origin == ThresholdCountertermOrigin::Explicit)
+        );
+    }
+
+    #[test]
+    fn member_threshold_subspace_is_interpreted_on_master_topology() {
+        test_initialise().unwrap();
+        let master: Graph = dot!(digraph metadata_master {
+            ext [style=invis]
+            node [num=1]
+            edge [num=1 mass=0]
+            ext -> a [id=0]
+            ext -> b [id=1]
+            ext -> c [id=2]
+            a -> b [id=3]
+            b -> c [id=4]
+            c -> a [id=5 lmb_id=0]
+        })
+        .unwrap();
+        // Deliberately change a member-local edge orientation. Metadata still follows
+        // the supplied master's convention; aligning physical meaning is the user's task.
+        let member: Graph = dot!(digraph metadata_member {
+            ext [style=invis]
+            node [num=1]
+            edge [num=1 mass=0]
+            ext -> a [id=0]
+            ext -> b [id=1]
+            ext -> c [id=2]
+            b -> a [id=3]
+            b -> c [id=4]
+            c -> a [id=5 lmb_id=0]
+        })
+        .unwrap();
+        let edges = vec![super::EdgeIndex::from(5)];
+        let master_lmbs = typed_index_collections::ti_vec![master.loop_momentum_basis.clone()];
+        let member_lmbs = typed_index_collections::ti_vec![member.loop_momentum_basis.clone()];
+        let parent = super::LmbIndex::from(0);
+        let expected = super::SubspaceData::new_from_parent_basis_edges(
+            &edges,
+            &master.full_filter(),
+            parent,
+            &master,
+            &master_lmbs,
+        )
+        .unwrap();
+        let native = super::SubspaceData::new_from_parent_basis_edges(
+            &edges,
+            &member.full_filter(),
+            parent,
+            &member,
+            &member_lmbs,
+        )
+        .unwrap();
+        assert_ne!(
+            expected.solve_signature(&master_lmbs),
+            native.solve_signature(&member_lmbs)
+        );
+        let mut member = AmplitudeGraph::new(member);
+        member.derived_data.lmbs = Some(member_lmbs);
+        member.derived_data.threshold_topology = Some((master, master_lmbs.clone()));
+        let resolved = member
+            .resolve_amplitude_threshold_variant_subspace(
+                &ThresholdCountertermVariant {
+                    name: Some("master_coordinates".to_owned()),
+                    group_id: Some(0),
+                    subspace: Some(edges.clone()),
+                    parent_lmb: Some(edges),
+                    disable: false,
+                    multiplier: None,
+                },
+                &expected,
+                "member metadata in master topology",
+            )
+            .unwrap();
+        assert_eq!(
+            resolved.solve_signature(&master_lmbs),
+            expected.solve_signature(&master_lmbs)
+        );
+    }
+
+    #[test]
+    fn amplitude_legacy_parent_falls_back_when_the_generation_lmb_is_not_generated() {
+        test_initialise().unwrap();
+        let model = load_generic_model("scalars");
+        let mut graph: AmplitudeGraph =
+            include_str!("../../../../tests/resources/graphs/uv_tests/dotted_sunrise.dot")
+                .into_graph(&model)
+                .unwrap();
+        graph.build_lmbs();
+
+        let all_lmbs = graph.derived_data.lmbs.as_ref().unwrap();
+        let generation_lmb = graph.graph.loop_momentum_basis.loop_edges.clone();
+        assert!(
+            all_lmbs.iter().all(|lmb| lmb.loop_edges != generation_lmb),
+            "the dotted-sunrise topology must exercise the legacy LMB fallback",
+        );
+        let fallback_parent = all_lmbs.iter_enumerated().next().unwrap().0;
+        assert_eq!(
+            graph.preferred_amplitude_parent_lmb().unwrap(),
+            fallback_parent,
+        );
+
+        let legacy_subspace = super::SubspaceData::new_with_user_selected_lmb(
+            graph.graph.no_dummy(),
+            fallback_parent,
+            &graph.graph,
+            all_lmbs,
+        )
+        .unwrap();
+        let error = graph
+            .resolve_amplitude_threshold_variant_subspace(
+                &ThresholdCountertermVariant {
+                    group_id: None,
+                    name: Some("explicit_missing_parent".to_string()),
+                    subspace: None,
+                    parent_lmb: Some(generation_lmb.iter().copied().collect()),
+                    disable: false,
+                    multiplier: None,
+                },
+                &legacy_subspace,
+                "dotted-sunrise explicit-parent test",
+            )
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("is not among graph 'sunrise' generated LMBs")
+        );
+    }
+
+    #[test]
+    fn amplitude_rejects_a_valid_edge_set_that_is_not_a_topological_threshold() {
+        test_initialise().unwrap();
+        let mut graph: AmplitudeGraph = dot!(
+            digraph unmatched_amplitude_threshold {
+                edge [particle=scalar_1]
+                node [num=1]
+                e [style=invis]
+                e -> A:0 [id=3]
+                B:1 -> e [id=2]
+                A -> B [id=1]
+                A -> B [id=0]
+            },
+            "scalars"
+        )
+        .unwrap();
+        graph.graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
+            schema_version: 1,
+            function_map: Default::default(),
+            cuts: vec![ThresholdCountertermCut {
+                edges: Vec::new(),
+                thresholds: vec![ThresholdCountertermThreshold {
+                    // Edge 0 is internal and valid, but the parallel edge 1 means it is not a
+                    // complete connected cut boundary and therefore cannot be an E-surface.
+                    edges: vec![super::EdgeIndex(0)],
+                    counterterms: Vec::new(),
+                }],
+            }],
+        });
+
+        let settings = GenerationSettings {
+            threshold_subtraction: ThresholdSubtractionSettings {
+                enable_thresholds: true,
+                assume_positive_external_energies: false,
+                check_esurface_at_generation: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        graph.generate_cff(&settings).unwrap();
+        let raised_data = graph.graph.determine_raised_esurfaces_from_expression(
+            &graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .expression,
+        );
+        graph.build_lmbs();
+
+        let error = graph
+            .resolve_amplitude_threshold_counterterm_directives(
+                &raised_data,
+                &settings,
+                &(&RuntimeSettings::default()).into(),
+                &load_generic_model("scalars"),
+            )
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("does not match a topology-discovered E-surface")
+        );
+    }
+
+    #[test]
+    fn amplitude_orientation_excluded_topological_threshold_remains_dormant() {
+        test_initialise().unwrap();
+        let mut graph: AmplitudeGraph = dot!(
+            digraph dormant_amplitude_threshold {
+                edge [particle=scalar_1]
+                node [num=1]
+                e [style=invis]
+                e -> A:0 [id=4]
+                C:1 -> e [id=3]
+                A -> B [id=0]
+                B -> C [id=1]
+                A -> C [id=2]
+            },
+            "scalars"
+        )
+        .unwrap();
+        let selected_graph = graph.graph.clone();
+        graph.generate_cff(&GenerationSettings::default()).unwrap();
+        let full_cff = graph.derived_data.cff_expression.as_ref().unwrap();
+        let physical_thresholds = full_cff
+            .expression
+            .surfaces
+            .esurface_cache
+            .iter_enumerated()
+            .filter(|(_, esurface)| !esurface.external_shift.is_empty())
+            .map(|(esurface_id, esurface)| {
+                (
+                    esurface_id,
+                    esurface.energies.iter().copied().sorted().collect_vec(),
+                )
+            })
+            .collect_vec();
+        let (orientation_pattern, dormant_threshold_edges) = full_cff
+            .expression
+            .orientations
+            .iter()
+            .find_map(|orientation| {
+                let present = orientation
+                    .iter_denominator_nodes()
+                    .filter_map(|node| match node.data {
+                        crate::cff::surface::HybridSurfaceID::Esurface(esurface_id) => Some(
+                            full_cff.expression.surfaces.esurface_cache[esurface_id]
+                                .energies
+                                .iter()
+                                .copied()
+                                .sorted()
+                                .collect_vec(),
+                        ),
+                        _ => None,
+                    })
+                    .collect::<std::collections::BTreeSet<_>>();
+                physical_thresholds
+                    .iter()
+                    .find(|(_, edges)| !present.contains(edges))
+                    .map(|(_, edges)| {
+                        (
+                            OrientationPattern::from_orientation(orientation),
+                            edges.clone(),
+                        )
+                    })
+            })
+            .expect("the triangle must have a physical threshold absent from one orientation");
+
+        let mut graph = AmplitudeGraph::new(selected_graph);
+        graph.graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
+            schema_version: 1,
+            function_map: Default::default(),
+            cuts: vec![ThresholdCountertermCut {
+                edges: Vec::new(),
+                thresholds: vec![ThresholdCountertermThreshold {
+                    edges: dormant_threshold_edges.clone(),
+                    counterterms: vec![ThresholdCountertermVariant {
+                        group_id: None,
+                        name: Some("dormant".to_string()),
+                        subspace: None,
+                        parent_lmb: Some(
+                            graph
+                                .graph
+                                .loop_momentum_basis
+                                .loop_edges
+                                .iter()
+                                .copied()
+                                .collect(),
+                        ),
+                        disable: false,
+                        multiplier: None,
+                    }],
+                }],
+            }],
+        });
+        let settings = GenerationSettings {
+            orientation_pattern,
+            threshold_subtraction: ThresholdSubtractionSettings {
+                enable_thresholds: true,
+                assume_positive_external_energies: false,
+                check_esurface_at_generation: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        graph.generate_cff(&settings).unwrap();
+        // CFF generation retains the full catalogue; only the selected subset
+        // contributes evaluators and active threshold-counterterm instances.
+        assert_eq!(
+            graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .expression
+                .orientations
+                .iter()
+                .filter(|orientation| settings.orientation_pattern.filter(*orientation))
+                .count(),
+            1,
+        );
+        let raised_data = graph.graph.determine_raised_esurfaces_from_expression(
+            &graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .expression,
+        );
+        graph.build_lmbs();
+        let (resolved, _) = graph
+            .resolve_amplitude_threshold_counterterm_directives(
+                &raised_data,
+                &settings,
+                &(&RuntimeSettings::default()).into(),
+                &load_generic_model("scalars"),
+            )
+            .unwrap();
+        assert!(resolved.variants.iter().all(|variant| {
+            variant.name != "dormant"
+                && variant
+                    .associations
+                    .iter()
+                    .all(|association| association.threshold_edges != dormant_threshold_edges)
+        }));
+    }
+
+    #[test]
+    fn amplitude_variant_subspace_resolves_in_the_requested_parent() {
+        test_initialise().unwrap();
+        let mut graph: AmplitudeGraph = dot!(
+            digraph amplitude_variant_subspace {
+                edge [particle=scalar_1]
+                node [num=1]
+                e [style=invis]
+                e -> A:0 [id=3]
+                B:1 -> e [id=4]
+                A -> B [id=0]
+                A -> B [id=1]
+                A -> B [id=2]
+            },
+            "scalars"
+        )
+        .unwrap();
+        graph.build_lmbs();
+        let preferred_parent = graph.preferred_amplitude_parent_lmb().unwrap();
+        let all_lmbs = graph.derived_data.lmbs.as_ref().unwrap();
+        let parent_edges = all_lmbs[preferred_parent]
+            .loop_edges
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        let requested_subspace = vec![parent_edges[0]];
+        let legacy_subspace = super::SubspaceData::new_with_user_selected_lmb(
+            graph.graph.no_dummy(),
+            preferred_parent,
+            &graph.graph,
+            all_lmbs,
+        )
+        .unwrap();
+        let resolved = graph
+            .resolve_amplitude_threshold_variant_subspace(
+                &ThresholdCountertermVariant {
+                    group_id: None,
+                    name: Some("one_loop".to_string()),
+                    subspace: Some(requested_subspace.clone()),
+                    parent_lmb: Some(parent_edges),
+                    disable: false,
+                    multiplier: None,
+                },
+                &legacy_subspace,
+                "amplitude subspace test",
+            )
+            .unwrap();
+
+        assert_eq!(resolved.parent_lmb_index(), preferred_parent);
+        assert_eq!(resolved.loopcount(), 1);
+        assert_eq!(
+            resolved.iter_basis_edges(all_lmbs).collect::<Vec<_>>(),
+            requested_subspace,
+        );
+    }
+
+    #[test]
+    fn amplitude_preprocessing_keeps_duplicate_geometric_variants_independent() {
+        std::thread::Builder::new()
+            .name("amplitude-threshold-variant-test".to_string())
+            .stack_size(32 * 1024 * 1024)
+            .spawn(|| {
+                test_initialise().unwrap();
+                let mut graph: AmplitudeGraph = dot!(
+                    digraph duplicate_threshold_variants {
+                        edge [particle=scalar_1]
+                        node [num=1]
+                        e [style=invis]
+                        e -> A:0 [id=3]
+                        B:1 -> e [id=2]
+                        A -> B [id=1]
+                        A -> B [id=0]
+                    },
+                    "scalars"
+                )
+                .unwrap();
+                graph.generate_cff(&GenerationSettings::default()).unwrap();
+                let threshold_edges = graph
+                    .derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .expression
+                    .surfaces
+                    .esurface_cache
+                    .iter()
+                    .find(|esurface| !esurface.external_shift.is_empty())
+                    .expect("the scalar bubble must contain a physical threshold")
+                    .energies
+                    .iter()
+                    .copied()
+                    .sorted()
+                    .collect::<Vec<_>>();
+                graph.graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
+                    schema_version: 1,
+                    function_map: Default::default(),
+                    cuts: vec![ThresholdCountertermCut {
+                        edges: Vec::new(),
+                        thresholds: vec![ThresholdCountertermThreshold {
+                            edges: threshold_edges.clone(),
+                            counterterms: vec![
+                                ThresholdCountertermVariant {
+                                    group_id: None,
+                                    name: Some("first".to_string()),
+                                    subspace: None,
+                                    parent_lmb: Some(
+                                        graph
+                                            .graph
+                                            .loop_momentum_basis
+                                            .loop_edges
+                                            .iter()
+                                            .copied()
+                                            .collect(),
+                                    ),
+                                    disable: false,
+                                    multiplier: None,
+                                },
+                                ThresholdCountertermVariant {
+                                    group_id: None,
+                                    name: Some("disabled".to_string()),
+                                    subspace: None,
+                                    parent_lmb: Some(
+                                        graph
+                                            .graph
+                                            .loop_momentum_basis
+                                            .loop_edges
+                                            .iter()
+                                            .copied()
+                                            .collect(),
+                                    ),
+                                    disable: true,
+                                    multiplier: None,
+                                },
+                                ThresholdCountertermVariant {
+                                    group_id: None,
+                                    name: Some("second".to_string()),
+                                    subspace: None,
+                                    parent_lmb: Some(
+                                        graph
+                                            .graph
+                                            .loop_momentum_basis
+                                            .loop_edges
+                                            .iter()
+                                            .copied()
+                                            .collect(),
+                                    ),
+                                    disable: false,
+                                    multiplier: None,
+                                },
+                            ],
+                        }],
+                    }],
+                });
+
+                let model = load_generic_model("scalars");
+                let mut generation_settings = GenerationSettings {
+                    threshold_subtraction: ThresholdSubtractionSettings {
+                        enable_thresholds: true,
+                        assume_positive_external_energies: false,
+                        check_esurface_at_generation: false,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                graph
+                    .preprocess(
+                        &model,
+                        &generation_settings,
+                        &(&RuntimeSettings::default()).into(),
+                    )
+                    .unwrap();
+
+                let resolved = graph
+                    .derived_data
+                    .resolved_threshold_counterterms
+                    .as_ref()
+                    .unwrap();
+                assert!(!resolved.legacy_equivalent);
+                let mut names_by_group = std::collections::BTreeMap::<Vec<usize>, Vec<&str>>::new();
+                for variant in resolved.variants.iter().filter(|variant| {
+                    variant
+                        .associations
+                        .iter()
+                        .any(|association| association.threshold_edges == threshold_edges)
+                }) {
+                    names_by_group
+                        .entry(
+                            variant
+                                .threshold_esurface_ids
+                                .iter()
+                                .map(|esurface_id| esurface_id.0)
+                                .collect(),
+                        )
+                        .or_default()
+                        .push(&variant.name);
+                }
+                assert!(!names_by_group.is_empty());
+                assert!(
+                    names_by_group
+                        .values()
+                        .all(|names| names == &["first", "second"])
+                );
+                assert!(
+                    resolved
+                        .variants
+                        .iter()
+                        .all(|variant| variant.side == ThresholdCountertermSide::Amplitude)
+                );
+                assert_eq!(
+                    graph.derived_data.threshold_counterterm_variants.len(),
+                    resolved.variants.len(),
+                );
+                assert!(
+                    graph
+                        .derived_data
+                        .threshold_counterterm_variants
+                        .iter()
+                        .all(|variant| variant.atom.is_generated())
+                );
+                assert!(graph.derived_data.threshold_counterterms.is_empty());
+
+                let (term, _) = AmplitudeGraphTerm::from_amplitude_graph(
+                    &graph,
+                    GraphGroupPosition(0),
+                    TiVec::new(),
+                    &model,
+                    &GlobalSettings {
+                        generation: generation_settings.clone(),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                let registry = term
+                    .threshold_counterterm
+                    .metadata_registry
+                    .as_ref()
+                    .expect("explicit duplicate variants must create amplitude metadata");
+                assert_eq!(registry.variants.len(), resolved.variants.len());
+                assert_eq!(registry.components.len(), resolved.variants.len() * 2);
+                assert!(registry.evaluators.is_empty());
+                assert!(term.threshold_counterterm.threshold_multipliers.is_none());
+
+                let decomposition =
+                    crate::integrands::process::amplitude::amplitude_threshold_event_info(
+                        registry,
+                        Complex::new_re(F(100.0)),
+                        vec![
+                            AmplitudeCountertermComponentEvaluation {
+                                variant_id: super::ThresholdCountertermVariantId(0),
+                                kind: ThresholdCountertermComponentKind::Local,
+                                esurface_id: super::RaisedEsurfaceId(4),
+                                overlap_group: 2,
+                                multiplier_value: F(3.0),
+                                bare: Some(Complex::new_re(F(-2.0))),
+                                weighted: Complex::new_re(F(-6.0)),
+                                evaluation_skipped: false,
+                            },
+                            AmplitudeCountertermComponentEvaluation {
+                                variant_id: super::ThresholdCountertermVariantId(0),
+                                kind: ThresholdCountertermComponentKind::Integrated,
+                                esurface_id: super::RaisedEsurfaceId(4),
+                                overlap_group: 2,
+                                multiplier_value: F(0.0),
+                                bare: None,
+                                weighted: Complex::new_re(F(0.0)),
+                                evaluation_skipped: true,
+                            },
+                        ],
+                    )
+                    .unwrap();
+                assert_eq!(decomposition.total(), Complex::new_re(F(94.0)));
+                assert_eq!(decomposition.components[0].component_id, 0);
+                assert_eq!(decomposition.components[1].component_id, 1);
+                assert!(decomposition.components[1].evaluation_skipped);
+
+                graph.graph.threshold_counterterms =
+                    Autogen::generated(ThresholdCountertermSpec::default());
+                graph
+                    .preprocess(
+                        &model,
+                        &generation_settings,
+                        &(&RuntimeSettings::default()).into(),
+                    )
+                    .unwrap();
+                let resolved = graph
+                    .derived_data
+                    .resolved_threshold_counterterms
+                    .as_ref()
+                    .unwrap();
+                assert!(resolved.legacy_equivalent);
+                assert_eq!(
+                    graph.derived_data.threshold_counterterms.len(),
+                    graph.derived_data.raised_data.raised_groups.len(),
+                );
+                assert_eq!(
+                    graph
+                        .derived_data
+                        .threshold_counterterms
+                        .iter()
+                        .filter(|counterterm| counterterm.is_generated())
+                        .count(),
+                    graph.derived_data.threshold_counterterm_variants.len(),
+                );
+
+                generation_settings.threshold_subtraction.enable_thresholds = false;
+                graph
+                    .preprocess(
+                        &model,
+                        &generation_settings,
+                        &(&RuntimeSettings::default()).into(),
+                    )
+                    .unwrap();
+                assert!(graph.derived_data.resolved_threshold_counterterms.is_none());
+                assert!(graph.derived_data.threshold_counterterms.is_empty());
+                assert!(graph.derived_data.threshold_counterterm_variants.is_empty());
+                assert!(graph.derived_data.raised_data.raised_groups.is_empty());
+            })
+            .expect("amplitude threshold-variant test thread must start")
+            .join()
+            .expect("amplitude threshold-variant test thread must finish successfully");
+    }
+
+    #[test]
+    fn generalized_amplitude_approach_keeps_duplicate_variant_subspaces_and_complements() {
+        std::thread::Builder::new()
+            .name("generalized-amplitude-threshold-approach-test".to_string())
+            .stack_size(32 * 1024 * 1024)
+            .spawn(|| {
+                test_initialise().unwrap();
+                let model = load_generic_model("scalars");
+                let mut graph: Graph = dot!(
+                    digraph generalized_threshold_approach {
+                        edge [particle=scalar_1]
+                        node [num=1]
+                        e [style=invis]
+                        e -> A:0 [id=4]
+                        B:1 -> e [id=3]
+                        A -> B [id=2]
+                        A -> B [id=1]
+                        A -> B [id=0]
+                    },
+                    "scalars"
+                )
+                .unwrap();
+                let mut parent_probe = AmplitudeGraph::new(graph.clone());
+                parent_probe.build_lmbs();
+                let preferred_parent = parent_probe.preferred_amplitude_parent_lmb().unwrap();
+                let parent_edges = parent_probe.derived_data.lmbs.as_ref().unwrap()
+                    [preferred_parent]
+                    .loop_edges
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>();
+                assert_eq!(parent_edges.len(), 2);
+                graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
+                    schema_version: 1,
+                    function_map: Default::default(),
+                    cuts: vec![ThresholdCountertermCut {
+                        edges: Vec::new(),
+                        thresholds: vec![ThresholdCountertermThreshold {
+                            edges: vec![
+                                super::EdgeIndex(0),
+                                super::EdgeIndex(1),
+                                super::EdgeIndex(2),
+                            ],
+                            counterterms: vec![
+                                ThresholdCountertermVariant {
+                                    group_id: None,
+                                    name: Some("one_loop".to_string()),
+                                    subspace: Some(vec![parent_edges[0]]),
+                                    parent_lmb: Some(parent_edges.clone()),
+                                    disable: false,
+                                    multiplier: None,
+                                },
+                                ThresholdCountertermVariant {
+                                    group_id: None,
+                                    name: Some("two_loop".to_string()),
+                                    subspace: Some(parent_edges.clone()),
+                                    parent_lmb: Some(parent_edges),
+                                    disable: false,
+                                    multiplier: None,
+                                },
+                            ],
+                        }],
+                    }],
+                });
+
+                let generation_settings = GenerationSettings {
+                    threshold_subtraction: ThresholdSubtractionSettings {
+                        enable_thresholds: true,
+                        assume_positive_external_energies: false,
+                        check_esurface_at_generation: false,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                let runtime = RuntimeSettings {
+                    kinematics: KinematicsSettings {
+                        e_cm: 6.0,
+                        externals: Externals::Constant {
+                            momenta: vec![
+                                ExternalMomenta::Independent([F(6.0), F(0.0), F(0.0), F(0.0)]),
+                                ExternalMomenta::Dependent(Dep::Dep),
+                            ],
+                            helicities: vec![Helicity::ZERO; 2],
+                            improvement_settings: PhaseSpaceImprovementSettings::default(),
+                            f_64_cache: None,
+                            f_128_cache: None,
+                            arb_cache: Default::default(),
+                        },
+                    },
+                    ..RuntimeSettings::default()
+                };
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(1)
+                    .build()
+                    .unwrap();
+                let mut amplitude = super::Amplitude::from_graph_list(
+                    "generalized_threshold_approach",
+                    vec![graph],
+                )
+                .unwrap();
+                amplitude
+                    .preprocess(&model, &generation_settings, &(&runtime).into(), &pool)
+                    .unwrap();
+                amplitude
+                    .build_integrand(
+                        &model,
+                        "generalized_threshold_approach",
+                        &GlobalSettings {
+                            generation: generation_settings,
+                            ..Default::default()
+                        },
+                        (&runtime).into(),
+                        &pool,
+                    )
+                    .unwrap();
+                let ProcessIntegrand::Amplitude(integrand) = amplitude.integrand.as_mut().unwrap()
+                else {
+                    panic!("approach fixture built a non-amplitude integrand")
+                };
+                let external_signature =
+                    integrand.data.graph_terms[0].graph.get_external_signature();
+                let sample = MomentumSample::new(
+                    vec![
+                        ThreeMomentum::new(
+                            F::<ArbPrec>::from_f64(0.4),
+                            F::<ArbPrec>::from_f64(0.1),
+                            F::<ArbPrec>::from_f64(-0.2),
+                        ),
+                        ThreeMomentum::new(
+                            F::<ArbPrec>::from_f64(-0.3),
+                            F::<ArbPrec>::from_f64(0.2),
+                            F::<ArbPrec>::from_f64(0.15),
+                        ),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    0,
+                    &runtime.kinematics.externals,
+                    0,
+                    F::<ArbPrec>::from_f64(1.0),
+                    DependentMomentaConstructor::Amplitude(&external_signature),
+                    None,
+                )
+                .unwrap();
+
+                let term = &mut integrand.data.graph_terms[0];
+                let approach = term
+                    .kinematics_for_threshold_approach(&runtime, &model, &sample)
+                    .unwrap();
+                let variant_ids = approach
+                    .variant_ids
+                    .as_ref()
+                    .expect("generalized approach must expose stable variant IDs");
+                assert_eq!(variant_ids.len(), approach.existing_esurfaces.len());
+                assert!(variant_ids.len() >= 2);
+                assert_eq!(
+                    variant_ids
+                        .iter()
+                        .copied()
+                        .collect::<std::collections::BTreeSet<_>>()
+                        .len(),
+                    variant_ids.len(),
+                );
+
+                let counterterm = &term.threshold_counterterm;
+                let mut loop_counts_by_raised =
+                    std::collections::BTreeMap::<_, std::collections::BTreeSet<_>>::new();
+                for &variant_id in variant_ids {
+                    loop_counts_by_raised
+                        .entry(counterterm.variant_raised_esurfaces[variant_id])
+                        .or_default()
+                        .insert(counterterm.variant_subspaces[variant_id].loopcount());
+                }
+                assert!(loop_counts_by_raised.values().any(|counts| {
+                    counts
+                        == &[1, 2]
+                            .into_iter()
+                            .collect::<std::collections::BTreeSet<_>>()
+                }));
+
+                let mut referenced_variants = std::collections::BTreeSet::new();
+                for group in &approach.overlap_groups_with_kinematics {
+                    let centers = group
+                        .approach_centers_at_esurface
+                        .as_ref()
+                        .expect("generalized overlap groups need per-variant centers");
+                    assert_eq!(centers.len(), group.overlap_group.existing_esurfaces.len());
+                    assert_eq!(
+                        group.loop_momenta_at_esurface.len(),
+                        group.overlap_group.existing_esurfaces.len()
+                    );
+                    for (position, &existing_esurface_id) in
+                        group.overlap_group.existing_esurfaces.iter().enumerate()
+                    {
+                        let variant_id = variant_ids[existing_esurface_id];
+                        referenced_variants.insert(variant_id);
+                        let local_id = ExistingEsurfaceId::from(position);
+                        let root = group.loop_momenta_at_esurface[local_id]
+                            .as_ref()
+                            .expect("each generalized threshold needs an r_star sample");
+                        let center = centers[local_id]
+                            .as_ref()
+                            .expect("each generalized threshold needs a full center");
+                        for momentum in root.loop_moms().iter().chain(center.iter()) {
+                            for component in [&momentum.px, &momentum.py, &momentum.pz] {
+                                assert!(component.into_f64().is_finite());
+                            }
+                        }
+
+                        let subspace = &counterterm.variant_subspaces[variant_id];
+                        let parent_lmb = subspace.get_lmb(&counterterm.lmbs);
+                        let base_in_parent =
+                            sample.lmb_transform(&term.graph.loop_momentum_basis, parent_lmb);
+                        let root_in_parent =
+                            root.lmb_transform(&term.graph.loop_momentum_basis, parent_lmb);
+                        let mut center_sample = root.clone();
+                        center_sample.sample.loop_moms = center.clone();
+                        let center_in_parent = center_sample
+                            .lmb_transform(&term.graph.loop_momentum_basis, parent_lmb);
+                        for loop_index in (0..term.graph.get_loop_number()).map(LoopIndex::from) {
+                            if subspace.contains_loop_index(loop_index) {
+                                continue;
+                            }
+                            for (actual, expected) in [
+                                (
+                                    &root_in_parent.loop_moms()[loop_index],
+                                    &base_in_parent.loop_moms()[loop_index],
+                                ),
+                                (
+                                    &center_in_parent.loop_moms()[loop_index],
+                                    &base_in_parent.loop_moms()[loop_index],
+                                ),
+                            ] {
+                                for (actual, expected) in [
+                                    (&actual.px, &expected.px),
+                                    (&actual.py, &expected.py),
+                                    (&actual.pz, &expected.pz),
+                                ] {
+                                    assert!((actual - expected).abs().into_f64() < 1.0e-20);
+                                }
+                            }
+                        }
+                    }
+                }
+                assert_eq!(
+                    referenced_variants,
+                    variant_ids
+                        .iter()
+                        .copied()
+                        .collect::<std::collections::BTreeSet<_>>(),
+                    "overlap groups must retain every semantic duplicate independently",
+                );
+            })
+            .expect("generalized amplitude approach test thread must start")
+            .join()
+            .expect("generalized amplitude approach test thread must finish successfully");
+    }
+
+    #[test]
+    fn amplitude_dot_export_materializes_resolved_defaults_and_round_trips() {
+        std::thread::Builder::new()
+            .name("amplitude-threshold-dot-export-test".to_string())
+            .stack_size(32 * 1024 * 1024)
+            .spawn(|| {
+                test_initialise().unwrap();
+                let mut graph: AmplitudeGraph = dot!(
+                    digraph amplitude_threshold_dot_export {
+                        // A massive external scalar above the two-massless-particle threshold
+                        // guarantees that the runtime part of this regression records L/I pieces.
+                        edge [particle=scalar_0]
+                        node [num=1]
+                        e [style=invis]
+                        e -> A:0 [id=3 particle=scalar_2]
+                        B:1 -> e [id=2 particle=scalar_2]
+                        A -> B [id=1]
+                        A -> B [id=0]
+                    },
+                    "scalars"
+                )
+                .unwrap();
+                let model = load_generic_model("scalars");
+                let generation_settings = GenerationSettings {
+                    threshold_subtraction: ThresholdSubtractionSettings {
+                        enable_thresholds: true,
+                        assume_positive_external_energies: false,
+                        check_esurface_at_generation: false,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                graph
+                    .preprocess(
+                        &model,
+                        &generation_settings,
+                        &(&RuntimeSettings::default()).into(),
+                    )
+                    .unwrap();
+
+                assert!(graph.graph.threshold_counterterms.autogenerated);
+                assert!(graph.graph.threshold_counterterms.cuts.is_empty());
+                let resolved = graph
+                    .derived_data
+                    .resolved_threshold_counterterms
+                    .as_ref()
+                    .unwrap();
+                assert!(resolved.legacy_equivalent);
+                let expected_materialized = resolved.materialized_spec(
+                    &graph.graph.threshold_counterterms,
+                    graph.derived_data.lmbs.as_ref().unwrap(),
+                );
+                assert!(!expected_materialized.cuts.is_empty());
+                assert!(
+                    expected_materialized
+                        .cuts
+                        .iter()
+                        .all(|cut| cut.edges.is_empty())
+                );
+
+                let mut ordinary = String::new();
+                graph
+                    .write_dot_fmt(&mut ordinary, &DotExportSettings::default())
+                    .unwrap();
+                assert!(!ordinary.contains("threshold_counterterms"));
+                let ordinary_import = Graph::from_string(&ordinary, &model).unwrap().remove(0);
+                assert!(ordinary_import.threshold_counterterms.autogenerated);
+                assert!(ordinary_import.threshold_counterterms.cuts.is_empty());
+
+                let mut normalized = String::new();
+                graph
+                    .write_dot_fmt(
+                        &mut normalized,
+                        &DotExportSettings {
+                            include_autogenerated_fields: true,
+                            ..DotExportSettings::default()
+                        },
+                    )
+                    .unwrap();
+                let normalized_import = Graph::from_string(&normalized, &model).unwrap().remove(0);
+                assert!(!normalized_import.threshold_counterterms.autogenerated);
+                assert_eq!(
+                    *normalized_import.threshold_counterterms,
+                    expected_materialized
+                );
+                assert!(graph.graph.threshold_counterterms.autogenerated);
+                assert!(graph.graph.threshold_counterterms.cuts.is_empty());
+
+                let mut round_tripped = AmplitudeGraph::new(normalized_import);
+                round_tripped
+                    .preprocess(
+                        &model,
+                        &generation_settings,
+                        &(&RuntimeSettings::default()).into(),
+                    )
+                    .unwrap();
+                assert!(
+                    round_tripped
+                        .derived_data
+                        .resolved_threshold_counterterms
+                        .as_ref()
+                        .unwrap()
+                        .legacy_equivalent
+                );
+                let (term, _) = AmplitudeGraphTerm::from_amplitude_graph(
+                    &round_tripped,
+                    GraphGroupPosition(0),
+                    TiVec::new(),
+                    &model,
+                    &GlobalSettings {
+                        generation: generation_settings.clone(),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                assert!(term.threshold_counterterm.legacy_equivalent);
+                assert!(term.threshold_counterterm.variant_evaluators.is_empty());
+                assert!(term.threshold_counterterm.variant_subspaces.is_empty());
+                assert!(term.threshold_counterterm.metadata_registry.is_some());
+                assert_eq!(
+                    term.threshold_counterterm.helper_evaluators.len(),
+                    round_tripped
+                        .derived_data
+                        .raised_data
+                        .pass_two_evaluator
+                        .as_ref()
+                        .unwrap()
+                        .len(),
+                );
+
+                let normalized_graph = Graph::from_string(&normalized, &model).unwrap().remove(0);
+                let loop_count = normalized_graph.get_loop_number();
+                // A deterministic timelike external momentum is required here: the generic
+                // random 1 -> 1 sample is lightlike and leaves this massless bubble below its
+                // threshold, so it cannot exercise the detailed L/I event decomposition.
+                let mut runtime = RuntimeSettings {
+                    kinematics: KinematicsSettings {
+                        e_cm: 4.0,
+                        externals: Externals::Constant {
+                            momenta: vec![
+                                ExternalMomenta::Independent([F(4.0), F(0.0), F(0.0), F(0.0)]),
+                                ExternalMomenta::Dependent(Dep::Dep),
+                            ],
+                            helicities: vec![Helicity::ZERO; 2],
+                            improvement_settings: PhaseSpaceImprovementSettings::default(),
+                            f_64_cache: None,
+                            f_128_cache: None,
+                            arb_cache: Default::default(),
+                        },
+                    },
+                    ..RuntimeSettings::default()
+                };
+                runtime.general.generate_events = true;
+                runtime.general.store_additional_weights_in_event = true;
+                let mut amplitude = super::Amplitude::from_graph_list(
+                    "amplitude_threshold_event_roundtrip",
+                    vec![normalized_graph],
+                )
+                .unwrap();
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(1)
+                    .build()
+                    .unwrap();
+                amplitude
+                    .preprocess(&model, &generation_settings, &(&runtime).into(), &pool)
+                    .unwrap();
+                amplitude
+                    .build_integrand(
+                        &model,
+                        "amplitude_threshold_event_roundtrip",
+                        &GlobalSettings {
+                            generation: generation_settings.clone(),
+                            ..Default::default()
+                        },
+                        (&runtime).into(),
+                        &pool,
+                    )
+                    .unwrap();
+                let integrand = amplitude.integrand.as_mut().unwrap();
+                integrand.warm_up(&model).unwrap();
+                let result = integrand
+                    .evaluate_momentum_configuration(
+                        &model,
+                        &crate::integrands::process::MomentumSpaceEvaluationInput {
+                            loop_momenta: (0..loop_count)
+                                .map(|index| {
+                                    crate::momentum::ThreeMomentum::new(
+                                        F(0.35 + index as f64 * 0.1),
+                                        F(-0.2),
+                                        F(0.45),
+                                    )
+                                })
+                                .collect(),
+                            integrator_weight: F(1.0),
+                            graph_id: Some(0),
+                            group_id: None,
+                            orientation: None,
+                            channel_id: None,
+                        },
+                        false,
+                    )
+                    .unwrap();
+                let events = result
+                    .event_groups
+                    .iter()
+                    .flat_map(|group| group.iter())
+                    .collect::<Vec<_>>();
+                assert_eq!(events.len(), 1);
+                let event = events[0];
+                let decomposition = event
+                    .additional_weights
+                    .threshold_counterterms
+                    .as_ref()
+                    .expect("explicit normalized amplitude must record threshold components");
+                assert!(!decomposition.components.is_empty());
+                assert_eq!(decomposition.total(), event.weight);
+                assert!(decomposition.components.iter().all(|component| {
+                    component.multiplier_values.as_slice() == [F(1.0)]
+                        && component.bare.is_some()
+                        && component.bare == Some(component.weighted)
+                        && !component.evaluation_skipped
+                }));
+                assert!(event.additional_weights.weights.keys().any(|key| matches!(
+                    key,
+                    crate::observables::AdditionalWeightKey::AmplitudeThresholdCounterterm { .. }
+                )));
+            })
+            .expect("amplitude threshold DOT-export test thread must start")
+            .join()
+            .expect("amplitude threshold DOT-export test thread must finish successfully");
+    }
+
+    #[test]
+    fn grouped_amplitude_threshold_directives_remain_member_local_through_runtime_and_save_load() {
+        std::thread::Builder::new()
+            .name("grouped-amplitude-threshold-ownership-test".to_string())
+            .stack_size(32 * 1024 * 1024)
+            .spawn(|| {
+                test_initialise().unwrap();
+                let model = load_generic_model("scalars");
+                let mut member_a: Graph = dot!(
+                    digraph grouped_threshold_member_a {
+                        graph [group_id=0 is_group_master=true]
+                        edge [particle=scalar_0]
+                        node [num=1]
+                        e [style=invis]
+                        e -> A:0 [id=3 particle=scalar_2]
+                        B:1 -> e [id=2 particle=scalar_2]
+                        A -> B [id=1]
+                        A -> B [id=0 lmb_id=0]
+                    },
+                    "scalars"
+                )
+                .unwrap();
+                let mut member_b: Graph = dot!(
+                    digraph grouped_threshold_member_b {
+                        graph [group_id=0]
+                        edge [particle=scalar_0]
+                        node [num=1]
+                        e [style=invis]
+                        e -> A:0 [id=3 particle=scalar_2]
+                        B:1 -> e [id=2 particle=scalar_2]
+                        A -> B [id=1 lmb_id=0]
+                        A -> B [id=0]
+                    },
+                    "scalars"
+                )
+                .unwrap();
+                for (graph, name, subspace_edge, expression) in [
+                    (&mut member_a, "member_a_one_loop", 0, "1"),
+                    (&mut member_b, "member_b_one_loop", 1, "2"),
+                ] {
+                    graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
+                        schema_version: 1,
+                        function_map: Default::default(),
+                        cuts: vec![ThresholdCountertermCut {
+                            edges: Vec::new(),
+                            thresholds: vec![ThresholdCountertermThreshold {
+                                edges: vec![super::EdgeIndex(0), super::EdgeIndex(1)],
+                                counterterms: vec![ThresholdCountertermVariant {
+                                    group_id: None,
+                                    name: Some(name.to_string()),
+                                    subspace: Some(vec![super::EdgeIndex(subspace_edge)]),
+                                    parent_lmb: Some(vec![super::EdgeIndex(subspace_edge)]),
+                                    disable: false,
+                                    multiplier: Some(ThresholdCountertermMultiplier {
+                                        expression: expression.to_string(),
+                                        function_map: Default::default(),
+                                        symmetrize: false,
+                                        opaque_derivatives: true,
+                                    }),
+                                }],
+                            }],
+                        }],
+                    });
+                }
+
+                let generation_settings = GenerationSettings {
+                    threshold_subtraction: ThresholdSubtractionSettings {
+                        enable_thresholds: true,
+                        assume_positive_external_energies: false,
+                        check_esurface_at_generation: false,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                // Keep the two-member bubble above threshold so both member-local registries
+                // are referenced by actual detailed L/I event components.
+                let mut runtime = RuntimeSettings {
+                    kinematics: KinematicsSettings {
+                        e_cm: 4.0,
+                        externals: Externals::Constant {
+                            momenta: vec![
+                                ExternalMomenta::Independent([F(4.0), F(0.0), F(0.0), F(0.0)]),
+                                ExternalMomenta::Dependent(Dep::Dep),
+                            ],
+                            helicities: vec![Helicity::ZERO; 2],
+                            improvement_settings: PhaseSpaceImprovementSettings::default(),
+                            f_64_cache: None,
+                            f_128_cache: None,
+                            arb_cache: Default::default(),
+                        },
+                    },
+                    ..RuntimeSettings::default()
+                };
+                runtime.general.generate_events = true;
+                runtime.general.store_additional_weights_in_event = true;
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(1)
+                    .build()
+                    .unwrap();
+                let mut amplitude = super::Amplitude::from_graph_list(
+                    "grouped_threshold_ownership",
+                    vec![member_a, member_b],
+                )
+                .unwrap();
+                assert_eq!(amplitude.graph_group_structure.len(), 1);
+                assert_eq!(
+                    (&amplitude.graph_group_structure[super::GroupId(0)])
+                        .into_iter()
+                        .count(),
+                    2
+                );
+                amplitude
+                    .preprocess(&model, &generation_settings, &(&runtime).into(), &pool)
+                    .unwrap();
+
+                let expected = [
+                    ("grouped_threshold_member_a", "member_a_one_loop", 0, "1"),
+                    ("grouped_threshold_member_b", "member_b_one_loop", 1, "2"),
+                ];
+                for (graph, (_, name, subspace_edge, expression)) in
+                    amplitude.graphs.iter().zip(expected)
+                {
+                    let resolved = graph
+                        .derived_data
+                        .resolved_threshold_counterterms
+                        .as_ref()
+                        .unwrap();
+                    assert!(!resolved.legacy_equivalent);
+                    // The bubble has two raised E-surface groups for this energy-edge set. The
+                    // compact declaration resolves once per group, with IDs scoped to this graph
+                    // member rather than allocated across the owning amplitude group.
+                    assert_eq!(resolved.variants.len(), 2);
+                    assert_eq!(
+                        resolved
+                            .variants
+                            .keys()
+                            .map(|variant_id| variant_id.0)
+                            .collect::<Vec<_>>(),
+                        [0, 1]
+                    );
+                    for variant in &resolved.variants {
+                        assert_eq!(variant.name, name);
+                        assert_eq!(
+                            variant.requested_subspace,
+                            Some(vec![super::EdgeIndex(subspace_edge)])
+                        );
+                        assert_eq!(
+                            variant
+                                .subspace
+                                .iter_basis_edges(graph.derived_data.lmbs.as_ref().unwrap())
+                                .collect::<Vec<_>>(),
+                            vec![super::EdgeIndex(subspace_edge)]
+                        );
+                        assert_eq!(variant.multiplier.as_ref().unwrap().expression, expression);
+                    }
+                }
+
+                for include_autogenerated_fields in [false, true] {
+                    let mut exported = String::new();
+                    amplitude
+                        .write_dot_fmt(
+                            &mut exported,
+                            &DotExportSettings {
+                                include_autogenerated_fields,
+                                ..DotExportSettings::default()
+                            },
+                        )
+                        .unwrap();
+                    let exported_graphs = Graph::from_string(&exported, &model).unwrap();
+                    assert_eq!(exported_graphs.len(), 2);
+                    for (graph, (graph_name, name, subspace_edge, expression)) in
+                        exported_graphs.iter().zip(expected)
+                    {
+                        assert_eq!(graph.name, graph_name);
+                        let spec = &graph.threshold_counterterms;
+                        assert!(!spec.autogenerated);
+                        assert_eq!(spec.cuts.len(), 1);
+                        assert!(spec.cuts[0].edges.is_empty());
+                        let variants = &spec.cuts[0].thresholds[0].counterterms;
+                        assert_eq!(variants.len(), 1);
+                        assert_eq!(variants[0].name.as_deref(), Some(name));
+                        assert_eq!(
+                            variants[0].subspace,
+                            Some(vec![super::EdgeIndex(subspace_edge)])
+                        );
+                        assert_eq!(
+                            variants[0].multiplier.as_ref().unwrap().expression,
+                            expression
+                        );
+                    }
+                }
+
+                amplitude
+                    .build_integrand(
+                        &model,
+                        "grouped_threshold_ownership",
+                        &GlobalSettings {
+                            generation: generation_settings.clone(),
+                            ..Default::default()
+                        },
+                        (&runtime).into(),
+                        &pool,
+                    )
+                    .unwrap();
+                let integrand = amplitude.integrand.as_mut().unwrap();
+                integrand.warm_up(&model).unwrap();
+
+                let inspect_ownership = |integrand: &ProcessIntegrand| {
+                    let ProcessIntegrand::Amplitude(integrand) = integrand else {
+                        panic!("grouped amplitude fixture built a non-amplitude integrand")
+                    };
+                    assert_eq!(integrand.data.graph_group_structure.len(), 1);
+                    assert_eq!(
+                        (&integrand.data.graph_group_structure[super::GroupId(0)])
+                            .into_iter()
+                            .count(),
+                        2
+                    );
+                    for (term, (graph_name, name, subspace_edge, expression)) in
+                        integrand.data.graph_terms.iter().zip(expected)
+                    {
+                        assert_eq!(term.graph.name, graph_name);
+                        let counterterm = &term.threshold_counterterm;
+                        assert!(!counterterm.legacy_equivalent);
+                        assert_eq!(counterterm.variant_metadata.len(), 2);
+                        for (variant_id, variant) in counterterm.variant_metadata.iter_enumerated()
+                        {
+                            assert!(variant_id.0 < 2);
+                            assert_eq!(variant.name, name);
+                            assert_eq!(
+                                variant.requested_subspace,
+                                Some(vec![super::EdgeIndex(subspace_edge)])
+                            );
+                        }
+                        let multipliers = counterterm.threshold_multipliers.as_ref().unwrap();
+                        assert_eq!(multipliers.left_variants().len(), 2);
+                        for (variant_id, reference) in
+                            multipliers.left_variants().iter().enumerate()
+                        {
+                            assert_eq!(reference.variant_id.0, variant_id);
+                            assert_eq!(reference.evaluator_id.unwrap().0, 0);
+                        }
+                        let registry = counterterm.metadata_registry.as_ref().unwrap();
+                        assert_eq!(registry.graph_name, graph_name);
+                        assert_eq!(registry.variants.len(), 2);
+                        for (variant_id, variant) in registry.variants.iter().enumerate() {
+                            assert_eq!(variant.variant_id, variant_id);
+                            assert_eq!(variant.name, name);
+                            assert_eq!(variant.resolved_subspace, [subspace_edge]);
+                        }
+                        assert_eq!(registry.evaluators.len(), 1);
+                        assert_eq!(registry.evaluators[0].evaluator_id, 0);
+                        assert_eq!(registry.evaluators[0].variant_ids, [0, 1]);
+                        assert_eq!(registry.evaluators[0].expression, expression);
+                        assert!(registry.components.iter().all(|component| {
+                            component.variant_ids.len() == 1
+                                && component.variant_ids[0] < 2
+                                && component.evaluator_ids == [Some(0)]
+                        }));
+                    }
+                };
+                inspect_ownership(integrand);
+
+                let evaluate_members = |integrand: &mut ProcessIntegrand| {
+                    (0..2)
+                        .map(|graph_id| {
+                            let registry = match integrand {
+                                ProcessIntegrand::Amplitude(amplitude_integrand) => {
+                                    amplitude_integrand.data.graph_terms[graph_id]
+                                        .threshold_counterterm
+                                        .metadata_registry
+                                        .clone()
+                                        .unwrap()
+                                }
+                                ProcessIntegrand::CrossSection(_) => unreachable!(),
+                            };
+                            let result = integrand
+                                .evaluate_momentum_configuration(
+                                    &model,
+                                    &MomentumSpaceEvaluationInput {
+                                        loop_momenta: vec![crate::momentum::ThreeMomentum::new(
+                                            F(0.35),
+                                            F(-0.2),
+                                            F(0.45),
+                                        )],
+                                        integrator_weight: F(1.0),
+                                        graph_id: Some(graph_id),
+                                        group_id: None,
+                                        orientation: None,
+                                        channel_id: None,
+                                    },
+                                    false,
+                                )
+                                .unwrap();
+                            let events = result
+                                .event_groups
+                                .iter()
+                                .flat_map(|group| group.iter())
+                                .collect::<Vec<_>>();
+                            assert_eq!(events.len(), 1);
+                            let event = events[0];
+                            let decomposition = event
+                                .additional_weights
+                                .threshold_counterterms
+                                .as_ref()
+                                .expect("each grouped member must record its own decomposition");
+                            assert_eq!(decomposition.total(), event.weight);
+                            assert!(!decomposition.components.is_empty());
+                            let expected_multiplier = F(if graph_id == 0 { 1.0 } else { 2.0 });
+                            for component in &decomposition.components {
+                                let metadata = &registry.components[component.component_id];
+                                assert_eq!(metadata.variant_ids.len(), 1);
+                                assert!(metadata.variant_ids[0] < 2);
+                                assert_eq!(metadata.evaluator_ids, [Some(0)]);
+                                assert_eq!(
+                                    component.multiplier_values.as_slice(),
+                                    [expected_multiplier]
+                                );
+                                assert_eq!(component.effective_multiplier, expected_multiplier);
+                            }
+                            (
+                                event.weight,
+                                decomposition
+                                    .components
+                                    .iter()
+                                    .map(|component| {
+                                        (
+                                            component.component_id,
+                                            component.multiplier_values.clone(),
+                                            component.effective_multiplier,
+                                            component.bare,
+                                            component.weighted,
+                                            component.evaluation_skipped,
+                                        )
+                                    })
+                                    .collect::<Vec<_>>(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                };
+                let before_save = evaluate_members(integrand);
+
+                let unique = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos();
+                let save_root = std::env::temp_dir().join(format!(
+                    "gammalooprs-grouped-amplitude-threshold-{}-{unique}",
+                    std::process::id(),
+                ));
+                amplitude.save(&save_root, true).unwrap();
+                let mut state_bytes = Vec::new();
+                State::export(&mut state_bytes).unwrap();
+                let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
+                let context = GammaLoopContextContainer {
+                    model: &model,
+                    state_map: &state_map,
+                };
+                let mut loaded =
+                    super::Amplitude::load(save_root.join("grouped_threshold_ownership"), context)
+                        .unwrap();
+                let loaded_integrand = loaded.integrand.as_mut().unwrap();
+                loaded_integrand.warm_up(&model).unwrap();
+                inspect_ownership(loaded_integrand);
+                let after_load = evaluate_members(loaded_integrand);
+                assert_eq!(after_load, before_save);
+                fs::remove_dir_all(&save_root).unwrap();
+            })
+            .expect("grouped-amplitude threshold ownership test thread must start")
+            .join()
+            .expect("grouped-amplitude threshold ownership test must finish successfully");
+    }
+
+    #[test]
+    fn raised_amplitude_constituents_reject_different_group_ids() {
+        test_initialise().unwrap();
+        let model = crate::model::Model::from_file(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
+        )
+        .unwrap();
+        let mut graph = AmplitudeGraph::new(
+            Graph::from_string(
+                include_str!("../../../../tests/resources/graphs/dotted_bubble_amp.dot"),
+                &model,
+            )
+            .unwrap()
+            .remove(0),
+        );
+        // These two topological thresholds are constituents of the same double pole.
+        // Splitting the shared semantic variant between solve groups would give the
+        // single raised residue two inconsistent prescriptions.
+        graph.graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
+            schema_version: 1,
+            function_map: Default::default(),
+            cuts: vec![ThresholdCountertermCut {
+                edges: Vec::new(),
+                thresholds: [1, 2]
+                    .into_iter()
+                    .enumerate()
+                    .map(|(group_id, edge)| ThresholdCountertermThreshold {
+                        edges: vec![super::EdgeIndex(edge), super::EdgeIndex(3)],
+                        counterterms: vec![ThresholdCountertermVariant {
+                            name: Some("shared_raised_variant".to_string()),
+                            group_id: Some(group_id),
+                            subspace: Some(vec![super::EdgeIndex(3)]),
+                            parent_lmb: Some(vec![super::EdgeIndex(3)]),
+                            disable: false,
+                            multiplier: None,
+                        }],
+                    })
+                    .collect(),
+            }],
+        });
+        let settings = GenerationSettings {
+            threshold_subtraction: ThresholdSubtractionSettings {
+                enable_thresholds: true,
+                assume_positive_external_energies: false,
+                check_esurface_at_generation: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        graph.generate_cff(&settings).unwrap();
+        graph.build_lmbs();
+        let raised_data = graph.graph.determine_raised_esurfaces_from_expression(
+            &graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .expression,
+        );
+        let error = graph
+            .resolve_amplitude_threshold_counterterm_directives(
+                &raised_data,
+                &settings,
+                &(&RuntimeSettings::default()).into(),
+                &model,
+            )
+            .unwrap_err()
+            .to_string();
+        for detail in [
+            "Constituents of one raised residue",
+            "[EdgeIndex(1), EdgeIndex(3)]",
+            "[EdgeIndex(2), EdgeIndex(3)]",
+            "group_id=Some(0)",
+            "group_id=Some(1)",
+            "shared_raised_variant",
+        ] {
+            assert!(error.contains(detail), "missing {detail}: {error}");
+        }
+    }
+
+    #[test]
+    fn generalized_amplitude_directive_preserves_raised_threshold_order_and_components() {
+        std::thread::Builder::new()
+            .name("generalized-raised-amplitude-threshold-test".to_string())
+            .stack_size(32 * 1024 * 1024)
+            .spawn(|| {
+                test_initialise().unwrap();
+                let model = crate::model::Model::from_file(
+                    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
+                )
+                .unwrap();
+                let mut graph = Graph::from_string(
+                    include_str!("../../../../tests/resources/graphs/dotted_bubble_amp.dot"),
+                    &model,
+                )
+                .unwrap()
+                .remove(0);
+                let mut generation_settings = GenerationSettings {
+                    threshold_subtraction: ThresholdSubtractionSettings {
+                        enable_thresholds: true,
+                        assume_positive_external_energies: false,
+                        check_esurface_at_generation: false,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                generation_settings
+                    .tropical_subgraph_table
+                    .disable_tropical_generation = true;
+
+                let mut legacy_graph = AmplitudeGraph::new(graph.clone());
+                legacy_graph
+                    .preprocess(
+                        &model,
+                        &generation_settings,
+                        &(&RuntimeSettings::default()).into(),
+                    )
+                    .unwrap();
+                let expected_thresholds = [
+                    vec![super::EdgeIndex(1), super::EdgeIndex(3)],
+                    vec![super::EdgeIndex(2), super::EdgeIndex(3)],
+                ];
+                let legacy_resolved = legacy_graph
+                    .derived_data
+                    .resolved_threshold_counterterms
+                    .as_ref()
+                    .unwrap();
+                assert_eq!(legacy_resolved.variants.len(), 2);
+                for variant in &legacy_resolved.variants {
+                    assert_eq!(variant.raised_esurface_group.max_occurence, 2);
+                    assert_eq!(
+                        variant
+                            .associations
+                            .iter()
+                            .map(|association| association.threshold_edges.clone())
+                            .collect::<Vec<_>>(),
+                        expected_thresholds
+                    );
+                    assert_eq!(variant.subspace_loop_count, 1);
+                    assert_eq!(
+                        variant
+                            .subspace
+                            .iter_basis_edges(legacy_graph.derived_data.lmbs.as_ref().unwrap())
+                            .collect::<Vec<_>>(),
+                        [super::EdgeIndex(3)]
+                    );
+                }
+
+                let explicit_variant = ThresholdCountertermVariant {
+                    group_id: None,
+                    name: Some("raised_one_loop".to_string()),
+                    subspace: Some(vec![super::EdgeIndex(3)]),
+                    parent_lmb: Some(vec![super::EdgeIndex(3)]),
+                    disable: false,
+                    multiplier: Some(ThresholdCountertermMultiplier {
+                        expression: "2".to_string(),
+                        function_map: Default::default(),
+                        symmetrize: false,
+                        opaque_derivatives: true,
+                    }),
+                };
+                graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
+                    schema_version: 1,
+                    function_map: Default::default(),
+                    cuts: vec![ThresholdCountertermCut {
+                        edges: Vec::new(),
+                        thresholds: expected_thresholds
+                            .iter()
+                            .map(|edges| ThresholdCountertermThreshold {
+                                edges: edges.clone(),
+                                counterterms: vec![explicit_variant.clone()],
+                            })
+                            .collect(),
+                    }],
+                });
+                let mut runtime = RuntimeSettings {
+                    kinematics: KinematicsSettings {
+                        e_cm: 4.0,
+                        externals: Externals::Constant {
+                            momenta: vec![
+                                ExternalMomenta::Independent([
+                                    F(4.0),
+                                    F(0.0),
+                                    F(0.0),
+                                    F(0.0),
+                                ]),
+                                ExternalMomenta::Dependent(Dep::Dep),
+                            ],
+                            helicities: vec![Helicity::ZERO; 2],
+                            improvement_settings: PhaseSpaceImprovementSettings::default(),
+                            f_64_cache: None,
+                            f_128_cache: None,
+                            arb_cache: Default::default(),
+                        },
+                    },
+                    ..RuntimeSettings::default()
+                };
+                runtime.general.generate_events = true;
+                runtime.general.store_additional_weights_in_event = true;
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(1)
+                    .build()
+                    .unwrap();
+                let mut amplitude = super::Amplitude::from_graph_list(
+                    "generalized_raised_amplitude_threshold",
+                    vec![graph],
+                )
+                .unwrap();
+                amplitude
+                    .preprocess(&model, &generation_settings, &(&runtime).into(), &pool)
+                    .unwrap();
+                let resolved = amplitude.graphs[0]
+                    .derived_data
+                    .resolved_threshold_counterterms
+                    .as_ref()
+                    .unwrap();
+                assert!(!resolved.legacy_equivalent);
+                assert_eq!(resolved.variants.len(), 2);
+                for variant in &resolved.variants {
+                    assert_eq!(variant.name, "raised_one_loop");
+                    assert_eq!(variant.raised_esurface_group.max_occurence, 2);
+                    assert_eq!(variant.subspace_loop_count, 1);
+                    assert_eq!(variant.multiplier.as_ref().unwrap().expression, "2");
+                }
+                for symbolic in &amplitude.graphs[0]
+                    .derived_data
+                    .threshold_counterterm_variants
+                {
+                    let orders = symbolic
+                        .atom
+                        .parametric
+                        .iter()
+                        .filter_map(|(index, _)| index.left_threshold_order)
+                        .collect::<std::collections::BTreeSet<_>>();
+                    assert_eq!(orders, [1, 2].into_iter().collect::<std::collections::BTreeSet<_>>());
+                }
+
+                amplitude
+                    .build_integrand(
+                        &model,
+                        "generalized_raised_amplitude_threshold",
+                        &GlobalSettings {
+                            generation: generation_settings.clone(),
+                            ..Default::default()
+                        },
+                        (&runtime).into(),
+                        &pool,
+                    )
+                    .unwrap();
+                let inspect_raised_runtime = |integrand: &ProcessIntegrand| {
+                    let ProcessIntegrand::Amplitude(integrand) = integrand else {
+                        panic!("raised amplitude fixture built a non-amplitude integrand")
+                    };
+                    let counterterm = &integrand.data.graph_terms[0].threshold_counterterm;
+                    assert!(!counterterm.legacy_equivalent);
+                    assert_eq!(counterterm.variant_evaluators.len(), 2);
+                    for (variant_id, evaluator) in
+                        counterterm.variant_evaluators.iter_enumerated()
+                    {
+                        assert_eq!(
+                            evaluator
+                                .evaluator_stacks
+                                .keys()
+                                .filter_map(|index| index.left_threshold_order)
+                                .collect::<std::collections::BTreeSet<_>>(),
+                            [1, 2].into_iter().collect::<std::collections::BTreeSet<_>>()
+                        );
+                        let helpers = &counterterm.variant_helper_evaluators[variant_id];
+                        assert_eq!(helpers.len(), 2);
+                        assert!(helpers.iter().all(|helper| helper.exprs_len == 2));
+                    }
+
+                    let registry = counterterm.metadata_registry.as_ref().unwrap();
+                    assert_eq!(registry.variants.len(), 2);
+                    assert!(registry.variants.iter().all(|variant| {
+                        variant.name == "raised_one_loop"
+                            && variant.subspace_loop_count == 1
+                            && variant.resolved_subspace == [3]
+                    }));
+                    assert_eq!(registry.evaluators.len(), 1);
+                    assert_eq!(registry.evaluators[0].variant_ids, [0, 1]);
+                    assert_eq!(registry.evaluators[0].expression, "2");
+                    assert_eq!(registry.components.len(), 4);
+                    for variant_id in 0..2 {
+                        assert_eq!(
+                            registry
+                                .components
+                                .iter()
+                                .filter(|component| component.variant_ids == [variant_id])
+                                .map(|component| component.kind)
+                                .collect::<std::collections::BTreeSet<_>>(),
+                            [
+                                ThresholdCountertermComponentKind::Local,
+                                ThresholdCountertermComponentKind::Integrated,
+                            ]
+                            .into_iter()
+                            .collect::<std::collections::BTreeSet<_>>()
+                        );
+                    }
+                    registry.clone()
+                };
+                let registry_before_save =
+                    inspect_raised_runtime(amplitude.integrand.as_ref().unwrap());
+
+                let evaluate_raised = |integrand: &mut ProcessIntegrand| {
+                    let result = integrand
+                        .evaluate_momentum_configuration(
+                            &model,
+                            &MomentumSpaceEvaluationInput {
+                                loop_momenta: vec![crate::momentum::ThreeMomentum::new(
+                                    F(0.35),
+                                    F(-0.2),
+                                    F(0.45),
+                                )],
+                                integrator_weight: F(1.0),
+                                graph_id: Some(0),
+                                group_id: None,
+                                orientation: None,
+                                channel_id: None,
+                            },
+                            false,
+                        )
+                        .unwrap();
+                    let events = result
+                        .event_groups
+                        .iter()
+                        .flat_map(|group| group.iter())
+                        .collect::<Vec<_>>();
+                    assert_eq!(events.len(), 1);
+                    let event = events[0];
+                    let decomposition = event
+                        .additional_weights
+                        .threshold_counterterms
+                        .as_ref()
+                        .expect("raised generalized threshold must record completed L/I pieces");
+                    assert_eq!(decomposition.total(), event.weight);
+                    assert_eq!(decomposition.components.len(), 2);
+                    assert_eq!(
+                        decomposition
+                            .components
+                            .iter()
+                            .map(|component| {
+                                registry_before_save.components[component.component_id].kind
+                            })
+                            .collect::<std::collections::BTreeSet<_>>(),
+                        [
+                            ThresholdCountertermComponentKind::Local,
+                            ThresholdCountertermComponentKind::Integrated,
+                        ]
+                        .into_iter()
+                        .collect::<std::collections::BTreeSet<_>>()
+                    );
+                    for component in &decomposition.components {
+                        let metadata = &registry_before_save.components[component.component_id];
+                        assert_eq!(metadata.variant_ids.len(), 1);
+                        assert!(metadata.variant_ids[0] < 2);
+                        assert_eq!(metadata.evaluator_ids, [Some(0)]);
+                        assert_eq!(component.multiplier_values.as_slice(), [F(2.0)]);
+                        assert_eq!(component.effective_multiplier, F(2.0));
+                        assert!(component.bare.is_some());
+                        assert!(!component.evaluation_skipped);
+                        let crate::observables::ThresholdCountertermComponentOccurrence::Amplitude {
+                            raised_esurface_id,
+                            overlap_group,
+                        } = &component.occurrence
+                        else {
+                            panic!("amplitude fixture recorded a non-amplitude occurrence")
+                        };
+                        assert!(event.additional_weights.weights.contains_key(
+                            &crate::observables::AdditionalWeightKey::AmplitudeThresholdCountertermVariant {
+                                variant_id: metadata.variant_ids[0],
+                                esurface_id: *raised_esurface_id,
+                                overlap_group: *overlap_group,
+                            },
+                        ));
+                    }
+                    (
+                        event.weight,
+                        decomposition.original,
+                        decomposition
+                            .components
+                            .iter()
+                            .map(|component| {
+                                (
+                                    component.component_id,
+                                    component.occurrence.clone(),
+                                    component.multiplier_values.clone(),
+                                    component.effective_multiplier,
+                                    component.bare,
+                                    component.weighted,
+                                    component.evaluation_skipped,
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                };
+                let integrand = amplitude.integrand.as_mut().unwrap();
+                integrand.warm_up(&model).unwrap();
+                let before_save = evaluate_raised(integrand);
+
+                let unique = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos();
+                let save_root = std::env::temp_dir().join(format!(
+                    "gammalooprs-raised-amplitude-threshold-{}-{unique}",
+                    std::process::id(),
+                ));
+                amplitude.save(&save_root, true).unwrap();
+                let mut state_bytes = Vec::new();
+                State::export(&mut state_bytes).unwrap();
+                let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
+                let context = GammaLoopContextContainer {
+                    model: &model,
+                    state_map: &state_map,
+                };
+                let mut loaded = super::Amplitude::load(
+                    save_root.join("generalized_raised_amplitude_threshold"),
+                    context,
+                )
+                .unwrap();
+                let loaded_integrand = loaded.integrand.as_mut().unwrap();
+                assert_eq!(
+                    inspect_raised_runtime(loaded_integrand),
+                    registry_before_save
+                );
+                loaded_integrand.warm_up(&model).unwrap();
+                assert_eq!(evaluate_raised(loaded_integrand), before_save);
+                fs::remove_dir_all(&save_root).unwrap();
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
 
     #[test]
     fn amplitude_tree() {

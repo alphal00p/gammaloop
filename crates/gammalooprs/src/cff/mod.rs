@@ -2742,7 +2742,6 @@ mod tests {
                     },
                     &runtime_settings,
                     &mut EvaluationMetaData::new_empty(),
-                    false,
                 )?
                 .pop()
                 .expect("the triangle evaluator should return one value")

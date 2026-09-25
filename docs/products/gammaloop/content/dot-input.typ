@@ -99,6 +99,12 @@ port index to another leg changes its kinematic-list position and its initial dr
 See #product-link("gammaloop", page: "guides/conventions/", label: "Kinematics, normalization, and weights")
 for the four-vector and sign conventions.
 
+The graph-level `threshold_counterterms` attribute controls subtraction solve spaces and
+weighted variants. Its schema, scoped functions and copyable exports are described in
+#product-link("gammaloop", page: "guides/threshold-subtraction/", label: "Threshold subtraction metadata").
+These generation-time directives are separate from runtime
+#product-link("gammaloop", page: "guides/sampling/", label: "sampling channels and maps").
+
 For example, the edge and half-edge indices deliberately differ here:
 
 // docs-example: syntax

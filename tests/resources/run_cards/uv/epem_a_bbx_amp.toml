@@ -59,6 +59,11 @@ integral_unit = "none"
 mu_r = 20.0
 m_uv = 20.0
 
+[default_runtime_settings.stability]
+# Fixed-helicity amplitudes acquire a phase under rotations. Their stability
+# check uses the complex norm independently of the integration component.
+check_on_norm = true
+
 [default_runtime_settings.sampling]
 graphs = "monte_carlo"
 orientations = "monte_carlo"

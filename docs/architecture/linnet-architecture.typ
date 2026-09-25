@@ -116,6 +116,9 @@ the endpoint side determines underlying flow. Serialization maps caller data int
 types and writes through a caller-provided `fmt::Write` or `io::Write`; DOT parsing separately
 offers string- and file-based entry points. Malformed direction, endpoint, and explicit-ID data
 are reported as parser errors; they do not panic or publish a partially constructed graph.
+Graph-level multiline attribute values preserve their literal internal indentation
+through serialization and reparsing. Structural DOT indentation applies outside
+the quoted value, so embedded configuration retains its original whitespace.
 
 == Feature and persistence boundaries
 
@@ -129,6 +132,11 @@ directory, database, or background persistence service.
 The `drawing` feature enables `cgmath` and the layout modules. The `symbolica` feature enables
 the half-edge Symbolica adapter. These features extend data conversion or analysis; they do not
 change the involution and node-incidence contracts.
+
+`SubSetLike::symbol_from_label` restores the same custom printer used by a subset's `symbol`
+method from its textual label, including composite labels. Consumers can persist those labels
+and register the printers before importing a Symbolica archive; this restores display behavior
+without reconstructing graph topology or adding a persistence service to Linnet.
 
 == Maintained invariants
 

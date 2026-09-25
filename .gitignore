@@ -52,8 +52,23 @@ gammaloop_state/
 examples/cli/qq_aaa/*
 !examples/cli/qq_aaa/qqx_aaa_subtracted.dot
 !examples/cli/qq_aaa/qqx_aaa_subtracted.toml
+# Keep maintained NNLO cards and inputs; local states, plots and pilot output stay ignored.
 examples/cli/epem_a_ttxh/NNLO/*
+!examples/cli/epem_a_ttxh/NNLO/README.md
 !examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO.toml
+!examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO_test_GL297.toml
+!examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO_test_GL638.toml
+!examples/cli/epem_a_ttxh/NNLO/gl297_advanced_sampling.toml
+!examples/cli/epem_a_ttxh/NNLO/gl297_optimized_lmbs.toml
+!examples/cli/epem_a_ttxh/NNLO/gl638_advanced_sampling.toml
+!examples/cli/epem_a_ttxh/NNLO/gl638_advanced_sampling_max_weight.toml
+!examples/cli/epem_a_ttxh/NNLO/gl638_advanced_sampling_with_optimized_lmbs.toml
+!examples/cli/epem_a_ttxh/NNLO/gl638_optimized_lmbs.toml
+!examples/cli/epem_a_ttxh/NNLO/monitor_tth_nnlo_integration.py
+!examples/cli/epem_a_ttxh/NNLO/graphs/
+!examples/cli/epem_a_ttxh/NNLO/graphs/*.dot
+!examples/cli/epem_a_ttxh/NNLO/sampling/
+!examples/cli/epem_a_ttxh/NNLO/sampling/*.toml
 examples/**/*state*/
 examples/**/OLD_*
 examples/**/gammaloop_state/

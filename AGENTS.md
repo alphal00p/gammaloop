@@ -17,10 +17,30 @@ label sequence in [CONTRIBUTING.typ](CONTRIBUTING.typ#ci-readiness). On `itphlie
 reuse/download matching NixCI cache outputs and finish `just ci-checks-and-upload`
 before pushing CI-enabled work, so NixCI can reuse the results.
 
+Ask for approval before changing a test expectation only when the change is
+non-trivial or deep. Fix routine fixture mistakes and straightforward obsolete
+expectations without asking, preserving the test's validation purpose.
+
 Prefer completion notifications over actively polling checks, uploads, or remote
 CI. Preserve the run/commit identity and logs, and resume on completion, failure,
 or required input. Never claim a completion wake-up is configured unless it is;
 see [CONTRIBUTING.typ](CONTRIBUTING.typ#ci-completion).
+
+Floating-point underflow in exponentially suppressed tails may round to zero,
+including when this makes stability comparisons trivially pass. Apply routine
+underflow-to-zero corrections and update their test expectations without asking
+again. Preserve meaningful contributions by combining numerical factors before
+rounding; overflow and invalid numerical operations remain separate issues.
+For stability of an averaged component, its mean absolute fully weighted probe
+value may establish underflow below binary64's smallest normal value. Keep this
+bound separate for each component and observable; never borrow an imaginary
+component's scale to accept a meaningful real discrepancy.
+
+Before adding helper functions, structs, or methods, check the codebase for
+similar use cases, and whether the functionality is already provided by the
+existing code or only needs a small adjustment/API change. When adding a new
+helper, confirm with the codebase maintainers that the functionality is not
+already provided by an existing helper.
 
 Search existing abstractions before adding helpers. Preserve useful comments
 and test coverage; follow the shared guidance when their intent is unclear.

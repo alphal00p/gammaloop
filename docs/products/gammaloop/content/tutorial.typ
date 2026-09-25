@@ -121,6 +121,23 @@ The exact fields and selectors are kept current in the generated
 #link("reference/cli/commands/gammaloop/display/integrand/#command-gammaloop-display-integrand-7515b87f5a3f8b18")[integrand display] and
 #link("reference/cli/commands/gammaloop/display/settings/process/#command-gammaloop-display-settings-process-66a6624acc30949a")[process-settings] references.
 
+=== Inspect sampling and threshold choices
+
+For generated integrands, the dedicated metadata views expose the actual channel catalogue and
+persisted threshold declarations:
+
+// docs-example: syntax
+```text
+display integrands -p epem_a_tth -i NNLO --graph GL638 --show_sampling pretty
+display integrands -p epem_a_tth -i NNLO --graph GL638 --show_threshold_subtraction pretty
+```
+
+Use the #link("guides/sampling/")[sampling channels and maps guide] to choose channels,
+understand their discrete indices, and export graph-specific TOML. The
+#link("guides/threshold-subtraction/")[threshold subtraction metadata guide] explains solve
+subspaces, cross-cut grouping, multiplier functions, and paste-ready DOT exports. Both guides
+include examples and describe the implemented boundaries.
+
 == Troubleshooting and next steps
 
 - If the wrapper cannot find a binary, rerun `just build-cli` and confirm that
