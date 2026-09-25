@@ -33,7 +33,7 @@ use super::{
 };
 use crate::{
     color::CS,
-    dirac::AGS,
+    dirac::{AGS, DiracSimplifier},
     epsilon::EPSILON_SYMBOL,
     representations::{Bispinor, ColorAdjoint, ColorAntiFundamental, ColorFundamental},
 };
@@ -160,8 +160,17 @@ impl SymbolicTensor<PartialStructure> {
         if expression.as_view().is_zero()
             || (self.structure.open_positions().is_empty()
                 && !self.expression.as_view().needs_normalization()
-                && InterfaceInference::default()
-                    .rewrites_preserve_leaf_interfaces(self.expression.as_view()))
+                && {
+                    let mut inference = InterfaceInference::default();
+                    inference.rewrites_preserve_leaf_interfaces(self.expression.as_view())
+                        // Reserve source validation for substantial trace expansion.
+                        || (expression.as_view().get_byte_size()
+                            > self.expression.as_view().get_byte_size().saturating_mul(2)
+                            && inference.terminal_trace_preserves_interface(
+                                &self.expression,
+                                &self.structure,
+                            ))
+                })
         {
             return Ok(Self::from_normalized_parts(
                 expression,
@@ -363,6 +372,65 @@ impl InterfaceInference {
     /// allowed hook; all its vector operands are checked by the leaf proof.
     pub fn rewrites_preserve_leaf_interfaces(&mut self, value: AtomView<'_>) -> bool {
         Self::normalization_is_intrinsic(value) && self.algebra_preserves_leaf_interfaces(value)
+    }
+
+    /// Prove terminal trace identities on the short source word instead of
+    /// inferring the interface of the resulting pairing polynomial.
+    fn terminal_trace_preserves_interface(
+        &mut self,
+        expression: &Atom,
+        structure: &PartialStructure,
+    ) -> bool {
+        let Some((cyclic, indices)) =
+            DiracSimplifier::terminal_trace_interface_inputs(expression.as_view())
+        else {
+            return false;
+        };
+        // Canonical traces use this intrinsic cyclic wrapper. Its normalizer
+        // only unwraps a symmetric projector, which terminal-word admission
+        // excludes; it cannot invoke a component callback.
+        let mut intrinsic = true;
+        expression.as_view().visitor(&mut |node| {
+            if let AtomView::Fun(function) = node {
+                let symbol = function.get_symbol();
+                intrinsic &= if Some(node) == cyclic {
+                    symbol.get_evaluation_info().is_none()
+                } else {
+                    Self::intrinsic_normalization_head(symbol)
+                };
+            }
+            intrinsic
+        });
+        if !intrinsic {
+            return false;
+        }
+        if !indices
+            .into_iter()
+            .all(|index| match self.slots.classify(index) {
+                SlotMatch::Explicit(_) => self
+                    .slots
+                    .parse::<LibraryRep, AbstractIndex>(index)
+                    .is_ok_and(|slot| {
+                        !matches!(slot.aind(), AbstractIndex::Open { .. })
+                            && slot.rep().rep.is_self_dual()
+                    }),
+                SlotMatch::Other => {
+                    let AtomView::Fun(vector) = index else {
+                        return false;
+                    };
+                    self.direct_leaf_interface(vector).is_some_and(|interface| {
+                        matches!(interface.logical_slots().as_slice(), [slot]
+                        if matches!(slot.aind, PartialIndex::Open(_))
+                            && slot.rep().rep.is_self_dual())
+                    })
+                }
+                SlotMatch::Opaque => false,
+            })
+        {
+            return false;
+        }
+        SymbolicTensor::<PartialStructure>::validate_atom(expression).is_ok()
+            && SymbolicTensor::<PartialStructure>::validate_interface(expression, structure).is_ok()
     }
 
     /// Scalar algebra treats tensor leaves as indeterminates. Reuse their
@@ -2201,6 +2269,285 @@ mod tests {
         assert!(value.with_rewritten_expression(contracted).is_err());
         SymbolicTensor::<PartialStructure>::validate_interface(&Atom::Zero, &value.structure)
             .unwrap();
+    }
+
+    #[test]
+    fn terminal_trace_rewrites_validate_the_short_source_and_keep_logical_order() {
+        use crate::dirac::GammaSimplifier;
+
+        crate::test_support::test_initialize();
+        let spin = Bispinor {}.new_rep(4).to_symbolic([]);
+        let spectator = symbolica::parse_lit!((trace_interface_x + trace_interface_y) ^ 3);
+        for dimension in [
+            Dimension::Concrete(4),
+            Dimension::from(symbolica::symbol!("trace_interface_D")),
+        ] {
+            let minkowski = Minkowski {}.new_rep(dimension);
+            let indices = (0..8)
+                .map(|position| {
+                    minkowski
+                        .slot::<AbstractIndex, _>(if position < 4 {
+                            AbstractIndex::Normal(73501 + position)
+                        } else {
+                            AbstractIndex::Dummy(73501 + position)
+                        })
+                        .to_atom()
+                })
+                .collect::<Vec<_>>();
+            let vector = spenso::vector_symbol!("trace_interface_vector");
+            let compact = FunctionBuilder::new(vector)
+                .add_arg(minkowski.to_symbolic([]))
+                .finish();
+            let distinct_vectors = (0..8)
+                .map(|position| {
+                    FunctionBuilder::new(vector)
+                        .add_arg(position)
+                        .add_arg(minkowski.to_symbolic([]))
+                        .finish()
+                })
+                .collect::<Vec<_>>();
+            let words = [
+                indices.clone(),
+                distinct_vectors,
+                vec![
+                    indices[0].clone(),
+                    compact.clone(),
+                    indices[0].clone(),
+                    compact.clone(),
+                ],
+                vec![compact.clone(), compact.clone(), compact.clone(), compact],
+            ];
+            for word in words {
+                let ordinary =
+                    shadowing::trace(&spin, word.iter().map(|index| crate::gamma!(index)));
+                let mut expressions = vec![ordinary.clone(), &spectator * ordinary];
+                if dimension == Dimension::Concrete(4) && word == indices {
+                    let axial = shadowing::trace(
+                        &spin,
+                        std::iter::once(crate::gamma5!())
+                            .chain(word.iter().map(|index| crate::gamma!(index))),
+                    );
+                    expressions.extend([axial.clone(), &spectator * axial]);
+                }
+                for expression in expressions {
+                    let mut value = SymbolicTensor::<PartialStructure>::infer(expression).unwrap();
+                    value.structure = PartialStructure::from_logical_slots(
+                        value.structure.logical_slots().into_iter().rev(),
+                    );
+                    assert!(
+                        !InterfaceInference::default()
+                            .algebra_preserves_leaf_interfaces(value.expression.as_view())
+                    );
+                    assert!(
+                        InterfaceInference::default().terminal_trace_preserves_interface(
+                            &value.expression,
+                            &value.structure
+                        )
+                    );
+                    let expected = value.expression.simplify_gamma();
+                    assert_ne!(expected, value.expression);
+                    if word.len() == 8 {
+                        assert!(
+                            expected.as_view().get_byte_size()
+                                > value.expression.as_view().get_byte_size().saturating_mul(2)
+                        );
+                    }
+                    INFERENCE_CALLS.with(|count| count.set(0));
+                    SymbolicTensor::<PartialStructure>::validate_interface(
+                        &value.expression,
+                        &value.structure,
+                    )
+                    .unwrap();
+                    let source_inference_calls = INFERENCE_CALLS.with(|count| count.get());
+                    INFERENCE_CALLS.with(|count| count.set(0));
+                    let result = value.with_rewritten_expression(expected.clone()).unwrap();
+                    assert_eq!(result.expression, expected);
+                    assert_eq!(result.structure, value.structure);
+                    if word.len() == 8 {
+                        assert_eq!(
+                            INFERENCE_CALLS.with(|count| count.get()),
+                            source_inference_calls,
+                            "only the admitted source word needs interface inference"
+                        );
+                    }
+                    SymbolicTensor::<PartialStructure>::validate_interface(
+                        &result.expression,
+                        &result.structure,
+                    )
+                    .unwrap();
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn terminal_trace_interface_proof_rejects_unresolved_malformed_and_powered_words() {
+        crate::test_support::test_initialize();
+        let minkowski = Minkowski {}.new_rep(4);
+        let spin = Bispinor {}.new_rep(4).to_symbolic([]);
+        let [a, b] = [73521, 73523].map(|index| {
+            minkowski
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let ordinary = shadowing::trace(&spin, [&a, &b].map(|index| crate::gamma!(index)));
+        let structure = SymbolicTensor::<PartialStructure>::infer(ordinary.clone())
+            .unwrap()
+            .structure;
+        let malformed_spin = shadowing::trace(
+            Bispinor {}.new_rep(3).to_symbolic([]),
+            [&a, &b].map(|index| crate::gamma!(index)),
+        );
+        let mixed_dimension = shadowing::trace(
+            &spin,
+            [
+                crate::gamma!(&a),
+                crate::gamma!(
+                    Minkowski {}
+                        .new_rep(6)
+                        .slot::<AbstractIndex, _>(AbstractIndex::Normal(73523))
+                        .to_atom()
+                ),
+            ],
+        );
+        let powered_factor = shadowing::trace(&spin, [crate::gamma!(&a).pow(2), crate::gamma!(&b)]);
+        let chain = spenso::chain!(
+            Bispinor {}.new_rep(4).slot::<AbstractIndex, _>(AbstractIndex::Normal(73525)).to_atom(),
+            Bispinor {}.new_rep(4).slot::<AbstractIndex, _>(AbstractIndex::Normal(73527)).to_atom();
+            [crate::gamma!(&a)]);
+        let unresolved = shadowing::trace(
+            &spin,
+            [crate::gamma!(minkowski.to_symbolic([])), crate::gamma!(&b)],
+        );
+        let open_index = shadowing::trace(
+            &spin,
+            [
+                crate::gamma!(
+                    minkowski
+                        .slot::<AbstractIndex, _>(AbstractIndex::Open {
+                            owner: 73529,
+                            axis: 0
+                        })
+                        .to_atom()
+                ),
+                crate::gamma!(&b),
+            ],
+        );
+        for expression in [
+            malformed_spin,
+            mixed_dimension,
+            powered_factor,
+            chain,
+            unresolved,
+            open_index,
+            ordinary.pow(2),
+        ] {
+            assert!(
+                !InterfaceInference::default()
+                    .terminal_trace_preserves_interface(&expression, &structure),
+                "{expression}"
+            );
+        }
+        let nested = shadowing::trace(&spin, std::iter::empty::<Atom>());
+        let vector =
+            FunctionBuilder::new(spenso::vector_symbol!("trace_interface_nested_metadata"))
+                .add_arg(nested)
+                .add_arg(minkowski.to_symbolic([]))
+                .finish();
+        let nested_metadata =
+            shadowing::trace(&spin, [&vector, &b].map(|index| crate::gamma!(index)));
+        assert!(
+            DiracSimplifier::terminal_trace_interface_inputs(nested_metadata.as_view()).is_none()
+        );
+        assert!(
+            !InterfaceInference::default()
+                .terminal_trace_preserves_interface(&nested_metadata, &structure)
+        );
+        let cyclic_metadata =
+            FunctionBuilder::new(spenso::vector_symbol!("trace_interface_cyclic_metadata"))
+                .add_arg(shadowing::cyclic([Atom::var(symbolica::symbol!(
+                    "trace_interface_metadata"
+                ))]))
+                .add_arg(minkowski.to_symbolic([]))
+                .finish();
+        let cyclic_metadata = shadowing::trace(
+            &spin,
+            [&cyclic_metadata, &b].map(|index| crate::gamma!(index)),
+        );
+        assert!(
+            !InterfaceInference::default()
+                .terminal_trace_preserves_interface(&cyclic_metadata, &structure)
+        );
+        let symmetric = FunctionBuilder::new(
+            symbolica::symbol!("trace_interface_symmetric_vector"; Symmetric;
+                tags = [&SPENSO_TAG.tensor, &SPENSO_TAG.rank1]),
+        )
+        .add_arg(7)
+        .add_arg(minkowski.to_symbolic([]))
+        .finish();
+        let symmetric = shadowing::trace(&spin, [&symmetric, &b].map(|index| crate::gamma!(index)));
+        assert!(
+            !InterfaceInference::default()
+                .terminal_trace_preserves_interface(&symmetric, &structure)
+        );
+        let wrong_structure = PartialStructure::from_logical_slots([]);
+        assert!(
+            !InterfaceInference::default().terminal_trace_preserves_interface(
+                &shadowing::trace(&spin, [&a, &b].map(|index| crate::gamma!(index))),
+                &wrong_structure
+            )
+        );
+    }
+
+    #[test]
+    fn terminal_trace_callback_rank_loss_keeps_output_validation_without_replay() {
+        use crate::dirac::GammaSimplifier;
+        use std::sync::{Arc, Mutex};
+
+        crate::test_support::test_initialize();
+        let scalar = Atom::add_many((0..64).map(|index| {
+            Atom::var(symbolica::symbol!(format!(
+                "trace_interface_callback_scalar_{index}"
+            )))
+        }));
+        let callback_scalar = scalar.clone();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&calls);
+        let vector = spenso::vector_symbol!(
+            "trace_interface_callback_vector",
+            norm = move |node, out| {
+                recorded.lock().unwrap().push(node.to_owned());
+                if let AtomView::Fun(function) = node
+                    && let Some(AtomView::Fun(slot)) = function.iter().last()
+                    && slot.get_nargs() == 2
+                {
+                    **out = callback_scalar.clone();
+                }
+            }
+        );
+        let minkowski = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let index = AbstractIndex::Normal(73531);
+        let explicit = minkowski.slot::<AbstractIndex, _>(index).to_atom();
+        let compact = FunctionBuilder::new(vector)
+            .add_arg(minkowski.to_symbolic([]))
+            .finish();
+        let source = shadowing::trace(
+            Bispinor {}.new_rep(4).to_symbolic([]),
+            [&explicit, &compact].map(|index| crate::gamma!(index)),
+        );
+        let value =
+            SymbolicTensor::<PartialStructure>::new(source, explicit_interface(minkowski, index));
+        calls.lock().unwrap().clear();
+        let rewritten = value.expression.simplify_gamma();
+        assert_eq!(rewritten, Atom::num(4) * scalar);
+        assert!(
+            rewritten.as_view().get_byte_size()
+                > value.expression.as_view().get_byte_size().saturating_mul(2)
+        );
+        let before_validation = calls.lock().unwrap().clone();
+        assert!(!before_validation.is_empty());
+        assert!(value.with_rewritten_expression(rewritten).is_err());
+        assert_eq!(*calls.lock().unwrap(), before_validation);
     }
 
     #[test]

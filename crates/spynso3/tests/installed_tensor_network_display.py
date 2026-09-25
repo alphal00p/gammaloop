@@ -17,6 +17,24 @@ from symbolica.community.spenso import (
 
 
 class NetworkDisplayTests(unittest.TestCase):
+    def test_edge_slots_use_representation_alphabets(self):
+        gamma = TensorExpression.gamma(4)(1, 2, 1).to_network()
+        labels = re.findall(r'\("label-typst"\): "([^"]*)"', gamma.to_linnest())
+        self.assertCountEqual(labels, ["a", "b", "mu", "gamma"])
+        ET.fromstring(gamma.render())
+
+        # Compound graph indices must be named together, not independently as mu.
+        rep = Representation.mink(4)
+        p = TensorName("network_slot_labels::p")(rep)
+        q = TensorName("network_slot_labels::q")(rep)
+        network = (
+            p(E("gammalooprs::hedge(2,1)")) * q(E("gammalooprs::hedge(3,1)"))
+        ).to_network()
+        labels = re.findall(r'\("label-typst"\): "([^"]*)"', network.to_linnest())
+        self.assertIn("mu", labels)
+        self.assertIn("nu", labels)
+        ET.fromstring(network.render())
+
     def test_registered_names_and_typed_inspection(self):
         spinor = Representation.bis(4)
         jbar = TensorName("network_details::Jbar", print={"typst": "macron(J)"})(spinor)

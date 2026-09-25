@@ -2957,6 +2957,50 @@ def _(mo):
     `shared_tensor_handle_and_dimension_followup` contains the sources, samples,
     FORM references, validation, and profiles.
 
+    **Closed-trace interface reuse:** the shared symbolic tensor now checks the
+    short admitted gamma word and retains its interface across expansion. It
+    reuses the Dirac evaluator's parser, keeps callback and unresolved-port
+    checks, and validates small outputs directly. Against the preceding saved
+    release, two alternating process pairs give:
+
+    | Complete public call | Before | After | Speedup |
+    | --- | ---: | ---: | ---: |
+    | Free trace4, length 8 | 1.745 ms | 0.230 ms | 7.58× |
+    | Free tracen, length 6 | 0.353 ms | 0.115 ms | 3.07× |
+    | Free tracen, length 10 | 22.552 ms | 1.541 ms | 14.63× |
+    | Free tracen, length 12 | 253.761 ms | 18.836 ms | 13.47× |
+    | Repeated-index tracen, length 8 | 0.454 ms | 0.150 ms | 3.02× |
+    | Axial trace4, length 12 | 30.977 ms | 9.205 ms | 3.37× |
+
+    Short-trace controls and large-result reruns remain roughly flat. Three
+    paired complete typed ladders are also flat, **8.830 → 8.826 s**. The raw
+    route is slightly slower, **17.031 → 17.302 s**, with paired increases of
+    **0.73–2.22%**. All ladder outputs equal the FORM-certified **9,652-term**
+    polynomial. An endpoint-recognition candidate was discarded after its
+    **91-case** matrix showed no reliable gain.
+
+    Fresh FORM takes **0.753 s process wall** for the ladder: a remaining
+    **11.7×** gap. FORM trace-body CPU is **0.0473 ms** for free trace4 length 8,
+    **3.967 ms** for tracen length 12, and **0.600 ms** for axial length 12.
+    These exclude the scalar spectator and Python wrapping; source construction
+    is untimed in both trace routes. We are not at FORM parity.
+
+    Free tracen output wrapping falls from **94.23%** to **2.29%** of sampled
+    cycles; axial wrapping is **2.78%**. Over **96%** now belongs to the core
+    trace pipeline. These profile shares are not wall-time measurements.
+    Polynomial-to-Symbolica conversion accounts for **73.14%** of free tracen
+    cycles inclusively; epsilon cleanup accounts for **64.23%** of axial cycles,
+    including nested Schoonschip scans. These overlapping shares identify the
+    remaining Rust-side work; they are not Python-wrapper costs. This build uses
+    Symbolica `06906976` **without** the isolated `poly-emission.patch` and
+    `poly-presence.patch` experiments. Their combined end-to-end tracen effect
+    has not been measured; **73.14% is not a post-patch profile**.
+    All **207** exact Python records, **117** HEP component checks, and three
+    new proof regressions pass. Rust checks pass **469** Idenso and **114/115**
+    binding tests; the known wrapped-index failure and snapshot exclusion remain.
+    Clippy and formatting pass. Sources, raw observations and FORM comparisons
+    are stored under `shared_tensor_trace_interface_followup` in the archive.
+
     **Partial-network follow-up:** a closed subcase with vertices **1, 2, 8**
     produces **64 scalar terms**. The baseline expand-first route takes about
     **5.56 ms**; network contraction with local sum distribution takes

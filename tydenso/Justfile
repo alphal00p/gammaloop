@@ -66,7 +66,7 @@ check: build check-wasm-features
     set -euo pipefail
     cd "{{ justfile_directory() }}/tydenso"
     tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../symbolica-typst-plugin}"
-    tymbolica_revision="780334ea83b45edf651ccc43a26cc280f0ae9595"
+    tymbolica_revision="cf7b9fe59ba3fc7fe9ea70b875f5660ee2addd7a"
     if [ ! -f "$tymbolica_checkout/typst.toml" ]; then
       echo "set TYMBOLICA_CHECKOUT to the pinned symbolica-dev/symbolica-typst-plugin checkout" >&2
       exit 1
@@ -86,11 +86,9 @@ check: build check-wasm-features
     tymbolica_checkout="$check_dir/tymbolica"
     # Atom payloads require the same storage format in all three engines. Apply
     # the root's pin only to this copy, preserving the plugin's Wasm features.
-    cat >> "$tymbolica_checkout/Cargo.toml" <<EOF
-
-    [patch.crates-io]
-    symbolica = { git = "$symbolica_git", rev = "$symbolica_revision" }
-    EOF
+    sed -i \
+      "s|git = \"https://github.com/symbolica-dev/symbolica.git\", branch = \"main\"|git = \"$symbolica_git\", rev = \"$symbolica_revision\"|g" \
+      "$tymbolica_checkout/Cargo.toml"
     # Rebuild the pinned combined algebra/integration engine without changing the checkout.
     # Its build script reads Cargo's target and feature settings; generated plugin
     # assets remain outside the Rust source inputs.
@@ -99,6 +97,8 @@ check: build check-wasm-features
     (
       cd "$tymbolica_checkout"
       unset CARGO_TARGET_DIR
+      # Upstream builds with --locked; resolve the workspace pin in this copy first.
+      cargo update --package symbolica
       nix run --no-write-lock-file "path:$PWD#build"
     )
     for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do

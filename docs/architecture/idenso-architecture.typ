@@ -84,6 +84,17 @@ ports, checks every sum branch, and retains necessary multiplicity checks. Uncha
 are borrowed; changed exact sums and products use bulk construction when callback ordering
 permits it.
 
+Closed gamma traces reuse the Dirac evaluator's terminal-word recognition to
+certify their interface before expansion. The shared tensor checks intrinsic
+normalization, explicit external ports, compact-vector eligibility, and the
+small source's declared interface. Eligible tensor identities can then retain
+that interface without walking the expanded pairing polynomial. This proof does
+not widen scalar-algebra or index-cooking admission; callback-sensitive and
+unresolved expressions still validate the rewritten result.
+The proof runs only when the output's encoded size exceeds twice the source's:
+small trace results are cheaper to check directly. The cyclic-wrapper exception
+applies only to the admitted trace's own wrapper, not to arbitrary metadata.
+
 Lorentz-dimension changes map both the Atom and its declared interface here. Newly coincident
 explicit indices contract; excess occurrences fail. Callback validation compares the encoded
 interfaces before and after the change, separately from the retained logical layout. A no-op

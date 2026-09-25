@@ -105,6 +105,22 @@ impl IndexAliases {
             })
     }
 
+    pub(super) fn port_typst(
+        &self,
+        slot: spenso::structure::partial::PartialSlot,
+        settings: &DisplaySettings,
+    ) -> String {
+        if matches!(slot.aind, PartialIndex::Open(_)) {
+            return "?".into();
+        }
+        let (index, display) = self.port_display(slot, settings);
+        display
+            .map(|display| display.to_typst_source())
+            .unwrap_or_else(|| {
+                format_atom_with_settings(&index, TensorDisplayMode::Typst, settings)
+            })
+    }
+
     fn port_html(
         &self,
         py: Python<'_>,
@@ -115,16 +131,15 @@ impl IndexAliases {
             return Ok("?".into());
         }
         let (index, display) = self.port_display(slot, settings);
-        if let Some(display) = display {
-            let source = format!(
-                "#set page(width: auto, height: auto, margin: 4pt)\n#set text(font: \"STIX Two Math\")\n$ {} $",
-                display.to_typst_source()
-            );
-            String::from_utf8(compile_typst(py, &source, "svg", None, None)?)
-                .map_err(|error| PyRuntimeError::new_err(error.to_string()))
-        } else {
-            atom_to_svg(py, &index, settings, None)
+        if display.is_none() {
+            return atom_to_svg(py, &index, settings, None);
         }
+        let source = format!(
+            "#set page(width: auto, height: auto, margin: 4pt)\n#set text(font: \"STIX Two Math\")\n$ {} $",
+            self.port_typst(slot, settings)
+        );
+        String::from_utf8(compile_typst(py, &source, "svg", None, None)?)
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))
     }
 }
 

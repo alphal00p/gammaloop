@@ -175,7 +175,10 @@
 }
 
 #let tree-edge-label(edge) = {
-  let value = record-label-value(edge)
+  let math-source = edge.at("data", default: (:)).at("label-typst", default: none)
+  let value = if math-source != none {
+    eval("$" + math-source + "$", mode: "markup")
+  } else { record-label-value(edge) }
   if value == none or value == "" {
     none
   } else {
@@ -407,7 +410,8 @@
         endpoints.push(graph.sink(item.sink.at(0), id: item.sink.at(1)))
       }
       graph.edge(..endpoints, id: item.id, orientation: item.orientation,
-        slot: item.slot, inspection: (edge: item.id) + item.inspection)
+        slot: item.slot, label-typst: item.at("label-typst", default: none),
+        inspection: (edge: item.id) + item.inspection)
     }
   })
   let tree = subgraph.select(g, edges: network.edges.filter(item => item.tree).map(item => item.id))

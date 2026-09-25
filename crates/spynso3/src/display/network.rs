@@ -1,5 +1,5 @@
 //! Network graph rendering through Linnet's shared asset and SVG pipeline.
-use super::{TensorDisplayMode, format_atom_with_mode};
+use super::{DisplaySettings, IndexAliases, TensorDisplayMode, format_atom_with_mode};
 use crate::{metadata::SpensoRepresentationName, network::SpensoNet};
 use linnet::half_edge::involution::{Flow, HedgePair, Orientation};
 use pyo3::{
@@ -15,6 +15,7 @@ use spenso::{
     structure::{
         HasName,
         abstract_index::AbstractIndex,
+        partial::PartialIndex,
         slot::{IsAbstractSlot, ParseableAind},
     },
     tensors::{complex::RealOrComplexTensor, data::DataTensor, parametric::MixedTensor},
@@ -134,6 +135,16 @@ impl SpensoNet {
     fn render_snapshot<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let graph = &self.network.graph.graph;
         let store = &self.network.store;
+        let settings = DisplaySettings::default();
+        // Resolve compound indices together so different edges cannot receive
+        // the same alphabet alias just because each slot was printed alone.
+        let mut ports = FunctionBuilder::new(spenso::structure::abstract_index::AIND_SYMBOLS.aind);
+        for (_, _, edge) in graph.iter_edges() {
+            if let NetworkEdge::Slot(slot) = edge.data {
+                ports = ports.add_arg(slot.to_atom());
+            }
+        }
+        let aliases = IndexAliases::for_atom(&ports.finish(), &settings.index_style);
         let nodes = PyList::empty(py);
         for (id, _, node) in graph.iter_nodes() {
             let mut label = match node {
@@ -286,6 +297,16 @@ impl SpensoNet {
                 match edge.data {
                     NetworkEdge::Head => String::new(),
                     NetworkEdge::Slot(slot) => slot.to_string(),
+                },
+            )?;
+            record.set_item(
+                "label-typst",
+                match edge.data {
+                    NetworkEdge::Head => None,
+                    NetworkEdge::Slot(slot) => Some(aliases.port_typst(
+                        slot.rep().slot(PartialIndex::Explicit(slot.aind())),
+                        &settings,
+                    )),
                 },
             )?;
             let mut detail = match edge.data {

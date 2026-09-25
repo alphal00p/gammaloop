@@ -431,6 +431,16 @@ impl DiracRuleDimension {
     }
 }
 
+/// Borrowed inputs admitted by the terminal trace evaluator.
+struct TerminalTrace<'a> {
+    representation: AtomView<'a>,
+    indices: Vec<AtomView<'a>>,
+    axial: bool,
+    repeated: usize,
+    compact_count: usize,
+    four_dimensional: bool,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct DiracSimplifier<'settings> {
     settings: &'settings GammaSimplifySettings,
@@ -477,35 +487,24 @@ impl<'settings> DiracSimplifier<'settings> {
         let mut observed = Some(SimplificationCandidates::scan(expr.as_view(), heads));
         if TERMINAL_CONTEXT
             && self.settings.evaluate_traces
-            && observed.as_ref().is_some_and(|candidates| candidates.symbols[3])
-            && let AtomView::Mul(product) = expr.as_view()
-            && let Some(trace) = product.iter().find(
-                |factor| matches!(factor, AtomView::Fun(function) if function.get_symbol_id() == trace),
-            )
-            && product.iter().all(|factor| {
-                if factor == trace {
-                    return true;
-                }
-                // Exact function-free scalars have no tensor slots or callbacks.
-                // Approximate coefficients retain the original evaluation order.
-                let mut scalar = true;
-                factor.visitor(&mut |node| {
-                    scalar &= match node {
-                        AtomView::Fun(_) => false,
-                        AtomView::Num(_) => Self::exact_scalar_leaf(node),
-                        _ => true,
-                    };
-                    scalar
-                });
-                scalar
-            })
+            && observed
+                .as_ref()
+                .is_some_and(|candidates| candidates.symbols[3])
+            && let Some(trace) = Self::scalar_trace_factor(expr.as_view(), trace)
             && let Some(result) = self.evaluate_terminal_trace::<true>(trace)
         {
             // The terminal kernel emits each free explicit slot once per
             // term. Canonical vector components have no callbacks, and the exact
             // function-free spectators cannot introduce tensor cleanup work.
+            let AtomView::Mul(product) = expr.as_view() else {
+                unreachable!("scalar_trace_factor requires a product");
+            };
             return Atom::mul_many(product.iter().map(|factor| {
-                if factor == trace { result.as_view() } else { factor }
+                if factor == trace {
+                    result.as_view()
+                } else {
+                    factor
+                }
             }));
         }
 
@@ -603,22 +602,68 @@ impl<'settings> DiracSimplifier<'settings> {
         }
     }
 
-    /// Evaluate standalone traces after reducing summed indices within the
-    /// word. The surviving explicit indices occur once per monomial and compact
-    /// arguments produce scalar dots, so no outer tensor contraction remains.
-    /// A scalar-product context additionally requires callback-free ordinary
-    /// words with exact leaf metadata. Free slots occur once per term; wildcard
-    /// metadata may retain inert closed diagonals. Exact scalar spectators cannot
-    /// introduce further tensor cleanup.
-    fn evaluate_terminal_trace<const SCALAR_CONTEXT: bool>(
-        self,
-        expr: AtomView<'_>,
-    ) -> Option<Atom> {
-        let output = if self.settings.expand_traces {
-            trace_kernel::TraceOutput::Expanded
-        } else {
-            trace_kernel::TraceOutput::Factored
+    /// Recognize one trace multiplied by the terminal evaluator's exact scalar spectators.
+    fn scalar_trace_factor(expr: AtomView<'_>, trace: u32) -> Option<AtomView<'_>> {
+        let AtomView::Mul(product) = expr else {
+            return None;
         };
+        let trace = product.iter().find(
+            |factor| matches!(factor, AtomView::Fun(function) if function.get_symbol_id() == trace),
+        )?;
+        product
+            .iter()
+            .all(|factor| {
+                if factor == trace {
+                    return true;
+                }
+                let mut scalar = true;
+                factor.visitor(&mut |node| {
+                    scalar &= match node {
+                        AtomView::Fun(_) => false,
+                        AtomView::Num(_) => Self::exact_scalar_leaf(node),
+                        _ => true,
+                    };
+                    scalar
+                });
+                scalar
+            })
+            .then_some(trace)
+    }
+
+    /// Borrow the admitted trace's cyclic wrapper and Minkowski arguments.
+    /// The tensor owner still checks callbacks, compact leaves and its declared interface.
+    pub(crate) fn terminal_trace_interface_inputs(
+        expr: AtomView<'_>,
+    ) -> Option<(Option<AtomView<'_>>, Vec<AtomView<'_>>)> {
+        // Retain the existing rejection of nested trace metadata even when the
+        // requested algebra operation leaves its result factored.
+        let settings = GammaSimplifySettings::default().with_expanded_traces();
+        let simplifier = DiracSimplifier::new(&settings);
+        let trace = match expr {
+            AtomView::Fun(_) => expr,
+            // Exact spectators cannot change tensor ports. Their arithmetic
+            // emission still follows the evaluator's stricter contextual rules.
+            AtomView::Mul(_) => Self::scalar_trace_factor(expr, T.trace.get_id())?,
+            _ => return None,
+        };
+        let word = simplifier.parse_terminal_trace::<false>(trace)?;
+        let AtomView::Fun(function) = trace else {
+            unreachable!("terminal traces are functions");
+        };
+        let cyclic = if function.get_nargs() == 2 {
+            function.iter().nth(1).filter(|argument| {
+                matches!(argument, AtomView::Fun(wrapper) if wrapper.get_symbol() == *shadowing::CYCLIC)
+            })
+        } else {
+            None
+        };
+        Some((cyclic, word.indices))
+    }
+
+    fn parse_terminal_trace<'a, const SCALAR_CONTEXT: bool>(
+        self,
+        expr: AtomView<'a>,
+    ) -> Option<TerminalTrace<'a>> {
         let AtomView::Fun(f) = expr else {
             return None;
         };
@@ -652,9 +697,6 @@ impl<'settings> DiracSimplifier<'settings> {
             .map(DiracFactor::parse)
             .collect::<Vec<_>>();
         let gamma5_position = factors.iter().position(|factor| factor.is_gamma5());
-        if SCALAR_CONTEXT && gamma5_position.is_some() {
-            return None;
-        }
         // Trace cyclicity moves one gamma5 to the front without a sign. Any
         // further gamma5 or non-gamma factor is rejected by the sequence parser.
         if let Some(position) = gamma5_position {
@@ -721,18 +763,50 @@ impl<'settings> DiracSimplifier<'settings> {
         if axial && indices.len() > 14 {
             return None;
         }
+        Some(TerminalTrace {
+            representation: rep,
+            indices,
+            axial,
+            repeated,
+            compact_count,
+            four_dimensional: has_four_dimensional_trace_rep(rep)
+                && factors
+                    .iter()
+                    .all(|factor| factor.gamma_dimension().is_some_and(is_four_dimension)),
+        })
+    }
+
+    /// Evaluate standalone traces after reducing summed indices within the
+    /// word. The surviving explicit indices occur once per monomial and compact
+    /// arguments produce scalar dots, so no outer tensor contraction remains.
+    /// A scalar-product context additionally requires callback-free words
+    /// with exact leaf metadata. Free slots occur once per term; wildcard
+    /// metadata may retain inert closed diagonals. Exact scalar spectators cannot
+    /// introduce further tensor cleanup.
+    fn evaluate_terminal_trace<const SCALAR_CONTEXT: bool>(
+        self,
+        expr: AtomView<'_>,
+    ) -> Option<Atom> {
+        let TerminalTrace {
+            representation: rep,
+            indices,
+            axial,
+            repeated,
+            compact_count,
+            four_dimensional,
+        } = self.parse_terminal_trace::<SCALAR_CONTEXT>(expr)?;
+        // The contextual full pass emits expanded axial traces. Keep that
+        // representation while skipping cleanup of the already terminal word.
+        let output = if self.settings.expand_traces || (SCALAR_CONTEXT && axial) {
+            trace_kernel::TraceOutput::Expanded
+        } else {
+            trace_kernel::TraceOutput::Factored
+        };
         if indices.len() % 2 == 1 || (axial && indices.len() < 4) {
             return Some(Atom::Zero);
         }
         let compact = !axial && indices.iter().all(|&index| !is_minkowski_slot(index));
-        let result = if !compact
-            && repeated == 0
-            && (axial
-                || (has_four_dimensional_trace_rep(rep)
-                    && factors
-                        .iter()
-                        .all(|factor| factor.gamma_dimension().is_some_and(is_four_dimension))))
-        {
+        let result = if !compact && repeated == 0 && (axial || four_dimensional) {
             trace_kernel::evaluate(&indices, axial, output)?
         } else {
             let terminal = trace!(rep; std::iter::empty::<Atom>());
@@ -2211,6 +2285,154 @@ mod tests {
                     input
                 );
             }
+        }
+    }
+
+    #[test]
+    fn scalar_axial_traces_match_the_full_pass_at_every_gamma5_position() {
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        let slots = (0..14)
+            .map(|position| {
+                reps.mink4.pattern(symbolica::symbol!(format!(
+                    "contextual_axial_mu_{position}"
+                )))
+            })
+            .collect::<Vec<_>>();
+        let scalar = symbolica::parse_lit!((contextual_axial_x + contextual_axial_y) ^ 3);
+        let spectators = [
+            Atom::num(-3),
+            Atom::num((2, 7)),
+            scalar.clone(),
+            -&scalar / 5,
+        ];
+        let inert = symbolica::function!(symbolica::symbol!("contextual_axial_inert"), 0);
+        for length in 2..=14 {
+            for position in 0..=length {
+                let mut factors = slots[..length]
+                    .iter()
+                    .map(|slot| gamma!(slot))
+                    .collect::<Vec<_>>();
+                factors.insert(position, gamma5!());
+                let trace = trace!(&spin; factors);
+                for settings in [
+                    GammaSimplifySettings::default(),
+                    GammaSimplifySettings::default().with_expanded_traces(),
+                ] {
+                    let admitted = DiracSimplifier::new(&settings)
+                        .evaluate_terminal_trace::<true>(trace.as_view())
+                        .expect("a free axial word with symbolic slots is terminal");
+                    // A function spectator forces the established full pass.
+                    // Exact coefficients can then be applied without regrouping
+                    // approximate arithmetic or invoking normalization callbacks.
+                    let reference = (&inert * &trace).simplify_gamma_with(settings) / &inert;
+                    assert_eq!(
+                        admitted, reference,
+                        "length {length}, gamma5 position {position}"
+                    );
+                    for spectator in &spectators {
+                        let decorated = spectator * &trace;
+                        let result = decorated.simplify_gamma_with(settings);
+                        assert_eq!(
+                            result,
+                            spectator * &reference,
+                            "length {length}, gamma5 position {position}, spectator {spectator}"
+                        );
+                        assert_eq!(result.simplify_gamma_with(settings), result);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn scalar_axial_shortcut_retains_unsupported_and_callback_boundaries() {
+        use std::sync::{Arc, Mutex};
+
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        let slots = (0..16)
+            .map(|position| {
+                reps.mink4.pattern(symbolica::symbol!(format!(
+                    "contextual_axial_guard_mu_{position}"
+                )))
+            })
+            .collect::<Vec<_>>();
+        let trace = trace!(&spin; std::iter::once(gamma5!())
+            .chain(slots[..4].iter().map(|slot| gamma!(slot))));
+        let unsupported = [
+            trace!(&spin, gamma5!(), gamma!(&slots[0]), gamma!(&slots[0])),
+            trace!(
+                &spin,
+                gamma5!(),
+                gamma5!(),
+                gamma!(&slots[0]),
+                gamma!(&slots[1])
+            ),
+            trace!(
+                &spin,
+                gamma5!(),
+                gamma!(spenso::p!(reps.mink4.to_symbolic([])))
+            ),
+            trace!(
+                &spin,
+                gamma5!(),
+                gamma!(slot!(reps.mink_d, contextual_axial_guard_mu))
+            ),
+            trace!(&spin; std::iter::once(gamma5!())
+                .chain(slots.iter().map(|slot| gamma!(slot)))),
+        ];
+        for input in unsupported {
+            assert!(
+                DiracSimplifier::new(&GammaSimplifySettings::default())
+                    .evaluate_terminal_trace::<true>(input.as_view())
+                    .is_none(),
+                "{input}"
+            );
+        }
+        let inert = symbolica::function!(symbolica::symbol!("contextual_axial_guard_inert"), 0);
+        let rounded = Atom::num(symbolica::domains::float::Float::parse("0.1", Some(11)).unwrap());
+        let rounded_input = &rounded * &trace;
+        assert!(
+            DiracSimplifier::scalar_trace_factor(rounded_input.as_view(), T.trace.get_id())
+                .is_none()
+        );
+        for settings in [
+            GammaSimplifySettings::default(),
+            GammaSimplifySettings::default().with_expanded_traces(),
+        ] {
+            assert_eq!(
+                rounded_input.simplify_gamma_with(settings),
+                (&inert * &rounded_input).simplify_gamma_with(settings) / &inert
+            );
+        }
+
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&calls);
+        let callback = symbolica::symbol!("contextual_axial_scalar_callback"; Scalar;
+        norm = move |node, output| {
+            recorded.lock().unwrap().push(node.to_owned());
+            if !node.contains_symbol(T.trace) {
+                **output = Atom::num(7);
+            }
+        });
+        let spectator = symbolica::function!(
+            callback,
+            trace!(&spin, gamma!(&slots[4]), gamma!(&slots[5]))
+        );
+        let input = spectator * &trace;
+        assert!(DiracSimplifier::scalar_trace_factor(input.as_view(), T.trace.get_id()).is_none());
+        for settings in [
+            GammaSimplifySettings::default(),
+            GammaSimplifySettings::default().with_expanded_traces(),
+        ] {
+            calls.lock().unwrap().clear();
+            let reference = (&inert * &input).simplify_gamma_with(settings) / &inert;
+            let expected_calls = std::mem::take(&mut *calls.lock().unwrap());
+            assert!(!expected_calls.is_empty());
+            let result = input.simplify_gamma_with(settings);
+            assert_eq!(result, reference);
+            assert_eq!(*calls.lock().unwrap(), expected_calls);
         }
     }
 
