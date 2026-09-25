@@ -156,6 +156,50 @@ Symbolica API requires building each Python snapshot through `Graph.add_node` an
 `Graph.add_edge`. No FeynKit topology wrapper or independent graph algorithms are involved.
 Exceptions from either callback cancel generation and propagate unchanged.
 
+== Assemble and square amplitudes
+
+`Amplitude` owns a coherent collection of finalized diagrams, aligning external tensor
+ports by physical leg identity. It retains the source diagrams and individual weighted
+terms. The operator includes each diagram's overall factor and numerator prefactor
+exactly once; the diagnostic automorphism order is not a second symmetry factor.
+
+// docs-example: compile
+```python
+from symbolica.community.feynkit import Amplitude
+
+amplitude = Amplitude(generated.diagrams)
+operator = amplitude.expression()
+adjoint = amplitude.conjugate().expression()
+squared = amplitude.squared()
+unpolarized = squared.sum_spins(average_initial=True).sum_colors(average_initial=True)
+tensor = unpolarized.expression().simplify_gamma().simplify_color()
+```
+
+These expressions are amputated and unintegrated. External wavefunctions remain open
+spin/color ports until explicitly summed. `legs` exposes each physical particle,
+incoming/outgoing state, momentum, and bare tensor index. `terms` exposes individual
+`TensorExpression` operators. Conjugation uses Idenso's physical-leg Dirac adjoint and
+color conjugation. Model-declared real parameters and physical momenta are real;
+additional assumptions can be supplied with `real=[...]`. Other scalar symbols,
+including complex couplings, retain their conjugation. Named model couplings are expanded
+into their analytic parameter expressions before conjugation.
+
+Squaring includes all interferences. Ket and bra indices remain separate, as do their
+loop integration variables. `sum_spins([0, 1], average_initial=True)` closes selected
+legs; omitting the labels selects all remaining legs. An explicitly repeated sum raises
+an error, preventing repeated averaging. Vector `references={leg: momentum}` and Dirac
+`spin_vectors={leg: spin}` use the existing completeness API. Omitting a massless vector
+reference chooses the covariant sum, which assumes a gauge-invariant amplitude.
+Color sums close the actual dual representations of the open ports.
+
+The Lorentz dimension defaults to four and can be set with `dimension=D`; bispinor
+spaces retain dimension four. Denominators follow the diagram's quadratic convention,
+without widths or an imaginary prescription. Flux, identical-final-state factors, loop
+measures, and phase-space integration are not supplied by `SquaredAmplitude`.
+Already-sewn forward diagrams are rejected: their inverse-process right side must not
+receive a second amplitude conjugation. GammaLoop's CFF/subtraction/sampling pipeline
+continues to own those diagrams separately.
+
 == Analyze interaction regions with Linnet
 
 Finalized diagrams use GammaLoop's half-edge conventions. Amplitude external states are

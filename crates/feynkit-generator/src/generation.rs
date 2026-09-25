@@ -31,7 +31,7 @@ use symbolica::{
 };
 use thiserror::Error;
 
-use crate::color::ColorRepresentation;
+use feynkit_amplitude::ColorRepresentation;
 
 use crate::{
     FilterScope, GenerationFilter, GenerationFilterKind, GenerationOptions, GenerationType,

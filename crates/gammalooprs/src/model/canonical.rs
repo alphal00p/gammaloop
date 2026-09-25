@@ -1,4 +1,4 @@
-use feynkit_generator::{AxialReference, ColorRepresentation, SpinSum};
+use feynkit_amplitude::{AxialReference, ColorRepresentation, SpinSum};
 use feynkit_graph::DOD;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -1071,7 +1071,7 @@ impl PropagatorGammaLoopExt for Propagator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use feynkit_generator::ColorSum;
+    use feynkit_amplitude::ColorSum;
     use idenso::shorthands::metric::MetricSimplifier;
     use spenso::{network::library::symbolic::ETS, structure::TensorStructure};
 

@@ -16,7 +16,7 @@ use spenso::{
         slot::{DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotMatcher},
     },
 };
-use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
+use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
 use thiserror::Error;
 
 /// An atom paired with its ordered, tensor-aware external interface.
@@ -28,8 +28,12 @@ pub struct StructuredAtom {
 
 impl StructuredAtom {
     pub fn new(atom: Atom, interface: PartialStructure) -> Self {
+        let atom = match Self::normalize_products(atom.as_view()) {
+            AtomOrView::View(_) => atom,
+            normalized => normalized.into_owned(),
+        };
         Self {
-            atom: Self::normalize_products(atom.as_view()),
+            atom,
             interface: interface.canonicalize_open_ports(),
         }
     }
@@ -49,7 +53,7 @@ impl StructuredAtom {
             .add_arg(left)
             .add_arg(right)
             .finish();
-        Self::normalize_products(product.as_view())
+        Self::normalize_products(product.as_view()).into_owned()
     }
 
     /// Ordinary multiplication is safe once tensor slots have identities.
@@ -100,28 +104,46 @@ impl StructuredAtom {
         }
     }
 
-    fn normalize_products(value: AtomView<'_>) -> Atom {
+    /// Borrow unchanged branches: only bracket removal requires renormalizing
+    /// their arithmetic parents.
+    fn normalize_products(value: AtomView<'_>) -> AtomOrView<'_> {
         match value {
             AtomView::Add(sum) => {
                 let terms: Vec<_> = sum.iter().map(Self::normalize_products).collect();
-                if sum.iter().eq(terms.iter().map(Atom::as_view)) {
-                    return value.to_owned();
+                if terms.iter().all(|term| matches!(term, AtomOrView::View(_))) {
+                    return value.into();
                 }
                 // Bracket removal can expose equal sums. Preserve their existing
                 // grouping while avoiding reconstruction of unchanged large sums.
-                terms.into_iter().fold(Atom::Zero, |sum, term| sum + term)
+                terms
+                    .iter()
+                    .fold(Atom::Zero, |sum, term| sum + term.as_view())
+                    .into()
             }
-            AtomView::Mul(product) => product.iter().fold(Atom::num(1), |product, factor| {
-                product * Self::normalize_products(factor)
-            }),
+            AtomView::Mul(product) => {
+                let factors: Vec<_> = product.iter().map(Self::normalize_products).collect();
+                if factors
+                    .iter()
+                    .all(|factor| matches!(factor, AtomOrView::View(_)))
+                {
+                    return value.into();
+                }
+                factors
+                    .iter()
+                    .fold(Atom::num(1), |product, factor| product * factor.as_view())
+                    .into()
+            }
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
-                Self::normalize_products(base).pow(exponent.to_owned())
+                match Self::normalize_products(base) {
+                    AtomOrView::View(_) => value.into(),
+                    base => base.as_view().pow(exponent).into(),
+                }
             }
             AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.bracket => {
                 let mut factors = Vec::new();
                 for arg in fun.iter() {
-                    let factor = Self::normalize_products(arg);
+                    let factor = Self::normalize_products(arg).into_owned();
                     if let AtomView::Fun(nested) = factor.as_view()
                         && nested.get_symbol() == SPENSO_TAG.bracket
                     {
@@ -141,17 +163,22 @@ impl StructuredAtom {
                 Self::unresolved_factors(ordinary.as_view(), &mut after);
                 // Explicit indices survive sorting. Unresolved factors must
                 // neither change positional order nor coalesce into powers.
-                if before != after {
+                let normalized = if before != after {
                     FunctionBuilder::new(SPENSO_TAG.bracket)
                         .add_args(factors)
                         .finish()
                 } else {
                     ordinary
+                };
+                if normalized.as_view() == value {
+                    value.into()
+                } else {
+                    normalized.into()
                 }
             }
             // Tensor arguments include scalar metadata; chain and trace arguments
             // also own placeholder scopes. Do not rewrite inside those containers.
-            _ => value.to_owned(),
+            _ => value.into(),
         }
     }
 
@@ -1776,7 +1803,7 @@ mod tests {
         let expected = sum * chain * trace * &d.atom;
         assert_eq!(flattened, expected);
         assert_eq!(
-            StructuredAtom::normalize_products(flattened.as_view()),
+            StructuredAtom::normalize_products(flattened.as_view()).into_owned(),
             flattened
         );
     }
@@ -1798,6 +1825,64 @@ mod tests {
         assert_eq!(output.atom, expected);
         assert_eq!(
             StructuredAtom::new(output.atom.clone(), output.interface).atom,
+            expected
+        );
+    }
+
+    #[test]
+    fn product_normalization_preserves_opaque_metadata_and_callbacks() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let head = symbolica::symbol!(
+            "product_normalization_metadata",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let x = Atom::var(symbolica::symbol!("product_normalization::x"));
+        let y = Atom::var(symbolica::symbol!("product_normalization::y"));
+        let metadata = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(&x)
+            .add_arg(&y)
+            .finish();
+        let container = FunctionBuilder::new(head).add_arg(metadata).finish();
+        let input = (&x + &y).pow(5) * &container + x * y * container;
+        calls.store(0, Ordering::Relaxed);
+
+        let normalized = StructuredAtom::normalize_products(input.as_view());
+        assert!(matches!(normalized, AtomOrView::View(_)));
+        assert_eq!(normalized.as_view(), input.as_view());
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn product_normalization_flattens_brackets_under_powers_without_merging_open_ports() {
+        let vector = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("normalization_open_vector"))
+            .add_arg(rep().to_symbolic([]))
+            .finish();
+        let single = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(&vector)
+            .finish();
+        let nested = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(single)
+            .add_arg(&vector)
+            .finish();
+        let flat = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(&vector)
+            .add_arg(&vector)
+            .finish();
+        let scalar = Atom::var(symbolica::symbol!("product_normalization::spectator"));
+        let input = &scalar * (nested + &scalar).pow(3);
+        let expected = &scalar * (flat + &scalar).pow(3);
+        let normalized = StructuredAtom::normalize_products(input.as_view()).into_owned();
+        assert_eq!(normalized, expected);
+        assert_eq!(
+            StructuredAtom::normalize_products(normalized.as_view()).into_owned(),
             expected
         );
     }

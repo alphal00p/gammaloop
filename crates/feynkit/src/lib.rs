@@ -7,6 +7,13 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "amplitude")]
+pub use feynkit_amplitude as amplitude;
+#[cfg(feature = "amplitude")]
+pub use feynkit_amplitude::{
+    Amplitude, AmplitudeError, AmplitudeLeg, AmplitudeOptions, AxialReference, ColorRepresentation,
+    ColorSum, ColorSumError, SpinSum, SpinSumError, SquaredAmplitude,
+};
 #[cfg(feature = "cff")]
 pub use feynkit_cff as cff;
 #[cfg(feature = "generator")]
@@ -26,8 +33,7 @@ pub use feynkit_ufo as ufo;
 pub use feynkit_cff::{CffGenerator, CffOptions, CffResult};
 #[cfg(feature = "generator")]
 pub use feynkit_generator::{
-    AxialReference, ColorRepresentation, ColorSum, ColorSumError, GenerationOptions,
-    GenerationResult, Generator, ParticleSelector, Process, SpinSum, SpinSumError,
+    GenerationOptions, GenerationResult, Generator, ParticleSelector, Process,
 };
 #[cfg(feature = "graph")]
 pub use feynkit_graph::{

@@ -1393,6 +1393,10 @@ struct DiagramSelection {
 }
 
 impl PyFeynmanDiagram {
+    pub(crate) fn is_whole_diagram(&self) -> bool {
+        self.selected_region.is_none()
+    }
+
     pub(crate) fn whole(&self) -> Self {
         let mut whole = self.clone();
         whole.selected_region = None;

@@ -29,6 +29,7 @@
     "checks.x86_64-linux.gammaloop-nextest-binaries-feynkit" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-test-binaries-feynkit"
+      "packages.x86_64-linux.crate-test-binaries-feynkit-amplitude"
       "packages.x86_64-linux.crate-test-binaries-feynkit-cff"
       "packages.x86_64-linux.crate-test-binaries-feynkit-generator"
       "packages.x86_64-linux.crate-test-binaries-feynkit-graph"
@@ -95,6 +96,9 @@
     ];
     "packages.x86_64-linux.crate-test-binaries-feynkit" = [
       "packages.x86_64-linux.crate-test-dependencies-feynkit"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-feynkit-amplitude" = [
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
     ];
     "packages.x86_64-linux.crate-test-binaries-feynkit-cff" = [
       "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
@@ -232,6 +236,7 @@
     "packages.x86_64-linux.crate-test-dependencies-feynkit" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
@@ -239,6 +244,15 @@
       "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-ufo"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+      "packages.x86_64-linux.crate-test-dependencies-idenso"
+      "packages.x86_64-linux.crate-test-dependencies-linnet"
+      "packages.x86_64-linux.crate-test-dependencies-spenso"
     ];
     "packages.x86_64-linux.crate-test-dependencies-feynkit-cff" = [
       "packages.x86_64-linux.cargoArtifacts"
@@ -252,6 +266,7 @@
     "packages.x86_64-linux.crate-test-dependencies-feynkit-generator" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
       "packages.x86_64-linux.crate-test-dependencies-idenso"
@@ -281,6 +296,7 @@
     "packages.x86_64-linux.crate-test-dependencies-feynkit-py" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
@@ -349,6 +365,7 @@
     "packages.x86_64-linux.crate-test-dependencies-gammalooprs" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
@@ -507,6 +524,7 @@
     "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-schema"
     "packages.x86_64-linux.crate-test-binaries-clinnet"
     "packages.x86_64-linux.crate-test-binaries-feynkit"
+    "packages.x86_64-linux.crate-test-binaries-feynkit-amplitude"
     "packages.x86_64-linux.crate-test-binaries-feynkit-cff"
     "packages.x86_64-linux.crate-test-binaries-feynkit-generator"
     "packages.x86_64-linux.crate-test-binaries-feynkit-graph"
@@ -540,6 +558,7 @@
     "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-schema"
     "packages.x86_64-linux.crate-test-dependencies-clinnet"
     "packages.x86_64-linux.crate-test-dependencies-feynkit"
+    "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
     "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
     "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
     "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"

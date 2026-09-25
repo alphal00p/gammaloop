@@ -1,5 +1,6 @@
 //! Python bindings installed as `symbolica.community.feynkit`.
 
+mod amplitude;
 mod cff;
 mod display;
 mod error;
@@ -16,6 +17,7 @@ mod ufo;
 use pyo3::{prelude::*, types::PyModule};
 use symbolica::api::python::SymbolicaCommunityModule;
 
+pub use amplitude::{PyAmplitude, PyAmplitudeLeg, PySquaredAmplitude};
 pub use cff::{
     PyCffGenerator, PyCffOrientation, PyCffReport, PyCffResult, PyCffSurface, PyCffSurfaceGroup,
     PyCutPropagator,
@@ -63,6 +65,7 @@ impl SymbolicaCommunityModule for FeynkitModule {
 /// Register FeynKit classes in an existing Symbolica community module.
 pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
     error::register(module)?;
+    amplitude::register(module)?;
     model::register(module)?;
     graph::register(module)?;
     generation::register(module)?;

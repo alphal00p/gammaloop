@@ -8,6 +8,7 @@ test_gammaloop *args:
     enforce_warnings_as_errors=1
     gammaloop_packages=(
         feynkit
+        feynkit-amplitude
         feynkit-cff
         feynkit-generator
         feynkit-graph
@@ -224,6 +225,7 @@ _test-ci TEST_NAME="" NEXTEST_FILTERSET="":
     set -euo pipefail
     gammaloop_packages=(
         feynkit
+        feynkit-amplitude
         feynkit-cff
         feynkit-generator
         feynkit-graph

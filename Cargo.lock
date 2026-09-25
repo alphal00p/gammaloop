@@ -1856,6 +1856,7 @@ dependencies = [
 name = "feynkit"
 version = "0.1.0"
 dependencies = [
+ "feynkit-amplitude",
  "feynkit-cff",
  "feynkit-generator",
  "feynkit-graph",
@@ -1863,6 +1864,19 @@ dependencies = [
  "feynkit-model",
  "feynkit-tensor",
  "feynkit-ufo",
+]
+
+[[package]]
+name = "feynkit-amplitude"
+version = "0.1.0"
+dependencies = [
+ "feynkit-graph",
+ "feynkit-model",
+ "idenso",
+ "linnet",
+ "spenso",
+ "symbolica",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1888,6 +1902,7 @@ version = "0.1.0"
 dependencies = [
  "bincode 2.0.1",
  "bincode-trait-derive",
+ "feynkit-amplitude",
  "feynkit-graph",
  "feynkit-model",
  "idenso",
@@ -1950,6 +1965,7 @@ dependencies = [
 name = "feynkit-py"
 version = "0.1.0"
 dependencies = [
+ "feynkit-amplitude",
  "feynkit-cff",
  "feynkit-generator",
  "feynkit-graph",
@@ -2390,6 +2406,7 @@ dependencies = [
  "dot-parser",
  "enum_dispatch",
  "eyre",
+ "feynkit-amplitude",
  "feynkit-cff",
  "feynkit-generator",
  "feynkit-graph",

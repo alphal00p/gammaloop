@@ -183,16 +183,17 @@ pages = [
   { id = "showcase-ufo", title = "Loading UFO models", summary = "Normalize a raw UFO package, inspect its diagnostics and restriction card, and generate typed diagrams.", source = "docs/products/feynkit/content/showcase-ufo.typ", symbol = "showcase-ufo", route = "guides/showcases/ufo/", group = "Showcases" },
   { id = "showcase-tensor-reduction", title = "Vacuum tensor reduction", summary = "Project rank-two, rank-six, and rank-twenty tensors and split a vacuum graph into scalar contributions.", source = "docs/products/feynkit/content/showcase-tensor-reduction.typ", symbol = "showcase-tensor-reduction", route = "guides/showcases/tensor-reduction/", group = "Showcases" },
   { id = "community-host", title = "Integrating the Symbolica community host", summary = "Register the shared native module, package its Python wrapper, export stubs, and verify an installed host.", source = "docs/products/feynkit/content/community-host.typ", symbol = "community-host", route = "guides/community-host/", group = "Advanced" },
-  { id = "interfaces", title = "Rust and Python interfaces", summary = "The eight Rust crates, facade feature gates, Python owners, and their complete API references.", source = "docs/products/feynkit/content/api.typ", symbol = "api", route = "reference/interfaces/", group = "Reference" },
+  { id = "interfaces", title = "Rust and Python interfaces", summary = "The Rust crates, facade feature gates, Python owners, and their complete API references.", source = "docs/products/feynkit/content/api.typ", symbol = "api", route = "reference/interfaces/", group = "Reference" },
   { id = "releases", title = "Version history", summary = "Current source-revision coverage, compatibility boundaries, and reproducibility requirements.", source = "docs/products/feynkit/content/changelog.typ", symbol = "changelog", route = "version-history/", group = "Version history" },
 ]
 related = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
 rust_components = [
-  { id = "feynkit", package = "feynkit", kind = "library", version_source = "crates/feynkit/Cargo.toml", features = ["cff", "generator", "graph", "kinematics", "model", "tensor", "ufo"] },
+  { id = "feynkit", package = "feynkit", kind = "library", version_source = "crates/feynkit/Cargo.toml", features = ["amplitude", "cff", "generator", "graph", "kinematics", "model", "tensor", "ufo"] },
   { id = "feynkit-model", package = "feynkit-model", kind = "library", version_source = "crates/feynkit-model/Cargo.toml", features = ["native"] },
   { id = "feynkit-ufo", package = "feynkit-ufo", kind = "library", version_source = "crates/feynkit-ufo/Cargo.toml", features = ["feynkit-model/native"] },
   { id = "feynkit-kinematics", package = "feynkit-kinematics", kind = "library", version_source = "crates/feynkit-kinematics/Cargo.toml", features = ["native"] },
   { id = "feynkit-graph", package = "feynkit-graph", kind = "library", version_source = "crates/feynkit-graph/Cargo.toml", features = ["native"] },
+  { id = "feynkit-amplitude", package = "feynkit-amplitude", kind = "library", version_source = "crates/feynkit-amplitude/Cargo.toml", features = ["native"] },
   { id = "feynkit-generator", package = "feynkit-generator", kind = "library", version_source = "crates/feynkit-generator/Cargo.toml", features = ["native"] },
   { id = "feynkit-cff", package = "feynkit-cff", kind = "library", version_source = "crates/feynkit-cff/Cargo.toml", features = ["native"] },
   { id = "feynkit-tensor", package = "feynkit-tensor", kind = "library", version_source = "crates/feynkit-tensor/Cargo.toml", features = ["native"] },

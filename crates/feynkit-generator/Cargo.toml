@@ -9,6 +9,7 @@ keywords = ["feynman", "generator", "physics"]
 categories = ["science"]
 
 [dependencies]
+feynkit-amplitude = { version = "0.1.0", path = "../feynkit-amplitude", default-features = false }
 bincode-trait-derive = { workspace = true }
 bincode = { workspace = true, features = ["serde"] }
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features = false }
@@ -27,5 +28,5 @@ serde_json = { workspace = true }
 
 [features]
 default = ["native"]
-native = ["feynkit-graph/native", "spenso-hep-lib/native"]
-wasm = ["feynkit-graph/wasm", "spenso-hep-lib/wasm"]
+native = ["feynkit-amplitude/native", "feynkit-graph/native", "spenso-hep-lib/native"]
+wasm = ["feynkit-amplitude/wasm", "feynkit-graph/wasm", "spenso-hep-lib/wasm"]

@@ -4,7 +4,7 @@
 = Rust and Python interfaces
 
 #catalog-contract(
-  rust-scope: "feynkit, feynkit-model, feynkit-ufo, feynkit-kinematics, feynkit-graph, feynkit-generator, feynkit-cff, feynkit-tensor",
+  rust-scope: "feynkit, feynkit-model, feynkit-ufo, feynkit-kinematics, feynkit-graph, feynkit-amplitude, feynkit-generator, feynkit-cff, feynkit-tensor",
   python-scope: "symbolica.community.feynkit",
 )
 
@@ -19,14 +19,16 @@
   signatures, helicities, symbolic scalar products, Mandelstam substitutions, and generalized-kt clustering.
 - #link("reference/rust/feynkit_graph/")[`feynkit-graph`] owns finalized diagrams, cuts, routing,
   serialization, integral-family bases, and Linnest source output.
+- #link("reference/rust/feynkit_amplitude/")[`feynkit-amplitude`] owns coherent symbolic amplitudes,
+  physical conjugation, squared amplitudes, and shared external-state spin/color sums.
 - #link("reference/rust/feynkit_generator/")[`feynkit-generator`] owns process selectors,
-  generation options, progress/cancellation, diagram grouping, and shared external-state spin sums.
+  generation options, progress/cancellation, and diagram grouping.
 - #link("reference/rust/feynkit_cff/")[`feynkit-cff`] owns CFF expressions, surface arenas,
   orientations, residues, and topology conversion.
 - #link("reference/rust/feynkit_tensor/")[`feynkit-tensor`] owns covariant tensor reduction, contraction
   orbits, and exact coefficient tables.
 
-The facade's default features are `cff`, `generator`, `graph`, `kinematics`, `model`, and
+The facade's default features are `amplitude`, `cff`, `generator`, `graph`, `kinematics`, `model`, and
 `tensor`. `ufo` is opt-in. Native Rustdoc for this product includes that optional interface;
 applications choose their features explicitly. When using `feynkit-model` in isolation, enable
 its `native` feature to select the GMP integer and MPFR floating-point backends. The kinematics crate selects those backends through its default `native` feature;
@@ -38,13 +40,13 @@ revision of this manual, so pin matching dependencies when reproducing a calcula
 
 The #link("reference/python/feynkit-community/")[generated Python reference] covers native
 classes, properties, signatures, examples, and error types. The primary owners are `Model`,
-`Process`, `Generator`, `SnailFilterOptions`, `NumeratorGrouping`, `FeynmanDiagram`, `Subgraph`, `CffGenerator`, `TensorReducer`,
+`Process`, `Generator`, `SnailFilterOptions`, `NumeratorGrouping`, `FeynmanDiagram`, `Amplitude`, `SquaredAmplitude`, `AmplitudeLeg`, `Subgraph`, `CffGenerator`, `TensorReducer`,
 `Kinematics`, `IntegralFamily`, `JetDefinition`, and the optional `UfoLoader`. Expressions cross the boundary as Symbolica values.
 
 Use the #link("quickstart/python/")[quickstart] for an installed host or the
 #link("guides/community-host/")[community-host guide] when packaging the module. The Python
 adapter does not publish a standalone wheel. Exception classes keep model, generation, graph,
-CFF, kinematics, and tensor-reduction failures distinguishable.
+amplitude, CFF, kinematics, and tensor-reduction failures distinguishable.
 
 == CFF coefficients and generalized cuts
 

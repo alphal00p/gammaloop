@@ -80,6 +80,17 @@ define_exception!(
     "Failure while importing or normalizing a UFO model.\n\nExamples\n--------\nReport a missing or malformed UFO directory cleanly:\n\n>>> try:\n...     loaded = fk.UfoLoader().load(\"models/sm\")\n... except fk.UfoLoadError as error:\n...     print(error)"
 );
 
+define_exception!(
+    AmplitudeError,
+    FeynkitError,
+    pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
+    "Invalid amplitude, conjugation, or external-state sum.\n\nExamples\n--------\n>>> try:\n...     amplitude = fk.Amplitude(diagrams)\n... except fk.AmplitudeError as error:\n...     print(error)"
+);
+
+pub(crate) fn amplitude(error: feynkit_amplitude::AmplitudeError) -> PyErr {
+    AmplitudeError::new_err(error.to_string())
+}
+
 pub(crate) fn model(error: feynkit_model::ModelError) -> PyErr {
     ModelError::new_err(error.to_string())
 }
@@ -135,6 +146,7 @@ pub(crate) fn ufo(error: feynkit_ufo::UfoLoadError) -> PyErr {
 pub(crate) fn register(module: &pyo3::Bound<'_, pyo3::types::PyModule>) -> pyo3::PyResult<()> {
     let py = module.py();
     module.add("FeynkitError", py.get_type::<FeynkitError>())?;
+    module.add("AmplitudeError", py.get_type::<AmplitudeError>())?;
     module.add("ModelError", py.get_type::<ModelError>())?;
     module.add("DiagramError", py.get_type::<DiagramError>())?;
     module.add("GenerationError", py.get_type::<GenerationError>())?;
