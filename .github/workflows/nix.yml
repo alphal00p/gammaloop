@@ -1,32 +1,23 @@
 name: Nix
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, edited]
-    branches:
-      - main
-      - codex/raised-energy-cff-reviewed
   push:
     branches:
       - main
-  merge_group:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: nix-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: nix-${{ github.workflow }}-${{ github.run_id }}
+  cancel-in-progress: false
 
 # Matrix evaluation embeds this value in derivations registered with Hestia, so
 # keep it public. Licensed worker builds re-evaluate their attributes locally.
 env:
   CARGO_TERM_COLOR: always
-  HESTIA_CACHE_WRITABLE: >-
-    ${{ github.event_name != 'pull_request' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-        github.actor != 'dependabot[bot]') }}
+  HESTIA_CACHE_WRITABLE: true
   HESTIA_DRAIN_TIMEOUT: 7200
   # Bump this only for an intentional Hestia cache-format migration.
   HESTIA_CACHE_VERSION_SALT: gammaloop-no-closure-v1
@@ -38,9 +29,6 @@ jobs:
   # running in parallel.
   prepare:
     name: Prepare shared artifacts
-    if: >-
-      github.event_name != 'pull_request' ||
-      (!github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review'))
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     outputs:
@@ -185,9 +173,7 @@ jobs:
   flake-checks:
     name: Flake checks
     needs: [prepare, build]
-    if: >-
-      always() && (github.event_name != 'pull_request' ||
-      (!github.event.pull_request.draft && contains(github.event.pull_request.labels.*.name, 'final-review')))
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Confirm matrix result
