@@ -66,7 +66,7 @@ check: build check-wasm-features
     set -euo pipefail
     cd "{{ justfile_directory() }}/tydenso"
     tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../symbolica-typst-plugin}"
-    tymbolica_revision="18e0491628f9eac5c788659cabfcdb7575f6986d"
+    tymbolica_revision="780334ea83b45edf651ccc43a26cc280f0ae9595"
     if [ ! -f "$tymbolica_checkout/typst.toml" ]; then
       echo "set TYMBOLICA_CHECKOUT to the pinned symbolica-dev/symbolica-typst-plugin checkout" >&2
       exit 1
