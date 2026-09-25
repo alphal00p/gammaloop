@@ -421,9 +421,9 @@ const FEYNKIT_GRAPH: &[RustExampleSpec] = &[example!(
 )];
 
 const FEYNKIT_GENERATOR: &[RustExampleSpec] = &[example!(
-    "Generator",
+    "Process",
     "rust",
-    "use feynkit_generator::{GenerationOptions, Generator, Process};\nlet model = feynkit_model::Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nlet generator = Generator::new(model);\nlet process = Process::amplitude([\"scalar_0\"], [\"scalar_0\", \"scalar_0\"]);\nlet result = generator.generate(&process, &GenerationOptions::default().max_vertices(3))?;\nassert!(!result.diagrams.is_empty());"
+    "use feynkit_generator::{GenerationOptions, Process};\nlet model = feynkit_model::Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nlet process = Process::new([\"scalar_0\"], [\"scalar_0\", \"scalar_0\"]);\nlet result = process.generate_diagrams(model, &GenerationOptions::default().max_vertices(3))?;\nassert!(!result.diagrams.is_empty());"
 )];
 
 const FEYNKIT_CFF: &[RustExampleSpec] = &[example!(

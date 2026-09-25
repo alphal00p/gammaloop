@@ -60,8 +60,7 @@ for label, pdgs in (
     ("Bhabha", [11, -11, 11, -11]),
     ("Moller", [11, 11, 11, 11]),
 ):
-    generated = fk.Generator(model).generate(
-        fk.Process.amplitude(pdgs[:2], pdgs[2:]),
+    generated = fk.Process(model, pdgs[:2], pdgs[2:]).generate_diagrams(
         max_vertices=2,
         maximum_bridges=None,
         vertex_allow=["V_98"],

@@ -314,7 +314,7 @@ impl GraphImportSource {
 
 #[cfg(test)]
 mod tests {
-    use feynkit_generator::{GenerationOptions, Generator, Process};
+    use feynkit_generator::{GenerationOptions, Process};
 
     use super::*;
 
@@ -323,11 +323,12 @@ mod tests {
         let model = gammalooprs::model::Model::from_json(include_str!(
             "../../../../../assets/models/json/scalars/scalars_2p_3p.json"
         ))?;
-        let generated = Generator::new(Arc::new(model.clone())).generate(
-            &Process::cross_section(["scalar_1"], ["scalar_1", "scalar_1"])
-                .with_loop_count(1, 1)?,
-            &GenerationOptions::default().threads(1).max_vertices(4),
-        )?;
+        let generated = Process::new(["scalar_1"], ["scalar_1", "scalar_1"])
+            .with_loop_count(1, 1)?
+            .generate_cross_section(
+                Arc::new(model.clone()),
+                &GenerationOptions::default().threads(1).max_vertices(4),
+            )?;
         assert!(!generated.diagrams.is_empty());
         let dot = generated
             .diagrams

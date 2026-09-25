@@ -1826,11 +1826,9 @@ fn feyngen_from_spec_args(
         // FeynKit generation deliberately represents one amplitude final
         // state at a time, as the generator has always consumed the first
         // alternative here.
-        GenerationType::Amplitude => {
-            GenerationProcess::amplitude(initial_pdgs.to_vec(), first_outgoing)
-        }
+        GenerationType::Amplitude => GenerationProcess::new(initial_pdgs.to_vec(), first_outgoing),
         GenerationType::CrossSection => {
-            GenerationProcess::cross_section(initial_pdgs.to_vec(), first_outgoing)
+            GenerationProcess::new(initial_pdgs.to_vec(), first_outgoing)
                 .with_final_state_alternatives(outgoing_alternatives)
                 .expect("the parser produces a non-empty final-state alternative list")
         }
@@ -2055,6 +2053,7 @@ fn feyngen_from_spec_args(
     }
 
     ProcessDefinition {
+        generation_type,
         process,
         generation_options,
         ..Default::default()
@@ -2635,7 +2634,7 @@ mod tests {
         test_initialise().unwrap();
         let ps = parse_ok_amp("e+ e- > mu+ mu-");
         assert_eq!(
-            ps.process_definition.process.generation_type(),
+            ps.process_definition.generation_type,
             GenerationType::Amplitude
         );
     }
@@ -2665,7 +2664,7 @@ mod tests {
         test_initialise().unwrap();
         let ps = parse_ok_xs("{} to {}");
         assert_eq!(
-            ps.process_definition.process.generation_type(),
+            ps.process_definition.generation_type,
             GenerationType::CrossSection
         );
 
@@ -2767,7 +2766,7 @@ mod tests {
         // Final-state alternatives captured
         assert_eq!(ps.final_sets.len(), 3);
         assert_eq!(
-            ps.process_definition.process.generation_type(),
+            ps.process_definition.generation_type,
             GenerationType::CrossSection
         );
 

@@ -17,13 +17,16 @@ Nc, dA, cof, coad = S("spenso::Nc", "dA", "spenso::cof", "spenso::coad")
 kinematics = fk.Kinematics.mandelstam(
     [P(0), P(1), P(2), P(3)], [mass**2, mass**2, E("0"), E("0")], [s, t, u]
 )
-generated = fk.Generator(model).generate(
-    fk.Process.amplitude([5, -5], [21, 21]).with_loop_count(0, 0),
-    max_vertices=2,
-    maximum_bridges=None,
-    vertex_allow=["V_76", "V_36"],
-    numerator_grouping=None,
-    progress=None,
+generated = (
+    fk.Process(model, [5, -5], [21, 21])
+    .with_loop_count(0, 0)
+    .generate_diagrams(
+        max_vertices=2,
+        maximum_bridges=None,
+        vertex_allow=["V_76", "V_36"],
+        numerator_grouping=None,
+        progress=None,
+    )
 )
 assert len(generated.diagrams) == 3
 ports = S("external_0", "external_1", "external_2", "external_3")

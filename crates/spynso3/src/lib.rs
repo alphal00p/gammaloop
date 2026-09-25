@@ -1,9 +1,4 @@
-use std::{
-    cell::Cell,
-    collections::HashMap,
-    ops::Deref,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use std::{cell::Cell, collections::HashMap, ops::Deref};
 
 use eyre::eyre;
 
@@ -67,7 +62,6 @@ use pyo3_stub_gen::{PyStubType, TypeInfo, derive::*, impl_stub_type};
 use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
 
 pub mod broadcast;
-mod composition;
 mod data;
 pub mod display;
 pub mod expression;
@@ -78,15 +72,9 @@ pub mod pattern;
 mod simplification;
 pub mod structure;
 
-use composition::StructuredAtom;
 use expression::TensorExpression;
+use idenso::tensor::SymbolicTensor;
 use structure::ConvertibleToSpensoName;
-
-static OPEN_OWNER: AtomicUsize = AtomicUsize::new(0);
-
-pub(crate) fn fresh_open_owner() -> usize {
-    OPEN_OWNER.fetch_add(1, Ordering::Relaxed)
-}
 
 trait ModuleInit: PyClass {
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -269,14 +257,14 @@ define_spenso_python_surface! {
 #[derive(Clone)]
 pub struct Spensor {
     pub(crate) tensor: MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
-    pub(crate) descriptor: StructuredAtom,
+    pub(crate) descriptor: SymbolicTensor<PartialStructure>,
     pub(crate) descriptor_name: Option<Symbol>,
     pub(crate) descriptor_args: Vec<Atom>,
 }
 
 pub struct TensorDataDescriptor {
     structure: Canonicalized<ShadowedStructure<AbstractIndex>>,
-    descriptor: StructuredAtom,
+    descriptor: SymbolicTensor<PartialStructure>,
     name: Symbol,
     args: Vec<Atom>,
 }
@@ -350,12 +338,16 @@ impl<'a, 'py> FromPyObject<'a, 'py> for TensorDataDescriptor {
 }
 
 impl TensorDataDescriptor {
-    fn new(descriptor: StructuredAtom, name: Symbol, args: Vec<Atom>) -> PyResult<Self> {
-        let layout = tensor_data_layout(&descriptor.interface)?;
-        let owner = fresh_open_owner();
+    fn new(
+        descriptor: SymbolicTensor<PartialStructure>,
+        name: Symbol,
+        args: Vec<Atom>,
+    ) -> PyResult<Self> {
+        let layout = tensor_data_layout(&descriptor.structure)?;
+        let owner = AbstractIndex::fresh_open_owner();
         let logical_axes = (0..layout.logical_shape().len()).collect::<Vec<_>>();
         let storage_axes = descriptor
-            .interface
+            .structure
             .layout()
             .logical_to_canonical(&logical_axes);
         let mut storage_indices = vec![0; storage_axes.len()];
@@ -364,7 +356,7 @@ impl TensorDataDescriptor {
         }
         let structure = OrderedStructure::new(
             descriptor
-                .interface
+                .structure
                 .logical_slots()
                 .into_iter()
                 .zip(storage_indices)
@@ -395,7 +387,7 @@ impl PyStubType for TensorDataDescriptor {
 impl Spensor {
     pub(crate) fn from_storage_with_descriptor(
         tensor: MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
-        descriptor: StructuredAtom,
+        descriptor: SymbolicTensor<PartialStructure>,
         descriptor_name: Option<Symbol>,
         descriptor_args: Vec<Atom>,
     ) -> Self {
@@ -409,7 +401,7 @@ impl Spensor {
 
     pub(crate) fn scalar_with_descriptor(
         value: f64,
-        descriptor: StructuredAtom,
+        descriptor: SymbolicTensor<PartialStructure>,
         descriptor_name: Option<Symbol>,
         descriptor_args: Vec<Atom>,
     ) -> Self {
@@ -499,8 +491,8 @@ impl Spensor {
     pub fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_known_parts(
             py,
-            self.descriptor.atom.clone(),
-            self.descriptor.interface.clone(),
+            self.descriptor.expression.clone(),
+            self.descriptor.structure.clone(),
             self.descriptor_name,
             self.descriptor_args.clone(),
         )
@@ -510,7 +502,7 @@ impl Spensor {
     #[getter]
     fn structure(&self) -> metadata::SpensoTensorStructure {
         metadata::SpensoTensorStructure {
-            interface: self.descriptor.interface.clone(),
+            interface: self.descriptor.structure.clone(),
             name: self.descriptor_name,
             arguments: self.descriptor_args.clone(),
         }
@@ -628,7 +620,7 @@ impl Spensor {
             name,
             args,
         } = structure;
-        let layout = tensor_data_layout(&descriptor.interface)?;
+        let layout = tensor_data_layout(&descriptor.structure)?;
         let storage_structure = structure.into_canonical();
         let dense = match data {
             AtomsOrFloats::Floats(f) => DenseTensor::<f64, _>::from_storage_data(
@@ -826,7 +818,7 @@ impl Spensor {
     /// Canonical storage-axis order is never exposed through this API.
     #[gen_stub(skip)]
     fn __getitem__(&self, item: SliceOrIntOrExpanded) -> PyResult<Py<PyAny>> {
-        let layout = tensor_data_layout(&self.descriptor.interface)?;
+        let layout = tensor_data_layout(&self.descriptor.structure)?;
         let size = layout.size();
         let get_owned_canonical = |index: usize| {
             self.get_owned_linear(index.into())
@@ -930,7 +922,7 @@ impl Spensor {
             ));
         };
 
-        let layout = tensor_data_layout(&self.descriptor.interface)?;
+        let layout = tensor_data_layout(&self.descriptor.structure)?;
         let coefficient_error = |error| {
             eyre!(
                 "assigned coefficient kind must match tensor storage (float for real, complex for complex, Expression for parametric): {error}"
@@ -1291,7 +1283,7 @@ pub struct SpensoExpressionEvaluator {
     pub eval: Option<LinearizedEvalTensor<f64, ShadowedStructure<AbstractIndex>>>,
     pub eval_complex: LinearizedEvalTensor<Complex<f64>, ShadowedStructure<AbstractIndex>>,
     parameters: Vec<Atom>,
-    descriptor: StructuredAtom,
+    descriptor: SymbolicTensor<PartialStructure>,
     descriptor_name: Option<Symbol>,
     descriptor_args: Vec<Atom>,
 }
@@ -1332,7 +1324,7 @@ impl SpensoExpressionEvaluator {
     fn output_shape<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(
             py,
-            tensor_data_layout(&self.descriptor.interface)?.logical_shape(),
+            tensor_data_layout(&self.descriptor.structure)?.logical_shape(),
         )
     }
 
@@ -1576,7 +1568,7 @@ pub struct SpensoCompiledExpressionEvaluator {
         EvalTensor<symbolica::evaluate::CompiledRealEvaluator, ShadowedStructure<AbstractIndex>>,
     >,
     parameters: Vec<Atom>,
-    descriptor: StructuredAtom,
+    descriptor: SymbolicTensor<PartialStructure>,
     descriptor_name: Option<Symbol>,
     descriptor_args: Vec<Atom>,
 }
@@ -1602,7 +1594,7 @@ impl SpensoCompiledExpressionEvaluator {
     fn output_shape<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(
             py,
-            tensor_data_layout(&self.descriptor.interface)?.logical_shape(),
+            tensor_data_layout(&self.descriptor.structure)?.logical_shape(),
         )
     }
 
@@ -2029,7 +2021,7 @@ mod tests {
             ParamOrConcrete::new_scalar(ConcreteOrParam::Concrete(RealOrComplex::Complex(
                 Complex::new(1., 2.),
             ))),
-            StructuredAtom::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface),
             None,
             Vec::new(),
         );

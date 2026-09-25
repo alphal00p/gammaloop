@@ -58,8 +58,8 @@ fn complex_ckm_generation_preserves_named_and_inline_couplings() -> color_eyre::
         // The unrelated leptonic coupling retains its ordinary imaginary factor.
         assert_ne!(model.get_coupling("GC_40").value.unwrap().im, 0.0);
         let mut process = ProcessDefinition {
-            process: GenerationProcess::cross_section([24_i64], [2_i64, -5])
-                .with_loop_count(1, 1)?,
+            generation_type: feynkit_generator::GenerationType::CrossSection,
+            process: GenerationProcess::new([24_i64], [2_i64, -5]).with_loop_count(1, 1)?,
             generation_options: GenerationOptions::default().with_graph_filter(
                 GenerationFilter::VertexAllow(vec!["V_95".into(), "V_125".into()]),
             ),
@@ -129,7 +129,8 @@ fn complex_ckm_updates_preserve_direct_integrand_warm_up() -> color_eyre::Result
         }
 
         let definition = ProcessDefinition {
-            process: GenerationProcess::cross_section([24_i64], [2_i64, -5])
+            generation_type: feynkit_generator::GenerationType::CrossSection,
+            process: GenerationProcess::new([24_i64], [2_i64, -5])
                 .with_loop_count(1, 1)?
                 .symmetrize_left_right(symmetrize),
             generation_options: GenerationOptions::default().with_graph_filter(

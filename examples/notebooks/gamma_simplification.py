@@ -2847,6 +2847,20 @@ def _(mo):
     modified the wrapper afterward; its newer source is outside this measured
     checkpoint. The notebook environment contains the validated release.
 
+    **Shared symbolic tensor machinery:** Idenso's `SymbolicTensor<S>` now owns
+    both explicit network tensors and tensors with a `PartialStructure` that
+    retains logical port order and unresolved occurrences. The duplicate
+    `StructuredAtom` is removed. Composition, contraction, index substitution,
+    fast inference, and checked result reconstruction use this shared owner;
+    Spynso handles Python conversion and result wrapping.
+
+    Identity substitutions borrow unchanged branches while still checking for
+    the requested index in every sum branch. Genuine relabeling uses bulk
+    sum/product construction when exact arithmetic and callback behavior permit.
+    Typed zeros keep their interfaces. Rewrites that can invoke a normalizer
+    validate the resulting interface: `g(a,b)*T(a)` must not retain a vector
+    interface if the callback turns `T(b)` into a scalar.
+
     **Partial-network follow-up:** a closed subcase with vertices **1, 2, 8**
     produces **64 scalar terms**. The baseline expand-first route takes about
     **5.56 ms**; network contraction with local sum distribution takes

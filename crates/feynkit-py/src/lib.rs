@@ -24,9 +24,8 @@ pub use cff::{
 };
 pub use generation::{
     PyCancellationToken, PyDiagramGroup, PyGenerationProgress, PyGenerationReport,
-    PyGenerationResult, PyGenerationType, PyGenerator, PyGroupMember, PyNumeratorGrouping,
-    PyParticleSelector, PyProcess, PySelfEnergyFilterOptions, PySnailFilterOptions,
-    PyTadpoleFilterOptions,
+    PyGenerationResult, PyGroupMember, PyNumeratorGrouping, PyParticleSelector, PyProcess,
+    PySelfEnergyFilterOptions, PySnailFilterOptions, PyTadpoleFilterOptions,
 };
 pub use graph::{
     PyDiagramCut, PyDiagramCutSide, PyDiagramEdge, PyDiagramThresholdCandidate, PyDiagramVertex,
@@ -101,7 +100,10 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
     // and automatic notebook progress as a Python string literal.
     for class in module.class.values_mut() {
         for method in class.methods.values_mut().flatten() {
-            if matches!(method.name, "generate" | "generate_diagrams") {
+            if matches!(
+                method.name,
+                "generate_diagrams" | "generate_amplitude" | "generate_cross_section"
+            ) {
                 for parameter in &mut method.parameters.keyword_only {
                     if parameter.type_info.name.contains("types.EllipsisType") {
                         parameter.default =
@@ -255,7 +257,7 @@ mod tests {
     fn primary_wrappers_are_send() {
         fn assert_send<T: Send>() {}
         assert_send::<PyModel>();
-        assert_send::<PyGenerator>();
+        assert_send::<PyProcess>();
         assert_send::<PyFeynmanDiagram>();
         assert_send::<PyTensorReducer>();
     }
@@ -303,7 +305,6 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
             let module = registered_module(py);
             for class in [
                 "Model",
-                "Generator",
                 "Process",
                 "FeynmanDiagram",
                 "TensorReducer",
@@ -356,10 +357,9 @@ assert scalar.antiparticle.name == "scalar_0"
 model = fk.Model.from_json(model.to_json(pretty=False))
 
 scalar = model.particle("scalar_0")
-process = fk.Process.amplitude([scalar], [1000, scalar.antiparticle])
+process = fk.Process(model, [scalar], [1000, scalar.antiparticle])
 process = process.with_loop_count(0, 1)
 assert isinstance(process, fk.Process)
-assert process.generation_type == "amplitude"
 assert process.loop_count == (0, 1)
 
 generation_arguments = dict(
@@ -371,9 +371,7 @@ generation_arguments = dict(
     fermion_loop_count_range=(0, 0),
     factorized_loop_topologies_count_range=(0, 1),
 )
-generated = model.generate_diagrams(
-    [scalar], [1000, scalar.antiparticle], loops=(0, 1), **generation_arguments,
-)
+generated = fk.Process(model, [scalar], [1000, scalar.antiparticle]).generate_diagrams(loops=(0, 1), **generation_arguments)
 assert len(generated) > 0
 assert generated[0].name == next(iter(generated)).name
 assert generated.report.completed
@@ -498,7 +496,7 @@ def assert_feynkit_error(error_type, operation):
 assert_feynkit_error(fk.ModelError, lambda: fk.Model.from_json("{}"))
 assert_feynkit_error(
     fk.GenerationError,
-    lambda: fk.Process.amplitude([], []).with_loop_count(2, 1),
+    lambda: fk.Process(model, [], []).with_loop_count(2, 1),
 )
 assert_feynkit_error(
     fk.DiagramError,
@@ -509,7 +507,6 @@ assert_feynkit_error(
     lambda: fk.Boost(fk.ThreeMomentum(1.0, 0.0, 0.0)),
 )
 
-generator = fk.Generator(model)
 
 filter_arguments = dict(
     self_energy=fk.SelfEnergyFilterOptions(veto_massive=False),
@@ -531,15 +528,11 @@ grouping_arguments = dict(
 )
 assert not hasattr(fk, "GenerationOptions")
 
-amplitude = fk.Process.amplitude(
-    ["scalar_0"], ["scalar_0", "scalar_0"],
-)
-assert generator.generate(amplitude, max_vertices=3, **filter_arguments).report.completed
+amplitude = fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
+assert amplitude.generate_diagrams(max_vertices=3, **filter_arguments).report.completed
 for mode in ("none", "zeroes", "identical", "up_to_sign", "up_to_scalar"):
     grouping = fk.NumeratorGrouping(mode, **grouping_arguments)
-    assert generator.generate(
-        amplitude, max_vertices=3, numerator_grouping=grouping,
-    ).report.completed
+    assert amplitude.generate_diagrams(max_vertices=3, numerator_grouping=grouping).report.completed
 
 for invalid_arguments in (
     dict(self_energy=fk.SelfEnergyFilterOptions(only_scaleless=True)),
@@ -554,7 +547,7 @@ for invalid_arguments in (
 ):
     assert_feynkit_error(
         fk.GenerationError,
-        lambda: generator.generate(amplitude, max_vertices=3, **invalid_arguments),
+        lambda: amplitude.generate_diagrams(max_vertices=3, **invalid_arguments),
     )
 
 for invalid_arguments in (
@@ -563,32 +556,29 @@ for invalid_arguments in (
     dict(loops=(0, None)),
 ):
     try:
-        model.generate_diagrams(["scalar_0"], ["scalar_0", "scalar_0"], **invalid_arguments)
+        fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"]).generate_diagrams(**invalid_arguments)
     except ValueError:
         pass
     else:
         raise AssertionError("invalid generation range was accepted")
 
-# Both entry points share configuration, including reusable exact/ranged orders.
+# Process generation accepts reusable exact/ranged orders.
 kwargs = dict(max_vertices=3, vertex_allow=["V_3_SCALAR_000"], coupling_orders={"QCD": 1})
-exact = generator.generate(amplitude, **kwargs)
-ranged = model.generate_diagrams(
-    ["scalar_0"], ["scalar_0", "scalar_0"],
-    **dict(kwargs, coupling_orders={"QCD": (1, 1)}),
-)
+exact = amplitude.generate_diagrams(**kwargs)
+ranged = fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"]).generate_diagrams(**dict(kwargs, coupling_orders={"QCD": (1, 1)}))
 assert len(exact) > 0
 assert [d.id for d in exact] == [d.id for d in ranged]
-assert [d.id for d in generator.generate(amplitude, **kwargs)] == [d.id for d in exact]
+assert [d.id for d in amplitude.generate_diagrams(**kwargs)] == [d.id for d in exact]
 assert kwargs["coupling_orders"] == {"QCD": 1}
-assert len(generator.generate(amplitude, **dict(kwargs, coupling_orders={"QCD": 0}))) == 0
-assert len(generator.generate(amplitude, **dict(kwargs, particle_veto=["scalar_0"]))) == 0
-assert len(generator.generate(amplitude, **dict(kwargs, vertex_veto=["V_3_SCALAR_000"]))) == 0
-assert len(generator.generate(amplitude, select_diagrams=[exact[0]], **kwargs)) == 1
-assert len(generator.generate(amplitude, veto_diagrams=[d.id for d in exact], **kwargs)) == 0
+assert len(amplitude.generate_diagrams(**dict(kwargs, coupling_orders={"QCD": 0}))) == 0
+assert len(amplitude.generate_diagrams(**dict(kwargs, particle_veto=["scalar_0"]))) == 0
+assert len(amplitude.generate_diagrams(**dict(kwargs, vertex_veto=["V_3_SCALAR_000"]))) == 0
+assert len(amplitude.generate_diagrams(select_diagrams=[exact[0]], **kwargs)) == 1
+assert len(amplitude.generate_diagrams(veto_diagrams=[d.id for d in exact], **kwargs)) == 0
 
 for invalid_arguments in (dict(options=None), dict(coupling_order={"QCD": 0}), dict(coupling_orders={"QCD": True})):
     try:
-        generator.generate(amplitude, **invalid_arguments)
+        amplitude.generate_diagrams(**invalid_arguments)
     except TypeError:
         pass
     else:
@@ -596,12 +586,9 @@ for invalid_arguments in (dict(options=None), dict(coupling_order={"QCD": 0}), d
 
 token = fk.CancellationToken()
 token.cancel()
-assert not generator.generate(amplitude, cancellation_token=token, **kwargs).report.completed
+assert not amplitude.generate_diagrams(cancellation_token=token, **kwargs).report.completed
 
-diagram = generator.generate(
-    amplitude.with_loop_count(1, 1), max_vertices=3,
-    vertex_allow=["V_3_SCALAR_000"],
-).diagrams[0]
+diagram = amplitude.with_loop_count(1, 1).generate_diagrams(max_vertices=3, vertex_allow=["V_3_SCALAR_000"]).diagrams[0]
 assert_feynkit_error(
     fk.CffError,
     lambda: fk.CffGenerator(max_orientations=0).generate(diagram),
@@ -629,7 +616,7 @@ class Diagram:
 
     Examples
     --------
-    >>> diagram = model.generate_diagrams([], []).diagrams[0]
+    >>> diagram = fk.Process(model, [], []).generate_diagrams().diagrams[0]
     """
 
     @property

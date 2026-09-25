@@ -5,7 +5,7 @@
 //! the reference through the new shared implementation.
 
 use crate::{graph::Graph, uv::UltravioletGraph};
-use feynkit_generator::{GenerationOptions, Generator, Process};
+use feynkit_generator::{GenerationOptions, GenerationType, Process};
 use linnet::half_edge::{
     involution::Hedge,
     subgraph::{SuBitGraph, SubSetLike},
@@ -57,49 +57,51 @@ fn finalized_graph_matches_gammaloop_reference() {
         (
             "scalar_amplitude",
             "scalars",
-            Process::amplitude(["scalar_1"], ["scalar_1"])
+            GenerationType::Amplitude,
+            Process::new(["scalar_1"], ["scalar_1"])
                 .with_loop_count(1, 1)
                 .unwrap(),
         ),
         (
             "scalar_cross_section",
             "scalars",
-            Process::cross_section(["scalar_1"], ["scalar_1", "scalar_1"])
+            GenerationType::CrossSection,
+            Process::new(["scalar_1"], ["scalar_1", "scalar_1"])
                 .with_loop_count(1, 1)
                 .unwrap(),
         ),
         (
             "fermion_amplitude",
             "sm",
-            Process::amplitude(["e-", "e+"], ["mu-", "mu+"])
+            GenerationType::Amplitude,
+            Process::new(["e-", "e+"], ["mu-", "mu+"])
                 .with_loop_count(0, 0)
                 .unwrap(),
         ),
         (
             "vector_amplitude",
             "sm",
-            Process::amplitude(["g"], ["g"])
-                .with_loop_count(1, 1)
-                .unwrap(),
+            GenerationType::Amplitude,
+            Process::new(["g"], ["g"]).with_loop_count(1, 1).unwrap(),
         ),
         (
             "fermion_cross_section",
             "sm",
-            Process::cross_section(["e-", "e+"], ["a"])
+            GenerationType::CrossSection,
+            Process::new(["e-", "e+"], ["a"])
                 .with_loop_count(0, 0)
                 .unwrap(),
         ),
     ];
     let mut result = serde_json::Map::new();
-    for (name, model, process) in cases {
+    for (name, model, generation_type, process) in cases {
         let model = std::sync::Arc::new(crate::utils::load_generic_model(model));
-        let generator = Generator::new(std::sync::Arc::clone(&model));
-        let generated = generator
-            .generate(
-                &process,
-                &GenerationOptions::default().threads(1).max_vertices(2),
-            )
-            .unwrap();
+        let options = GenerationOptions::default().threads(1).max_vertices(2);
+        let generated = match generation_type {
+            GenerationType::Amplitude => process.generate_diagrams(model.clone(), &options),
+            GenerationType::CrossSection => process.generate_cross_section(model.clone(), &options),
+        }
+        .unwrap();
         assert!(!generated.diagrams.is_empty(), "{name}");
         let snapshots = generated
             .diagrams

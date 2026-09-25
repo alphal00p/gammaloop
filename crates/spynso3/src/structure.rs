@@ -613,13 +613,14 @@ impl SpensoName {
             .add_args(&scalar_args)
             .add_args(&port_atoms)
             .finish();
-        TensorExpression::from_known_parts(
-            py,
-            atom,
-            PartialStructure::from_logical_slots(ports),
-            Some(self.name),
-            scalar_args,
-        )
+        let interface = PartialStructure::from_logical_slots(ports);
+        if self.name.get_normalization_function().is_some()
+            || self.name.get_evaluation_info().is_some()
+        {
+            idenso::tensor::SymbolicTensor::validate_interface(&atom, &interface)
+                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        }
+        TensorExpression::from_known_parts(py, atom, interface, Some(self.name), scalar_args)
     }
 
     fn __repr__(&self) -> String {

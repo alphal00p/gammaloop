@@ -22,9 +22,7 @@ integral-evaluation backend.
 import symbolica.community.feynkit as fk
 
 model = fk.Model("crates/feynkit-model/tests/fixtures/scalars_2p_3p.json")
-result = model.generate_diagrams(
-    ["scalar_0"], ["scalar_0", "scalar_0"], loops=0, max_vertices=3
-)
+result = fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"]).generate_diagrams(loops=0, max_vertices=3)
 assert result.diagrams
 
 diagram = result.diagrams[0]
@@ -38,10 +36,11 @@ cff = diagram.build_cff()
 print(cff.to_expression())
 ```
 
-`Model`, `Generator`, and `FeynmanDiagram` own their respective operations. Use
-`model.generate_diagrams(...)` for a short workflow, or `Generator(model).generate(process,
-**settings)` when reusing a configured `Process`. Particle names, PDG codes, and particles obtained
-from that model can select external states.
+`Process(model, incoming, outgoing)` owns the external states and generation settings.
+Use `process.generate_diagrams()` for a `GenerationResult`, `process.generate_amplitude()`
+for an `Amplitude`, and `process.generate_cross_section()` for sewn diagrams and their cuts.
+All three accept generation settings as keywords. Particle names, PDG codes, and particles
+obtained from that model can select external states.
 
 #callout("Keep the same Symbolica kernel", [
   Numerators are Spenso `TensorExpression` values, which extend Symbolica `Expression`; CFF

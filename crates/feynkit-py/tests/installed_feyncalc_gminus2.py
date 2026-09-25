@@ -35,13 +35,16 @@ kinematics = (
 )
 operators, diagrams = [], []
 for loops in (0, 1):
-    generated = hep.Generator(model).generate(
-        hep.Process.amplitude([11], [22, 11]).with_loop_count(loops, loops),
-        max_vertices=1 + 2 * loops,
-        maximum_bridges=0,
-        vertex_allow=["V_98"],
-        numerator_grouping=None,
-        progress=None,
+    generated = (
+        hep.Process(model, [11], [22, 11])
+        .with_loop_count(loops, loops)
+        .generate_diagrams(
+            max_vertices=1 + 2 * loops,
+            maximum_bridges=0,
+            vertex_allow=["V_98"],
+            numerator_grouping=None,
+            progress=None,
+        )
     )
     assert len(generated.diagrams) == 1
     diagram = generated.diagrams[0]

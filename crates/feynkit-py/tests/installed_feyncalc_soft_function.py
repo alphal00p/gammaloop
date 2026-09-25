@@ -127,9 +127,7 @@ print("PASS: symbolic-D transverse metric and large-component projectors")
 
 channels, denominators, generated_channels = [], [], []
 for outgoing in (["b", "b~"], ["b", "b~", "g"]):
-    result = model.generate_diagrams(
-        ["a"],
-        outgoing,
+    result = hep.Process(model, ["a"], outgoing).generate_diagrams(
         vertex_allow=vertices,
         max_vertices=len(outgoing) - 1,
         maximum_bridges=None,

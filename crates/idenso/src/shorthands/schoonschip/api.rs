@@ -1,4 +1,5 @@
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
+use spenso::structure::{OrderedStructure, representation::LibraryRep};
 use spenso::{
     network::{
         ExecutionResult, Sequential,
@@ -263,7 +264,7 @@ impl NetworkSchoonschip<'_> {
             .map_err(|error| NetworkToolingError::Parse {
                 reason: error.to_string(),
             })?;
-        let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
+        let lib = DummyLibrary::<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>::new();
 
         let execution = match self.settings.contraction_order {
             SchoonschipContractionOrder::SmallestDegree => net

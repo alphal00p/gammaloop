@@ -46,14 +46,16 @@ source["vertex_rules"] = [
 ]
 model = fk.Model.from_json(json.dumps(source))
 for sign in (1, -1):
-    generated = fk.Generator(model).generate(
-        fk.Process.amplitude(
-            [sign * (pdg_base + 1)], [-sign * (pdg_base + 2), -sign * (pdg_base + 3)]
-        ).with_loop_count(0, 0),
-        max_vertices=1,
-        maximum_bridges=None,
-        numerator_grouping=None,
-        progress=None,
+    generated = (
+        fk.Process(
+            model,
+            [sign * (pdg_base + 1)],
+            [-sign * (pdg_base + 2), -sign * (pdg_base + 3)],
+        )
+        .with_loop_count(0, 0)
+        .generate_diagrams(
+            max_vertices=1, maximum_bridges=None, numerator_grouping=None, progress=None
+        )
     )
     assert len(generated.diagrams) == 1
     color = TensorExpression(

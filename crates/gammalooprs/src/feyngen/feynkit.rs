@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use feynkit_generator::{GenerationControl, GenerationReport, GenerationResult, Generator};
+use feynkit_generator::{GenerationControl, GenerationReport, GenerationResult, GenerationType};
 use feynkit_graph::{EdgeId, FeynmanDiagram};
 use thiserror::Error;
 
@@ -124,8 +124,14 @@ impl ProcessDefinition {
                         GenerationControl::Continue
                     }
                 });
-            let generated =
-                Generator::new(Arc::new(model.clone())).generate(&self.process, &options)?;
+            let generated = match self.generation_type {
+                GenerationType::Amplitude => self
+                    .process
+                    .generate_diagrams(Arc::new(model.clone()), &options)?,
+                GenerationType::CrossSection => self
+                    .process
+                    .generate_cross_section(Arc::new(model.clone()), &options)?,
+            };
             if !generated.report.completed || crate::is_interrupt_requested() {
                 return Err(FeynkitRuntimeError::Interrupted);
             }
@@ -683,12 +689,12 @@ mod tests {
     #[test]
     fn canonical_cross_section_generation_survives_runtime_enrichment_and_consumption() {
         let model = model();
-        let process = Process::cross_section(["phi"], ["phi", "phi"])
+        let process = Process::new(["phi"], ["phi", "phi"])
             .with_loop_count(1, 1)
             .unwrap();
         let options = GenerationOptions::default().threads(1).max_vertices(2);
-        let generated = Generator::new(Arc::clone(&model))
-            .generate(&process, &options)
+        let generated = process
+            .generate_cross_section(Arc::clone(&model), &options)
             .unwrap();
 
         assert!(generated.report.completed);
@@ -709,6 +715,7 @@ mod tests {
         let runtime_graphs = generated.to_gamma_loop_graphs().unwrap();
         assert_eq!(runtime_graphs.len(), generated.diagrams.len());
         let process_definition = ProcessDefinition {
+            generation_type: GenerationType::CrossSection,
             process,
             generation_options: options,
             folder_name: "canonical_cross_section_bridge".to_owned(),

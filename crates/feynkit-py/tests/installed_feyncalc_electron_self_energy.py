@@ -35,9 +35,7 @@ vertices = [
     if sorted(v.particles) == sorted([electron.name, electron.antiname, photon.name])
 ]
 assert len(vertices) == 1
-result = model.generate_diagrams(
-    [electron],
-    [electron],
+result = hep.Process(model, [electron], [electron]).generate_diagrams(
     loops=1,
     max_vertices=2,
     maximum_bridges=0,
@@ -74,13 +72,8 @@ assert [e.particle_name for e in diagram.internal_edges] == [electron.name, phot
 # carry +i and -i. Their product gives the unweighted kernel -e^2 N.
 # Both generated e->e and e->gamma e amplitudes have an additional external
 # Wick-ordering factor -1. Establish that sign independently at tree level.
-tree_result = model.generate_diagrams(
-    [electron],
-    [photon, electron],
-    max_vertices=1,
-    vertex_allow=vertices,
-    numerator_grouping=None,
-    progress=None,
+tree_result = hep.Process(model, [electron], [photon, electron]).generate_diagrams(
+    max_vertices=1, vertex_allow=vertices, numerator_grouping=None, progress=None
 )
 assert len(tree_result.diagrams) == 1
 tree_diagram = tree_result.diagrams[0]

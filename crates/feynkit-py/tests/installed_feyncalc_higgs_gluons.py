@@ -50,13 +50,10 @@ gluon_vertices = [
     if sorted(v.particles) == sorted([top.antiname, top.name, gluon.name])
 ]
 assert len(yukawa_vertices) == len(gluon_vertices) == 1
-yukawa_tree_result = model.generate_diagrams(
-    [higgs],
-    [top, top.antiparticle],
-    max_vertices=1,
-    vertex_allow=yukawa_vertices,
-    numerator_grouping=None,
-    progress=None,
+yukawa_tree_result = hep.Process(
+    model, [higgs], [top, top.antiparticle]
+).generate_diagrams(
+    max_vertices=1, vertex_allow=yukawa_vertices, numerator_grouping=None, progress=None
 )
 assert len(yukawa_tree_result.diagrams) == 1
 yukawa_tree = yukawa_tree_result.diagrams[0]
@@ -70,9 +67,7 @@ identities = S("left_", "right_")
 yukawa_tree_coupling = yukawa_tree_kernel.replace(metric(*identities), E("1"))
 assert (yukawa_tree_coupling + Symbol.I * y).expand() == E("0")
 
-result = model.generate_diagrams(
-    [higgs],
-    [gluon, gluon],
+result = hep.Process(model, [higgs], [gluon, gluon]).generate_diagrams(
     loops=1,
     max_vertices=3,
     maximum_bridges=0,

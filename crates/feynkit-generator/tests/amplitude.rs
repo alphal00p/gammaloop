@@ -1,9 +1,7 @@
 //! The amplitude boundary consumes finalized diagrams, not generator state.
 
-use feynkit_amplitude::{Amplitude, AmplitudeError};
-use feynkit_generator::{
-    GenerationFilter, GenerationOptions, Generator, NumeratorGrouping, Process,
-};
+use feynkit_amplitude::{Amplitude, AmplitudeError, AmplitudeOptions};
+use feynkit_generator::{GenerationFilter, GenerationOptions, NumeratorGrouping, Process};
 use feynkit_model::Model;
 use idenso::{IndexTooling, shorthands::metric::MetricSimplifier};
 use spenso::structure::abstract_index::AbstractIndex;
@@ -16,7 +14,7 @@ use symbolica::{
 fn photons() -> Vec<Arc<feynkit_graph::FeynmanDiagram>> {
     let model =
         Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
-    let process = Process::amplitude(["e-", "e+"], ["a", "a"])
+    let process = Process::new(["e-", "e+"], ["a", "a"])
         .with_loop_count(0, 0)
         .unwrap();
     let options = GenerationOptions::default()
@@ -24,7 +22,7 @@ fn photons() -> Vec<Arc<feynkit_graph::FeynmanDiagram>> {
         .max_vertices(2)
         .numerator_grouping(NumeratorGrouping::None)
         .with_graph_filter(GenerationFilter::VertexAllow(vec!["V_98".into()]));
-    let generated = Generator::new(model).generate(&process, &options).unwrap();
+    let generated = process.generate_diagrams(model, &options).unwrap();
     assert_eq!(generated.diagrams.len(), 2);
     generated.diagrams.into_iter().map(Arc::new).collect()
 }
@@ -197,14 +195,14 @@ fn colored_fermion_interference_preserves_physical_leg_pairings() {
         })
         .map(|rule| rule.name.clone().into())
         .collect();
-    let process = Process::amplitude(["b", "b"], ["b", "b"])
+    let process = Process::new(["b", "b"], ["b", "b"])
         .with_loop_count(0, 0)
         .unwrap();
     let options = GenerationOptions::default()
         .threads(1)
         .max_vertices(2)
         .with_graph_filter(GenerationFilter::VertexAllow(vertices));
-    let generated = Generator::new(model).generate(&process, &options).unwrap();
+    let generated = process.generate_diagrams(model, &options).unwrap();
     assert_eq!(generated.diagrams.len(), 2);
     let amplitude = Amplitude::from_diagrams(generated.diagrams.into_iter().map(Arc::new)).unwrap();
     assert!(amplitude.legs().iter().all(|leg| leg.slots.len() == 2));
@@ -265,4 +263,46 @@ fn loop_square_keeps_independent_integration_momenta() {
     assert!(squared.expression().contains(&parse!(
         "gammalooprs::K(feynkit_amplitude::bra(0),spenso::mink(4))"
     )));
+}
+
+#[test]
+fn one_process_generates_diagrams_amplitudes_and_cross_sections() {
+    let model = Arc::new(
+        Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap(),
+    );
+    let process = Process::new(["e-", "e+"], ["a", "a"]);
+    let options = GenerationOptions::default().threads(1).max_vertices(4);
+    let diagrams = process.generate_diagrams(model.clone(), &options).unwrap();
+    assert_eq!(diagrams.diagrams.len(), 2);
+    let amplitude = process
+        .generate_amplitude(model.clone(), &options, AmplitudeOptions::default())
+        .unwrap();
+    assert_eq!(amplitude.diagrams().len(), diagrams.diagrams.len());
+    assert_eq!(
+        amplitude.expression(),
+        Amplitude::from_diagrams(diagrams.diagrams.into_iter().map(Arc::new))
+            .unwrap()
+            .expression()
+    );
+    let forward = process
+        .clone()
+        .with_loop_count(1, 1)
+        .unwrap()
+        .generate_cross_section(model.clone(), &options)
+        .unwrap();
+    assert!(!forward.diagrams.is_empty());
+    assert!(
+        forward
+            .diagrams
+            .iter()
+            .all(|diagram| diagram.loop_count() == 1 && !diagram.cuts().is_empty())
+    );
+    assert_eq!(process.loop_count(), 0..=0);
+    let token = feynkit_generator::CancellationToken::new();
+    token.cancel();
+    let cancelled = options.cancellation_token(token);
+    assert!(matches!(
+        process.generate_amplitude(model, &cancelled, AmplitudeOptions::default()),
+        Err(feynkit_generator::GenerationError::IncompleteAmplitude)
+    ));
 }

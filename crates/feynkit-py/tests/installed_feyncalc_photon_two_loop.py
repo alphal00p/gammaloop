@@ -80,16 +80,19 @@ gmunu = metric(mink(d, mu), mink(d, nu))
 ppmunu = p(0, mink(d, mu)) * p(0, mink(d, nu))
 Qg, Qpp = S("photon_2l::metric_basis", "photon_2l::momentum_basis")
 Q, dot = S("gammalooprs::Q", "spenso::dot")
-result = hep.Generator(model).generate(
-    hep.Process.amplitude([22], [22]).with_loop_count(2, 2),
-    max_vertices=4,
-    maximum_bridges=0,
-    vertex_allow=["V_98"],
-    self_energy=None,
-    tadpoles=None,
-    zero_snails=None,
-    numerator_grouping=None,
-    progress=None,
+result = (
+    hep.Process(model, [22], [22])
+    .with_loop_count(2, 2)
+    .generate_diagrams(
+        max_vertices=4,
+        maximum_bridges=0,
+        vertex_allow=["V_98"],
+        self_energy=None,
+        tadpoles=None,
+        zero_snails=None,
+        numerator_grouping=None,
+        progress=None,
+    )
 )
 assert len(result.diagrams) == 3
 targets, diagram_integrals = set(), []
@@ -283,16 +286,19 @@ ct_coordinate, ct_integral = S("photon_2l::ctd", "photon_2l::ctI")
 # Keeping the latter's squared denominator through IR rearrangement is essential.
 # Physical electron mass is zero, so its mass counterterm contributes nothing.
 # These explicit local insertions are not automatic CT/forest generation.
-one_loop_generated = hep.Generator(model).generate(
-    hep.Process.amplitude([22], [22]).with_loop_count(1, 1),
-    max_vertices=2,
-    maximum_bridges=0,
-    vertex_allow=["V_98"],
-    self_energy=None,
-    tadpoles=None,
-    zero_snails=None,
-    numerator_grouping=None,
-    progress=None,
+one_loop_generated = (
+    hep.Process(model, [22], [22])
+    .with_loop_count(1, 1)
+    .generate_diagrams(
+        max_vertices=2,
+        maximum_bridges=0,
+        vertex_allow=["V_98"],
+        self_energy=None,
+        tadpoles=None,
+        zero_snails=None,
+        numerator_grouping=None,
+        progress=None,
+    )
 )
 assert len(one_loop_generated.diagrams) == 1
 one_loop_diagram = one_loop_generated.diagrams[0]

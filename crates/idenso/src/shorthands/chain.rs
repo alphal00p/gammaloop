@@ -285,6 +285,7 @@ impl<'a> Chain for AtomView<'a> {
 mod tests {
     use insta::assert_snapshot;
     use spenso::g;
+    use spenso::structure::OrderedStructure;
     use spenso::{chain, slot};
     use symbolica::{parse, parse_lit, symbol};
     use symbolica_utils::AtomPrintExt;
@@ -679,9 +680,10 @@ mod tests {
             assert_eq!(collected.collect_chains(rep), collected);
             let mut reference_indices = None;
             for candidate in [expression, collected] {
-                let mut network = SymbolicTensor::<AbstractIndex>::empty(candidate)
-                    .to_network(&library)
-                    .unwrap();
+                let mut network =
+                    SymbolicTensor::<OrderedStructure<LibraryRep, AbstractIndex>>::empty(candidate)
+                        .to_network(&library)
+                        .unwrap();
                 network
                     .execute::<Sequential, SmallestDegree, _, _, _>(&library, &functions)
                     .unwrap();

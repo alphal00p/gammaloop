@@ -45,13 +45,11 @@ for label, legs, loops, vertices in [
     ("vertex", 2, 1, 2),
     ("tree", 2, 0, 1),
 ]:
-    diagrams[label] = model.generate_diagrams(
-        [particle] * legs,
-        [particle] * legs,
-        loops=loops,
-        max_vertices=vertices,
-        **options,
-    ).diagrams
+    diagrams[label] = (
+        hep.Process(model, [particle] * legs, [particle] * legs)
+        .generate_diagrams(loops=loops, max_vertices=vertices, **options)
+        .diagrams
+    )
 assert [len(diagrams[k]) for k in ("self_energy", "vertex", "tree")] == [1, 3, 1]
 tree = diagrams["tree"][0]
 tree_amplitude = (
@@ -177,14 +175,9 @@ ct_model = hep.Model.from_json(json.dumps(specification))
 ct_diagrams, ct_amplitudes = {}, {}
 self_kinematics = hep.Kinematics().with_scalar_product(P(0), P(0), p2)
 for label, legs, count in [("self_energy", 1, 2), ("vertex", 2, 1)]:
-    result = ct_model.generate_diagrams(
-        [particle.name] * legs,
-        [particle.name] * legs,
-        loops=0,
-        max_vertices=1,
-        coupling_orders={"CT": 1},
-        **options,
-    )
+    result = hep.Process(
+        ct_model, [particle.name] * legs, [particle.name] * legs
+    ).generate_diagrams(loops=0, max_vertices=1, coupling_orders={"CT": 1}, **options)
     assert len(result.diagrams) == count
     ct_diagrams[label] = result.diagrams
     amplitude = zero

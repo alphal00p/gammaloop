@@ -54,7 +54,7 @@ fn expression_order_metric_name<const METRIC: u8>() -> &'static str {
     }
 }
 fn tensor_slot_pos<Aind: AbsInd + ParseableAind>(
-    tensor: &SymbolicTensor<Aind>,
+    tensor: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
     slot: &LibrarySlot<Aind>,
 ) -> Option<SlotIndex> {
     let slot_atom = slot.to_atom();
@@ -70,7 +70,7 @@ fn tensor_slot_pos<Aind: AbsInd + ParseableAind>(
 
 fn parse_tensor_factor<Aind: AbsInd + DummyAind + ParseableAind>(
     factor: &Atom,
-) -> Option<SymbolicTensor<Aind>> {
+) -> Option<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>> {
     SymbolicTensor::parse(factor.as_view())
         .ok()
         .map(Canonicalized::into_canonical)
@@ -78,7 +78,7 @@ fn parse_tensor_factor<Aind: AbsInd + DummyAind + ParseableAind>(
 
 fn direct_contract_factor_replacement<Aind: AbsInd + ParseableAind>(
     factor: &Atom,
-    factor_tensor: &SymbolicTensor<Aind>,
+    factor_tensor: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
     factor_slot: &LibrarySlot<Aind>,
     target_slot: &LibrarySlot<Aind>,
 ) -> Option<(Atom, Atom)> {
@@ -576,8 +576,8 @@ fn direct_contract_expanded_sum_side<Aind: AbsInd + DummyAind + ParseableAind + 
 }
 
 fn contracted_slot_pairs<Aind: AbsInd + ParseableAind>(
-    left: &SymbolicTensor<Aind>,
-    right: &SymbolicTensor<Aind>,
+    left: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
+    right: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
     left_positions: &SubSet<SlotIndex>,
     right_positions: &SubSet<SlotIndex>,
 ) -> Option<Vec<(LibrarySlot<Aind>, LibrarySlot<Aind>)>> {
@@ -621,8 +621,8 @@ fn structure_contains_slot<Aind: AbsInd + ParseableAind>(
 }
 
 fn removed_slots_still_in_expression<Aind: AbsInd + ParseableAind>(
-    left: &SymbolicTensor<Aind>,
-    right: &SymbolicTensor<Aind>,
+    left: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
+    right: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
     left_positions: &SubSet<SlotIndex>,
     right_positions: &SubSet<SlotIndex>,
     result_structure: &OrderedStructure<LibraryRep, Aind>,
@@ -658,8 +658,8 @@ fn removed_slots_still_in_expression<Aind: AbsInd + ParseableAind>(
 fn direct_contract_smallest_expanded_sum_side<
     Aind: AbsInd + DummyAind + ParseableAind + 'static,
 >(
-    left: &SymbolicTensor<Aind>,
-    right: &SymbolicTensor<Aind>,
+    left: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
+    right: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
     left_positions: &SubSet<SlotIndex>,
     right_positions: &SubSet<SlotIndex>,
     left_expr: &Atom,
@@ -716,7 +716,7 @@ impl<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool>
     SchoonschipSmallestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>
 {
     fn simplify_scalar_tensors<Aind: AbsInd + DummyAind + ParseableAind + 'static>(
-        executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
+        executor: &mut NetworkStore<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>, Atom>,
     ) -> Result<(), ContractionError> {
         if !RECURSE {
             return Ok(());
@@ -764,21 +764,21 @@ impl<
     Aind: AbsInd + DummyAind + ParseableAind + 'static,
 >
     ContractionStrategy<
-        NetworkStore<SymbolicTensor<Aind>, Atom>,
-        DummyLibrary<SymbolicTensor<Aind>>,
+        NetworkStore<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>, Atom>,
+        DummyLibrary<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>,
         DummyKey,
         symbolica::atom::Symbol,
         Aind,
     > for SchoonschipSmallestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>
 where
-    SymbolicTensor<Aind>: ScalarMul<Atom, Output = SymbolicTensor<Aind>>
-        + ApplyPendingIndexPermutation<Output = SymbolicTensor<Aind>>,
+    SymbolicTensor<OrderedStructure<LibraryRep, Aind>>: ScalarMul<Atom, Output = SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>
+        + ApplyPendingIndexPermutation<Output = SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>,
 {
     fn contract(
-        executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
+        executor: &mut NetworkStore<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>, Atom>,
         graph: &NetworkGraph<DummyKey, symbolica::atom::Symbol, Aind>,
         operation: &NetworkOperation<symbolica::atom::Symbol>,
-        lib: &DummyLibrary<SymbolicTensor<Aind>>,
+        lib: &DummyLibrary<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>,
     ) -> Result<NetworkLeaf<DummyKey, Aind>, TensorNetworkError<DummyKey, symbolica::atom::Symbol>>
     {
         let trace = trace_contraction_ordering();
@@ -917,21 +917,21 @@ impl<
     Aind: AbsInd + DummyAind + ParseableAind + 'static,
 >
     ContractionStrategy<
-        NetworkStore<SymbolicTensor<Aind>, Atom>,
-        DummyLibrary<SymbolicTensor<Aind>>,
+        NetworkStore<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>, Atom>,
+        DummyLibrary<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>,
         DummyKey,
         symbolica::atom::Symbol,
         Aind,
     > for SchoonschipExpressionOrder<METRIC, EXPANDSUMS, RECURSE, DEPTH_FIRST>
 where
-    SymbolicTensor<Aind>: ScalarMul<Atom, Output = SymbolicTensor<Aind>>
-        + ApplyPendingIndexPermutation<Output = SymbolicTensor<Aind>>,
+    SymbolicTensor<OrderedStructure<LibraryRep, Aind>>: ScalarMul<Atom, Output = SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>
+        + ApplyPendingIndexPermutation<Output = SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>,
 {
     fn contract(
-        executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
+        executor: &mut NetworkStore<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>, Atom>,
         graph: &NetworkGraph<DummyKey, symbolica::atom::Symbol, Aind>,
         operation: &NetworkOperation<symbolica::atom::Symbol>,
-        lib: &DummyLibrary<SymbolicTensor<Aind>>,
+        lib: &DummyLibrary<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>,
     ) -> Result<NetworkLeaf<DummyKey, Aind>, TensorNetworkError<DummyKey, symbolica::atom::Symbol>>
     {
         SchoonschipSmallestDegree::<EXPANDSUMS, RECURSE, DEPTH_FIRST>::simplify_scalar_tensors(
@@ -1012,21 +1012,21 @@ impl<
     Aind: AbsInd + DummyAind + ParseableAind + 'static,
 >
     ContractionStrategy<
-        NetworkStore<SymbolicTensor<Aind>, Atom>,
-        DummyLibrary<SymbolicTensor<Aind>>,
+        NetworkStore<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>, Atom>,
+        DummyLibrary<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>,
         DummyKey,
         symbolica::atom::Symbol,
         Aind,
     > for SchoonschipLargestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>
 where
-    SymbolicTensor<Aind>: ScalarMul<Atom, Output = SymbolicTensor<Aind>>
-        + ApplyPendingIndexPermutation<Output = SymbolicTensor<Aind>>,
+    SymbolicTensor<OrderedStructure<LibraryRep, Aind>>: ScalarMul<Atom, Output = SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>
+        + ApplyPendingIndexPermutation<Output = SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>,
 {
     fn contract(
-        executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
+        executor: &mut NetworkStore<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>, Atom>,
         graph: &NetworkGraph<DummyKey, symbolica::atom::Symbol, Aind>,
         operation: &NetworkOperation<symbolica::atom::Symbol>,
-        lib: &DummyLibrary<SymbolicTensor<Aind>>,
+        lib: &DummyLibrary<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>,
     ) -> Result<NetworkLeaf<DummyKey, Aind>, TensorNetworkError<DummyKey, symbolica::atom::Symbol>>
     {
         SchoonschipSmallestDegree::<EXPANDSUMS, RECURSE, DEPTH_FIRST>::simplify_scalar_tensors(
@@ -1087,9 +1087,9 @@ fn finish_contract<
     const DEPTH_FIRST: bool,
     Aind: AbsInd + DummyAind + ParseableAind + 'static,
 >(
-    mut result: SymbolicTensor<Aind>,
+    mut result: SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
     recurse_result: bool,
-) -> Result<SymbolicTensor<Aind>, ContractionError> {
+) -> Result<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>, ContractionError> {
     let trace = trace_finish_contracts();
     if recurse_result {
         let start = trace.then(Instant::now);
@@ -1127,7 +1127,7 @@ fn single_contracted_pos(positions: &SubSet<SlotIndex>) -> Option<SlotIndex> {
 }
 
 fn metric_free_slot<Aind: AbsInd>(
-    metric: &SymbolicTensor<Aind>,
+    metric: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
     contracted_pos: SlotIndex,
 ) -> Option<LibrarySlot<Aind>> {
     if metric.structure.order() != 2 {
@@ -1141,13 +1141,13 @@ fn metric_free_slot<Aind: AbsInd>(
 }
 
 fn contract_metric_into_tensor<Aind: AbsInd + ParseableAind>(
-    metric: &SymbolicTensor<Aind>,
-    tensor: &SymbolicTensor<Aind>,
+    metric: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
+    tensor: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
     metric_positions: &SubSet<SlotIndex>,
     tensor_positions: &SubSet<SlotIndex>,
     tensor_expr: &Atom,
     structure: OrderedStructure<LibraryRep, Aind>,
-) -> Option<SymbolicTensor<Aind>> {
+) -> Option<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>> {
     if metric.is_composite || !metric.is_metric {
         return None;
     }
@@ -1172,14 +1172,14 @@ fn contract_metric_into_tensor<Aind: AbsInd + ParseableAind>(
 }
 
 fn contract_rank_one_into_tensor<Aind: AbsInd + ParseableAind>(
-    rank_one: &SymbolicTensor<Aind>,
-    tensor: &SymbolicTensor<Aind>,
+    rank_one: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
+    tensor: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
     rank_one_positions: &SubSet<SlotIndex>,
     tensor_positions: &SubSet<SlotIndex>,
     rank_one_expr: &Atom,
     tensor_expr: &Atom,
     structure: OrderedStructure<LibraryRep, Aind>,
-) -> Option<SymbolicTensor<Aind>> {
+) -> Option<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>> {
     if rank_one.is_composite || rank_one.structure.order() != 1 {
         return None;
     }
@@ -1213,11 +1213,17 @@ impl<
     const RECURSE: bool,
     const DEPTH_FIRST: bool,
     Aind: AbsInd + DummyAind + ParseableAind + 'static,
-> Contract<SymbolicTensor<Aind>, Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>>
-    for SymbolicTensor<Aind>
+>
+    Contract<
+        SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
+        Schoonschipify<EXPANDSUMS, RECURSE, DEPTH_FIRST>,
+    > for SymbolicTensor<OrderedStructure<LibraryRep, Aind>>
 {
-    type LCM = SymbolicTensor<Aind>;
-    fn contract(&self, other: &SymbolicTensor<Aind>) -> Result<Self::LCM, ContractionError> {
+    type LCM = SymbolicTensor<OrderedStructure<LibraryRep, Aind>>;
+    fn contract(
+        &self,
+        other: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
+    ) -> Result<Self::LCM, ContractionError> {
         if TRACE_SCHOONSCHIP {
             println!(
                 "Contracting  {} {}rank {} with rank {} {} {}: \n{}\nwith\n{}\n gives:",

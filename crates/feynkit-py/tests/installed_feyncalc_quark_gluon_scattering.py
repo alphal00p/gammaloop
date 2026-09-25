@@ -33,9 +33,7 @@ kinematics = hep.Kinematics.mandelstam(
 results = {}
 generated_channels = {}
 for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
-    generated = model.generate_diagrams(
-        ["b", boson],
-        ["b", boson],
+    generated = hep.Process(model, ["b", boson], ["b", boson]).generate_diagrams(
         max_vertices=2,
         maximum_bridges=None,
         vertex_allow=allowed,

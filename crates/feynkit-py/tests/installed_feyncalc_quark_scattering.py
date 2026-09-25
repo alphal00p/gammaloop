@@ -40,9 +40,7 @@ for name, pdgs in [
     same = name in ("qq", "qaq")
     masses = [m**2, (m if same else M) ** 2] * 2
     kin = hep.Kinematics.mandelstam([P(i) for i in range(4)], masses, [s, t, u])
-    generation = model.generate_diagrams(
-        pdgs[:2],
-        pdgs[2:],
+    generation = hep.Process(model, pdgs[:2], pdgs[2:]).generate_diagrams(
         max_vertices=2,
         maximum_bridges=None,
         vertex_allow=vertices,

@@ -48,14 +48,14 @@ use symbolica::{
 
 use symbolica::api::python::ConvertibleToExpression;
 
-use crate::{
-    composition::{self, ProductPlan, StructuredAtom},
-    display,
-    expression::TensorExpression,
-    library::SpensorFunctionLibrary,
+use crate::{display, expression::TensorExpression, library::SpensorFunctionLibrary};
+use idenso::tensor::{
+    SymbolicTensor,
+    composition::{self, ProductPlan},
+    inference::InterfaceInference,
 };
 
-use super::{Spensor, fresh_open_owner, library::SpensorLibrary, structure::ArithmeticStructure};
+use super::{Spensor, library::SpensorLibrary, structure::ArithmeticStructure};
 
 use super::ModuleInit;
 
@@ -115,9 +115,9 @@ pub struct SpensoNet {
         Symbol,
     >,
     /// Semantic source expression and public interface, including unresolved ports.
-    pub(crate) structure: StructuredAtom,
+    pub(crate) structure: SymbolicTensor<PartialStructure>,
     /// The source expression with all graph-facing ports made explicit.
-    pub(crate) materialized: StructuredAtom,
+    pub(crate) materialized: SymbolicTensor<PartialStructure>,
     /// Optional stored-data identity. Composite results deliberately remain unnamed.
     pub(crate) descriptor: Option<(Symbol, Vec<Atom>)>,
 }
@@ -232,25 +232,25 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ReplacementCondition {
 #[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::impl_stub_type!(ReplacementCondition = PythonPatternRestriction | PythonCondition);
 
-fn non_scalar_zero_network(value: &StructuredAtom) -> Option<ParsingNet> {
-    if !value.atom.as_view().is_zero() || value.is_scalar() {
+fn non_scalar_zero_network(value: &SymbolicTensor<PartialStructure>) -> Option<ParsingNet> {
+    if !value.expression.as_view().is_zero() || value.is_scalar() {
         return None;
     }
 
     let replacements = value
-        .interface
+        .structure
         .logical_slots()
         .into_iter()
         .filter_map(|slot| match slot.aind {
             PartialIndex::Explicit(_) => None,
             PartialIndex::Open(id) => Some((
                 id,
-                composition::fresh_dummy_index([&value.atom], [&value.interface]),
+                composition::fresh_dummy_index([&value.expression], [&value.structure]),
             )),
         })
         .collect();
     let structure: ShadowedStructure<AbstractIndex> = value
-        .interface
+        .structure
         .materialize_open_ports(&replacements)
         .into_canonical()
         .into();
@@ -266,7 +266,7 @@ fn network_from_arithmetic(
         ArithmeticStructure::Tensor(expression) => Python::attach(|py| {
             let expression = expression.bind(py).borrow();
             let structure = TensorExpression::structured(&expression);
-            let materialized = TensorExpression::materialized(&expression)?;
+            let materialized = structure.materialized().map_err(composition_error)?;
             let descriptor = TensorExpression::descriptor_name(&expression)
                 .map(|name| (name, TensorExpression::descriptor_args(&expression)));
             if let Some(network) = non_scalar_zero_network(&materialized) {
@@ -280,7 +280,7 @@ fn network_from_arithmetic(
 
             Ok(SpensoNet {
                 network: ParsingNet::try_from_view(
-                    materialized.atom.as_view(),
+                    materialized.expression.as_view(),
                     library,
                     &ParseSettings::default(),
                 )?,
@@ -293,7 +293,7 @@ fn network_from_arithmetic(
             let atom = expression.to_expression()?.expr;
             let network =
                 ParsingNet::try_from_view(atom.as_view(), library, &ParseSettings::default())?;
-            let value = composition::normalize_closed_root_chain(StructuredAtom::new(
+            let value = SymbolicTensor::new(
                 atom.clone(),
                 PartialStructure::from_logical_slots(
                     network
@@ -302,7 +302,8 @@ fn network_from_arithmetic(
                         .into_iter()
                         .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind()))),
                 ),
-            ))?;
+            )
+            .normalize_closed_root_chain()?;
             Ok(SpensoNet {
                 network,
                 structure: value.clone(),
@@ -326,7 +327,7 @@ impl SpensoNet {
         let canonical = value.tensor.external_structure();
         let logical = value
             .descriptor
-            .interface
+            .structure
             .layout()
             .canonical_to_logical(&canonical);
         let replacements = logical
@@ -334,7 +335,9 @@ impl SpensoNet {
             .enumerate()
             .map(|(position, slot)| (position, slot.aind()))
             .collect::<HashMap<_, _>>();
-        let materialized = composition::reindex_interface_ports(&value.descriptor, &replacements)
+        let materialized = value
+            .descriptor
+            .reindex_interface_ports(&replacements)
             .map_err(composition_error)?;
         let mut network = Self {
             network: Network::from_tensor(value.tensor),
@@ -398,21 +401,13 @@ fn composition_error(error: composition::TensorCompositionError) -> PyErr {
     PyValueError::new_err(error.to_string())
 }
 
-fn additive_interfaces_match(left: &PartialStructure, right: &PartialStructure) -> bool {
-    // Unresolved ports remain positional; only explicit indices identify ports across terms.
-    left.logical_slots() == right.logical_slots()
-        || (left.open_positions().is_empty()
-            && right.open_positions().is_empty()
-            && left.canonical() == right.canonical())
-}
-
 impl SpensoNet {
     fn semantic_slots(&self) -> Vec<spenso::structure::partial::PartialSlot> {
-        self.structure.interface.logical_slots()
+        self.structure.structure.logical_slots()
     }
 
     fn relabel_port(&mut self, position: usize, index: AbstractIndex) -> PyResult<()> {
-        let slots = self.materialized.interface.logical_slots();
+        let slots = self.materialized.structure.logical_slots();
         let slot = slots.get(position).copied().ok_or_else(|| {
             PyValueError::new_err(format!(
                 "port position {position} is outside an interface of rank {}",
@@ -428,11 +423,10 @@ impl SpensoNet {
             return Ok(());
         }
 
-        let materialized = composition::reindex_interface_ports(
-            &self.materialized,
-            &HashMap::from([(position, index)]),
-        )
-        .map_err(composition_error)?;
+        let materialized = self
+            .materialized
+            .reindex_interface_ports(&HashMap::from([(position, index)]))
+            .map_err(composition_error)?;
         let from = slot.rep().slot(current).to_lib();
         let to = slot.rep().slot(index).to_lib();
         let mut reindexed = Vec::new();
@@ -466,10 +460,10 @@ impl SpensoNet {
     }
 
     fn freshen_open_ports(&mut self) -> PyResult<()> {
-        let owner = fresh_open_owner();
+        let owner = AbstractIndex::fresh_open_owner();
         for (axis, position) in self
             .structure
-            .interface
+            .structure
             .open_positions()
             .into_iter()
             .enumerate()
@@ -480,62 +474,19 @@ impl SpensoNet {
     }
 
     fn align_pair(left: &mut Self, right: &mut Self, pair: composition::PortPair) -> PyResult<()> {
-        let left_slot = left
-            .semantic_slots()
-            .get(pair.left)
-            .copied()
-            .ok_or_else(|| {
-                PyValueError::new_err(format!("invalid left port position {}", pair.left))
-            })?;
-        let right_slot = right
-            .semantic_slots()
-            .get(pair.right)
-            .copied()
-            .ok_or_else(|| {
-                PyValueError::new_err(format!("invalid right port position {}", pair.right))
-            })?;
-        let target = match (left_slot.aind, right_slot.aind) {
-            (PartialIndex::Explicit(left), PartialIndex::Explicit(right)) if left == right => left,
-            (PartialIndex::Explicit(index), PartialIndex::Open(_))
-            | (PartialIndex::Open(_), PartialIndex::Explicit(index)) => index,
-            (PartialIndex::Open(_), PartialIndex::Open(_)) => composition::fresh_dummy_index(
-                [&left.structure.atom, &right.structure.atom],
-                [&left.structure.interface, &right.structure.interface],
-            ),
-            (PartialIndex::Explicit(_), PartialIndex::Explicit(_)) => {
-                return Err(PyValueError::new_err(format!(
-                    "explicit ports {} and {} do not carry the same abstract index",
-                    pair.left, pair.right
-                )));
-            }
-        };
+        let target = left
+            .structure
+            .contraction_index(&right.structure, pair)
+            .map_err(composition_error)?;
         left.relabel_port(pair.left, target)?;
         right.relabel_port(pair.right, target)
     }
 
     fn align_self_pair(&mut self, pair: composition::PortPair) -> PyResult<()> {
-        let slots = self.semantic_slots();
-        let left = slots
-            .get(pair.left)
-            .copied()
-            .ok_or_else(|| PyValueError::new_err(format!("invalid port position {}", pair.left)))?;
-        let right = slots.get(pair.right).copied().ok_or_else(|| {
-            PyValueError::new_err(format!("invalid port position {}", pair.right))
-        })?;
-        let target = match (left.aind, right.aind) {
-            (PartialIndex::Explicit(left), PartialIndex::Explicit(right)) if left == right => left,
-            (PartialIndex::Explicit(index), PartialIndex::Open(_))
-            | (PartialIndex::Open(_), PartialIndex::Explicit(index)) => index,
-            (PartialIndex::Open(_), PartialIndex::Open(_)) => {
-                composition::fresh_dummy_index([&self.structure.atom], [&self.structure.interface])
-            }
-            (PartialIndex::Explicit(_), PartialIndex::Explicit(_)) => {
-                return Err(PyValueError::new_err(format!(
-                    "explicit ports {} and {} do not carry the same abstract index",
-                    pair.left, pair.right
-                )));
-            }
-        };
+        let target = self
+            .structure
+            .contraction_index(&self.structure, pair)
+            .map_err(composition_error)?;
         self.relabel_port(pair.left, target)?;
         self.relabel_port(pair.right, target)
     }
@@ -543,7 +494,7 @@ impl SpensoNet {
     fn validate_graph_interface(&self) -> PyResult<()> {
         let mut expected = self
             .materialized
-            .interface
+            .structure
             .logical_slots()
             .into_iter()
             .map(|slot| {
@@ -568,13 +519,15 @@ impl SpensoNet {
 
     fn finish(
         mut network: ParsingNet,
-        structure: StructuredAtom,
-        materialized: StructuredAtom,
+        structure: SymbolicTensor<PartialStructure>,
+        materialized: SymbolicTensor<PartialStructure>,
     ) -> PyResult<Self> {
-        let structure =
-            composition::normalize_closed_root_chain(structure).map_err(composition_error)?;
-        let materialized =
-            composition::normalize_closed_root_chain(materialized).map_err(composition_error)?;
+        let structure = structure
+            .normalize_closed_root_chain()
+            .map_err(composition_error)?;
+        let materialized = materialized
+            .normalize_closed_root_chain()
+            .map_err(composition_error)?;
         network.state = network.graph.state();
         let value = Self {
             network,
@@ -587,7 +540,10 @@ impl SpensoNet {
     }
 
     pub(crate) fn add_network(mut self, mut right: Self, subtract: bool) -> PyResult<Self> {
-        if !additive_interfaces_match(&self.structure.interface, &right.structure.interface) {
+        if !InterfaceInference::additive_interfaces_match(
+            &self.structure.structure,
+            &right.structure.structure,
+        ) {
             return Err(PyValueError::new_err(if subtract {
                 "subtraction requires compatible tensor interfaces"
             } else {
@@ -596,7 +552,7 @@ impl SpensoNet {
         }
         self.freshen_open_ports()?;
         right.freshen_open_ports()?;
-        for position in self.structure.interface.open_positions() {
+        for position in self.structure.structure.open_positions() {
             Self::align_pair(
                 &mut self,
                 &mut right,
@@ -606,21 +562,21 @@ impl SpensoNet {
                 },
             )?;
         }
-        let structure = StructuredAtom::new(
+        let structure = SymbolicTensor::new(
             if subtract {
-                self.structure.atom.as_ref() - right.structure.atom.as_ref()
+                self.structure.expression.as_ref() - right.structure.expression.as_ref()
             } else {
-                self.structure.atom.as_ref() + right.structure.atom.as_ref()
+                self.structure.expression.as_ref() + right.structure.expression.as_ref()
             },
-            self.structure.interface.clone(),
+            self.structure.structure.clone(),
         );
-        let materialized = StructuredAtom::new(
+        let materialized = SymbolicTensor::new(
             if subtract {
-                self.materialized.atom.as_ref() - right.materialized.atom.as_ref()
+                self.materialized.expression.as_ref() - right.materialized.expression.as_ref()
             } else {
-                self.materialized.atom.as_ref() + right.materialized.atom.as_ref()
+                self.materialized.expression.as_ref() + right.materialized.expression.as_ref()
             },
-            self.materialized.interface.clone(),
+            self.materialized.structure.clone(),
         );
         let network = if subtract {
             self.network - right.network
@@ -631,20 +587,25 @@ impl SpensoNet {
     }
 
     pub(crate) fn multiply_network(mut self, mut right: Self) -> PyResult<Self> {
-        let plan = composition::product_plan(&self.structure, &right.structure)
+        let plan = self
+            .structure
+            .product_plan(&right.structure)
             .map_err(composition_error)?;
-        let structure =
-            composition::multiply(&self.structure, &right.structure).map_err(composition_error)?;
+        let structure = self
+            .structure
+            .multiply(&right.structure)
+            .map_err(composition_error)?;
         self.freshen_open_ports()?;
         right.freshen_open_ports()?;
         let materialized = match plan {
-            ProductPlan::Scalar => composition::multiply(&self.materialized, &right.materialized),
-            ProductPlan::Outer => Ok(composition::outer(&self.materialized, &right.materialized)),
+            ProductPlan::Scalar => self.materialized.multiply(&right.materialized),
+            ProductPlan::Outer => Ok(self.materialized.outer(&right.materialized)),
             ProductPlan::Contract(pairs) => {
                 for &pair in &pairs {
                     Self::align_pair(&mut self, &mut right, pair)?;
                 }
-                composition::contract(&self.materialized, &right.materialized, &pairs)
+                self.materialized
+                    .contract_ports(&right.materialized, &pairs)
             }
             ProductPlan::Compose(left_channel, right_channel) => {
                 Self::align_pair(
@@ -655,12 +616,8 @@ impl SpensoNet {
                         right: right_channel.input,
                     },
                 )?;
-                composition::compose(
-                    &self.materialized,
-                    &right.materialized,
-                    left_channel,
-                    right_channel,
-                )
+                self.materialized
+                    .compose(&right.materialized, left_channel, right_channel)
             }
         }
         .map_err(composition_error)?;
@@ -673,29 +630,29 @@ impl SpensoNet {
                 "a non-scalar tensor cannot be used as a denominator",
             ));
         }
-        let structure = StructuredAtom::new(
-            Atom::num(1) / self.structure.atom.as_ref(),
-            self.structure.interface.clone(),
+        let structure = SymbolicTensor::new(
+            Atom::num(1) / self.structure.expression.as_ref(),
+            self.structure.structure.clone(),
         );
-        let materialized = StructuredAtom::new(
-            Atom::num(1) / self.materialized.atom.as_ref(),
-            self.materialized.interface.clone(),
+        let materialized = SymbolicTensor::new(
+            Atom::num(1) / self.materialized.expression.as_ref(),
+            self.materialized.structure.clone(),
         );
         Self::finish(self.network.pow(-1), structure, materialized)
     }
 
     pub(crate) fn broadcast_function(self, function: Symbol) -> PyResult<Self> {
-        let structure = StructuredAtom::new(
+        let structure = SymbolicTensor::new(
             FunctionBuilder::new(function)
-                .add_arg(self.structure.atom.clone())
+                .add_arg(self.structure.expression.clone())
                 .finish(),
-            self.structure.interface.clone(),
+            self.structure.structure.clone(),
         );
-        let materialized = StructuredAtom::new(
+        let materialized = SymbolicTensor::new(
             FunctionBuilder::new(function)
-                .add_arg(self.materialized.atom.clone())
+                .add_arg(self.materialized.expression.clone())
                 .finish(),
-            self.materialized.interface.clone(),
+            self.materialized.structure.clone(),
         );
         Self::finish(self.network.fun(function), structure, materialized)
     }
@@ -706,7 +663,7 @@ impl SpensoNet {
         cook_indices: Option<&crate::simplification::PyCookSettings>,
     ) -> PyResult<Self> {
         let replacements =
-            TensorExpression::index_replacements(&self.structure.interface, indices, cook_indices)?;
+            TensorExpression::index_replacements(&self.structure.structure, indices, cook_indices)?;
         self.set_port_indices(&replacements)
     }
 
@@ -714,11 +671,13 @@ impl SpensoNet {
         &self,
         replacements: &HashMap<usize, AbstractIndex>,
     ) -> PyResult<Self> {
-        let structure = composition::reindex_interface_ports(&self.structure, replacements)
+        let structure = self
+            .structure
+            .reindex_interface_ports(replacements)
             .map_err(composition_error)?;
         let mut network = self.clone();
         network.freshen_open_ports()?;
-        let owner = fresh_open_owner();
+        let owner = AbstractIndex::fresh_open_owner();
         for (axis, &position) in replacements.keys().enumerate() {
             network.relabel_port(position, AbstractIndex::Open { owner, axis })?;
         }
@@ -728,8 +687,8 @@ impl SpensoNet {
         network.network.graph.sew_dangling_slots();
         network.network.state = network.network.graph.state();
 
-        let structure_slots = structure.interface.logical_slots();
-        let materialized_slots = network.materialized.interface.logical_slots();
+        let structure_slots = structure.structure.logical_slots();
+        let materialized_slots = network.materialized.structure.logical_slots();
         if structure_slots.len() != materialized_slots.len() {
             return Err(PyRuntimeError::new_err(
                 "semantic and materialized network interfaces have different ranks",
@@ -759,21 +718,23 @@ impl SpensoNet {
         }
 
         let contracted = retained.len() < structure_slots.len();
-        network.structure = composition::normalize_closed_root_chain(StructuredAtom::new(
-            structure.atom,
+        network.structure = SymbolicTensor::new(
+            structure.expression,
             PartialStructure::from_logical_slots(
                 retained.iter().map(|&position| structure_slots[position]),
             ),
-        ))
+        )
+        .normalize_closed_root_chain()
         .map_err(composition_error)?;
-        network.materialized = composition::normalize_closed_root_chain(StructuredAtom::new(
-            network.materialized.atom.clone(),
+        network.materialized = SymbolicTensor::new(
+            network.materialized.expression.clone(),
             PartialStructure::from_logical_slots(
                 retained
                     .iter()
                     .map(|&position| materialized_slots[position]),
             ),
-        ))
+        )
+        .normalize_closed_root_chain()
         .map_err(composition_error)?;
         if contracted {
             network.descriptor = None;
@@ -783,50 +744,14 @@ impl SpensoNet {
     }
 
     pub(crate) fn chain_form(self, channel: composition::MatrixChannel) -> PyResult<Self> {
-        fn convert(
-            value: &StructuredAtom,
-            channel: composition::MatrixChannel,
-        ) -> Result<StructuredAtom, composition::TensorCompositionError> {
-            let slots = value.interface.logical_slots();
-            let input = *slots.get(channel.input).ok_or(
-                composition::TensorCompositionError::InvalidPort {
-                    position: channel.input,
-                    rank: slots.len(),
-                },
-            )?;
-            let output = *slots.get(channel.output).ok_or(
-                composition::TensorCompositionError::InvalidPort {
-                    position: channel.output,
-                    rank: slots.len(),
-                },
-            )?;
-            let atom = if value.atom.as_view().is_zero() {
-                Atom::Zero
-            } else {
-                SPENSO_TAG.chain(
-                    composition::port_atom(input),
-                    composition::port_atom(output),
-                    composition::chain_factors(value, channel)?,
-                )
-            };
-            Ok(StructuredAtom::new(
-                atom,
-                PartialStructure::from_logical_slots(
-                    [input, output].into_iter().chain(
-                        slots
-                            .into_iter()
-                            .enumerate()
-                            .filter(|(position, _)| {
-                                *position != channel.input && *position != channel.output
-                            })
-                            .map(|(_, slot)| slot),
-                    ),
-                ),
-            ))
-        }
-
-        let structure = convert(&self.structure, channel).map_err(composition_error)?;
-        let materialized = convert(&self.materialized, channel).map_err(composition_error)?;
+        let structure = self
+            .structure
+            .chain_form(channel)
+            .map_err(composition_error)?;
+        let materialized = self
+            .materialized
+            .chain_form(channel)
+            .map_err(composition_error)?;
         Self::finish(self.network, structure, materialized)
     }
 }
@@ -888,7 +813,7 @@ impl SpensoNet {
     /// >>> one_net = TensorNetwork.one()
     /// >>> result = one_net.result_scalar()
     pub fn one() -> SpensoNet {
-        let value = StructuredAtom::new(
+        let value = SymbolicTensor::new(
             Atom::num(1),
             PartialStructure::from_logical_slots(std::iter::empty()),
         );
@@ -929,7 +854,7 @@ impl SpensoNet {
     /// >>> zero_net = TensorNetwork.zero()
     /// >>> result = zero_net.result_scalar()
     pub fn zero() -> SpensoNet {
-        let value = StructuredAtom::new(
+        let value = SymbolicTensor::new(
             Atom::Zero,
             PartialStructure::from_logical_slots(std::iter::empty()),
         );
@@ -1486,8 +1411,8 @@ impl SpensoNet {
     fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_known_parts(
             py,
-            self.structure.atom.clone(),
-            self.structure.interface.clone(),
+            self.structure.expression.clone(),
+            self.structure.structure.clone(),
             self.descriptor.as_ref().map(|(name, _)| *name),
             self.descriptor
                 .as_ref()
@@ -1500,7 +1425,7 @@ impl SpensoNet {
     #[getter]
     fn structure(&self) -> crate::metadata::SpensoTensorStructure {
         crate::metadata::SpensoTensorStructure {
-            interface: self.structure.interface.clone(),
+            interface: self.structure.structure.clone(),
             name: self.descriptor.as_ref().map(|(name, _)| *name),
             arguments: self
                 .descriptor
@@ -1532,7 +1457,7 @@ impl SpensoNet {
     ) -> PyResult<Self> {
         let positions = (0..self.structure.rank()).collect::<Vec<_>>();
         let replacements = TensorExpression::port_replacements(
-            &self.structure.interface,
+            &self.structure.structure,
             &positions,
             indices,
             cook_indices,
@@ -1548,7 +1473,7 @@ impl SpensoNet {
         cook_indices: Option<&crate::simplification::PyCookSettings>,
     ) -> PyResult<Self> {
         let replacements =
-            TensorExpression::named_replacements(&self.structure.interface, mapping, cook_indices)?;
+            TensorExpression::named_replacements(&self.structure.structure, mapping, cook_indices)?;
         let result = self.set_port_indices(&replacements)?;
         if result.structure.rank() != self.structure.rank() {
             return Err(PyValueError::new_err(
@@ -1561,9 +1486,9 @@ impl SpensoNet {
     /// Return a copy with reordered external axes and the same execution progress.
     /// Unresolved ports acquire fresh identities; reindex() can assign preferred labels.
     pub(crate) fn permute_axes(&self, axes: Vec<usize>) -> PyResult<Self> {
-        let structure = TensorExpression::permuted_structure(&self.structure, &axes)?;
-        let new_slots = structure.interface.logical_slots();
-        let old_slots = self.structure.interface.logical_slots();
+        let structure = self.structure.permuted(&axes).map_err(composition_error)?;
+        let new_slots = structure.structure.logical_slots();
+        let old_slots = self.structure.structure.logical_slots();
         let replacements = axes
             .iter()
             .enumerate()
@@ -1580,8 +1505,8 @@ impl SpensoNet {
             .collect();
         let mut result = self.set_port_indices(&replacements)?;
         result.structure = structure;
-        let materialized = result.materialized.interface.logical_slots();
-        result.materialized.interface =
+        let materialized = result.materialized.structure.logical_slots();
+        result.materialized.structure =
             PartialStructure::from_logical_slots(axes.iter().map(|&axis| materialized[axis]));
         result.validate_graph_interface()?;
         Ok(result)
@@ -1603,13 +1528,13 @@ impl SpensoNet {
     }
 
     pub fn __neg__(&self) -> PyResult<Self> {
-        let structure = StructuredAtom::new(
-            Atom::num(-1) * self.structure.atom.as_ref(),
-            self.structure.interface.clone(),
+        let structure = SymbolicTensor::new(
+            Atom::num(-1) * self.structure.expression.as_ref(),
+            self.structure.structure.clone(),
         );
-        let materialized = StructuredAtom::new(
-            Atom::num(-1) * self.materialized.atom.as_ref(),
-            self.materialized.interface.clone(),
+        let materialized = SymbolicTensor::new(
+            Atom::num(-1) * self.materialized.expression.as_ref(),
+            self.materialized.structure.clone(),
         );
         Self::finish(-self.network.clone(), structure, materialized)
     }
@@ -1712,7 +1637,7 @@ impl SpensoNet {
         let left_slots = left.semantic_slots();
         let right_slots = right.semantic_slots();
         let collisions =
-            composition::compatible_pairs(&left.structure.interface, &right.structure.interface)
+            composition::compatible_pairs(&left.structure.structure, &right.structure.structure)
                 .into_iter()
                 .filter(|pair| {
                     matches!(left_slots[pair.left].aind, PartialIndex::Explicit(_))
@@ -1724,10 +1649,10 @@ impl SpensoNet {
                 "outer product cannot preserve equal explicit indices on compatible port pairs {collisions:?}; use distinct indices"
             )));
         }
-        let structure = composition::outer(&left.structure, &right.structure);
+        let structure = left.structure.outer(&right.structure);
         left.freshen_open_ports()?;
         right.freshen_open_ports()?;
-        let materialized = composition::outer(&left.materialized, &right.materialized);
+        let materialized = left.materialized.outer(&right.materialized);
         Self::finish(left.network * right.network, structure, materialized)
     }
 
@@ -1742,12 +1667,16 @@ impl SpensoNet {
         let mut lhs = self.clone();
         let mut rhs = rhs.to_net();
         let pair = composition::PortPair { left, right };
-        let structure = composition::contract(&lhs.structure, &rhs.structure, &[pair])
+        let structure = lhs
+            .structure
+            .contract_ports(&rhs.structure, &[pair])
             .map_err(composition_error)?;
         lhs.freshen_open_ports()?;
         rhs.freshen_open_ports()?;
         Self::align_pair(&mut lhs, &mut rhs, pair)?;
-        let materialized = composition::contract(&lhs.materialized, &rhs.materialized, &[pair])
+        let materialized = lhs
+            .materialized
+            .contract_ports(&rhs.materialized, &[pair])
             .map_err(composition_error)?;
         Self::finish(lhs.network * rhs.network, structure, materialized)
     }
@@ -1770,9 +1699,10 @@ impl SpensoNet {
             input: right.0,
             output: right.1,
         };
-        let structure =
-            composition::compose(&lhs.structure, &rhs.structure, left_channel, right_channel)
-                .map_err(composition_error)?;
+        let structure = lhs
+            .structure
+            .compose(&rhs.structure, left_channel, right_channel)
+            .map_err(composition_error)?;
         lhs.freshen_open_ports()?;
         rhs.freshen_open_ports()?;
         Self::align_pair(
@@ -1783,13 +1713,10 @@ impl SpensoNet {
                 right: right_channel.input,
             },
         )?;
-        let materialized = composition::compose(
-            &lhs.materialized,
-            &rhs.materialized,
-            left_channel,
-            right_channel,
-        )
-        .map_err(composition_error)?;
+        let materialized = lhs
+            .materialized
+            .compose(&rhs.materialized, left_channel, right_channel)
+            .map_err(composition_error)?;
         Self::finish(lhs.network * rhs.network, structure, materialized)
     }
 
@@ -1810,18 +1737,25 @@ impl SpensoNet {
     pub fn trace(&self, channel: Option<(usize, usize)>) -> PyResult<Self> {
         let selected = match channel {
             Some((input, output)) => composition::MatrixChannel { input, output },
-            None => composition::matrix_channel(&self.structure)
+            None => self
+                .structure
+                .matrix_channel()
                 .ok_or_else(|| PyValueError::new_err("tensor has no unique matrix channel"))?,
         };
-        let structure = composition::trace(&self.structure, selected).map_err(composition_error)?;
+        let structure = self
+            .structure
+            .trace_ports(selected)
+            .map_err(composition_error)?;
         let mut network = self.clone();
         network.freshen_open_ports()?;
         network.align_self_pair(composition::PortPair {
             left: selected.input,
             right: selected.output,
         })?;
-        let materialized =
-            composition::trace(&network.materialized, selected).map_err(composition_error)?;
+        let materialized = network
+            .materialized
+            .trace_ports(selected)
+            .map_err(composition_error)?;
         network.network.graph.sew_dangling_slots();
         network.network.state = network.network.graph.state();
         Self::finish(network.network, structure, materialized)
@@ -1857,11 +1791,11 @@ mod tests {
 
     use super::*;
 
-    fn data_tensor(descriptor: StructuredAtom, name: Symbol) -> Spensor {
-        let owner = fresh_open_owner();
+    fn data_tensor(descriptor: SymbolicTensor<PartialStructure>, name: Symbol) -> Spensor {
+        let owner = AbstractIndex::fresh_open_owner();
         let storage = OrderedStructure::new(
             descriptor
-                .interface
+                .structure
                 .logical_slots()
                 .into_iter()
                 .enumerate()
@@ -1881,7 +1815,7 @@ mod tests {
     fn tensor_descriptor(
         name: &str,
         slots: impl IntoIterator<Item = spenso::structure::partial::PartialSlot>,
-    ) -> (StructuredAtom, Symbol) {
+    ) -> (SymbolicTensor<PartialStructure>, Symbol) {
         let name = SPENSO_TAG.tensor_symbol(name);
         let interface = PartialStructure::from_logical_slots(slots);
         let atom = FunctionBuilder::new(name)
@@ -1892,7 +1826,7 @@ mod tests {
                     .map(composition::port_atom),
             )
             .finish();
-        (StructuredAtom::new(atom, interface), name)
+        (SymbolicTensor::new(atom, interface), name)
     }
 
     #[test]
@@ -1914,7 +1848,7 @@ mod tests {
 
             assert_eq!(network.structure.rank(), 1);
             assert_eq!(
-                network.structure.interface.logical_slots()[0].aind,
+                network.structure.structure.logical_slots()[0].aind,
                 PartialIndex::Explicit(slot.aind)
             );
             assert_eq!(network.network.graph.dangling_indices(), vec![slot]);
@@ -1960,8 +1894,8 @@ mod tests {
             );
             let expression = TensorExpression::from_known_parts(
                 py,
-                descriptor.atom,
-                descriptor.interface,
+                descriptor.expression,
+                descriptor.structure,
                 Some(name),
                 Vec::new(),
             )?;
@@ -2022,7 +1956,7 @@ mod tests {
                 .finish();
             let expression = TensorExpression::from_structured(
                 py,
-                StructuredAtom::new(
+                SymbolicTensor::new(
                     SPENSO_TAG.chain(
                         representation.to_symbolic([]),
                         representation.to_symbolic([]),
@@ -2044,10 +1978,10 @@ mod tests {
             assert!(closed.structure.is_scalar());
             assert!(closed.materialized.is_scalar());
             assert!(
-                matches!(closed.structure.atom.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
+                matches!(closed.structure.expression.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
             );
             assert!(
-                matches!(closed.materialized.atom.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
+                matches!(closed.materialized.expression.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
             );
             assert!(closed.network.graph.dangling_indices().is_empty());
             assert!(closed.network.state.is_scalar());
@@ -2071,8 +2005,8 @@ mod tests {
             );
             let expression = TensorExpression::from_known_parts(
                 py,
-                descriptor.atom,
-                descriptor.interface,
+                descriptor.expression,
+                descriptor.structure,
                 Some(name),
                 Vec::new(),
             )?;
@@ -2123,15 +2057,15 @@ mod tests {
             );
             let matrix = TensorExpression::from_known_parts(
                 py,
-                matrix_descriptor.atom,
-                matrix_descriptor.interface,
+                matrix_descriptor.expression,
+                matrix_descriptor.structure,
                 Some(matrix_name),
                 Vec::new(),
             )?;
             let vector = TensorExpression::from_known_parts(
                 py,
-                vector_descriptor.atom,
-                vector_descriptor.interface,
+                vector_descriptor.expression,
+                vector_descriptor.structure,
                 Some(vector_name),
                 Vec::new(),
             )?;
@@ -2184,8 +2118,8 @@ mod tests {
             );
             let expression = TensorExpression::from_known_parts(
                 py,
-                descriptor.atom,
-                descriptor.interface,
+                descriptor.expression,
+                descriptor.structure,
                 Some(name),
                 Vec::new(),
             )?;
@@ -2226,8 +2160,8 @@ mod tests {
             );
             let expression = TensorExpression::from_known_parts(
                 py,
-                descriptor.atom,
-                descriptor.interface,
+                descriptor.expression,
+                descriptor.structure,
                 Some(name),
                 Vec::new(),
             )?;
@@ -2264,7 +2198,7 @@ mod tests {
 
             let assert_result = |mut network: SpensoNet, expected: &[f64]| -> PyResult<()> {
                 assert_eq!(
-                    network.structure.interface.logical_slots(),
+                    network.structure.structure.logical_slots(),
                     expected_interface
                 );
                 network.execute(Some(&library), None, None, ExecutionMode::All)?;
@@ -2350,7 +2284,7 @@ mod tests {
         );
 
         // Use the native Rust API directly to avoid Python linking issues
-        let value = StructuredAtom::new(
+        let value = SymbolicTensor::new(
             expr.clone(),
             PartialStructure::from_logical_slots(std::iter::empty()),
         );
@@ -2374,7 +2308,7 @@ mod tests {
         initialize();
         let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
         let explicit = AbstractIndex::Normal(37);
-        let value = StructuredAtom::new(
+        let value = SymbolicTensor::new(
             Atom::Zero,
             PartialStructure::from_logical_slots([
                 representation.slot(PartialIndex::open(0)),
@@ -2417,7 +2351,7 @@ mod tests {
         assert_eq!(product.materialized.rank(), 1);
         assert_eq!(product.network.graph.dangling_indices().len(), 1);
         assert_eq!(
-            product.structure.interface.logical_slots()[0].aind,
+            product.structure.structure.logical_slots()[0].aind,
             PartialIndex::Explicit(AbstractIndex::Normal(41))
         );
     }
@@ -2441,8 +2375,8 @@ mod tests {
                 );
                 let expression = TensorExpression::from_known_parts(
                     py,
-                    descriptor.atom,
-                    descriptor.interface,
+                    descriptor.expression,
+                    descriptor.structure,
                     Some(name),
                     Vec::new(),
                 )?;
@@ -2545,7 +2479,7 @@ mod tests {
         assert_eq!(
             swapped
                 .structure
-                .interface
+                .structure
                 .logical_slots()
                 .into_iter()
                 .map(|slot| slot.aind)
@@ -2612,7 +2546,7 @@ mod tests {
         assert_eq!(
             product
                 .structure
-                .interface
+                .structure
                 .logical_slots()
                 .iter()
                 .map(|slot| slot.aind)

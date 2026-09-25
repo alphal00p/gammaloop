@@ -31,9 +31,7 @@ def calculate(outgoing, kin):
             sorted(["mu-", "mu+", "a"]),
         ]
     ]
-    generated = model.generate_diagrams(
-        ["a"],
-        outgoing,
+    generated = hep.Process(model, ["a"], outgoing).generate_diagrams(
         vertex_allow=allowed,
         max_vertices=len(outgoing) - 1,
         maximum_bridges=None,

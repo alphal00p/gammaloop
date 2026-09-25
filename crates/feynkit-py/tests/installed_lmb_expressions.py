@@ -15,14 +15,13 @@ fk = importlib.import_module(
     f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
 )
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
-diagrams = model.generate_diagrams(
-    ["scalar_0"],
-    ["scalar_0", "scalar_0"],
-    loops=1,
-    max_vertices=3,
-    vertex_allow=["V_3_SCALAR_000"],
-    allow_self_loops=True,
-).diagrams
+diagrams = (
+    fk.Process(model, ["scalar_0"], ["scalar_0", "scalar_0"])
+    .generate_diagrams(
+        loops=1, max_vertices=3, vertex_allow=["V_3_SCALAR_000"], allow_self_loops=True
+    )
+    .diagrams
+)
 diagram = next(
     candidate
     for candidate in diagrams
@@ -178,9 +177,7 @@ for expression in (diagram.numerator_expression, diagram.denominator_expression)
 # Exercise multiple loops, alternate bases, indexed vectors, and compact dots.
 two_loop = next(
     iter(
-        model.generate_diagrams(
-            ["scalar_0"],
-            ["scalar_0"],
+        fk.Process(model, ["scalar_0"], ["scalar_0"]).generate_diagrams(
             loops=2,
             max_vertices=4,
             vertex_allow=["V_3_SCALAR_000"],

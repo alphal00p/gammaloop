@@ -21,7 +21,7 @@ use spenso::{
         parsing::ParseSettings,
     },
     structure::{
-        HasName, TensorStructure,
+        HasName, OrderedStructure, TensorStructure,
         representation::{LibraryRep, LibrarySlot, RepName, Representation},
         slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
     },
@@ -216,7 +216,7 @@ fn project_expression<Aind: AbsInd + ParseableAind>(
 fn add_tensor<Aind: AbsInd + ParseableAind>(
     network: &SymbolicNet<Aind>,
     network_node: NodeIndex,
-    tensor: &SymbolicTensor<Aind>,
+    tensor: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
     tree: &SimpleTraversalTree<ParentChildStore<()>>,
     graph: &mut TensorGraph<Aind>,
     slot_copies: &mut SlotsByHedge<Aind>,
@@ -294,7 +294,7 @@ fn add_tensor<Aind: AbsInd + ParseableAind>(
 }
 
 fn tensor_color<Aind: AbsInd + ParseableAind>(
-    tensor: &SymbolicTensor<Aind>,
+    tensor: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
     slots: &[LibrarySlot<Aind>],
 ) -> Option<TensorColor> {
     let AtomView::Fun(function) = tensor.expression.as_view() else {

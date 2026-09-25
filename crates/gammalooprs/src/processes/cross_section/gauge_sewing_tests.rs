@@ -43,7 +43,8 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyr
     let model = load_generic_model("sm");
     for (state, count) in [(vec![24, -24], 16), (vec![23, 23], 10)] {
         let process = ProcessDefinition {
-            process: GenerationProcess::cross_section(Vec::<i64>::new(), state.clone()),
+            generation_type: feynkit_generator::GenerationType::CrossSection,
+            process: GenerationProcess::new(Vec::<i64>::new(), state.clone()),
             ..Default::default()
         };
         let closure = process.covariant_cut_states(&model)?;
@@ -62,7 +63,8 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyr
         }
     }
     let diagnostic = ProcessDefinition {
-        process: GenerationProcess::cross_section(Vec::<i64>::new(), [250_i64, 250]),
+        generation_type: feynkit_generator::GenerationType::CrossSection,
+        process: GenerationProcess::new(Vec::<i64>::new(), [250_i64, 250]),
         ..Default::default()
     };
     assert!(diagnostic.covariant_cut_representatives(&model).is_empty());
@@ -99,7 +101,8 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyr
     assert!(unresolved.covariant_cut_states(&unresolved_model).is_err());
 
     let incomplete = ProcessDefinition {
-        process: GenerationProcess::cross_section(Vec::<i64>::new(), [24_i64, -24]),
+        generation_type: feynkit_generator::GenerationType::CrossSection,
+        process: GenerationProcess::new(Vec::<i64>::new(), [24_i64, -24]),
         generation_options: GenerationOptions::default()
             .with_graph_filter(GenerationFilter::ParticleVeto(vec![251_i64.into()])),
         ..Default::default()
@@ -148,7 +151,8 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
         (vec![23, 23], Atom::num((15, 4)), 4, Atom::num((1, 2))),
     ] {
         let process = ProcessDefinition {
-            process: GenerationProcess::cross_section([25_i64], physical).with_loop_count(1, 1)?,
+            generation_type: feynkit_generator::GenerationType::CrossSection,
+            process: GenerationProcess::new([25_i64], physical).with_loop_count(1, 1)?,
             generation_options: GenerationOptions::default().with_graph_filter(
                 GenerationFilter::CouplingOrders(
                     [("QED".into(), (2, Some(2)))].into_iter().collect(),
