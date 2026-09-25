@@ -18,6 +18,7 @@
     "side-strength": "number",
     "external-pull": "number",
     "external-pull-balance": "non-negative-finite",
+    "external-pull-attachment": "non-negative-finite",
     "node-movement": ("fixed", "layout"),
     direction: ("down", "right", "left-to-right", "left-right", "lr"),
     "rank-alignment": (
@@ -387,9 +388,10 @@
   /// Mixed momentum directions pull left/right; one direction spreads radially.
   /// Components with both directions balance their total pull across the sides
   /// and normalize it by the largest unit-flow spring load, including dangling
-  /// springs. No endpoint exceeds the requested base force. A series chain
-  /// with one leg at each end keeps its pull regardless of length; parallel
-  /// routes share the load. One-direction components keep the base force.
+  /// springs. A series chain with one leg at each end keeps its pull regardless
+  /// of length; parallel routes share the load. Distributed owners sharing an
+  /// external X coordinate receive extra pull to clear their outermost owner,
+  /// which can exceed the base force. One-direction components keep the base force.
   /// These fixed topology weights apply identically to force and energy.
   /// Reaction is shared over nodes, preserving translation and respecting pins.
   /// Zero disables the pull. Applies to force and annealing modes. -> float
@@ -398,6 +400,11 @@
   /// pull, 1 keeps the default balancing, and values above 1 strengthen it.
   /// One-direction radial pull is unaffected. -> float
   external-pull-balance: 1.0,
+  /// Non-negative multiplier on the extra demand from distributed owners
+  /// sharing an external X coordinate. Zero uses only bottleneck load sharing;
+  /// 1 keeps the default correction, and larger values increase that demand.
+  /// Terminal groups and one-direction radial pull are unaffected. -> float
+  external-pull-attachment: 1.0,
   /// Local edge-edge repulsion, relative to `beta`. Applies to both
   /// modes. -> float
   gamma-ee: 0.1,
@@ -524,6 +531,16 @@
     pull-balance,
     "non-negative-finite",
   )
+  let pull-attachment = constraints.at(
+    "external-pull-attachment",
+    default: external-pull-attachment,
+  )
+  _check-option-value(
+    "constraints",
+    "external-pull-attachment",
+    pull-attachment,
+    "non-negative-finite",
+  )
   labels = _checked-group("labels", labels)
   solver = _checked-group(
     "solver",
@@ -577,6 +594,7 @@
     ),
     external-pull: str(constraints.at("external-pull", default: external-pull)),
     external-pull-balance: str(pull-balance),
+    external-pull-attachment: str(pull-attachment),
     gamma-ee: str(repulsion.at("edge-edge", default: gamma-ee)),
     directional-force: str(constraints.at(
       "side-strength",

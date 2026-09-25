@@ -1146,13 +1146,22 @@
   unit-load spring-network displacement at an attachment node, and let $s$
   be $-1$ for incoming legs and $+1$ for outgoing legs. Within each movable
   X group, connected component, and direction, the multiplier is
-  $w_e = W / N_("side") + W "mean"_i ("max"_j(s u_j) - s u_i)$.
+  $w_e = W / N_("side") + c W "mean"_i ("max"_j(s u_j) - s u_i)$.
   The mean counts external legs, including repeated attachments at a node.
   Independent endpoints and groups whose attachments have the same displacement
   retain the baseline. Fixed X coordinates receive no group correction.
   This uses connectivity and coordinate constraints, without measuring the
   current drawing or adding a target position. The correction can exceed one,
   and opposite sides need not receive equal total pull.
+
+  `external-pull-attachment` (also `constraints.external-pull-attachment`)
+  controls $c$, the strength of this distributed-attachment correction. Its
+  default is `1`. Set it to `0` to retain only bottleneck balancing, or above
+  `1` to increase pull where a shared external line spans distinct network
+  displacements. It accepts finite non-negative values. Unlike increasing the
+  balancing exponent, increasing this setting never decreases the corrected
+  multiplier, even when it is below one. Terminal groups, independent endpoints,
+  fixed X coordinates and one-direction radial pull receive no extra force.
 
   A series chain with one external leg at each end keeps its original pull
   regardless of its length. Parallel routes share the internal load, while

@@ -5250,6 +5250,63 @@ fn external_pull_balance_rejects_invalid_settings_before_layout_or_streaming() {
 }
 
 #[test]
+fn external_pull_attachment_defaults_and_propagates_through_settings() {
+    let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+    graph.layout_config = crate::LayoutConfig::from_figment(&test_figment());
+    assert_eq!(graph.layout_config.spring.external_pull_attachment, 1.0);
+    assert_eq!(graph.layout_energy_state().1.external_pull_attachment, 1.0);
+    assert!(crate::LayoutConfig::is_layout_statement_key(
+        "external-pull-attachment"
+    ));
+    assert!(crate::LayoutConfig::is_layout_statement_key(
+        "external_pull_attachment"
+    ));
+
+    for balance in [0.0, 0.25, 1.0, 2.0, 16.0] {
+        let config = one_statement("external-pull-attachment", &balance.to_string());
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            config,
+            Profile::Default,
+        )));
+        assert_eq!(graph.layout_config.spring.external_pull_attachment, balance);
+        graph.validate_layout().unwrap();
+        assert_eq!(
+            graph.layout_energy_state().1.external_pull_attachment,
+            balance
+        );
+        let archived = rkyv::to_bytes::<_, 4096>(&graph).unwrap();
+        let restored = crate::graph_api::decode_typst_graph(&archived).unwrap();
+        assert_eq!(
+            restored.layout_energy_state().1.external_pull_attachment,
+            balance
+        );
+    }
+}
+
+#[test]
+fn external_pull_attachment_rejects_invalid_settings_before_layout_or_streaming() {
+    for value in ["-0.1", "NaN", "inf", "-inf"] {
+        let config = one_statement("external-pull-attachment", value);
+        let mut graph = TypstGraph::parse("digraph { a -> b }").unwrap();
+        graph.layout_config = crate::LayoutConfig::from_figment(&Figment::from(Serialized::from(
+            &config,
+            Profile::Default,
+        )));
+        assert!(graph
+            .validate_layout()
+            .unwrap_err()
+            .contains("external-pull-attachment"));
+        let bytes = encode_cbor(&config);
+        assert!(
+            crate::ForceLayoutStream::from_dot("digraph { a -> b }", &bytes)
+                .err()
+                .unwrap()
+                .contains("external-pull-attachment")
+        );
+    }
+}
+
+#[test]
 fn dangling_centroid_incremental_delta_matches_total_delta() {
     let input = r#"digraph {
         ext [style=invis]

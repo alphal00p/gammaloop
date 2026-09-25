@@ -127,12 +127,28 @@ pub(crate) fn directional_force_shift(
 /// A physical edge's normalized charge at its anchor or a half-edge route point.
 pub(super) type EdgeChargeSample = (Option<(Hedge, usize)>, Point2<f64>, f64);
 
+/// Geometry-independent load and extra demand from distributed shared-X attachments.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ExternalPullTopology {
+    pub load_share: f64,
+    pub attachment_deficit: f64,
+}
+
+impl Default for ExternalPullTopology {
+    fn default() -> Self {
+        Self {
+            load_share: 1.0,
+            attachment_deficit: 0.0,
+        }
+    }
+}
+
 pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     pub graph: &'a HedgeGraph<E, V, H, N>,
     pub ext: SuBitGraph,
     active_subgraph: Option<SuBitGraph>,
     /// External load sharing and shared-axis attachment demand, independent of geometry.
-    pub(super) external_pull_scales: EdgeVec<f64>,
+    pub(super) external_pull_topology: EdgeVec<ExternalPullTopology>,
     pub vertex_points: NodeVec<Point2<f64>>,
     pub edge_points: EdgeVec<Point2<f64>>,
     /// Interior drawing points, ordered from each half-edge's vertex to its edge anchor.
@@ -176,7 +192,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             graph: self,
             ext,
             active_subgraph: None,
-            external_pull_scales: vec![1.0; len_e].into(),
+            external_pull_topology: vec![ExternalPullTopology::default(); len_e].into(),
             vertex_points,
             edge_points,
             route_points: vec![Vec::new(); self.n_hedges()].into(),
@@ -191,7 +207,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             changed_edges: SubSet::empty(len_e),
             incremental,
         };
-        state.rebuild_external_pull_scales();
+        state.rebuild_external_pull_topology();
         state
     }
 }
@@ -202,7 +218,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> Clone for LayoutState<'a, E, 
             graph: self.graph,
             ext: self.ext.clone(),
             active_subgraph: self.active_subgraph.clone(),
-            external_pull_scales: self.external_pull_scales.clone(),
+            external_pull_topology: self.external_pull_topology.clone(),
             vertex_points: self.vertex_points.clone(),
             edge_points: self.edge_points.clone(),
             route_points: self.route_points.clone(),
@@ -247,23 +263,23 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
         }
         self.ext = ext;
         self.active_subgraph = Some(active_subgraph);
-        self.rebuild_external_pull_scales();
+        self.rebuild_external_pull_topology();
         self
     }
 
-    /// External load-sharing scale, including demand from shared-X attachments.
-    /// Recomputed when the active graph changes; independent of route geometry.
-    /// Distributed attachments can require a scale greater than one.
-    pub fn external_pull_scale(&self, edge: EdgeIndex) -> f64 {
-        self.external_pull_scales[edge]
+    /// Load sharing and shared-X attachment demand, recomputed when the active
+    /// graph changes and independent of route geometry or pull parameters.
+    pub fn external_pull_topology(&self, edge: EdgeIndex) -> ExternalPullTopology {
+        self.external_pull_topology[edge]
     }
 
-    fn rebuild_external_pull_scales(&mut self)
+    fn rebuild_external_pull_topology(&mut self)
     where
         E: HasPointConstraint,
         V: HasPointConstraint,
     {
-        self.external_pull_scales = vec![1.0; self.edge_points.len().0].into();
+        self.external_pull_topology =
+            vec![ExternalPullTopology::default(); self.edge_points.len().0].into();
         if self.ext.included_iter().next().is_none() {
             return;
         }
@@ -364,7 +380,8 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
                         Flow::Source => outgoing,
                         Flow::Sink => incoming,
                     };
-                    self.external_pull_scales[edge] = (width / side_count as f64).min(1.0);
+                    self.external_pull_topology[edge].load_share =
+                        (width / side_count as f64).min(1.0);
                     let Some(reference) = self.graph[edge]
                         .point_constraint()
                         .x
@@ -403,7 +420,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
                     .sum::<f64>()
                     / members.len() as f64;
                 for &(edge, _) in members {
-                    self.external_pull_scales[edge] += width * deficit;
+                    self.external_pull_topology[edge].attachment_deficit = width * deficit;
                 }
             }
         }
@@ -1287,6 +1304,8 @@ pub struct SpringChargeEnergy {
     /// Exponent of each topology weight: 0 gives uniform per-leg pull, 1 gives
     /// normalized pull, and larger values strengthen the correction.
     pub external_pull_balance: f64,
+    /// Multiplier for distributed shared-X attachment demand; zero disables it.
+    pub external_pull_attachment: f64,
     pub c_ev: f64,             // edge-vertex (≈ 0.028*L^3)
     pub c_ee_local: f64,       // edge-edge local (≈ 0.014*L^3)
     pub c_center: f64,         // central pull (dimensionless relative strength)
@@ -1347,6 +1366,8 @@ pub struct ParamTuning {
     pub external_pull: f64,           // constant external pull relative to k_spring * L
     /// Finite nonnegative topology-weight exponent, defaulting to 1.
     pub external_pull_balance: f64,
+    /// Multiplier for distributed shared-X attachment demand; zero disables it.
+    pub external_pull_attachment: f64,
     pub gamma_ev: f64,         // edge–vertex vs vertex–vertex
     pub gamma_ee: f64,         // local edge–edge vs vertex–vertex
     pub g_center: f64,         // central vs vertex–vertex
@@ -1383,6 +1404,10 @@ impl ParamTuning {
         global_data.statements.insert(
             "external_pull_balance".to_string(),
             self.external_pull_balance.to_string(),
+        );
+        global_data.statements.insert(
+            "external_pull_attachment".to_string(),
+            self.external_pull_attachment.to_string(),
         );
         global_data
             .statements
@@ -1426,6 +1451,11 @@ impl ParamTuning {
                 "external_pull_balance" => {
                     if let Ok(v) = value.parse::<f64>() {
                         tune.external_pull_balance = v;
+                    }
+                }
+                "external_pull_attachment" => {
+                    if let Ok(v) = value.parse::<f64>() {
+                        tune.external_pull_attachment = v;
                     }
                 }
                 "k_spring" => {
@@ -1480,6 +1510,7 @@ impl Default for ParamTuning {
             gamma_dangling_centroid: 0.0,
             external_pull: 0.0,
             external_pull_balance: 1.0,
+            external_pull_attachment: 1.0,
             gamma_ev: 0.20,
             gamma_ee: 0.10,
             g_center: 0.05,
@@ -1595,19 +1626,35 @@ pub use energy_trace::{
 };
 
 impl SpringChargeEnergy {
-    pub(super) fn external_pull_strength(&self, topology_scale: f64) -> f64 {
+    /// Topology multiplier before the balancing exponent, shared with external
+    /// layout solvers that apply their own force strength and exponent.
+    pub fn external_pull_scale(&self, topology: ExternalPullTopology) -> f64 {
+        let scale =
+            topology.load_share + self.external_pull_attachment * topology.attachment_deficit;
+        assert!(
+            scale.is_finite(),
+            "external pull attachment produces an unrepresentable topology scale"
+        );
+        scale
+    }
+
+    pub(super) fn external_pull_strength(&self, topology: ExternalPullTopology) -> f64 {
         if self.external_pull == 0.0 {
             return 0.0;
         }
-        let scale = match self.external_pull_balance {
-            0.0 => 1.0,
-            1.0 => topology_scale,
-            balance => topology_scale.powf(balance),
+        let scale = if self.external_pull_balance == 0.0 {
+            1.0
+        } else {
+            let topology_scale = self.external_pull_scale(topology);
+            match self.external_pull_balance {
+                1.0 => topology_scale,
+                balance => topology_scale.powf(balance),
+            }
         };
         let strength = self.external_pull * scale;
         assert!(
             strength.is_finite(),
-            "external pull and balancing produce an unrepresentable force for topology scale {topology_scale}"
+            "external pull and balancing produce an unrepresentable force"
         );
         strength
     }
@@ -1681,7 +1728,7 @@ impl SpringChargeEnergy {
                     point.distance(centroid)
                 };
                 repulsion
-                    - self.external_pull_strength(state.external_pull_scales[edge]) * extension
+                    - self.external_pull_strength(state.external_pull_topology[edge]) * extension
             })
             .sum()
     }
@@ -2174,6 +2221,7 @@ impl SpringChargeEnergy {
 
     pub fn from_graph(n_nodes: usize, viewport_w: f64, viewport_h: f64, tune: ParamTuning) -> Self {
         assert!(tune.external_pull_balance.is_finite() && tune.external_pull_balance >= 0.0);
+        assert!(tune.external_pull_attachment.is_finite() && tune.external_pull_attachment >= 0.0);
         let area = (viewport_w * viewport_h).max(1e-9);
         let spring_length = tune.length_scale * (area / (n_nodes.max(1) as f64)).sqrt();
         let spring_length_sq = spring_length.powi(2);
@@ -2190,6 +2238,7 @@ impl SpringChargeEnergy {
             dangling_centroid_charge: tune.gamma_dangling_centroid * tune.beta * repulsion_scale,
             external_pull: tune.external_pull * tune.k_spring * spring_length,
             external_pull_balance: tune.external_pull_balance,
+            external_pull_attachment: tune.external_pull_attachment,
             crossing_penalty: tune.crossing_penalty * spring_length_sq,
             eps: tune.eps * spring_length,
         }
@@ -2230,7 +2279,11 @@ mod tests {
         external
             .iter()
             .enumerate()
-            .map(|(i, _)| state.external_pull_scale(EdgeIndex(internal.len() + i)))
+            .map(|(i, _)| {
+                test_energy(0.0).external_pull_scale(
+                    state.external_pull_topology(EdgeIndex(internal.len() + i)),
+                )
+            })
             .collect()
     }
 
@@ -2263,7 +2316,11 @@ mod tests {
             let energy = SpringChargeEnergy::from_graph(2, 3.0, 4.0, parsed);
             assert_eq!(energy.external_pull_balance, balance);
             assert!(
-                (energy.external_pull_strength(0.5) - energy.external_pull * half_scale).abs()
+                (energy.external_pull_strength(ExternalPullTopology {
+                    load_share: 0.5,
+                    attachment_deficit: 0.0
+                }) - energy.external_pull * half_scale)
+                    .abs()
                     < 1e-12
             );
             if balance == 0.0 || balance == 1.0 {
@@ -2274,7 +2331,12 @@ mod tests {
                         energy.external_pull * scale
                     };
                     assert_eq!(
-                        energy.external_pull_strength(scale).to_bits(),
+                        energy
+                            .external_pull_strength(ExternalPullTopology {
+                                load_share: scale,
+                                attachment_deficit: 0.0
+                            })
+                            .to_bits(),
                         expected.to_bits()
                     );
                 }
@@ -2295,6 +2357,58 @@ mod tests {
     }
 
     #[test]
+    fn external_pull_attachment_roundtrips_and_short_circuits_unused_demand() {
+        let mut global = GlobalData {
+            name: String::new(),
+            payload: None,
+            statements: Default::default(),
+            edge_statements: Default::default(),
+            node_statements: Default::default(),
+        };
+        assert_eq!(ParamTuning::parse(&global).external_pull_attachment, 1.0);
+        for attachment in [0.0, 1.0, 16.0] {
+            let tune = ParamTuning {
+                external_pull_attachment: attachment,
+                ..ParamTuning::default()
+            };
+            tune.add_to_global(&mut global);
+            let parsed = ParamTuning::parse(&global);
+            assert_eq!(parsed.external_pull_attachment, attachment);
+            assert_eq!(
+                SpringChargeEnergy::from_graph(2, 3.0, 4.0, parsed).external_pull_attachment,
+                attachment
+            );
+        }
+        for invalid in [-0.1, f64::NEG_INFINITY, f64::NAN, f64::INFINITY] {
+            assert!(std::panic::catch_unwind(|| SpringChargeEnergy::from_graph(
+                2,
+                3.0,
+                4.0,
+                ParamTuning {
+                    external_pull_attachment: invalid,
+                    ..ParamTuning::default()
+                }
+            ))
+            .is_err());
+        }
+        let topology = ExternalPullTopology {
+            load_share: 0.25,
+            attachment_deficit: 2.0,
+        };
+        let mut energy = SpringChargeEnergy {
+            external_pull: 2.0,
+            external_pull_attachment: f64::MAX,
+            ..test_energy(0.0)
+        };
+        assert!(std::panic::catch_unwind(|| energy.external_pull_strength(topology)).is_err());
+        energy.external_pull_balance = 0.0;
+        assert_eq!(energy.external_pull_strength(topology), 2.0);
+        energy.external_pull_balance = 1.0;
+        energy.external_pull = 0.0;
+        assert_eq!(energy.external_pull_strength(topology), 0.0);
+    }
+
+    #[test]
     fn external_pull_balance_strengthens_correction_without_reversing_force() {
         let mut energy = SpringChargeEnergy {
             external_pull: 3.0,
@@ -2304,7 +2418,10 @@ mod tests {
             let mut previous = energy.external_pull;
             for balance in [0.0, 0.25, 0.5, 1.0, 2.0, 2.5, 100.0, f64::MAX] {
                 energy.external_pull_balance = balance;
-                let force = energy.external_pull_strength(topology_scale);
+                let force = energy.external_pull_strength(ExternalPullTopology {
+                    load_share: topology_scale,
+                    attachment_deficit: 0.0,
+                });
                 assert!(force.is_finite() && force >= 0.0 && force <= previous);
                 previous = force;
             }
@@ -2526,21 +2643,30 @@ mod tests {
                     0.0,
                     false,
                 );
-                let expected = if matches!(mode, "shared" | "free-reference" | "node-reference") {
-                    0.5
-                } else {
-                    0.25
-                };
-                for edge in 2..8 {
-                    let expected = if edge < 4 { 0.5 } else { expected };
-                    assert!(
-                        (state.external_pull_scale(EdgeIndex(edge)) - expected).abs() < 1e-12,
-                        "mode={mode}, reverse={reverse}, edge={edge}"
-                    );
+                let corrected = matches!(mode, "shared" | "free-reference" | "node-reference");
+                for attachment in [0.0, 1.0, 16.0] {
+                    let energy = SpringChargeEnergy {
+                        external_pull_attachment: attachment,
+                        ..test_energy(0.0)
+                    };
+                    for edge in 2..8 {
+                        let topology = state.external_pull_topology(EdgeIndex(edge));
+                        let load_share = if edge < 4 { 0.5 } else { 0.25 };
+                        let deficit = if corrected && edge >= 4 { 0.25 } else { 0.0 };
+                        assert!((topology.load_share - load_share).abs() < 1e-12);
+                        assert!((topology.attachment_deficit - deficit).abs() < 1e-12);
+                        assert!(
+                            (energy.external_pull_scale(topology)
+                                - (load_share + attachment * deficit))
+                                .abs()
+                                < 1e-12,
+                            "mode={mode}, reverse={reverse}, edge={edge}, attachment={attachment}"
+                        );
+                    }
                 }
                 assert_eq!(
-                    state.external_pull_scales,
-                    state.clone().external_pull_scales
+                    state.external_pull_topology,
+                    state.clone().external_pull_topology
                 );
                 if mode == "shared" {
                     // Removing one attachment at each owner changes the base
@@ -2552,11 +2678,20 @@ mod tests {
                     let isolated = state.clone().with_active_subgraph(selected);
                     for edge in [4, 6] {
                         assert!(
-                            (isolated.external_pull_scale(EdgeIndex(edge)) - 0.75).abs() < 1e-12
+                            (test_energy(0.0).external_pull_scale(
+                                isolated.external_pull_topology(EdgeIndex(edge))
+                            ) - 0.75)
+                                .abs()
+                                < 1e-12
                         );
                     }
                     for edge in [5, 7] {
-                        assert_eq!(isolated.external_pull_scale(EdgeIndex(edge)), 1.0);
+                        assert_eq!(
+                            test_energy(0.0).external_pull_scale(
+                                isolated.external_pull_topology(EdgeIndex(edge))
+                            ),
+                            1.0
+                        );
                     }
                     // An excluded group reference cannot move; its remaining
                     // members retain only the component's load-sharing baseline.
@@ -2567,7 +2702,10 @@ mod tests {
                     let isolated = state.with_active_subgraph(selected);
                     for edge in [5, 6, 7] {
                         assert!(
-                            (isolated.external_pull_scale(EdgeIndex(edge)) - 1.0 / 3.0).abs()
+                            (test_energy(0.0).external_pull_scale(
+                                isolated.external_pull_topology(EdgeIndex(edge))
+                            ) - 1.0 / 3.0)
+                                .abs()
                                 < 1e-12
                         );
                     }
@@ -2602,7 +2740,13 @@ mod tests {
             false,
         );
         for edge in 11..21 {
-            assert!((state.external_pull_scale(EdgeIndex(edge)) - 1.75).abs() < 1e-10);
+            assert!(
+                (test_energy(0.0)
+                    .external_pull_scale(state.external_pull_topology(EdgeIndex(edge)))
+                    - 1.75)
+                    .abs()
+                    < 1e-10
+            );
         }
         let mut energy = SpringChargeEnergy {
             external_pull: 2.0,
@@ -2611,14 +2755,29 @@ mod tests {
         for balance in [0.0, 0.25, 1.0, 2.0, 4.0] {
             energy.external_pull_balance = balance;
             assert_eq!(
-                energy.external_pull_strength(1.75),
+                energy.external_pull_strength(ExternalPullTopology {
+                    load_share: 1.75,
+                    attachment_deficit: 0.0
+                }),
                 2.0 * 1.75_f64.powf(balance)
             );
         }
         energy.external_pull_balance = f64::MAX;
-        assert!(std::panic::catch_unwind(|| energy.external_pull_strength(1.75)).is_err());
+        assert!(
+            std::panic::catch_unwind(|| energy.external_pull_strength(ExternalPullTopology {
+                load_share: 1.75,
+                attachment_deficit: 0.0
+            }))
+            .is_err()
+        );
         energy.external_pull = 0.0;
-        assert_eq!(energy.external_pull_strength(1.75), 0.0);
+        assert_eq!(
+            energy.external_pull_strength(ExternalPullTopology {
+                load_share: 1.75,
+                attachment_deficit: 0.0
+            }),
+            0.0
+        );
     }
 
     #[test]
@@ -2642,15 +2801,24 @@ mod tests {
             0.0,
             false,
         );
-        assert_eq!(state.external_pull_scales, vec![1.0; 6].into());
+        assert_eq!(
+            state.external_pull_topology,
+            vec![ExternalPullTopology::default(); 6].into()
+        );
         let mut selected: SuBitGraph = graph.external_filter();
         let pair = graph[&EdgeIndex(0)].1;
         selected.add(pair);
         let isolated = state.clone().with_active_subgraph(selected);
         for i in 2..6 {
-            assert_eq!(isolated.external_pull_scales[EdgeIndex(i)], 0.5);
+            assert_eq!(
+                isolated.external_pull_topology[EdgeIndex(i)].load_share,
+                0.5
+            );
         }
-        assert_eq!(state.external_pull_scales, vec![1.0; 6].into());
+        assert_eq!(
+            state.external_pull_topology,
+            vec![ExternalPullTopology::default(); 6].into()
+        );
         let HedgePair::Paired { source, .. } = pair else {
             panic!("paired edge");
         };
@@ -2662,14 +2830,17 @@ mod tests {
             }
         }
         let half = state.with_active_subgraph(half);
-        assert_eq!(half.external_pull_scales[EdgeIndex(0)], 1.0);
+        assert_eq!(half.external_pull_topology[EdgeIndex(0)].load_share, 1.0);
         for i in 2..4 {
-            assert_eq!(half.external_pull_scales[EdgeIndex(i)], 0.5);
+            assert_eq!(half.external_pull_topology[EdgeIndex(i)].load_share, 0.5);
         }
         for i in 4..6 {
-            assert_eq!(half.external_pull_scales[EdgeIndex(i)], 1.0);
+            assert_eq!(half.external_pull_topology[EdgeIndex(i)].load_share, 1.0);
         }
-        assert_eq!(half.external_pull_scales, half.clone().external_pull_scales);
+        assert_eq!(
+            half.external_pull_topology,
+            half.clone().external_pull_topology
+        );
     }
 
     #[test]
@@ -2968,6 +3139,7 @@ mod tests {
             dangling_centroid_charge: 0.0,
             external_pull: 0.0,
             external_pull_balance: 1.0,
+            external_pull_attachment: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center,
@@ -3323,6 +3495,7 @@ mod tests {
             dangling_centroid_charge: 5.0,
             external_pull: 2.0,
             external_pull_balance: 1.0,
+            external_pull_attachment: 1.0,
             c_ev: 6.0,
             c_ee_local: 7.0,
             c_center: 8.0,
@@ -3390,6 +3563,7 @@ mod tests {
             gamma_dangling_centroid: 1.3,
             external_pull: 2.0,
             external_pull_balance: 1.0,
+            external_pull_attachment: 1.0,
             gamma_ev: 0.2,
             gamma_ee: 0.4,
             g_center: 0.05,

@@ -9,6 +9,37 @@ coordinates, then relaxes it with ImPrEd. It stops there; native spring refineme
 and annealing are excluded from this pipeline. Constraint projection remains
 active during ImPrEd.
 
+== Metric refinement forces
+
+The playground uses ImPrEd's topology protection, exponent schedule and
+certified route subdivision/contraction. Attraction acts on each segment
+independently, with tension $T = A ell (ell / delta)^a$ for segment length
+$ell$. A new route point adds a segment in series: under a fixed endpoint
+pull, an edge can become longer as it gains points. On a straight section,
+unequal adjacent lengths produce unequal tensions, moving their shared point
+toward equal spacing.
+The exponent decreases from $1$ to $0.4$ during refinement. The spacing
+parameter $delta$ sets the force scale; it is not a prescribed rest length.
+
+Each external tip and its intermediate points share a total point charge of
+one; internal edge samples share a total charge of `0.35`. Physical vertices
+keep unit charge. Points on the same flexible dangling connection do not repel
+one another. Repulsion against other connections remains active, and flexible
+internal edges retain their consecutive-point exemption. Subdividing an
+external leg therefore adds compliance without adding total point charge or
+introducing repulsion between points on that same connection.
+Fixed charge conserves the total, not the spatial force field: moving or adding
+samples can still change repulsion against other connections.
+
+The constant external pull uses native topology normalization and active
+coordinate groups. The playground exposes separate controls for its base
+strength, balancing exponent, and distributed-attachment correction. The last
+control increases demand from shared external X groups spread through the
+network without increasing terminal-group or one-direction radial pull.
+These force choices extend the paper's metric model; they do not change the EC
+embedding algorithm, crossing guards, or certificates required to add or remove
+route points.
+
 == Constraint semantics
 
 A constraint tree contains every edge incident to its vertex exactly once.

@@ -1680,6 +1680,7 @@ impl LayoutConfig {
                 | "gamma-dangling-centroid"
                 | "external-pull"
                 | "external-pull-balance"
+                | "external-pull-attachment"
                 | "gamma-ee"
                 | "gamma-ev"
                 | "incremental-energy"
@@ -1854,6 +1855,8 @@ struct SpringConfig {
     external_pull: f64,
     #[serde(deserialize_with = "deserialize_f64")]
     external_pull_balance: f64,
+    #[serde(deserialize_with = "deserialize_f64")]
+    external_pull_attachment: f64,
     #[serde(default = "default_gamma_ev", deserialize_with = "deserialize_f64")]
     gamma_ev: f64,
     #[serde(default = "default_gamma_ee", deserialize_with = "deserialize_f64")]
@@ -1879,6 +1882,7 @@ impl Default for SpringConfig {
             gamma_dangling_centroid: default_gamma_dangling_centroid(),
             external_pull: 0.0,
             external_pull_balance: 1.0,
+            external_pull_attachment: 1.0,
             gamma_ev: default_gamma_ev(),
             gamma_ee: default_gamma_ee(),
             g_center: default_g_center(),
@@ -1898,6 +1902,7 @@ impl From<&SpringConfig> for ParamTuning {
             gamma_dangling_centroid: cfg.gamma_dangling_centroid,
             external_pull: cfg.external_pull,
             external_pull_balance: cfg.external_pull_balance,
+            external_pull_attachment: cfg.external_pull_attachment,
             gamma_ev: cfg.gamma_ev,
             gamma_ee: cfg.gamma_ee,
             g_center: cfg.g_center,
@@ -2484,6 +2489,10 @@ impl TypstGraph {
             (
                 "external-pull-balance",
                 self.layout_config.spring.external_pull_balance,
+            ),
+            (
+                "external-pull-attachment",
+                self.layout_config.spring.external_pull_attachment,
             ),
         ] {
             if !value.is_finite() || value < 0.0 {

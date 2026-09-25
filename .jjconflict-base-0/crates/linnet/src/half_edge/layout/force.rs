@@ -814,14 +814,14 @@ impl ForceBuffers {
                     Vector2::zero()
                 };
                 if horizontal {
-                    force.x += energy.external_pull_strength(state.external_pull_scales[ei])
+                    force.x += energy.external_pull_strength(state.external_pull_topology[ei])
                         * match state.graph.flow(hedge) {
                             Flow::Source => 1.0,
                             Flow::Sink => -1.0,
                         };
                 } else if dist > 1e-9 {
                     force +=
-                        d / dist * energy.external_pull_strength(state.external_pull_scales[ei]);
+                        d / dist * energy.external_pull_strength(state.external_pull_topology[ei]);
                 }
                 if workset.force_edge[ei] {
                     forces_e[ei] += Vector3::new(force.x, force.y, 0.0);
@@ -1132,6 +1132,7 @@ mod tests {
             dangling_centroid_charge: 0.0,
             external_pull: 0.0,
             external_pull_balance: 1.0,
+            external_pull_attachment: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 0.0,
@@ -1587,6 +1588,110 @@ mod tests {
     }
 
     #[test]
+    fn distributed_attachment_gain_matches_shared_coordinate_energy_gradient() {
+        let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
+        let nodes = (0..3)
+            .map(|_| builder.add_node(PointConstraint::default()))
+            .collect::<Vec<_>>();
+        for i in 0..2 {
+            builder.add_edge(nodes[i], nodes[i + 1], PointConstraint::default(), false);
+        }
+        for _ in 0..2 {
+            builder.add_external_edge(nodes[0], PointConstraint::default(), false, Flow::Sink);
+        }
+        for owner in [1, 1, 2, 2] {
+            builder.add_external_edge(
+                nodes[owner],
+                PointConstraint {
+                    x: Constraint::Grouped(
+                        LayoutPointIndex::Edge(EdgeIndex(4)),
+                        ShiftDirection::Any,
+                    ),
+                    y: Constraint::Free,
+                },
+                false,
+                Flow::Source,
+            );
+        }
+        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let state = graph.new_layout_state(
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(1.0, 0.0),
+                Point2::new(2.0, 0.0),
+            ]
+            .into(),
+            vec![
+                Point2::new(0.5, 0.0),
+                Point2::new(1.5, 0.0),
+                Point2::new(-1.0, -1.0),
+                Point2::new(-1.0, 1.0),
+                Point2::new(3.0, -2.0),
+                Point2::new(3.0, -1.0),
+                Point2::new(3.0, 1.0),
+                Point2::new(3.0, 2.0),
+            ]
+            .into(),
+            1.0,
+            0.0,
+            true,
+        );
+        for attachment in [0.0, 1.0, 16.0] {
+            for balance in [0.0, 0.25, 1.0, 2.0] {
+                let energy = SpringChargeEnergy {
+                    k_spring: 0.0,
+                    external_pull: 2.0,
+                    external_pull_balance: balance,
+                    external_pull_attachment: attachment,
+                    ..SpringChargeEnergy::from_graph(
+                        3,
+                        4.0,
+                        4.0,
+                        ParamTuning {
+                            beta: 0.0,
+                            ..ParamTuning::default()
+                        },
+                    )
+                };
+                let (forces_v, forces_e, _) = compute_forces(
+                    &state,
+                    &energy,
+                    &vec![0.0; 3].into(),
+                    &vec![0.0; 8].into(),
+                    &graph.new_hedgevec(|_, _| Vec::new()),
+                    0.0,
+                    &ForceWorkSet::new(&state),
+                );
+                let expected = 8.0 * (0.25 + attachment * 0.25).powf(balance);
+                assert!((forces_e[EdgeIndex(4)].x - expected).abs() < 1e-12);
+                for edge in 5..8 {
+                    assert_eq!(forces_e[EdgeIndex(edge)].x, 0.0);
+                }
+                let total = forces_v
+                    .iter()
+                    .map(|(_, f)| f.x)
+                    .chain(forces_e.iter().map(|(_, f)| f.x))
+                    .sum::<f64>();
+                assert!(total.abs() < 1e-12);
+                let mut plus = state.clone();
+                let mut minus = state.clone();
+                for edge in 4..8 {
+                    plus.edge_points[EdgeIndex(edge)].x += 1e-4;
+                    minus.edge_points[EdgeIndex(edge)].x -= 1e-4;
+                    plus.changed_edges.add(EdgeIndex(edge));
+                }
+                let reference = energy.energy(None, &state);
+                let plus_energy = energy.energy(None, &plus);
+                let gradient = (plus_energy - energy.energy(None, &minus)) / 2e-4;
+                assert!((forces_e[EdgeIndex(4)].x + gradient).abs() < 1e-7);
+                assert!(
+                    (energy.energy(Some((&state, reference)), &plus) - plus_energy).abs() < 1e-10
+                );
+            }
+        }
+    }
+
+    #[test]
     fn external_pull_balance_leaves_radial_and_single_leg_series_forces_unchanged() {
         for length in [1, 4] {
             for last_flow in [Flow::Sink, Flow::Source] {
@@ -1649,23 +1754,26 @@ mod tests {
                 let baseline_energy = energy.energy(None, &state);
                 for balance in [0.5, 1.0, 2.0, 2.5] {
                     energy.external_pull_balance = balance;
-                    let forces = compute_forces(
-                        &state,
-                        &energy,
-                        &node_z,
-                        &edge_z,
-                        &state
-                            .graph
-                            .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
-                        0.0,
-                        &workset,
-                    );
-                    assert!((energy.energy(None, &state) - baseline_energy).abs() < 1e-10);
-                    for (i, force) in &forces.0 {
-                        assert!((*force - baseline.0[i]).magnitude() < 1e-12);
-                    }
-                    for (i, force) in &forces.1 {
-                        assert!((*force - baseline.1[i]).magnitude() < 1e-12);
+                    for attachment in [0.0, 1.0, 16.0, f64::MAX] {
+                        energy.external_pull_attachment = attachment;
+                        let forces = compute_forces(
+                            &state,
+                            &energy,
+                            &node_z,
+                            &edge_z,
+                            &state
+                                .graph
+                                .new_hedgevec(|h, _| vec![0.0; state.route_points[h].len()]),
+                            0.0,
+                            &workset,
+                        );
+                        assert!((energy.energy(None, &state) - baseline_energy).abs() < 1e-10);
+                        for (i, force) in &forces.0 {
+                            assert!((*force - baseline.0[i]).magnitude() < 1e-12);
+                        }
+                        for (i, force) in &forces.1 {
+                            assert!((*force - baseline.1[i]).magnitude() < 1e-12);
+                        }
                     }
                 }
             }
@@ -1739,16 +1847,22 @@ mod tests {
         assert_eq!(streamed.edge_points, batch.edge_points);
         assert_eq!(streamed.vertex_depths, batch.vertex_depths);
         assert_eq!(streamed.edge_depths, batch.edge_depths);
-        assert_eq!(streamed.external_pull_scales, state.external_pull_scales);
+        assert_eq!(
+            streamed.external_pull_topology,
+            state.external_pull_topology
+        );
         assert_eq!(streamed.vertex_points[a], state.vertex_points[a]);
         assert_eq!(
             streamed.edge_points[EdgeIndex(1)],
             state.edge_points[EdgeIndex(1)]
         );
-        assert_eq!(state.external_pull_scales[EdgeIndex(1)], 0.5);
-        assert_eq!(state.external_pull_scales[EdgeIndex(2)], 0.5);
+        assert_eq!(state.external_pull_topology[EdgeIndex(1)].load_share, 0.5);
+        assert_eq!(state.external_pull_topology[EdgeIndex(2)].load_share, 0.5);
         for i in 3..6 {
-            assert_eq!(state.external_pull_scales[EdgeIndex(i)], 1.0 / 3.0);
+            assert_eq!(
+                state.external_pull_topology[EdgeIndex(i)].load_share,
+                1.0 / 3.0
+            );
         }
     }
 
@@ -2257,6 +2371,7 @@ mod tests {
             dangling_centroid_charge: 0.0,
             external_pull: 0.0,
             external_pull_balance: 1.0,
+            external_pull_attachment: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 0.0,
@@ -2455,6 +2570,7 @@ mod tests {
             dangling_centroid_charge: 0.0,
             external_pull: 0.0,
             external_pull_balance: 1.0,
+            external_pull_attachment: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 0.0,
@@ -2508,6 +2624,7 @@ mod tests {
             dangling_centroid_charge: 0.0,
             external_pull: 0.0,
             external_pull_balance: 1.0,
+            external_pull_attachment: 1.0,
             c_ev: 1e8,
             c_ee_local: 0.0,
             c_center: 0.0,
@@ -2569,6 +2686,7 @@ mod tests {
             dangling_centroid_charge: 0.0,
             external_pull: 0.0,
             external_pull_balance: 1.0,
+            external_pull_attachment: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 0.5,
@@ -2658,6 +2776,7 @@ mod tests {
             dangling_centroid_charge: 0.0,
             external_pull: 0.0,
             external_pull_balance: 1.0,
+            external_pull_attachment: 1.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center: 1.0,

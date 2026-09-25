@@ -3097,6 +3097,26 @@ class TestTypedTypstSurface(unittest.TestCase):
                 with self.assertRaises((TypeError, ValueError)):
                     lp.LayoutOptions().then(external_pull_balance=value)
 
+    def test_external_pull_attachment_is_validated_and_preserved_across_passes(self):
+        layouts = (
+            lp.LayoutOptions(external_pull_attachment=0)
+            .then(external_pull_attachment=0.25)
+            .then(external_pull_attachment=1)
+            .then(external_pull_attachment=16)
+        )
+        graph, _, _, _ = sample_graph(render_config=lp.RenderConfig(layouts=layouts))
+        source = graph.prepare_render().typst_source
+        self.assertEqual(layouts.pass_count, 4)
+        for value in ("0", "0.25", "1", "16"):
+            self.assertIn(f'("external-pull-attachment"): {value}', source)
+        self.assertEqual(source.count('("external-pull-attachment"):'), 4)
+        for value in (-0.1, float("nan"), float("inf"), -float("inf")):
+            with self.subTest(value=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutOptions(external_pull_attachment=value)
+                with self.assertRaises((TypeError, ValueError)):
+                    lp.LayoutOptions().then(external_pull_attachment=value)
+
     def test_typed_option_constructors_expose_explicit_runtime_signatures(self):
         constructors = (
             lp.NodeDrawing,
