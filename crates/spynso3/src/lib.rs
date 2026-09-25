@@ -497,7 +497,7 @@ impl From<ConcreteOrParam<RealOrComplex<f64>>> for TensorElements {
 impl Spensor {
     /// Return the symbolic descriptor of this tensor, independently of its component data.
     pub fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
-        TensorExpression::from_atom_interface_descriptor(
+        TensorExpression::from_known_parts(
             py,
             self.descriptor.atom.clone(),
             self.descriptor.interface.clone(),

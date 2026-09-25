@@ -390,7 +390,7 @@ fn tensor_reference(
         (!args.is_empty()).then_some(args.clone()),
     );
     let value = value_to_structured_atom(&structure)?;
-    TensorExpression::from_atom_interface_descriptor(py, value.atom, interface, Some(name), args)
+    TensorExpression::from_known_parts(py, value.atom, interface, Some(name), args)
 }
 
 /// Make a Python-facing interface directly from a key's canonical storage

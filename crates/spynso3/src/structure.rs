@@ -613,7 +613,7 @@ impl SpensoName {
             .add_args(&scalar_args)
             .add_args(&port_atoms)
             .finish();
-        TensorExpression::from_atom_interface_descriptor(
+        TensorExpression::from_known_parts(
             py,
             atom,
             PartialStructure::from_logical_slots(ports),

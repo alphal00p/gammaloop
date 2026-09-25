@@ -1484,7 +1484,7 @@ impl SpensoNet {
     /// `replace()`, `evaluate()`, and `execute()` leave it unchanged. Use
     /// `result_scalar()` or `result_tensor()` to inspect the current computed value.
     fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
-        TensorExpression::from_atom_interface_descriptor(
+        TensorExpression::from_known_parts(
             py,
             self.structure.atom.clone(),
             self.structure.interface.clone(),
@@ -1958,7 +1958,7 @@ mod tests {
                     representation.slot(PartialIndex::open(1)),
                 ],
             );
-            let expression = TensorExpression::from_atom_interface_descriptor(
+            let expression = TensorExpression::from_known_parts(
                 py,
                 descriptor.atom,
                 descriptor.interface,
@@ -2069,7 +2069,7 @@ mod tests {
                     representation.slot(PartialIndex::open(1)),
                 ],
             );
-            let expression = TensorExpression::from_atom_interface_descriptor(
+            let expression = TensorExpression::from_known_parts(
                 py,
                 descriptor.atom,
                 descriptor.interface,
@@ -2121,14 +2121,14 @@ mod tests {
                 "lazy_library_vector",
                 [representation.slot(PartialIndex::open(0))],
             );
-            let matrix = TensorExpression::from_atom_interface_descriptor(
+            let matrix = TensorExpression::from_known_parts(
                 py,
                 matrix_descriptor.atom,
                 matrix_descriptor.interface,
                 Some(matrix_name),
                 Vec::new(),
             )?;
-            let vector = TensorExpression::from_atom_interface_descriptor(
+            let vector = TensorExpression::from_known_parts(
                 py,
                 vector_descriptor.atom,
                 vector_descriptor.interface,
@@ -2182,7 +2182,7 @@ mod tests {
                     representation.slot(PartialIndex::open(2)),
                 ],
             );
-            let expression = TensorExpression::from_atom_interface_descriptor(
+            let expression = TensorExpression::from_known_parts(
                 py,
                 descriptor.atom,
                 descriptor.interface,
@@ -2224,7 +2224,7 @@ mod tests {
                     representation.slot(PartialIndex::open(1)),
                 ],
             );
-            let expression = TensorExpression::from_atom_interface_descriptor(
+            let expression = TensorExpression::from_known_parts(
                 py,
                 descriptor.atom,
                 descriptor.interface,
@@ -2439,7 +2439,7 @@ mod tests {
                         representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)))
                     }),
                 );
-                let expression = TensorExpression::from_atom_interface_descriptor(
+                let expression = TensorExpression::from_known_parts(
                     py,
                     descriptor.atom,
                     descriptor.interface,
