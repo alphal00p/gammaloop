@@ -2819,6 +2819,34 @@ def _(mo):
     move **24.2 → 25.8 µs**. Reruns are mostly unchanged. Full records are under
     `retained_unchanged_products_and_scalar_interfaces` in the parity archive.
 
+    **Retaining the interface through expansion:** ordinary changed, nonzero
+    typed expansion now validates the smaller factored input and carries its
+    ordered interface when the tensor leaves permit this. Callback-sensitive
+    leaves, exposed tensor powers, unresolved ports, and other expansion modes
+    keep their existing output checks. Unchanged results avoid the extra scan.
+
+    In a baseline/candidate/baseline comparison, the complete typed ladder takes
+    **27.740 / 20.358 / 28.684 s**. Its initial expansion phase falls from
+    **8.687–9.250 s to 1.849 s (4.70–5.00×)**; total improvement is
+    **1.36–1.41×**. All stage Atoms, logical interfaces, and final coefficients
+    agree. The **105** expansion controls and **68** constructor cases also
+    agree, including rejected inputs and callback behavior. Fresh FORM takes
+    **0.751 s** process wall: the typed operation sum remains **27.1×** larger,
+    with different timing boundaries. No trace-kernel improvement is claimed.
+
+    This is a typed-route optimization. The raw control moves **21.999 →
+    18.253 s** without using this shortcut; that movement is not attributed to
+    the change. The earlier **17.740 s** raw result remains a separate checkpoint.
+    Multiplication still takes **10.603 s** in the candidate typed ladder. A
+    focused profile of its final multiplication assigns **90.3%** of sampled
+    cycles to port rewriting, chiefly rebuilding the sum even when indices
+    already match. These are cycle samples, not a wall-time partition.
+
+    `retained_factored_expansion_interface` records the measured release,
+    controls, profile, and timing limits. The concurrent broader API audit
+    modified the wrapper afterward; its newer source is outside this measured
+    checkpoint. The notebook environment contains the validated release.
+
     **Partial-network follow-up:** a closed subcase with vertices **1, 2, 8**
     produces **64 scalar terms**. The baseline expand-first route takes about
     **5.56 ms**; network contraction with local sum distribution takes
