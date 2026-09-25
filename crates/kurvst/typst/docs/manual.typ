@@ -283,6 +283,33 @@
   String names `"wave"`, `"zigzag"`, and `"coil"` are accepted for convenience,
   but they are resolved in Typst before calling wasm.
 
+  Pass `split-at: (s1, s2, ...)` to divide the finished pattern at arc distances
+  along its input carrier. The result retains the unchanged full `path` and adds
+  `parts`, an array of drawable path dictionaries. Sampling, phase, endpoint
+  tapering, and spline fitting use the full carrier once; the parts are exact
+  subdivisions of those fitted segments. This allows different colors or gaps
+  without changing the coil shape. Distances are mapped linearly between carrier
+  samples, rather than measured along the longer decorated curve.
+
+  ```typ
+  #let base = kurvst.from-cubic(segment)
+  #let L = kurvst.length(base)
+  #let decorated = kurvst.pattern(
+    base,
+    pattern: kurvst.coil(),
+    amplitude: 0.12,
+    wavelength: 0.55,
+    split-at: (L / 2 - 0.06, L / 2 + 0.06),
+  )
+  #kurvst.to-native(decorated.parts.at(0), unit: 36pt, stroke: blue + 0.7pt)
+  #kurvst.to-native(decorated.parts.at(2), unit: 36pt, stroke: red + 0.7pt)
+  ```
+
+  Cuts must be finite. They are sorted and clamped to `[0, L]`; duplicate cuts
+  and cuts at the endpoints retain empty parts, so there are always one more
+  parts than cuts. With no cuts, the only part is the full pattern. A zero-length
+  carrier produces empty parts.
+
   Custom patterns use the same object shape:
 
   ```typ
@@ -426,6 +453,9 @@
   side of the original path, before offsetting or trimming. Drawing packages can
   use this to place derived layers on the same side as an edge label without
   knowing anything about the physics or graph style that requested the layer.
+  The returned `offset` records the resolved signed distance, including for
+  empty paths. When processing fragments of the same carrier, reuse this value
+  with `side-point: none` so all fragments use the full carrier's side choice.
 
   == Native Drawing Primitives
 

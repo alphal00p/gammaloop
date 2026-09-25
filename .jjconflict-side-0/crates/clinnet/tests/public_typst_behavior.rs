@@ -176,6 +176,32 @@ fn public_linnest_layout_and_drawing_behavior_is_observable() {
     let renderer = TypstRenderer::new(base.path()).typst_executable(typst);
     renderer.check_version().unwrap();
     renderer.stage_default_assets().unwrap();
+    let curve_tests = base
+        .path()
+        .join(".clinnet/templates/crates/kurvst/typst/tests");
+    fs::create_dir_all(&curve_tests).unwrap();
+    for (name, source) in [
+        (
+            "pattern-split.typ",
+            include_str!("../../kurvst/typst/tests/pattern-split.typ"),
+        ),
+        (
+            "layer-offset.typ",
+            include_str!("../../kurvst/typst/tests/layer-offset.typ"),
+        ),
+    ] {
+        fs::write(curve_tests.join(name), source).unwrap();
+    }
+    let curve_wrapper = base.path().join(".clinnet/templates/curve-behavior.typ");
+    fs::write(
+        &curve_wrapper,
+        "#include \"crates/kurvst/typst/tests/pattern-split.typ\"\n\
+         #include \"crates/kurvst/typst/tests/layer-offset.typ\"\n",
+    )
+    .unwrap();
+    renderer
+        .compile_template(&curve_wrapper, base.path().join("curve-behavior.pdf"), &[])
+        .unwrap();
     let pattern_fixture = base
         .path()
         .join(".clinnet/templates/pattern-endpoints-behavior.typ");

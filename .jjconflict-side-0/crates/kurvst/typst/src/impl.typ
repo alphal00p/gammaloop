@@ -795,6 +795,7 @@
   anchor-start: true,
   anchor-end: true,
   endpoint-slope: 0,
+  split-at: (),
   accuracy: 0.001,
 ) = {
   let pattern = _resolve-pattern(
@@ -813,6 +814,7 @@
     anchor-start: anchor-start,
     anchor-end: anchor-end,
     endpoint-slope: endpoint-slope,
+    split-at: split-at,
     accuracy: accuracy,
   )
 }
@@ -824,6 +826,8 @@
 /// `(kind: "points", interpolation: "linear" or "smooth", points: ((at: 0, x: 0, y: 0), ...))`.
 /// The whole input path is sampled continuously, so pattern phase does not
 /// restart at cubic segment boundaries.
+/// With `split-at`, the returned `parts` divide the finished fitted pattern at
+/// carrier distances; cuts never re-fit, restart, or taper the pattern.
 ///
 /// ```example
 /// #let spline = kurvst.hobby-spline((
@@ -898,6 +902,7 @@
 /// positive and is clamped at the endpoint outsets. The return value is a normal
 /// Kurvst path dictionary that can be passed to @pattern, @parallel,
 /// @trim, or @to-cetz.
+/// Its `offset` field records the signed offset resolved before trimming.
 ///
 /// ```example
 /// #let base = kurvst.hobby-spline((
@@ -941,10 +946,10 @@
       accuracy: accuracy,
       optimize: optimize,
     )
-    // Parallel preserves empty paths, which trim would reject.
-    if segments(path).len() == 0 {
-      return path
-    }
+  }
+  // Keep empty paths drawable; trim requires at least one segment.
+  if segments(path).len() == 0 {
+    return (path: _path-value(path), offset: distance)
   }
   let center-trim = center-outset(
     _length(path, accuracy: accuracy),
@@ -962,7 +967,7 @@
     start-outset: start-outset,
     end-outset: end-outset,
     accuracy: accuracy,
-  )
+  ) + (offset: distance)
 }
 
 /// Emit a Kurvst path as native Typst `curve` content.

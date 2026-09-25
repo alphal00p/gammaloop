@@ -801,8 +801,11 @@
   Set `offset-side: "label"` on an offset layer to choose the sign of `offset`
   so the layer is drawn on the same side of the curve as the edge label.
 
-  Pattern layers are generated over each continuous path, so internal curve
-  segments do not restart the phase or shorten the endpoint taper.
+  Pattern layers are generated over each continuous path before colour boundaries
+  or gaps divide the painted stroke. Internal curve segments, source/sink colours,
+  and crossing gaps do not restart the phase, shorten the endpoint taper, or
+  change the fitted coil. Split positions follow distances on the underlying
+  carrier, including when the decorated coil doubles back.
 
   `pattern-natural-endpoints` defaults to `false`. For built-in coil strings
   (`"coil"`, `"helix"`, or `"spring"`) on complete continuous paths with both
@@ -831,10 +834,11 @@
   so the final direction also depends on phase, amplitude, and wavelength.
   Endpoints remain attached.
 
-  Partially anchored paths, including split-style halves and crossing-gap
-  fragments, keep the requested wavelength, taper only anchored endpoints,
-  and preserve phase continuity across hidden spans. Neither automatic coil
-  construction nor integer fitting applies.
+  Source and sink styles with the same carrier and pattern geometry share this
+  complete decoration even when their paints differ. Different patterns or
+  carrier offsets define independent decorations on the two halves.
+  For a shared pattern with `offset-side: "label"`, the full carrier selects the
+  offset side once; both halves and their marks use that same signed offset.
 
   Paired edges are Kurvst paths split at their edge layout point. Set
   `edge-split-gap` on `draw` to open a centered arc-length gap there, or set
@@ -848,12 +852,13 @@
   integer edge id) or `crossing-under: <bridge>` (using its Typst edge name), and
   optionally `crossing-gap` (default `0.55`) on the style layer that should be
   interrupted. Targets are resolved independently of edge order.
-  Kurvst locates proper intersections and trims the current path by arc length;
-  wave and coil phases continue across every hidden span. This works for
-  dangling layers and for paired layers whose source and sink have one continuous
-  style. Both paired half styles must name the same target and gap. A cut layer's
-  mark is placed once on the original uncut carrier, while only its painted path
-  is split; this keeps the mark present without duplicating it on every fragment.
+  Kurvst locates proper intersections on the carrier and removes the corresponding
+  intervals from the finished decoration. This works for dangling layers and for
+  paired layers whose source and sink share carrier and pattern geometry;
+  their paints may differ. Both paired half styles must name the same target
+  and gap. A cut layer's mark is placed once on the original uncut carrier, while
+  only its painted path is split; this keeps the mark present without duplicating
+  it on every fragment.
   A cut layer cannot participate in a subgraph underlay. Self, unknown, and invisible references are reported as
   errors. A valid edge pair with no proper interior intersection, including one
   that only shares an endpoint, is left unchanged.

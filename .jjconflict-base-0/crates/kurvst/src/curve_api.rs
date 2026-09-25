@@ -132,6 +132,8 @@ pub struct PatternPathSpec {
     pub anchor_end: bool,
     #[serde(default, deserialize_with = "deserialize_f64")]
     pub endpoint_slope: f64,
+    #[serde(default, deserialize_with = "deserialize_f64_vec")]
+    pub split_at: Vec<f64>,
     #[serde(
         default = "default_arclen_accuracy",
         deserialize_with = "deserialize_f64"
@@ -261,6 +263,55 @@ pub struct PatternPathOutput {
     )]
     pub path: BezPath,
     pub pattern: String,
+    pub parts: Vec<CurvePathOutput>,
+}
+
+impl PatternPathOutput {
+    fn split_at_carrier_distances(
+        &mut self,
+        distances: &[f64],
+        mut split_at: Vec<f64>,
+    ) -> Result<(), String> {
+        let length = distances.last().copied().unwrap_or(0.0);
+        for distance in &mut split_at {
+            validate_finite(*distance, "pattern split-at distance")?;
+            *distance = distance.clamp(0.0, length);
+        }
+        split_at.sort_by(f64::total_cmp);
+        split_at.insert(0, 0.0);
+        split_at.push(length);
+
+        let segments = self.path.segments().collect::<Vec<_>>();
+        self.parts = split_at
+            .windows(2)
+            .map(|interval| {
+                let path = BezPath::from_path_segments(
+                    segments
+                        .iter()
+                        .zip(distances.windows(2))
+                        .filter_map(|(segment, sample)| {
+                            let start = interval[0].max(sample[0]);
+                            let end = interval[1].min(sample[1]);
+                            if end <= start {
+                                return None;
+                            }
+                            if start == sample[0] && end == sample[1] {
+                                return Some(*segment);
+                            }
+                            // The full pattern has already been sampled and fitted. Map
+                            // carrier distance onto that segment's parameter without
+                            // adding knots or measuring the longer decorated curve.
+                            let span = sample[1] - sample[0];
+                            let t0 = (start - sample[0]) / span;
+                            let t1 = (end - sample[0]) / span;
+                            Some(segment.subsegment(t0..t1))
+                        }),
+                );
+                CurvePathOutput { path }
+            })
+            .collect();
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -497,6 +548,14 @@ where
     D: Deserializer<'de>,
 {
     Option::<F64OrInt>::deserialize(deserializer).map(|value| value.map(|value| value.0))
+}
+
+fn deserialize_f64_vec<'de, D>(deserializer: D) -> Result<Vec<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Vec::<F64Value>::deserialize(deserializer)
+        .map(|values| values.into_iter().map(|value| value.0).collect())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1110,15 +1169,18 @@ fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
         .collect::<Vec<_>>();
     let length: f64 = segment_lengths.iter().sum();
     if length <= f64::EPSILON {
-        return Ok(PatternPathOutput {
+        let mut output = PatternPathOutput {
             path: spec.path,
             pattern: pattern.name.clone(),
-        });
+            parts: Vec::new(),
+        };
+        output.split_at_carrier_distances(&[0.0], spec.split_at)?;
+        return Ok(output);
     }
 
     let distances = pattern.distances(length, wavelength, spec.samples_per_period);
     let mut points = Vec::with_capacity(distances.len());
-    for distance in distances {
+    for &distance in &distances {
         let (segment, segment_distance) =
             path_segment_at_distance(&path_segments, &segment_lengths, distance);
         let t = segment.inv_arclen(segment_distance, accuracy);
@@ -1173,10 +1235,13 @@ fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
         ),
     };
 
-    Ok(PatternPathOutput {
+    let mut output = PatternPathOutput {
         path,
         pattern: pattern.name,
-    })
+        parts: Vec::new(),
+    };
+    output.split_at_carrier_distances(&distances, spec.split_at)?;
+    Ok(output)
 }
 
 fn parallel_path(spec: ParallelPathSpec) -> Result<CurvePathOutput, String> {
@@ -1906,6 +1971,7 @@ mod tests {
         let output = PatternPathOutput {
             path,
             pattern: "wave".into(),
+            parts: Vec::new(),
         };
         let PatternCetzOutput::Data(subpaths) = PatternCetzOutput::from_pattern(output, -1.75)
         else {
@@ -1941,6 +2007,7 @@ mod tests {
         let output = PatternPathOutput {
             path,
             pattern: "zigzag".into(),
+            parts: Vec::new(),
         };
         let PatternCetzOutput::Data(subpaths) = PatternCetzOutput::from_pattern(output, -1.0)
         else {
@@ -1967,6 +2034,7 @@ mod tests {
         let output = PatternPathOutput {
             path,
             pattern: "coil".into(),
+            parts: Vec::new(),
         };
         let expected = encode_cbor(&output).unwrap();
         for unit in [-1.0, -0.0, 0.0, 1.0] {
@@ -2487,6 +2555,133 @@ mod tests {
     }
 
     #[test]
+    fn pattern_splits_preserve_full_fitted_geometry() {
+        let carrier = segment_path(CubicBez::new(
+            (0.0, 0.0),
+            (0.0, 2.0),
+            (2.0, 2.0),
+            (2.0, 0.0),
+        ));
+        for pattern in [
+            coil_pattern(16, 1.4),
+            sampled_pattern(
+                "untapered-coil",
+                16,
+                |theta| (1.4 * theta.cos(), theta.sin()),
+                false,
+            ),
+            wave_pattern(16),
+            zigzag_pattern(),
+        ] {
+            let mut spec = PatternPathSpec {
+                path: carrier.clone(),
+                pattern,
+                amplitude: 0.15,
+                wavelength: 0.53,
+                phase: 0.37,
+                samples_per_period: 16,
+                coil_longitudinal_scale: 1.4,
+                anchor_start: true,
+                anchor_end: true,
+                endpoint_slope: 1.0,
+                split_at: Vec::new(),
+                accuracy: 1e-9,
+            };
+            let whole = pattern_path(spec.clone()).unwrap();
+            assert_eq!(whole.parts[0].path, whole.path);
+            let length = path_length_value(&carrier, spec.accuracy);
+            let distances = PointPattern::from_input(spec.pattern.clone())
+                .unwrap()
+                .distances(length, spec.wavelength, spec.samples_per_period);
+            let cut = distances[4] + 0.37 * (distances[5] - distances[4]);
+            let gap_end = distances[10] + 0.61 * (distances[11] - distances[10]);
+            spec.split_at = vec![cut, gap_end];
+            let split = pattern_path(spec).unwrap();
+            assert_eq!(split.path, whole.path);
+            assert_eq!(split.parts.len(), 3);
+            let original = whole.path.segments().collect::<Vec<_>>();
+            let first = split.parts[0].path.segments().collect::<Vec<_>>();
+            let middle = split.parts[1].path.segments().collect::<Vec<_>>();
+            let last = split.parts[2].path.segments().collect::<Vec<_>>();
+            assert_eq!(first[..4], original[..4]);
+            assert_eq!(middle[1..6], original[5..10]);
+            assert_eq!(last[1..], original[11..]);
+            for (part, full, start, end) in [
+                (first[4], original[4], 0.0, 0.37),
+                (middle[0], original[4], 0.37, 1.0),
+                (middle[6], original[10], 0.0, 0.61),
+                (last[0], original[10], 0.61, 1.0),
+            ] {
+                for t in [0.0, 0.2, 0.5, 0.9, 1.0] {
+                    let error = (part.eval(t) - full.eval(start + (end - start) * t)).hypot();
+                    assert!(error < 1e-12, "{} split changed by {error}", split.pattern);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn pattern_splits_sort_clamp_and_retain_empty_intervals() {
+        let mut spec = PatternPathSpec {
+            path: straight_path(2.0),
+            pattern: coil_pattern(16, 1.4),
+            amplitude: 0.15,
+            wavelength: 0.5,
+            phase: 0.0,
+            samples_per_period: 16,
+            coil_longitudinal_scale: 1.4,
+            anchor_start: true,
+            anchor_end: true,
+            endpoint_slope: 0.0,
+            split_at: vec![3.0, 1.0, -1.0, 1.0],
+            accuracy: 1e-9,
+        };
+        let output = pattern_path(spec.clone()).unwrap();
+        assert_eq!(output.parts.len(), 5);
+        for index in [0, 2, 4] {
+            assert!(output.parts[index].path.is_empty());
+        }
+        let pieces = output.parts[1]
+            .path
+            .segments()
+            .chain(output.parts[3].path.segments());
+        assert_eq!(BezPath::from_path_segments(pieces), output.path);
+
+        for path in [BezPath::new(), straight_path(0.0)] {
+            spec.path = path;
+            let output = pattern_path(spec.clone()).unwrap();
+            assert_eq!(output.parts.len(), 5);
+            assert!(output.parts.iter().all(|part| part.path.is_empty()));
+        }
+        for distance in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            spec.split_at = vec![distance];
+            assert!(pattern_path(spec.clone()).unwrap_err().contains("split-at"));
+        }
+    }
+
+    #[test]
+    fn pattern_split_distances_accept_integer_and_float_cbor() {
+        let bytes = encode_cbor(&CurvePathOutput {
+            path: straight_path(2.0),
+        })
+        .unwrap();
+        let default: PatternPathSpec = ciborium::de::from_reader(&bytes[..]).unwrap();
+        assert!(default.split_at.is_empty());
+        let mut input: std::collections::BTreeMap<String, ciborium::Value> =
+            ciborium::de::from_reader(&bytes[..]).unwrap();
+        input.insert(
+            "split-at".to_string(),
+            ciborium::Value::Array(vec![
+                ciborium::Value::Integer(1.into()),
+                ciborium::Value::Float(1.5),
+            ]),
+        );
+        let bytes = encode_cbor(&input).unwrap();
+        let spec: PatternPathSpec = ciborium::de::from_reader(&bytes[..]).unwrap();
+        assert_eq!(spec.split_at, [1.0, 1.5]);
+    }
+
+    #[test]
     fn wave_pattern_offsets_along_curve_normal() {
         let output = pattern_path(PatternPathSpec {
             path: straight_path(4.0),
@@ -2499,6 +2694,7 @@ mod tests {
             anchor_start: default_anchor_endpoint(),
             anchor_end: default_anchor_endpoint(),
             endpoint_slope: 0.0,
+            split_at: Vec::new(),
             accuracy: 1e-6,
         })
         .unwrap();
@@ -2532,6 +2728,7 @@ mod tests {
             anchor_start: default_anchor_endpoint(),
             anchor_end: default_anchor_endpoint(),
             endpoint_slope: 0.0,
+            split_at: Vec::new(),
             accuracy: 1e-6,
         })
         .unwrap();
@@ -2584,6 +2781,7 @@ mod tests {
             anchor_start: true,
             anchor_end: true,
             endpoint_slope: 0.0,
+            split_at: Vec::new(),
             accuracy: 1e-6,
         })
         .unwrap();
@@ -2612,6 +2810,7 @@ mod tests {
             anchor_start: false,
             anchor_end: false,
             endpoint_slope: 0.0,
+            split_at: Vec::new(),
             accuracy: 1e-6,
         })
         .unwrap();
@@ -2638,6 +2837,7 @@ mod tests {
             anchor_start: default_anchor_endpoint(),
             anchor_end: default_anchor_endpoint(),
             endpoint_slope: 0.0,
+            split_at: Vec::new(),
             accuracy: 1e-6,
         })
         .unwrap();
@@ -2687,6 +2887,7 @@ mod tests {
             anchor_start: true,
             anchor_end: true,
             endpoint_slope: 0.0,
+            split_at: Vec::new(),
             accuracy: 1e-6,
         })
         .unwrap();
@@ -2713,6 +2914,7 @@ mod tests {
             anchor_start: true,
             anchor_end: true,
             endpoint_slope: 0.0,
+            split_at: Vec::new(),
             accuracy: 1e-6,
         })
         .unwrap();
@@ -2793,6 +2995,7 @@ mod tests {
                 anchor_start: true,
                 anchor_end: true,
                 endpoint_slope,
+                split_at: Vec::new(),
                 accuracy: 1e-6,
             })
             .unwrap();
@@ -2835,6 +3038,7 @@ mod tests {
                 anchor_start,
                 anchor_end,
                 endpoint_slope: 0.0,
+                split_at: Vec::new(),
                 accuracy: 1e-6,
             };
             let expected = pattern_path(spec.clone()).unwrap();
@@ -2859,6 +3063,7 @@ mod tests {
                 anchor_start: true,
                 anchor_end: true,
                 endpoint_slope,
+                split_at: Vec::new(),
                 accuracy: 1e-6,
             })
             .unwrap_err();
@@ -2890,6 +3095,7 @@ mod tests {
                 spec,
                 PatternPathSpec {
                     endpoint_slope,
+                    split_at: Vec::new(),
                     ..default.clone()
                 }
             );
@@ -2932,6 +3138,7 @@ mod tests {
                     anchor_start: true,
                     anchor_end: true,
                     endpoint_slope: 3.0,
+                    split_at: Vec::new(),
                     accuracy: 1e-9,
                 })
                 .unwrap();
@@ -2989,6 +3196,7 @@ mod tests {
                 anchor_start: true,
                 anchor_end: true,
                 endpoint_slope: 3.0,
+                split_at: Vec::new(),
                 accuracy: 1e-9,
             };
             for (anchor_start, anchor_end) in
@@ -3061,6 +3269,7 @@ mod tests {
                     anchor_start: true,
                     anchor_end: true,
                     endpoint_slope: 3.0,
+                    split_at: Vec::new(),
                     accuracy: 1e-9,
                 })
                 .unwrap();

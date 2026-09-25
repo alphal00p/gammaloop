@@ -985,7 +985,29 @@
   sink-outset,
   label-pos,
   accuracy,
+  pattern-curve: none,
 ) = {
+  let shared = _same-layer-geometry(source-style, sink-style)
+  let whole-path = if shared {
+    _path-layer(
+      if pattern-curve == none { curve } else { pattern-curve },
+      source-style,
+      source-outset,
+      sink-outset,
+      label-pos,
+      auto,
+    )
+  } else { none }
+  if (
+    shared
+      and _style-value(source-style, "offset-side") == "label"
+      and curve-api.elements(whole-path).len() > 0
+  ) {
+    // The label chooses one side of the full carrier, including both paint halves.
+    let resolved = (offset: whole-path.offset, offset-side: none)
+    source-style += resolved
+    sink-style += resolved
+  }
   let geometries = ()
   let split-gap = 0
   for (index, style) in (source-style, sink-style).enumerate() {
@@ -1029,25 +1051,15 @@
       label-pos,
     ))
   }
-  let whole-geometry = if (
-    _same-layer-geometry(source-style, sink-style) and split-gap == 0
-  ) {
-    _geometry-path-segments(
-      curve,
-      source-style,
-      source-outset,
-      sink-outset,
-      label-pos,
-      auto,
-    )
-  } else {
+  let whole-geometry = if shared { curve-api.segments(whole-path) } else {
     none
   }
   (
     source: geometries.first(),
     sink: geometries.last(),
     curve: curve,
-    whole: whole-geometry,
+    whole: if split-gap == 0 { whole-geometry } else { none },
+    pattern-whole: whole-geometry,
     split-gap: split-gap,
   )
 }
@@ -1226,6 +1238,7 @@
     sink-end-outset,
     label-pos,
     accuracy,
+    pattern-curve: curve-api.path(source-path, sink-path),
   )
   // The fallback halves contain anchor guides that are absent from `curve`.
   halves.whole = none
@@ -1425,6 +1438,62 @@
   curve-api.path(..segments.map(curve-api.from-cubic))
 }
 
+#let _pattern-path(
+  path,
+  style,
+  phase: auto,
+  anchor-start: true,
+  anchor-end: true,
+  split-at: (),
+) = {
+  let pattern-style = _pattern-style(style)
+  let length = curve-api.length(path, accuracy: pattern-style.pattern-accuracy)
+  let pattern = pattern-style.pattern
+  let wavelength = pattern-style.pattern-wavelength
+  let samples = pattern-style.pattern-samples-per-period
+  let phase = if phase == auto { pattern-style.pattern-phase } else { phase }
+  assert(wavelength > 0, message: "pattern-wavelength must be positive")
+  // Fit the physical endpoints before dividing the decorated path for painting.
+  let natural = (
+    pattern-style.pattern-natural-endpoints and anchor-start and anchor-end
+  )
+  if natural and length > 0 {
+    assert(
+      type(pattern) == str and pattern.trim() in ("coil", "helix", "spring"),
+      message: "pattern-natural-endpoints requires a built-in coil",
+    )
+    pattern = curve-api.coil(
+      fit-length: length,
+      amplitude: pattern-style.pattern-amplitude,
+      wavelength: wavelength,
+      samples-per-period: samples,
+      longitudinal-scale: pattern-style.pattern-coil-longitudinal-scale,
+    )
+    wavelength = length
+    samples = pattern.points.len() - 1
+    phase = 0
+  } else if (
+    pattern-style.pattern-fit and anchor-start and anchor-end and length > 0
+  ) {
+    wavelength = length / calc.max(1, calc.round(length / wavelength))
+  }
+  let patterned = curve-api.pattern(
+    path,
+    pattern: pattern,
+    amplitude: pattern-style.pattern-amplitude,
+    wavelength: wavelength,
+    phase: phase,
+    samples-per-period: samples,
+    coil-longitudinal-scale: pattern-style.pattern-coil-longitudinal-scale,
+    anchor-start: anchor-start,
+    anchor-end: anchor-end,
+    endpoint-slope: pattern-style.pattern-endpoint-slope,
+    accuracy: pattern-style.pattern-accuracy,
+    split-at: split-at,
+  )
+  patterned
+}
+
 #let _segments-elements(segments, style, phase, anchor-start, anchor-end) = {
   if _style-value(style, "label-only") { return (elements: (), length: 0) }
   if _has-mark(style) {
@@ -1495,6 +1564,58 @@
   (elements: elements, length: length)
 }
 
+// Windows are distances on the carrier, not on the longer decorated curve.
+#let _path-window-elements(path, style, windows) = {
+  let windows = windows.filter(window => window.end > window.start)
+  if windows.len() == 0 { return () }
+  let parts = if _has-pattern(style) {
+    let boundaries = windows.map(window => (window.start, window.end)).flatten()
+    _pattern-path(path, style, split-at: boundaries).parts
+  } else { () }
+  let total = curve-api.length(path, accuracy: _style-value(style, "accuracy"))
+  let elements = ()
+  for (index, window) in windows.enumerate() {
+    if not _style-value(window.style, "label-only") {
+      let piece = if _has-pattern(style) { parts.at(2 * index + 1) } else {
+        curve-api.trim(
+          path,
+          start-outset: window.start,
+          end-outset: total - window.end,
+          accuracy: _style-value(style, "accuracy"),
+        )
+      }
+      elements.push(curve-api.to-cetz(piece, .._draw-style(_without-mark-style(
+        window.style,
+      ))))
+    }
+  }
+  elements
+}
+
+#let _half-paint-windows(halves, source-style, sink-style, total) = {
+  if halves.at("split-gap", default: 0) == 0 and _same-draw-path-style(
+    _without-mark-style(source-style), _without-mark-style(sink-style),
+  ) {
+    return ((start: 0, end: total, style: source-style),)
+  }
+  let accuracy = _style-value(source-style, "accuracy")
+  let source-end = calc.min(total, curve-api.length(
+    _segments-path(halves.source),
+    accuracy: accuracy,
+  ))
+  let sink-start = if halves.at("split-gap", default: 0) == 0 {
+    source-end
+  } else {
+    calc.max(
+      source-end,
+      total - curve-api.length(_segments-path(halves.sink), accuracy: accuracy),
+    )
+  }
+  (
+    (start: 0, end: source-end, style: source-style),
+    (start: sink-start, end: total, style: sink-style),
+  )
+}
 
 #let _mark-carrier-elements(path, style, paint: false) = {
   if style == none or not _has-mark(style) { return () }
@@ -2496,41 +2617,27 @@
       true,
     ).elements
   }
-  if _same-pattern-geometry(source-style, sink-style) {
-    let source = _derived-segments-elements(
-      halves.source,
+  let pattern-whole = halves.at("pattern-whole", default: whole)
+  if (
+    pattern-whole != none and _same-pattern-geometry(source-style, sink-style)
+  ) {
+    let path = _segments-path(pattern-whole)
+    let total = curve-api.length(path, accuracy: _style-value(
       source-style,
-      auto,
-      true,
-      false,
-    )
-    let wavelength = _style-value(source-style, "pattern-wavelength")
-    let phase = _style-value(source-style, "pattern-phase")
-    let hidden-length = halves.at("split-gap", default: 0)
-    let sink-phase = (
-      phase + 2 * calc.pi * (source.length + hidden-length) / wavelength
-    )
-    let sink-elements = _derived-segments-elements(
-      halves.sink,
+      "accuracy",
+    ))
+    elements = _path-window-elements(path, source-style, _half-paint-windows(
+      halves,
+      source-style,
       sink-style,
-      sink-phase,
-      false,
-      true,
-    ).elements
-    if _has-mark(source-style) and not _has-mark(sink-style) {
-      for element in sink-elements {
-        elements.push(element)
-      }
-      for element in source.elements {
-        elements.push(element)
-      }
-    } else {
-      for element in source.elements {
-        elements.push(element)
-      }
-      for element in sink-elements {
-        elements.push(element)
-      }
+      total,
+    ))
+    // Marks retain their original carrier and placement, above both painted halves.
+    for (segments, style) in (
+      (halves.source, source-style),
+      (halves.sink, sink-style),
+    ) {
+      elements += _mark-carrier-elements(_segments-path(segments), style)
     }
   } else {
     let source-elements = _derived-segments-elements(
@@ -2731,74 +2838,39 @@
     .map(hit => hit.at("distance-a"))
 }
 
-#let _cut-path-elements(path, style, cuts, mark-style: none) = {
-  let paint-style = _without-mark-style(style)
-  let gap = calc.max(0, _style-value(style, "crossing-gap"))
-  if cuts.len() == 0 or gap == 0 {
-    let elements = _segments-elements(
-      curve-api.segments(path),
-      paint-style,
-      auto,
-      true,
-      true,
-    ).elements
-    if mark-style != none {
-      elements += _mark-carrier-elements(path, mark-style)
-    }
-    return elements
-  }
+#let _cut-path-elements(
+  path,
+  style,
+  cuts,
+  mark-style: none,
+  paint-windows: none,
+) = {
   let accuracy = _style-value(style, "accuracy")
   let total = curve-api.length(path, accuracy: accuracy)
+  let gap = calc.max(0, _style-value(style, "crossing-gap"))
+  let windows = if paint-windows == none {
+    ((start: 0, end: total, style: style),)
+  } else { paint-windows }
+  let visible = ()
   let cursor = 0
-  let elements = ()
-  for center in cuts {
-    let cut-start = calc.max(cursor, calc.min(total, center - gap / 2))
-    if cut-start > cursor {
-      let piece = curve-api.trim(
-        path,
-        start-outset: cursor,
-        end-outset: total - cut-start,
-        accuracy: accuracy,
-      )
-      let phase = if _has-pattern(style) {
-        (
-          float(_style-value(style, "pattern-phase"))
-            + 2 * calc.pi * cursor / _style-value(style, "pattern-wavelength")
-        )
-      } else {
-        auto
-      }
-      elements += _segments-elements(
-        curve-api.segments(piece),
-        paint-style,
-        phase,
-        cursor == 0,
-        false,
-      ).elements
+  if gap > 0 {
+    for center in cuts.sorted() {
+      let cut-start = _clamp(center - gap / 2, cursor, total)
+      if cut-start > cursor { visible.push((start: cursor, end: cut-start)) }
+      cursor = _clamp(center + gap / 2, cursor, total)
     }
-    cursor = calc.max(cursor, calc.min(total, center + gap / 2))
   }
-  if cursor < total {
-    let piece = curve-api.trim(path, start-outset: cursor, accuracy: accuracy)
-    let phase = if _has-pattern(style) {
-      (
-        float(_style-value(style, "pattern-phase"))
-          + 2 * calc.pi * cursor / _style-value(style, "pattern-wavelength")
-      )
-    } else {
-      auto
+  if cursor < total { visible.push((start: cursor, end: total)) }
+  let clipped = ()
+  for window in windows {
+    for interval in visible {
+      let start = calc.max(window.start, interval.start)
+      let end = calc.min(window.end, interval.end)
+      if end > start { clipped.push(window + (start: start, end: end)) }
     }
-    elements += _segments-elements(
-      curve-api.segments(piece),
-      paint-style,
-      phase,
-      false,
-      true,
-    ).elements
   }
-  if mark-style != none {
-    elements += _mark-carrier-elements(path, mark-style)
-  }
+  let elements = _path-window-elements(path, style, clipped)
+  if mark-style != none { elements += _mark-carrier-elements(path, mark-style) }
   elements
 }
 
@@ -3762,24 +3834,27 @@
                 } else {
                   _without-mark-style(sink-draw-style)
                 }
+                let carrier = halves.at("pattern-whole", default: halves.whole)
+                let same-geometry = if source-paint-style == none or sink-paint-style == none {
+                  false
+                } else if _has-pattern(source-paint-style) or _has-pattern(sink-paint-style) {
+                  _same-pattern-geometry(source-paint-style, sink-paint-style)
+                } else { _same-layer-geometry(source-paint-style, sink-paint-style) }
                 if (
                   source-draw-style == none
                     or sink-draw-style == none
                     or source-crossing-under != sink-crossing-under
                     or source-crossing-gap != sink-crossing-gap
-                    or halves.whole == none
-                    or not _same-draw-path-style(
-                      source-paint-style,
-                      sink-paint-style,
-                    )
+                    or carrier == none
+                    or not same-geometry
                 ) {
                   panic(
                     "draw: crossing-under on paired edge "
                       + str(edge-data.eid)
-                      + " requires one continuous source/sink style layer",
+                      + " requires continuous source/sink geometry with the same pattern",
                   )
                 }
-                let path = _segments-path(halves.whole)
+                let path = _segments-path(carrier)
                 let mark-style = if _has-mark(source-draw-style) {
                   source-draw-style
                 } else if _has-mark(sink-draw-style) {
@@ -3799,6 +3874,10 @@
                   source-paint-style,
                   cuts,
                   mark-style: mark-style,
+                  paint-windows: _half-paint-windows(halves,
+                    source-paint-style, sink-paint-style,
+                    curve-api.length(path, accuracy: _style-value(source-paint-style, "accuracy")),
+                  ),
                 ) {
                   elements.push(element)
                 }

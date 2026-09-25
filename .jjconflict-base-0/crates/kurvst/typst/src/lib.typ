@@ -423,6 +423,10 @@
   /// lateral offset is nonzero at its endpoint phase. This is not an angle.
   /// Ignored for unanchored ends and patterns without endpoint ramping, including fitted coils. -> int | float
   endpoint-slope: 0,
+  /// Carrier arc distances at which to split the finished pattern into parts.
+  /// Sorted and clamped to the carrier length; repeated cuts keep empty parts.
+  /// The full path is unchanged. -> array
+  split-at: (),
   /// Geometry approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
 ) = _impl-pattern(
@@ -436,6 +440,7 @@
   anchor-start: anchor-start,
   anchor-end: anchor-end,
   endpoint-slope: endpoint-slope,
+  split-at: split-at,
   accuracy: accuracy,
 )
 
@@ -480,6 +485,8 @@
 }
 
 /// Build a derived visible path layer.
+/// Returns drawable geometry and `offset`, the resolved signed offset before
+/// trimming. Reuse that value to apply the same side choice to path fragments.
 /// -> dictionary
 #let layer(
   /// Base Kurvst path dictionary. -> dictionary
