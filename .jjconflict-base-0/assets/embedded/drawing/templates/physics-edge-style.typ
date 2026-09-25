@@ -176,7 +176,7 @@
 /// is capped at half the offset carrier's arc length.
 /// -> dictionary
 #let momentum-arrow-defaults = (
-  offset: 0.5,
+  offset: 0.35,
   length: 1.4,
   ratio: 0.5,
   stroke: _momentum-arrow-stroke,

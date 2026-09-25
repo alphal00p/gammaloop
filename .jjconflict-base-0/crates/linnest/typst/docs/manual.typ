@@ -674,7 +674,7 @@
   chooses a position along the full edge and may switch an automatic side.
   It can move neighbouring annotations together to escape crowded placements.
   The complete arrow stays within the carrier. The shared physics renderer
-  uses `momentum-arrow-offset: 0.5`, `momentum-arrow-length: 1.4`, and
+  uses `momentum-arrow-offset: 0.35`, `momentum-arrow-length: 1.4`, and
   `momentum-arrow-ratio: 0.5`: the requested length is capped at half the offset
   carrier's arc length. Set the ratio to `none` for an absolute length without
   this fractional cap. Sparse `momentum(...)` patches configure the arrow and

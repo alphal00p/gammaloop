@@ -127,7 +127,7 @@
   let shift = _number(edge, "momentum-arrow-shift", 0)
   let label-shift = _number(edge, "momentum-label-shift", shift)
   let anchor = _value(edge, "momentum-label-anchor", auto)
-  let offset = _number(edge, "momentum-arrow-offset", 0.5)
+  let offset = _number(edge, "momentum-arrow-offset", 0.35)
   let ratio = _value(edge, "momentum-arrow-ratio", 0.5)
   let ratio = if ratio == none or str(ratio).trim("\"") == "none" { none } else {
     _number(edge, "momentum-arrow-ratio", 0.5)

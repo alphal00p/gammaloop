@@ -49,7 +49,7 @@
   ghG: reference-scalar,
 )
 #let reference-geometry = (
-  offset: 0.5,
+  offset: 0.35,
   offset-side: "label",
   label-side: auto,
   label-gap: 0.45,

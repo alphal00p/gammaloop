@@ -3,7 +3,7 @@
 #import "gamma-layout-core.typ": autogen-external-edge-fields
 #set page(width: auto, height: auto, margin: 0pt)
 
-#assert.eq(physics.momentum-arrow-defaults.offset, 0.5)
+#assert.eq(physics.momentum-arrow-defaults.offset, 0.35)
 #assert.eq(physics.momentum-arrow-defaults.length, 1.4)
 #assert.eq(physics.momentum-arrow-defaults.ratio, 0.5)
 #assert.eq(physics.coil.pattern-natural-endpoints, true)
