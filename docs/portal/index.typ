@@ -50,6 +50,24 @@
   #portal.funding
 ]
 
+#let tour = tour-section[
+  #portal-section-heading[
+    #heading-copy[
+      #kicker[Guided tour]
+
+      #anchored-heading(2, "tour-title")[See GammaLoop run]
+    ]
+
+    An animated walk through the command line, process generation, Monte Carlo integration, the Rust and Python APIs, and the crates behind them, drawn live in the browser. The commands are real; the terminal output is illustrative.
+  ]
+  #tour-frame("Animated tour of GammaLoop", "assets/showcase-hard-boiled.mp3")
+  #tour-credit[
+    Music: #link("https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700076")[Hard Boiled]
+    by Kevin MacLeod (incompetech.com), licensed under
+    #link("https://creativecommons.org/licenses/by/4.0/")[Creative Commons Attribution 4.0].
+  ]
+]
+
 #let landing = [
   #landing-hero(landing-art(portal.graphs)[
     Local cancellation. \
@@ -96,6 +114,7 @@
       #for (index, product) in registry.product.enumerate() { project-entry(product, index) }
     ]
   ]
+  #tour
   #funding
 ]
 

@@ -1,0 +1,445 @@
+/* GammaLoop showcase: an embeddable, time-seekable tour of the CLI, the APIs, and Local
+   Unitarity. The stage is always 1920x1080 CSS pixels and is scaled into a 16:9 frame, so the
+   same program drives the docs embed, the standalone preview, and the frame-by-frame video
+   render (scripts/render-showcase-video.mjs). Everything is scoped under .gl-showcase and the
+   tokens mirror the dark palette of site.css. */
+
+.gl-showcase {
+  --gl-canvas: #211a23;
+  --gl-surface: #2d2430;
+  --gl-surface-soft: #382d3b;
+  --gl-ink: #eee8ef;
+  --gl-ink-strong: #f8effa;
+  --gl-ink-muted: #c7bdc9;
+  --gl-ink-faint: #8d818f;
+  --gl-accent: #b893c7;
+  --gl-accent-soft: #4a3750;
+  --gl-link: #d8b9e3;
+  --gl-hairline: #57475b;
+  --gl-syntax-call: #9cb5ff;
+  --gl-syntax-comment: #aaa3ad;
+  --gl-syntax-keyword: #ff8793;
+  --gl-syntax-number: #e7b66f;
+  --gl-syntax-label: #76d3df;
+  --gl-syntax-property: #d7a6f2;
+  --gl-syntax-string: #71d083;
+  --gl-cut: #ff8793;
+  --gl-good: #71d083;
+  --gl-font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Liberation Sans", sans-serif;
+  --gl-font-serif: "Newsreader", "Iowan Old Style", Charter, Georgia, "Liberation Serif", serif;
+  --gl-font-mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, "DejaVu Sans Mono", monospace;
+  position: relative;
+  display: grid;
+  gap: 0;
+  color: var(--gl-ink);
+  color-scheme: dark;
+  font-family: var(--gl-font-sans);
+}
+.gl-showcase *, .gl-showcase *::before, .gl-showcase *::after { box-sizing: border-box; }
+.gl-showcase-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--gl-canvas);
+}
+.gl-showcase.render .gl-showcase-frame { width: 1920px; height: 1080px; aspect-ratio: auto; }
+.gl-showcase-stage {
+  position: absolute;
+  left: 0; top: 0;
+  width: 1920px; height: 1080px;
+  transform-origin: 0 0;
+  overflow: hidden;
+  background: var(--gl-canvas);
+  color: var(--gl-ink);
+  font-family: var(--gl-font-sans);
+  font-size: 28px;
+  line-height: 1.4;
+  text-align: left;
+}
+.gl-showcase-stage section, .gl-showcase-stage div { margin: 0; }
+.gl-showcase-field { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+
+/* Cover shown before the first play */
+.gl-showcase-cover {
+  position: absolute; inset: 0;
+  display: grid; place-items: center; align-content: center; gap: 4%;
+  width: 100%; height: 100%;
+  margin: 0; padding: 0;
+  border: 0;
+  background: linear-gradient(to bottom, rgb(33 26 35 / 15%), rgb(33 26 35 / 65%));
+  color: var(--gl-ink-strong);
+  font: inherit;
+  cursor: pointer;
+}
+.gl-showcase-cover:focus-visible { outline: 3px solid var(--gl-accent); outline-offset: -6px; }
+.gl-showcase-cover-button {
+  display: grid; place-items: center;
+  width: clamp(3.5rem, 9%, 6rem); aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--gl-accent);
+  color: var(--gl-canvas);
+  font-size: clamp(1.2rem, 3vw, 2rem);
+  padding-left: 0.3em;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 40%);
+  transition: transform 160ms ease;
+}
+.gl-showcase-cover:hover .gl-showcase-cover-button { transform: scale(1.06); }
+.gl-showcase-cover-label {
+  padding: 0.3em 0.9em;
+  border-radius: 999px;
+  background: rgb(33 26 35 / 70%);
+  font-family: var(--gl-font-mono);
+  font-size: clamp(0.65rem, 1.4vw, 0.9rem);
+  letter-spacing: 0.04em;
+}
+.gl-showcase-cover[hidden] { display: none; }
+
+/* Player bar */
+.gl-showcase-player {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 0.9rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--gl-surface);
+  border-top: 1px solid var(--gl-hairline);
+  color: var(--gl-ink-muted);
+  font-family: var(--gl-font-sans);
+  font-size: 0.8rem;
+}
+.gl-showcase-player button {
+  margin: 0;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--gl-hairline);
+  border-radius: 0.35rem;
+  background: var(--gl-surface-soft);
+  color: var(--gl-ink-strong);
+  font: inherit;
+  cursor: pointer;
+}
+.gl-showcase-player button:hover { border-color: var(--gl-accent); }
+.gl-showcase-player button:focus-visible { outline: 2px solid var(--gl-accent); outline-offset: 2px; }
+.gl-showcase-player button[aria-pressed="false"] { color: var(--gl-ink-muted); }
+.gl-showcase-player input[type="range"] { flex: 1 1 10rem; min-width: 6rem; margin: 0; accent-color: var(--gl-accent); }
+.gl-showcase-scene { min-width: 11ch; color: var(--gl-ink); }
+.gl-showcase-time { font-family: var(--gl-font-mono); font-variant-numeric: tabular-nums; min-width: 12ch; text-align: right; }
+.gl-showcase.render .gl-showcase-player { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .gl-showcase-cover-button { transition: none; }
+}
+
+/* ------------------------------------------------------------------ stage */
+.gl-showcase-stage .scene {
+  position: absolute; inset: 0;
+  opacity: 0; visibility: hidden;
+}
+.gl-showcase-stage .scene.on { visibility: visible;
+}
+.gl-showcase-stage .kicker {
+  font-family: var(--gl-font-sans);
+  font-size: 22px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--gl-accent);
+}
+.gl-showcase-stage .display {
+  font-family: var(--gl-font-serif);
+  font-weight: 400;
+  font-size: 84px; line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--gl-ink-strong);
+  text-wrap: balance;
+}
+.gl-showcase-stage .display em { font-style: italic; color: var(--gl-link);
+}
+.gl-showcase-stage .lede {
+  font-family: var(--gl-font-sans);
+  font-size: 30px; line-height: 1.45;
+  color: var(--gl-ink-muted);
+  max-width: 30ch;
+}
+.gl-showcase-stage .mono { font-family: var(--gl-font-mono);
+}
+.gl-showcase-stage .tnum { font-variant-numeric: tabular-nums;
+}
+.gl-showcase-stage #field { position: absolute; inset: 0;
+}
+.gl-showcase-stage .s-open .logo { position: absolute; left: 610px; top: 200px; width: 700px;
+}
+.gl-showcase-stage .s-open .logo path { fill: none; stroke: var(--gl-ink-strong);
+}
+.gl-showcase-stage .s-open .wordmark {
+  position: absolute; left: 0; right: 0; top: 590px;
+  text-align: center;
+  font-family: var(--gl-font-serif); font-size: 120px; letter-spacing: -0.02em;
+  color: var(--gl-ink-strong);
+}
+.gl-showcase-stage .s-open .tagline {
+  position: absolute; left: 0; right: 0; top: 760px;
+  text-align: center;
+  font-family: var(--gl-font-serif); font-style: italic; font-size: 48px;
+  color: var(--gl-accent);
+}
+.gl-showcase-stage .s-open .sub {
+  position: absolute; left: 0; right: 0; top: 850px;
+  text-align: center;
+  font-size: 26px; color: var(--gl-ink-muted);
+}
+.gl-showcase-stage .s-lu .copy { position: absolute; left: 120px; top: 150px; width: 640px; display: grid; gap: 28px;
+}
+.gl-showcase-stage .s-lu .diagram { position: absolute; left: 820px; top: 90px; width: 1000px; height: 900px;
+}
+.gl-showcase-stage .s-lu .diagram svg { width: 100%; height: 100%; overflow: visible;
+}
+.gl-showcase-stage .s-lu .eqblock {
+  position: absolute; left: 120px; top: 740px;
+  display: inline-flex; flex-direction: column; align-items: center; gap: 20px;
+}
+.gl-showcase-stage .s-lu .eq {
+  font-family: var(--gl-font-serif); font-size: 40px; color: var(--gl-ink-strong);
+}
+.gl-showcase-stage .s-lu .eq .sub { font-size: 0.6em; vertical-align: sub; color: var(--gl-ink-muted);
+}
+.gl-showcase-stage .s-lu .eq .cut { color: var(--gl-cut);
+}
+.gl-showcase-stage .s-lu .cutlabel {
+  font-family: var(--gl-font-mono); font-size: 26px; fill: var(--gl-cut);
+}
+.gl-showcase-stage .edge { fill: none; stroke: var(--gl-ink-strong); stroke-width: 5; stroke-linecap: round;
+}
+.gl-showcase-stage .edge.photon { stroke: var(--gl-link);
+}
+.gl-showcase-stage .edge.hot { stroke: var(--gl-cut);
+}
+.gl-showcase-stage .vertex { fill: var(--gl-ink-strong);
+}
+.gl-showcase-stage .cutline { fill: none; stroke: var(--gl-cut); stroke-width: 5; stroke-dasharray: 18 14; stroke-linecap: round;
+}
+.gl-showcase-stage .ghost { opacity: 0.22;
+}
+.gl-showcase-stage .term {
+  position: absolute;
+  background: #17121a;
+  border: 1px solid var(--gl-hairline);
+  border-radius: 14px;
+  box-shadow: 0 30px 80px rgb(0 0 0 / 45%);
+  overflow: hidden;
+  font-family: var(--gl-font-mono);
+  font-size: 24px; line-height: 1.5;
+  color: var(--gl-ink);
+}
+.gl-showcase-stage .term .bar {
+  height: 54px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 22px;
+  background: var(--gl-surface);
+  border-bottom: 1px solid var(--gl-hairline);
+  color: var(--gl-ink-muted); font-family: var(--gl-font-sans); font-size: 20px;
+}
+.gl-showcase-stage .term .bar .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--gl-hairline);
+}
+.gl-showcase-stage .term .bar .title { margin-left: auto; margin-right: auto;
+}
+.gl-showcase-stage .term .body { padding: 22px 30px; white-space: pre-wrap; word-break: break-word;
+}
+.gl-showcase-stage .term .prompt { color: var(--gl-accent);
+}
+.gl-showcase-stage .term .cmd { color: var(--gl-ink-strong);
+}
+.gl-showcase-stage .term .flag { color: var(--gl-syntax-label);
+}
+.gl-showcase-stage .term .str { color: var(--gl-syntax-string);
+}
+.gl-showcase-stage .term .out { color: var(--gl-ink-muted);
+}
+.gl-showcase-stage .term .hi { color: var(--gl-syntax-number);
+}
+.gl-showcase-stage .term .ok { color: var(--gl-good);
+}
+.gl-showcase-stage .term .blue { color: var(--gl-syntax-call); font-weight: 600;
+}
+.gl-showcase-stage .term .caret {
+  display: inline-block; width: 0.6em; height: 1.1em;
+  background: var(--gl-accent); vertical-align: text-bottom; margin-left: 2px;
+}
+.gl-showcase-stage .s-gen .term { left: 90px; top: 150px; width: 1080px; height: 800px;
+}
+.gl-showcase-stage .s-gen .graphs { position: absolute; left: 1230px; top: 150px; width: 600px; height: 800px;
+}
+.gl-showcase-stage .s-gen .graphs svg { width: 100%; height: 100%; overflow: visible;
+}
+.gl-showcase-stage .s-gen .graphs .label { font-family: var(--gl-font-mono); font-size: 22px; fill: var(--gl-ink-muted);
+}
+.gl-showcase-stage .s-gen .graphs .label.master { fill: var(--gl-accent);
+}
+.gl-showcase-stage .s-gen .head { position: absolute; left: 90px; top: 70px; display: flex; gap: 28px; align-items: baseline;
+}
+.gl-showcase-stage .s-gen .head .display { font-size: 48px;
+}
+.gl-showcase-stage .s-gen .tree {
+  position: absolute; left: 1230px; top: 150px; width: 600px;
+  font-family: var(--gl-font-mono); font-size: 22px; line-height: 1.55; color: var(--gl-ink-muted);
+  white-space: pre;
+}
+.gl-showcase-stage .s-gen .tree .dir { color: var(--gl-link);
+}
+.gl-showcase-stage .s-gen .tree .new { color: var(--gl-good);
+}
+.gl-showcase-stage .s-int .term { left: 90px; top: 150px; width: 1740px; height: 820px;
+}
+.gl-showcase-stage .s-int .head { position: absolute; left: 90px; top: 70px; display: flex; gap: 28px; align-items: baseline;
+}
+.gl-showcase-stage .s-int .head .display { font-size: 48px;
+}
+.gl-showcase-stage .tui { display: grid; grid-template-rows: auto 1fr auto; height: 100%; font-size: 22px; line-height: 1.45;
+}
+.gl-showcase-stage .tui .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--gl-hairline); padding: 0 8px;
+}
+.gl-showcase-stage .tui .tab { padding: 8px 18px; color: var(--gl-ink-faint);
+}
+.gl-showcase-stage .tui .tab.on { color: var(--gl-ink-strong); border-bottom: 3px solid var(--gl-accent);
+}
+.gl-showcase-stage .tui .grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 16px; padding: 16px 8px; min-height: 0;
+}
+.gl-showcase-stage .tui .panel { border: 1px solid var(--gl-hairline); border-radius: 8px; padding: 10px 16px; min-height: 0; position: relative;
+}
+.gl-showcase-stage .tui .panel .ptitle { position: absolute; top: -14px; left: 14px; padding: 0 8px; background: #17121a; color: var(--gl-accent); font-size: 20px;
+}
+.gl-showcase-stage .tui .chart { grid-column: 1 / 3;
+}
+.gl-showcase-stage .tui .chart svg { width: 100%; height: 100%; display: block;
+}
+.gl-showcase-stage .tui .rows { display: grid; grid-template-columns: 4fr 3fr 3fr 3fr 2fr 2fr; column-gap: 20px; font-variant-numeric: tabular-nums;
+}
+.gl-showcase-stage .tui .rows .h { color: var(--gl-ink-faint);
+}
+.gl-showcase-stage .tui .rows .r { text-align: right;
+}
+.gl-showcase-stage .tui .rows .pos { color: var(--gl-good);
+}
+.gl-showcase-stage .tui .rows .neg { color: var(--gl-cut);
+}
+.gl-showcase-stage .tui .bar { height: 18px; border-radius: 4px; background: var(--gl-surface-soft); overflow: hidden; margin: 8px 0;
+}
+.gl-showcase-stage .tui .bar i { display: block; height: 100%; background: var(--gl-accent);
+}
+.gl-showcase-stage .tui .foot { border-top: 1px solid var(--gl-hairline); padding: 8px 16px; color: var(--gl-ink-faint); display: flex; gap: 36px; font-size: 20px;
+}
+.gl-showcase-stage .tui .foot b { color: var(--gl-ink-muted); font-weight: 500;
+}
+.gl-showcase-stage .tui .kv { display: grid; grid-template-columns: auto 1fr; column-gap: 24px; row-gap: 2px;
+}
+.gl-showcase-stage .tui .kv .k { color: var(--gl-ink-faint);
+}
+.gl-showcase-stage .tui .kv .v { text-align: right;
+}
+.gl-showcase-stage .tui .stab { color: var(--gl-ink-muted);
+}
+.gl-showcase-stage .s-api .head { position: absolute; left: 90px; top: 70px; display: grid; gap: 8px;
+}
+.gl-showcase-stage .s-api .head .display { font-size: 60px;
+}
+.gl-showcase-stage .s-api .pane {
+  position: absolute; top: 230px; width: 840px; height: 730px;
+  background: #17121a; border: 1px solid var(--gl-hairline); border-radius: 14px; overflow: hidden;
+  font-family: var(--gl-font-mono); font-size: 22px; line-height: 1.55;
+}
+.gl-showcase-stage .s-api .pane .bar { height: 50px; display: flex; align-items: center; padding: 0 22px; gap: 14px; background: var(--gl-surface); border-bottom: 1px solid var(--gl-hairline); font-family: var(--gl-font-sans); font-size: 20px; color: var(--gl-ink-muted);
+}
+.gl-showcase-stage .s-api .pane .bar .lang { color: var(--gl-ink-strong); font-weight: 600;
+}
+.gl-showcase-stage .s-api .pane .code { padding: 22px 28px; white-space: pre;
+}
+.gl-showcase-stage .s-api .py { left: 90px;
+}
+.gl-showcase-stage .s-api .rs { left: 990px;
+}
+.gl-showcase-stage .s-api .hub {
+  position: absolute; left: 860px; top: 130px; width: 200px; text-align: center;
+  font-family: var(--gl-font-mono); font-size: 20px; color: var(--gl-ink-muted);
+}
+.gl-showcase-stage .s-api .link { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; pointer-events: none;
+}
+.gl-showcase-stage .kw { color: var(--gl-syntax-keyword);
+}
+.gl-showcase-stage .fn { color: var(--gl-syntax-call);
+}
+.gl-showcase-stage .st { color: var(--gl-syntax-string);
+}
+.gl-showcase-stage .nu { color: var(--gl-syntax-number);
+}
+.gl-showcase-stage .cm { color: var(--gl-syntax-comment);
+}
+.gl-showcase-stage .ty { color: var(--gl-syntax-property);
+}
+.gl-showcase-stage .at { color: var(--gl-syntax-label);
+}
+.gl-showcase-stage .s-eco .head { position: absolute; left: 120px; top: 90px; display: grid; gap: 10px;
+}
+.gl-showcase-stage .s-eco .head .display { font-size: 64px;
+}
+.gl-showcase-stage .s-eco svg { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: visible;
+}
+.gl-showcase-stage .s-eco .node { fill: var(--gl-surface); stroke: var(--gl-hairline); stroke-width: 2;
+}
+.gl-showcase-stage .s-eco .node.core { fill: var(--gl-accent-soft); stroke: var(--gl-accent);
+}
+.gl-showcase-stage .s-eco .ntitle { font-family: var(--gl-font-serif); font-size: 42px; fill: var(--gl-ink-strong);
+}
+.gl-showcase-stage .s-eco .nsub { font-family: var(--gl-font-sans); font-size: 21px; fill: var(--gl-ink-muted);
+}
+.gl-showcase-stage .s-eco .npkg { font-family: var(--gl-font-mono); font-size: 19px; fill: var(--gl-accent);
+}
+.gl-showcase-stage .s-eco .link { fill: none; stroke: var(--gl-link); stroke-width: 3; stroke-linecap: round; opacity: 0.9;
+}
+.gl-showcase-stage .s-out .logo { position: absolute; left: 760px; top: 220px; width: 400px;
+}
+.gl-showcase-stage .s-out .logo path { fill: none; stroke: var(--gl-ink-strong);
+}
+.gl-showcase-stage .s-out .lines { position: absolute; left: 0; right: 0; top: 500px; text-align: center; display: grid; gap: 22px;
+}
+.gl-showcase-stage .s-out .big { font-family: var(--gl-font-serif); font-size: 64px; color: var(--gl-ink-strong);
+}
+.gl-showcase-stage .s-out .url { font-family: var(--gl-font-mono); font-size: 30px; color: var(--gl-link);
+}
+.gl-showcase-stage .s-out .small { font-size: 22px; color: var(--gl-ink-muted);
+}
+.gl-showcase-stage .term .body { height: calc(100% - 54px); box-sizing: border-box; overflow: hidden;
+}
+.gl-showcase-stage .logo path.ink { stroke: var(--gl-ink-strong);
+}
+.gl-showcase-stage .logo path.mask { stroke: var(--gl-canvas);
+}
+.gl-showcase-stage .term .line-hi { background: rgb(184 147 199 / 14%); border-radius: 4px;
+}
+.gl-showcase-stage .s-lu .eq .term-g { color: var(--gl-ink-faint); transition: none;
+}
+.gl-showcase-stage .s-lu .fin { color: var(--gl-good); font-family: var(--gl-font-sans); font-size: 40px; line-height: 1.2; text-align: center;
+}
+.gl-showcase-stage .s-lu .eq .term-g .sub { color: inherit;
+}
+.gl-showcase-stage .s-lu .klabel { font-family: var(--gl-font-serif); font-style: italic; font-size: 30px; fill: var(--gl-accent);
+}
+.gl-showcase-stage .s-lu .elabel { font-family: var(--gl-font-serif); font-style: italic; font-size: 26px; fill: var(--gl-ink-muted);
+}
+.gl-showcase-stage .s-lu .extlabel { font-family: var(--gl-font-serif); font-style: italic; font-size: 26px; fill: var(--gl-ink-muted);
+}
+.gl-showcase-stage .s-api .chip { font-size: 19px; 
+  position: absolute; padding: 10px 18px; border-radius: 999px;
+  background: var(--gl-surface); border: 1px solid var(--gl-hairline);
+  font-family: var(--gl-font-mono); font-size: 20px; color: var(--gl-ink);
+  white-space: nowrap;
+}
+.gl-showcase-stage .s-api .chip.hub { background: var(--gl-accent-soft); border-color: var(--gl-accent); color: var(--gl-ink-strong);
+}
+.gl-showcase-stage .s-api .lede { font-size: 26px; max-width: 60ch;
+}
+.gl-showcase-stage .s-eco .legend { position: absolute; left: 0; right: 0; bottom: 60px; text-align: center; font-size: 24px; color: var(--gl-ink-muted);
+}
+.gl-showcase-stage .s-int .term .body.tui-host { padding: 14px 18px;
+}
+.gl-showcase-stage .tui .foot { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; gap: 30px;
+}
+.gl-showcase-stage .tui .stab { font-size: 20px;
+}
+.gl-showcase-stage .s-api .pane .code { overflow: hidden; height: calc(100% - 50px); box-sizing: border-box;
+}
+.gl-showcase-stage .s-api .rs .code { font-size: 17px; line-height: 1.38; padding: 16px 28px;
+}

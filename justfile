@@ -240,6 +240,10 @@ docs-check:
     just docs-svg-assets-check
     just docs-linnet-python-check
 
+# Render the front-page tour to target/showcase/ (needs Node, Playwright's Chromium, and ffmpeg).
+showcase-video *ARGS:
+    node scripts/render-showcase-video.mjs {{ ARGS }}
+
 # Build Linnet's extension and compare its real import surface with the checked-in stub.
 docs-linnet-python-check:
     #!/usr/bin/env bash
