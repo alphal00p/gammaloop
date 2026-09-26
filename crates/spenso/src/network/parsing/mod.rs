@@ -197,12 +197,11 @@ pub enum StrictTensorFilter {
 
 #[derive(Clone, Debug)]
 pub struct ParseSettings {
-    /// Fold factors that parse as pure scalars into one scalar factor while
-    /// parsing a product.
+    /// Fold pure scalar operands into one scalar while parsing a product or sum.
     ///
     /// This keeps scalar-only subexpressions out of the tensor graph when they
     /// cannot affect contraction topology. Disable it when the caller needs
-    /// every product factor to remain represented separately in the network.
+    /// every operand to remain represented separately in the network.
     pub precontract_scalars: bool,
 
     /// Parse only the first summand of an addition.
@@ -964,7 +963,9 @@ where
         if settings.take_first_term_from_sum {
             Ok(first)
         } else if settings.precontract_scalars {
-            let mut scalars = Atom::Zero;
+            // Keep borrowed terms until we know whether a mixed sum needs a
+            // scalar summand. Pairwise addition copies the growing sum.
+            let mut scalars = Vec::new();
 
             let rest: Result<Vec<_>, _> = iter
                 .filter_map(|a| {
@@ -979,9 +980,7 @@ where
                             profile::bump(Counter::AddTerm, 1);
                             if n.state.is_compatible(&first.state) {
                                 if let NetworkState::PureScalar = n.state {
-                                    let _span = profile::span(Timer::ScalarAddAccum);
-                                    profile::bump(Counter::ScalarAddAccum, 1);
-                                    scalars += a;
+                                    scalars.push(a);
                                     None
                                 } else {
                                     Some(Ok(n))
@@ -1001,16 +1000,20 @@ where
             let mut res = rest?;
 
             if let NetworkState::PureScalar = first.state {
-                let _span = profile::span(Timer::ScalarAddAccum);
-                profile::bump(Counter::ScalarAddAccum, 1);
-                scalars += first_atom;
+                scalars.push(first_atom);
             } else {
                 res.push(first);
             }
 
             if res.is_empty() {
+                // The input already contains the complete normalized scalar sum.
                 Ok(Self::from_scalar(value.as_view().try_into()?))
             } else {
+                let scalars = {
+                    let _span = profile::span(Timer::ScalarAddAccum);
+                    profile::bump(Counter::ScalarAddAccum, scalars.len() as u64);
+                    Atom::add_many(scalars)
+                };
                 let s = if scalars != Atom::Zero {
                     Self::from_scalar(scalars.as_view().try_into()?)
                 } else {

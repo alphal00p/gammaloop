@@ -5,7 +5,7 @@ networks in `crates/spenso/src/network/parsing`. It focuses on the
 control flow, shorthand expansion, opaque leaves, structure inference,
 and edge cases that affect Schoonschip-style notation.
 
-#strong[Audit status:] reviewed 2026-09-21 against `11fe63d8`.
+#strong[Audit status:] reviewed 2026-09-25 against `4571823a`.
 Lifecycle: current implementation architecture.
 
 == Entry Points
@@ -739,6 +739,15 @@ let factor = ChainExpansion::replace_placeholders(factor, &left, &right);
     allowed only when the network state supports the exponent.
     Non-integer powers fall back to scalar parsing.],
 )
+
+With scalar precontraction enabled, sum parsing retains borrowed pure-scalar
+summands while checking compatibility. A wholly scalar sum reuses the original
+normalized input atom. A mixed sum combines its scalar summands once with
+`Atom::add_many`, then passes that scalar and the tensor networks to the existing
+n-ary network addition. This avoids repeatedly copying an increasingly large
+scalar sum and preserves factorized coefficients. `take_first_term_from_sum`
+still returns after parsing the first summand; disabling precontraction retains
+separate operand networks.
 
 When a positive integer power greater than one lowers shorthand that
 allocates internal dummy indices, each remaining copy is parsed from the
