@@ -14,6 +14,8 @@ The portraits below are size-optimized WebP derivatives of public professional p
 | `people/ben.webp` | Ben Ruijl | [Symbolica profile](https://symbolica.io/about.html) · [original portrait](https://symbolica.io/ben.jpg) |
 | `spensologo.svg` | Spenso | Native Typst reconstruction of the [canonical logo at the pinned upstream revision](https://github.com/alphal00p/spenso/blob/c052f22dc98a18535e114eede758674befc2758f/spensologo.svg) |
 
+`showcase.js`, `showcase.css`, and `showcase-music.js` are the source of the animated tour on the portal landing page. The stage is a pure function of time, so the same program drives the browser embed and the video export, and `showcase-music.js` composes and synthesizes the slow-blues piano soundtrack from a fixed seed; no recorded audio or video is checked in. `just showcase-video` renders the tour to `target/showcase/gammaloop-showcase.mp4` with Node, Playwright's Chromium, and ffmpeg (see `scripts/render-showcase-video.mjs`). The mark drawn in its opening is `assets/gammalooplogo-dark.svg`.
+
 The graph sources read the real generated-process and test-resource DOT files directly and pass them to Linnest from Typst; no Graphviz, `just draw`, or generated template bundle is part of the website build. Four sources enable Linnest momentum arrows explicitly, and the shared edge style owns the website-specific line weights and light/dark palette.
 
 The portraits and referenced project design are public professional/project material. No explicit public redistribution license was found for the portrait sources; preserve this provenance and obtain permission where required before reusing them elsewhere.

@@ -153,6 +153,17 @@
   attrs: (href: href),
   body,
 )
+// The animated tour mounts itself into the data-showcase host once site.js has loaded the
+// showcase assets; without JavaScript the whole section stays hidden.
+#let tour-section(body) = region(
+  class: "portal-section portal-showcase",
+  id: "tour",
+  labelled-by: "tour-title",
+  body,
+)
+#let tour-frame(label) = group(class: "portal-showcase-frame")[
+  #group(attrs: ("data-showcase": "", "data-poster": "5.6", role: "region", "aria-label": label))[]
+]
 #let funding-note(href, title-id: "funding-title", about: false, body) = el(
   "aside",
   class: "portal-funding" + if about { " about-funding" } else { "" },
