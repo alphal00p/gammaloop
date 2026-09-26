@@ -190,7 +190,7 @@
 }
 .gl-showcase-stage .s-lu .eq {
   position: absolute; left: 120px; top: 760px;
-  font-family: var(--gl-font-serif); font-size: 44px; color: var(--gl-ink-strong);
+  font-family: var(--gl-font-serif); font-size: 40px; color: var(--gl-ink-strong);
 }
 .gl-showcase-stage .s-lu .eq .sub { font-size: 0.6em; vertical-align: sub; color: var(--gl-ink-muted);
 }
@@ -408,7 +408,9 @@
 }
 .gl-showcase-stage .s-lu .eq .term-g { color: var(--gl-ink-faint); transition: none;
 }
-.gl-showcase-stage .s-lu .eq .fin { color: var(--gl-good); font-family: var(--gl-font-sans); font-size: 30px; margin-left: 24px;
+.gl-showcase-stage .s-lu .fin { position: absolute; left: 120px; top: 840px; color: var(--gl-good); font-family: var(--gl-font-sans); font-size: 40px; line-height: 1.2;
+}
+.gl-showcase-stage .s-lu .eq .term-g .sub { color: inherit;
 }
 .gl-showcase-stage .s-lu .klabel { font-family: var(--gl-font-serif); font-style: italic; font-size: 30px; fill: var(--gl-accent);
 }

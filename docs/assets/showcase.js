@@ -485,16 +485,18 @@
 
       // Equation
       const eq = el('div', { class: 'eq' });
+      const sup = (text) => `<sup style="font-size:.6em">${text}</sup>`;
+      const faint = (text) => `<span style="color:var(--gl-ink-faint)">${text}</span>`;
       eq.innerHTML =
-        'σ = ∫ d<sup style="font-size:.6em">3L</sup>k <span style="display:inline-block;transform:translateY(2px)">∑</span><span class="sub">cuts</span> ' +
+        `σ = ∫ d${sup('3')}k d${sup('3')}l <span style="display:inline-block;transform:translateY(2px)">∑</span><span class="sub">cuts</span> ${faint('[')}` +
         [1, 2, 3, 4]
-          .map((i) => `<span class="term-g" data-c="${i}"><i>G</i><span class="sub">${i}</span>(k)</span>`)
-          .join(' <span class="term-plus" style="color:var(--ink-faint)">+</span> ') +
-        '<span class="fin"></span>';
-      sc.append(eq);
+          .map((i) => `<span class="term-g" data-c="${i}"><i>G</i><span class="sub">${i}</span></span>`)
+          .join(` ${faint('+')} `) +
+        `${faint(']')}(k, l)`;
+      const fin = el('div', { class: 'fin' });
+      sc.append(eq, fin);
       fadeIn(eq, a + 2.2, 0.8);
       const terms = [...eq.querySelectorAll('.term-g')];
-      const fin = eq.querySelector('.fin');
 
       // Diagram
       const box = el('div', { class: 'diagram' });
@@ -542,6 +544,10 @@
       const kdot = svg('circle', { r: 11, fill: '#b893c7' });
       const klabel = svg('text', { class: 'klabel' }, 'k');
       g.append(kdot, klabel);
+      // The gluon rung carries the second loop momentum l, flowing from the top vertex down.
+      const ldot = svg('circle', { r: 9, fill: '#76d3df' });
+      const llabel = svg('text', { class: 'klabel', fill: '#76d3df' }, 'l');
+      g.append(ldot, llabel);
       let loopLen = null;
       tl.add(
         a + 2.6,
@@ -549,13 +555,17 @@
         (_, local, t) => {
           if (loopLen === null) loopLen = loopPath.getTotalLength();
           const on = t >= a + 2.6;
-          kdot.style.opacity = on ? 1 : 0;
-          klabel.style.opacity = on ? 1 : 0;
+          [kdot, klabel, ldot, llabel].forEach((n) => (n.style.opacity = on ? 1 : 0));
           const pt = loopPath.getPointAtLength((local * 190) % loopLen);
           kdot.setAttribute('cx', pt.x);
           kdot.setAttribute('cy', pt.y);
           klabel.setAttribute('x', pt.x + 18);
           klabel.setAttribute('y', pt.y - 14);
+          const ly = lerp(Bv[1] + 40, Cv[1] - 40, (local / 3.2) % 1);
+          ldot.setAttribute('cx', Bv[0]);
+          ldot.setAttribute('cy', ly);
+          llabel.setAttribute('x', Bv[0] - 44);
+          llabel.setAttribute('y', ly + 10);
         },
         ease.linear,
       );
@@ -606,21 +616,21 @@
             rect.setAttribute('height', hgt);
             rect.setAttribute('y', upward ? 900 - hgt : 0);
             path.style.opacity = active ? 1 : ghostPhase ? 0.6 : 0.18;
-            path.style.stroke = ghostPhase ? 'var(--accent)' : 'var(--cut)';
+            path.style.stroke = ghostPhase ? 'var(--gl-accent)' : 'var(--gl-cut)';
             tag.style.opacity = active ? clamp(local / 0.4) : ghostPhase ? 0.9 : 0.35;
-            tag.style.fill = ghostPhase ? 'var(--accent)' : 'var(--cut)';
+            tag.style.fill = ghostPhase ? 'var(--gl-accent)' : 'var(--gl-cut)';
             if (active) {
               caption.textContent = cut.label;
               caption.style.opacity = clamp(local / 0.4);
-              caption.style.fill = 'var(--cut)';
+              caption.style.fill = 'var(--gl-cut)';
             }
             if (i === cuts.length - 1 && ghostPhase) {
-              caption.textContent = 'all four cuts share the same loop momentum k';
+              caption.textContent = 'all four cuts localized in the same momenta k and l';
               caption.style.opacity = clamp((t - (cutStart + 4 * per)) / 0.5);
-              caption.style.fill = 'var(--accent)';
+              caption.style.fill = 'var(--gl-accent)';
             }
             const term = terms[i];
-            term.style.color = active ? 'var(--cut)' : ghostPhase ? 'var(--ink-strong)' : 'var(--ink-muted)';
+            term.style.color = active ? 'var(--gl-cut)' : ghostPhase ? 'var(--gl-ink-strong)' : 'var(--gl-ink-muted)';
             if (active) cut.hot.forEach((e) => e.classList.add('hot'));
             else cut.hot.forEach((e) => e.classList.remove('hot'));
           },
@@ -630,7 +640,7 @@
       // Reset all hot edges during the final ghost phase so the loop settles.
       tl.add(cutStart + 4 * per, 0.01, () => internal.forEach((e) => e.classList.remove('hot')), ease.linear);
       const finAt = cutStart + 4 * per + 0.3;
-      typeText(fin, '= finite at every k', finAt, 0.9);
+      typeText(fin, 'finite at every k and l', finAt, 0.9);
     }
 
     // -- CLI help ------------------------------------------------------------
@@ -807,7 +817,7 @@
       // DOT excerpt
       const dot = el('div', {
         class: 'tree',
-        style: 'left:1200px;top:430px;font-size:18px;line-height:1.4;color:var(--ink-muted)',
+        style: 'left:1200px;top:430px;font-size:18px;line-height:1.4;color:var(--gl-ink-muted)',
       });
       sc.append(dot);
       const dotText = `digraph GL0 {\n  0:4 -> 2:5 [id=4 lmb_id="0" name="e4" particle="t"];\n  3:6 -> 0:7 [id=5 name="e5" particle="t"];\n  2:8 -> 1:9 [id=6 name="e6" particle="t"];\n  1:10 -> 3:11 [id=7 name="e7" particle="t"];\n  exte0 -> 3:0 [id=0 particle="a" pin="x:@-left"];\n  …\n}`;
@@ -899,7 +909,7 @@
         el('span', { class: 'tab on' }, 'Overview'),
         el('span', { class: 'tab' }, 'Discrete'),
         el('span', { class: 'tab' }, 'Max Weight'),
-        el('span', { class: 'tab', style: 'margin-left:auto;color:var(--ink-muted)' }, 'aa_aa@1L · 8 cores · ratatui'),
+        el('span', { class: 'tab', style: 'margin-left:auto;color:var(--gl-ink-muted)' }, 'aa_aa@1L · 8 cores · ratatui'),
       );
       const grid = el('div', { class: 'grid' });
       const summary = el('div', { class: 'panel' }, el('span', { class: 'ptitle' }, 'Results summary · aa_aa@1L'));
