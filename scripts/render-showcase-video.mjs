@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Render the front-page GammaLoop tour (docs/assets/showcase*.js|css) to a video, or write a
+// Render the front-page GammaLoop tour (docs/assets/showcase.js|css) to a video, or write a
 // standalone preview page. The stage is a pure function of time, so frames are captured
-// deterministically with Playwright and piped to ffmpeg together with the procedurally
-// generated soundtrack.
+// deterministically with Playwright and piped to ffmpeg together with the soundtrack
+// (docs/assets/showcase-hard-boiled.mp3).
 //
 //   node scripts/render-showcase-video.mjs                 target/showcase/gammaloop-showcase.mp4
 //   node scripts/render-showcase-video.mjs --preview       target/showcase/index.html (needs fonts online)
-//   node scripts/render-showcase-video.mjs --standalone    one self-contained HTML page with embedded fonts
+//   node scripts/render-showcase-video.mjs --standalone    one self-contained HTML page with embedded media
 //
 // Options: --out DIR, --fps 30, --from 0, --to END, --width 1920, --height 1080, --poster 5.6,
 //          --assets DIR, --ffmpeg PATH, --no-fonts, --no-music.
@@ -15,7 +15,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -34,10 +33,10 @@ const width = Number(opt('width', 1920));
 const height = Number(opt('height', 1080));
 fs.mkdirSync(out, { recursive: true });
 
-const read = (name) => fs.readFileSync(path.join(assets, name), 'utf8');
-const css = read('showcase.css');
-const js = read('showcase.js');
-const musicJs = read('showcase-music.js');
+const css = fs.readFileSync(path.join(assets, 'showcase.css'), 'utf8');
+const js = fs.readFileSync(path.join(assets, 'showcase.js'), 'utf8');
+const soundtrackName = 'showcase-hard-boiled.mp3';
+const soundtrack = path.join(assets, soundtrackName);
 
 const FAMILIES =
   'family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap';
@@ -85,7 +84,7 @@ const embedFonts = (fontCss) => {
   return embedded;
 };
 
-const pageHtml = (fontCss, { autoplay }) => `<!doctype html>
+const pageHtml = (fontCss, soundtrackSrc) => `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -99,59 +98,25 @@ html, body { margin: 0; min-height: 100%; background: #211a23; }
 </style>
 </head>
 <body>
-<div class="showcase-host" data-showcase${autoplay ? ' data-autoplay' : ''} data-poster="5.6"></div>
-<script>${musicJs}</script>
+<div class="showcase-host" data-showcase data-autoplay data-poster="5.6" data-soundtrack="${soundtrackSrc}"></div>
 <script>${js}</script>
 </body>
 </html>`;
 
 const fontCss = flag('no-fonts') ? null : localFontCss();
 const indexFile = path.join(out, 'index.html');
-fs.writeFileSync(indexFile, pageHtml(fontCss, { autoplay: true }));
+fs.copyFileSync(soundtrack, path.join(out, soundtrackName));
+fs.writeFileSync(indexFile, pageHtml(fontCss, soundtrackName));
 if (flag('standalone')) {
   const file = path.join(out, 'gammaloop-showcase.html');
-  fs.writeFileSync(file, pageHtml(fontCss ? embedFonts(fontCss) : null, { autoplay: true }));
+  const audio = `data:audio/mpeg;base64,${fs.readFileSync(soundtrack).toString('base64')}`;
+  fs.writeFileSync(file, pageHtml(fontCss ? embedFonts(fontCss) : null, audio));
   console.log(file);
   process.exit(0);
 }
 if (flag('preview')) {
   console.log(indexFile);
   process.exit(0);
-}
-
-function writeWav(file, duration, sampleRate = 44100) {
-  const music = createRequire(import.meta.url)(path.join(assets, 'showcase-music.js'));
-  const synth = music.createSynth({ sampleRate, duration });
-  const total = Math.round(duration * sampleRate);
-  const pcm = Buffer.alloc(total * 4);
-  const chunk = sampleRate;
-  const left = new Float32Array(chunk);
-  const right = new Float32Array(chunk);
-  let offset = 0;
-  let more = true;
-  while (more && offset < pcm.length) {
-    more = synth.render(left, right);
-    for (let i = 0; i < chunk && offset < pcm.length; i++) {
-      pcm.writeInt16LE(Math.round(Math.max(-1, Math.min(1, left[i])) * 32767), offset);
-      pcm.writeInt16LE(Math.round(Math.max(-1, Math.min(1, right[i])) * 32767), offset + 2);
-      offset += 4;
-    }
-  }
-  const header = Buffer.alloc(44);
-  header.write('RIFF', 0);
-  header.writeUInt32LE(36 + pcm.length, 4);
-  header.write('WAVE', 8);
-  header.write('fmt ', 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(2, 22);
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(sampleRate * 4, 28);
-  header.writeUInt16LE(4, 32);
-  header.writeUInt16LE(16, 34);
-  header.write('data', 36);
-  header.writeUInt32LE(pcm.length, 40);
-  fs.writeFileSync(file, Buffer.concat([header, pcm]));
 }
 
 async function loadPlaywright() {
@@ -195,11 +160,9 @@ await page.evaluate((t) => window.showcase.seek(t), Number(opt('poster', 5.6)));
 fs.writeFileSync(path.join(out, 'poster.png'), await page.screenshot({ type: 'png' }));
 
 const videoFile = path.join(out, opt('name', 'gammaloop-showcase.mp4'));
-const audioFile = path.join(out, 'soundtrack.wav');
 const withMusic = !flag('no-music');
-if (withMusic) writeWav(audioFile, to - from);
 const ffmpegArgs = ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-i', 'pipe:0'];
-if (withMusic) ffmpegArgs.push('-i', audioFile);
+if (withMusic) ffmpegArgs.push('-ss', String(from), '-i', soundtrack);
 ffmpegArgs.push('-c:v', 'libx264', '-preset', 'medium', '-crf', '17', '-pix_fmt', 'yuv420p', '-movflags', '+faststart');
 if (withMusic) ffmpegArgs.push('-c:a', 'aac', '-b:a', '160k', '-shortest');
 ffmpegArgs.push(videoFile);

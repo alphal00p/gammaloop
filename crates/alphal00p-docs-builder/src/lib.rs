@@ -1256,7 +1256,7 @@ impl SiteBuilder {
         self.require_file(Path::new("docs/assets/site.js"))?;
         self.require_file(Path::new("docs/assets/showcase.css"))?;
         self.require_file(Path::new("docs/assets/showcase.js"))?;
-        self.require_file(Path::new("docs/assets/showcase-music.js"))?;
+        self.require_file(Path::new("docs/assets/showcase-hard-boiled.mp3"))?;
         self.require_file(Path::new("docs/assets/rustdoc.css"))?;
         self.require_file(Path::new("docs/assets/STIXTwoMath-Regular.woff2"))?;
         self.require_file(Path::new("docs/assets/STIX-Two-OFL.txt"))?;
@@ -2240,7 +2240,10 @@ impl SiteBuilder {
             ("docs/assets/site.js", "site.js"),
             ("docs/assets/showcase.css", "showcase.css"),
             ("docs/assets/showcase.js", "showcase.js"),
-            ("docs/assets/showcase-music.js", "showcase-music.js"),
+            (
+                "docs/assets/showcase-hard-boiled.mp3",
+                "showcase-hard-boiled.mp3",
+            ),
             (
                 "docs/assets/STIXTwoMath-Regular.woff2",
                 "STIXTwoMath-Regular.woff2",

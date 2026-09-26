@@ -1214,91 +1214,69 @@
       const u1 = el('div', { class: 'url' }, 'alphal00p.github.io/gammaloop');
       const u2 = el('div', { class: 'url' }, 'github.com/alphal00p/gammaloop');
       const small = el('div', { class: 'small' }, 'The αLoop collaboration · Research associated with Local Unitarity is supported by the Swiss National Science Foundation');
-      lines.append(big, u1, u2, small);
+      const credit = el('div', { class: 'small' }, 'Music: “Hard Boiled” by Kevin MacLeod (incompetech.com), Creative Commons Attribution 4.0');
+      lines.append(big, u1, u2, small, credit);
       sc.append(lines);
       fadeIn(big, a + 1.0, 0.8, 20);
       fadeIn(u1, a + 1.6, 0.7, 14);
       fadeIn(u2, a + 1.9, 0.7, 14);
       fadeIn(small, a + 2.6, 0.8, 10);
+      fadeIn(credit, a + 3.0, 0.8, 10);
     }
 
     return { tl, scenes, duration: T.out[1] };
   }
 
   // ================================================================ playback
-  // Music: the shared score module renders one-second chunks ahead of the audio clock, so the
-  // page and the video hear the same notes. Audio only starts from a user gesture.
-  class MusicPlayer {
-    constructor(duration) {
-      this.duration = duration;
-      this.module = globalThis.GammaLoopShowcaseMusic || null;
-      this.ctx = null;
-      this.sources = [];
-      this.timer = 0;
+  // Soundtrack: an <audio> element whose clock drives the animation while sound is on. Audio
+  // only starts from a user gesture, so the browser never blocks it.
+  class Soundtrack {
+    constructor(src) {
+      this.src = src;
+      this.audio = null;
       this.active = false;
+      this.pending = 0;
+      this.waiting = false;
     }
     get available() {
-      return this.module !== null && typeof (globalThis.AudioContext || globalThis.webkitAudioContext) === 'function';
+      return Boolean(this.src) && typeof Audio === 'function';
     }
-    ensure() {
-      if (this.ctx) return;
-      const Context = globalThis.AudioContext || globalThis.webkitAudioContext;
-      this.ctx = new Context();
-      this.gain = this.ctx.createGain();
-      this.gain.connect(this.ctx.destination);
-      this.synth = this.module.createSynth({ sampleRate: this.ctx.sampleRate, duration: this.duration });
+    get running() {
+      return this.active && this.audio !== null && !this.audio.paused && this.audio.readyState >= 3;
     }
     start(time) {
-      this.ensure();
-      this.stop();
-      this.ctx.resume();
-      this.synth.seek(time);
-      this.startContext = this.ctx.currentTime + 0.08;
-      this.startTimeline = time;
-      this.rendered = time;
+      if (!this.audio) {
+        this.audio = new Audio(this.src);
+        this.audio.preload = 'auto';
+      }
       this.active = true;
-      this.schedule();
+      this.pending = time;
+      if (this.audio.readyState >= 1) this.begin();
+      else if (!this.waiting) {
+        this.waiting = true;
+        this.audio.addEventListener(
+          'loadedmetadata',
+          () => {
+            this.waiting = false;
+            if (this.active) this.begin();
+          },
+          { once: true },
+        );
+      }
+    }
+    begin() {
+      this.audio.currentTime = this.pending;
+      this.audio.play().catch(() => {});
     }
     time() {
-      return this.startTimeline + (this.ctx.currentTime - this.startContext);
-    }
-    schedule() {
-      clearTimeout(this.timer);
-      const chunk = 1;
-      while (this.active && this.rendered < this.duration && this.rendered - this.time() < 3.2) {
-        const frames = Math.round(chunk * this.ctx.sampleRate);
-        const buffer = this.ctx.createBuffer(2, frames, this.ctx.sampleRate);
-        const more = this.synth.render(buffer.getChannelData(0), buffer.getChannelData(1));
-        const source = this.ctx.createBufferSource();
-        source.buffer = buffer;
-        source.connect(this.gain);
-        source.start(Math.max(this.ctx.currentTime, this.startContext + (this.rendered - this.startTimeline)));
-        this.sources.push(source);
-        this.rendered = more ? this.rendered + chunk : this.duration;
-      }
-      if (this.active && this.rendered < this.duration) this.timer = setTimeout(() => this.schedule(), 300);
+      return this.audio.currentTime;
     }
     pause() {
-      if (!this.ctx || !this.active) return;
-      clearTimeout(this.timer);
-      this.ctx.suspend();
-    }
-    resume() {
-      if (!this.ctx || !this.active) return;
-      this.ctx.resume();
-      this.schedule();
+      if (this.audio) this.audio.pause();
     }
     stop() {
-      clearTimeout(this.timer);
       this.active = false;
-      for (const source of this.sources) {
-        try {
-          source.stop();
-        } catch {
-          // already finished
-        }
-      }
-      this.sources = [];
+      if (this.audio) this.audio.pause();
     }
   }
 
@@ -1335,7 +1313,7 @@
     if (render) return controller;
 
     // Interactive controls
-    const music = new MusicPlayer(duration);
+    const music = new Soundtrack(options.soundtrack);
     let playing = false;
     let origin = 0;
     let soundOn = options.autoplay !== true; // autoplay cannot carry sound, so it starts muted
@@ -1385,7 +1363,11 @@
     }
     function tick(now) {
       if (!playing) return;
-      let t = music.active && music.ctx.state === 'running' ? music.time() : (now - origin) / 1000;
+      let t = (now - origin) / 1000;
+      if (music.running) {
+        t = music.time();
+        origin = now - t * 1000;
+      }
       if (t >= duration) {
         t = 0;
         origin = now;
@@ -1435,7 +1417,6 @@
           } else if (entry.isIntersecting && autoPaused) {
             autoPaused = false;
             play();
-            if (music.active) music.resume();
           }
         },
         { threshold: 0.1 },
@@ -1461,6 +1442,7 @@
         render,
         autoplay: host.hasAttribute('data-autoplay'),
         poster: host.dataset.poster ? Number(host.dataset.poster) : 5.6,
+        soundtrack: host.dataset.soundtrack || null,
       });
       if (index === 0) globalThis.showcase = controller;
     });

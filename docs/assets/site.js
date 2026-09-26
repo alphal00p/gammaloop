@@ -6,18 +6,15 @@
   const searchIndex = body.dataset.searchIndex || `${docsRoot}search-index.json`;
   const searchRoot = body.dataset.searchRoot || docsRoot;
 
-  // The front-page tour loads its stage, score, and styles only where a host asks for them.
+  // The front-page tour loads its stage and styles only where a host asks for them.
   if (document.querySelector("[data-showcase]")) {
     const stylesheet = document.createElement("link");
     stylesheet.rel = "stylesheet";
     stylesheet.href = `${docsRoot}assets/showcase.css`;
     document.head.append(stylesheet);
-    for (const name of ["showcase-music.js", "showcase.js"]) {
-      const script = document.createElement("script");
-      script.src = `${docsRoot}assets/${name}`;
-      script.async = false;
-      document.head.append(script);
-    }
+    const script = document.createElement("script");
+    script.src = `${docsRoot}assets/showcase.js`;
+    document.head.append(script);
   }
   const menu = document.querySelector("[data-menu-toggle]");
   const sidebar = document.querySelector(".docs-sidebar");
