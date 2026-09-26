@@ -669,6 +669,18 @@
   Set `default-edge-data: (show-momentum: false)` on `graph.build` to hide all
   momenta, then opt individual edges back in with `show-momentum: true`.
 
+  Ordinary dangling-edge labels without a stored `label-pos` clear their
+  external endpoint by `external-label-gap` (default `0.45` canvas units).
+  Linnest measures the text box, including its anchor, padding and rotation,
+  and moves it along the rendered carrier's outward endpoint tangent until
+  the nearest projection clears that endpoint. This applies to direct `draw`,
+  Python graphs, Feynman diagrams and process schematics. Existing explicit
+  or layout-produced label positions and path-attached labels retain their
+  placement. Set `draw(..., external-label-gap: 0.65)` in Typst, or
+  `RenderConfig(drawing=DrawOptions(external_label_gap=0.65))` in Python,
+  to change the clearance. The value must be non-negative; zero removes the
+  extra gap while still placing the text box outside the endpoint.
+
   Momentum arrows and labels are placed together by the shared label annealing
   step. The arrow offset and relative arc shift remain fixed; the optimizer
   chooses a position along the full edge and may switch an automatic side.

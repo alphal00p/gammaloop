@@ -317,6 +317,11 @@
   /// moves help crowded annotations pass one another.
   /// -> int | float
   label-collision-padding: _impl-label-collision-padding.extra,
+  /// Clearance from a dangling endpoint to the nearest side of its automatic
+  /// label's text box, in canvas units, measured along the outward tangent.
+  /// Explicit label positions and path-attached labels keep their placement.
+  /// -> int | float
+  external-label-gap: 0.45,
   /// Show `h_i` beside every half-edge without an explicit endpoint label.
   /// -> bool
   show-half-edge-ids: false,
@@ -547,6 +552,7 @@
       debug: debug,
       debug-label-collisions: debug-label-collisions,
       label-collision-padding: label-collision-padding,
+      external-label-gap: external-label-gap,
       show-half-edge-ids: show-half-edge-ids,
       node-radius: node-radius,
       node-min-radius: node-min-radius,

@@ -2216,7 +2216,7 @@
   if attached { reach / scale } else { initial }
 }
 
-#let _layer-label-element(ctx, path, style, label-pos, data, href: none, fixed-position: none, placement: false) = {
+#let _layer-label-element(ctx, path, style, label-pos, data, href: none, fixed-position: none, endpoint-direction: none, placement: false) = {
   let label = _layer-label(style, data)
   if label == none { return none }
   if href != none { label = link(href, label) }
@@ -2296,14 +2296,16 @@
       _path-mid-frame(candidate-path, accuracy, shift: at - total / 2)
     }
     let tangent-length = _point-length(frame.tangent)
-    let normal = if tangent-length <= 1e-9 { (0, candidate-side) } else {
+    let normal = if endpoint-direction != none {
+      _point-scale(endpoint-direction, 1 / _point-length(endpoint-direction))
+    } else if tangent-length <= 1e-9 { (0, candidate-side) } else {
       _point-scale((-_point-y(frame.tangent), _point-x(frame.tangent)), candidate-side / tangent-length)
     }
     let outward = cetz.vector.sub(
       cetz.matrix.mul4x4-vec3(ctx.transform, (..normal, 0)), origin,
     )
     let normal-squared = cetz.vector.dot(outward, outward)
-    let nearest = if clear-box and normal-squared > 1e-18 {
+    let nearest = if (clear-box or endpoint-direction != none) and normal-squared > 1e-18 {
       calc.min(..corners.map(corner => cetz.vector.dot(corner, outward))) / normal-squared
     } else { 0 }
     let path-shift = at - total / 2 + if attached == none { 0 } else { _style-value(attached, "shift") - shift }
@@ -2330,9 +2332,9 @@
         outward, gap, gap - nearest,
       )
     } else { gap - nearest }
-    let position = if base != none and (fixed-position != none or normal-offset == gap - nearest) {
+    let position = if base != none and endpoint-direction == none and (fixed-position != none or normal-offset == gap - nearest) {
       base.position
-    } else if fixed-position != none { frame.point } else {
+    } else if fixed-position != none and endpoint-direction == none { frame.point } else {
       _point-add(frame.point, _point-scale(normal, normal-offset))
     }
     let center = cetz.matrix.mul4x4-vec3(ctx.transform, (..position, 0))
@@ -4228,15 +4230,32 @@
             let gap = _statement-number(edge, "layout-label-gap")
             let carrier = crossing-paths.ids.at(str(edge.edge), default: none)
             let follows-path = gap != none and carrier != none
+            let endpoint-direction = none
+            if edge.label-pos == none and (source-half-edge == none or sink-half-edge == none) {
+              // Follow the rendered endpoint tangent, including routed edges.
+              // The text-box measurement below supplies clearance at any angle.
+              let segments = if source-half-edge == none { sink-label-segments } else { source-label-segments }
+              if segments != none and segments.len() > 0 {
+                endpoint-direction = if source-half-edge == none {
+                  _point-scale(curve-api.cubic-tangent(segments.first(), 0), -1)
+                } else { curve-api.cubic-tangent(segments.last(), 1) }
+              }
+              if endpoint-direction == none or _point-length(endpoint-direction) <= 1e-9 {
+                let owner = if source-half-edge == none { sink-half-edge } else { source-half-edge }
+                endpoint-direction = _point-sub(edge.pos, _node-pos(nodes.at(owner.node)))
+              }
+              if _point-length(endpoint-direction) <= 1e-9 { endpoint-direction = (1, 0) }
+            }
             label-placements.push(_layer-label-element(
               ctx,
               if follows-path { carrier.path } else { none },
-              (label: ev-label, label-style: edge-label-draw-style, label-gap: if gap == none { 0 } else { gap }),
+              (label: ev-label, label-style: edge-label-draw-style, label-gap: if endpoint-direction != none { options.external-label-gap } else if gap == none { 0 } else { gap }),
               label-pos,
               edge-data,
               href: href,
               placement: true,
               fixed-position: if follows-path { none } else { label-pos },
+              endpoint-direction: endpoint-direction,
             ))
           }
 

@@ -2844,6 +2844,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             sink_style={"stroke": stroke},
             edge_label=lp.MathSymbol("p", subscript=1),
             edge_label_style={"fill": lp.Color("red")},
+            external_label_gap=0.45,
             edge_omega=1,
             edge_trim_accuracy=0.001,
             padding=lp.Insets(x=lp.Length.em(0.4), y=lp.Length.em(0.2)),
@@ -2953,6 +2954,10 @@ class TestTypedTypstSurface(unittest.TestCase):
             lp.DrawOptions(show_half_edge_ids=1)
         with self.assertRaises(TypeError):
             lp.DrawOptions(label_collision_padding=-0.1)
+        for gap in (-0.1, True, "0.45", lp.Length.pt(1)):
+            with self.subTest(external_label_gap=gap), self.assertRaises(TypeError):
+                lp.DrawOptions(external_label_gap=gap)
+        lp.DrawOptions(external_label_gap=0)
         with self.assertRaises(TypeError):
             lp.DrawOptions(edge_split_gap=-0.1)
         with self.assertRaises(TypeError):
@@ -3039,6 +3044,7 @@ class TestTypedTypstSurface(unittest.TestCase):
                 drawing=lp.DrawOptions(
                     edge_split_gap=0.25,
                     label_collision_padding=0.3,
+                    external_label_gap=0.65,
                     edge_dangling_tangent=lp.DanglingTangent.Vertical,
                 )
             )
@@ -3047,6 +3053,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         source = graph.prepare_render().typst_source
         self.assertIn('("edge-split-gap"): 0.25', source)
         self.assertIn('("label-collision-padding"): 0.3', source)
+        self.assertIn('("external-label-gap"): 0.65', source)
         self.assertIn('("edge-dangling-tangent"): "vertical"', source)
 
         graph, _, _, _ = sample_graph(

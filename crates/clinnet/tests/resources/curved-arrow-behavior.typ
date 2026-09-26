@@ -1335,6 +1335,52 @@
       }),
     )
   }
+  // Automatic external labels clear their measured text boxes along the final
+  // tangent. Check both flows, diagonal boxes and a curved dangling carrier.
+  for incoming in (false, true) {
+    for (endpoint, tangent, outward) in (
+      ((4, 0), auto, (1, 0)),
+      ((-4, 0), auto, (-1, 0)),
+      ((3, 3), auto, (1 / calc.sqrt(2), 1 / calc.sqrt(2))),
+      ((3, -3), "horizontal", (1, 0)),
+    ) {
+      for gap in (0, 0.45, 0.8) {
+        let scene = graph.build({
+          graph.node(<blob>, pos: graph.pos(x: 0, y: 0))
+          graph.edge(<external>, if incoming { graph.sink(<blob>) } else { graph.source(<blob>) },
+            pos: graph.pos(x: endpoint.at(0), y: endpoint.at(1)))
+        })
+        draw(scene, unit: 10pt, node-label: none,
+          edge-label: box(width: 15pt, height: 7pt, fill: red),
+          edge-label-style: (name: "external-label", rotate: 15deg),
+          edge-dangling-tangent: tangent, external-label-gap: gap,
+          draw-after: (g, bounds) => cetz.draw.get-ctx(ctx => {
+            let anchors = ctx.nodes.at("external-label").anchors
+            let nearest = calc.min(..("north-west", "north-east", "south-west", "south-east").map(name => {
+              let corner = anchors(name)
+              ((corner.at(0) - endpoint.at(0)) * outward.at(0)
+                + (corner.at(1) - endpoint.at(1)) * outward.at(1))
+            }))
+            assert(calc.abs(nearest - gap) < 1e-6, message: "external labels keep the requested text-box clearance")
+            ()
+          }),
+        )
+      }
+    }
+  }
+  // Authored positions remain exact, even with a larger automatic gap.
+  draw(graph.build({
+    graph.node(<manual>, pos: graph.pos(x: 0, y: 0))
+    graph.edge(<label>, graph.sink(<manual>), pos: graph.pos(x: 3, y: 0),
+      label-pos: (3, 2))
+  }), node-label: none, edge-label: [manual], external-label-gap: 2,
+    edge-label-style: (anchor: "center", name: "manual-label"),
+    draw-after: (g, bounds) => cetz.draw.get-ctx(ctx => {
+      let center = (ctx.nodes.at("manual-label").anchors)("center")
+      assert(calc.abs(center.at(0) - 3) < 1e-6 and calc.abs(center.at(1) - 2) < 1e-6)
+      ()
+    }),
+  )
   // Hidden edges provide neither label carriers nor stroke obstacles.
   draw(graph.build({
     graph.node(<hidden-a>, pos: graph.pos(x: 0, y: 0))
