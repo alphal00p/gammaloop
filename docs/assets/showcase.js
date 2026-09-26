@@ -269,7 +269,7 @@
     // ------------------------------------------------------ syntax highlight
     const KW = {
       python: ['from', 'import', 'with', 'as', 'def', 'return', 'print', 'for', 'in', 'if', 'else', 'None', 'True', 'False', 'class'],
-      rust: ['use', 'let', 'mut', 'for', 'in', 'fn', 'pub', 'struct', 'impl', 'match', 'Some', 'None', 'Ok', 'Err', 'return', 'as', 'self', 'crate'],
+      rust: ['use', 'let', 'mut', 'for', 'in', 'fn', 'pub', 'struct', 'impl', 'match', 'Some', 'None', 'Ok', 'Err', 'true', 'false', 'return', 'as', 'self', 'crate'],
     };
     function tokenize(code, lang) {
       const out = [];
@@ -389,10 +389,10 @@
       lu: [8, 36.8],
       cli: [36.8, 48.8],
       gen: [48.8, 67.3],
-      int: [67.3, 87.8],
-      api: [87.8, 99.8],
-      eco: [99.8, 109.8],
-      out: [109.8, 115.8],
+      int: [67.3, 89.8],
+      api: [89.8, 101.8],
+      eco: [101.8, 111.8],
+      out: [111.8, 117.8],
     };
 
     // ------------------------------------------------------ background field
@@ -1048,7 +1048,7 @@
       const head = el('div', { class: 'head' });
       const kicker = el('div', { class: 'kicker' }, 'Rust and Python');
       const display = el('div', { class: 'display' }, 'One state. Three interfaces.');
-      const lede = el('div', { class: 'lede', style: 'position:absolute;left:90px;top:972px;max-width:none' }, 'The CLI, the Rust facade, and the Python package load the same persisted state and run the same commands.');
+      const lede = el('div', { class: 'lede', style: 'position:absolute;left:90px;top:988px;max-width:none' }, 'The CLI, the Rust facade, and the Python package load the same persisted state and run the same commands.');
       head.append(kicker, display);
       sc.append(head, lede);
       fadeIn(kicker, a + 0.3);
@@ -1066,55 +1066,47 @@
       fadeIn(rs, a + 1.2, 0.6, 20);
       const pySrc = `from gammaloop import GammaLoopAPI
 
-  api = GammaLoopAPI(state_folder="gammaloop_state/bubble")
-  api.run("import model scalars-default.json")
-  api.run(
-      "generate amp scalar_1 > scalar_1 [{1}] "
-      "--allowed-vertex-interactions V_3_SCALAR_122 "
-      "-p bubble -i one_loop"
-  )
+api = GammaLoopAPI(state_folder="gammaloop_state/bubble")
+api.run("import model scalars-default.json")
+api.run(
+    "generate amp scalar_1 > scalar_1 [{1}] "
+    "--allowed-vertex-interactions V_3_SCALAR_122 "
+    "-p bubble -i one_loop"
+)
 
-  result = api.evaluate_sample(
-      [0.1, 0.2, 0.3],
-      process_id=0,
-      integrand_name="one_loop",
-  )
-  print(result.integrand_result)`;
+result = api.evaluate_sample(
+    [0.1, 0.2, 0.3],
+    process_id=0,
+    integrand_name="one_loop",
+)
+print(result.integrand_result)`;
       const rsSrc = `use gammaloop_api::commands::evaluate_samples::{
-      evaluate_sample, EvaluateSamples,
-  };
-  use gammaloop_api::{state::CommandHistory, StateLoadOption};
+    evaluate_sample, EvaluateSamples,
+};
+use gammaloop_api::{state::CommandHistory, StateLoadOption};
+let mut loaded = StateLoadOption {
+    state_folder: Some("gammaloop_state/bubble".into()),
+    ..StateLoadOption::default()
+}
+.load()?;
+for raw in [
+    "import model scalars-default.json",
+    "generate amp scalar_1 > scalar_1 [{1}] \\
+     --allowed-vertex-interactions V_3_SCALAR_122 -p bubble -i one_loop",
+] {
+    let command = CommandHistory::from_raw_string(raw)?;
+    loaded.cli_session().execute_command(command)?;
+}
 
-  let mut loaded = StateLoadOption {
-      state_folder: Some("gammaloop_state/bubble".into()),
-      ..StateLoadOption::default()
-  }
-  .load()?;
-
-  for raw in [
-      "import model scalars-default.json",
-      "generate amp scalar_1 > scalar_1 [{1}] \\
-       --allowed-vertex-interactions V_3_SCALAR_122 \\
-       -p bubble -i one_loop",
-  ] {
-      let command = CommandHistory::from_raw_string(raw)?;
-      loaded.cli_session().execute_command(command)?;
-  }
-
-  let result = evaluate_sample(&mut loaded.state, &EvaluateSamples {
-      process_id: Some(0),
-      integrand_name: Some("one_loop".into()),
-      points: arr2(&[[0.1, 0.2, 0.3]]).view(),
-      use_arb_prec: false,
-      minimal_output: false,
-      momentum_space: false,
-      return_generated_events: None,
-      integrator_weights: None,
-      discrete_dims: None,
-      graph_names: None,
-      orientations: None,
-  })?;
-  println!("{result}");`;
+let request = EvaluateSamples {
+    process_id: Some(0),
+    integrand_name: Some("one_loop".into()),
+    points: arr2(&[[0.1, 0.2, 0.3]]).view(),
+    use_arb_prec: false, minimal_output: false, momentum_space: false,
+    return_generated_events: None, integrator_weights: None,
+    discrete_dims: None, graph_names: None, orientations: None,
+};
+println!("{}", evaluate_sample(&mut loaded.state, &request)?);`;
       typeCode(pyCode, pySrc, 'python', a + 1.6, 5.2);
       typeCode(rsCode, rsSrc, 'rust', a + 1.9, 6.4);
 
@@ -1127,8 +1119,8 @@
       const link = svg('svg', { class: 'link', viewBox: `0 0 ${W} ${H}` });
       sc.append(link);
       const stroke = { fill: 'none', stroke: '#b893c7', 'stroke-width': 3, 'stroke-dasharray': '10 8' };
-      const l1 = svg('path', { d: 'M1130 144 C1080 200, 700 190, 512 250', ...stroke });
-      const l2 = svg('path', { d: 'M1290 144 C1330 200, 1390 220, 1410 250', ...stroke });
+      const l1 = svg('path', { d: 'M1130 144 C1080 200, 700 180, 512 230', ...stroke });
+      const l2 = svg('path', { d: 'M1290 144 C1330 190, 1390 205, 1410 230', ...stroke });
       link.append(l1, l2);
       [l1, l2].forEach((p, i) => {
         p.style.opacity = 0;

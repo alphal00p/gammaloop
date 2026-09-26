@@ -337,7 +337,7 @@
 .gl-showcase-stage .s-api .head .display { font-size: 60px;
 }
 .gl-showcase-stage .s-api .pane {
-  position: absolute; top: 250px; width: 840px; height: 700px;
+  position: absolute; top: 230px; width: 840px; height: 730px;
   background: #17121a; border: 1px solid var(--gl-hairline); border-radius: 14px; overflow: hidden;
   font-family: var(--gl-font-mono); font-size: 22px; line-height: 1.55;
 }
@@ -441,5 +441,5 @@
 }
 .gl-showcase-stage .s-api .pane .code { overflow: hidden; height: calc(100% - 50px); box-sizing: border-box;
 }
-.gl-showcase-stage .s-api .rs .code { font-size: 20px;
+.gl-showcase-stage .s-api .rs .code { font-size: 17px; line-height: 1.38; padding: 16px 28px;
 }

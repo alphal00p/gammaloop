@@ -18,7 +18,7 @@ The portraits below are size-optimized WebP derivatives of public professional p
 
 | Local asset | Subject | Public source |
 | --- | --- | --- |
-| `showcase-hard-boiled.mp3` | "Hard Boiled" by Kevin MacLeod, the first 1:55.8 of the 3:01 track with a 2.5 s end fade, re-encoded at 160 kb/s | [Incompetech track page (ISRC USUAN1700076)](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700076) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the landing page and the video outro carry the required credit |
+| `showcase-hard-boiled.mp3` | "Hard Boiled" by Kevin MacLeod, the first 1:57.8 of the 3:01 track with a 2.5 s end fade, re-encoded at 160 kb/s | [Incompetech track page (ISRC USUAN1700076)](https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700076) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the landing page and the video outro carry the required credit |
 
 The graph sources read the real generated-process and test-resource DOT files directly and pass them to Linnest from Typst; no Graphviz, `just draw`, or generated template bundle is part of the website build. Four sources enable Linnest momentum arrows explicitly, and the shared edge style owns the website-specific line weights and light/dark palette.
 
