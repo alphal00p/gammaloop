@@ -321,7 +321,7 @@
   /// label's text box, in canvas units, measured along the outward tangent.
   /// Explicit label positions and path-attached labels keep their placement.
   /// -> int | float
-  external-label-gap: 0.45,
+  external-label-gap: 0.25,
   /// Show `h_i` beside every half-edge without an explicit endpoint label.
   /// -> bool
   show-half-edge-ids: false,

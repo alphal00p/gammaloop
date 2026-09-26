@@ -670,7 +670,7 @@
   momenta, then opt individual edges back in with `show-momentum: true`.
 
   Ordinary dangling-edge labels without a stored `label-pos` clear their
-  external endpoint by `external-label-gap` (default `0.45` canvas units).
+  external endpoint by `external-label-gap` (default `0.25` canvas units).
   Linnest measures the text box, including its anchor, padding and rotation,
   and moves it along the rendered carrier's outward endpoint tangent until
   the nearest projection clears that endpoint. This applies to direct `draw`,
