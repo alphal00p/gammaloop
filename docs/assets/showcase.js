@@ -386,13 +386,13 @@
     // ---------------------------------------------------------------- schedule
     const T = {
       open: [0, 8],
-      lu: [8, 24.5],
-      cli: [24.5, 36.5],
-      gen: [36.5, 55],
-      int: [55, 73.5],
-      api: [73.5, 85.5],
-      eco: [85.5, 95.5],
-      out: [95.5, 101.5],
+      lu: [8, 36.8],
+      cli: [36.8, 48.8],
+      gen: [48.8, 67.3],
+      int: [67.3, 87.8],
+      api: [87.8, 99.8],
+      eco: [99.8, 109.8],
+      out: [109.8, 115.8],
     };
 
     // ------------------------------------------------------ background field
@@ -468,6 +468,7 @@
     // -- Local Unitarity ----------------------------------------------------
     {
       const [a, b] = T.lu;
+      const s = 1.5; // this scene breathes slower than the rest
       const sc = scene('s-lu', 'Local Unitarity', a, b);
       const copy = el('div', { class: 'copy' });
       const kicker = el('div', { class: 'kicker' }, 'The method');
@@ -479,11 +480,11 @@
       );
       copy.append(kicker, display, lede);
       sc.append(copy);
-      fadeIn(kicker, a + 0.4);
-      fadeIn(display, a + 0.7, 0.8);
-      fadeIn(lede, a + 1.2, 0.8);
+      fadeIn(kicker, a + 0.4 * s, 0.7 * s);
+      fadeIn(display, a + 0.7 * s, 0.8 * s);
+      fadeIn(lede, a + 1.2 * s, 0.8 * s);
 
-      // Equation
+      // Equation, with the finite statement centred beneath it
       const eq = el('div', { class: 'eq' });
       const sup = (text) => `<sup style="font-size:.6em">${text}</sup>`;
       const faint = (text) => `<span style="color:var(--gl-ink-faint)">${text}</span>`;
@@ -493,9 +494,9 @@
           .map((i) => `<span class="term-g" data-c="${i}"><i>G</i><span class="sub">${i}</span></span>`)
           .join(` ${faint('+')} `) +
         `${faint(']')}(k, l)`;
-      const fin = el('div', { class: 'fin' });
-      sc.append(eq, fin);
-      fadeIn(eq, a + 2.2, 0.8);
+      const fin = el('div', { class: 'fin' }, 'Finite at every momenta k and l !');
+      sc.append(el('div', { class: 'eqblock' }, eq, fin));
+      fadeIn(eq, a + 2.2 * s, 0.8 * s);
       const terms = [...eq.querySelectorAll('.term-g')];
 
       // Diagram
@@ -531,41 +532,42 @@
       ext.forEach((p) => g.append(p));
       g.append(LB.g, LC.g, BR.g, CR.g, G, ...verts, ...labels);
       const internal = [LB.line, LC.line, BR.line, CR.line, G];
-      [...ext, ...internal].forEach((p, i) => drawPath(p, a + 1.4 + i * 0.12, 0.9, ease.out));
-      [LB.head, LC.head, BR.head, CR.head, ...verts, ...labels].forEach((n) => fadeIn(n, a + 2.4, 0.4, 0));
+      [...ext, ...internal].forEach((p, i) => drawPath(p, a + (1.4 + i * 0.12) * s, 0.9 * s, ease.out));
+      [LB.head, LC.head, BR.head, CR.head, ...verts, ...labels].forEach((n) => fadeIn(n, a + 2.4 * s, 0.4 * s, 0));
 
-      // loop-momentum marker circulating on the outer loop
-      const loopPath = svg('path', {
-        d: `M${Lv[0]} ${Lv[1]} L${Bv[0]} ${Bv[1]} L${Rv[0]} ${Rv[1]} L${Cv[0]} ${Cv[1]} Z`,
-        fill: 'none',
-        stroke: 'none',
-      });
-      g.append(loopPath);
+      // Loop momenta: k circulates clockwise around the left triangle and l anti-clockwise
+      // around the right one; both share the gluon rung.
+      const triangle = (points) => svg('path', { d: `M${points.map(([x, y]) => `${x} ${y}`).join(' L')} Z`, fill: 'none', stroke: 'none' });
+      const kPath = triangle([Lv, Bv, Cv]);
+      const lPath = triangle([Bv, Cv, Rv]);
       const kdot = svg('circle', { r: 11, fill: '#b893c7' });
       const klabel = svg('text', { class: 'klabel' }, 'k');
-      g.append(kdot, klabel);
-      // The gluon rung carries the second loop momentum l, flowing from the top vertex down.
-      const ldot = svg('circle', { r: 9, fill: '#76d3df' });
+      const ldot = svg('circle', { r: 11, fill: '#76d3df' });
       const llabel = svg('text', { class: 'klabel', fill: '#76d3df' }, 'l');
-      g.append(ldot, llabel);
-      let loopLen = null;
+      g.append(kPath, lPath, kdot, klabel, ldot, llabel);
+      const markerStart = a + 2.6 * s;
+      let kLen = null;
+      let lLen = null;
       tl.add(
-        a + 2.6,
-        b - a - 2.6,
+        markerStart,
+        b - markerStart,
         (_, local, t) => {
-          if (loopLen === null) loopLen = loopPath.getTotalLength();
-          const on = t >= a + 2.6;
+          if (kLen === null) {
+            kLen = kPath.getTotalLength();
+            lLen = lPath.getTotalLength();
+          }
+          const on = t >= markerStart;
           [kdot, klabel, ldot, llabel].forEach((n) => (n.style.opacity = on ? 1 : 0));
-          const pt = loopPath.getPointAtLength((local * 190) % loopLen);
-          kdot.setAttribute('cx', pt.x);
-          kdot.setAttribute('cy', pt.y);
-          klabel.setAttribute('x', pt.x + 18);
-          klabel.setAttribute('y', pt.y - 14);
-          const ly = lerp(Bv[1] + 40, Cv[1] - 40, (local / 3.2) % 1);
-          ldot.setAttribute('cx', Bv[0]);
-          ldot.setAttribute('cy', ly);
-          llabel.setAttribute('x', Bv[0] - 44);
-          llabel.setAttribute('y', ly + 10);
+          const kp = kPath.getPointAtLength((local * 150) % kLen);
+          kdot.setAttribute('cx', kp.x);
+          kdot.setAttribute('cy', kp.y);
+          klabel.setAttribute('x', kp.x + 18);
+          klabel.setAttribute('y', kp.y - 14);
+          const lp = lPath.getPointAtLength((local * 150 + lLen / 2) % lLen);
+          ldot.setAttribute('cx', lp.x);
+          ldot.setAttribute('cy', lp.y);
+          llabel.setAttribute('x', lp.x + 18);
+          llabel.setAttribute('y', lp.y + 36);
         },
         ease.linear,
       );
@@ -593,8 +595,8 @@
       const caption = svg('text', { class: 'cutlabel', x: 500, y: 20, 'text-anchor': 'middle' }, '');
       caption.style.fontSize = '30px';
       g.append(caption);
-      const cutStart = a + 4.2;
-      const per = 2.3;
+      const cutStart = a + 4.2 * s;
+      const per = 2.3 * s;
       cuts.forEach((cut, i) => {
         const clipId = `cutclip${i}`;
         const rect = svg('rect', { x: 0, y: 0, width: 1000, height: 0 });
@@ -609,7 +611,7 @@
           t0,
           b - t0,
           (_, local, t) => {
-            const draw = clamp(local / 0.7);
+            const draw = clamp(local / (0.7 * s));
             const active = t >= t0 && t < t0 + per;
             const ghostPhase = t >= cutStart + 4 * per;
             const hgt = 900 * ease.out(draw);
@@ -617,16 +619,16 @@
             rect.setAttribute('y', upward ? 900 - hgt : 0);
             path.style.opacity = active ? 1 : ghostPhase ? 0.6 : 0.18;
             path.style.stroke = ghostPhase ? 'var(--gl-accent)' : 'var(--gl-cut)';
-            tag.style.opacity = active ? clamp(local / 0.4) : ghostPhase ? 0.9 : 0.35;
+            tag.style.opacity = t < t0 ? 0 : active ? clamp(local / (0.4 * s)) : ghostPhase ? 0.9 : 0.35;
             tag.style.fill = ghostPhase ? 'var(--gl-accent)' : 'var(--gl-cut)';
             if (active) {
               caption.textContent = cut.label;
-              caption.style.opacity = clamp(local / 0.4);
+              caption.style.opacity = clamp(local / (0.4 * s));
               caption.style.fill = 'var(--gl-cut)';
             }
             if (i === cuts.length - 1 && ghostPhase) {
               caption.textContent = 'all four cuts localized in the same momenta k and l';
-              caption.style.opacity = clamp((t - (cutStart + 4 * per)) / 0.5);
+              caption.style.opacity = clamp((t - (cutStart + 4 * per)) / (0.5 * s));
               caption.style.fill = 'var(--gl-accent)';
             }
             const term = terms[i];
@@ -639,8 +641,7 @@
       });
       // Reset all hot edges during the final ghost phase so the loop settles.
       tl.add(cutStart + 4 * per, 0.01, () => internal.forEach((e) => e.classList.remove('hot')), ease.linear);
-      const finAt = cutStart + 4 * per + 0.3;
-      typeText(fin, 'finite at every k and l', finAt, 0.9);
+      fadeIn(fin, cutStart + 4 * per + 0.3 * s, 0.9 * s, 16);
     }
 
     // -- CLI help ------------------------------------------------------------
