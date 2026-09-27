@@ -116,6 +116,13 @@ This conclusion is restricted to the chosen hard timelike kinematics.
 [`results.json`](results.json) retains the complete native result records,
 reference values, normalization, seeds, sample counts, and stability statistics.
 
+A separate [spacelike diagnostic](spacelike.md) finds the expected LO Landau
+damping, an unresolved NLO discrepancy, and a radial-root isolation failure.
+
+The [small positive-virtuality scan](lightcone.md) records logarithmic
+fixed-order growth, poor Monte Carlo convergence, and reproducible nonfinite
+samples approaching the light cone without resummation.
+
 ## Reproduction
 
 Run from the repository root using the existing dev-optim CLI:

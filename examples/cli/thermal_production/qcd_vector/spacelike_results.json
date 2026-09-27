@@ -1,0 +1,507 @@
+{
+  "gammaloop_revision": "1eed087aa6042a0492da1d43464b990b363992b5",
+  "paper": "https://arxiv.org/abs/1910.07552v2",
+  "reference_code": "https://doi.org/10.5281/zenodo.3478144",
+  "reference_checks": [
+    {
+      "k0_over_T": 1.0,
+      "k_over_T": 4.0,
+      "absolute_tolerance": 0.0001,
+      "rho_lo": 0.21937756076360546,
+      "rho_nlo": -0.022065903635688392
+    },
+    {
+      "k0_over_T": 1.0,
+      "k_over_T": 4.0,
+      "absolute_tolerance": 1e-05,
+      "rho_lo": 0.21937756076360546,
+      "rho_nlo": -0.022066002519195806
+    }
+  ],
+  "inputs": {
+    "T": 1,
+    "K": [
+      1,
+      0,
+      0,
+      4
+    ],
+    "K_squared": -15,
+    "e": 1,
+    "g": 1,
+    "Qd": -0.3333333333333333,
+    "Nc": 3,
+    "mu_r": 4,
+    "m_uv": 4,
+    "localization_scale": 4,
+    "e_cm_sampling_scale": 3.872983346207417,
+    "native_to_rho": 9,
+    "vacuum_subtraction": false
+  },
+  "thermal_standalone_export_identical_to_timelike_benchmark": true,
+  "runs": {
+    "thermal_lo": {
+      "seed": 191007552,
+      "requested_samples": 100000,
+      "completed": true,
+      "record_is_last_completed_iteration": false,
+      "rho": 0.2181704052072011,
+      "rho_error": 0.0022461384560818758,
+      "reference_rho": 0.21937756076360546,
+      "difference_sigma": -0.5374359506359618,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_lo@LO",
+            "process": "vector_lo",
+            "integrand": "LO",
+            "target": null,
+            "integral": {
+              "neval": 100000,
+              "real_zero": 11648,
+              "im_zero": 100000,
+              "result": {
+                "re": 0.024241156134133454,
+                "im": 0.0
+              },
+              "error": {
+                "re": 0.00024957093956465287,
+                "im": 0.0
+              },
+              "real_chisq": 0.682644236669546,
+              "im_chisq": 0.0
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.024241156134133454,
+                "error": 0.00024957093956465287,
+                "relative_error_percent": 1.0295339800779442,
+                "chi_sq_per_dof": 0.341322118334773,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0010592446244929608
+              },
+              {
+                "component": "im",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 2.8362e-05,
+              "average_parameterization_time_seconds": 1.75e-07,
+              "average_integrand_time_seconds": 1.2228e-05,
+              "average_evaluator_time_seconds": 8.036e-06,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.82e-07,
+              "f64_percentage": 99.98599999999999,
+              "f128_percentage": 0.013999999999999999,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 2.567731432657542,
+                "coordinates": "xs: [ 4.3582028725555644e-01 6.2435136117607892e-01 4.9228221941433059e-04 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    },
+    "thermal_nlo": {
+      "seed": 191007552,
+      "requested_samples": 100000,
+      "completed": true,
+      "record_is_last_completed_iteration": false,
+      "rho": -0.024654236412250733,
+      "rho_error": 0.0006131124686195019,
+      "reference_rho": -0.022066002519195806,
+      "difference_sigma": -4.221466738203277,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_nlo@NLO",
+            "process": "vector_nlo",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 100000,
+              "real_zero": 50,
+              "im_zero": 552,
+              "result": {
+                "re": -0.0027393596013611924,
+                "im": 1.1708791105419955e-15
+              },
+              "error": {
+                "re": 6.81236076243891e-05,
+                "im": 9.66459786872099e-16
+              },
+              "real_chisq": 7.547437990993274,
+              "im_chisq": 3.3717850019717006
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": -0.0027393596013611924,
+                "error": 6.81236076243891e-05,
+                "relative_error_percent": 2.4868442825300616,
+                "chi_sq_per_dof": 1.8868594977483184,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.005366273745125725
+              },
+              {
+                "component": "im",
+                "value": 1.1708791105419955e-15,
+                "error": 9.66459786872099e-16,
+                "relative_error_percent": 82.54138093083995,
+                "chi_sq_per_dof": 0.8429462504929252,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.815223098027474
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.001827158,
+              "average_parameterization_time_seconds": 2.28e-07,
+              "average_integrand_time_seconds": 0.000906231,
+              "average_evaluator_time_seconds": 0.000710244,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 3.24e-07,
+              "f64_percentage": 99.924,
+              "f128_percentage": 0.076,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 1.1538697903423127,
+                "coordinates": "xs: [\n9.2181224498381620e-02 6.1168866098319208e-01 4.7467662854839354e-01\n4.8692201382627798e-01 6.8565672399606803e-01 9.8634302554073350e-01 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -1.4700153507242641,
+                "coordinates": "xs: [\n2.3177755799003386e-02 9.6567086721080564e-01 2.4817343683285698e-02\n4.4612399029701411e-01 6.9200931639526297e-01 9.8718435369073942e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 9.545276959116987e-11,
+                "coordinates": "xs: [\n9.9994448879222464e-01 8.9120089967906568e-01 3.1396539406234469e-01\n4.7072322773725322e-01 2.8379574460054074e-01 1.6917018411245052e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -3.211469007742603e-12,
+                "coordinates": "xs: [\n9.9958254799479951e-01 5.7093398440055920e-01 2.7110802313750498e-01\n4.7341688082620098e-01 4.5362663573852699e-02 9.3879101417151084e-02 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    },
+    "thermal_nlo_independent_seed": {
+      "seed": 271828,
+      "requested_samples": 300000,
+      "completed": false,
+      "record_is_last_completed_iteration": true,
+      "rho": -0.02430014575768958,
+      "rho_error": 0.0005627571621513337,
+      "reference_rho": -0.022066002519195806,
+      "difference_sigma": -3.9699952106393277,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_nlo@NLO",
+            "process": "vector_nlo",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 150000,
+              "real_zero": 87,
+              "im_zero": 922,
+              "result": {
+                "re": -0.002700016195298842,
+                "im": -1.994525896045079e-15
+              },
+              "error": {
+                "re": 6.252857357237041e-05,
+                "im": 2.012965908705589e-15
+              },
+              "real_chisq": 1.414289119476365,
+              "im_chisq": 0.5121646804500338
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": -0.002700016195298842,
+                "error": 6.252857357237041e-05,
+                "relative_error_percent": 2.3158592041500565,
+                "chi_sq_per_dof": 0.4714297064921216,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.007195698684359106
+              },
+              {
+                "component": "im",
+                "value": -1.994525896045079e-15,
+                "error": 2.012965908705589e-15,
+                "relative_error_percent": 100.92453112276327,
+                "chi_sq_per_dof": 0.17072156015001128,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.8944183129998619
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 150000,
+              "average_total_time_seconds": 0.001836217,
+              "average_parameterization_time_seconds": 1.91e-07,
+              "average_integrand_time_seconds": 0.000912432,
+              "average_evaluator_time_seconds": 0.00069254,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 3.16e-07,
+              "f64_percentage": 99.93066666666667,
+              "f128_percentage": 0.06933333333333333,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 2.9142754476390236,
+                "coordinates": "xs: [\n3.9950625700968223e-01 7.3752391601766720e-01 9.1787460637060436e-01\n5.5916137601168203e-01 9.4999638742552306e-01 8.6454503253728487e-01 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -1.2479895455488264,
+                "coordinates": "xs: [\n3.4657893796978145e-02 3.5734187936604767e-01 6.0860426840505222e-01\n4.2802378716474521e-01 5.8570155857890815e-01 9.9819743521187720e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 9.754615619020572e-11,
+                "coordinates": "xs: [\n9.9984524628073523e-01 5.6136628821190793e-01 3.6128107954765087e-01\n4.8557352115188257e-01 3.0393505176335794e-01 3.8644247172145263e-02 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -2.6759107307627665e-10,
+                "coordinates": "xs: [\n9.9992328345680304e-01 9.7321214172361406e-02 4.0390322971581227e-01\n4.3157181855967136e-01 1.9337264114105368e-01 2.1497251658582345e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    },
+    "vacuum_lo": {
+      "seed": 191007552,
+      "requested_samples": 1000,
+      "completed": true,
+      "record_is_last_completed_iteration": false,
+      "rho": 0.0,
+      "rho_error": 0.0,
+      "reference_rho": 0,
+      "difference_sigma": null,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_lo@LO",
+            "process": "vector_lo",
+            "integrand": "LO",
+            "target": null,
+            "integral": {
+              "neval": 1000,
+              "real_zero": 1000,
+              "im_zero": 1000,
+              "result": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "error": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "real_chisq": 0.0,
+              "im_chisq": 0.0
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              },
+              {
+                "component": "im",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 1000,
+              "average_total_time_seconds": 5.42e-06,
+              "average_parameterization_time_seconds": 1.81e-07,
+              "average_integrand_time_seconds": 8.87e-07,
+              "average_evaluator_time_seconds": 0.0,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 4.03e-07,
+              "f64_percentage": 100.0,
+              "f128_percentage": 0.0,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    },
+    "vacuum_nlo": {
+      "seed": 191007552,
+      "requested_samples": 1000,
+      "completed": true,
+      "record_is_last_completed_iteration": false,
+      "rho": 0.0,
+      "rho_error": 0.0,
+      "reference_rho": 0,
+      "difference_sigma": null,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_nlo@NLO",
+            "process": "vector_nlo",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 1000,
+              "real_zero": 1000,
+              "im_zero": 1000,
+              "result": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "error": {
+                "re": 0.0,
+                "im": 0.0
+              },
+              "real_chisq": 0.0,
+              "im_chisq": 0.0
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              },
+              {
+                "component": "im",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 1000,
+              "average_total_time_seconds": 2.6504e-05,
+              "average_parameterization_time_seconds": 1.84e-07,
+              "average_integrand_time_seconds": 1.1646e-05,
+              "average_evaluator_time_seconds": 0.0,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 7.05e-07,
+              "f64_percentage": 100.0,
+              "f128_percentage": 0.0,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    }
+  },
+  "failure": {
+    "run": "thermal_nlo_independent_seed",
+    "exit_code": 1,
+    "last_completed_samples": 150000,
+    "message": "Cannot isolate simple radial roots in [0.9999998078938658, 0.9999998078938659]; increase precision",
+    "source": "crates/gammalooprs/src/utils/newton_solver.rs:773",
+    "caller": "crates/gammalooprs/src/integrands/process/cross_section/mod.rs:1577",
+    "stability_error_propagation": "crates/gammalooprs/src/integrands/process/mod.rs:3783",
+    "coordinates": null,
+    "notes": "The bracket is in compact u=t/(1+t), near t=5.2e6. This solver error aborts evaluation instead of returning an unstable value for precision escalation. Its relationship to the NLO discrepancy has not been established."
+  }
+}

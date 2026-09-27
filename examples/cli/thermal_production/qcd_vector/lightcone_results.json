@@ -1,0 +1,1453 @@
+{
+  "gammaloop_revision": "1eed087aa6042a0492da1d43464b990b363992b5",
+  "paper": "https://arxiv.org/abs/1910.07552v2",
+  "reference_code": "https://doi.org/10.5281/zenodo.3478144",
+  "reference_commit": "dca510d2d2c8bee2288345e972ee3a54b37cdbd5",
+  "settings": {
+    "T": 1,
+    "k0": 4,
+    "e": 1,
+    "g": 1,
+    "Nc": 3,
+    "Qd": -0.3333333333333333,
+    "native_to_rho": 36,
+    "mu_r": 4,
+    "m_uv": 4,
+    "localization_scale": 4,
+    "sampling_e_cm": 3.872983346207417,
+    "vacuum_subtraction": false,
+    "local_uv": true,
+    "integrated_uv": true,
+    "threshold_subtraction": false,
+    "soft_counterterms": false,
+    "resummation": false
+  },
+  "points": {
+    "1": {
+      "requested_K_squared": 1.0,
+      "actual_K_squared": 0.9999999999999982,
+      "kz": 3.872983346207417,
+      "references": [
+        {
+          "k0_over_T": 4.0,
+          "k_over_T": 3.872983346207417,
+          "tolerance": 0.0001,
+          "rho_lo": 0.1595159943314148,
+          "rho_nlo": 0.10804400457317949
+        },
+        {
+          "k0_over_T": 4.0,
+          "k_over_T": 3.872983346207417,
+          "tolerance": 1e-05,
+          "rho_lo": 0.1595159943314148,
+          "rho_nlo": 0.10804403180459382
+        }
+      ],
+      "reference_tolerance_change": 2.7231414331807535e-08,
+      "reference_nlo_over_lo": 0.6773241282633927,
+      "standalone_export_identical_to_hard_timelike": true
+    },
+    "01": {
+      "requested_K_squared": 0.1,
+      "actual_K_squared": 0.09999999999999964,
+      "kz": 3.987480407475377,
+      "references": [
+        {
+          "k0_over_T": 4.0,
+          "k_over_T": 3.987480407475377,
+          "tolerance": 0.0001,
+          "rho_lo": 0.015829529287418927,
+          "rho_nlo": 0.2405139409356203
+        },
+        {
+          "k0_over_T": 4.0,
+          "k_over_T": 3.987480407475377,
+          "tolerance": 1e-05,
+          "rho_lo": 0.015829529287418927,
+          "rho_nlo": 0.24051375593793228
+        }
+      ],
+      "reference_tolerance_change": 1.8499768802970884e-07,
+      "reference_nlo_over_lo": 15.193992921134365,
+      "standalone_export_identical_to_hard_timelike": true
+    },
+    "001": {
+      "requested_K_squared": 0.01,
+      "actual_K_squared": 0.00999999999999801,
+      "kz": 3.998749804626441,
+      "references": [
+        {
+          "k0_over_T": 4.0,
+          "k_over_T": 3.998749804626441,
+          "tolerance": 0.0001,
+          "rho_lo": 0.0015817401860827578,
+          "rho_nlo": 0.4057994294739389
+        },
+        {
+          "k0_over_T": 4.0,
+          "k_over_T": 3.998749804626441,
+          "tolerance": 1e-05,
+          "rho_lo": 0.0015817401860827578,
+          "rho_nlo": 0.4057995222319259
+        }
+      ],
+      "reference_tolerance_change": 9.275798701358084e-08,
+      "reference_nlo_over_lo": 256.55257785218475,
+      "standalone_export_identical_to_hard_timelike": true
+    }
+  },
+  "runs": {
+    "1-lo": {
+      "point": "1",
+      "completed": true,
+      "exit_code": 0,
+      "seed": 191007552,
+      "batch": 50000,
+      "cores": 2,
+      "sampling_e_cm": 3.872983346207417,
+      "rho": 0.15260849548532096,
+      "rho_error": 0.007584126777126479,
+      "reference_rho": 0.1595159943314148,
+      "difference_in_quoted_mc_errors": -0.9107836734647785,
+      "nonfinite_count": 0,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_lo@LO",
+            "process": "vector_lo",
+            "integrand": "LO",
+            "target": null,
+            "integral": {
+              "neval": 100000,
+              "real_zero": 20711,
+              "im_zero": 100000,
+              "result": {
+                "re": 0.004239124874592249,
+                "im": 0.0
+              },
+              "error": {
+                "re": 0.0002106701882535133,
+                "im": 0.0
+              },
+              "real_chisq": 1.546103930065243,
+              "im_chisq": 0.0
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.004239124874592249,
+                "error": 0.0002106701882535133,
+                "relative_error_percent": 4.96966224128458,
+                "chi_sq_per_dof": 0.7730519650326215,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.029919826335101558
+              },
+              {
+                "component": "im",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 1.7767e-05,
+              "average_parameterization_time_seconds": 1.46e-07,
+              "average_integrand_time_seconds": 7.228e-06,
+              "average_evaluator_time_seconds": 4.391e-06,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.94e-07,
+              "f64_percentage": 100.0,
+              "f128_percentage": 0.0,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 12.683388006060927,
+                "coordinates": "xs: [ 4.8547558672501667e-01 3.6684753682657367e-01 1.1188118011841164e-03 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    },
+    "1-nlo": {
+      "point": "1",
+      "completed": true,
+      "exit_code": 0,
+      "seed": 191007552,
+      "batch": 25000,
+      "cores": 2,
+      "sampling_e_cm": 3.872983346207417,
+      "rho": 0.037857384303851,
+      "rho_error": 0.04792285927538387,
+      "reference_rho": 0.10804403180459382,
+      "difference_in_quoted_mc_errors": -1.464575539982336,
+      "nonfinite_count": 0,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_nlo@NLO",
+            "process": "vector_nlo",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 100000,
+              "real_zero": 175,
+              "im_zero": 1775,
+              "result": {
+                "re": 0.0010515940084403056,
+                "im": 2.68595400918655e-20
+              },
+              "error": {
+                "re": 0.0013311905354273295,
+                "im": 6.805393205029491e-20
+              },
+              "real_chisq": 3.824793430271532,
+              "im_chisq": 3.053816639162706
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0010515940084403056,
+                "error": 0.0013311905354273295,
+                "relative_error_percent": 126.58787752145085,
+                "chi_sq_per_dof": 0.956198357567883,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.7799166597400016
+              },
+              {
+                "component": "im",
+                "value": 2.68595400918655e-20,
+                "error": 6.805393205029491e-20,
+                "relative_error_percent": 253.3696847285381,
+                "chi_sq_per_dof": 0.7634541597906765,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 1.4664449769617072
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.001612867,
+              "average_parameterization_time_seconds": 2.02e-07,
+              "average_integrand_time_seconds": 0.000794039,
+              "average_evaluator_time_seconds": 0.000640673,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 3.08e-07,
+              "f64_percentage": 99.863,
+              "f128_percentage": 0.13699999999999998,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 13.962746858584387,
+                "coordinates": "xs: [\n4.6754467782289422e-01 6.5297513225577153e-01 3.2189969801702467e-01\n5.3856635595095126e-01 7.8540007174414739e-01 4.8339860915953548e-03 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -82.01556864653621,
+                "coordinates": "xs: [\n1.0859478524491879e-01 6.2363577487687527e-01 5.2830475218500994e-01\n4.9456787190945856e-01 8.7068163994237735e-01 6.7192727621515145e-04 ]"
+              },
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 3.938803765121775e-15,
+                "coordinates": "xs: [\n8.4751846250597281e-03 3.8113597130850763e-01 2.2946297008581387e-03\n4.5910249955254934e-01 9.9006804321793862e-01 9.9613216294263429e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -2.707219686483233e-15,
+                "coordinates": "xs: [\n1.0411465247368669e-02 9.5194554830899147e-01 2.5581869057469869e-02\n4.0361870453557425e-01 5.9852735296519510e-01 9.9114048732539639e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      },
+      "nonfinite_warnings": []
+    },
+    "01-lo": {
+      "point": "01",
+      "completed": true,
+      "exit_code": 0,
+      "seed": 191007552,
+      "batch": 50000,
+      "cores": 2,
+      "sampling_e_cm": 3.872983346207417,
+      "rho": 0.014303784609759123,
+      "rho_error": 0.0018615822055514147,
+      "reference_rho": 0.015829529287418927,
+      "difference_in_quoted_mc_errors": -0.8195956499314877,
+      "nonfinite_count": 0,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_lo@LO",
+            "process": "vector_lo",
+            "integrand": "LO",
+            "target": null,
+            "integral": {
+              "neval": 100000,
+              "real_zero": 54695,
+              "im_zero": 100000,
+              "result": {
+                "re": 0.00039732735027108677,
+                "im": 0.0
+              },
+              "error": {
+                "re": 5.171061682087263e-05,
+                "im": 0.0
+              },
+              "real_chisq": 0.5525903903472837,
+              "im_chisq": 0.0
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.00039732735027108677,
+                "error": 5.171061682087263e-05,
+                "relative_error_percent": 13.014612959714889,
+                "chi_sq_per_dof": 0.27629519517364187,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.08539884762436654
+              },
+              {
+                "component": "im",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 1.664e-05,
+              "average_parameterization_time_seconds": 1.5e-07,
+              "average_integrand_time_seconds": 6.813e-06,
+              "average_evaluator_time_seconds": 4.165e-06,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.94e-07,
+              "f64_percentage": 100.0,
+              "f128_percentage": 0.0,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 3.393129784279385,
+                "coordinates": "xs: [ 4.5875474178204290e-01 8.0315179717342289e-01 3.5369242888527719e-04 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    },
+    "01-nlo": {
+      "point": "01",
+      "completed": true,
+      "exit_code": 0,
+      "seed": 191007552,
+      "batch": 25000,
+      "cores": 2,
+      "sampling_e_cm": 3.872983346207417,
+      "rho": 0.06867741679900288,
+      "rho_error": 0.12706527569765008,
+      "reference_rho": 0.24051375593793228,
+      "difference_in_quoted_mc_errors": -1.3523469586436139,
+      "nonfinite_count": 0,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_nlo@NLO",
+            "process": "vector_nlo",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 100000,
+              "real_zero": 820,
+              "im_zero": 2457,
+              "result": {
+                "re": 0.0019077060221945243,
+                "im": 2.206964706146289e-21
+              },
+              "error": {
+                "re": 0.003529590991601391,
+                "im": 2.5046351963886046e-21
+              },
+              "real_chisq": 1.1989641937249398,
+              "im_chisq": 1.3581442648132895
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.0019077060221945243,
+                "error": 0.003529590991601391,
+                "relative_error_percent": 185.0175525231679,
+                "chi_sq_per_dof": 0.29974104843123495,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 1.4296501760967497
+              },
+              {
+                "component": "im",
+                "value": 2.206964706146289e-21,
+                "error": 2.5046351963886046e-21,
+                "relative_error_percent": 113.48777755318504,
+                "chi_sq_per_dof": 0.3395360662033224,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.746981057489307
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.001596868,
+              "average_parameterization_time_seconds": 2.02e-07,
+              "average_integrand_time_seconds": 0.000776756,
+              "average_evaluator_time_seconds": 0.000628359,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 3.21e-07,
+              "f64_percentage": 99.775,
+              "f128_percentage": 0.22399999999999998,
+              "arb_percentage": 0.001,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 62.633925960953775,
+                "coordinates": "xs: [\n4.6754467782289422e-01 6.5297513225577153e-01 3.2189969801702467e-01\n5.3856635595095126e-01 7.8540007174414739e-01 4.8339860915953548e-03 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -272.73522505712316,
+                "coordinates": "xs: [\n3.5180877028951835e-01 5.0713411606636938e-01 5.1820696272235833e-01\n5.0714972354666910e-01 3.3707881674477408e-01 5.4099280300530157e-06 ]"
+              },
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 1.6485608300387326e-16,
+                "coordinates": "xs: [\n1.7283591119399363e-02 5.5544501081888320e-01 9.8845411985389264e-01\n1.3454834644911737e-01 4.0176469250041907e-01 9.6602625084466065e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -9.605707158711139e-17,
+                "coordinates": "xs: [\n1.9125822408921429e-03 8.4440364418152614e-01 9.3642861794192933e-01\n2.2119513830310997e-01 2.2461455674928435e-01 9.8980955999094733e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      },
+      "nonfinite_warnings": []
+    },
+    "001-lo": {
+      "point": "001",
+      "completed": true,
+      "exit_code": 0,
+      "seed": 191007552,
+      "batch": 50000,
+      "cores": 2,
+      "sampling_e_cm": 3.872983346207417,
+      "rho": 0.0017145662750483993,
+      "rho_error": 0.0005067025568959164,
+      "reference_rho": 0.0015817401860827578,
+      "difference_in_quoted_mc_errors": 0.26213818572248837,
+      "nonfinite_count": 0,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_lo@LO",
+            "process": "vector_lo",
+            "integrand": "LO",
+            "target": null,
+            "integral": {
+              "neval": 100000,
+              "real_zero": 76721,
+              "im_zero": 100000,
+              "result": {
+                "re": 4.7626840973566644e-05,
+                "im": 0.0
+              },
+              "error": {
+                "re": 1.4075071024886566e-05,
+                "im": 0.0
+              },
+              "real_chisq": 0.371571853093396,
+              "im_chisq": 0.0
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 4.7626840973566644e-05,
+                "error": 1.4075071024886566e-05,
+                "relative_error_percent": 29.55281252581578,
+                "chi_sq_per_dof": 0.185785926546698,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.19593102685314695
+              },
+              {
+                "component": "im",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 1.66e-05,
+              "average_parameterization_time_seconds": 1.39e-07,
+              "average_integrand_time_seconds": 6.97e-06,
+              "average_evaluator_time_seconds": 4.264e-06,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 1.91e-07,
+              "f64_percentage": 100.0,
+              "f128_percentage": 0.0,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 0.9331575857722445,
+                "coordinates": "xs: [ 4.7300935320483306e-01 2.6655198087225312e-02 9.8210857384229545e-06 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    },
+    "001-nlo": {
+      "point": "001",
+      "completed": true,
+      "exit_code": 0,
+      "seed": 191007552,
+      "batch": 25000,
+      "cores": 2,
+      "sampling_e_cm": 3.872983346207417,
+      "rho": 0.7299427810205744,
+      "rho_error": 0.3960079419219348,
+      "reference_rho": 0.4057995222319259,
+      "difference_in_quoted_mc_errors": 0.8185271669439069,
+      "nonfinite_count": 0,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_nlo@NLO",
+            "process": "vector_nlo",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 100000,
+              "real_zero": 1467,
+              "im_zero": 3128,
+              "result": {
+                "re": 0.020276188361682622,
+                "im": 3.1247397311353523e-22
+              },
+              "error": {
+                "re": 0.011000220608942632,
+                "im": 9.626387625880488e-22
+              },
+              "real_chisq": 3.2555091545735015,
+              "im_chisq": 1.8552492268615763
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.020276188361682622,
+                "error": 0.011000220608942632,
+                "relative_error_percent": 54.251915659506025,
+                "chi_sq_per_dof": 0.8138772886433754,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.5180022230053011
+              },
+              {
+                "component": "im",
+                "value": 3.1247397311353523e-22,
+                "error": 9.626387625880488e-22,
+                "relative_error_percent": 308.07006196265843,
+                "chi_sq_per_dof": 0.4638123067153941,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 1.3406941258162774
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.001608686,
+              "average_parameterization_time_seconds": 2.15e-07,
+              "average_integrand_time_seconds": 0.000776612,
+              "average_evaluator_time_seconds": 0.00062496,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 3.08e-07,
+              "f64_percentage": 99.71,
+              "f128_percentage": 0.28900000000000003,
+              "arb_percentage": 0.001,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 1050.311064542581,
+                "coordinates": "xs: [\n1.2812025041055664e-02 4.7915106676167649e-02 7.7509916662110490e-01\n5.0558211695687816e-01 5.8957052323199144e-01 5.1928661193744130e-07 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -210.1944586649132,
+                "coordinates": "xs: [\n1.1471748158360945e-01 6.5189564450141491e-01 9.0932940003346174e-01\n4.5186040973078878e-01 2.6380798108881010e-01 4.3209621583525203e-05 ]"
+              },
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 4.189320202237901e-17,
+                "coordinates": "xs: [\n1.6731852323175311e-01 4.2789359050048145e-02 9.4638924219048548e-01\n5.2843292645357998e-01 3.9509841179267990e-01 9.9153359028357735e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -2.3646874807826798e-17,
+                "coordinates": "xs: [\n1.6228114641375185e-01 1.4256011447978462e-01 4.4366932599909259e-02\n6.2330710070504369e-01 7.3168148432880775e-01 9.9756104452218142e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      },
+      "nonfinite_warnings": []
+    },
+    "01-repeat-nlo": {
+      "point": "01",
+      "completed": true,
+      "exit_code": 0,
+      "seed": 271828,
+      "batch": 50000,
+      "cores": 4,
+      "sampling_e_cm": 3.872983346207417,
+      "rho": 0.2039981966975803,
+      "rho_error": 0.07245267180098489,
+      "reference_rho": 0.24051375593793228,
+      "difference_in_quoted_mc_errors": -0.5039918933652854,
+      "nonfinite_count": 4,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_nlo@NLO",
+            "process": "vector_nlo",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 500000,
+              "real_zero": 1651,
+              "im_zero": 7851,
+              "result": {
+                "re": 0.005666616574932786,
+                "im": 1.087660961314707e-20
+              },
+              "error": {
+                "re": 0.0020125742166940248,
+                "im": 1.858797141282568e-20
+              },
+              "real_chisq": 7.627732170828956,
+              "im_chisq": 10.856805834427217
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.005666616574932786,
+                "error": 0.0020125742166940248,
+                "relative_error_percent": 35.51632954304654,
+                "chi_sq_per_dof": 0.7627732170828956,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.3067098714524805
+              },
+              {
+                "component": "im",
+                "value": 1.087660961314707e-20,
+                "error": 1.858797141282568e-20,
+                "relative_error_percent": 170.89858029249777,
+                "chi_sq_per_dof": 1.0856805834427217,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 1.675407390460084
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 500000,
+              "average_total_time_seconds": 0.001615218,
+              "average_parameterization_time_seconds": 2.2e-07,
+              "average_integrand_time_seconds": 0.000797171,
+              "average_evaluator_time_seconds": 0.000620517,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 3.18e-07,
+              "f64_percentage": 99.8896,
+              "f128_percentage": 0.1096,
+              "arb_percentage": 0.0007999999999999999,
+              "nan_percentage": 0.0007999999999999999,
+              "nan_or_unstable_percentage": 0.0007999999999999999,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 202.27402997569658,
+                "coordinates": "xs: [\n2.0952849586940017e-01 1.0232910663249668e-01 5.2797624060740622e-01\n5.0841192225642329e-01 4.0817629761114783e-02 1.7909962877516412e-06 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -869.003620634065,
+                "coordinates": "xs: [\n3.4113069872687019e-01 7.6662784424599395e-02 5.8244100757885431e-01\n5.0621457178617091e-01 5.0470806400019452e-01 9.7755820875440662e-06 ]"
+              },
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 9.111376064507898e-15,
+                "coordinates": "xs: [\n5.1324565551659300e-04 7.6279520571225434e-01 3.0038002336899447e-02\n3.8217532930152254e-01 9.3737362706115945e-01 9.9990079672621857e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -1.003410869816029e-15,
+                "coordinates": "xs: [\n2.3857891283036534e-04 3.8393999003454188e-01 5.0429333567709611e-01\n3.1163974435502678e-01 8.7611513152538761e-02 9.9815843660768067e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      },
+      "nonfinite_warnings": [
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(1.757650615777132e-5), [F(0.0016412315884704574), F(0.4814422140818139), F(0.996834916311464), F(0.5171256728189192), F(0.49146070241600354), F(7.236033354880577e-8)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:38:54.466+03:00"
+        },
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(7.563702841042823e-6), [F(0.006211965142953429), F(0.9547635013356494), F(0.7365118959661624), F(0.5089542265048257), F(0.9527056594986254), F(2.916789176114798e-5)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:38:59.052+03:00"
+        },
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(0.0006539552319492787), [F(0.00025191214315680474), F(0.6431056667057574), F(0.7914141905127325), F(0.9256403331624938), F(0.6024472913647587), F(2.760184763559928e-10)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:39:19.460+03:00"
+        },
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(2.438888869226525e-7), [F(0.0009274471584364608), F(0.4172775548402864), F(0.6212989813765615), F(0.5080016622165807), F(0.41550037672938545), F(7.101747480817108e-7)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:39:46.873+03:00"
+        }
+      ]
+    },
+    "001-repeat-nlo": {
+      "point": "001",
+      "completed": true,
+      "exit_code": 0,
+      "seed": 271828,
+      "batch": 50000,
+      "cores": 4,
+      "sampling_e_cm": 3.872983346207417,
+      "rho": 0.4737966529980182,
+      "rho_error": 0.08902669591184892,
+      "reference_rho": 0.4057995222319259,
+      "difference_in_quoted_mc_errors": 0.7637836052392719,
+      "nonfinite_count": 8,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_nlo@NLO",
+            "process": "vector_nlo",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 500000,
+              "real_zero": 3152,
+              "im_zero": 10656,
+              "result": {
+                "re": 0.013161018138833839,
+                "im": -4.464795099231975e-22
+              },
+              "error": {
+                "re": 0.0024729637753291367,
+                "im": 1.3921039732091407e-21
+              },
+              "real_chisq": 3.737752051273766,
+              "im_chisq": 4.6244497306279415
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 0.013161018138833839,
+                "error": 0.0024729637753291367,
+                "relative_error_percent": 18.790064334249593,
+                "chi_sq_per_dof": 0.3737752051273766,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.10936764305364638
+              },
+              {
+                "component": "im",
+                "value": -4.464795099231975e-22,
+                "error": 1.3921039732091407e-21,
+                "relative_error_percent": 311.7957134132779,
+                "chi_sq_per_dof": 0.46244497306279414,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 2.166716299081872
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 500000,
+              "average_total_time_seconds": 0.001598998,
+              "average_parameterization_time_seconds": 2.07e-07,
+              "average_integrand_time_seconds": 0.000787977,
+              "average_evaluator_time_seconds": 0.000612846,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 3.16e-07,
+              "f64_percentage": 99.87899999999999,
+              "f128_percentage": 0.11939999999999999,
+              "arb_percentage": 0.0015999999999999999,
+              "nan_percentage": 0.0015999999999999999,
+              "nan_or_unstable_percentage": 0.0015999999999999999,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 719.6947670152723,
+                "coordinates": "xs: [\n3.2520703941075002e-01 3.6145030501072789e-01 1.0742975086987049e-01\n5.1508187068928823e-01 2.9299689635071990e-01 2.9146259576789295e-05 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -254.02489906010126,
+                "coordinates": "xs: [\n2.8095036964750042e-01 5.6679974836666602e-01 8.2383770092543396e-01\n5.0801993182090566e-01 7.6336403409901477e-01 2.2895010646804213e-09 ]"
+              },
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 2.575116894401242e-16,
+                "coordinates": "xs: [\n2.7308895949775153e-01 5.3382744788045733e-01 4.6145208816022708e-03\n2.9269338563140185e-01 5.7474013676130331e-01 9.6265045903525803e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -4.836972156783392e-16,
+                "coordinates": "xs: [\n7.3433209227654912e-04 7.9040281970762827e-01 4.1225625602642486e-02\n4.1223290605536156e-01 9.1946184567105960e-01 9.9992671094209984e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      },
+      "nonfinite_warnings": [
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(0.053854971898392195), [F(0.38284976323786246), F(0.42928160419108263), F(0.010235373341083381), F(0.9998525100417789), F(0.43510709710570933), F(0.010667453207883319)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:37:56.750+03:00"
+        },
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(3.4165216731911114e-5), [F(0.002322187764337744), F(0.45250101609733967), F(0.9959024725260472), F(0.5166818159902608), F(0.5243932397047477), F(8.523612259419278e-8)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:38:52.025+03:00"
+        },
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(1.0218500424358558e-6), [F(0.01900569642670404), F(0.3511232048689104), F(0.000251057153145776), F(0.4929520280469678), F(0.3795499038560235), F(2.561938768282343e-7)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:39:10.372+03:00"
+        },
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(2.087324433926409e-5), [F(0.00036761506299903926), F(0.7055146698154829), F(0.7916157358876931), F(0.8682831499948068), F(0.6195379873541307), F(8.95972181027347e-11)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:39:16.259+03:00"
+        },
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(4.799151002797425e-8), [F(0.011155301428479444), F(0.6694024176283025), F(0.000717134207336703), F(0.506777885136661), F(0.6447552983648593), F(4.111268359127212e-7)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:39:19.905+03:00"
+        },
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(2.246931048753051e-7), [F(0.00027338203890636334), F(0.5650481057923109), F(0.775350609006738), F(0.5626684152579259), F(0.46643068813102384), F(6.093878005906108e-8)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:39:37.214+03:00"
+        },
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(2.3524109046395906e-7), [F(1.7542636615097998e-5), F(0.48398381863301826), F(0.6870415565767382), F(0.4659473166320968), F(0.7681357498581943), F(1.2992928979436915e-8)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:39:43.334+03:00"
+        },
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(0.01487069251349309), [F(0.02093692431769494), F(0.6270093114620038), F(0.43629312005700593), F(0.8868724551984724), F(0.6273893243801546), F(0.0001348128789546739)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:40:15.733+03:00"
+        }
+      ]
+    },
+    "001-mass-scale-lo": {
+      "point": "001",
+      "completed": true,
+      "exit_code": 0,
+      "seed": 191007552,
+      "batch": 50000,
+      "cores": 2,
+      "sampling_e_cm": 0.1,
+      "rho": 0.00045392702500043555,
+      "rho_error": 4.997579826557416e-05,
+      "reference_rho": 0.0015817401860827578,
+      "difference_in_quoted_mc_errors": -22.567186522745683,
+      "nonfinite_count": 0,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_lo@LO",
+            "process": "vector_lo",
+            "integrand": "LO",
+            "target": null,
+            "integral": {
+              "neval": 100000,
+              "real_zero": 18960,
+              "im_zero": 100000,
+              "result": {
+                "re": 1.2609084027789876e-05,
+                "im": 0.0
+              },
+              "error": {
+                "re": 1.3882166184881712e-06,
+                "im": 0.0
+              },
+              "real_chisq": 16.69689400347169,
+              "im_chisq": 0.0
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": 1.2609084027789876e-05,
+                "error": 1.3882166184881712e-06,
+                "relative_error_percent": 11.00965474913643,
+                "chi_sq_per_dof": 8.348447001735845,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.07224021998988411
+              },
+              {
+                "component": "im",
+                "value": 0.0,
+                "error": 0.0,
+                "relative_error_percent": null,
+                "chi_sq_per_dof": 0.0,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.0
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 1.8659e-05,
+              "average_parameterization_time_seconds": 1.15e-07,
+              "average_integrand_time_seconds": 7.504e-06,
+              "average_evaluator_time_seconds": 4.353e-06,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 2.12e-07,
+              "f64_percentage": 100.0,
+              "f128_percentage": 0.0,
+              "arb_percentage": 0.0,
+              "nan_percentage": 0.0,
+              "nan_or_unstable_percentage": 0.0,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 0.09108830040384748,
+                "coordinates": "xs: [ 9.2192542532128363e-01 3.7685167205727876e-01 6.3087530283512105e-04 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      }
+    },
+    "001-mass-scale-nlo": {
+      "point": "001",
+      "completed": true,
+      "exit_code": 0,
+      "seed": 191007552,
+      "batch": 25000,
+      "cores": 2,
+      "sampling_e_cm": 0.1,
+      "rho": -0.004223701940154682,
+      "rho_error": 0.6593321681783607,
+      "reference_rho": 0.4057995222319259,
+      "difference_in_quoted_mc_errors": -0.6218765653508388,
+      "nonfinite_count": 2,
+      "raw_native_result": {
+        "slots": [
+          {
+            "key": "vector_nlo@NLO",
+            "process": "vector_nlo",
+            "integrand": "NLO",
+            "target": null,
+            "integral": {
+              "neval": 100000,
+              "real_zero": 129,
+              "im_zero": 2032,
+              "result": {
+                "re": -0.00011732505389318561,
+                "im": -7.11766073967671e-21
+              },
+              "error": {
+                "re": 0.01831478244939891,
+                "im": 3.1313007864233816e-21
+              },
+              "real_chisq": 2.3541551998925394,
+              "im_chisq": 3.238818413776018
+            },
+            "table_results": [
+              {
+                "component": "re",
+                "value": -0.00011732505389318561,
+                "error": 0.01831478244939891,
+                "relative_error_percent": 15610.291102932666,
+                "chi_sq_per_dof": 0.5885387999731349,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 138.01484521421366
+              },
+              {
+                "component": "im",
+                "value": -7.11766073967671e-21,
+                "error": 3.1313007864233816e-21,
+                "relative_error_percent": 43.99339756344733,
+                "chi_sq_per_dof": 0.8097046034440045,
+                "target_delta_sigma": null,
+                "target_delta_percent": null,
+                "max_weight_impact": 0.3438877083729672
+              }
+            ],
+            "integration_statistics": {
+              "num_evals": 100000,
+              "average_total_time_seconds": 0.001628482,
+              "average_parameterization_time_seconds": 2.31e-07,
+              "average_integrand_time_seconds": 0.000795457,
+              "average_evaluator_time_seconds": 0.000649377,
+              "average_observable_time_seconds": 0.0,
+              "average_integrator_time_seconds": 3.21e-07,
+              "f64_percentage": 99.80499999999999,
+              "f128_percentage": 0.193,
+              "arb_percentage": 0.002,
+              "nan_percentage": 0.002,
+              "nan_or_unstable_percentage": 0.002,
+              "generated_event_count": 0,
+              "accepted_event_count": 0,
+              "selection_efficiency_percentage": null
+            },
+            "max_weight_info": [
+              {
+                "component": "re",
+                "sign": "+",
+                "max_eval": 617.4289486090078,
+                "coordinates": "xs: [\n9.2822276602954323e-01 9.7095629152051288e-01 4.7155360321673856e-01\n9.7270721467906196e-01 2.8630888456017911e-01 1.3121184793006538e-05 ]"
+              },
+              {
+                "component": "re",
+                "sign": "-",
+                "max_eval": -1619.2599152817288,
+                "coordinates": "xs: [\n9.6829012861753017e-01 5.2408670156758541e-01 1.1789962436170797e-02\n9.6811315825525934e-01 2.0887673402218483e-02 6.6426532064768983e-05 ]"
+              },
+              {
+                "component": "im",
+                "sign": "+",
+                "max_eval": 4.818530934691585e-17,
+                "coordinates": "xs: [\n9.3626712367553988e-01 2.6114464285027483e-01 3.5628435066452080e-02\n9.6344951419135538e-01 2.0845061084724903e-01 7.8186961509623076e-01 ]"
+              },
+              {
+                "component": "im",
+                "sign": "-",
+                "max_eval": -2.4476760407436626e-16,
+                "coordinates": "xs: [\n8.3730379429951263e-01 2.9249361636569443e-01 3.8012402452232519e-01\n9.7794732423110009e-01 4.1751552802720623e-02 9.9209171564428800e-01 ]"
+              }
+            ],
+            "grid_breakdown": {
+              "re": null,
+              "im": null
+            }
+          }
+        ]
+      },
+      "nonfinite_warnings": [
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(1.0), [F(0.005078045767840211), F(0.9129471256919621), F(0.0002808919490395745), F(0.6085493682281555), F(0.4351011674913746), F(0.6912444407148896)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:39:40.931+03:00"
+        },
+        {
+          "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "im_is_nan": true,
+          "level": "WARN",
+          "line": 3821,
+          "message": "final process evaluation is nonfinite",
+          "module_path": "gammalooprs::integrands::process",
+          "re_is_nan": true,
+          "result": "(NaN+NaNi)",
+          "sample": "Continuous(F(0.3873478756706876), [F(0.11064476274034339), F(0.4931299930879133), F(0.00011458960585640485), F(0.46238017881052673), F(0.011349145602947594), F(0.4971930467249254)])",
+          "stage": "process_final_nonfinite_sample",
+          "target": "gammalooprs::integrands::process",
+          "timestamp": "2026-09-27T12:40:36.508+03:00"
+        }
+      ]
+    }
+  },
+  "nonfinite_reproducer": {
+    "point": "001",
+    "unit_cube_coordinates": [
+      0.38284976323786246,
+      0.42928160419108263,
+      0.010235373341083381,
+      0.9998525100417789,
+      0.43510709710570933,
+      0.010667453207883319
+    ],
+    "parameterization_jacobian": 1.1376501886039257e+21,
+    "cases": {
+      "default": {
+        "nonfinite_warning": true,
+        "raw_inspect_output": {
+          "evaluation": {
+            "integrand_result": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "parameterization_jacobian": 1.1376501886039257e+21,
+            "integrator_weight": 1.0,
+            "event_groups": [],
+            "evaluation_metadata": null
+          }
+        }
+      },
+      "arb": {
+        "nonfinite_warning": true,
+        "raw_inspect_output": {
+          "evaluation": {
+            "integrand_result": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "parameterization_jacobian": 1.1376501886039257e+21,
+            "integrator_weight": 1.0,
+            "event_groups": [],
+            "evaluation_metadata": null
+          }
+        }
+      },
+      "GL0": {
+        "nonfinite_warning": true,
+        "raw_inspect_output": {
+          "evaluation": {
+            "integrand_result": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "parameterization_jacobian": 1.1376501886039257e+21,
+            "integrator_weight": 1.0,
+            "event_groups": [],
+            "evaluation_metadata": null
+          }
+        }
+      },
+      "GL2": {
+        "nonfinite_warning": true,
+        "raw_inspect_output": {
+          "evaluation": {
+            "integrand_result": {
+              "re": 0.0,
+              "im": 0.0
+            },
+            "parameterization_jacobian": 1.1376501886039257e+21,
+            "integrator_weight": 1.0,
+            "event_groups": [],
+            "evaluation_metadata": null
+          }
+        }
+      }
+    },
+    "warnings": [
+      {
+        "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "im_is_nan": true,
+        "level": "WARN",
+        "line": 3821,
+        "message": "final process evaluation is nonfinite",
+        "module_path": "gammalooprs::integrands::process",
+        "re_is_nan": true,
+        "result": "(NaN+NaNi)",
+        "sample": "Continuous(F(1.0), [F(0.38284976323786246), F(0.42928160419108263), F(0.010235373341083381), F(0.9998525100417789), F(0.43510709710570933), F(0.010667453207883319)])",
+        "stage": "process_final_nonfinite_sample",
+        "target": "gammalooprs::integrands::process",
+        "timestamp": "2026-09-27T12:40:51.848+03:00"
+      },
+      {
+        "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "im_is_nan": true,
+        "level": "WARN",
+        "line": 3821,
+        "message": "final process evaluation is nonfinite",
+        "module_path": "gammalooprs::integrands::process",
+        "re_is_nan": true,
+        "result": "(NaN+NaNi)",
+        "sample": "Continuous(F(1.0), [F(0.38284976323786246), F(0.42928160419108263), F(0.010235373341083381), F(0.9998525100417789), F(0.43510709710570933), F(0.010667453207883319)])",
+        "stage": "process_final_nonfinite_sample",
+        "target": "gammalooprs::integrands::process",
+        "timestamp": "2026-09-27T12:40:51.944+03:00"
+      },
+      {
+        "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "im_is_nan": true,
+        "level": "WARN",
+        "line": 3821,
+        "message": "final process evaluation is nonfinite",
+        "module_path": "gammalooprs::integrands::process",
+        "re_is_nan": true,
+        "result": "(NaN+NaNi)",
+        "sample": "Discrete(F(1.0), 0, Some(Continuous(F(1.0), [F(0.38284976323786246), F(0.42928160419108263), F(0.010235373341083381), F(0.9998525100417789), F(0.43510709710570933), F(0.010667453207883319)])))",
+        "stage": "process_final_nonfinite_sample",
+        "target": "gammalooprs::integrands::process",
+        "timestamp": "2026-09-27T12:43:41.108+03:00"
+      },
+      {
+        "file": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "im_is_nan": true,
+        "level": "WARN",
+        "line": 3821,
+        "message": "final process evaluation is nonfinite",
+        "module_path": "gammalooprs::integrands::process",
+        "re_is_nan": true,
+        "result": "(NaN+NaNi)",
+        "sample": "Discrete(F(1.0), 0, Some(Continuous(F(1.0), [F(0.38284976323786246), F(0.42928160419108263), F(0.010235373341083381), F(0.9998525100417789), F(0.43510709710570933), F(0.010667453207883319)])))",
+        "stage": "process_final_nonfinite_sample",
+        "target": "gammalooprs::integrands::process",
+        "timestamp": "2026-09-27T12:43:41.126+03:00"
+      }
+    ],
+    "interpretation": "All four replays log a nonfinite final evaluation. The returned zero is the discarded-sample replacement, not a valid integrand value. Both graph probes use the existing one-graph Monte Carlo selector and summed LMB channels. The underlying cause has not been isolated."
+  },
+  "limitations": [
+    "The quoted native errors are Monte Carlo estimates; large weights and discarded nonfinite samples prevent a precision validation.",
+    "Changing only e_cm to sqrt(K^2)=0.1 worsened the 100,000-sample error. Sampling has not been optimized.",
+    "This is a strict fixed-order scan. NLO dominates LO for the two smaller masses, so these are not controlled physical rate predictions.",
+    "No fatal root-isolation error occurred in these completed runs. This does not rule out such errors at other samples or smaller K^2."
+  ]
+}

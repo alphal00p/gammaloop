@@ -11,6 +11,20 @@ commands = [
 ]
 
 [[command_blocks]]
+name = "spacelike"
+# Keep e_cm as the positive sampling scale sqrt(|K^2|); no rest frame exists.
+commands = [
+  "set default-runtime kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,4.0]]",
+]
+
+[[command_blocks]]
+name = "near_lightcone"
+# k0/T=4; the default kz gives K^2/T^2=0.1. Hold the sampling scale fixed.
+commands = [
+  "set default-runtime kv kinematics.externals.data.momenta=[[4.0,0.0,0.0,$(kz:3.987480407475377)]] kinematics.e_cm=$(sampling_scale:3.872983346207417)",
+]
+
+[[command_blocks]]
 name = "lo"
 commands = [
   "generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==0 QED^2==2 [{{1}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p vector_lo -i LO --global-prefactor-num 1 --only-diagrams",
@@ -38,6 +52,14 @@ commands = [
 name = "inspect"
 commands = [
   "inspect -p vector_nlo -i NLO $(precision:) -m --graph-id $(graph:0) -x 0.17 -0.31 0.43 -0.29 0.53 0.71 --json-output $(output:/tmp/gammaloop-qcd-vector)-inspect.json",
+]
+
+[[command_blocks]]
+name = "lightcone_nonfinite"
+# Reproduce at kz=3.998749804626441 and the default sampling scale.
+commands = [
+  "inspect -p vector_nlo -i NLO -x 0.38284976323786246 0.42928160419108263 0.010235373341083381 0.9998525100417789 0.43510709710570933 0.010667453207883319 --json-output $(output:/tmp/gammaloop-qcd-vector)-nonfinite-default.json",
+  "inspect -p vector_nlo -i NLO -f -x 0.38284976323786246 0.42928160419108263 0.010235373341083381 0.9998525100417789 0.43510709710570933 0.010667453207883319 --json-output $(output:/tmp/gammaloop-qcd-vector)-nonfinite-arb.json",
 ]
 
 [[command_blocks]]
