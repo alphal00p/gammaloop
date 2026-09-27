@@ -708,6 +708,21 @@ title = "Engineering investigations"
 summary = "Dated measurements and diagnostic records. Treat their results as experiment context, not timeless API guarantees."
 
 [[section.note]]
+id = "tensor-engine-expansion-inventory"
+title = "Tensor engine expansion inventory"
+summary = "Fixed-base M0 inventory of direct and implicit tensor expansion, its existing owners, and the replacements required by the tensor engine consolidation plan."
+source = "docs/architecture/tensor-engine-expansion-inventory.typ"
+kind = "Implementation inventory"
+status = "In progress"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-09-27"
+review_ref = "bfb80d8c"
+products = ["spenso", "idenso", "gammaloop"]
+topics = ["schoonschip", "tensor-network", "parsing", "rewrites"]
+review_triggers = ["crates/idenso/src/**", "crates/spenso/src/**"]
+
+[[section.note]]
 id = "gammaloop-drawing-evaluated-fields-history"
 title = "GammaLoop Evaluated-Field Proposal"
 summary = "The superseded proposal for executable Typst fields in DOT drawing data, preserved separately from the maintained callback-based drawing architecture."
