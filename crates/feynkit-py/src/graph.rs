@@ -58,8 +58,15 @@ pub(crate) fn parse_symbolic_annotation(value: &str) -> Result<PythonExpression,
 ///
 /// Examples
 /// --------
-/// >>> vertex = next(iter(diagram.vertices))
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_diagrams(loops=1)
+/// >>> diagram = result.diagrams[0]
+/// >>> vertex = diagram.vertices[0]
 /// >>> interaction = model.vertex_rule(vertex.interaction)
+/// >>> factor = vertex.numerator_expression()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramVertex",
@@ -70,6 +77,12 @@ pub(crate) fn parse_symbolic_annotation(value: &str) -> Result<PythonExpression,
 #[derive(Clone)]
 pub struct PyDiagramVertex {
     /// Return this vertex's integer ID within the diagram.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramVertex`` class example:
+    ///
+    /// >>> vertices_by_id = {item.id: item for item in diagram.vertices}
     #[pyo3(get)]
     id: usize,
     inner: DiagramVertex,
@@ -81,6 +94,12 @@ pub struct PyDiagramVertex {
 #[pymethods]
 impl PyDiagramVertex {
     /// Return the stable vertex label stored in the diagram.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramVertex`` class example:
+    ///
+    /// >>> vertex_names = [item.name for item in diagram.vertices]
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -92,9 +111,10 @@ impl PyDiagramVertex {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``DiagramVertex`` class example:
+    ///
     /// >>> vertex = diagram.vertices[0]
     /// >>> rule = model.vertex_rule(vertex.interaction)
-    ///
     #[getter]
     fn interaction(&self) -> PyResult<String> {
         let interaction = self.inner.interaction.ok_or_else(|| {
@@ -113,6 +133,13 @@ impl PyDiagramVertex {
     ///
     /// Raises :class:`DiagramError` when the diagram does not carry an
     /// instantiated Feynman-rule numerator for this vertex.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramVertex`` class example:
+    ///
+    /// >>> source_text = vertex.numerator
+    /// >>> factor = vertex.numerator_expression()
     #[getter]
     fn numerator(&self) -> PyResult<String> {
         Ok(self.inner.numerator.to_plain_string())
@@ -122,10 +149,11 @@ impl PyDiagramVertex {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``DiagramVertex`` class example:
+    ///
     /// >>> vertex = diagram.vertices[0]
     /// >>> vertex_factor = vertex.numerator_expression()
     /// >>> weighted_vertex_factor = diagram.overall_factor_expression() * vertex_factor
-    ///
     fn numerator_expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_atom_interface(py, self.inner.numerator.clone(), None)
     }
@@ -134,9 +162,10 @@ impl PyDiagramVertex {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``DiagramVertex`` class example:
+    ///
     /// >>> vertex = diagram.vertices[0]
     /// >>> print(vertex)  # includes its external state or interaction rule
-    ///
     fn __repr__(&self) -> String {
         format!(
             "DiagramVertex(id={}, name={:?}, interaction={:?})",
@@ -148,7 +177,10 @@ impl PyDiagramVertex {
     ///
     /// Examples
     /// --------
-    /// IPython calls this method when formatting a vertex for text display.
+    /// Using the setup in the ``DiagramVertex`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(vertex)
     ///
     /// Parameters
     /// ----------
@@ -176,9 +208,16 @@ impl PyDiagramVertex {
 ///
 /// Examples
 /// --------
-/// >>> edge = next(iter(diagram.edges))
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_diagrams(loops=1)
+/// >>> diagram = result.diagrams[0]
+/// >>> edge = diagram.internal_edges[0]
+/// >>> endpoints = (edge.source, edge.target)
 /// >>> particle = edge.particle
-/// >>> source, target = diagram.vertices[edge.source], diagram.vertices[edge.target]
+/// >>> factor = edge.numerator_expression()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramEdge",
@@ -189,24 +228,34 @@ impl PyDiagramVertex {
 #[derive(Clone)]
 pub struct PyDiagramEdge {
     /// Return this edge's integer ID within the diagram.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> numerators = {line.id: line.numerator_expression() for line in diagram.internal_edges}
     #[pyo3(get)]
     id: usize,
     /// Return the source interaction ID, or None at a dangling sink.
     ///
     /// Examples
     /// --------
-    /// >>> edge = diagram.edges[0]
-    /// >>> source_vertex = diagram.vertices[edge.source]
+    /// Using the setup in the ``DiagramEdge`` class example:
     ///
+    /// >>> edge = diagram.internal_edges[0]
+    /// >>> vertices = {vertex.id: vertex for vertex in diagram.vertices}
+    /// >>> source_vertex = vertices[edge.source]
     #[pyo3(get)]
     source: Option<usize>,
     /// Return the target interaction ID, or None at a dangling source.
     ///
     /// Examples
     /// --------
-    /// >>> edge = diagram.edges[0]
-    /// >>> target_vertex = diagram.vertices[edge.target]
+    /// Using the setup in the ``DiagramEdge`` class example:
     ///
+    /// >>> edge = diagram.internal_edges[0]
+    /// >>> vertices = {vertex.id: vertex for vertex in diagram.vertices}
+    /// >>> target_vertex = vertices[edge.target]
     #[pyo3(get)]
     target: Option<usize>,
     inner: DiagramEdge,
@@ -238,6 +287,12 @@ impl PyDiagramEdge {
     ///
     /// >>> edge.particle.mass_expression
     /// >>> edge.particle.width_parameter
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> assert edge.particle.name == edge.particle_name
     #[getter]
     fn particle(&self) -> PyParticle {
         PyParticle::new(self.inner.particle, Arc::clone(&self.model))
@@ -247,6 +302,12 @@ impl PyDiagramEdge {
     ///
     /// Template expressions retain model placeholders. Use numerator_expression()
     /// and denominator_expression() for the instantiated diagram factors.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> propagator = edge.propagator
     #[getter]
     fn propagator(&self) -> PyResult<Option<PyPropagator>> {
         if self.is_external() || self.is_dummy() || self.is_dangling() {
@@ -272,6 +333,8 @@ impl PyDiagramEdge {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
     /// >>> edge = diagram.internal_edges[0]
     /// >>> denominator = edge.denominator_expression(in_lmb=True)
     ///
@@ -338,6 +401,8 @@ impl PyDiagramEdge {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
     /// >>> momentum = edge.momentum_expression(dimension=4, in_lmb=True)
     ///
     /// Parameters
@@ -391,6 +456,8 @@ impl PyDiagramEdge {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
     /// >>> edge.momentum_signature().loops
     /// >>> edge.momentum_signature().external
     ///
@@ -420,10 +487,9 @@ impl PyDiagramEdge {
     ///
     /// Examples
     /// --------
-    /// >>> external = [v for v in diagram.vertices if v.is_external]
-    /// >>> sorted(v.external_index for v in external) == list(range(len(external)))
-    /// True
+    /// Using the setup in the ``DiagramEdge`` class example:
     ///
+    /// >>> external_labels = [(edge.id, edge.external_index) for edge in diagram.external_edges]
     #[getter]
     fn external_index(&self) -> PyResult<usize> {
         self.inner
@@ -438,6 +504,12 @@ impl PyDiagramEdge {
     /// Return ``"incoming"`` or ``"outgoing"`` for an external edge.
     ///
     /// Raises :class:`DiagramError` for an internal edge.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> states = [(line.id, line.external_state) for line in diagram.external_edges]
     #[getter]
     fn external_state(&self) -> PyResult<&'static str> {
         self.inner
@@ -456,38 +528,69 @@ impl PyDiagramEdge {
     ///
     /// Examples
     /// --------
-    /// >>> external_edges = [edge for edge in diagram.edges if edge.is_external]
+    /// Using the setup in the ``DiagramEdge`` class example:
     ///
+    /// >>> external_edges = [edge for edge in diagram.edges if edge.is_external]
     #[getter]
     fn is_external(&self) -> bool {
         self.inner.external.is_some()
     }
 
     /// Return the shared sewing identity of an external momentum carrier.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> connections = [(line.id, line.external_connection) for line in diagram.edges]
     #[getter]
     fn external_connection(&self) -> Option<usize> {
         self.inner.external.as_ref().map(|leg| leg.connection)
     }
 
     /// Return the external-state label retained during finalization.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> labels = [line.external_name for line in diagram.external_edges]
     #[getter]
     fn external_name(&self) -> Option<String> {
         self.inner.external.as_ref().map(|leg| leg.name.clone())
     }
 
     /// Report whether this line is a dummy graph attachment.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> physical_lines = [line for line in diagram.edges if not line.is_dummy]
     #[getter]
     fn is_dummy(&self) -> bool {
         self.inner.is_dummy
     }
 
     /// Report whether this line has only one incident interaction vertex.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> dangling_lines = [line for line in diagram.edges if line.is_dangling]
     #[getter]
     fn is_dangling(&self) -> bool {
         self.source.is_none() || self.target.is_none()
     }
 
     /// Return the particle name associated with this propagator edge.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> assert edge.particle_name == "phi"
     #[getter]
     fn particle_name(&self) -> PyResult<String> {
         self.model
@@ -500,10 +603,11 @@ impl PyDiagramEdge {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
     /// >>> edge = diagram.edges[0]
     /// >>> edge.particle.pdg_code == edge.particle_pdg
     /// True
-    ///
     #[getter]
     fn particle_pdg(&self) -> PyResult<i64> {
         self.model
@@ -516,8 +620,9 @@ impl PyDiagramEdge {
     ///
     /// Examples
     /// --------
-    /// >>> fermion_edges = [edge for edge in diagram.edges if edge.directed]
+    /// Using the setup in the ``DiagramEdge`` class example:
     ///
+    /// >>> fermion_edges = [edge for edge in diagram.edges if edge.directed]
     #[getter]
     fn directed(&self) -> bool {
         self.inner.directed
@@ -527,6 +632,13 @@ impl PyDiagramEdge {
     ///
     /// Raises :class:`DiagramError` for an incomplete imported diagram that has
     /// no instantiated propagator numerator.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> source_text = edge.numerator
+    /// >>> factor = edge.numerator_expression()
     #[getter]
     fn numerator(&self) -> PyResult<String> {
         Ok(self.inner.numerator.to_plain_string())
@@ -536,10 +648,11 @@ impl PyDiagramEdge {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
     /// >>> edge = diagram.edges[0]
     /// >>> propagator_factor = edge.numerator_expression()
     /// >>> weighted_propagator = diagram.overall_factor_expression() * propagator_factor
-    ///
     fn numerator_expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_atom_interface(py, self.inner.numerator.clone(), None)
     }
@@ -548,9 +661,10 @@ impl PyDiagramEdge {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
     /// >>> edge = diagram.edges[0]
     /// >>> print(edge)  # shows particle identity, endpoints, and flow direction
-    ///
     fn __repr__(&self) -> String {
         let connector = if self.inner.directed { "->" } else { "--" };
         let particle = self
@@ -567,7 +681,10 @@ impl PyDiagramEdge {
     ///
     /// Examples
     /// --------
-    /// IPython calls this method when formatting an edge for text display.
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(edge)
     ///
     /// Parameters
     /// ----------
@@ -592,7 +709,14 @@ impl PyDiagramEdge {
 ///
 /// Examples
 /// --------
-/// >>> side = diagram.cuts[0].left
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_cross_section(loops=1)
+/// >>> diagram = result.diagrams[0]
+/// >>> cut = diagram.cuts[0]
+/// >>> side = cut.left
 /// >>> side_numerator = side.subgraph.numerator_expression()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -610,6 +734,12 @@ pub struct PyDiagramCutSide {
 #[pymethods]
 impl PyDiagramCutSide {
     /// Return a physics view of this amplitude side, retaining its original diagram.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramCutSide`` class example:
+    ///
+    /// >>> side_numerator = side.subgraph.numerator_expression()
     #[getter]
     fn subgraph(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
         self.diagram
@@ -617,11 +747,23 @@ impl PyDiagramCutSide {
             .half_edge_selection(py, &self.inner.half_edges)
     }
     /// Return coupling powers of this amplitude side.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramCutSide`` class example:
+    ///
+    /// >>> orders = side.coupling_orders
     #[getter]
     fn coupling_orders(&self) -> BTreeMap<String, usize> {
         self.inner.coupling_orders.clone()
     }
     /// Return the number of loops in this amplitude side.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramCutSide`` class example:
+    ///
+    /// >>> assert side.loop_count == 0  # tree amplitude on this side
     #[getter]
     fn loop_count(&self) -> usize {
         self.inner.loop_count
@@ -636,8 +778,15 @@ impl PyDiagramCutSide {
 ///
 /// Examples
 /// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_cross_section(loops=1)
+/// >>> diagram = result.diagrams[0]
 /// >>> cut = diagram.cuts[0]
 /// >>> factors = cut.propagators()
+/// >>> assert len(factors) == len(cut.edges)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(name = "DiagramCut", module = "symbolica.community.feynkit", frozen)]
 pub struct PyDiagramCut {
@@ -650,6 +799,12 @@ pub struct PyDiagramCut {
 #[pymethods]
 impl PyDiagramCut {
     /// Return the left amplitude and its generation metadata.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramCut`` class example:
+    ///
+    /// >>> left_numerator = cut.left.subgraph.numerator_expression()
     #[getter]
     fn left(&self, py: Python<'_>) -> PyDiagramCutSide {
         PyDiagramCutSide {
@@ -658,6 +813,12 @@ impl PyDiagramCut {
         }
     }
     /// Return the right amplitude and its generation metadata.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramCut`` class example:
+    ///
+    /// >>> right_numerator = cut.right.subgraph.numerator_expression()
     #[getter]
     fn right(&self, py: Python<'_>) -> PyDiagramCutSide {
         PyDiagramCutSide {
@@ -666,6 +827,12 @@ impl PyDiagramCut {
         }
     }
     /// Return the oriented crossing half-edges as a reusable selection.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramCut`` class example:
+    ///
+    /// >>> crossing_region = cut.subgraph
     #[getter]
     fn subgraph(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
         self.diagram
@@ -673,6 +840,12 @@ impl PyDiagramCut {
             .half_edge_selection(py, &self.inner.cut)
     }
     /// Return the crossing particle lines in their stored cut order.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramCut`` class example:
+    ///
+    /// >>> cut_edge_ids = [edge.id for edge in cut.edges]
     #[getter]
     fn edges(&self, py: Python<'_>) -> Vec<PyDiagramEdge> {
         let edges = self.diagram.borrow(py).whole().edges();
@@ -688,6 +861,12 @@ impl PyDiagramCut {
     /// A source-oriented cut line carries its stored species into the final
     /// state; a target-oriented line carries its antiparticle. Momentum
     /// orientations use the same left-to-right positive-energy routing.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramCut`` class example:
+    ///
+    /// >>> cut_particles = cut.particles
     #[getter]
     fn particles(&self, py: Python<'_>) -> PyResult<Vec<PyParticle>> {
         let diagram = self.diagram.borrow(py);
@@ -702,6 +881,12 @@ impl PyDiagramCut {
     }
 
     /// Orient crossing lines from the left side to the right side.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramCut`` class example:
+    ///
+    /// >>> cut_directions = cut.orientations
     #[getter]
     fn orientations(&self) -> BTreeMap<usize, i32> {
         self.inner
@@ -720,6 +905,12 @@ impl PyDiagramCut {
     }
     /// Return stored edge momenta in the diagram's selected routing.
     /// Multiply by :attr:`orientations` for momenta directed from left to right.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramCut`` class example:
+    ///
+    /// >>> cut_momenta = cut.momentum_signatures
     #[getter]
     fn momentum_signatures(&self, py: Python<'_>) -> BTreeMap<usize, PyMomentumSignature> {
         let diagram = self.diagram.borrow(py);
@@ -741,6 +932,8 @@ impl PyDiagramCut {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``DiagramCut`` class example:
+    ///
     /// >>> factors = diagram.cuts[0].propagators(edge_powers={2: 2})
     /// >>> distributions = [factor.to_expression() for factor in factors]
     ///
@@ -796,8 +989,20 @@ impl PyDiagramCut {
 ///
 /// Examples
 /// --------
-/// >>> threshold = diagram.topology_threshold_candidates[0]
-/// >>> crossing_lines = threshold.edges
+/// Topology candidates depend on the generated graph and may be empty;
+/// physical final-state cuts are available separately through ``diagram.cuts``.
+///
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_cross_section(loops=1)
+/// >>> diagram = result.diagrams[0]
+/// >>> cut = diagram.cuts[0]
+/// >>> thresholds = diagram.topology_threshold_candidates
+/// >>> for threshold in thresholds:
+/// ...     crossing_lines = threshold.edges
+/// ...     left_region = threshold.left
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramThresholdCandidate",
@@ -814,6 +1019,12 @@ pub struct PyDiagramThresholdCandidate {
 #[pymethods]
 impl PyDiagramThresholdCandidate {
     /// Return the left topology selection.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramThresholdCandidate`` class example:
+    ///
+    /// >>> left_regions = [candidate.left for candidate in thresholds]
     #[getter]
     fn left(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
         self.diagram
@@ -821,6 +1032,12 @@ impl PyDiagramThresholdCandidate {
             .half_edge_selection(py, &self.inner.left)
     }
     /// Return the right topology selection.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramThresholdCandidate`` class example:
+    ///
+    /// >>> right_regions = [candidate.right for candidate in thresholds]
     #[getter]
     fn right(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
         self.diagram
@@ -828,6 +1045,12 @@ impl PyDiagramThresholdCandidate {
             .half_edge_selection(py, &self.inner.right)
     }
     /// Return the oriented crossing half-edge selection.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramThresholdCandidate`` class example:
+    ///
+    /// >>> crossing_regions = [candidate.subgraph for candidate in thresholds]
     #[getter]
     fn subgraph(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
         self.diagram
@@ -835,6 +1058,12 @@ impl PyDiagramThresholdCandidate {
             .half_edge_selection(py, &self.inner.cut)
     }
     /// Return threshold-crossing lines in their stored order.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramThresholdCandidate`` class example:
+    ///
+    /// >>> crossing_edges = [candidate.edges for candidate in thresholds]
     #[getter]
     fn edges(&self, py: Python<'_>) -> Vec<PyDiagramEdge> {
         let edges = self.diagram.borrow(py).whole().edges();
@@ -857,9 +1086,16 @@ impl PyDiagramThresholdCandidate {
 ///
 /// Examples
 /// --------
-/// >>> basis = next(iter(diagram.loop_momentum_bases(limit=1)))
-/// >>> edge_id, signature = next(iter(basis.edge_signatures.items()))
-/// >>> print(f"q_{edge_id} = {signature.format_momentum()}")
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_diagrams(loops=1)
+/// >>> diagram = result.diagrams[0]
+/// >>> basis = diagram.loop_momentum_basis
+/// >>> edge_id = basis.loop_edges[0]
+/// >>> signature = basis.edge_signatures[edge_id]
+/// >>> routing = signature.format_momentum()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "MomentumSignature",
@@ -924,12 +1160,24 @@ fn components_close<const N: usize>(left: [f64; N], right: [f64; N]) -> bool {
 #[pymethods]
 impl PyMomentumSignature {
     /// Return the integer coefficients of the independent loop momenta.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``MomentumSignature`` class example:
+    ///
+    /// >>> assert len(signature.loops) == diagram.loop_count
     #[getter]
     fn loops(&self) -> Vec<isize> {
         self.inner.loops.integer_coefficients()
     }
 
     /// Return the integer coefficients of the external momenta.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``MomentumSignature`` class example:
+    ///
+    /// >>> external_coefficients = signature.external
     #[getter]
     fn external(&self) -> Vec<isize> {
         self.inner.external.integer_coefficients()
@@ -939,10 +1187,11 @@ impl PyMomentumSignature {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``MomentumSignature`` class example:
+    ///
     /// >>> signature = next(iter(basis.edge_signatures.values()))
     /// >>> loops, external = signature.integer_coefficients()
     /// >>> print("loop coefficients:", loops, "external coefficients:", external)
-    ///
     fn integer_coefficients(&self) -> (Vec<isize>, Vec<isize>) {
         self.inner.integer_coefficients()
     }
@@ -951,11 +1200,12 @@ impl PyMomentumSignature {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``MomentumSignature`` class example:
+    ///
     /// Print the momentum routing assigned to every propagator:
     ///
     /// >>> for edge_id, signature in basis.edge_signatures.items():
     /// ...     print(edge_id, signature.format_momentum())
-    ///
     fn format_momentum(&self) -> String {
         self.inner.format_momentum()
     }
@@ -964,9 +1214,10 @@ impl PyMomentumSignature {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``MomentumSignature`` class example:
+    ///
     /// >>> signature = next(iter(basis.edge_signatures.values()))
     /// >>> print(f"propagator momentum: {signature}")
-    ///
     fn __str__(&self) -> String {
         self.inner.format_momentum()
     }
@@ -975,9 +1226,10 @@ impl PyMomentumSignature {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``MomentumSignature`` class example:
+    ///
     /// >>> edge_id, signature = next(iter(basis.edge_signatures.items()))
     /// >>> print(f"edge {edge_id}: {signature!r}")
-    ///
     fn __repr__(&self) -> String {
         format!("MomentumSignature({})", self.inner.format_momentum())
     }
@@ -986,7 +1238,10 @@ impl PyMomentumSignature {
     ///
     /// Examples
     /// --------
-    /// IPython calls this method when formatting a signature for text display.
+    /// Using the setup in the ``MomentumSignature`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(signature)
     ///
     /// Parameters
     /// ----------
@@ -1014,9 +1269,14 @@ impl PyMomentumSignature {
 ///
 /// Examples
 /// --------
-/// >>> basis = next(iter(diagram.loop_momentum_bases(limit=1)))
-/// >>> len(basis.loop_edges) == diagram.loop_count
-/// True
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_diagrams(loops=1)
+/// >>> diagram = result.diagrams[0]
+/// >>> basis = diagram.loop_momentum_basis
+/// >>> assert len(basis.loop_edges) == diagram.loop_count
 /// >>> assignments = basis.edge_signatures
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -1045,6 +1305,12 @@ impl PyLoopMomentumBasis {
 #[pymethods]
 impl PyLoopMomentumBasis {
     /// Return the edge identifiers belonging to the spanning tree.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``LoopMomentumBasis`` class example:
+    ///
+    /// >>> rerouted = diagram.with_loop_momentum_tree_edges(basis.tree_edges)
     #[getter]
     fn tree_edges(&self) -> Vec<usize> {
         self.inner.tree_edges.iter().map(|id| id.0).collect()
@@ -1054,16 +1320,24 @@ impl PyLoopMomentumBasis {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``LoopMomentumBasis`` class example:
+    ///
     /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
     /// >>> len(basis.loop_edges) == diagram.loop_count
     /// True
-    ///
     #[getter]
     fn loop_edges(&self) -> Vec<usize> {
         self.inner.loop_edges.iter().map(|id| id.0).collect()
     }
 
     /// Return the identifiers of edges attached to external states.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``LoopMomentumBasis`` class example:
+    ///
+    /// >>> external_ids = basis.external_edges
+    /// >>> external_routings = [basis.edge_signatures[i] for i in external_ids]
     #[getter]
     fn external_edges(&self) -> Vec<usize> {
         self.inner.external_edges.iter().map(|id| id.0).collect()
@@ -1073,10 +1347,11 @@ impl PyLoopMomentumBasis {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``LoopMomentumBasis`` class example:
+    ///
     /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
     /// >>> set(basis.dependent_externals) <= set(basis.external_edges)
     /// True
-    ///
     #[getter]
     fn dependent_externals(&self) -> Vec<usize> {
         self.inner
@@ -1090,6 +1365,8 @@ impl PyLoopMomentumBasis {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``LoopMomentumBasis`` class example:
+    ///
     /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
     /// >>> momentum_by_edge = {
     /// ...     edge_id: signature.format_momentum()
@@ -1097,7 +1374,6 @@ impl PyLoopMomentumBasis {
     /// ... }
     /// >>> for edge in diagram.edges:
     /// ...     print(edge.particle_name, momentum_by_edge[edge.id])
-    ///
     #[getter]
     fn edge_signatures(&self) -> BTreeMap<usize, PyMomentumSignature> {
         self.inner
@@ -1112,9 +1388,10 @@ impl PyLoopMomentumBasis {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``LoopMomentumBasis`` class example:
+    ///
     /// >>> rules = diagram.loop_momentum_basis.momentum_replacements()
     /// >>> routed = diagram.numerator_expression().replace_multiple(rules)
-    ///
     fn momentum_replacements(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
         let constructor = py.import("symbolica.core")?.getattr("Replacement")?;
         self.inner
@@ -1136,27 +1413,23 @@ impl PyLoopMomentumBasis {
             .collect()
     }
 
-    /// Express edge momenta in this basis while retaining any tensor index arguments.
+    /// Express edge momenta in this basis while retaining tensor index arguments.
     ///
     /// Examples
     /// --------
-    /// >>> routed = diagram.loop_momentum_basis.route_expression(diagram.numerator_expression())
+    /// Using the setup in the ``LoopMomentumBasis`` class example:
+    ///
+    /// >>> routed = basis.route_expression(diagram.numerator_expression().to_expression())
     ///
     /// Parameters
     /// ----------
-    /// expression : Expression or TensorExpression
-    ///     Expression with canonical indexed edge momenta to route.
+    /// expression : Expression or number
+    ///     Expression with canonical edge momenta to route, or a scalar constant.
     /// loop_momenta : sequence[TensorName] or None, optional
     ///     Vector names in ``loop_edges`` order. None retains indexed ``K`` calls.
     /// external_momenta : sequence[TensorName] or None, optional
     ///     Vector names in ``external_edges`` order, excluding ``dependent_externals``.
     ///     None retains indexed ``P`` calls. Naming also applies to already routed vectors.
-    ///
-    /// Returns
-    /// -------
-    /// TensorExpression or Expression
-    ///     Tensor inputs retain their type and ordered interface, including zero results.
-    ///     Other inputs return a plain Expression.
     #[gen_stub(skip)]
     #[pyo3(signature = (expression, *, loop_momenta=None, external_momenta=None))]
     fn route_expression(
@@ -1226,27 +1499,25 @@ impl PyLoopMomentumBasis {
         }
     }
 
-    /// Route loop and external momenta through every diagram edge.
-    ///
-    /// Inputs must be uniformly :class:`ThreeMomentum` or uniformly
-    /// :class:`FourMomentum`. Loop momenta follow :attr:`loop_edges`; external
-    /// momenta follow :attr:`external_edges`. The result is keyed by stable edge
-    /// ID. FeynKit checks the supplied external momenta against momentum
-    /// conservation, including each dependent external leg.
+    /// Route four-momenta through every diagram edge.
     ///
     /// Examples
     /// --------
-    /// Route a one-loop spatial momentum through the complete graph:
+    /// Using ``basis`` from the class example; zero external momenta keep this
+    /// routing illustration momentum-conserving:
     ///
-    /// >>> routed = basis.route([loop_momentum], external_spatial_momenta)
+    /// >>> loop_momentum = hep.FourMomentum(2.0, 1.0, 0.0, 0.0)
+    /// >>> external_four_momenta = [hep.FourMomentum(0.0, 0.0, 0.0, 0.0)
+    /// ...                          for edge in basis.external_edges]
+    /// >>> routed = basis.route([loop_momentum], external_four_momenta)
     /// >>> internal_momentum = routed[basis.loop_edges[0]]
     ///
     /// Parameters
     /// ----------
-    /// loop_momenta : sequence[ThreeMomentum] or sequence[FourMomentum]
-    ///     Independent loop momenta in :attr:`loop_edges` order.
-    /// external_momenta : sequence[ThreeMomentum] or sequence[FourMomentum]
-    ///     External momenta in :attr:`external_edges` order.
+    /// loop_momenta : sequence[FourMomentum]
+    ///     Independent loop momenta in ``basis.loop_edges`` order.
+    /// external_momenta : sequence[FourMomentum]
+    ///     External momenta in ``basis.external_edges`` order.
     #[gen_stub(skip)]
     fn route(
         &self,
@@ -1361,9 +1632,10 @@ impl PyLoopMomentumBasis {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``LoopMomentumBasis`` class example:
+    ///
     /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
     /// >>> print(basis)
-    ///
     fn __repr__(&self) -> String {
         format!(
             "LoopMomentumBasis(loop_edges={:?}, tree_edges={:?}, external_edges={:?})",
@@ -1389,9 +1661,10 @@ impl PyLoopMomentumBasis {
     ///
     /// Examples
     /// --------
-    /// Leave ``basis`` as the final expression in a Jupyter or Marimo cell to
-    /// inspect every propagator's loop- and external-momentum assignment.
+    /// Using the setup in the ``LoopMomentumBasis`` class example:
     ///
+    /// >>> from IPython.display import display
+    /// >>> display(basis)
     fn _repr_html_(&self) -> String {
         let rows = self
             .inner
@@ -1420,7 +1693,10 @@ impl PyLoopMomentumBasis {
     ///
     /// Examples
     /// --------
-    /// IPython calls this method when formatting a basis for text display.
+    /// Using the setup in the ``LoopMomentumBasis`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(basis)
     ///
     /// Parameters
     /// ----------
@@ -1456,19 +1732,19 @@ submit! {
                 loop_momenta: pyo3_stub_gen.RustType["Option<Vec<SpensoName>>"] = None,
                 external_momenta: pyo3_stub_gen.RustType["Option<Vec<SpensoName>>"] = None,
             ) -> pyo3_stub_gen.RustType["TensorExpression"]:
-                """Express edge momenta in this basis while preserving the tensor interface.
-
-                Tensor zeros retain their original ordered interface.
+                """
+                Express edge momenta in this basis while retaining tensor index arguments.
 
                 Examples
                 --------
-                >>> routed = basis.route_expression(diagram.numerator_expression())
-                >>> assert routed.structure.slots == diagram.numerator_expression().structure.slots
+                Using the setup in the ``LoopMomentumBasis`` class example:
+
+                >>> routed = basis.route_expression(diagram.numerator_expression().to_expression())
 
                 Parameters
                 ----------
-                expression : TensorExpression
-                    Tensor expression with canonical indexed edge momenta to route.
+                expression : Expression or number
+                    Expression with canonical edge momenta to route, or a scalar constant.
                 loop_momenta : sequence[TensorName] or None, optional
                     Vector names in ``loop_edges`` order. None retains indexed ``K`` calls.
                 external_momenta : sequence[TensorName] or None, optional
@@ -1484,10 +1760,13 @@ submit! {
                 loop_momenta: pyo3_stub_gen.RustType["Option<Vec<SpensoName>>"] = None,
                 external_momenta: pyo3_stub_gen.RustType["Option<Vec<SpensoName>>"] = None,
             ) -> pyo3_stub_gen.RustType["PythonExpression"]:
-                """Express edge momenta in this basis while retaining tensor index arguments.
+                """
+                Express edge momenta in this basis while retaining tensor index arguments.
 
                 Examples
                 --------
+                Using the setup in the ``LoopMomentumBasis`` class example:
+
                 >>> routed = basis.route_expression(diagram.numerator_expression().to_expression())
 
                 Parameters
@@ -1507,18 +1786,25 @@ submit! {
                 loop_momenta: typing.Sequence[ThreeMomentum],
                 external_momenta: typing.Sequence[ThreeMomentum],
             ) -> dict[int, ThreeMomentum]:
-                """Route three-momenta through every diagram edge.
+                """
+                Route four-momenta through every diagram edge.
 
                 Examples
                 --------
-                >>> routed = basis.route([loop_momentum], external_spatial_momenta)
+                Using ``basis`` from the class example; zero external momenta keep this
+                routing illustration momentum-conserving:
+
+                >>> loop_momentum = hep.FourMomentum(2.0, 1.0, 0.0, 0.0)
+                >>> external_four_momenta = [hep.FourMomentum(0.0, 0.0, 0.0, 0.0)
+                ...                          for edge in basis.external_edges]
+                >>> routed = basis.route([loop_momentum], external_four_momenta)
                 >>> internal_momentum = routed[basis.loop_edges[0]]
 
                 Parameters
                 ----------
-                loop_momenta : sequence[ThreeMomentum]
+                loop_momenta : sequence[FourMomentum]
                     Independent loop momenta in ``basis.loop_edges`` order.
-                external_momenta : sequence[ThreeMomentum]
+                external_momenta : sequence[FourMomentum]
                     External momenta in ``basis.external_edges`` order.
                 """
 
@@ -1528,10 +1814,17 @@ submit! {
                 loop_momenta: typing.Sequence[FourMomentum],
                 external_momenta: typing.Sequence[FourMomentum],
             ) -> dict[int, FourMomentum]:
-                """Route four-momenta through every diagram edge.
+                """
+                Route four-momenta through every diagram edge.
 
                 Examples
                 --------
+                Using ``basis`` from the class example; zero external momenta keep this
+                routing illustration momentum-conserving:
+
+                >>> loop_momentum = hep.FourMomentum(2.0, 1.0, 0.0, 0.0)
+                >>> external_four_momenta = [hep.FourMomentum(0.0, 0.0, 0.0, 0.0)
+                ...                          for edge in basis.external_edges]
                 >>> routed = basis.route([loop_momentum], external_four_momenta)
                 >>> internal_momentum = routed[basis.loop_edges[0]]
 
@@ -1546,16 +1839,37 @@ submit! {
     }
 }
 
-/// A typed Feynman graph with model and symbolic physics annotations.
+/// A generated or imported Feynman diagram, with particles, momenta and Feynman rules.
 ///
-/// Diagrams expose vertices, propagator edges, loop-momentum routings, symmetry
-/// factors, Symbolica expressions, and Linnest/Typst notebook rendering.
+/// Obtain diagrams from ``Model.process(...).generate_diagrams().diagrams``;
+/// use ``from_json`` or ``from_dot`` to restore a saved diagram with its model.
+/// There is no direct Python constructor. ``internal_edges`` are propagators,
+/// whereas ``external_edges`` carry the scattering or decay states.
+///
+/// Use ``numerator_expression()`` for symbolic algebra, ``integral_family()``
+/// for loop-integral preparation, and ``render()`` for an SVG. Graph selections
+/// from ``subgraph`` and ``filter`` retain the original routing and identities.
+/// Routing changes return new diagrams. A diagram alone does not perform loop
+/// integration or supply a cross section.
 ///
 /// Examples
 /// --------
-/// >>> diagram = next(iter(result.diagrams))
+/// Generate a one-loop scalar scattering diagram, inspect its propagators,
+/// and prepare its integral family. In a notebook, displaying ``diagram``
+/// renders the graph. The methods below reuse this setup.
+///
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_diagrams(loops=1)
+/// >>> diagram = result.diagrams[0]
 /// >>> diagram.validate()
-/// >>> diagram  # renders as a Linnest graph in Jupyter or Marimo
+/// >>> assert diagram.loop_count == 1
+/// >>> propagators = [(edge.id, edge.particle_name) for edge in diagram.internal_edges]
+/// >>> numerator = diagram.numerator_expression()
+/// >>> family = diagram.integral_family()
+/// >>> assert family.is_complete
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "FeynmanDiagram",
@@ -1792,15 +2106,23 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> graph = diagram.to_linnet()
     /// >>> gluons = graph.filter(edge=lambda edge: edge.data.particle_name == "g")
-    ///
     #[gen_stub(override_return_type(type_repr="linnet.Graph", imports=("linnet")))]
     fn to_linnet(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.linnet.graph(py, self)
     }
 
     /// Return the canonical Linnet selection representing this physics region.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> region = diagram.subgraph(diagram.linnet_selection)
+    /// >>> assert region.n_half_edges == len(diagram.half_edges)
     #[getter]
     #[gen_stub(override_return_type(type_repr="linnet.Subgraph", imports=("linnet")))]
     fn linnet_selection(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
@@ -1823,6 +2145,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> region = diagram.subgraph(edges=[0, 1])
     /// >>> numerator = region.numerator_expression()
     ///
@@ -1873,6 +2197,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> region = diagram.filter(edge=lambda edge: edge.data.particle_name == "g")
     ///
     /// Parameters
@@ -1909,6 +2235,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> region = diagram.subgraph(nodes=[0])
     /// >>> boundary = region.boundary()
     fn boundary(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
@@ -1924,6 +2252,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> components = diagram.connected_components()
     fn connected_components(&self, py: Python<'_>) -> PyResult<Vec<Py<PySubgraph>>> {
         let selected = self.linnet_selection(py)?;
@@ -1939,6 +2269,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> connected = diagram.is_connected()
     fn is_connected(&self, py: Python<'_>) -> PyResult<bool> {
         let selected = self.linnet_selection(py)?;
@@ -1952,6 +2284,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> bridges = diagram.bridges()
     fn bridges(&self, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
         let selected = self.linnet_selection(py)?;
@@ -1966,6 +2300,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> cycles, covered = diagram.cycle_basis()
     #[gen_stub(override_return_type(type_repr="tuple[list[linnet.Cycle], Subgraph]", imports=("linnet")))]
     fn cycle_basis(&self, py: Python<'_>) -> PyResult<(Py<PyAny>, Py<PySubgraph>)> {
@@ -1985,6 +2321,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> forests = diagram.all_spanning_forests()
     fn all_spanning_forests(&self, py: Python<'_>) -> PyResult<Vec<Py<PySubgraph>>> {
         let selected = self.linnet_selection(py)?;
@@ -2000,6 +2338,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> bonds = diagram.all_bonds(min_size=2, max_size=3)
     ///
     /// Parameters
@@ -2031,6 +2371,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> partitions = diagram.all_cuts([0], [1])
     ///
     /// Parameters
@@ -2058,6 +2400,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> tree = diagram.depth_first_traverse(0)
     ///
     /// Parameters
@@ -2088,6 +2432,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> tree = diagram.breadth_first_traverse(0)
     ///
     /// Parameters
@@ -2118,8 +2464,10 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> encoded = diagram.to_json()
-    /// >>> restored = FeynmanDiagram.from_json(model, encoded)
+    /// >>> restored = hep.FeynmanDiagram.from_json(model, encoded)
     /// >>> restored.validate()
     /// >>> restored  # render the recovered graph in a notebook
     ///
@@ -2141,8 +2489,10 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> dot = diagram.to_dot()
-    /// >>> restored = FeynmanDiagram.from_dot(model, dot)
+    /// >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
     /// >>> restored.validate()
     /// >>> restored  # preserve topology through a Graphviz workflow
     ///
@@ -2151,7 +2501,7 @@ impl PyFeynmanDiagram {
     /// model : Model
     ///     Model used to resolve particles and interactions or validate annotated IDs.
     /// dot : str
-    ///     Compact physics DOT or annotated FeynKit DOT. Compact cross-sections pair
+    ///     Compact physics DOT or annotated HEP DOT. Compact cross-sections pair
     ///     initial-state legs with is_cut and specify comma-separated final_state particles.
     #[staticmethod]
     fn from_dot(model: &PyModel, dot: &str) -> PyResult<Self> {
@@ -2161,12 +2511,25 @@ impl PyFeynmanDiagram {
     }
 
     /// Return the deterministic name assigned during diagram generation.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> by_name = {item.name: item for item in result.diagrams}
     #[getter]
     fn name(&self) -> &str {
         self.inner.name()
     }
 
     /// Return the stable content-derived hexadecimal diagram ID.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> selected = process.generate_diagrams(loops=1, select_diagrams=[diagram.id])
+    /// >>> assert len(selected.diagrams) == 1
     #[getter]
     fn id(&self) -> String {
         self.inner.id().to_string()
@@ -2176,8 +2539,9 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// >>> graph_weight = 1 / diagram.symmetry_factor
+    /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
+    /// >>> graph_weight = 1 / diagram.symmetry_factor
     #[getter]
     fn symmetry_factor(&self) -> u64 {
         self.inner.symmetry_factor()
@@ -2191,10 +2555,11 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> source = diagram.overall_factor
     /// >>> factor = diagram.overall_factor_expression()
     /// >>> factor  # rich Symbolica output in a notebook
-    ///
     #[getter]
     fn overall_factor(&self) -> String {
         self.inner.overall_factor().to_plain_string()
@@ -2208,6 +2573,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> factor = diagram.overall_factor_expression()
     /// >>> weighted_numerator = factor * diagram.numerator_expression()
     /// >>> weighted_numerator
@@ -2231,6 +2598,12 @@ impl PyFeynmanDiagram {
 
     /// Return the diagram numerator annotation as source text.
     ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> source_text = diagram.numerator
+    /// >>> numerator = diagram.numerator_expression()
     #[getter]
     fn numerator(&self) -> String {
         self.local_numerator(None).to_plain_string()
@@ -2248,6 +2621,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> denominator = diagram.denominator_expression(in_lmb=True)
     /// >>> integrand = diagram.numerator_expression(in_lmb=True) / denominator
     /// >>> basis = diagram.loop_momentum_bases()[0]
@@ -2326,6 +2701,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> family = diagram.integral_family()
     ///
     /// Parameters
@@ -2358,11 +2735,10 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> family = diagram.propagator_family()
-    /// >>> p = family.external_momenta[0]
-    /// >>> kin = family.kinematics.with_scalar_product(p, p, s)
-    /// >>> family = diagram.propagator_family(kinematics=kin)
-    /// >>> U, F = family.symanzik(parameters)
+    /// >>> assert len(family.denominators) == len(diagram.internal_edges)
     ///
     /// Parameters
     /// ----------
@@ -2395,6 +2771,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> numerator = diagram.numerator_expression(in_lmb=True)
     /// >>> basis = diagram.loop_momentum_bases()[0]
     /// >>> numerator = diagram.numerator_expression(lmb=basis)
@@ -2461,11 +2839,10 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica import S
-    /// >>> mass = S("mUV", is_scalar=True)
-    /// >>> expansion = diagram.uv_expansion(mass)
-    /// >>> region = diagram.filter(edge=lambda e: e.data.id in selected_edge_ids)
-    /// >>> local_ct = region.uv_counterterm(mass)
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> expanded = diagram.uv_expansion(0)
+    /// >>> expansion = expanded  # symbolic Taylor-expanded integrand
     ///
     /// Parameters
     /// ----------
@@ -2519,6 +2896,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> from symbolica import S
     /// >>> mass = S("mUV", is_scalar=True)
     /// >>> counterterm = diagram.uv_counterterm(mass)
@@ -2553,10 +2932,11 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> prefactor = diagram.numerator_prefactor_expression()
     /// >>> weighted_numerator = prefactor * diagram.numerator_expression()
     /// >>> weighted_numerator
-    ///
     fn numerator_prefactor_expression(&self) -> PythonExpression {
         PythonExpression {
             expr: self.inner.numerator_prefactor().clone(),
@@ -2567,10 +2947,11 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> projector = diagram.projector_expression()
     /// >>> projected_numerator = projector * diagram.numerator_expression()
     /// >>> projected_numerator
-    ///
     fn projector_expression(&self) -> PythonExpression {
         PythonExpression {
             expr: self.inner.projector().clone(),
@@ -2587,6 +2968,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> from symbolica import E
     /// >>> reduced = diagram.tensor_reduce(E("D"))
     ///
@@ -2649,10 +3032,14 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica import E
-    /// >>> reducer = fk.TensorReducer.feynkit(E("4"))
+    /// Reduce a vacuum graph after explicitly selecting its integrated momentum head:
+    ///
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> model = hep.Model.phi4()
+    /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+    /// >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
     /// >>> scalar_numerator = vacuum_diagram.reduce_tensor_numerator(reducer)
-    /// >>> scalar_numerator
     ///
     /// Parameters
     /// ----------
@@ -2683,11 +3070,14 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica import E
-    /// >>> reducer = fk.TensorReducer.feynkit(E("4"))
+    /// Construct scalar numerator graphs for a vacuum diagram:
+    ///
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> model = hep.Model.phi4()
+    /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+    /// >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
     /// >>> scalar_graphs = vacuum_diagram.reduce_tensor_graphs(reducer)
-    /// >>> for contribution in scalar_graphs:
-    /// ...     print(contribution.name, contribution.numerator_expression())
     ///
     /// Parameters
     /// ----------
@@ -2702,6 +3092,13 @@ impl PyFeynmanDiagram {
     }
 
     /// Return physical final-state cuts selected during generation.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> physical_cuts = [cut.edges for cut in diagram.cuts]
+    /// >>> assert physical_cuts == []  # ordinary amplitude, not a sewn cross section
     #[getter]
     fn cuts(slf: Py<Self>, py: Python<'_>) -> Vec<PyDiagramCut> {
         let diagram = slf.borrow(py);
@@ -2731,6 +3128,12 @@ impl PyFeynmanDiagram {
     }
 
     /// Return topology threshold candidates separately from physical cuts.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> partitions = [candidate.edges for candidate in diagram.topology_threshold_candidates]
     #[getter]
     fn topology_threshold_candidates(
         slf: Py<Self>,
@@ -2765,6 +3168,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> rerouted = diagram.with_loop_momentum_edges(diagram.loop_momentum_basis.loop_edges)
     ///
     /// Parameters
@@ -2790,6 +3195,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> rerouted = diagram.with_loop_momentum_tree_edges(diagram.loop_momentum_basis.tree_edges)
     ///
     /// Parameters
@@ -2815,6 +3222,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> basis = diagram.momentum_basis()
     /// >>> routed = basis.route_expression(diagram.numerator_expression())
     #[pyo3(signature = (*))]
@@ -2829,6 +3238,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> basis = diagram.compatible_momentum_basis(diagram.loop_momentum_basis)
     ///
     /// Parameters
@@ -2855,6 +3266,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> contracted = diagram.filter(edge=lambda edge: edge.data.is_dummy)
     /// >>> basis = diagram.contracted_momentum_basis(contracted)
     ///
@@ -2885,6 +3298,13 @@ impl PyFeynmanDiagram {
     }
 
     /// Return the loop-momentum routing selected during generation.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> basis = diagram.loop_momentum_basis
+    /// >>> assert len(basis.loop_edges) == diagram.loop_count
     #[getter]
     fn loop_momentum_basis(&self) -> PyResult<PyLoopMomentumBasis> {
         let basis = if self.selected_region.is_some() {
@@ -2901,10 +3321,11 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
     /// >>> len(basis.loop_edges) == diagram.loop_count
     /// True
-    ///
     #[getter]
     fn loop_count(&self) -> PyResult<usize> {
         if self.selected_region.is_none() {
@@ -2927,6 +3348,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> degree = diagram.superficial_degree_of_divergence()
     /// >>> degree_in_six_dimensions = diagram.superficial_degree_of_divergence(dimension=6)
     ///
@@ -2942,6 +3365,12 @@ impl PyFeynmanDiagram {
     }
 
     /// Return the diagram's interaction vertices with stable integer identifiers.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> interactions = [model.vertex_rule(vertex.interaction) for vertex in diagram.vertices]
     #[getter]
     pub(crate) fn vertices(&self) -> Vec<PyDiagramVertex> {
         let model = self.inner.model_arc();
@@ -2957,6 +3386,12 @@ impl PyFeynmanDiagram {
     }
 
     /// Return every particle line, including dangling and sewn external carriers.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> particles_by_edge = {edge.id: edge.particle_name for edge in diagram.edges}
     #[getter]
     pub(crate) fn edges(&self) -> Vec<PyDiagramEdge> {
         let model = self.inner.model_arc();
@@ -2976,6 +3411,12 @@ impl PyFeynmanDiagram {
     }
 
     /// Return native Linnet half-edge views; ``data`` records their native diagram IDs.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> half_edge_payloads = [half_edge.data for half_edge in diagram.half_edges]
     #[getter]
     #[gen_stub(override_return_type(type_repr="list[linnet.HalfEdge]", imports=("linnet")))]
     fn half_edges(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
@@ -2990,8 +3431,10 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// >>> propagators = diagram.internal_edges
-    /// >>> on_shell = {edge.id: energy[edge.id] for edge in propagators}
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> propagators = [(edge.id, edge.particle_name) for edge in diagram.internal_edges]
+    /// >>> assert len(propagators) == 2
     #[getter]
     fn internal_edges(&self) -> Vec<PyDiagramEdge> {
         let complete: BTreeSet<_> = self
@@ -3012,6 +3455,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> external_particles = [edge.particle_name for edge in diagram.external_edges]
     #[getter]
     fn external_edges(&self) -> Vec<PyDiagramEdge> {
@@ -3025,6 +3470,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// Validation raises ``DiagramError`` for invalid particle or interaction
     /// references:
     ///
@@ -3041,6 +3488,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// Construct and display the causal denominators of a one-loop diagram:
     ///
     /// >>> cff = diagram.build_cff(max_orientations=10_000)
@@ -3079,10 +3528,11 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// >>> encoded = diagram.to_json()
-    /// >>> restored = FeynmanDiagram.from_json(model, encoded)
-    /// >>> restored.validate()
+    /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
+    /// >>> encoded = diagram.to_json()
+    /// >>> restored = hep.FeynmanDiagram.from_json(model, encoded)
+    /// >>> restored.validate()
     fn to_json(&self) -> PyResult<String> {
         self.require_complete()?;
         self.inner.to_json().map_err(error::diagram)
@@ -3092,10 +3542,11 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// >>> dot = diagram.to_dot()
-    /// >>> restored = FeynmanDiagram.from_dot(model, dot)
-    /// >>> restored.validate()
+    /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
+    /// >>> dot = diagram.to_dot()
+    /// >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
+    /// >>> restored.validate()
     fn to_dot(&self) -> PyResult<String> {
         self.require_complete()?;
         self.inner.to_dot().map_err(error::diagram)
@@ -3109,6 +3560,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> from pathlib import Path
     /// >>> Path("diagram.typ").write_text(diagram.to_linnest(momenta=True))
     ///
@@ -3142,6 +3595,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> import linnet as ln
     /// >>> svg = diagram.render(momenta=True, config=ln.RenderConfig(
     /// ...     layouts=ln.LayoutOptions(external_label_length_scale=0.7),
@@ -3167,7 +3622,6 @@ impl PyFeynmanDiagram {
     /// highlight : Subgraph or linnet.Subgraph or None, optional
     ///     Highlight a region while preserving the full diagram as muted context.
     ///     A Subgraph highlights its own region by default.
-    ///
     #[pyo3(signature = (*, config=None, momenta=false, lmb=None, highlight=None))]
     fn render(
         &self,
@@ -3187,6 +3641,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// >>> import marimo as mo
     /// >>> mo.iframe(diagram.to_html(momenta=True))
     ///
@@ -3219,7 +3675,10 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// Leave `diagram` as the final expression in a notebook cell to render it.
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(diagram)
     pub(crate) fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
         self.to_html(py, None, false, None, None)
     }
@@ -3228,8 +3687,10 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// >>> from IPython.display import SVG
-    /// >>> SVG(diagram._repr_svg_())
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(diagram)
     fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
         self.render(py, None, false, None, None)
     }
@@ -3238,7 +3699,10 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// IPython invokes this method when only a text representation is supported.
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(diagram)
     ///
     /// Parameters
     /// ----------
@@ -3260,6 +3724,8 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FeynmanDiagram`` class example:
+    ///
     /// Limit exploratory calculations to the first basis:
     ///
     /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
@@ -3295,8 +3761,9 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// >>> print(diagram)
+    /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
+    /// >>> print(diagram)
     fn __repr__(&self) -> PyResult<String> {
         Ok(format!(
             "{}(name='{}', loops={}, vertices={}, edges={})",
@@ -3313,7 +3780,7 @@ impl PyFeynmanDiagram {
     }
 }
 
-/// A physics region retaining an Arc to its immutable original Feynman diagram.
+/// A physics region retaining its immutable original Feynman diagram.
 ///
 /// Construct with ``diagram.subgraph(...)`` or ``diagram.filter(...)``. Inherited
 /// physics operations use this selection, with original edge IDs and momentum
@@ -3322,9 +3789,18 @@ impl PyFeynmanDiagram {
 ///
 /// Examples
 /// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_diagrams(loops=1)
+/// >>> diagram = result.diagrams[0]
 /// >>> region = diagram.filter(edge=lambda edge: not edge.data.is_external)
-/// >>> numerator = region.numerator_expression()
+/// >>> left = diagram.subgraph(nodes=[0])
+/// >>> right = diagram.subgraph(nodes=[1])
+/// >>> common = left & right
 /// >>> independent = region.excise()
+/// >>> independent.validate()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(name = "Subgraph", module = "symbolica.community.feynkit", extends=PyFeynmanDiagram, frozen)]
 pub struct PySubgraph {}
@@ -3333,7 +3809,13 @@ pub struct PySubgraph {}
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PySubgraph {
-    /// Return a full view of the immutable original diagram, sharing its Arc.
+    /// Return a full view of the immutable original diagram, sharing the same underlying diagram.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Subgraph`` class example:
+    ///
+    /// >>> assert region.original.id == diagram.id
     #[getter]
     fn original(slf: PyRef<'_, Self>) -> PyFeynmanDiagram {
         slf.into_super().whole()
@@ -3348,6 +3830,8 @@ impl PySubgraph {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Subgraph`` class example:
+    ///
     /// >>> region = diagram.subgraph(nodes=[0])
     /// >>> independent = region.excise()
     /// >>> independent.validate()
@@ -3371,6 +3855,8 @@ impl PySubgraph {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Subgraph`` class example:
+    ///
     /// >>> selected_half_edges = region.half_edge_indices()
     /// >>> canonical = region.to_linnet().subgraph(half_edges=selected_half_edges)
     fn half_edge_indices(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Vec<usize>> {
@@ -3385,12 +3871,20 @@ impl PySubgraph {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Subgraph`` class example:
+    ///
     /// >>> isolated_vertices = region.isolated_node_indices()
     fn isolated_node_indices(slf: PyRef<'_, Self>) -> Vec<usize> {
         slf.into_super().isolated_nodes().into_iter().collect()
     }
 
     /// Return the number of selected half-edges, excluding isolated vertices.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Subgraph`` class example:
+    ///
+    /// >>> assert region.n_half_edges == len(region.half_edge_indices())
     #[getter]
     fn n_half_edges(slf: PyRef<'_, Self>) -> usize {
         slf.into_super().selection().n_included()
@@ -3400,6 +3894,8 @@ impl PySubgraph {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Subgraph`` class example:
+    ///
     /// >>> size = len(region)
     fn __len__(slf: PyRef<'_, Self>) -> usize {
         let diagram = slf.into_super();
@@ -3410,6 +3906,8 @@ impl PySubgraph {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Subgraph`` class example:
+    ///
     /// >>> nonempty = bool(region)
     fn __bool__(slf: PyRef<'_, Self>) -> bool {
         Self::__len__(slf) != 0
@@ -3419,6 +3917,8 @@ impl PySubgraph {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Subgraph`` class example:
+    ///
     /// >>> common = left & right
     ///
     /// Parameters
@@ -3453,6 +3953,8 @@ impl PySubgraph {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Subgraph`` class example:
+    ///
     /// >>> combined = left | right
     ///
     /// Parameters
@@ -3487,6 +3989,8 @@ impl PySubgraph {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Subgraph`` class example:
+    ///
     /// >>> exclusive = left ^ right
     ///
     /// Parameters
@@ -3521,6 +4025,8 @@ impl PySubgraph {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Subgraph`` class example:
+    ///
     /// >>> remaining = left - right
     ///
     /// Parameters
@@ -3555,6 +4061,8 @@ impl PySubgraph {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Subgraph`` class example:
+    ///
     /// >>> outside = ~region
     fn __invert__(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<PySubgraph>> {
         let diagram = slf.into_super();

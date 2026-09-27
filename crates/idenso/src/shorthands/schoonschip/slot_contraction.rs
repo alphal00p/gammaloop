@@ -73,7 +73,7 @@ pub(crate) struct SlotContraction {
 }
 
 impl SlotContraction {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             metric: ETS.metric,
             tags: &SPENSO_TAG,

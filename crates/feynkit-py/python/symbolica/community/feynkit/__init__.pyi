@@ -28,9 +28,15 @@ class Amplitude:
 
     Examples
     --------
-    >>> amplitude = Amplitude(generated.diagrams)
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> generated = process.generate_diagrams()
+    >>> diagram = generated.diagrams[0]
+    >>> amplitude = hep.Amplitude(generated.diagrams)
     >>> operator = amplitude.expression()
-    >>> conjugate = amplitude.conjugate().expression()
+    >>> adjoint = amplitude.conjugate().expression()
     >>> squared = amplitude.squared().sum_spins(average_initial=True).sum_colors()
     >>> scalar = squared.expression().simplify_gamma().simplify_color()
     """
@@ -38,21 +44,47 @@ class Amplitude:
     def diagrams(self) -> builtins.list[FeynmanDiagram]:
         r"""
         Source diagrams, retaining weights, routing, and graph provenance.
+
+        Examples
+        --------
+        Using the setup in the ``Amplitude`` class example:
+
+        >>> assert len(amplitude.diagrams) == len(generated.diagrams)
         """
     @property
     def legs(self) -> builtins.list[AmplitudeLeg]:
         r"""
         Physical external states in increasing external-label order.
+
+        Examples
+        --------
+        Using the setup in the ``Amplitude`` class example:
+
+        >>> external_states = [(leg.index, leg.particle.name) for leg in amplitude.legs]
         """
     @property
     def terms(self) -> builtins.list[TensorExpression]:
         r"""
         Individual weighted operators, with aligned external tensor ports.
+
+        Examples
+        --------
+        Using the setup in the ``Amplitude`` class example:
+
+        >>> operators = amplitude.terms
+        >>> assert len(operators) == len(amplitude.diagrams)
         """
     @property
     def is_conjugated(self) -> builtins.bool:
         r"""
         Whether this amplitude is the physical adjoint of its source diagrams.
+
+        Examples
+        --------
+        Using the setup in the ``Amplitude`` class example:
+
+        >>> assert not amplitude.is_conjugated
+        >>> assert amplitude.conjugate().is_conjugated
         """
     def __new__(cls, diagrams: typing.Sequence[FeynmanDiagram], *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, real: typing.Optional[typing.Sequence[Expression]] = None) -> Amplitude:
         r"""
@@ -60,7 +92,9 @@ class Amplitude:
 
         Examples
         --------
-        >>> amplitude = Amplitude(generated.diagrams)
+        Using the setup in the ``Amplitude`` class example:
+
+        >>> amplitude = hep.Amplitude(generated.diagrams)
 
         Parameters
         ----------
@@ -78,7 +112,9 @@ class Amplitude:
 
         Examples
         --------
-        >>> amplitude = Amplitude.from_diagram(diagram)
+        Using the setup in the ``Amplitude`` class example:
+
+        >>> amplitude = hep.Amplitude.from_diagram(diagram)
 
         Parameters
         ----------
@@ -95,6 +131,8 @@ class Amplitude:
 
         Examples
         --------
+        Using the setup in the ``Amplitude`` class example:
+
         >>> operator = amplitude.expression().factor()
         """
     def conjugate(self) -> Amplitude:
@@ -105,6 +143,8 @@ class Amplitude:
 
         Examples
         --------
+        Using the setup in the ``Amplitude`` class example:
+
         >>> adjoint = amplitude.conjugate()
         """
     def squared(self) -> SquaredAmplitude:
@@ -115,6 +155,8 @@ class Amplitude:
 
         Examples
         --------
+        Using the setup in the ``Amplitude`` class example:
+
         >>> squared = amplitude.squared().sum_spins().sum_colors()
         """
     def __repr__(self) -> builtins.str:
@@ -123,6 +165,8 @@ class Amplitude:
 
         Examples
         --------
+        Using the setup in the ``Amplitude`` class example:
+
         >>> print(amplitude)
         """
     def _repr_html_(self) -> typing.Any:
@@ -131,7 +175,10 @@ class Amplitude:
 
         Examples
         --------
-        >>> amplitude  # notebook output
+        Using the setup in the ``Amplitude`` class example:
+
+        >>> from IPython.display import display
+        >>> display(amplitude)
         """
 
 class AmplitudeError(FeynkitError):
@@ -140,10 +187,12 @@ class AmplitudeError(FeynkitError):
 
     Examples
     --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
     >>> try:
-    ...     amplitude = fk.Amplitude(diagrams)
-    ... except fk.AmplitudeError as error:
-    ...     print(error)
+    ...     hep.Amplitude([])
+    ... except hep.AmplitudeError as error:
+    ...     message = str(error)
     """
     ...
 
@@ -154,38 +203,83 @@ class AmplitudeLeg:
 
     Examples
     --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> generated = process.generate_diagrams()
+    >>> diagram = generated.diagrams[0]
+    >>> amplitude = hep.Amplitude(generated.diagrams)
     >>> leg = amplitude.legs[0]
-    >>> leg.particle.spin_sum(leg.momentum, leg.tensor_index, S("conjugate_index"))
+    >>> state = (leg.index, leg.particle.name, leg.state)
+    >>> spin_sum = leg.particle.spin_sum(leg.momentum, leg.tensor_index, S("conjugate_index"))
     """
     @property
     def index(self) -> builtins.int:
         r"""
         Stable external-leg label shared by every diagram.
+
+        Examples
+        --------
+        Using the setup in the ``AmplitudeLeg`` class example:
+
+        >>> label = leg.index
+        >>> assert label in [state.index for state in amplitude.legs]
         """
     @property
     def particle(self) -> Particle:
         r"""
         Model particle, including particle/antiparticle identity.
+
+        Examples
+        --------
+        Using the setup in the ``AmplitudeLeg`` class example:
+
+        >>> particle_name = leg.particle.name
         """
     @property
     def state(self) -> builtins.str:
         r"""
         Whether the state is incoming or outgoing.
+
+        Examples
+        --------
+        Using the setup in the ``AmplitudeLeg`` class example:
+
+        >>> incoming = [state for state in amplitude.legs if state.state == "incoming"]
         """
     @property
     def momentum(self) -> Expression:
         r"""
         Unindexed physical momentum P(index).
+
+        Examples
+        --------
+        Using the setup in the ``AmplitudeLeg`` class example:
+
+        >>> external_momentum = leg.momentum
         """
     @property
     def tensor_index(self) -> Expression:
         r"""
         Bare label shared by this leg's spin and color slots.
+
+        Examples
+        --------
+        Using the setup in the ``AmplitudeLeg`` class example:
+
+        >>> spin_sum = leg.particle.spin_sum(leg.momentum, leg.tensor_index, S("bra"))
         """
     @property
     def slots(self) -> builtins.list[Slot]:
         r"""
         Typed open spin/color slots attached to this physical state.
+
+        Examples
+        --------
+        Using the setup in the ``AmplitudeLeg`` class example:
+
+        >>> open_slots = leg.slots
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -193,6 +287,8 @@ class AmplitudeLeg:
 
         Examples
         --------
+        Using the setup in the ``AmplitudeLeg`` class example:
+
         >>> print(amplitude.legs[0])
         """
 
@@ -206,9 +302,12 @@ class Boost:
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> boost = fk.Boost(fk.ThreeMomentum(0.0, 0.0, 0.5))
-    >>> boosted = boost.apply(fk.FourMomentum(10.0, 0.0, 0.0, 0.0))
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> momentum = hep.FourMomentum(10.0, 0.0, 0.0, 0.0)
+    >>> boost = hep.Boost(hep.ThreeMomentum(0.0, 0.0, 0.5))
+    >>> boosted = boost.apply(momentum)
+    >>> assert abs(boosted.mass_squared - momentum.mass_squared) < 1e-10
 
     Parameters
     ----------
@@ -219,6 +318,12 @@ class Boost:
     def beta(self) -> ThreeMomentum:
         r"""
         Return the dimensionless boost velocity.
+
+        Examples
+        --------
+        Using the setup in the ``Boost`` class example:
+
+        >>> assert boost.beta.pz == 0.5
         """
     def __new__(cls, beta: ThreeMomentum) -> Boost:
         r"""
@@ -226,7 +331,9 @@ class Boost:
 
         Examples
         --------
-        >>> boost = Boost(ThreeMomentum(0.0, 0.0, 0.5))
+        Using the setup in the ``Boost`` class example:
+
+        >>> boost = hep.Boost(hep.ThreeMomentum(0.0, 0.0, 0.5))
 
         Parameters
         ----------
@@ -239,6 +346,8 @@ class Boost:
 
         Examples
         --------
+        Using the setup in the ``Boost`` class example:
+
         >>> boosted = boost.apply(momentum)
 
         Parameters
@@ -252,6 +361,8 @@ class Boost:
 
         Examples
         --------
+        Using the setup in the ``Boost`` class example:
+
         >>> original = boost.apply_inverse(boost.apply(momentum))
 
         Parameters
@@ -270,8 +381,8 @@ class CancellationToken:
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> token = fk.CancellationToken()
+    >>> from symbolica.community import hep
+    >>> token = hep.CancellationToken()
     >>> token.is_cancelled
     False
     """
@@ -282,7 +393,9 @@ class CancellationToken:
 
         Examples
         --------
-        >>> token = fk.CancellationToken()
+        Using the setup in the ``CancellationToken`` class example:
+
+        >>> token = hep.CancellationToken()
         >>> token.cancel()
         >>> token.is_cancelled
         True
@@ -293,7 +406,9 @@ class CancellationToken:
 
         Examples
         --------
-        >>> token = fk.CancellationToken()
+        Using the setup in the ``CancellationToken`` class example:
+
+        >>> token = hep.CancellationToken()
         """
     def cancel(self) -> None:
         r"""
@@ -301,6 +416,8 @@ class CancellationToken:
 
         Examples
         --------
+        Using the setup in the ``CancellationToken`` class example:
+
         >>> token.cancel()
         """
 
@@ -310,12 +427,16 @@ class CffError(FeynkitError):
 
     Examples
     --------
-    Catch incompatible edge constraints at the CFF boundary:
-
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
     >>> try:
-    ...     cff = diagram.build_cff(contracted_edges=[edge_id])
-    ... except fk.CffError as error:
-    ...     print(error)
+    ...     diagram.build_cff(contracted_edges=[999999])
+    ... except hep.CffError as error:
+    ...     message = str(error)
     """
     ...
 
@@ -329,9 +450,15 @@ class CffGenerator:
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> cff = fk.CffGenerator(max_orientations=10_000)
-    >>> result = cff.generate(diagram)
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> generator = hep.CffGenerator(max_orientations=1000)
+    >>> result = generator.generate(diagram)
+    >>> expression = result.to_expression()
 
     Parameters
     ----------
@@ -344,7 +471,9 @@ class CffGenerator:
 
         Examples
         --------
-        >>> generator = CffGenerator(max_orientations=1000)
+        Using the setup in the ``CffGenerator`` class example:
+
+        >>> generator = hep.CffGenerator(max_orientations=1000)
 
         Parameters
         ----------
@@ -357,7 +486,11 @@ class CffGenerator:
 
         Examples
         --------
-        >>> generator.fix_orientation(0, reversed=True)
+        Using the setup in the ``CffGenerator`` class example:
+
+        >>> generator = hep.CffGenerator()
+        >>> generator.fix_orientation(diagram.internal_edges[0].id, reversed=True)
+        >>> result = generator.generate(diagram)
 
         Parameters
         ----------
@@ -372,7 +505,11 @@ class CffGenerator:
 
         Examples
         --------
-        >>> generator.contract_edge(2)
+        Using the setup in the ``CffGenerator`` class example:
+
+        >>> generator = hep.CffGenerator()
+        >>> generator.contract_edge(diagram.internal_edges[0].id)
+        >>> result = generator.generate(diagram)
 
         Parameters
         ----------
@@ -385,7 +522,11 @@ class CffGenerator:
 
         Examples
         --------
-        >>> generator.mark_initial_state_edge(0)
+        Using the setup in the ``CffGenerator`` class example:
+
+        >>> generator = hep.CffGenerator()
+        >>> generator.mark_initial_state_edge(diagram.external_edges[0].id)
+        >>> result = generator.generate(diagram)
 
         Parameters
         ----------
@@ -398,8 +539,11 @@ class CffGenerator:
 
         Examples
         --------
+        Using the setup in the ``CffGenerator`` class example:
+
+        >>> generator = hep.CffGenerator()
         >>> result = generator.generate(diagram)
-        >>> result.to_expression()
+        >>> expression = result.to_expression()
 
         Parameters
         ----------
@@ -417,19 +561,38 @@ class CffOrientation:
 
     Examples
     --------
-    >>> orientation = next(iter(result.orientations))
-    >>> for product in orientation.denominator_products():
-    ...     print([surface.symbol_name for surface in product])
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> result = diagram.build_cff()
+    >>> orientation = result.orientations[0]
+    >>> products = [[surface.symbol_name for surface in product]
+    ...             for product in orientation.denominator_products()]
     """
     @property
     def id(self) -> builtins.int:
         r"""
         Return this orientation's stable index within the CFF result.
+
+        Examples
+        --------
+        Using the setup in the ``CffOrientation`` class example:
+
+        >>> orientation_ids = [item.id for item in result.orientations]
         """
     @property
     def edge_orientations(self) -> builtins.list[tuple[builtins.int, builtins.str]]:
         r"""
         Return each edge ID and its selected orientation.
+
+        Examples
+        --------
+        Using the setup in the ``CffOrientation`` class example:
+
+        >>> directions = dict(orientation.edge_orientations)
         """
     def denominator_products(self) -> builtins.list[builtins.list[CffSurface]]:
         r"""
@@ -437,6 +600,8 @@ class CffOrientation:
 
         Examples
         --------
+        Using the setup in the ``CffOrientation`` class example:
+
         >>> products = orientation.denominator_products()
         >>> denominator_variables = [
         ...     [surface.symbol_name for surface in product] for product in products
@@ -453,29 +618,59 @@ class CffReport:
 
     Examples
     --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> result = diagram.build_cff()
     >>> report = result.report
-    >>> report.candidate_orientations >= report.acyclic_orientations
-    True
+    >>> assert report.candidate_orientations >= report.acyclic_orientations
     """
     @property
     def candidate_orientations(self) -> builtins.int:
         r"""
         Return the number of candidate edge orientations considered.
+
+        Examples
+        --------
+        Using the setup in the ``CffReport`` class example:
+
+        >>> assert report.candidate_orientations >= report.acyclic_orientations
         """
     @property
     def acyclic_orientations(self) -> builtins.int:
         r"""
         Return the number of candidate orientations that are acyclic.
+
+        Examples
+        --------
+        Using the setup in the ``CffReport`` class example:
+
+        >>> assert report.acyclic_orientations == len(result.orientations)
         """
     @property
     def unfolded_terms(self) -> builtins.int:
         r"""
         Return the total number of unfolded denominator terms.
+
+        Examples
+        --------
+        Using the setup in the ``CffReport`` class example:
+
+        >>> term_count = report.unfolded_terms
         """
     @property
     def interned_surfaces(self) -> builtins.int:
         r"""
         Return the number of unique denominator surfaces in the result.
+
+        Examples
+        --------
+        Using the setup in the ``CffReport`` class example:
+
+        >>> assert report.interned_surfaces == len(result.surfaces)
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -483,6 +678,8 @@ class CffReport:
 
         Examples
         --------
+        Using the setup in the ``CffReport`` class example:
+
         >>> print(result.report)
         """
     def _repr_html_(self) -> builtins.str:
@@ -491,7 +688,10 @@ class CffReport:
 
         Examples
         --------
-        Leave ``result.report`` as the final expression in a notebook cell.
+        Using the setup in the ``CffReport`` class example:
+
+        >>> from IPython.display import display
+        >>> display(report)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -499,7 +699,10 @@ class CffReport:
 
         Examples
         --------
-        IPython invokes this method when only a text representation is supported.
+        Using the setup in the ``CffReport`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(report)
 
         Parameters
         ----------
@@ -519,24 +722,48 @@ class CffResult:
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
     >>> result = diagram.build_cff()
     >>> expression = result.to_expression()
+    >>> assert result.report.acyclic_orientations == len(result.orientations)
     """
     @property
     def report(self) -> CffReport:
         r"""
         Return generation statistics for this CFF result.
+
+        Examples
+        --------
+        Using the setup in the ``CffResult`` class example:
+
+        >>> assert result.report.acyclic_orientations == len(result.orientations)
         """
     @property
     def orientations(self) -> builtins.list[CffOrientation]:
         r"""
         Return the acyclic energy-flow orientations in this result.
+
+        Examples
+        --------
+        Using the setup in the ``CffResult`` class example:
+
+        >>> products = [item.denominator_products() for item in result.orientations]
         """
     @property
     def surfaces(self) -> builtins.list[CffSurface]:
         r"""
         Return all unique energy and H surfaces in this result.
+
+        Examples
+        --------
+        Using the setup in the ``CffResult`` class example:
+
+        >>> energies = [result.surface_expression(surface) for surface in result.surfaces]
         """
     def to_expression(self, *, expand_surfaces: builtins.bool = False, normalized: builtins.bool = False) -> Expression:
         r"""
@@ -548,6 +775,8 @@ class CffResult:
 
         Examples
         --------
+        Using the setup in the ``CffResult`` class example:
+
         >>> result.to_expression(normalized=True)
 
         Parameters
@@ -563,6 +792,8 @@ class CffResult:
 
         Examples
         --------
+        Using the setup in the ``CffResult`` class example:
+
         >>> result.surface_expression(result.surfaces[0])
 
         Parameters
@@ -577,6 +808,8 @@ class CffResult:
 
         Examples
         --------
+        Using the setup in the ``CffResult`` class example:
+
         >>> groups = result.raised_surface_groups({3: 2})
         >>> [group.max_order for group in groups]
 
@@ -592,6 +825,8 @@ class CffResult:
 
         Examples
         --------
+        Using the setup in the ``CffResult`` class example:
+
         >>> coefficients = result.pole_coefficients(result.raised_surface_groups()[0])
         >>> [coefficient.to_expression() for coefficient in coefficients]
 
@@ -609,7 +844,12 @@ class CffResult:
 
         Examples
         --------
-        >>> result.residue(group, variable=t, root=t_star, surface=eta, coefficient=numerator)
+        Using the setup in ``CffResult``, illustrate a simple pole locally
+        parameterized by ``surface=t`` with constant remaining coefficient:
+
+        >>> t = S("t")
+        >>> group = result.raised_surface_groups()[0]
+        >>> residue = result.residue(group, variable=t, root=E("0"), surface=t, coefficient=E("1"))
 
         Parameters
         ----------
@@ -634,6 +874,8 @@ class CffResult:
 
         Examples
         --------
+        Using the setup in the ``CffResult`` class example:
+
         >>> denominator_term_count = len(result)
         """
     def __repr__(self) -> builtins.str:
@@ -642,6 +884,8 @@ class CffResult:
 
         Examples
         --------
+        Using the setup in the ``CffResult`` class example:
+
         >>> print(result)
         """
     def _repr_html_(self) -> builtins.str:
@@ -653,7 +897,10 @@ class CffResult:
 
         Examples
         --------
-        Leave ``result`` as the final expression in a notebook cell.
+        Using the setup in the ``CffResult`` class example:
+
+        >>> from IPython.display import display
+        >>> display(result)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -661,7 +908,10 @@ class CffResult:
 
         Examples
         --------
-        IPython invokes this method when only a text representation is supported.
+        Using the setup in the ``CffResult`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(result)
 
         Parameters
         ----------
@@ -682,13 +932,26 @@ class CffSurface:
 
     Examples
     --------
-    >>> surface = next(iter(result.surfaces))
-    >>> print(surface, surface.positive_energies, surface.external_shift)
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> result = diagram.build_cff()
+    >>> surface = result.surfaces[0]
+    >>> energy_combination = result.surface_expression(surface)
     """
     @property
     def kind(self) -> builtins.str:
         r"""
         Return the surface category: energy, h, unit, or infinite.
+
+        Examples
+        --------
+        Using the setup in the ``CffSurface`` class example:
+
+        >>> surface_kinds = {item.kind for item in result.surfaces}
         """
     @property
     def index(self) -> builtins.int:
@@ -696,6 +959,12 @@ class CffSurface:
         Return the index of an energy or H surface.
 
         Raises :class:`CffError` for the special unit or infinite sentinels.
+
+        Examples
+        --------
+        Using the setup in the ``CffSurface`` class example:
+
+        >>> surface_by_index = {item.index: item for item in result.surfaces}
         """
     @property
     def symbol_name(self) -> builtins.str:
@@ -704,21 +973,45 @@ class CffSurface:
 
         Raises :class:`CffError` for the special unit or infinite sentinels,
         which are not denominator variables.
+
+        Examples
+        --------
+        Using the setup in the ``CffSurface`` class example:
+
+        >>> surface_names = [item.symbol_name for item in result.surfaces]
         """
     @property
     def positive_energies(self) -> builtins.list[builtins.int]:
         r"""
         Return edge IDs whose on-shell energies enter with positive sign.
+
+        Examples
+        --------
+        Using the setup in the ``CffSurface`` class example:
+
+        >>> positive_edges = surface.positive_energies
         """
     @property
     def negative_energies(self) -> builtins.list[builtins.int]:
         r"""
         Return edge IDs whose on-shell energies enter with negative sign.
+
+        Examples
+        --------
+        Using the setup in the ``CffSurface`` class example:
+
+        >>> negative_edges = surface.negative_energies
         """
     @property
     def external_shift(self) -> builtins.list[tuple[builtins.int, builtins.int]]:
         r"""
         Return external edge IDs and their integer shift coefficients.
+
+        Examples
+        --------
+        Using the setup in the ``CffSurface`` class example:
+
+        >>> external_energy_shift = surface.external_shift
         """
     @property
     def vertices(self) -> builtins.list[builtins.int]:
@@ -727,6 +1020,12 @@ class CffSurface:
 
         Contracted CFF vertices retain the identities of all interaction
         vertices they contain, including for selected subgraphs.
+
+        Examples
+        --------
+        Using the setup in the ``CffSurface`` class example:
+
+        >>> region_vertices = surface.vertices
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -734,6 +1033,8 @@ class CffSurface:
 
         Examples
         --------
+        Using the setup in the ``CffSurface`` class example:
+
         >>> print(surface)  # Symbolica denominator variable, for example feynkit_cff::η(0)
         """
 
@@ -744,18 +1045,38 @@ class CffSurfaceGroup:
 
     Examples
     --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> result = diagram.build_cff()
     >>> group = result.raised_surface_groups()[0]
-    >>> print(group.max_order, group.surfaces)
+    >>> coefficients = result.pole_coefficients(group)
     """
     @property
     def max_order(self) -> builtins.int:
         r"""
         Highest inverse surface power occurring on one CFF branch.
+
+        Examples
+        --------
+        Using the setup in the ``CffSurfaceGroup`` class example:
+
+        >>> highest_pole = group.max_order
+        >>> assert highest_pole >= 1
         """
     @property
     def surfaces(self) -> builtins.list[CffSurface]:
         r"""
         Canonical energy surfaces identified by this group.
+
+        Examples
+        --------
+        Using the setup in the ``CffSurfaceGroup`` class example:
+
+        >>> equivalent_surfaces = group.surfaces
         """
 
 @typing.final
@@ -768,9 +1089,14 @@ class ClusteringResult:
 
     Examples
     --------
-    >>> definition = fk.JetDefinition.anti_kt(0.4, minimum_pt=20.0)
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> particles = [hep.FourMomentum(50.0, 30.0, 40.0, 0.0),
+    ...              hep.FourMomentum(25.0, -15.0, -20.0, 0.0)]
+    >>> definition = hep.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
     >>> clustering = definition.cluster(particles)
     >>> jets = clustering.jets
+    >>> assert len(jets) == 2
     """
     @property
     def jets(self) -> builtins.list[Jet]:
@@ -779,7 +1105,9 @@ class ClusteringResult:
 
         Examples
         --------
-        >>> jets = result.jets
+        Using the setup in the ``ClusteringResult`` class example:
+
+        >>> jets = clustering.jets
         >>> all(left.pt >= right.pt for left, right in zip(jets, jets[1:]))
         True
         """
@@ -789,7 +1117,9 @@ class ClusteringResult:
 
         Examples
         --------
-        >>> jet_multiplicity = len(result)
+        Using the setup in the ``ClusteringResult`` class example:
+
+        >>> jet_multiplicity = len(clustering)
         """
     def __getitem__(self, index: builtins.int) -> Jet:
         r"""
@@ -797,7 +1127,9 @@ class ClusteringResult:
 
         Examples
         --------
-        >>> leading_jet = result[0]
+        Using the setup in the ``ClusteringResult`` class example:
+
+        >>> leading_jet = clustering[0]
 
         Parameters
         ----------
@@ -810,7 +1142,9 @@ class ClusteringResult:
 
         Examples
         --------
-        >>> transverse_momenta = [jet.pt for jet in result]
+        Using the setup in the ``ClusteringResult`` class example:
+
+        >>> transverse_momenta = [jet.pt for jet in clustering]
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -818,7 +1152,9 @@ class ClusteringResult:
 
         Examples
         --------
-        >>> print(result)
+        Using the setup in the ``ClusteringResult`` class example:
+
+        >>> print(clustering)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -829,8 +1165,10 @@ class ClusteringResult:
 
         Examples
         --------
-        Leave ``result`` as the final expression in a notebook cell to display
-        the jet collection.
+        Using the setup in the ``ClusteringResult`` class example:
+
+        >>> from IPython.display import display
+        >>> display(clustering)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -838,7 +1176,10 @@ class ClusteringResult:
 
         Examples
         --------
-        IPython invokes this method when only a text representation is supported.
+        Using the setup in the ``ClusteringResult`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(clustering)
 
         Parameters
         ----------
@@ -858,19 +1199,34 @@ class Coupling:
 
     Examples
     --------
-    >>> coupling = next(iter(model.couplings))
-    >>> coupling.orders
-    {'QED': 1}
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
+    >>> coupling = model.couplings[0]
+    >>> orders = coupling.orders
+    >>> formula = coupling.expression
     """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the coupling name.
+
+        Examples
+        --------
+        Using the setup in the ``Coupling`` class example:
+
+        >>> coupling_by_name = {item.name: item.expression for item in model.couplings}
         """
     @property
     def expression(self) -> Expression:
         r"""
         Return the expression defining the coupling.
+
+        Examples
+        --------
+        Using the setup in the ``Coupling`` class example:
+
+        >>> formula = coupling.expression
         """
     @property
     def orders(self) -> builtins.dict[builtins.str, builtins.int]:
@@ -879,6 +1235,8 @@ class Coupling:
 
         Examples
         --------
+        Using the setup in the ``Coupling`` class example:
+
         >>> qed_couplings = [c for c in model.couplings if c.orders.get("QED", 0) > 0]
         """
     @property
@@ -890,6 +1248,8 @@ class Coupling:
 
         Examples
         --------
+        Using the setup in the ``Coupling`` class example:
+
         >>> coupling_value = model.couplings[0].value
         >>> print("coupling:", coupling_value.real, coupling_value.imag)
         """
@@ -899,6 +1259,8 @@ class Coupling:
 
         Examples
         --------
+        Using the setup in the ``Coupling`` class example:
+
         >>> print(next(c for c in model.couplings if c.orders.get("QED", 0) > 0))
         """
     def _repr_html_(self) -> builtins.str:
@@ -907,7 +1269,10 @@ class Coupling:
 
         Examples
         --------
-        Leave this object as the final expression in a notebook cell.
+        Using the setup in the ``Coupling`` class example:
+
+        >>> from IPython.display import display
+        >>> display(coupling)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -915,7 +1280,10 @@ class Coupling:
 
         Examples
         --------
-        IPython calls this automatically when formatting model members in lists.
+        Using the setup in the ``Coupling`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(coupling)
 
         Parameters
         ----------
@@ -935,8 +1303,11 @@ class CutPropagator:
 
     Examples
     --------
-    >>> cut = CutPropagator(q0, E, power=2)
-    >>> cut.apply(q0**2, q0)
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> q0, energy = S("q0", "energy")
+    >>> cut = hep.CutPropagator(q0, energy, power=2)
+    >>> residue = cut.apply(q0**2, q0)
     """
     def __new__(cls, energy: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], on_shell_energy: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, power: builtins.int = 1, orientation: builtins.int = 1, prescription: builtins.int = 1, normalization: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> CutPropagator:
         r"""
@@ -944,7 +1315,10 @@ class CutPropagator:
 
         Examples
         --------
-        >>> cut = CutPropagator(q0, E, power=3, orientation=-1)
+        Using the setup in the ``CutPropagator`` class example:
+
+        >>> cut = hep.CutPropagator(q0, energy, power=3, orientation=-1)
+        >>> residue = cut.apply(q0**3, q0)
 
         Parameters
         ----------
@@ -968,6 +1342,8 @@ class CutPropagator:
 
         Examples
         --------
+        Using the setup in the ``CutPropagator`` class example:
+
         >>> cut.to_expression(covariant=False)
 
         Parameters
@@ -982,6 +1358,8 @@ class CutPropagator:
 
         Examples
         --------
+        Using the setup in the ``CutPropagator`` class example:
+
         >>> cut.apply(q0**2, q0)
 
         Parameters
@@ -999,28 +1377,59 @@ class DiagramCut:
 
     Examples
     --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_cross_section(loops=1)
+    >>> diagram = result.diagrams[0]
     >>> cut = diagram.cuts[0]
     >>> factors = cut.propagators()
+    >>> assert len(factors) == len(cut.edges)
     """
     @property
     def left(self) -> DiagramCutSide:
         r"""
         Return the left amplitude and its generation metadata.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramCut`` class example:
+
+        >>> left_numerator = cut.left.subgraph.numerator_expression()
         """
     @property
     def right(self) -> DiagramCutSide:
         r"""
         Return the right amplitude and its generation metadata.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramCut`` class example:
+
+        >>> right_numerator = cut.right.subgraph.numerator_expression()
         """
     @property
     def subgraph(self) -> Subgraph:
         r"""
         Return the oriented crossing half-edges as a reusable selection.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramCut`` class example:
+
+        >>> crossing_region = cut.subgraph
         """
     @property
     def edges(self) -> builtins.list[DiagramEdge]:
         r"""
         Return the crossing particle lines in their stored cut order.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramCut`` class example:
+
+        >>> cut_edge_ids = [edge.id for edge in cut.edges]
         """
     @property
     def particles(self) -> builtins.list[Particle]:
@@ -1031,17 +1440,35 @@ class DiagramCut:
         A source-oriented cut line carries its stored species into the final
         state; a target-oriented line carries its antiparticle. Momentum
         orientations use the same left-to-right positive-energy routing.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramCut`` class example:
+
+        >>> cut_particles = cut.particles
         """
     @property
     def orientations(self) -> builtins.dict[builtins.int, builtins.int]:
         r"""
         Orient crossing lines from the left side to the right side.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramCut`` class example:
+
+        >>> cut_directions = cut.orientations
         """
     @property
     def momentum_signatures(self) -> builtins.dict[builtins.int, MomentumSignature]:
         r"""
         Return stored edge momenta in the diagram's selected routing.
         Multiply by :attr:`orientations` for momenta directed from left to right.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramCut`` class example:
+
+        >>> cut_momenta = cut.momentum_signatures
         """
     def propagators(self, *, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None, prescription: builtins.int = 1, normalization: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> builtins.list[CutPropagator]:
         r"""
@@ -1050,6 +1477,8 @@ class DiagramCut:
 
         Examples
         --------
+        Using the setup in the ``DiagramCut`` class example:
+
         >>> factors = diagram.cuts[0].propagators(edge_powers={2: 2})
         >>> distributions = [factor.to_expression() for factor in factors]
 
@@ -1070,23 +1499,48 @@ class DiagramCutSide:
 
     Examples
     --------
-    >>> side = diagram.cuts[0].left
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_cross_section(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> cut = diagram.cuts[0]
+    >>> side = cut.left
     >>> side_numerator = side.subgraph.numerator_expression()
     """
     @property
     def subgraph(self) -> Subgraph:
         r"""
         Return a physics view of this amplitude side, retaining its original diagram.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramCutSide`` class example:
+
+        >>> side_numerator = side.subgraph.numerator_expression()
         """
     @property
     def coupling_orders(self) -> builtins.dict[builtins.str, builtins.int]:
         r"""
         Return coupling powers of this amplitude side.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramCutSide`` class example:
+
+        >>> orders = side.coupling_orders
         """
     @property
     def loop_count(self) -> builtins.int:
         r"""
         Return the number of loops in this amplitude side.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramCutSide`` class example:
+
+        >>> assert side.loop_count == 0  # tree amplitude on this side
         """
 
 @typing.final
@@ -1099,14 +1553,27 @@ class DiagramEdge:
 
     Examples
     --------
-    >>> edge = next(iter(diagram.edges))
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> edge = diagram.internal_edges[0]
+    >>> endpoints = (edge.source, edge.target)
     >>> particle = edge.particle
-    >>> source, target = diagram.vertices[edge.source], diagram.vertices[edge.target]
+    >>> factor = edge.numerator_expression()
     """
     @property
     def id(self) -> builtins.int:
         r"""
         Return this edge's integer ID within the diagram.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> numerators = {line.id: line.numerator_expression() for line in diagram.internal_edges}
         """
     @property
     def source(self) -> typing.Optional[builtins.int]:
@@ -1115,8 +1582,11 @@ class DiagramEdge:
 
         Examples
         --------
-        >>> edge = diagram.edges[0]
-        >>> source_vertex = diagram.vertices[edge.source]
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> edge = diagram.internal_edges[0]
+        >>> vertices = {vertex.id: vertex for vertex in diagram.vertices}
+        >>> source_vertex = vertices[edge.source]
         """
     @property
     def target(self) -> typing.Optional[builtins.int]:
@@ -1125,8 +1595,11 @@ class DiagramEdge:
 
         Examples
         --------
-        >>> edge = diagram.edges[0]
-        >>> target_vertex = diagram.vertices[edge.target]
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> edge = diagram.internal_edges[0]
+        >>> vertices = {vertex.id: vertex for vertex in diagram.vertices}
+        >>> target_vertex = vertices[edge.target]
         """
     @property
     def particle(self) -> Particle:
@@ -1135,6 +1608,12 @@ class DiagramEdge:
 
         >>> edge.particle.mass_expression
         >>> edge.particle.width_parameter
+
+        Examples
+        --------
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> assert edge.particle.name == edge.particle_name
         """
     @property
     def propagator(self) -> typing.Optional[Propagator]:
@@ -1143,6 +1622,12 @@ class DiagramEdge:
 
         Template expressions retain model placeholders. Use numerator_expression()
         and denominator_expression() for the instantiated diagram factors.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> propagator = edge.propagator
         """
     @property
     def external_index(self) -> builtins.int:
@@ -1154,9 +1639,9 @@ class DiagramEdge:
 
         Examples
         --------
-        >>> external = [v for v in diagram.vertices if v.is_external]
-        >>> sorted(v.external_index for v in external) == list(range(len(external)))
-        True
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> external_labels = [(edge.id, edge.external_index) for edge in diagram.external_edges]
         """
     @property
     def external_state(self) -> builtins.str:
@@ -1164,6 +1649,12 @@ class DiagramEdge:
         Return ``"incoming"`` or ``"outgoing"`` for an external edge.
 
         Raises :class:`DiagramError` for an internal edge.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> states = [(line.id, line.external_state) for line in diagram.external_edges]
         """
     @property
     def is_external(self) -> builtins.bool:
@@ -1172,32 +1663,64 @@ class DiagramEdge:
 
         Examples
         --------
+        Using the setup in the ``DiagramEdge`` class example:
+
         >>> external_edges = [edge for edge in diagram.edges if edge.is_external]
         """
     @property
     def external_connection(self) -> typing.Optional[builtins.int]:
         r"""
         Return the shared sewing identity of an external momentum carrier.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> connections = [(line.id, line.external_connection) for line in diagram.edges]
         """
     @property
     def external_name(self) -> typing.Optional[builtins.str]:
         r"""
         Return the external-state label retained during finalization.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> labels = [line.external_name for line in diagram.external_edges]
         """
     @property
     def is_dummy(self) -> builtins.bool:
         r"""
         Report whether this line is a dummy graph attachment.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> physical_lines = [line for line in diagram.edges if not line.is_dummy]
         """
     @property
     def is_dangling(self) -> builtins.bool:
         r"""
         Report whether this line has only one incident interaction vertex.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> dangling_lines = [line for line in diagram.edges if line.is_dangling]
         """
     @property
     def particle_name(self) -> builtins.str:
         r"""
         Return the particle name associated with this propagator edge.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> assert edge.particle_name == "phi"
         """
     @property
     def particle_pdg(self) -> builtins.int:
@@ -1206,6 +1729,8 @@ class DiagramEdge:
 
         Examples
         --------
+        Using the setup in the ``DiagramEdge`` class example:
+
         >>> edge = diagram.edges[0]
         >>> edge.particle.pdg_code == edge.particle_pdg
         True
@@ -1217,6 +1742,8 @@ class DiagramEdge:
 
         Examples
         --------
+        Using the setup in the ``DiagramEdge`` class example:
+
         >>> fermion_edges = [edge for edge in diagram.edges if edge.directed]
         """
     @property
@@ -1226,6 +1753,13 @@ class DiagramEdge:
 
         Raises :class:`DiagramError` for an incomplete imported diagram that has
         no instantiated propagator numerator.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> source_text = edge.numerator
+        >>> factor = edge.numerator_expression()
         """
     def denominator_expression(self, *, power: builtins.int = 1, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
         r"""
@@ -1238,6 +1772,8 @@ class DiagramEdge:
 
         Examples
         --------
+        Using the setup in the ``DiagramEdge`` class example:
+
         >>> edge = diagram.internal_edges[0]
         >>> denominator = edge.denominator_expression(in_lmb=True)
 
@@ -1262,6 +1798,8 @@ class DiagramEdge:
 
         Examples
         --------
+        Using the setup in the ``DiagramEdge`` class example:
+
         >>> momentum = edge.momentum_expression(dimension=4, in_lmb=True)
 
         Parameters
@@ -1281,6 +1819,8 @@ class DiagramEdge:
 
         Examples
         --------
+        Using the setup in the ``DiagramEdge`` class example:
+
         >>> edge.momentum_signature().loops
         >>> edge.momentum_signature().external
 
@@ -1295,6 +1835,8 @@ class DiagramEdge:
 
         Examples
         --------
+        Using the setup in the ``DiagramEdge`` class example:
+
         >>> edge = diagram.edges[0]
         >>> propagator_factor = edge.numerator_expression()
         >>> weighted_propagator = diagram.overall_factor_expression() * propagator_factor
@@ -1305,6 +1847,8 @@ class DiagramEdge:
 
         Examples
         --------
+        Using the setup in the ``DiagramEdge`` class example:
+
         >>> edge = diagram.edges[0]
         >>> print(edge)  # shows particle identity, endpoints, and flow direction
         """
@@ -1314,7 +1858,10 @@ class DiagramEdge:
 
         Examples
         --------
-        IPython calls this method when formatting an edge for text display.
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(edge)
 
         Parameters
         ----------
@@ -1330,12 +1877,16 @@ class DiagramError(FeynkitError):
 
     Examples
     --------
-    Validate imported diagrams before further physics operations:
-
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
     >>> try:
-    ...     diagram.validate()
-    ... except fk.DiagramError as error:
-    ...     print(error)
+    ...     diagram.with_loop_momentum_edges([])
+    ... except hep.DiagramError as error:
+    ...     message = str(error)
     """
     ...
 
@@ -1349,8 +1900,15 @@ class DiagramGroup:
 
     Examples
     --------
-    >>> group = next(iter(result.groups))
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> group = result.groups[0]
     >>> master_diagram = result.diagrams[group.master]
+    >>> ratios = [member.ratio for member in group.members]
     """
     @property
     def master(self) -> builtins.int:
@@ -1359,12 +1917,20 @@ class DiagramGroup:
 
         Examples
         --------
+        Using the setup in the ``DiagramGroup`` class example:
+
         >>> result.diagrams[result.groups[0].master]
         """
     @property
     def members(self) -> builtins.list[GroupMember]:
         r"""
         Return the deterministically ordered group members, including the master.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramGroup`` class example:
+
+        >>> weighted_diagrams = [(result.diagrams[m.diagram], m.ratio) for m in group.members]
         """
 
 @typing.final
@@ -1374,28 +1940,64 @@ class DiagramThresholdCandidate:
 
     Examples
     --------
-    >>> threshold = diagram.topology_threshold_candidates[0]
-    >>> crossing_lines = threshold.edges
+    Topology candidates depend on the generated graph and may be empty;
+    physical final-state cuts are available separately through ``diagram.cuts``.
+
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_cross_section(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> cut = diagram.cuts[0]
+    >>> thresholds = diagram.topology_threshold_candidates
+    >>> for threshold in thresholds:
+    ...     crossing_lines = threshold.edges
+    ...     left_region = threshold.left
     """
     @property
     def left(self) -> Subgraph:
         r"""
         Return the left topology selection.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramThresholdCandidate`` class example:
+
+        >>> left_regions = [candidate.left for candidate in thresholds]
         """
     @property
     def right(self) -> Subgraph:
         r"""
         Return the right topology selection.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramThresholdCandidate`` class example:
+
+        >>> right_regions = [candidate.right for candidate in thresholds]
         """
     @property
     def subgraph(self) -> Subgraph:
         r"""
         Return the oriented crossing half-edge selection.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramThresholdCandidate`` class example:
+
+        >>> crossing_regions = [candidate.subgraph for candidate in thresholds]
         """
     @property
     def edges(self) -> builtins.list[DiagramEdge]:
         r"""
         Return threshold-crossing lines in their stored order.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramThresholdCandidate`` class example:
+
+        >>> crossing_edges = [candidate.edges for candidate in thresholds]
         """
 
 @typing.final
@@ -1407,18 +2009,37 @@ class DiagramVertex:
 
     Examples
     --------
-    >>> vertex = next(iter(diagram.vertices))
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> vertex = diagram.vertices[0]
     >>> interaction = model.vertex_rule(vertex.interaction)
+    >>> factor = vertex.numerator_expression()
     """
     @property
     def id(self) -> builtins.int:
         r"""
         Return this vertex's integer ID within the diagram.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramVertex`` class example:
+
+        >>> vertices_by_id = {item.id: item for item in diagram.vertices}
         """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the stable vertex label stored in the diagram.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramVertex`` class example:
+
+        >>> vertex_names = [item.name for item in diagram.vertices]
         """
     @property
     def interaction(self) -> builtins.str:
@@ -1429,6 +2050,8 @@ class DiagramVertex:
 
         Examples
         --------
+        Using the setup in the ``DiagramVertex`` class example:
+
         >>> vertex = diagram.vertices[0]
         >>> rule = model.vertex_rule(vertex.interaction)
         """
@@ -1439,6 +2062,13 @@ class DiagramVertex:
 
         Raises :class:`DiagramError` when the diagram does not carry an
         instantiated Feynman-rule numerator for this vertex.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramVertex`` class example:
+
+        >>> source_text = vertex.numerator
+        >>> factor = vertex.numerator_expression()
         """
     def numerator_expression(self) -> TensorExpression:
         r"""
@@ -1446,6 +2076,8 @@ class DiagramVertex:
 
         Examples
         --------
+        Using the setup in the ``DiagramVertex`` class example:
+
         >>> vertex = diagram.vertices[0]
         >>> vertex_factor = vertex.numerator_expression()
         >>> weighted_vertex_factor = diagram.overall_factor_expression() * vertex_factor
@@ -1456,6 +2088,8 @@ class DiagramVertex:
 
         Examples
         --------
+        Using the setup in the ``DiagramVertex`` class example:
+
         >>> vertex = diagram.vertices[0]
         >>> print(vertex)  # includes its external state or interaction rule
         """
@@ -1465,7 +2099,10 @@ class DiagramVertex:
 
         Examples
         --------
-        IPython calls this method when formatting a vertex for text display.
+        Using the setup in the ``DiagramVertex`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(vertex)
 
         Parameters
         ----------
@@ -1485,8 +2122,8 @@ class EvaluatedValues:
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> values = fk.EvaluatedValues(couplings={"GC_1": (0.3, 0.0)})
+    >>> from symbolica.community import hep
+    >>> values = hep.EvaluatedValues(couplings={"GC_1": (0.3, 0.0)})
 
     Parameters
     ----------
@@ -1499,11 +2136,25 @@ class EvaluatedValues:
     def internal_parameters(self) -> builtins.dict[builtins.str, tuple[builtins.float, builtins.float]]:
         r"""
         Return the evaluated internal parameters keyed by name.
+
+        Examples
+        --------
+        Using the setup in the ``EvaluatedValues`` class example:
+
+        >>> values = hep.EvaluatedValues(internal_parameters={"alpha": (0.1, 0.0)})
+        >>> assert values.internal_parameters["alpha"] == (0.1, 0.0)
         """
     @property
     def couplings(self) -> builtins.dict[builtins.str, tuple[builtins.float, builtins.float]]:
         r"""
         Return the evaluated couplings keyed by name.
+
+        Examples
+        --------
+        Using the setup in the ``EvaluatedValues`` class example:
+
+        >>> values = hep.EvaluatedValues(couplings={"GC_1": (0.3, 0.0)})
+        >>> assert values.couplings["GC_1"] == (0.3, 0.0)
         """
     def __new__(cls, *, internal_parameters: typing.Optional[typing.Mapping[builtins.str, tuple[builtins.float, builtins.float]]] = None, couplings: typing.Optional[typing.Mapping[builtins.str, tuple[builtins.float, builtins.float]]] = None) -> EvaluatedValues:
         r"""
@@ -1511,7 +2162,9 @@ class EvaluatedValues:
 
         Examples
         --------
-        >>> values = EvaluatedValues(couplings={"GC_1": (1.0, 0.0)})
+        Using the setup in the ``EvaluatedValues`` class example:
+
+        >>> values = hep.EvaluatedValues(couplings={"GC_1": (1.0, 0.0)})
 
         Parameters
         ----------
@@ -1531,10 +2184,22 @@ class EvaluationRequest:
 
     Examples
     --------
+    This evaluator implements the built-in scalar model at its default ``lam=1``.
+    A callback must return every requested internal parameter and coupling.
+
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> requests = []
     >>> def evaluate(request):
-    ...     assert request.known_parameters
-    ...     return fk.EvaluatedValues()
+    ...     requests.append(request)
+    ...     return hep.EvaluatedValues(
+    ...         couplings={"SCALAR_COUPLING": (0.0, -1.0)},
+    ...     )
     >>> updated_model = model.recompute_with(evaluate)
+    >>> request = requests[0]
+    >>> formulas = {item.name: item.expression for item in request.couplings}
     """
     @property
     def known_parameters(self) -> builtins.dict[builtins.str, tuple[builtins.float, builtins.float]]:
@@ -1543,9 +2208,11 @@ class EvaluationRequest:
 
         Examples
         --------
+        Using the setup in the ``EvaluationRequest`` class example:
+
         >>> def evaluate(request):
         ...     alpha_s = request.known_parameters["aS"]
-        ...     return fk.EvaluatedValues()
+        ...     return hep.EvaluatedValues()
         """
     @property
     def internal_parameters(self) -> builtins.list[ModelExpression]:
@@ -1554,6 +2221,8 @@ class EvaluationRequest:
 
         Examples
         --------
+        Using the setup in the ``EvaluationRequest`` class example:
+
         >>> formulas = {item.name: item.expression for item in request.internal_parameters}
         """
     @property
@@ -1563,6 +2232,8 @@ class EvaluationRequest:
 
         Examples
         --------
+        Using the setup in the ``EvaluationRequest`` class example:
+
         >>> coupling_formulas = {item.name: item.expression for item in request.couplings}
         """
     @property
@@ -1572,6 +2243,8 @@ class EvaluationRequest:
 
         Examples
         --------
+        Using the setup in the ``EvaluationRequest`` class example:
+
         >>> helper_functions = {function.name: function for function in request.functions}
         """
     @property
@@ -1581,51 +2254,95 @@ class EvaluationRequest:
 
         Examples
         --------
+        Using the setup in the ``EvaluationRequest`` class example:
+
         >>> form_factors = {factor.name: factor for factor in request.form_factors}
         """
 
 class FeynkitError(builtins.Exception):
     r"""
-    Base exception for native FeynKit operations.
+    Base exception for native HEP operations.
 
     Examples
     --------
-    Catch any model, diagram, generation, CFF, tensor-reduction, or kinematics failure:
-
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
     >>> try:
-    ...     result = model.process(incoming, outgoing).generate_diagrams()
-    ... except fk.FeynkitError as error:
-    ...     print(error)
+    ...     model.particle_by_pdg(999999)
+    ... except hep.FeynkitError as error:
+    ...     message = str(error)
     """
     ...
 
 class FeynmanDiagram:
     r"""
-    A typed Feynman graph with model and symbolic physics annotations.
+    A generated or imported Feynman diagram, with particles, momenta and Feynman rules.
 
-    Diagrams expose vertices, propagator edges, loop-momentum routings, symmetry
-    factors, Symbolica expressions, and Linnest/Typst notebook rendering.
+    Obtain diagrams from ``Model.process(...).generate_diagrams().diagrams``;
+    use ``from_json`` or ``from_dot`` to restore a saved diagram with its model.
+    There is no direct Python constructor. ``internal_edges`` are propagators,
+    whereas ``external_edges`` carry the scattering or decay states.
+
+    Use ``numerator_expression()`` for symbolic algebra, ``integral_family()``
+    for loop-integral preparation, and ``render()`` for an SVG. Graph selections
+    from ``subgraph`` and ``filter`` retain the original routing and identities.
+    Routing changes return new diagrams. A diagram alone does not perform loop
+    integration or supply a cross section.
 
     Examples
     --------
-    >>> diagram = next(iter(result.diagrams))
+    Generate a one-loop scalar scattering diagram, inspect its propagators,
+    and prepare its integral family. In a notebook, displaying ``diagram``
+    renders the graph. The methods below reuse this setup.
+
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
     >>> diagram.validate()
-    >>> diagram  # renders as a Linnest graph in Jupyter or Marimo
+    >>> assert diagram.loop_count == 1
+    >>> propagators = [(edge.id, edge.particle_name) for edge in diagram.internal_edges]
+    >>> numerator = diagram.numerator_expression()
+    >>> family = diagram.integral_family()
+    >>> assert family.is_complete
     """
     @property
     def linnet_selection(self) -> linnet.Subgraph:
         r"""
         Return the canonical Linnet selection representing this physics region.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> region = diagram.subgraph(diagram.linnet_selection)
+        >>> assert region.n_half_edges == len(diagram.half_edges)
         """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the deterministic name assigned during diagram generation.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> by_name = {item.name: item for item in result.diagrams}
         """
     @property
     def id(self) -> builtins.str:
         r"""
         Return the stable content-derived hexadecimal diagram ID.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> selected = process.generate_diagrams(loops=1, select_diagrams=[diagram.id])
+        >>> assert len(selected.diagrams) == 1
         """
     @property
     def symmetry_factor(self) -> builtins.int:
@@ -1634,6 +2351,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> graph_weight = 1 / diagram.symmetry_factor
         """
     @property
@@ -1647,6 +2366,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> source = diagram.overall_factor
         >>> factor = diagram.overall_factor_expression()
         >>> factor  # rich Symbolica output in a notebook
@@ -1655,21 +2376,48 @@ class FeynmanDiagram:
     def numerator(self) -> builtins.str:
         r"""
         Return the diagram numerator annotation as source text.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> source_text = diagram.numerator
+        >>> numerator = diagram.numerator_expression()
         """
     @property
     def cuts(self) -> builtins.list[DiagramCut]:
         r"""
         Return physical final-state cuts selected during generation.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> physical_cuts = [cut.edges for cut in diagram.cuts]
+        >>> assert physical_cuts == []  # ordinary amplitude, not a sewn cross section
         """
     @property
     def topology_threshold_candidates(self) -> builtins.list[DiagramThresholdCandidate]:
         r"""
         Return topology threshold candidates separately from physical cuts.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> partitions = [candidate.edges for candidate in diagram.topology_threshold_candidates]
         """
     @property
     def loop_momentum_basis(self) -> LoopMomentumBasis:
         r"""
         Return the loop-momentum routing selected during generation.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> basis = diagram.loop_momentum_basis
+        >>> assert len(basis.loop_edges) == diagram.loop_count
         """
     @property
     def loop_count(self) -> builtins.int:
@@ -1678,6 +2426,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> basis = diagram.loop_momentum_bases(limit=1)[0]
         >>> len(basis.loop_edges) == diagram.loop_count
         True
@@ -1686,16 +2436,34 @@ class FeynmanDiagram:
     def vertices(self) -> builtins.list[DiagramVertex]:
         r"""
         Return the diagram's interaction vertices with stable integer identifiers.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> interactions = [model.vertex_rule(vertex.interaction) for vertex in diagram.vertices]
         """
     @property
     def edges(self) -> builtins.list[DiagramEdge]:
         r"""
         Return every particle line, including dangling and sewn external carriers.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> particles_by_edge = {edge.id: edge.particle_name for edge in diagram.edges}
         """
     @property
     def half_edges(self) -> list[linnet.HalfEdge]:
         r"""
         Return native Linnet half-edge views; ``data`` records their native diagram IDs.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> half_edge_payloads = [half_edge.data for half_edge in diagram.half_edges]
         """
     @property
     def internal_edges(self) -> builtins.list[DiagramEdge]:
@@ -1704,8 +2472,10 @@ class FeynmanDiagram:
 
         Examples
         --------
-        >>> propagators = diagram.internal_edges
-        >>> on_shell = {edge.id: energy[edge.id] for edge in propagators}
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> propagators = [(edge.id, edge.particle_name) for edge in diagram.internal_edges]
+        >>> assert len(propagators) == 2
         """
     @property
     def external_edges(self) -> builtins.list[DiagramEdge]:
@@ -1714,6 +2484,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> external_particles = [edge.particle_name for edge in diagram.external_edges]
         """
     def to_linnet(self) -> linnet.Graph:
@@ -1726,6 +2498,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> graph = diagram.to_linnet()
         >>> gluons = graph.filter(edge=lambda edge: edge.data.particle_name == "g")
         """
@@ -1736,6 +2510,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> region = diagram.subgraph(edges=[0, 1])
         >>> numerator = region.numerator_expression()
 
@@ -1756,6 +2532,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> region = diagram.filter(edge=lambda edge: edge.data.particle_name == "g")
 
         Parameters
@@ -1775,6 +2553,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> region = diagram.subgraph(nodes=[0])
         >>> boundary = region.boundary()
         """
@@ -1784,6 +2564,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> components = diagram.connected_components()
         """
     def is_connected(self) -> builtins.bool:
@@ -1792,6 +2574,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> connected = diagram.is_connected()
         """
     def bridges(self) -> Subgraph:
@@ -1800,6 +2584,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> bridges = diagram.bridges()
         """
     def cycle_basis(self) -> tuple[list[linnet.Cycle], Subgraph]:
@@ -1808,6 +2594,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> cycles, covered = diagram.cycle_basis()
         """
     def all_spanning_forests(self) -> builtins.list[Subgraph]:
@@ -1816,6 +2604,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> forests = diagram.all_spanning_forests()
         """
     def all_bonds(self, *, min_size: typing.Optional[builtins.int] = None, max_size: typing.Optional[builtins.int] = None) -> builtins.list[Subgraph]:
@@ -1824,6 +2614,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> bonds = diagram.all_bonds(min_size=2, max_size=3)
 
         Parameters
@@ -1839,6 +2631,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> partitions = diagram.all_cuts([0], [1])
 
         Parameters
@@ -1854,6 +2648,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> tree = diagram.depth_first_traverse(0)
 
         Parameters
@@ -1869,6 +2665,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> tree = diagram.breadth_first_traverse(0)
 
         Parameters
@@ -1885,8 +2683,10 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> encoded = diagram.to_json()
-        >>> restored = FeynmanDiagram.from_json(model, encoded)
+        >>> restored = hep.FeynmanDiagram.from_json(model, encoded)
         >>> restored.validate()
         >>> restored  # render the recovered graph in a notebook
 
@@ -1905,8 +2705,10 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> dot = diagram.to_dot()
-        >>> restored = FeynmanDiagram.from_dot(model, dot)
+        >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         >>> restored  # preserve topology through a Graphviz workflow
 
@@ -1915,7 +2717,7 @@ class FeynmanDiagram:
         model : Model
             Model used to resolve particles and interactions or validate annotated IDs.
         dot : str
-            Compact physics DOT or annotated FeynKit DOT. Compact cross-sections pair
+            Compact physics DOT or annotated HEP DOT. Compact cross-sections pair
             initial-state legs with is_cut and specify comma-separated final_state particles.
         """
     def overall_factor_expression(self, *, evaluate: builtins.bool = False) -> Expression:
@@ -1928,6 +2730,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> factor = diagram.overall_factor_expression()
         >>> weighted_numerator = factor * diagram.numerator_expression()
         >>> weighted_numerator
@@ -1951,6 +2755,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> denominator = diagram.denominator_expression(in_lmb=True)
         >>> integrand = diagram.numerator_expression(in_lmb=True) / denominator
         >>> basis = diagram.loop_momentum_bases()[0]
@@ -1984,6 +2790,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> family = diagram.integral_family()
 
         Parameters
@@ -2010,11 +2818,10 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> family = diagram.propagator_family()
-        >>> p = family.external_momenta[0]
-        >>> kin = family.kinematics.with_scalar_product(p, p, s)
-        >>> family = diagram.propagator_family(kinematics=kin)
-        >>> U, F = family.symanzik(parameters)
+        >>> assert len(family.denominators) == len(diagram.internal_edges)
 
         Parameters
         ----------
@@ -2028,6 +2835,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> numerator = diagram.numerator_expression(in_lmb=True)
         >>> basis = diagram.loop_momentum_bases()[0]
         >>> numerator = diagram.numerator_expression(lmb=basis)
@@ -2066,11 +2875,10 @@ class FeynmanDiagram:
 
         Examples
         --------
-        >>> from symbolica import S
-        >>> mass = S("mUV", is_scalar=True)
-        >>> expansion = diagram.uv_expansion(mass)
-        >>> region = diagram.filter(edge=lambda e: e.data.id in selected_edge_ids)
-        >>> local_ct = region.uv_counterterm(mass)
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> expanded = diagram.uv_expansion(0)
+        >>> expansion = expanded  # symbolic Taylor-expanded integrand
 
         Parameters
         ----------
@@ -2095,6 +2903,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> from symbolica import S
         >>> mass = S("mUV", is_scalar=True)
         >>> counterterm = diagram.uv_counterterm(mass)
@@ -2118,6 +2928,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> prefactor = diagram.numerator_prefactor_expression()
         >>> weighted_numerator = prefactor * diagram.numerator_expression()
         >>> weighted_numerator
@@ -2128,6 +2940,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> projector = diagram.projector_expression()
         >>> projected_numerator = projector * diagram.numerator_expression()
         >>> projected_numerator
@@ -2144,6 +2958,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> from symbolica import E
         >>> reduced = diagram.tensor_reduce(E("D"))
 
@@ -2171,10 +2987,14 @@ class FeynmanDiagram:
 
         Examples
         --------
-        >>> from symbolica import E
-        >>> reducer = fk.TensorReducer.feynkit(E("4"))
+        Reduce a vacuum graph after explicitly selecting its integrated momentum head:
+
+        >>> from symbolica import S, E
+        >>> from symbolica.community import hep
+        >>> model = hep.Model.phi4()
+        >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+        >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
         >>> scalar_numerator = vacuum_diagram.reduce_tensor_numerator(reducer)
-        >>> scalar_numerator
 
         Parameters
         ----------
@@ -2198,11 +3018,14 @@ class FeynmanDiagram:
 
         Examples
         --------
-        >>> from symbolica import E
-        >>> reducer = fk.TensorReducer.feynkit(E("4"))
+        Construct scalar numerator graphs for a vacuum diagram:
+
+        >>> from symbolica import S, E
+        >>> from symbolica.community import hep
+        >>> model = hep.Model.phi4()
+        >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+        >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
         >>> scalar_graphs = vacuum_diagram.reduce_tensor_graphs(reducer)
-        >>> for contribution in scalar_graphs:
-        ...     print(contribution.name, contribution.numerator_expression())
 
         Parameters
         ----------
@@ -2215,6 +3038,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> rerouted = diagram.with_loop_momentum_edges(diagram.loop_momentum_basis.loop_edges)
 
         Parameters
@@ -2228,6 +3053,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> rerouted = diagram.with_loop_momentum_tree_edges(diagram.loop_momentum_basis.tree_edges)
 
         Parameters
@@ -2241,6 +3068,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> basis = diagram.momentum_basis()
         >>> routed = basis.route_expression(diagram.numerator_expression())
         """
@@ -2250,6 +3079,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> basis = diagram.compatible_momentum_basis(diagram.loop_momentum_basis)
 
         Parameters
@@ -2263,6 +3094,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> contracted = diagram.filter(edge=lambda edge: edge.data.is_dummy)
         >>> basis = diagram.contracted_momentum_basis(contracted)
 
@@ -2284,6 +3117,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> degree = diagram.superficial_degree_of_divergence()
         >>> degree_in_six_dimensions = diagram.superficial_degree_of_divergence(dimension=6)
 
@@ -2298,6 +3133,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         Validation raises ``DiagramError`` for invalid particle or interaction
         references:
 
@@ -2313,6 +3150,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         Construct and display the causal denominators of a one-loop diagram:
 
         >>> cff = diagram.build_cff(max_orientations=10_000)
@@ -2335,8 +3174,10 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> encoded = diagram.to_json()
-        >>> restored = FeynmanDiagram.from_json(model, encoded)
+        >>> restored = hep.FeynmanDiagram.from_json(model, encoded)
         >>> restored.validate()
         """
     def to_dot(self) -> builtins.str:
@@ -2345,8 +3186,10 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> dot = diagram.to_dot()
-        >>> restored = FeynmanDiagram.from_dot(model, dot)
+        >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
     def to_linnest(self, *, config: linnet.RenderConfig | None = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | linnet.Subgraph | None = None) -> builtins.str:
@@ -2359,6 +3202,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> from pathlib import Path
         >>> Path("diagram.typ").write_text(diagram.to_linnest(momenta=True))
 
@@ -2379,6 +3224,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> import linnet as ln
         >>> svg = diagram.render(momenta=True, config=ln.RenderConfig(
         ...     layouts=ln.LayoutOptions(external_label_length_scale=0.7),
@@ -2411,6 +3258,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> import marimo as mo
         >>> mo.iframe(diagram.to_html(momenta=True))
 
@@ -2431,7 +3280,10 @@ class FeynmanDiagram:
 
         Examples
         --------
-        Leave `diagram` as the final expression in a notebook cell to render it.
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> from IPython.display import display
+        >>> display(diagram)
         """
     def _repr_svg_(self) -> builtins.str:
         r"""
@@ -2439,8 +3291,10 @@ class FeynmanDiagram:
 
         Examples
         --------
-        >>> from IPython.display import SVG
-        >>> SVG(diagram._repr_svg_())
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> from IPython.display import display
+        >>> display(diagram)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -2448,7 +3302,10 @@ class FeynmanDiagram:
 
         Examples
         --------
-        IPython invokes this method when only a text representation is supported.
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(diagram)
 
         Parameters
         ----------
@@ -2463,6 +3320,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         Limit exploratory calculations to the first basis:
 
         >>> basis = diagram.loop_momentum_bases(limit=1)[0]
@@ -2483,6 +3342,8 @@ class FeynmanDiagram:
 
         Examples
         --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
         >>> print(diagram)
         """
 
@@ -2496,24 +3357,43 @@ class FormFactor:
 
     Examples
     --------
-    >>> form_factor = next(iter(model.form_factors))
-    >>> form_factor.name
-    'FF1'
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
+    >>> form_factors = {ff.name: ff.value for ff in model.form_factors}
     """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the form-factor name.
+
+        Examples
+        --------
+        Using the setup in the ``FormFactor`` class example:
+
+        >>> names = [ff.name for ff in model.form_factors]
         """
     @property
     def type_name(self) -> typing.Optional[builtins.str]:
         r"""
         Return the model-defined form-factor type, when present.
+
+        Examples
+        --------
+        Using the setup in the ``FormFactor`` class example:
+
+        >>> types = {ff.name: ff.type_name for ff in model.form_factors}
         """
     @property
     def value(self) -> typing.Optional[Expression]:
         r"""
         Return the symbolic form-factor value, when present.
+
+        Examples
+        --------
+        Using the setup in the ``FormFactor`` class example:
+
+        >>> formulas = {ff.name: ff.value for ff in model.form_factors}
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -2521,7 +3401,9 @@ class FormFactor:
 
         Examples
         --------
-        >>> print(model.form_factors[0])
+        Using the setup in the ``FormFactor`` class example:
+
+        >>> summaries = [repr(ff) for ff in model.form_factors]
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -2529,7 +3411,10 @@ class FormFactor:
 
         Examples
         --------
-        Leave this object as the final expression in a notebook cell.
+        Using the setup in the ``FormFactor`` class example:
+
+        >>> from IPython.display import display
+        >>> display(model.form_factors)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -2537,7 +3422,10 @@ class FormFactor:
 
         Examples
         --------
-        IPython calls this automatically when formatting model members in lists.
+        Using the setup in the ``FormFactor`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(model.form_factors)
 
         Parameters
         ----------
@@ -2557,10 +3445,13 @@ class FourMomentum:
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> p = fk.FourMomentum(50.0, 30.0, 40.0, 0.0)
-    >>> p.mass_squared
-    0.0
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> momentum = hep.FourMomentum(5.0, 3.0, 4.0, 0.0)
+    >>> p = momentum
+    >>> first = hep.FourMomentum(5.0, 0.0, 5.0, 0.0)
+    >>> second = hep.FourMomentum(5.0, 5.0, 0.0, 0.0)
+    >>> assert momentum.mass_squared == 0.0
 
     Parameters
     ----------
@@ -2577,21 +3468,45 @@ class FourMomentum:
     def energy(self) -> builtins.float:
         r"""
         Return the energy component.
+
+        Examples
+        --------
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> assert momentum.energy == 5.0
         """
     @property
     def px(self) -> builtins.float:
         r"""
         Return the x component of spatial momentum.
+
+        Examples
+        --------
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> assert momentum.px == 3.0
         """
     @property
     def py(self) -> builtins.float:
         r"""
         Return the y component of spatial momentum.
+
+        Examples
+        --------
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> assert momentum.py == 4.0
         """
     @property
     def pz(self) -> builtins.float:
         r"""
         Return the z component of spatial momentum.
+
+        Examples
+        --------
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> assert momentum.pz == 0.0
         """
     @property
     def spatial(self) -> ThreeMomentum:
@@ -2600,7 +3515,9 @@ class FourMomentum:
 
         Examples
         --------
-        >>> FourMomentum(5.0, 3.0, 4.0, 0.0).spatial.pt
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> hep.FourMomentum(5.0, 3.0, 4.0, 0.0).spatial.pt
         5.0
         """
     @property
@@ -2610,7 +3527,9 @@ class FourMomentum:
 
         Examples
         --------
-        >>> FourMomentum(5.0, 3.0, 4.0, 0.0).mass_squared
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> hep.FourMomentum(5.0, 3.0, 4.0, 0.0).mass_squared
         0.0
         """
     @property
@@ -2620,7 +3539,9 @@ class FourMomentum:
 
         Examples
         --------
-        >>> FourMomentum(5.0, 0.0, 0.0, 0.0).mass
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> hep.FourMomentum(5.0, 0.0, 0.0, 0.0).mass
         5.0
         """
     @property
@@ -2630,7 +3551,9 @@ class FourMomentum:
 
         Examples
         --------
-        >>> FourMomentum(13.0, 3.0, 4.0, 12.0).pt
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> hep.FourMomentum(13.0, 3.0, 4.0, 12.0).pt
         5.0
         """
     @property
@@ -2640,7 +3563,9 @@ class FourMomentum:
 
         Examples
         --------
-        >>> FourMomentum(1.0, 1.0, 0.0, 0.0).phi
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> hep.FourMomentum(1.0, 1.0, 0.0, 0.0).phi
         0.0
         """
     @property
@@ -2650,8 +3575,10 @@ class FourMomentum:
 
         Examples
         --------
-        >>> FourMomentum(1.0, 1.0, 0.0, 0.0).pseudorapidity
-        0.0
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> abs(hep.FourMomentum(1.0, 1.0, 0.0, 0.0).pseudorapidity) < 1e-12
+        True
         """
     @property
     def rapidity(self) -> builtins.float:
@@ -2660,7 +3587,9 @@ class FourMomentum:
 
         Examples
         --------
-        >>> FourMomentum(1.0, 1.0, 0.0, 0.0).rapidity
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> hep.FourMomentum(1.0, 1.0, 0.0, 0.0).rapidity
         0.0
         """
     def __new__(cls, energy: builtins.float, px: builtins.float, py: builtins.float, pz: builtins.float) -> FourMomentum:
@@ -2669,7 +3598,9 @@ class FourMomentum:
 
         Examples
         --------
-        >>> momentum = FourMomentum(5.0, 3.0, 4.0, 0.0)
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> momentum = hep.FourMomentum(5.0, 3.0, 4.0, 0.0)
 
         Parameters
         ----------
@@ -2688,7 +3619,9 @@ class FourMomentum:
 
         Examples
         --------
-        >>> FourMomentum(5.0, 3.0, 4.0, 0.0).components()
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> hep.FourMomentum(5.0, 3.0, 4.0, 0.0).components()
         (5.0, 3.0, 4.0, 0.0)
         """
     def dot(self, other: FourMomentum) -> builtins.float:
@@ -2697,6 +3630,8 @@ class FourMomentum:
 
         Examples
         --------
+        Using the setup in the ``FourMomentum`` class example:
+
         >>> momentum.dot(momentum)
         0.0
 
@@ -2715,8 +3650,10 @@ class FourMomentum:
 
         Examples
         --------
-        >>> p = fk.FourMomentum(5.0, 0.0, 0.0, 5.0)
-        >>> q = fk.FourMomentum(5.0, 0.0, 0.0, -5.0)
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> p = hep.FourMomentum(5.0, 0.0, 0.0, 5.0)
+        >>> q = hep.FourMomentum(5.0, 0.0, 0.0, -5.0)
         >>> p.flux(q)
         200.0
 
@@ -2731,6 +3668,8 @@ class FourMomentum:
 
         Examples
         --------
+        Using the setup in the ``FourMomentum`` class example:
+
         >>> first.delta_phi(second)
         1.5707963267948966
 
@@ -2745,6 +3684,8 @@ class FourMomentum:
 
         Examples
         --------
+        Using the setup in the ``FourMomentum`` class example:
+
         >>> separation = first.delta_r(second)
         >>> same_jet = separation < 0.4
 
@@ -2759,6 +3700,8 @@ class FourMomentum:
 
         Examples
         --------
+        Using the setup in the ``FourMomentum`` class example:
+
         >>> (first + second).energy == first.energy + second.energy
         True
 
@@ -2773,6 +3716,8 @@ class FourMomentum:
 
         Examples
         --------
+        Using the setup in the ``FourMomentum`` class example:
+
         >>> (first - second).energy == first.energy - second.energy
         True
 
@@ -2787,7 +3732,11 @@ class FourMomentum:
 
         Examples
         --------
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> incoming_convention = hep.FourMomentum(5.0, 3.0, 4.0, 0.0)
         >>> outgoing_convention = -incoming_convention
+        >>> assert outgoing_convention.energy == -5.0
         """
     def __mul__(self, scalar: builtins.float) -> FourMomentum:
         r"""
@@ -2795,6 +3744,8 @@ class FourMomentum:
 
         Examples
         --------
+        Using the setup in the ``FourMomentum`` class example:
+
         >>> half_momentum = momentum * 0.5
 
         Parameters
@@ -2808,6 +3759,8 @@ class FourMomentum:
 
         Examples
         --------
+        Using the setup in the ``FourMomentum`` class example:
+
         >>> half_momentum = 0.5 * momentum
 
         Parameters
@@ -2821,7 +3774,9 @@ class FourMomentum:
 
         Examples
         --------
-        >>> muon_momentum = FourMomentum(5.0, 3.0, 4.0, 0.0)
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> muon_momentum = hep.FourMomentum(5.0, 3.0, 4.0, 0.0)
         >>> print(f"muon four-momentum: {muon_momentum!r}")
         """
     def _repr_latex_(self) -> builtins.str:
@@ -2830,8 +3785,9 @@ class FourMomentum:
 
         Examples
         --------
-        Leave ``momentum`` as the final expression in a notebook cell to render
-        its energy and Cartesian momentum components.
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> latex = momentum._repr_latex_()
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -2839,7 +3795,10 @@ class FourMomentum:
 
         Examples
         --------
-        IPython invokes this method when only a text representation is supported.
+        Using the setup in the ``FourMomentum`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(momentum)
 
         Parameters
         ----------
@@ -2855,12 +3814,14 @@ class GenerationError(FeynkitError):
 
     Examples
     --------
-    Process and topology failures share one public exception type:
-
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> try:
-    ...     result = model.process(incoming, outgoing).generate_diagrams(loops=1)
-    ... except fk.GenerationError as error:
-    ...     print(error)
+    ...     process.generate_diagrams(self_energy=hep.SelfEnergyFilterOptions(only_scaleless=True))
+    ... except hep.GenerationError as error:
+    ...     message = str(error)
     """
     ...
 
@@ -2874,9 +3835,15 @@ class GenerationProgress:
 
     Examples
     --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> snapshots = []
     >>> def report(progress):
-    ...     print(progress.stage, progress.completed, progress.total)
-    >>> result = process.generate_diagrams(progress=report)
+    ...     snapshots.append((progress.stage, progress.completed, progress.total))
+    >>> result = process.generate_diagrams(loops=1, progress=report)
+    >>> assert result.report.completed
     """
     @property
     def stage(self) -> builtins.str:
@@ -2884,16 +3851,43 @@ class GenerationProgress:
         Pipeline stage: topologies, topology_filters, interactions,
         interaction_filters, numerators, selection, grouping_preparation,
         grouping_samples, grouping_comparison, grouping, complete or cancelled.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationProgress`` class example:
+
+        >>> stages = []
+        >>> def report(progress):
+        ...     stages.append(progress.stage)
+        >>> result = process.generate_diagrams(progress=report)
         """
     @property
     def completed(self) -> builtins.int:
         r"""
         Work items processed within this stage.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationProgress`` class example:
+
+        >>> counts = []
+        >>> def report(progress):
+        ...     counts.append((progress.stage, progress.completed))
+        >>> result = process.generate_diagrams(progress=report)
         """
     @property
     def total(self) -> typing.Optional[builtins.int]:
         r"""
         Stage total, or None while the amount of work is unknown.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationProgress`` class example:
+
+        >>> totals = []
+        >>> def report(progress):
+        ...     totals.append((progress.stage, progress.total))
+        >>> result = process.generate_diagrams(progress=report)
         """
 
 @typing.final
@@ -2906,33 +3900,70 @@ class GenerationReport:
 
     Examples
     --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
     >>> report = result.report
-    >>> print(report)
+    >>> assert report.completed
+    >>> assert report.retained_count == len(result.diagrams)
     """
     @property
     def topology_count(self) -> builtins.int:
         r"""
         Return the number of distinct topologies considered during generation.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationReport`` class example:
+
+        >>> assert report.topology_count >= 1
         """
     @property
     def interaction_assignment_count(self) -> builtins.int:
         r"""
         Return the number of interaction assignments examined.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationReport`` class example:
+
+        >>> assignments_tested = report.interaction_assignment_count
         """
     @property
     def retained_count(self) -> builtins.int:
         r"""
         Return the number of diagrams retained after removing zero numerators.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationReport`` class example:
+
+        >>> assert report.retained_count == len(result.diagrams)
         """
     @property
     def zero_numerator_count(self) -> builtins.int:
         r"""
         Return the number of diagrams removed for having an exact zero numerator.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationReport`` class example:
+
+        >>> removed_zeroes = report.zero_numerator_count
         """
     @property
     def completed(self) -> builtins.bool:
         r"""
         Report whether generation finished without cancellation.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationReport`` class example:
+
+        >>> assert report.completed  # False means generation was cancelled
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -2940,6 +3971,8 @@ class GenerationReport:
 
         Examples
         --------
+        Using the setup in the ``GenerationReport`` class example:
+
         >>> print(result.report)
         """
     def _repr_html_(self) -> builtins.str:
@@ -2948,7 +3981,10 @@ class GenerationReport:
 
         Examples
         --------
-        Leave ``result.report`` as the final expression in a notebook cell.
+        Using the setup in the ``GenerationReport`` class example:
+
+        >>> from IPython.display import display
+        >>> display(report)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -2956,7 +3992,10 @@ class GenerationReport:
 
         Examples
         --------
-        IPython invokes this method when only a text representation is supported.
+        Using the setup in the ``GenerationReport`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(report)
 
         Parameters
         ----------
@@ -2976,24 +4015,47 @@ class GenerationResult:
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> result = process.generate_diagrams()
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
     >>> diagrams = result.diagrams
+    >>> assert result.report.retained_count == len(diagrams)
     """
     @property
     def diagrams(self) -> builtins.list[FeynmanDiagram]:
         r"""
         Return every retained diagram in generated order.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationResult`` class example:
+
+        >>> numerators = [diagram.numerator_expression() for diagram in result.diagrams]
         """
     @property
     def groups(self) -> builtins.list[DiagramGroup]:
         r"""
         Return the numerator groups in deterministic master-index order.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationResult`` class example:
+
+        >>> masters = [result.diagrams[group.master] for group in result.groups]
         """
     @property
     def report(self) -> GenerationReport:
         r"""
         Return generation counts and completion status.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationResult`` class example:
+
+        >>> assert result.report.completed
         """
     def __len__(self) -> builtins.int:
         r"""
@@ -3001,6 +4063,8 @@ class GenerationResult:
 
         Examples
         --------
+        Using the setup in the ``GenerationResult`` class example:
+
         >>> number_of_diagrams = len(result)
         """
     def __getitem__(self, index: builtins.int) -> FeynmanDiagram:
@@ -3009,6 +4073,8 @@ class GenerationResult:
 
         Examples
         --------
+        Using the setup in the ``GenerationResult`` class example:
+
         >>> first_diagram = result[0]
 
         Parameters
@@ -3022,6 +4088,8 @@ class GenerationResult:
 
         Examples
         --------
+        Using the setup in the ``GenerationResult`` class example:
+
         >>> one_loop = [diagram for diagram in result if diagram.loop_count == 1]
         """
     def __repr__(self) -> builtins.str:
@@ -3030,6 +4098,8 @@ class GenerationResult:
 
         Examples
         --------
+        Using the setup in the ``GenerationResult`` class example:
+
         >>> print(result)
         """
     def _repr_html_(self) -> builtins.str:
@@ -3042,7 +4112,10 @@ class GenerationResult:
 
         Examples
         --------
-        Leave ``result`` as the final expression in a notebook cell.
+        Using the setup in the ``GenerationResult`` class example:
+
+        >>> from IPython.display import display
+        >>> display(result)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -3050,7 +4123,10 @@ class GenerationResult:
 
         Examples
         --------
-        IPython invokes this method when only a text representation is supported.
+        Using the setup in the ``GenerationResult`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(result)
 
         Parameters
         ----------
@@ -3070,23 +4146,49 @@ class GroupMember:
 
     Examples
     --------
-    >>> member = next(iter(next(iter(result.groups)).members))
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> group = result.groups[0]
+    >>> member = group.members[0]
     >>> diagram = result.diagrams[member.diagram]
     """
     @property
     def source_diagram(self) -> builtins.int:
         r"""
         Return the generated-order index from before zero-numerator removal.
+
+        Examples
+        --------
+        Using the setup in the ``GroupMember`` class example:
+
+        >>> source_index = member.source_diagram
+        >>> source_identity = (source_index, member.source_id, member.source_name)
         """
     @property
     def source_id(self) -> builtins.str:
         r"""
         Return the source diagram's stable content-derived ID.
+
+        Examples
+        --------
+        Using the setup in the ``GroupMember`` class example:
+
+        >>> source_ids = [entry.source_id for entry in group.members]
         """
     @property
     def source_name(self) -> builtins.str:
         r"""
         Return the finalized display name assigned to the source diagram.
+
+        Examples
+        --------
+        Using the setup in the ``GroupMember`` class example:
+
+        >>> source_names = [entry.source_name for entry in group.members]
         """
     @property
     def diagram(self) -> builtins.int:
@@ -3095,12 +4197,20 @@ class GroupMember:
 
         Examples
         --------
+        Using the setup in the ``GroupMember`` class example:
+
         >>> result.diagrams[result.groups[0].members[0].diagram]
         """
     @property
     def ratio(self) -> builtins.str:
         r"""
         Return the member numerator divided by the group master numerator.
+
+        Examples
+        --------
+        Using the setup in the ``GroupMember`` class example:
+
+        >>> relative_weights = [entry.ratio for entry in group.members]
         """
     def ratio_expression(self) -> Expression:
         r"""
@@ -3108,6 +4218,8 @@ class GroupMember:
 
         Examples
         --------
+        Using the setup in the ``GroupMember`` class example:
+
         >>> ratio = result.groups[0].members[0].ratio_expression()
         """
     def overall_factor_expression(self) -> Expression:
@@ -3116,6 +4228,8 @@ class GroupMember:
 
         Examples
         --------
+        Using the setup in the ``GroupMember`` class example:
+
         >>> group = result.groups[0]
         >>> member = group.members[0]
         >>> master = result.diagrams[group.master]
@@ -3130,14 +4244,14 @@ class Helicity:
     r"""
     A spin projection along a particle's direction of motion.
 
-    FeynKit represents the physical minus, longitudinal, and plus helicity
+    HEP represents the physical minus, longitudinal, and plus helicity
     states by the integers -1, 0, and 1.
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> incoming_fermion_helicity = fk.Helicity(-1)
-    >>> incoming_fermion_helicity == fk.Helicity.MINUS
+    >>> from symbolica.community import hep
+    >>> incoming_fermion_helicity = hep.Helicity(-1)
+    >>> incoming_fermion_helicity == hep.Helicity.MINUS
     True
 
     Parameters
@@ -3179,7 +4293,9 @@ class Helicity:
 
         Examples
         --------
-        >>> Helicity.PLUS.value
+        Using the setup in the ``Helicity`` class example:
+
+        >>> hep.Helicity.PLUS.value
         1
         """
     def __new__(cls, value: builtins.int) -> Helicity:
@@ -3188,7 +4304,9 @@ class Helicity:
 
         Examples
         --------
-        >>> helicity = Helicity(-1)
+        Using the setup in the ``Helicity`` class example:
+
+        >>> helicity = hep.Helicity(-1)
 
         Parameters
         ----------
@@ -3202,7 +4320,9 @@ class Helicity:
 
         Examples
         --------
-        >>> Helicity.parse("+") == Helicity.PLUS
+        Using the setup in the ``Helicity`` class example:
+
+        >>> hep.Helicity.parse("+") == hep.Helicity.PLUS
         True
 
         Parameters
@@ -3216,7 +4336,9 @@ class Helicity:
 
         Examples
         --------
-        >>> int(Helicity.MINUS)
+        Using the setup in the ``Helicity`` class example:
+
+        >>> int(hep.Helicity.MINUS)
         -1
         """
     def __eq__(self, other: typing.Any) -> builtins.bool:
@@ -3225,7 +4347,9 @@ class Helicity:
 
         Examples
         --------
-        >>> Helicity(0) == Helicity.ZERO
+        Using the setup in the ``Helicity`` class example:
+
+        >>> hep.Helicity(0) == hep.Helicity.ZERO
         True
 
         Parameters
@@ -3239,68 +4363,142 @@ class Helicity:
 
         Examples
         --------
-        >>> print(f"selected external helicity: {Helicity.PLUS!r}")
+        Using the setup in the ``Helicity`` class example:
+
+        >>> print(f"selected external helicity: {hep.Helicity.PLUS!r}")
         """
 
 @typing.final
 class IntegralFamily:
     r"""
-    An ordered family of affine inverse propagators in loop scalar products.
+    An ordered set of inverse propagators sharing loop momenta and external kinematics.
 
-    Construct denominators with ``Kinematics.scalar_product``. External momenta
-    must form an independent basis. Rank, completion, and numerator rewriting
-    use Symbolica's exact linear algebra. Verified momentum shifts are available
-    through ``mapping_to`` and ``find_mapping``. Parametric scaling certificates
-    detect scaleless sectors in dimensional regularization. Integration
-    prescriptions and IBP reduction are separate operations.
+    Pass denominators such as ``k.k - m2``, not their reciprocals. An integral
+    with powers ``[a1, a2, ...]`` has integrand ``1/(D1**a1 * D2**a2 * ...)``:
+    zero powers omit a denominator and negative powers put it in the numerator.
+    All power vectors and denominator labels follow the original input order.
+
+    Declare independent external momenta and their scalar products through
+    ``Kinematics``. ``is_independent`` checks the denominator basis for linear
+    dependence; ``is_complete`` checks whether it spans every loop scalar product.
+    For L loops and E independent external momenta this space has
+    L*(L+1)/2 + L*E coordinates. ``complete()`` returns a new family with missing
+    coordinates appended; give these auxiliary slots nonpositive integral powers.
+    Use ``partial_fraction()`` before completion when denominators are dependent.
+
+    Use this class to rewrite scalar numerators, compare momentum routings, test
+    scalelessness, and construct Symanzik polynomials. Reduction is provided by
+    ``hep.IBPFamily`` or, for one loop, ``hep.oneloop.reduce``. No integration
+    prescription or loop-measure normalization is inferred by this container.
 
     Examples
     --------
-    >>> kin = fk.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
+    Build a massless bubble with external virtuality ``p.p = s``. The method
+    examples below reuse this family and its symbols.
+
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> D, k, p, s = S("D", "k", "p", "s")
+    >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
+    >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
     >>> denominators = [kin.scalar_product(k, k), kin.scalar_product(k-p, k-p)]
-    >>> family = fk.IntegralFamily([k], [p], denominators, kinematics=kin)
-    >>> assert family.is_complete and family.is_independent
-    >>> reduced = family.rewrite_numerator(kin.scalar_product(k, p)**2, [d1, d2])
+    >>> family = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
+    >>> assert family.rank == 2 and family.is_complete and family.is_independent
+    >>> rewritten = family.rewrite_numerator(kin.scalar_product(k, p), [d1, d2])
+    >>> assert (rewritten - (d1 - d2 + s)/2).expand() == E("0")
+    >>> U, F = family.symanzik([x1, x2])
+    >>> assert U == x1 + x2
     """
     @property
     def loop_momenta(self) -> builtins.list[Expression]:
         r"""
         Integrated momentum names in their original order.
+
+        Examples
+        --------
+        Using the setup in the ``IntegralFamily`` class example:
+
+        >>> assert family.loop_momenta == [k]
         """
     @property
     def kinematics(self) -> Kinematics:
         r"""
         Scoped kinematics, including the family momentum declarations.
+
+        Examples
+        --------
+        Using the setup in the ``IntegralFamily`` class example:
+
+        >>> assert family.kinematics.scalar_product(p, p) == s
         """
     @property
     def external_momenta(self) -> builtins.list[Expression]:
         r"""
         Independent external momentum names in their original order.
+
+        Examples
+        --------
+        Using the setup in the ``IntegralFamily`` class example:
+
+        >>> assert family.external_momenta == [p]
         """
     @property
     def scalar_products(self) -> builtins.list[Expression]:
         r"""
         Loop-loop and loop-external products spanning the numerator space.
+
+        Examples
+        --------
+        Using the setup in the ``IntegralFamily`` class example:
+
+        >>> assert len(family.scalar_products) == 2
         """
     @property
     def denominators(self) -> builtins.list[Expression]:
         r"""
         Ordered inverse propagators, including any auxiliary completion terms.
+
+        Examples
+        --------
+        Using the setup in the ``IntegralFamily`` class example:
+
+        >>> assert family.denominators == denominators
+        >>> weighted = list(zip(family.denominators, [1, 2]))
         """
     @property
     def rank(self) -> builtins.int:
         r"""
         Number of independent affine forms in the loop scalar products.
+
+        Examples
+        --------
+        Using the setup in the ``IntegralFamily`` class example:
+
+        >>> assert family.rank == 2
         """
     @property
     def is_complete(self) -> builtins.bool:
         r"""
         Whether the inverse propagators span every loop scalar product.
+
+        Examples
+        --------
+        Using the setup in the ``IntegralFamily`` class example:
+
+        >>> assert family.is_complete
+        >>> assert family.rank == len(family.scalar_products)
         """
     @property
     def is_independent(self) -> builtins.bool:
         r"""
         Whether no denominator can be eliminated by an affine relation.
+
+        Examples
+        --------
+        Using the setup in the ``IntegralFamily`` class example:
+
+        >>> assert family.is_independent
+        >>> assert family.rank == len(family.denominators)
         """
     @staticmethod
     def from_diagram(diagram: FeynmanDiagram, independent_dot_products: typing.Optional[typing.Sequence[Expression]] = None, *, kinematics: typing.Optional[Kinematics] = None) -> IntegralFamily:
@@ -3317,7 +4515,14 @@ class IntegralFamily:
 
         Examples
         --------
-        >>> family = fk.IntegralFamily.from_diagram(diagram)
+        >>> from symbolica import S, E
+        >>> from symbolica.community import hep
+        >>> model = hep.Model.phi4()
+        >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+        >>> result = process.generate_diagrams(loops=1)
+        >>> diagram = result.diagrams[0]
+        >>> family = hep.IntegralFamily.from_diagram(diagram)
+        >>> assert family.is_complete
 
         Parameters
         ----------
@@ -3336,7 +4541,13 @@ class IntegralFamily:
 
         Examples
         --------
-        >>> family = fk.IntegralFamily([k], [p], denominators, kinematics=kin)
+        >>> from symbolica import S, E
+        >>> from symbolica.community import hep
+        >>> D, k, p, s = S("D", "k", "p", "s")
+        >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
+        >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
+        >>> denominators = [kin.scalar_product(k, k), kin.scalar_product(k-p, k-p)]
+        >>> family = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
         >>> assert family.rank == 2
 
         Parameters
@@ -3356,6 +4567,8 @@ class IntegralFamily:
 
         Examples
         --------
+        Using the setup in the ``IntegralFamily`` class example:
+
         >>> print(family)
         """
     def _repr_html_(self) -> builtins.str:
@@ -3366,7 +4579,10 @@ class IntegralFamily:
 
         Examples
         --------
-        Leave ``family`` as the final expression in a notebook cell.
+        Using the setup in the ``IntegralFamily`` class example:
+
+        >>> from IPython.display import display
+        >>> display(family)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -3374,7 +4590,10 @@ class IntegralFamily:
 
         Examples
         --------
-        IPython uses this representation when rich HTML output is unavailable.
+        Using the setup in the ``IntegralFamily`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(family)
 
         Parameters
         ----------
@@ -3396,9 +4615,13 @@ class IntegralFamily:
 
         Examples
         --------
-        >>> completed = family.complete()
-        >>> assert completed.is_complete
-        >>> completed = family.complete(candidates=other_family.denominators)
+        Using the bubble setup in ``IntegralFamily``:
+
+        >>> incomplete = hep.IntegralFamily([k], [p], denominators[:1], kinematics=kin)
+        >>> completed = incomplete.complete()
+        >>> assert not incomplete.is_complete and completed.is_complete
+        >>> assert completed.denominators[0] == denominators[0]
+        >>> powers = [1, 0]  # the appended slot is absent from the original integral
 
         Parameters
         ----------
@@ -3417,9 +4640,13 @@ class IntegralFamily:
 
         Examples
         --------
-        >>> terms = family.partial_fraction([1, 1])
-        >>> for coefficient, powers in terms:
-        ...     print(coefficient, powers)
+        Using the symbols and kinematics in ``IntegralFamily``:
+
+        >>> m2 = S("m2")
+        >>> dependent = hep.IntegralFamily([k], [], [kin.scalar_product(k, k),
+        ...     kin.scalar_product(k, k) - m2], kinematics=kin)
+        >>> terms = dependent.partial_fraction([1, 1])
+        >>> assert all(sum(power > 0 for power in powers) == 1 for coefficient, powers in terms)
 
         Parameters
         ----------
@@ -3444,9 +4671,10 @@ class IntegralFamily:
 
         Examples
         --------
-        >>> mapping = source.mapping_to(target, [l - p])
-        >>> assert mapping is not None
-        >>> target_powers = mapping.map_powers([1, 2])
+        Using the bubble setup in ``IntegralFamily``:
+
+        >>> mapping = family.mapping_to(family, [k])
+        >>> assert mapping.map_powers([1, 2]) == [1, 2]
 
         Parameters
         ----------
@@ -3471,9 +4699,12 @@ class IntegralFamily:
 
         Examples
         --------
-        >>> mapping = source.find_mapping(target)
-        >>> if mapping is not None:
-        ...     transformed = mapping.apply(scalar_numerator)
+        Using the bubble setup in ``IntegralFamily``:
+
+        >>> target = hep.IntegralFamily([k], [p], list(reversed(denominators)), kinematics=kin)
+        >>> mapping = family.find_mapping(target)
+        >>> assert mapping is not None
+        >>> transformed = mapping.apply(kin.scalar_product(k, p))
 
         Parameters
         ----------
@@ -3507,10 +4738,11 @@ class IntegralFamily:
 
         Examples
         --------
-        >>> mappings = fk.IntegralFamily.find_mappings(families)
-        >>> representatives = sorted({target for target, mapping in mappings})
-        >>> target, mapping = mappings[0]
-        >>> target_powers = mapping.map_powers(source_powers)
+        Using the bubble setup in ``IntegralFamily``:
+
+        >>> families = [family, family]
+        >>> mappings = hep.IntegralFamily.find_mappings(families)
+        >>> assert [target for target, mapping in mappings] == [0, 0]
 
         Parameters
         ----------
@@ -3534,8 +4766,10 @@ class IntegralFamily:
 
         Examples
         --------
-        >>> sector = family.sector([1, 2, -1])
-        >>> assert len(sector.denominators) == 2
+        Using the bubble setup in ``IntegralFamily``:
+
+        >>> sector = family.sector([1, 0])
+        >>> assert sector.denominators == denominators[:1]
 
         Parameters
         ----------
@@ -3560,9 +4794,11 @@ class IntegralFamily:
 
         Examples
         --------
-        >>> direction = family.sector(powers).scaleless_transverse_direction()
-        >>> if direction is not None:
-        ...     print("Scaleless transverse integration:", direction)
+        Using the bubble setup in ``IntegralFamily``:
+
+        >>> empty_sector = family.sector([0, 0])
+        >>> direction = empty_sector.scaleless_transverse_direction()
+        >>> assert direction is not None  # no denominators constrain the loop momentum
 
         Returns
         -------
@@ -3582,10 +4818,11 @@ class IntegralFamily:
 
         Examples
         --------
-        >>> sector = family.sector([1, 1, 0])
-        >>> weights = sector.scaleless_scaling([x1, x2])
-        >>> if weights is not None:
-        ...     print("Scaleless in dimensional regularization", weights)
+        Using the bubble setup in ``IntegralFamily``:
+
+        >>> tadpole = family.sector([1, 0])
+        >>> weights = tadpole.scaleless_scaling([x1])
+        >>> assert weights is not None  # massless tadpole vanishes in dimensional regularization
 
         Parameters
         ----------
@@ -3611,9 +4848,12 @@ class IntegralFamily:
 
         Examples
         --------
-        >>> mapping = source.parametric_mapping(target, [x1, x2])
-        >>> if mapping is not None:
-        ...     target_powers = mapping.map_powers([1, 2])
+        Using the bubble setup in ``IntegralFamily``:
+
+        >>> target = hep.IntegralFamily([k], [p], list(reversed(denominators)), kinematics=kin)
+        >>> mapping = family.parametric_mapping(target, [x1, x2])
+        >>> assert mapping is not None
+        >>> mapped_powers = mapping.map_powers([1, 2])
 
         Parameters
         ----------
@@ -3640,6 +4880,8 @@ class IntegralFamily:
 
         Examples
         --------
+        Using the setup in the ``IntegralFamily`` class example:
+
         >>> U, F = family.symanzik([x1, x2])
         >>> assert U == x1 + x2  # two standard one-loop propagators
 
@@ -3659,6 +4901,8 @@ class IntegralFamily:
 
         Examples
         --------
+        Using the setup in the ``IntegralFamily`` class example:
+
         >>> rules = family.scalar_product_rules([d1, d2])
         >>> assert len(rules) == 2
 
@@ -3678,6 +4922,8 @@ class IntegralFamily:
 
         Examples
         --------
+        Using the setup in the ``IntegralFamily`` class example:
+
         >>> numerator = kin.scalar_product(k, p)**2
         >>> reduced = family.rewrite_numerator(numerator, [d1, d2])
 
@@ -3695,12 +4941,17 @@ class IntegralFamilyError(FeynkitError):
 
     Examples
     --------
-    Catch a family that needs partial fractioning before completion:
-
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> D, k, p, s = S("D", "k", "p", "s")
+    >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
+    >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
+    >>> denominators = [kin.scalar_product(k, k), kin.scalar_product(k-p, k-p)]
+    >>> family = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
     >>> try:
-    ...     completed = family.complete()
-    ... except fk.IntegralFamilyError as error:
-    ...     print(error)
+    ...     hep.IntegralFamily([k], [p], [denominators[0], denominators[0]], kinematics=kin).complete()
+    ... except hep.IntegralFamilyError as error:
+    ...     message = str(error)
     """
     ...
 
@@ -3716,19 +4967,44 @@ class IntegralMapping:
 
     Examples
     --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> D, k, p, s = S("D", "k", "p", "s")
+    >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
+    >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
+    >>> denominators = [kin.scalar_product(k, k), kin.scalar_product(k-p, k-p)]
+    >>> family = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
+    >>> m2 = S("m2")
+    >>> denominators = [denominators[0] - m2, denominators[1]]
+    >>> source = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
+    >>> target = hep.IntegralFamily([k], [p], list(reversed(denominators)), kinematics=kin)
     >>> mapping = source.find_mapping(target)
     >>> assert mapping is not None
-    >>> print(mapping.momentum_rules, mapping.denominator_map)
+    >>> target_powers = mapping.map_powers([1, 2])
+    >>> assert target_powers == [2, 1]
     """
     @property
     def momentum_rules(self) -> builtins.list[tuple[Expression, Expression]]:
         r"""
         Source loop momentum names paired with their target-coordinate images.
+
+        Examples
+        --------
+        Using the setup in the ``IntegralMapping`` class example:
+
+        >>> loop_substitutions = mapping.momentum_rules
         """
     @property
     def denominator_map(self) -> builtins.list[builtins.int]:
         r"""
         Zero-based target denominator index for each source denominator.
+
+        Examples
+        --------
+        Using the setup in the ``IntegralMapping`` class example:
+
+        >>> mapped_powers = mapping.map_powers([1, 2])
+        >>> slot_map = mapping.denominator_map
         """
     def map_powers(self, powers: typing.Sequence[builtins.int]) -> builtins.list[builtins.int]:
         r"""
@@ -3736,6 +5012,8 @@ class IntegralMapping:
 
         Examples
         --------
+        Using the setup in the ``IntegralMapping`` class example:
+
         >>> powers = mapping.map_powers([1, 2])
 
         Parameters
@@ -3749,7 +5027,9 @@ class IntegralMapping:
 
         Examples
         --------
-        >>> transformed_numerator = mapping.apply(numerator)
+        Using the setup in ``IntegralMapping``:
+
+        >>> transformed = mapping.apply(kin.scalar_product(k, p))
 
         Parameters
         ----------
@@ -3767,34 +5047,71 @@ class Jet:
 
     Examples
     --------
-    >>> jets = fk.JetDefinition.anti_kt(0.4).cluster(particles).jets
-    >>> leading_jet = next(iter(jets))
-    >>> leading_jet.momentum
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> particles = [hep.FourMomentum(50.0, 30.0, 40.0, 0.0),
+    ...              hep.FourMomentum(25.0, -15.0, -20.0, 0.0)]
+    >>> definition = hep.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
+    >>> clustering = definition.cluster(particles)
+    >>> jets = clustering.jets
+    >>> leading_jet = jets[0]
+    >>> assert leading_jet.pt == 50.0
+    >>> inputs = [particles[i] for i in leading_jet.constituent_indices]
     """
     @property
     def momentum(self) -> FourMomentum:
         r"""
         Return the recombined four-momentum of this jet.
+
+        Examples
+        --------
+        Using the setup in the ``Jet`` class example:
+
+        >>> assert leading_jet.momentum.pt == leading_jet.pt
         """
     @property
     def constituent_indices(self) -> builtins.list[builtins.int]:
         r"""
         Return sorted positions of the input momenta assigned to this jet.
+
+        Examples
+        --------
+        Using the setup in the ``Jet`` class example:
+
+        >>> inputs = [particles[i] for i in leading_jet.constituent_indices]
         """
     @property
     def pt(self) -> builtins.float:
         r"""
         Return the jet transverse momentum.
+
+        Examples
+        --------
+        Using the setup in the ``Jet`` class example:
+
+        >>> assert leading_jet.pt == 50.0
         """
     @property
     def rapidity(self) -> builtins.float:
         r"""
         Return the jet rapidity.
+
+        Examples
+        --------
+        Using the setup in the ``Jet`` class example:
+
+        >>> assert leading_jet.rapidity == 0.0
         """
     @property
     def phi(self) -> builtins.float:
         r"""
         Return the jet azimuthal angle in radians.
+
+        Examples
+        --------
+        Using the setup in the ``Jet`` class example:
+
+        >>> azimuth = leading_jet.phi
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -3802,7 +5119,9 @@ class Jet:
 
         Examples
         --------
-        >>> print(jet)
+        Using the setup in the ``Jet`` class example:
+
+        >>> summary = repr(leading_jet)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -3810,8 +5129,10 @@ class Jet:
 
         Examples
         --------
-        Leave ``jet`` as the final expression in a notebook cell to display its
-        transverse momentum, rapidity, azimuth, and constituents.
+        Using the setup in the ``Jet`` class example:
+
+        >>> from IPython.display import display
+        >>> display(leading_jet)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -3819,7 +5140,10 @@ class Jet:
 
         Examples
         --------
-        IPython invokes this method when only a text representation is supported.
+        Using the setup in the ``Jet`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(leading_jet)
 
         Parameters
         ----------
@@ -3839,9 +5163,14 @@ class JetDefinition:
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> definition = fk.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
-    >>> result = definition.cluster(particles)
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> particles = [hep.FourMomentum(50.0, 30.0, 40.0, 0.0),
+    ...              hep.FourMomentum(25.0, -15.0, -20.0, 0.0)]
+    >>> definition = hep.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
+    >>> clustering = definition.cluster(particles)
+    >>> assert definition.radius == 0.4
+    >>> assert len(clustering.jets) == 2
 
     Parameters
     ----------
@@ -3856,16 +5185,34 @@ class JetDefinition:
     def algorithm(self) -> JetAlgorithm:
         r"""
         Return the selected clustering algorithm.
+
+        Examples
+        --------
+        Using the setup in the ``JetDefinition`` class example:
+
+        >>> assert definition.algorithm == hep.JetAlgorithm.AntiKt
         """
     @property
     def radius(self) -> builtins.float:
         r"""
         Return the jet-radius parameter.
+
+        Examples
+        --------
+        Using the setup in the ``JetDefinition`` class example:
+
+        >>> assert definition.radius == 0.4
         """
     @property
     def minimum_pt(self) -> builtins.float:
         r"""
         Return the minimum transverse momentum for retained jets.
+
+        Examples
+        --------
+        Using the setup in the ``JetDefinition`` class example:
+
+        >>> assert definition.minimum_pt == 20.0
         """
     def __new__(cls, algorithm: JetAlgorithm, radius: builtins.float, minimum_pt: builtins.float = 0.0) -> JetDefinition:
         r"""
@@ -3873,7 +5220,9 @@ class JetDefinition:
 
         Examples
         --------
-        >>> definition = JetDefinition(JetAlgorithm.AntiKt, 0.4, 20.0)
+        Using the setup in the ``JetDefinition`` class example:
+
+        >>> definition = hep.JetDefinition(hep.JetAlgorithm.AntiKt, 0.4, 20.0)
 
         Parameters
         ----------
@@ -3891,7 +5240,9 @@ class JetDefinition:
 
         Examples
         --------
-        >>> definition = JetDefinition.kt(0.4)
+        Using the setup in the ``JetDefinition`` class example:
+
+        >>> definition = hep.JetDefinition.kt(0.4)
 
         Parameters
         ----------
@@ -3907,7 +5258,9 @@ class JetDefinition:
 
         Examples
         --------
-        >>> definition = JetDefinition.cambridge_aachen(0.4)
+        Using the setup in the ``JetDefinition`` class example:
+
+        >>> definition = hep.JetDefinition.cambridge_aachen(0.4)
 
         Parameters
         ----------
@@ -3923,7 +5276,9 @@ class JetDefinition:
 
         Examples
         --------
-        >>> definition = JetDefinition.anti_kt(0.4, minimum_pt=20.0)
+        Using the setup in the ``JetDefinition`` class example:
+
+        >>> definition = hep.JetDefinition.anti_kt(0.4, minimum_pt=20.0)
 
         Parameters
         ----------
@@ -3938,9 +5293,10 @@ class JetDefinition:
 
         Examples
         --------
-        >>> result = JetDefinition.anti_kt(0.4).cluster(momenta)
-        >>> leading_jet = result.jets[0]
-        >>> leading_jet.momentum
+        Using the setup in the ``JetDefinition`` class example:
+
+        >>> result = definition.cluster(particles)
+        >>> assert len(result.jets) == 2
 
         Parameters
         ----------
@@ -3960,14 +5316,22 @@ class Kinematics:
     Examples
     --------
     >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> from symbolica import S, E
     >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
-    >>> kin = fk.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+    >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
     >>> assert kin.scalar_product(p1, p2) == s/2
     """
     @property
     def dimension(self) -> Expression:
         r"""
         Lorentz dimension as a Symbolica integer or symbol.
+
+        Examples
+        --------
+        Using the setup in the ``Kinematics`` class example:
+
+        >>> assert hep.Kinematics(S("D")).dimension == S("D")
         """
     def __new__(cls, dimension: typing.Optional[Expression] = None, *, momenta: typing.Optional[typing.Sequence[Expression]] = None) -> Kinematics:
         r"""
@@ -3975,8 +5339,10 @@ class Kinematics:
 
         Examples
         --------
-        >>> kin = fk.Kinematics()
-        >>> dimensional = fk.Kinematics(S("D"))
+        Using the setup in the ``Kinematics`` class example:
+
+        >>> kin = hep.Kinematics()
+        >>> dimensional = hep.Kinematics(S("D"))
 
         Parameters
         ----------
@@ -3996,7 +5362,9 @@ class Kinematics:
 
         Examples
         --------
-        >>> kin = fk.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+        Using the setup in the ``Kinematics`` class example:
+
+        >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
 
         Parameters
         ----------
@@ -4013,7 +5381,11 @@ class Kinematics:
 
         Examples
         --------
-        >>> kin = fk.Kinematics().with_scalar_product(p, p, m**2)
+        Using the setup in the ``Kinematics`` class example:
+
+        >>> p, m = S("p", "m")
+        >>> kin = hep.Kinematics(momenta=[p]).with_scalar_product(p, p, m**2)
+        >>> assert kin.scalar_product(p, p) == m**2
 
         Parameters
         ----------
@@ -4034,6 +5406,8 @@ class Kinematics:
 
         Examples
         --------
+        Using the setup in the ``Kinematics`` class example:
+
         >>> assert kin.scalar_product(p1, p2) == s/2
         >>> assert kin.scalar_product(p1 + p2, p1 + p2) == s
 
@@ -4056,8 +5430,13 @@ class Kinematics:
 
         Examples
         --------
-        >>> denominator = kin.flux(p1, p2)
-        >>> rest_frame_decay_denominator = kin.flux(parent)
+        Using the setup in the ``Kinematics`` class example:
+
+        >>> p1, p2, s = S("p1", "p2", "s")
+        >>> kin = hep.Kinematics(momenta=[p1, p2])
+        >>> kin = kin.with_scalar_product(p1, p1, E("0")).with_scalar_product(p2, p2, E("0"))
+        >>> kin = kin.with_scalar_product(p1, p2, s/2)
+        >>> flux = kin.flux(p1, p2)
 
         Parameters
         ----------
@@ -4079,7 +5458,11 @@ class Kinematics:
 
         Examples
         --------
-        >>> differential_cross_section = squared * kin.two_body_phase_space(k1, k2) / kin.flux(p1, p2)
+        Using the setup in the ``Kinematics`` class example:
+
+        >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
+        >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+        >>> density = kin.two_body_phase_space(p3, p4)
 
         Parameters
         ----------
@@ -4105,8 +5488,11 @@ class Kinematics:
 
         Examples
         --------
+        Using the setup in the ``Kinematics`` class example:
+
+        >>> k1, k2, k3 = S("k1", "k2", "k3")
+        >>> kin = hep.Kinematics(momenta=[k1, k2, k3])
         >>> density = kin.three_body_phase_space(k1, k2, k3)
-        >>> differential_width = squared * density / kin.flux(parent)
 
         Parameters
         ----------
@@ -4117,28 +5503,43 @@ class Kinematics:
     @typing.overload
     def apply(self, expression: TensorExpression) -> TensorExpression:
         r"""
-        Substitute scalar products while preserving the ordered tensor interface.
+        Substitute scalar products without mutating global assumptions.
 
-        Tensor zeros retain their original ports.
+        Accepts a scalar Expression or a tensor expression. Tensor results retain
+        the ordered open slots, including when the result is zero.
 
         Examples
         --------
-        >>> result = kin.apply(contracted_tensor)
-        >>> assert result.structure.slots == contracted_tensor.structure.slots
+        Using the setup in the ``Kinematics`` class example:
+
+        >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
+        >>> free = hep.Kinematics(momenta=[p1, p2, p3, p4])
+        >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+        >>> contracted_expression = free.scalar_product(p1, p2)
+        >>> assert kin.apply(contracted_expression) == s/2
 
         Parameters
         ----------
-        expression : TensorExpression
-            Tensor expression with compact scalar products.
+        expression : Expression
+            Expression with compact scalar products.
         """
     @typing.overload
     def apply(self, expression: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]) -> Expression:
         r"""
         Substitute scalar products without mutating global assumptions.
 
+        Accepts a scalar Expression or a tensor expression. Tensor results retain
+        the ordered open slots, including when the result is zero.
+
         Examples
         --------
-        >>> result = kin.apply(contracted_expression)
+        Using the setup in the ``Kinematics`` class example:
+
+        >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
+        >>> free = hep.Kinematics(momenta=[p1, p2, p3, p4])
+        >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+        >>> contracted_expression = free.scalar_product(p1, p2)
+        >>> assert kin.apply(contracted_expression) == s/2
 
         Parameters
         ----------
@@ -4152,12 +5553,12 @@ class KinematicsError(FeynkitError):
 
     Examples
     --------
-    Kinematic-domain failures remain distinct from model errors:
-
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
     >>> try:
-    ...     jets = fk.JetDefinition.anti_kt(-0.4).cluster(momenta)
-    ... except fk.KinematicsError as error:
-    ...     print(error)
+    ...     hep.JetDefinition.anti_kt(-0.4)
+    ... except hep.KinematicsError as error:
+    ...     message = str(error)
     """
     ...
 
@@ -4171,7 +5572,12 @@ class LoadedModel:
 
     Examples
     --------
-    >>> loaded = fk.UfoLoader().load("path/to/MyUFO")
+    Replace ``path/to/MyUFO`` with the directory containing your UFO model
+    (``particles.py``, ``vertices.py``, and related files).
+
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> loaded = hep.UfoLoader().load("path/to/MyUFO")
     >>> model = loaded.model
     >>> particle_names = [particle.name for particle in model.particles]
     >>> parameters = loaded.parameters
@@ -4179,10 +5585,12 @@ class LoadedModel:
     @property
     def model(self) -> Model:
         r"""
-        Return the normalized FeynKit model.
+        Return the normalized HEP model.
 
         Examples
         --------
+        Using the setup in the ``LoadedModel`` class example:
+
         >>> model = loaded.model
         >>> particles = model.particles
         """
@@ -4193,6 +5601,8 @@ class LoadedModel:
 
         Examples
         --------
+        Using the setup in the ``LoadedModel`` class example:
+
         >>> parameters = loaded.parameters
         >>> shifted = loaded.model.with_parameter_card(parameters)
         """
@@ -4200,6 +5610,12 @@ class LoadedModel:
     def diagnostics(self) -> UfoLoadDiagnostics:
         r"""
         Return counts and options recorded while loading the UFO model.
+
+        Examples
+        --------
+        Using the setup in the ``LoadedModel`` class example:
+
+        >>> counts = (loaded.diagnostics.particle_count, loaded.diagnostics.vertex_rule_count)
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -4207,6 +5623,8 @@ class LoadedModel:
 
         Examples
         --------
+        Using the setup in the ``LoadedModel`` class example:
+
         >>> print(loaded)
         """
     def _repr_html_(self) -> builtins.str:
@@ -4215,8 +5633,10 @@ class LoadedModel:
 
         Examples
         --------
-        Leave ``loaded`` as the final expression in a notebook cell to display
-        the normalized model and import source.
+        Using the setup in the ``LoadedModel`` class example:
+
+        >>> from IPython.display import display
+        >>> display(loaded)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -4224,7 +5644,10 @@ class LoadedModel:
 
         Examples
         --------
-        IPython invokes this method when only a text representation is supported.
+        Using the setup in the ``LoadedModel`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(loaded)
 
         Parameters
         ----------
@@ -4244,15 +5667,26 @@ class LoopMomentumBasis:
 
     Examples
     --------
-    >>> basis = next(iter(diagram.loop_momentum_bases(limit=1)))
-    >>> len(basis.loop_edges) == diagram.loop_count
-    True
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> basis = diagram.loop_momentum_basis
+    >>> assert len(basis.loop_edges) == diagram.loop_count
     >>> assignments = basis.edge_signatures
     """
     @property
     def tree_edges(self) -> builtins.list[builtins.int]:
         r"""
         Return the edge identifiers belonging to the spanning tree.
+
+        Examples
+        --------
+        Using the setup in the ``LoopMomentumBasis`` class example:
+
+        >>> rerouted = diagram.with_loop_momentum_tree_edges(basis.tree_edges)
         """
     @property
     def loop_edges(self) -> builtins.list[builtins.int]:
@@ -4261,6 +5695,8 @@ class LoopMomentumBasis:
 
         Examples
         --------
+        Using the setup in the ``LoopMomentumBasis`` class example:
+
         >>> basis = diagram.loop_momentum_bases(limit=1)[0]
         >>> len(basis.loop_edges) == diagram.loop_count
         True
@@ -4269,6 +5705,13 @@ class LoopMomentumBasis:
     def external_edges(self) -> builtins.list[builtins.int]:
         r"""
         Return the identifiers of edges attached to external states.
+
+        Examples
+        --------
+        Using the setup in the ``LoopMomentumBasis`` class example:
+
+        >>> external_ids = basis.external_edges
+        >>> external_routings = [basis.edge_signatures[i] for i in external_ids]
         """
     @property
     def dependent_externals(self) -> builtins.list[builtins.int]:
@@ -4277,6 +5720,8 @@ class LoopMomentumBasis:
 
         Examples
         --------
+        Using the setup in the ``LoopMomentumBasis`` class example:
+
         >>> basis = diagram.loop_momentum_bases(limit=1)[0]
         >>> set(basis.dependent_externals) <= set(basis.external_edges)
         True
@@ -4288,6 +5733,8 @@ class LoopMomentumBasis:
 
         Examples
         --------
+        Using the setup in the ``LoopMomentumBasis`` class example:
+
         >>> basis = diagram.loop_momentum_bases(limit=1)[0]
         >>> momentum_by_edge = {
         ...     edge_id: signature.format_momentum()
@@ -4303,6 +5750,8 @@ class LoopMomentumBasis:
 
         Examples
         --------
+        Using the setup in the ``LoopMomentumBasis`` class example:
+
         >>> rules = diagram.loop_momentum_basis.momentum_replacements()
         >>> routed = diagram.numerator_expression().replace_multiple(rules)
         """
@@ -4312,6 +5761,8 @@ class LoopMomentumBasis:
 
         Examples
         --------
+        Using the setup in the ``LoopMomentumBasis`` class example:
+
         >>> basis = diagram.loop_momentum_bases(limit=1)[0]
         >>> print(basis)
         """
@@ -4321,8 +5772,10 @@ class LoopMomentumBasis:
 
         Examples
         --------
-        Leave ``basis`` as the final expression in a Jupyter or Marimo cell to
-        inspect every propagator's loop- and external-momentum assignment.
+        Using the setup in the ``LoopMomentumBasis`` class example:
+
+        >>> from IPython.display import display
+        >>> display(basis)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -4330,7 +5783,10 @@ class LoopMomentumBasis:
 
         Examples
         --------
-        IPython calls this method when formatting a basis for text display.
+        Using the setup in the ``LoopMomentumBasis`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(basis)
 
         Parameters
         ----------
@@ -4342,19 +5798,18 @@ class LoopMomentumBasis:
     @typing.overload
     def route_expression(self, expression: TensorExpression, *, loop_momenta: typing.Optional[typing.Sequence[TensorName]] = None, external_momenta: typing.Optional[typing.Sequence[TensorName]] = None) -> TensorExpression:
         r"""
-        Express edge momenta in this basis while preserving the tensor interface.
-
-        Tensor zeros retain their original ordered interface.
+        Express edge momenta in this basis while retaining tensor index arguments.
 
         Examples
         --------
-        >>> routed = basis.route_expression(diagram.numerator_expression())
-        >>> assert routed.structure.slots == diagram.numerator_expression().structure.slots
+        Using the setup in the ``LoopMomentumBasis`` class example:
+
+        >>> routed = basis.route_expression(diagram.numerator_expression().to_expression())
 
         Parameters
         ----------
-        expression : TensorExpression
-            Tensor expression with canonical indexed edge momenta to route.
+        expression : Expression or number
+            Expression with canonical edge momenta to route, or a scalar constant.
         loop_momenta : sequence[TensorName] or None, optional
             Vector names in ``loop_edges`` order. None retains indexed ``K`` calls.
         external_momenta : sequence[TensorName] or None, optional
@@ -4368,6 +5823,8 @@ class LoopMomentumBasis:
 
         Examples
         --------
+        Using the setup in the ``LoopMomentumBasis`` class example:
+
         >>> routed = basis.route_expression(diagram.numerator_expression().to_expression())
 
         Parameters
@@ -4383,18 +5840,24 @@ class LoopMomentumBasis:
     @typing.overload
     def route(self, loop_momenta: typing.Sequence[ThreeMomentum], external_momenta: typing.Sequence[ThreeMomentum]) -> dict[int, ThreeMomentum]:
         r"""
-        Route three-momenta through every diagram edge.
+        Route four-momenta through every diagram edge.
 
         Examples
         --------
-        >>> routed = basis.route([loop_momentum], external_spatial_momenta)
+        Using ``basis`` from the class example; zero external momenta keep this
+        routing illustration momentum-conserving:
+
+        >>> loop_momentum = hep.FourMomentum(2.0, 1.0, 0.0, 0.0)
+        >>> external_four_momenta = [hep.FourMomentum(0.0, 0.0, 0.0, 0.0)
+        ...                          for edge in basis.external_edges]
+        >>> routed = basis.route([loop_momentum], external_four_momenta)
         >>> internal_momentum = routed[basis.loop_edges[0]]
 
         Parameters
         ----------
-        loop_momenta : sequence[ThreeMomentum]
+        loop_momenta : sequence[FourMomentum]
             Independent loop momenta in ``basis.loop_edges`` order.
-        external_momenta : sequence[ThreeMomentum]
+        external_momenta : sequence[FourMomentum]
             External momenta in ``basis.external_edges`` order.
         """
     @typing.overload
@@ -4404,6 +5867,12 @@ class LoopMomentumBasis:
 
         Examples
         --------
+        Using ``basis`` from the class example; zero external momenta keep this
+        routing illustration momentum-conserving:
+
+        >>> loop_momentum = hep.FourMomentum(2.0, 1.0, 0.0, 0.0)
+        >>> external_four_momenta = [hep.FourMomentum(0.0, 0.0, 0.0, 0.0)
+        ...                          for edge in basis.external_edges]
         >>> routed = basis.route([loop_momentum], external_four_momenta)
         >>> internal_momentum = routed[basis.loop_edges[0]]
 
@@ -4425,14 +5894,23 @@ class LorentzStructure:
 
     Examples
     --------
-    >>> lorentz = next(iter(model.lorentz_structures))
-    >>> lorentz.spins
-    [2, 2, 3]
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
+    >>> lorentz = model.lorentz_structures[0]
+    >>> spins = lorentz.spins
+    >>> formula = lorentz.structure
     """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the Lorentz-structure name.
+
+        Examples
+        --------
+        Using the setup in the ``LorentzStructure`` class example:
+
+        >>> structures = {item.name: item.structure for item in model.lorentz_structures}
         """
     @property
     def spins(self) -> builtins.list[builtins.int]:
@@ -4441,6 +5919,8 @@ class LorentzStructure:
 
         Examples
         --------
+        Using the setup in the ``LorentzStructure`` class example:
+
         >>> vertex = model.vertex_rules[0]
         >>> lorentz = model.lorentz_structure(vertex.lorentz_structures[0])
         >>> len(lorentz.spins) == len(vertex.particles)
@@ -4450,6 +5930,12 @@ class LorentzStructure:
     def structure(self) -> Expression:
         r"""
         Return the symbolic Lorentz expression.
+
+        Examples
+        --------
+        Using the setup in the ``LorentzStructure`` class example:
+
+        >>> formula = lorentz.structure
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -4457,6 +5943,8 @@ class LorentzStructure:
 
         Examples
         --------
+        Using the setup in the ``LorentzStructure`` class example:
+
         >>> vertex = model.vertex_rules[0]
         >>> print(model.lorentz_structure(vertex.lorentz_structures[0]))
         """
@@ -4466,7 +5954,10 @@ class LorentzStructure:
 
         Examples
         --------
-        Leave this object as the final expression in a notebook cell.
+        Using the setup in the ``LorentzStructure`` class example:
+
+        >>> from IPython.display import display
+        >>> display(lorentz)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -4474,7 +5965,10 @@ class LorentzStructure:
 
         Examples
         --------
-        IPython calls this automatically when formatting model members in lists.
+        Using the setup in the ``LorentzStructure`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(lorentz)
 
         Parameters
         ----------
@@ -4494,40 +5988,48 @@ class Model:
 
     Examples
     --------
+    Built-in models need no external files. To import your own UFO directory,
+    see ``UfoLoader``; to restore a normalized JSON model, use ``Model(path)``
+    or ``Model.from_json``.
+
+    >>> from symbolica import S, E
     >>> from symbolica.community import hep
-
-    Load a built-in model without any model files or UFO installation:
-
     >>> model = hep.Model.standard_model()
     >>> photon = model.particle("a")
+    >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
+    >>> result = process.generate_diagrams()
+    >>> assert result.report.completed
     >>> scalar_model = hep.Model.phi4()
-    >>> phi = scalar_model.particle("phi")
-
-    Load a raw UFO model while retaining its parameter card and diagnostics:
-
-    >>> loaded = hep.UfoLoader().load("path/to/MyUFO")
-    >>> model = loaded.model
-    >>> electron = model.particle_by_pdg(11)
-
-    Or open a previously normalized FeynKit JSON model directly:
-
-    >>> model = hep.Model("models/sm.json")
-    >>> photon = model.particle("a")
+    >>> assert scalar_model.particle("phi").spin == 1
 
     Parameters
     ----------
     path : str or os.PathLike
-        Path to a normalized FeynKit JSON model.
+        Path to a normalized HEP JSON model.
     """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the model name.
+
+        Examples
+        --------
+        Using the setup in the ``Model`` class example:
+
+        >>> model = hep.Model.standard_model()
+        >>> model_name = model.name
         """
     @property
     def restriction(self) -> typing.Optional[builtins.str]:
         r"""
         Return the applied restriction name, when present.
+
+        Examples
+        --------
+        Using the setup in the ``Model`` class example:
+
+        >>> model = hep.Model.standard_model()
+        >>> restriction = model.restriction
         """
     @property
     def particles(self) -> builtins.list[Particle]:
@@ -4536,7 +6038,9 @@ class Model:
 
         Examples
         --------
-        >>> fermions = [particle for particle in model.particles if particle.is_fermion]
+        Using the setup in the ``Model`` class example:
+
+        >>> fermions = [particle for particle in model.particles if particle.spin == 2]
         """
     @property
     def parameters(self) -> builtins.list[Parameter]:
@@ -4545,7 +6049,9 @@ class Model:
 
         Examples
         --------
-        >>> external = [p for p in model.parameters if p.nature == fk.ParameterNature.EXTERNAL]
+        Using the setup in the ``Model`` class example:
+
+        >>> external = [p for p in model.parameters if p.nature == hep.ParameterNature.EXTERNAL]
         """
     @property
     def couplings(self) -> builtins.list[Coupling]:
@@ -4554,6 +6060,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> qed = [c for c in model.couplings if c.orders.get("QED", 0) > 0]
         """
     @property
@@ -4563,6 +6071,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> electron_vertices = [v for v in model.vertex_rules if "e-" in v.particles]
         """
     @property
@@ -4572,6 +6082,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> lorentz_by_name = {item.name: item for item in model.lorentz_structures}
         """
     @property
@@ -4581,7 +6093,9 @@ class Model:
 
         Examples
         --------
-        >>> propagator_particles = {item.particle for item in model.propagators}
+        Using the setup in the ``Model`` class example:
+
+        >>> propagators_by_name = {item.name: item for item in model.propagators}
         """
     @property
     def functions(self) -> builtins.list[ModelFunction]:
@@ -4590,6 +6104,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> functions = {function.name: function for function in model.functions}
         """
     @property
@@ -4599,6 +6115,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> form_factors = {factor.name: factor for factor in model.form_factors}
         """
     @staticmethod
@@ -4609,7 +6127,9 @@ class Model:
 
         Examples
         --------
-        >>> model = fk.Model.standard_model()
+        Using the setup in the ``Model`` class example:
+
+        >>> model = hep.Model.standard_model()
         """
     @staticmethod
     def qcd() -> Model:
@@ -4619,7 +6139,9 @@ class Model:
 
         Examples
         --------
-        >>> model = fk.Model.qcd()
+        Using the setup in the ``Model`` class example:
+
+        >>> model = hep.Model.qcd()
         """
     @staticmethod
     def qed() -> Model:
@@ -4629,7 +6151,9 @@ class Model:
 
         Examples
         --------
-        >>> model = fk.Model.qed()
+        Using the setup in the ``Model`` class example:
+
+        >>> model = hep.Model.qed()
         """
     @staticmethod
     def electroweak() -> Model:
@@ -4639,7 +6163,9 @@ class Model:
 
         Examples
         --------
-        >>> model = fk.Model.electroweak()
+        Using the setup in the ``Model`` class example:
+
+        >>> model = hep.Model.electroweak()
         """
     @staticmethod
     def qcd_qed() -> Model:
@@ -4649,7 +6175,9 @@ class Model:
 
         Examples
         --------
-        >>> model = fk.Model.qcd_qed()
+        Using the setup in the ``Model`` class example:
+
+        >>> model = hep.Model.qcd_qed()
         """
     @staticmethod
     def yang_mills() -> Model:
@@ -4658,7 +6186,9 @@ class Model:
 
         Examples
         --------
-        >>> model = fk.Model.yang_mills()
+        Using the setup in the ``Model`` class example:
+
+        >>> model = hep.Model.yang_mills()
         """
     @staticmethod
     def phi3() -> Model:
@@ -4668,7 +6198,9 @@ class Model:
 
         Examples
         --------
-        >>> model = fk.Model.phi3()
+        Using the setup in the ``Model`` class example:
+
+        >>> model = hep.Model.phi3()
         """
     @staticmethod
     def phi4() -> Model:
@@ -4678,7 +6210,9 @@ class Model:
 
         Examples
         --------
-        >>> model = fk.Model.phi4()
+        Using the setup in the ``Model`` class example:
+
+        >>> model = hep.Model.phi4()
         """
     @staticmethod
     def phi_3_4() -> Model:
@@ -4688,7 +6222,9 @@ class Model:
 
         Examples
         --------
-        >>> model = fk.Model.phi_3_4()
+        Using the setup in the ``Model`` class example:
+
+        >>> model = hep.Model.phi_3_4()
         """
     @staticmethod
     def scalar_qed() -> Model:
@@ -4699,15 +6235,25 @@ class Model:
 
         Examples
         --------
-        >>> model = fk.Model.scalar_qed()
+        Using the setup in the ``Model`` class example:
+
+        >>> model = hep.Model.scalar_qed()
         """
     def __new__(cls, path: builtins.str | os.PathLike | pathlib.Path) -> Model:
         r"""
-        Load a model from a normalized FeynKit JSON file.
+        Load a model from a normalized HEP JSON file.
 
         Examples
         --------
-        >>> model = fk.Model("model.json")
+        Using the setup in the ``Model`` class example:
+
+        >>> from pathlib import Path
+        >>> from tempfile import TemporaryDirectory
+        >>> with TemporaryDirectory() as directory:
+        ...     path = Path(directory) / "model.json"
+        ...     model.write_json(path)
+        ...     restored = hep.Model(path)
+        ...     assert restored.name == model.name
 
         Parameters
         ----------
@@ -4721,7 +6267,11 @@ class Model:
 
         Examples
         --------
-        >>> model = fk.Model.from_json(model_json)
+        Using the setup in the ``Model`` class example:
+
+        >>> model_json = model.to_json()
+        >>> restored = hep.Model.from_json(model_json)
+        >>> assert restored.name == model.name
 
         Parameters
         ----------
@@ -4736,7 +6286,9 @@ class Model:
 
         Examples
         --------
-        >>> process = model.process(["e-", "e+"], ["a", "a"], vertex_allow=["V_98"])
+        Using the setup in the ``Model`` class example:
+
+        >>> process = model.process(["e-", "e+"], ["a", "a"])
         >>> amplitude = process.generate_amplitude(loops=0)
 
         Parameters
@@ -4758,7 +6310,10 @@ class Model:
 
         Examples
         --------
-        >>> particle = model.particle("electron")
+        Using the setup in the ``Model`` class example:
+
+        >>> electron = model.particle("e-")
+        >>> assert electron.pdg_code == 11
 
         Parameters
         ----------
@@ -4771,6 +6326,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> particle = model.particle_by_pdg(11)
 
         Parameters
@@ -4784,7 +6341,10 @@ class Model:
 
         Examples
         --------
-        >>> parameter = model.parameter("mass")
+        Using the setup in the ``Model`` class example:
+
+        >>> mass = model.parameter("MM")
+        >>> assert mass.nature == hep.ParameterNature.EXTERNAL
 
         Parameters
         ----------
@@ -4797,6 +6357,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> coupling = model.coupling("GC_1")
 
         Parameters
@@ -4810,6 +6372,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> vertex = model.vertex_rule("V_1")
 
         Parameters
@@ -4823,6 +6387,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> lorentz = model.lorentz_structure("FFV1")
 
         Parameters
@@ -4836,7 +6402,10 @@ class Model:
 
         Examples
         --------
-        >>> propagator = model.propagator("electron")
+        Using the setup in the ``Model`` class example:
+
+        >>> name = model.propagators[0].name
+        >>> propagator = model.propagator(name)
 
         Parameters
         ----------
@@ -4849,7 +6418,9 @@ class Model:
 
         Examples
         --------
-        >>> function = model.function("complexconjugate")
+        Using ``model`` from the class example. A model may have no helper functions:
+
+        >>> functions = [model.function(item.name) for item in model.functions]
 
         Parameters
         ----------
@@ -4862,7 +6433,9 @@ class Model:
 
         Examples
         --------
-        >>> form_factor = model.form_factor("FF_1")
+        Using ``model`` from the class example. A model may have no form factors:
+
+        >>> form_factors = [model.form_factor(item.name) for item in model.form_factors]
 
         Parameters
         ----------
@@ -4875,6 +6448,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> card = model.default_parameter_card()
         """
     def with_parameter_card(self, card: ParameterCard, evaluator: collections.abc.Callable[[EvaluationRequest], EvaluatedValues] | None = None) -> Model:
@@ -4883,6 +6458,10 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
+        >>> card = model.default_parameter_card()
+        >>> card.set("MM", 0.105658, 0.0)
         >>> updated = model.with_parameter_card(card)
 
         Parameters
@@ -4898,7 +6477,22 @@ class Model:
 
         Examples
         --------
-        >>> recomputed = model.recompute_with(evaluate)
+        This callback evaluates the built-in scalar model at its default coupling
+        ``lam=1``. See ``EvaluationRequest`` for callback inputs.
+
+        >>> from symbolica import S, E
+        >>> from symbolica.community import hep
+        >>> model = hep.Model.phi4()
+        >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+        >>> requests = []
+        >>> def evaluate(request):
+        ...     requests.append(request)
+        ...     return hep.EvaluatedValues(
+        ...         couplings={"SCALAR_COUPLING": (0.0, -1.0)},
+        ...     )
+        >>> updated_model = model.recompute_with(evaluate)
+        >>> request = requests[0]
+        >>> formulas = {item.name: item.expression for item in request.couplings}
 
         Parameters
         ----------
@@ -4911,6 +6505,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> model.to_json(pretty=False)
 
         Parameters
@@ -4924,6 +6520,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> model.write_json("model.json")
 
         Parameters
@@ -4937,6 +6535,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> print(model)
         """
     def _repr_html_(self) -> builtins.str:
@@ -4945,8 +6545,10 @@ class Model:
 
         Examples
         --------
-        Leave ``model`` as the final expression in a notebook cell to display
-        its particle-content and interaction counts.
+        Using the setup in the ``Model`` class example:
+
+        >>> from IPython.display import display
+        >>> display(model)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -4954,7 +6556,10 @@ class Model:
 
         Examples
         --------
-        IPython invokes this method when only a text representation is supported.
+        Using the setup in the ``Model`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(model)
 
         Parameters
         ----------
@@ -4966,20 +6571,20 @@ class Model:
     @typing.overload
     def expand_couplings(self, expression: TensorExpression) -> TensorExpression:
         r"""
-        Expand UFO coefficients while preserving the ordered tensor interface.
+        Replace named UFO coefficients by their analytic model expressions.
 
-        Tensor zeros retain their original ports. The input is unchanged.
+        The input and the stored model are unchanged.
 
         Examples
         --------
-        >>> numerator = diagram.numerator_expression()
-        >>> analytic = model.expand_couplings(numerator)
-        >>> assert analytic.structure.slots == numerator.structure.slots
+        Using the setup in the ``Model`` class example:
+
+        >>> analytic = model.expand_couplings(S("UFO::GC_11"))
 
         Parameters
         ----------
-        expression : TensorExpression
-            Tensor expression containing named couplings from this model.
+        expression : Expression
+            Symbolica expression containing named couplings from this model.
         """
     @typing.overload
     def expand_couplings(self, expression: Expression) -> Expression:
@@ -4990,6 +6595,8 @@ class Model:
 
         Examples
         --------
+        Using the setup in the ``Model`` class example:
+
         >>> analytic = model.expand_couplings(S("UFO::GC_11"))
 
         Parameters
@@ -5004,12 +6611,13 @@ class ModelError(FeynkitError):
 
     Examples
     --------
-    A missing particle is reported as a model error:
-
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
     >>> try:
     ...     model.particle_by_pdg(999999)
-    ... except fk.ModelError:
-    ...     pass
+    ... except hep.ModelError as error:
+    ...     message = str(error)
     """
     ...
 
@@ -5023,19 +6631,43 @@ class ModelExpression:
 
     Examples
     --------
-    >>> coupling_formulas = {
-    ...     item.name: item.expression for item in request.couplings
-    ... }
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> requests = []
+    >>> def evaluate(request):
+    ...     requests.append(request)
+    ...     return hep.EvaluatedValues(
+    ...         couplings={"SCALAR_COUPLING": (0.0, -1.0)},
+    ...     )
+    >>> updated_model = model.recompute_with(evaluate)
+    >>> request = requests[0]
+    >>> item = request.couplings[0]
+    >>> formula = item.expression
+    >>> name = item.name
     """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the name assigned to the expression.
+
+        Examples
+        --------
+        Using the setup in the ``ModelExpression`` class example:
+
+        >>> formulas = {item.name: item.expression for item in request.couplings}
         """
     @property
     def expression(self) -> Expression:
         r"""
         Return the symbolic expression text.
+
+        Examples
+        --------
+        Using the setup in the ``ModelExpression`` class example:
+
+        >>> formula = item.expression
         """
 
 @typing.final
@@ -5048,14 +6680,21 @@ class ModelFunction:
 
     Examples
     --------
-    >>> function = next(iter(model.functions))
-    >>> function.arguments
-    ['z']
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
+    >>> functions = {function.name: function.arguments for function in model.functions}
     """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the function name.
+
+        Examples
+        --------
+        Using the setup in the ``ModelFunction`` class example:
+
+        >>> names = [function.name for function in model.functions]
         """
     @property
     def arguments(self) -> builtins.list[builtins.str]:
@@ -5064,13 +6703,20 @@ class ModelFunction:
 
         Examples
         --------
-        >>> function = model.functions[0]
-        >>> argument_slots = dict.fromkeys(function.arguments)
+        Using the setup in the ``ModelFunction`` class example:
+
+        >>> arguments_by_name = {function.name: function.arguments for function in model.functions}
         """
     @property
     def expression(self) -> typing.Optional[Expression]:
         r"""
         Return the function body, when one is defined by the model.
+
+        Examples
+        --------
+        Using the setup in the ``ModelFunction`` class example:
+
+        >>> implementations = {function.name: function.expression for function in model.functions}
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -5078,7 +6724,9 @@ class ModelFunction:
 
         Examples
         --------
-        >>> print(model.functions[0])
+        Using the setup in the ``ModelFunction`` class example:
+
+        >>> summaries = [repr(function) for function in model.functions]
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -5086,7 +6734,10 @@ class ModelFunction:
 
         Examples
         --------
-        Leave this object as the final expression in a notebook cell.
+        Using the setup in the ``ModelFunction`` class example:
+
+        >>> from IPython.display import display
+        >>> display(model.functions)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -5094,7 +6745,10 @@ class ModelFunction:
 
         Examples
         --------
-        IPython calls this automatically when formatting model members in lists.
+        Using the setup in the ``ModelFunction`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(model.functions)
 
         Parameters
         ----------
@@ -5114,19 +6768,38 @@ class MomentumSignature:
 
     Examples
     --------
-    >>> basis = next(iter(diagram.loop_momentum_bases(limit=1)))
-    >>> edge_id, signature = next(iter(basis.edge_signatures.items()))
-    >>> print(f"q_{edge_id} = {signature.format_momentum()}")
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
+    >>> basis = diagram.loop_momentum_basis
+    >>> edge_id = basis.loop_edges[0]
+    >>> signature = basis.edge_signatures[edge_id]
+    >>> routing = signature.format_momentum()
     """
     @property
     def loops(self) -> builtins.list[builtins.int]:
         r"""
         Return the integer coefficients of the independent loop momenta.
+
+        Examples
+        --------
+        Using the setup in the ``MomentumSignature`` class example:
+
+        >>> assert len(signature.loops) == diagram.loop_count
         """
     @property
     def external(self) -> builtins.list[builtins.int]:
         r"""
         Return the integer coefficients of the external momenta.
+
+        Examples
+        --------
+        Using the setup in the ``MomentumSignature`` class example:
+
+        >>> external_coefficients = signature.external
         """
     def integer_coefficients(self) -> tuple[builtins.list[builtins.int], builtins.list[builtins.int]]:
         r"""
@@ -5134,6 +6807,8 @@ class MomentumSignature:
 
         Examples
         --------
+        Using the setup in the ``MomentumSignature`` class example:
+
         >>> signature = next(iter(basis.edge_signatures.values()))
         >>> loops, external = signature.integer_coefficients()
         >>> print("loop coefficients:", loops, "external coefficients:", external)
@@ -5144,6 +6819,8 @@ class MomentumSignature:
 
         Examples
         --------
+        Using the setup in the ``MomentumSignature`` class example:
+
         Print the momentum routing assigned to every propagator:
 
         >>> for edge_id, signature in basis.edge_signatures.items():
@@ -5155,6 +6832,8 @@ class MomentumSignature:
 
         Examples
         --------
+        Using the setup in the ``MomentumSignature`` class example:
+
         >>> signature = next(iter(basis.edge_signatures.values()))
         >>> print(f"propagator momentum: {signature}")
         """
@@ -5164,6 +6843,8 @@ class MomentumSignature:
 
         Examples
         --------
+        Using the setup in the ``MomentumSignature`` class example:
+
         >>> edge_id, signature = next(iter(basis.edge_signatures.items()))
         >>> print(f"edge {edge_id}: {signature!r}")
         """
@@ -5173,7 +6854,10 @@ class MomentumSignature:
 
         Examples
         --------
-        IPython calls this method when formatting a signature for text display.
+        Using the setup in the ``MomentumSignature`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(signature)
 
         Parameters
         ----------
@@ -5190,7 +6874,9 @@ class NumeratorGrouping:
 
     Examples
     --------
-    >>> fk.NumeratorGrouping("identical", number_of_numerical_samples=7)
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> hep.NumeratorGrouping("identical", number_of_numerical_samples=7)
 
     Parameters
     ----------
@@ -5216,7 +6902,9 @@ class NumeratorGrouping:
 
         Examples
         --------
-        >>> fk.NumeratorGrouping("identical", number_of_numerical_samples=7)
+        Using the setup in the ``NumeratorGrouping`` class example:
+
+        >>> hep.NumeratorGrouping("identical", number_of_numerical_samples=7)
 
         Parameters
         ----------
@@ -5247,14 +6935,22 @@ class Parameter:
 
     Examples
     --------
-    >>> mass = model.parameter("MMU")
-    >>> mass.nature
-    ParameterNature.EXTERNAL
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
+    >>> mass = model.parameter("MM")
+    >>> assert mass.nature == hep.ParameterNature.EXTERNAL
     """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the parameter name.
+
+        Examples
+        --------
+        Using the setup in the ``Parameter`` class example:
+
+        >>> assert mass.name == "MM"
         """
     @property
     def texname(self) -> typing.Optional[builtins.str]:
@@ -5262,8 +6958,15 @@ class Parameter:
         The model's LaTeX display label, or None when no label was supplied.
         MiTeX renders this label in Typst and notebook math output.
 
-        >>> Model.standard_model().parameter("ee").texname
+        >>> hep.Model.standard_model().parameter("ee").texname
         'e'
+
+        Examples
+        --------
+        Using the setup in the ``Parameter`` class example:
+
+        >>> label = model.parameter("ee").texname
+        >>> assert label == "e"
         """
     @property
     def lhablock(self) -> typing.Optional[builtins.str]:
@@ -5272,6 +6975,8 @@ class Parameter:
 
         Examples
         --------
+        Using the setup in the ``Parameter`` class example:
+
         >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
         >>> mass.lhablock
         'MASS'
@@ -5283,6 +6988,8 @@ class Parameter:
 
         Examples
         --------
+        Using the setup in the ``Parameter`` class example:
+
         >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
         >>> mass.lhacode
         [13]
@@ -5294,8 +7001,10 @@ class Parameter:
 
         Examples
         --------
+        Using the setup in the ``Parameter`` class example:
+
         >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
-        >>> mass.nature == fk.ParameterNature.EXTERNAL
+        >>> mass.nature == hep.ParameterNature.EXTERNAL
         True
         """
     @property
@@ -5305,8 +7014,10 @@ class Parameter:
 
         Examples
         --------
+        Using the setup in the ``Parameter`` class example:
+
         >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
-        >>> mass.parameter_type == fk.ParameterType.REAL
+        >>> mass.parameter_type == hep.ParameterType.REAL
         True
         """
     @property
@@ -5318,7 +7029,9 @@ class Parameter:
 
         Examples
         --------
-        >>> mass_value = model.parameter("MMU").value
+        Using the setup in the ``Parameter`` class example:
+
+        >>> mass_value = model.parameter("MM").value
         >>> print("mass:", mass_value.real, "width component:", mass_value.imag)
         """
     @property
@@ -5328,6 +7041,8 @@ class Parameter:
 
         Examples
         --------
+        Using the setup in the ``Parameter`` class example:
+
         >>> internal = next(p for p in model.parameters if p.expression is not None)
         >>> formula = internal.expression
         """
@@ -5337,6 +7052,8 @@ class Parameter:
 
         Examples
         --------
+        Using the setup in the ``Parameter`` class example:
+
         >>> print(model.parameter(model.particle_by_pdg(13).mass_parameter))
         """
     def _repr_html_(self) -> builtins.str:
@@ -5345,7 +7062,10 @@ class Parameter:
 
         Examples
         --------
-        Leave this object as the final expression in a notebook cell.
+        Using the setup in the ``Parameter`` class example:
+
+        >>> from IPython.display import display
+        >>> display(mass)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -5353,7 +7073,10 @@ class Parameter:
 
         Examples
         --------
-        IPython calls this automatically when formatting model members in lists.
+        Using the setup in the ``Parameter`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(mass)
 
         Parameters
         ----------
@@ -5373,8 +7096,11 @@ class ParameterCard:
 
     Examples
     --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
     >>> card = model.default_parameter_card()
-    >>> card.set("MMU", 0.105658, 0.0)
+    >>> card.set("MM", 0.105658, 0.0)
     >>> shifted_model = model.with_parameter_card(card)
     """
     def __new__(cls) -> ParameterCard:
@@ -5383,7 +7109,9 @@ class ParameterCard:
 
         Examples
         --------
-        >>> card = ParameterCard()
+        Using the setup in the ``ParameterCard`` class example:
+
+        >>> card = hep.ParameterCard()
         """
     @staticmethod
     def from_json(json: builtins.str) -> ParameterCard:
@@ -5392,7 +7120,9 @@ class ParameterCard:
 
         Examples
         --------
-        >>> card = ParameterCard.from_json('{"mass": [1.0, 0.0]}')
+        Using the setup in the ``ParameterCard`` class example:
+
+        >>> card = hep.ParameterCard.from_json('{"mass": [1.0, 0.0]}')
 
         Parameters
         ----------
@@ -5406,7 +7136,14 @@ class ParameterCard:
 
         Examples
         --------
-        >>> card = ParameterCard.from_path("parameters.json")
+        Using the setup in the ``ParameterCard`` class example:
+
+        >>> from pathlib import Path
+        >>> from tempfile import TemporaryDirectory
+        >>> with TemporaryDirectory() as directory:
+        ...     path = Path(directory) / "parameters.json"
+        ...     path.write_text(card.to_json())
+        ...     restored = hep.ParameterCard.from_path(path)
 
         Parameters
         ----------
@@ -5419,6 +7156,8 @@ class ParameterCard:
 
         Examples
         --------
+        Using the setup in the ``ParameterCard`` class example:
+
         >>> card.get("mass")
 
         Parameters
@@ -5432,6 +7171,8 @@ class ParameterCard:
 
         Examples
         --------
+        Using the setup in the ``ParameterCard`` class example:
+
         >>> card.set("mass", 1.0)
 
         Parameters
@@ -5449,6 +7190,8 @@ class ParameterCard:
 
         Examples
         --------
+        Using the setup in the ``ParameterCard`` class example:
+
         >>> card.remove("mass")
 
         Parameters
@@ -5462,6 +7205,8 @@ class ParameterCard:
 
         Examples
         --------
+        Using the setup in the ``ParameterCard`` class example:
+
         >>> card.items()
         """
     def to_json(self, pretty: builtins.bool = True) -> builtins.str:
@@ -5470,6 +7215,8 @@ class ParameterCard:
 
         Examples
         --------
+        Using the setup in the ``ParameterCard`` class example:
+
         >>> card.to_json(pretty=False)
 
         Parameters
@@ -5483,6 +7230,8 @@ class ParameterCard:
 
         Examples
         --------
+        Using the setup in the ``ParameterCard`` class example:
+
         >>> card.write_json("parameters.json")
 
         Parameters
@@ -5496,6 +7245,8 @@ class ParameterCard:
 
         Examples
         --------
+        Using the setup in the ``ParameterCard`` class example:
+
         >>> number_of_external_inputs = len(model.default_parameter_card())
         """
 
@@ -5510,19 +7261,33 @@ class Particle:
 
     Examples
     --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
     >>> electron = model.particle_by_pdg(11)
-    >>> electron.name
-    'e-'
+    >>> assert electron.name == "e-"
     """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the particle name used by the model.
+
+        Examples
+        --------
+        Using the setup in the ``Particle`` class example:
+
+        >>> assert electron.name == "e-"
         """
     @property
     def antiname(self) -> builtins.str:
         r"""
         Return the name of the corresponding antiparticle.
+
+        Examples
+        --------
+        Using the setup in the ``Particle`` class example:
+
+        >>> assert electron.antiname == "e+"
         """
     @property
     def antiparticle(self) -> Particle:
@@ -5533,6 +7298,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> electron = model.particle_by_pdg(11)
         >>> electron.antiparticle.name
         'e+'
@@ -5546,6 +7313,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle("e-").pdg_code
         11
         """
@@ -5556,6 +7325,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle_by_pdg(11).spin  # spin-1/2 electron
         2
         """
@@ -5566,6 +7337,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle_by_pdg(11).color  # color-singlet electron
         1
         """
@@ -5576,6 +7349,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> particle = model.particle_by_pdg(13)
         >>> mass = model.parameter(particle.mass_parameter)
         """
@@ -5586,6 +7361,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> particle = model.particle_by_pdg(23)
         >>> width = model.parameter(particle.width_parameter)
         """
@@ -5597,6 +7374,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle("c").mass_expression
         """
     @property
@@ -5606,6 +7385,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle("c").charge
         """
     @property
@@ -5616,6 +7397,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle("c").y_charge
         """
     @property
@@ -5625,6 +7408,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle("c").y_charge_right
         """
     @property
@@ -5635,6 +7420,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle("c").weak_isospin
         """
     @property
@@ -5644,6 +7431,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle("c").weak_isospin_right
         """
     @property
@@ -5653,6 +7442,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle_by_pdg(11).is_antiparticle
         False
         """
@@ -5663,6 +7454,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle_by_pdg(22).is_self_antiparticle
         True
         """
@@ -5673,6 +7466,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle_by_pdg(11).is_fermion
         True
         """
@@ -5683,6 +7478,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> model.particle_by_pdg(22).is_massless
         True
         """
@@ -5700,6 +7497,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> from symbolica import S
         >>> i, j = S("i", "j")
         >>> color_projector = model.particle_by_pdg(5).color_sum(i, j, average=True)
@@ -5749,6 +7548,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> from symbolica import S
         >>> p, i, j = S("p", "i", "j")
         >>> projector = model.particle("e-").spin_sum(p, i, j, average=True)
@@ -5806,10 +7607,15 @@ class Particle:
 
         Examples
         --------
-        >>> from symbolica import S
-        >>> p = S("p")
+        Using the setup in the ``Particle`` class example:
+
+        >>> from symbolica import S, E
+        >>> from symbolica.community import hep
+        >>> model = hep.Model.standard_model()
+        >>> diagram = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams().diagrams[0]
+        >>> electron = model.particle("e-")
         >>> projector = diagram.projector_expression()
-        >>> summed = model.particle("e-").sum_spins(projector, p, edge=0, average=True)
+        >>> spin_summed = electron.sum_spins(projector, S("gammalooprs::P")(1), edge=1)
 
         Parameters
         ----------
@@ -5849,6 +7655,8 @@ class Particle:
 
         Examples
         --------
+        Using the setup in the ``Particle`` class example:
+
         >>> print(model.particle_by_pdg(11))
         """
     def _repr_html_(self) -> builtins.str:
@@ -5857,7 +7665,10 @@ class Particle:
 
         Examples
         --------
-        Leave this object as the final expression in a notebook cell.
+        Using the setup in the ``Particle`` class example:
+
+        >>> from IPython.display import display
+        >>> display(electron)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -5865,7 +7676,10 @@ class Particle:
 
         Examples
         --------
-        IPython calls this automatically when formatting model members in lists.
+        Using the setup in the ``Particle`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(electron)
 
         Parameters
         ----------
@@ -5885,9 +7699,9 @@ class ParticleSelector:
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> electron = fk.ParticleSelector.by_pdg(11)
-    >>> positron = fk.ParticleSelector.by_name("e+")
+    >>> from symbolica.community import hep
+    >>> electron = hep.ParticleSelector.by_pdg(11)
+    >>> positron = hep.ParticleSelector.by_name("e+")
     """
     @property
     def name(self) -> builtins.str:
@@ -5896,6 +7710,12 @@ class ParticleSelector:
 
         Raises :class:`TypeError` for a PDG selector. Use :attr:`is_name` to
         distinguish the selector variants before accessing their payloads.
+
+        Examples
+        --------
+        Using the setup in the ``ParticleSelector`` class example:
+
+        >>> assert hep.ParticleSelector.by_name("e-").name == "e-"
         """
     @property
     def pdg(self) -> builtins.int:
@@ -5904,16 +7724,34 @@ class ParticleSelector:
 
         Raises :class:`TypeError` for a name selector. Use :attr:`is_pdg` to
         distinguish the selector variants before accessing their payloads.
+
+        Examples
+        --------
+        Using the setup in the ``ParticleSelector`` class example:
+
+        >>> assert hep.ParticleSelector.by_pdg(11).pdg == 11
         """
     @property
     def is_name(self) -> builtins.bool:
         r"""
         Report whether this selector identifies a particle by name.
+
+        Examples
+        --------
+        Using the setup in the ``ParticleSelector`` class example:
+
+        >>> assert hep.ParticleSelector.by_name("e-").is_name
         """
     @property
     def is_pdg(self) -> builtins.bool:
         r"""
         Report whether this selector identifies a particle by PDG code.
+
+        Examples
+        --------
+        Using the setup in the ``ParticleSelector`` class example:
+
+        >>> assert hep.ParticleSelector.by_pdg(11).is_pdg
         """
     @staticmethod
     def by_name(name: builtins.str) -> ParticleSelector:
@@ -5922,7 +7760,9 @@ class ParticleSelector:
 
         Examples
         --------
-        >>> fk.ParticleSelector.by_name("e-").name
+        Using the setup in the ``ParticleSelector`` class example:
+
+        >>> hep.ParticleSelector.by_name("e-").name
         'e-'
 
         Parameters
@@ -5937,7 +7777,9 @@ class ParticleSelector:
 
         Examples
         --------
-        >>> fk.ParticleSelector.by_pdg(11).pdg
+        Using the setup in the ``ParticleSelector`` class example:
+
+        >>> hep.ParticleSelector.by_pdg(11).pdg
         11
 
         Parameters
@@ -5951,7 +7793,9 @@ class ParticleSelector:
 
         Examples
         --------
-        >>> str(fk.ParticleSelector.by_pdg(11))
+        Using the setup in the ``ParticleSelector`` class example:
+
+        >>> str(hep.ParticleSelector.by_pdg(11))
         '11'
         """
     def __repr__(self) -> builtins.str:
@@ -5960,7 +7804,9 @@ class ParticleSelector:
 
         Examples
         --------
-        >>> print(fk.ParticleSelector.by_pdg(11))  # electron selector in a process
+        Using the setup in the ``ParticleSelector`` class example:
+
+        >>> print(hep.ParticleSelector.by_pdg(11))  # electron selector in a process
         """
     def __eq__(self, other: typing.Any) -> builtins.bool:
         r"""
@@ -5968,7 +7814,9 @@ class ParticleSelector:
 
         Examples
         --------
-        >>> fk.ParticleSelector.by_pdg(11) == 11
+        Using the setup in the ``ParticleSelector`` class example:
+
+        >>> hep.ParticleSelector.by_pdg(11) == 11
         True
 
         Parameters
@@ -5988,29 +7836,56 @@ class Process:
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
     >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
-    >>> one_loop = process.generate_diagrams(loops=1)
+    >>> result = process.generate_diagrams(loops=0)
+    >>> assert result.report.completed
     """
     @property
     def model(self) -> Model:
         r"""
         The particle model supplying this process's Feynman rules.
+
+        Examples
+        --------
+        Using the setup in the ``Process`` class example:
+
+        >>> electron = process.model.particle("e-")
         """
     @property
     def particle_veto(self) -> builtins.list[ParticleSelector]:
         r"""
         The excluded particle selectors, shared by every generation operation.
+
+        Examples
+        --------
+        Using the setup in the ``Process`` class example:
+
+        >>> excluded_particles = process.particle_veto
         """
     @property
     def vertex_allow(self) -> typing.Optional[builtins.list[VertexRule]]:
         r"""
         Allowed model vertex rules; None permits every interaction.
+
+        Examples
+        --------
+        Using the setup in the ``Process`` class example:
+
+        >>> allowed_interactions = process.vertex_allow
         """
     @property
     def vertex_veto(self) -> builtins.list[VertexRule]:
         r"""
         Excluded model vertex rules.
+
+        Examples
+        --------
+        Using the setup in the ``Process`` class example:
+
+        >>> excluded_interactions = process.vertex_veto
         """
     @property
     def incoming(self) -> builtins.list[ParticleSelector]:
@@ -6019,13 +7894,20 @@ class Process:
 
         Examples
         --------
-        >>> [selector.pdg for selector in process.incoming]
-        [11, -11]
+        Using the setup in the ``Process`` class example:
+
+        >>> assert [selector.name for selector in process.incoming] == ["e-", "e+"]
         """
     @property
     def outgoing_alternatives(self) -> builtins.list[builtins.list[ParticleSelector]]:
         r"""
         Return every allowed ordered final-state alternative.
+
+        Examples
+        --------
+        Using the setup in the ``Process`` class example:
+
+        >>> alternatives = process.outgoing_alternatives
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -6033,8 +7915,10 @@ class Process:
 
         Examples
         --------
+        Using the setup in the ``Process`` class example:
+
         >>> repr(process)
-        'Process("sm": [e-, e+] -> [a, a])'
+        'Process("sm": [e-, e+] -> [mu-, mu+])'
         """
     def render(self, *, config: linnet.RenderConfig | None = None) -> builtins.str:
         r"""
@@ -6043,6 +7927,8 @@ class Process:
 
         Examples
         --------
+        Using the setup in the ``Process`` class example:
+
         >>> svg = process.render()
 
         Parameters
@@ -6056,7 +7942,10 @@ class Process:
 
         Examples
         --------
-        >>> process._repr_svg_()
+        Using the setup in the ``Process`` class example:
+
+        >>> from IPython.display import display
+        >>> display(process)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -6064,7 +7953,10 @@ class Process:
 
         Examples
         --------
-        Leave ``process`` as the final expression in a notebook cell.
+        Using the setup in the ``Process`` class example:
+
+        >>> from IPython.display import display
+        >>> display(process)
         """
     def with_final_state_alternatives(self, alternatives: typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]) -> Process:
         r"""
@@ -6074,6 +7966,8 @@ class Process:
 
         Examples
         --------
+        Using the setup in the ``Process`` class example:
+
         >>> process = model.process([11, -11], [22, 22])
         >>> inclusive = process.with_final_state_alternatives([[22, 22], [13, -13]])
 
@@ -6090,6 +7984,8 @@ class Process:
 
         Examples
         --------
+        Using the setup in the ``Process`` class example:
+
         >>> qed = process.with_filters(vertex_allow=["V_98"])
         >>> unrestricted = qed.with_filters(vertex_allow=None)
 
@@ -6113,6 +8009,8 @@ class Process:
 
         Examples
         --------
+        Using the setup in the ``Process`` class example:
+
         >>> result = process.generate_diagrams(max_vertices=6)
         >>> combined_numerator = result.diagrams[0].numerator_expression()
 
@@ -6217,6 +8115,8 @@ class Process:
 
         Examples
         --------
+        Using the setup in the ``Process`` class example:
+
         >>> result = process.generate_amplitude(max_vertices=6)
         >>> operator = result.expression()
 
@@ -6325,7 +8225,14 @@ class Process:
 
         Examples
         --------
-        >>> result = process.generate_cross_section(max_vertices=6)
+        A two-particle tree cut has one loop after the amplitude sides are sewn:
+
+        >>> from symbolica import S, E
+        >>> from symbolica.community import hep
+        >>> model = hep.Model.phi4()
+        >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+        >>> result = process.generate_cross_section(loops=1)
+        >>> assert result.diagrams[0].cuts
         >>> combined_numerator = result.diagrams[0].numerator_expression()
 
         Parameters
@@ -6428,13 +8335,22 @@ class Propagator:
 
     Examples
     --------
-    >>> propagator = next(iter(model.propagators))
-    >>> propagator.numerator / propagator.denominator
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
+    >>> propagator = model.propagators[0]
+    >>> formula = propagator.numerator / propagator.denominator
     """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the propagator name.
+
+        Examples
+        --------
+        Using the setup in the ``Propagator`` class example:
+
+        >>> propagators_by_name = {item.name: item for item in model.propagators}
         """
     @property
     def particle(self) -> builtins.str:
@@ -6443,6 +8359,8 @@ class Propagator:
 
         Examples
         --------
+        Using the setup in the ``Propagator`` class example:
+
         >>> propagator = model.propagators[0]
         >>> particle = model.particle(propagator.particle)
         """
@@ -6450,11 +8368,23 @@ class Propagator:
     def numerator(self) -> Expression:
         r"""
         Return the symbolic propagator numerator.
+
+        Examples
+        --------
+        Using the setup in the ``Propagator`` class example:
+
+        >>> formula = propagator.numerator / propagator.denominator
         """
     @property
     def denominator(self) -> Expression:
         r"""
         Return the symbolic propagator denominator.
+
+        Examples
+        --------
+        Using the setup in the ``Propagator`` class example:
+
+        >>> inverse_propagator = propagator.denominator
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -6462,6 +8392,8 @@ class Propagator:
 
         Examples
         --------
+        Using the setup in the ``Propagator`` class example:
+
         >>> print(model.propagators[0])
         """
     def _repr_html_(self) -> builtins.str:
@@ -6470,7 +8402,10 @@ class Propagator:
 
         Examples
         --------
-        Leave this object as the final expression in a notebook cell.
+        Using the setup in the ``Propagator`` class example:
+
+        >>> from IPython.display import display
+        >>> display(propagator)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -6478,7 +8413,10 @@ class Propagator:
 
         Examples
         --------
-        IPython calls this automatically when formatting model members in lists.
+        Using the setup in the ``Propagator`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(propagator)
 
         Parameters
         ----------
@@ -6499,14 +8437,33 @@ class PropagatorMapping:
 
     Examples
     --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> D, k, p, s = S("D", "k", "p", "s")
+    >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
+    >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
+    >>> denominators = [kin.scalar_product(k, k), kin.scalar_product(k-p, k-p)]
+    >>> family = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
+    >>> m2 = S("m2")
+    >>> denominators = [denominators[0] - m2, denominators[1]]
+    >>> source = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
+    >>> target = hep.IntegralFamily([k], [p], list(reversed(denominators)), kinematics=kin)
     >>> mapping = source.parametric_mapping(target, [x1, x2])
-    >>> if mapping is not None:
-    ...     print(mapping.denominator_map, mapping.map_powers([1, 2]))
+    >>> assert mapping is not None
+    >>> target_powers = mapping.map_powers([1, 2])
+    >>> assert target_powers == [2, 1]
     """
     @property
     def denominator_map(self) -> builtins.list[builtins.int]:
         r"""
         Zero-based target denominator index for each source denominator.
+
+        Examples
+        --------
+        Using the setup in the ``PropagatorMapping`` class example:
+
+        >>> slot_map = mapping.denominator_map
+        >>> mapped_powers = mapping.map_powers([1, 2])
         """
     def map_powers(self, powers: typing.Sequence[builtins.int]) -> builtins.list[builtins.int]:
         r"""
@@ -6514,6 +8471,8 @@ class PropagatorMapping:
 
         Examples
         --------
+        Using the setup in the ``PropagatorMapping`` class example:
+
         >>> reordered = mapping.map_powers([1, -2])
 
         Parameters
@@ -6532,9 +8491,9 @@ class Rotation:
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> rotation = fk.Rotation.quarter_turn(fk.Axis.Z)
-    >>> rotated = rotation.apply_three(fk.ThreeMomentum(1.0, 0.0, 0.0))
+    >>> from symbolica.community import hep
+    >>> rotation = hep.Rotation.quarter_turn(hep.Axis.Z)
+    >>> rotated = rotation.apply_three(hep.ThreeMomentum(1.0, 0.0, 0.0))
     """
     @staticmethod
     def identity() -> Rotation:
@@ -6543,7 +8502,9 @@ class Rotation:
 
         Examples
         --------
-        >>> rotation = Rotation.identity()
+        Using the setup in the ``Rotation`` class example:
+
+        >>> rotation = hep.Rotation.identity()
         """
     @staticmethod
     def euler(alpha: builtins.float, beta: builtins.float, gamma: builtins.float) -> Rotation:
@@ -6552,7 +8513,9 @@ class Rotation:
 
         Examples
         --------
-        >>> rotation = Rotation.euler(0.1, 0.2, 0.3)
+        Using the setup in the ``Rotation`` class example:
+
+        >>> rotation = hep.Rotation.euler(0.1, 0.2, 0.3)
 
         Parameters
         ----------
@@ -6570,7 +8533,9 @@ class Rotation:
 
         Examples
         --------
-        >>> rotation = Rotation.quarter_turn(Axis.Z)
+        Using the setup in the ``Rotation`` class example:
+
+        >>> rotation = hep.Rotation.quarter_turn(hep.Axis.Z)
 
         Parameters
         ----------
@@ -6583,7 +8548,10 @@ class Rotation:
 
         Examples
         --------
-        >>> rotated = Rotation.quarter_turn(Axis.Z).apply_three(momentum)
+        Using the setup in the ``Rotation`` class example:
+
+        >>> momentum = hep.ThreeMomentum(1.0, 0.0, 0.0)
+        >>> rotated = rotation.apply_three(momentum)
 
         Parameters
         ----------
@@ -6596,7 +8564,10 @@ class Rotation:
 
         Examples
         --------
-        >>> rotated = Rotation.quarter_turn(Axis.Z).apply_four(momentum)
+        Using the setup in the ``Rotation`` class example:
+
+        >>> momentum = hep.FourMomentum(2.0, 1.0, 0.0, 0.0)
+        >>> rotated = rotation.apply_four(momentum)
 
         Parameters
         ----------
@@ -6609,6 +8580,9 @@ class Rotation:
 
         Examples
         --------
+        Using the setup in the ``Rotation`` class example:
+
+        >>> momentum = hep.ThreeMomentum(1.0, 0.0, 0.0)
         >>> original = rotation.apply_inverse_three(rotation.apply_three(momentum))
 
         Parameters
@@ -6622,6 +8596,9 @@ class Rotation:
 
         Examples
         --------
+        Using the setup in the ``Rotation`` class example:
+
+        >>> momentum = hep.FourMomentum(2.0, 1.0, 0.0, 0.0)
         >>> original = rotation.apply_inverse_four(rotation.apply_four(momentum))
 
         Parameters
@@ -6637,7 +8614,9 @@ class SelfEnergyFilterOptions:
 
     Examples
     --------
-    >>> fk.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> hep.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
 
     Parameters
     ----------
@@ -6654,7 +8633,9 @@ class SelfEnergyFilterOptions:
 
         Examples
         --------
-        >>> fk.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
+        Using the setup in the ``SelfEnergyFilterOptions`` class example:
+
+        >>> hep.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
 
         Parameters
         ----------
@@ -6673,7 +8654,9 @@ class SnailFilterOptions:
 
     Examples
     --------
-    >>> fk.SnailFilterOptions(veto_attached_to_massless=True)
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> hep.SnailFilterOptions(veto_attached_to_massless=True)
 
     Parameters
     ----------
@@ -6690,7 +8673,9 @@ class SnailFilterOptions:
 
         Examples
         --------
-        >>> fk.SnailFilterOptions(veto_attached_to_massless=True)
+        Using the setup in the ``SnailFilterOptions`` class example:
+
+        >>> hep.SnailFilterOptions(veto_attached_to_massless=True)
 
         Parameters
         ----------
@@ -6712,7 +8697,14 @@ class SquaredAmplitude:
 
     Examples
     --------
-    >>> squared = Amplitude(generated.diagrams).squared()
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> generated = process.generate_diagrams()
+    >>> diagram = generated.diagrams[0]
+    >>> amplitude = hep.Amplitude(generated.diagrams)
+    >>> squared = amplitude.squared()
     >>> unpolarized = squared.sum_spins(average_initial=True).sum_colors(average_initial=True)
     >>> tensor = unpolarized.expression()
     """
@@ -6720,16 +8712,36 @@ class SquaredAmplitude:
     def amplitude(self) -> Amplitude:
         r"""
         The original coherent amplitude and its source diagrams.
+
+        Examples
+        --------
+        Using the setup in the ``SquaredAmplitude`` class example:
+
+        >>> source_diagrams = squared.amplitude.diagrams
         """
     @property
     def spin_summed(self) -> builtins.list[builtins.int]:
         r"""
         External labels whose spin states have been summed.
+
+        Examples
+        --------
+        Using the setup in the ``SquaredAmplitude`` class example:
+
+        >>> summed = squared.sum_spins()
+        >>> assert set(summed.spin_summed) == {leg.index for leg in amplitude.legs}
         """
     @property
     def color_summed(self) -> builtins.list[builtins.int]:
         r"""
         External labels whose color states have been summed.
+
+        Examples
+        --------
+        Using the setup in the ``SquaredAmplitude`` class example:
+
+        >>> summed = squared.sum_colors()
+        >>> assert set(summed.color_summed) == {leg.index for leg in amplitude.legs}
         """
     @staticmethod
     def from_diagram(diagram: FeynmanDiagram, *, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, real: typing.Optional[typing.Sequence[Expression]] = None) -> SquaredAmplitude:
@@ -6738,7 +8750,9 @@ class SquaredAmplitude:
 
         Examples
         --------
-        >>> squared = SquaredAmplitude.from_diagram(diagram)
+        Using the setup in the ``SquaredAmplitude`` class example:
+
+        >>> squared = hep.SquaredAmplitude.from_diagram(diagram)
 
         Parameters
         ----------
@@ -6755,6 +8769,8 @@ class SquaredAmplitude:
 
         Examples
         --------
+        Using the setup in the ``SquaredAmplitude`` class example:
+
         >>> tensor = squared.expression().simplify_gamma().simplify_color()
         """
     def sum_spins(self, legs: typing.Optional[typing.Sequence[builtins.int]] = None, *, average_initial: builtins.bool = False, references: typing.Optional[typing.Mapping[builtins.int, Expression]] = None, spin_vectors: typing.Optional[typing.Mapping[builtins.int, Expression]] = None) -> SquaredAmplitude:
@@ -6766,8 +8782,10 @@ class SquaredAmplitude:
 
         Examples
         --------
+        Using the setup in the ``SquaredAmplitude`` class example:
+
         >>> unpolarized = squared.sum_spins(average_initial=True)
-        >>> photons = squared.sum_spins([2, 3], references={2: P(3), 3: P(2)})
+        >>> assert set(unpolarized.spin_summed) == {leg.index for leg in amplitude.legs}
 
         Parameters
         ----------
@@ -6786,6 +8804,8 @@ class SquaredAmplitude:
 
         Examples
         --------
+        Using the setup in the ``SquaredAmplitude`` class example:
+
         >>> color_averaged = squared.sum_colors(average_initial=True)
 
         Parameters
@@ -6801,6 +8821,8 @@ class SquaredAmplitude:
 
         Examples
         --------
+        Using the setup in the ``SquaredAmplitude`` class example:
+
         >>> print(squared)
         """
     def _repr_html_(self) -> typing.Any:
@@ -6809,13 +8831,16 @@ class SquaredAmplitude:
 
         Examples
         --------
-        >>> squared  # notebook output
+        Using the setup in the ``SquaredAmplitude`` class example:
+
+        >>> from IPython.display import display
+        >>> display(squared)
         """
 
 @typing.final
 class Subgraph(FeynmanDiagram):
     r"""
-    A physics region retaining an Arc to its immutable original Feynman diagram.
+    A physics region retaining its immutable original Feynman diagram.
 
     Construct with ``diagram.subgraph(...)`` or ``diagram.filter(...)``. Inherited
     physics operations use this selection, with original edge IDs and momentum
@@ -6824,19 +8849,40 @@ class Subgraph(FeynmanDiagram):
 
     Examples
     --------
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.phi4()
+    >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    >>> result = process.generate_diagrams(loops=1)
+    >>> diagram = result.diagrams[0]
     >>> region = diagram.filter(edge=lambda edge: not edge.data.is_external)
-    >>> numerator = region.numerator_expression()
+    >>> left = diagram.subgraph(nodes=[0])
+    >>> right = diagram.subgraph(nodes=[1])
+    >>> common = left & right
     >>> independent = region.excise()
+    >>> independent.validate()
     """
     @property
     def original(self) -> FeynmanDiagram:
         r"""
-        Return a full view of the immutable original diagram, sharing its Arc.
+        Return a full view of the immutable original diagram, sharing the same underlying diagram.
+
+        Examples
+        --------
+        Using the setup in the ``Subgraph`` class example:
+
+        >>> assert region.original.id == diagram.id
         """
     @property
     def n_half_edges(self) -> builtins.int:
         r"""
         Return the number of selected half-edges, excluding isolated vertices.
+
+        Examples
+        --------
+        Using the setup in the ``Subgraph`` class example:
+
+        >>> assert region.n_half_edges == len(region.half_edge_indices())
         """
     def excise(self) -> FeynmanDiagram:
         r"""
@@ -6849,6 +8895,8 @@ class Subgraph(FeynmanDiagram):
 
         Examples
         --------
+        Using the setup in the ``Subgraph`` class example:
+
         >>> region = diagram.subgraph(nodes=[0])
         >>> independent = region.excise()
         >>> independent.validate()
@@ -6859,6 +8907,8 @@ class Subgraph(FeynmanDiagram):
 
         Examples
         --------
+        Using the setup in the ``Subgraph`` class example:
+
         >>> selected_half_edges = region.half_edge_indices()
         >>> canonical = region.to_linnet().subgraph(half_edges=selected_half_edges)
         """
@@ -6868,6 +8918,8 @@ class Subgraph(FeynmanDiagram):
 
         Examples
         --------
+        Using the setup in the ``Subgraph`` class example:
+
         >>> isolated_vertices = region.isolated_node_indices()
         """
     def __len__(self) -> builtins.int:
@@ -6876,6 +8928,8 @@ class Subgraph(FeynmanDiagram):
 
         Examples
         --------
+        Using the setup in the ``Subgraph`` class example:
+
         >>> size = len(region)
         """
     def __bool__(self) -> builtins.bool:
@@ -6884,6 +8938,8 @@ class Subgraph(FeynmanDiagram):
 
         Examples
         --------
+        Using the setup in the ``Subgraph`` class example:
+
         >>> nonempty = bool(region)
         """
     def __and__(self, other: FeynmanDiagram) -> Subgraph:
@@ -6892,6 +8948,8 @@ class Subgraph(FeynmanDiagram):
 
         Examples
         --------
+        Using the setup in the ``Subgraph`` class example:
+
         >>> common = left & right
 
         Parameters
@@ -6905,6 +8963,8 @@ class Subgraph(FeynmanDiagram):
 
         Examples
         --------
+        Using the setup in the ``Subgraph`` class example:
+
         >>> combined = left | right
 
         Parameters
@@ -6918,6 +8978,8 @@ class Subgraph(FeynmanDiagram):
 
         Examples
         --------
+        Using the setup in the ``Subgraph`` class example:
+
         >>> exclusive = left ^ right
 
         Parameters
@@ -6931,6 +8993,8 @@ class Subgraph(FeynmanDiagram):
 
         Examples
         --------
+        Using the setup in the ``Subgraph`` class example:
+
         >>> remaining = left - right
 
         Parameters
@@ -6944,6 +9008,8 @@ class Subgraph(FeynmanDiagram):
 
         Examples
         --------
+        Using the setup in the ``Subgraph`` class example:
+
         >>> outside = ~region
         """
 
@@ -6954,7 +9020,9 @@ class TadpoleFilterOptions:
 
     Examples
     --------
-    >>> fk.TadpoleFilterOptions(veto_attached_to_massless=True)
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> hep.TadpoleFilterOptions(veto_attached_to_massless=True)
 
     Parameters
     ----------
@@ -6971,7 +9039,9 @@ class TadpoleFilterOptions:
 
         Examples
         --------
-        >>> fk.TadpoleFilterOptions(veto_attached_to_massless=True)
+        Using the setup in the ``TadpoleFilterOptions`` class example:
+
+        >>> hep.TadpoleFilterOptions(veto_attached_to_massless=True)
 
         Parameters
         ----------
@@ -7004,12 +9074,16 @@ class TensorReducer:
 
     Examples
     --------
-    Select every native FeynKit momentum in a pure vacuum numerator:
+    Average a rank-two vacuum numerator over the loop direction. The result
+    is proportional to the metric tensor times ``k.k / D``.
 
-    >>> from symbolica import E
-    >>> reducer = fk.TensorReducer.feynkit(E("4"))
-    >>> scalar_numerator = reducer.reduce(vacuum_numerator)
-    >>> scalar_numerator
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> D, k, p, mu, nu = S("D", "k", "p", "mu", "nu")
+    >>> mink = S("spenso::mink")
+    >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
+    >>> numerator = k(mink(D, mu)) * k(mink(D, nu))
+    >>> projected = reducer.reduce(numerator)
 
     Parameters
     ----------
@@ -7020,6 +9094,12 @@ class TensorReducer:
     def dimension(self) -> Expression:
         r"""
         Return the configured Lorentz-space dimension.
+
+        Examples
+        --------
+        Using the setup in the ``TensorReducer`` class example:
+
+        >>> assert reducer.dimension == D
         """
     def __new__(cls, dimension: Expression) -> TensorReducer:
         r"""
@@ -7031,8 +9111,10 @@ class TensorReducer:
 
         Examples
         --------
+        Using the setup in the ``TensorReducer`` class example:
+
         >>> from symbolica import E
-        >>> reducer = fk.TensorReducer(E("4 - 2*eps")).with_integrated_head("Loop::k")
+        >>> reducer = hep.TensorReducer(E("4 - 2*eps")).with_integrated_head("Loop::k")
 
         Parameters
         ----------
@@ -7045,7 +9127,7 @@ class TensorReducer:
         Construct a reducer that selects every ``gammalooprs::Q`` tensor.
 
         This is the convenient constructor for vacuum numerators produced by
-        FeynKit's native Feynman-rule generator. It selects the entire
+        HEP native Feynman-rule generator. It selects the entire
         ``gammalooprs::Q`` head and is therefore intended for pure vacuum
         numerators, where every such momentum is integrated. If a graph still
         contains external ``gammalooprs::Q`` tensors, construct a reducer
@@ -7054,8 +9136,13 @@ class TensorReducer:
 
         Examples
         --------
-        >>> from symbolica import E
-        >>> reducer = fk.TensorReducer.feynkit(E("4"))
+        The equivalent explicit selector shows which momentum head is integrated:
+
+        >>> from symbolica import S, E
+        >>> from symbolica.community import hep
+        >>> model = hep.Model.phi4()
+        >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+        >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
         >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression())
 
         Parameters
@@ -7070,7 +9157,9 @@ class TensorReducer:
 
         Examples
         --------
-        >>> reducer = fk.TensorReducer(D).with_integrated_head("Loop::k")
+        Using the setup in the ``TensorReducer`` class example:
+
+        >>> reducer = hep.TensorReducer(D).with_integrated_head("Loop::k")
         >>> scalar = reducer.reduce(numerator)
 
         Parameters
@@ -7088,9 +9177,10 @@ class TensorReducer:
 
         Examples
         --------
-        >>> k1 = K(1, mink(D))
-        >>> reducer = fk.TensorReducer(D).with_integrated_vector(k1)
-        >>> scalar = reducer.reduce(numerator)
+        Using the setup in the ``TensorReducer`` class example:
+
+        >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
+        >>> projected = reducer.reduce(k(mink(D, mu)) * k(mink(D, nu)))
 
         Parameters
         ----------
@@ -7108,7 +9198,9 @@ class TensorReducer:
 
         Examples
         --------
-        >>> reducer = fk.TensorReducer(D).with_integrated_vector(k(mink(D)))
+        Using the setup in the ``TensorReducer`` class example:
+
+        >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
         >>> reducer = reducer.with_external_vector(p(mink(D)))
         >>> reduced = reducer.reduce(k(mink(D, mu)))
 
@@ -7125,6 +9217,8 @@ class TensorReducer:
 
         Examples
         --------
+        Using the setup in the ``TensorReducer`` class example:
+
         >>> reducer = reducer.with_pairing_limit(200_000)
 
         Parameters
@@ -7138,6 +9232,8 @@ class TensorReducer:
 
         Examples
         --------
+        Using the setup in the ``TensorReducer`` class example:
+
         >>> reducer = reducer.with_pairing_product_limit(150_000_000)
 
         Parameters
@@ -7151,6 +9247,8 @@ class TensorReducer:
 
         Examples
         --------
+        Using the setup in the ``TensorReducer`` class example:
+
         >>> reducer = reducer.with_output_term_limit(20_000)
 
         Parameters
@@ -7174,13 +9272,15 @@ class TensorReducer:
 
         Examples
         --------
+        Using the setup in the ``TensorReducer`` class example:
+
         A rank-two vacuum projection becomes a product of dot products divided
         by the dimension:
 
         >>> from symbolica import S
-        >>> import symbolica.community.feynkit as fk
-        >>> D, mu, nu = S("feynkit_docs::D", "feynkit_docs::mu", "feynkit_docs::nu")
-        >>> k, p = S("feynkit_docs::k", "feynkit_docs::p")
+        >>> from symbolica.community import hep
+        >>> D, mu, nu = S("hep_docs::D", "hep_docs::mu", "hep_docs::nu")
+        >>> k, p = S("hep_docs::k", "hep_docs::p")
         >>> mink, dot = S("spenso::mink", "spenso::dot")
         >>> k_compact = k(mink(D))
         >>> p_compact = p(mink(D))
@@ -7188,7 +9288,7 @@ class TensorReducer:
         ...     k(mink(D, mu)) * k(mink(D, nu))
         ...     * p(mink(D, mu)) * p(mink(D, nu))
         ... )
-        >>> reducer = fk.TensorReducer(D).with_integrated_vector(k_compact)
+        >>> reducer = hep.TensorReducer(D).with_integrated_vector(k_compact)
         >>> reduced = reducer.reduce(numerator)
         >>> expected = dot(k_compact, k_compact) * dot(p_compact, p_compact) / D
         >>> assert reduced == expected
@@ -7204,6 +9304,8 @@ class TensorReducer:
 
         Examples
         --------
+        Using the setup in the ``TensorReducer`` class example:
+
         >>> print(reducer)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
@@ -7212,7 +9314,10 @@ class TensorReducer:
 
         Examples
         --------
-        IPython calls this method when formatting a reducer for text display.
+        Using the setup in the ``TensorReducer`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(reducer)
 
         Parameters
         ----------
@@ -7228,12 +9333,15 @@ class TensorReductionError(FeynkitError):
 
     Examples
     --------
-    Catch unsupported tensor structures or an exceeded expansion budget:
-
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> D, k, mu = S("D", "k", "mu")
+    >>> mink = S("spenso::mink")
+    >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
     >>> try:
-    ...     scalar = reducer.reduce(numerator)
-    ... except fk.TensorReductionError as error:
-    ...     print(error)
+    ...     scalar = reducer.reduce(k(mink(D, mu))**2)
+    ... except hep.TensorReductionError as error:
+    ...     message = str(error)
     """
     ...
 
@@ -7247,10 +9355,13 @@ class ThreeMomentum:
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> p = fk.ThreeMomentum(30.0, 40.0, 10.0)
-    >>> p.pt
-    50.0
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> momentum = hep.ThreeMomentum(3.0, 4.0, 0.0)
+    >>> p = momentum
+    >>> first = hep.ThreeMomentum(0.0, 1.0, 0.0)
+    >>> second = hep.ThreeMomentum(1.0, 0.0, 0.0)
+    >>> assert momentum.pt == 5.0
 
     Parameters
     ----------
@@ -7265,16 +9376,34 @@ class ThreeMomentum:
     def px(self) -> builtins.float:
         r"""
         Return the x component.
+
+        Examples
+        --------
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> assert momentum.px == 3.0
         """
     @property
     def py(self) -> builtins.float:
         r"""
         Return the y component.
+
+        Examples
+        --------
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> assert momentum.py == 4.0
         """
     @property
     def pz(self) -> builtins.float:
         r"""
         Return the z component.
+
+        Examples
+        --------
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> assert momentum.pz == 0.0
         """
     @property
     def norm_squared(self) -> builtins.float:
@@ -7283,7 +9412,9 @@ class ThreeMomentum:
 
         Examples
         --------
-        >>> ThreeMomentum(3.0, 4.0, 0.0).norm_squared
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> hep.ThreeMomentum(3.0, 4.0, 0.0).norm_squared
         25.0
         """
     @property
@@ -7293,7 +9424,9 @@ class ThreeMomentum:
 
         Examples
         --------
-        >>> ThreeMomentum(3.0, 4.0, 0.0).norm
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> hep.ThreeMomentum(3.0, 4.0, 0.0).norm
         5.0
         """
     @property
@@ -7303,7 +9436,9 @@ class ThreeMomentum:
 
         Examples
         --------
-        >>> ThreeMomentum(3.0, 4.0, 12.0).pt
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> hep.ThreeMomentum(3.0, 4.0, 12.0).pt
         5.0
         """
     @property
@@ -7313,7 +9448,9 @@ class ThreeMomentum:
 
         Examples
         --------
-        >>> ThreeMomentum(1.0, 0.0, 0.0).phi
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> hep.ThreeMomentum(1.0, 0.0, 0.0).phi
         0.0
         """
     @property
@@ -7323,8 +9460,10 @@ class ThreeMomentum:
 
         Examples
         --------
-        >>> ThreeMomentum(1.0, 0.0, 0.0).pseudorapidity
-        0.0
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> abs(hep.ThreeMomentum(1.0, 0.0, 0.0).pseudorapidity) < 1e-12
+        True
         """
     def __new__(cls, px: builtins.float, py: builtins.float, pz: builtins.float) -> ThreeMomentum:
         r"""
@@ -7332,7 +9471,9 @@ class ThreeMomentum:
 
         Examples
         --------
-        >>> momentum = ThreeMomentum(3.0, 4.0, 0.0)
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> momentum = hep.ThreeMomentum(3.0, 4.0, 0.0)
 
         Parameters
         ----------
@@ -7349,7 +9490,9 @@ class ThreeMomentum:
 
         Examples
         --------
-        >>> ThreeMomentum(1.0, 0.0, 0.0).dot(ThreeMomentum(2.0, 0.0, 0.0))
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> hep.ThreeMomentum(1.0, 0.0, 0.0).dot(hep.ThreeMomentum(2.0, 0.0, 0.0))
         2.0
 
         Parameters
@@ -7363,7 +9506,9 @@ class ThreeMomentum:
 
         Examples
         --------
-        >>> ThreeMomentum(1.0, 0.0, 0.0).cross(ThreeMomentum(0.0, 1.0, 0.0))
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> hep.ThreeMomentum(1.0, 0.0, 0.0).cross(hep.ThreeMomentum(0.0, 1.0, 0.0))
         ThreeMomentum(0, 0, 1)
 
         Parameters
@@ -7377,6 +9522,8 @@ class ThreeMomentum:
 
         Examples
         --------
+        Using the setup in the ``ThreeMomentum`` class example:
+
         >>> first.delta_phi(second)
         1.5707963267948966
 
@@ -7391,6 +9538,8 @@ class ThreeMomentum:
 
         Examples
         --------
+        Using the setup in the ``ThreeMomentum`` class example:
+
         >>> separation = first.delta_r(second)
         >>> passes_isolation = separation > 0.4
 
@@ -7405,6 +9554,8 @@ class ThreeMomentum:
 
         Examples
         --------
+        Using the setup in the ``ThreeMomentum`` class example:
+
         >>> total = first + second
 
         Parameters
@@ -7418,7 +9569,12 @@ class ThreeMomentum:
 
         Examples
         --------
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> incoming = hep.ThreeMomentum(3.0, 4.0, 0.0)
+        >>> outgoing = hep.ThreeMomentum(1.0, 0.0, 0.0)
         >>> transfer = incoming - outgoing
+        >>> assert transfer.px == 2.0
 
         Parameters
         ----------
@@ -7431,7 +9587,11 @@ class ThreeMomentum:
 
         Examples
         --------
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> incoming_convention = hep.ThreeMomentum(3.0, 4.0, 0.0)
         >>> outgoing_convention = -incoming_convention
+        >>> assert outgoing_convention.px == -3.0
         """
     def __mul__(self, scalar: builtins.float) -> ThreeMomentum:
         r"""
@@ -7439,6 +9599,8 @@ class ThreeMomentum:
 
         Examples
         --------
+        Using the setup in the ``ThreeMomentum`` class example:
+
         >>> half_momentum = momentum * 0.5
 
         Parameters
@@ -7452,6 +9614,8 @@ class ThreeMomentum:
 
         Examples
         --------
+        Using the setup in the ``ThreeMomentum`` class example:
+
         >>> half_momentum = 0.5 * momentum
 
         Parameters
@@ -7465,7 +9629,9 @@ class ThreeMomentum:
 
         Examples
         --------
-        >>> ThreeMomentum(3.0, 4.0, 0.0).on_shell().energy
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> hep.ThreeMomentum(3.0, 4.0, 0.0).on_shell().energy
         5.0
 
         Parameters
@@ -7479,7 +9645,9 @@ class ThreeMomentum:
 
         Examples
         --------
-        >>> track_momentum = ThreeMomentum(1.0, 2.0, 3.0)
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> track_momentum = hep.ThreeMomentum(1.0, 2.0, 3.0)
         >>> print(f"track momentum: {track_momentum!r}")
         """
     def _repr_latex_(self) -> builtins.str:
@@ -7488,8 +9656,9 @@ class ThreeMomentum:
 
         Examples
         --------
-        Leave ``momentum`` as the final expression in a notebook cell to render
-        its Cartesian components.
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> latex = momentum._repr_latex_()
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -7497,7 +9666,10 @@ class ThreeMomentum:
 
         Examples
         --------
-        IPython invokes this method when only a text representation is supported.
+        Using the setup in the ``ThreeMomentum`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(momentum)
 
         Parameters
         ----------
@@ -7517,6 +9689,12 @@ class UfoLoadDiagnostics:
 
     Examples
     --------
+    Replace ``path/to/MyUFO`` with the directory containing your UFO model
+    (``particles.py``, ``vertices.py``, and related files).
+
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> loaded = hep.UfoLoader().load("path/to/MyUFO")
     >>> diagnostics = loaded.diagnostics
     >>> print(diagnostics.source, diagnostics.particle_count, diagnostics.vertex_rule_count)
     """
@@ -7524,71 +9702,155 @@ class UfoLoadDiagnostics:
     def source(self) -> pathlib.Path:
         r"""
         Return the UFO source directory.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> source = diagnostics.source
         """
     @property
     def restriction_name(self) -> typing.Optional[builtins.str]:
         r"""
         Return the applied restriction-card name, if any.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> restriction_name = diagnostics.restriction_name
         """
     @property
     def simplify_model(self) -> builtins.bool:
         r"""
         Return whether model expressions were simplified while loading.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> simplify_model = diagnostics.simplify_model
         """
     @property
     def wrap_indices_in_lorentz_structures(self) -> builtins.bool:
         r"""
         Return whether normalized Lorentz indices were wrapped.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> wrap_indices_in_lorentz_structures = diagnostics.wrap_indices_in_lorentz_structures
         """
     @property
     def order_count(self) -> builtins.int:
         r"""
         Return the number of coupling orders loaded from the UFO model.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> order_count = diagnostics.order_count
         """
     @property
     def model_parameter_count(self) -> builtins.int:
         r"""
         Return the number of model parameters loaded.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> model_parameter_count = diagnostics.model_parameter_count
         """
     @property
     def particle_count(self) -> builtins.int:
         r"""
         Return the number of particles loaded.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> particle_count = diagnostics.particle_count
         """
     @property
     def propagator_count(self) -> builtins.int:
         r"""
         Return the number of propagators loaded.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> propagator_count = diagnostics.propagator_count
         """
     @property
     def lorentz_structure_count(self) -> builtins.int:
         r"""
         Return the number of Lorentz structures loaded.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> lorentz_structure_count = diagnostics.lorentz_structure_count
         """
     @property
     def coupling_count(self) -> builtins.int:
         r"""
         Return the number of couplings loaded.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> coupling_count = diagnostics.coupling_count
         """
     @property
     def vertex_rule_count(self) -> builtins.int:
         r"""
         Return the number of vertex rules loaded.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> vertex_rule_count = diagnostics.vertex_rule_count
         """
     @property
     def function_count(self) -> builtins.int:
         r"""
         Return the number of model functions loaded.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> function_count = diagnostics.function_count
         """
     @property
     def form_factor_count(self) -> builtins.int:
         r"""
         Return the number of form factors loaded.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> form_factor_count = diagnostics.form_factor_count
         """
     @property
     def parameter_value_count(self) -> builtins.int:
         r"""
         Return the number of parameter values loaded into the parameter card.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> parameter_value_count = diagnostics.parameter_value_count
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -7596,6 +9858,8 @@ class UfoLoadDiagnostics:
 
         Examples
         --------
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
         >>> print(loaded.diagnostics)
         """
     def _repr_html_(self) -> builtins.str:
@@ -7604,8 +9868,10 @@ class UfoLoadDiagnostics:
 
         Examples
         --------
-        Leave ``loaded.diagnostics`` as the final expression in a notebook cell
-        to display the import inventory.
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> from IPython.display import display
+        >>> display(diagnostics)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -7613,7 +9879,10 @@ class UfoLoadDiagnostics:
 
         Examples
         --------
-        IPython invokes this method when only a text representation is supported.
+        Using the setup in the ``UfoLoadDiagnostics`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(diagnostics)
 
         Parameters
         ----------
@@ -7629,12 +9898,12 @@ class UfoLoadError(FeynkitError):
 
     Examples
     --------
-    Report a missing or malformed UFO directory cleanly:
-
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
     >>> try:
-    ...     loaded = fk.UfoLoader().load("models/sm")
-    ... except fk.UfoLoadError as error:
-    ...     print(error)
+    ...     hep.UfoLoader().load("/path/to/missing-model")
+    ... except hep.UfoLoadError as error:
+    ...     message = str(error)
     """
     ...
 
@@ -7644,12 +9913,15 @@ class UfoLoader:
     Load and normalize a Universal FeynRules Output model.
 
     The loader delegates UFO parsing to ``ufo_model_loader`` and returns typed
-    FeynKit model entities suitable for process and diagram generation.
+    HEP model entities suitable for process and diagram generation.
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> loader = fk.UfoLoader(restriction_name="massless")
+    Replace ``path/to/MyUFO`` with the directory containing your UFO model
+    (``particles.py``, ``vertices.py``, and related files).
+
+    >>> from symbolica.community import hep
+    >>> loader = hep.UfoLoader()
     >>> loaded = loader.load("path/to/MyUFO")
 
     Parameters
@@ -7665,16 +9937,37 @@ class UfoLoader:
     def restriction_name(self) -> typing.Optional[builtins.str]:
         r"""
         Return the configured restriction-card name.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoader`` class example:
+
+        >>> loader = hep.UfoLoader(restriction_name="massless")
+        >>> assert loader.restriction_name == "massless"
         """
     @property
     def simplify_model(self) -> builtins.bool:
         r"""
         Return whether model simplification is enabled.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoader`` class example:
+
+        >>> loader = hep.UfoLoader(simplify_model=False)
+        >>> assert not loader.simplify_model
         """
     @property
     def wrap_indices_in_lorentz_structures(self) -> builtins.bool:
         r"""
         Return whether normalized Lorentz indices are wrapped.
+
+        Examples
+        --------
+        Using the setup in the ``UfoLoader`` class example:
+
+        >>> loader = hep.UfoLoader(wrap_indices_in_lorentz_structures=True)
+        >>> assert loader.wrap_indices_in_lorentz_structures
         """
     def __new__(cls, *, restriction_name: typing.Optional[builtins.str] = None, simplify_model: builtins.bool = True, wrap_indices_in_lorentz_structures: builtins.bool = True) -> UfoLoader:
         r"""
@@ -7682,7 +9975,9 @@ class UfoLoader:
 
         Examples
         --------
-        >>> loader = UfoLoader(restriction_name="massless")
+        Using the setup in the ``UfoLoader`` class example:
+
+        >>> loader = hep.UfoLoader(restriction_name="massless")
 
         Parameters
         ----------
@@ -7699,7 +9994,9 @@ class UfoLoader:
 
         Examples
         --------
-        >>> loaded = UfoLoader().load("path/to/ufo_model")
+        Using the setup in the ``UfoLoader`` class example:
+
+        >>> loaded = hep.UfoLoader().load("path/to/ufo_model")
         >>> model = loaded.model
 
         Parameters
@@ -7718,14 +10015,22 @@ class VertexRule:
 
     Examples
     --------
-    >>> vertex = next(iter(model.vertex_rules))
-    >>> vertex.particles
-    ['e+', 'e-', 'a']
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
+    >>> vertex = model.vertex_rules[0]
+    >>> particles = [model.particle(name) for name in vertex.particles]
     """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the vertex-rule name.
+
+        Examples
+        --------
+        Using the setup in the ``VertexRule`` class example:
+
+        >>> rules_by_name = {rule.name: rule for rule in model.vertex_rules}
         """
     @property
     def particles(self) -> builtins.list[builtins.str]:
@@ -7734,6 +10039,8 @@ class VertexRule:
 
         Examples
         --------
+        Using the setup in the ``VertexRule`` class example:
+
         >>> vertex = model.vertex_rules[0]
         >>> particles = [model.particle(name) for name in vertex.particles]
         """
@@ -7741,6 +10048,12 @@ class VertexRule:
     def color_structures(self) -> builtins.list[Expression]:
         r"""
         Return the color structures used by the vertex.
+
+        Examples
+        --------
+        Using the setup in the ``VertexRule`` class example:
+
+        >>> color_basis = vertex.color_structures
         """
     @property
     def lorentz_structures(self) -> builtins.list[builtins.str]:
@@ -7749,6 +10062,8 @@ class VertexRule:
 
         Examples
         --------
+        Using the setup in the ``VertexRule`` class example:
+
         >>> vertex = model.vertex_rules[0]
         >>> tensors = [model.lorentz_structure(name) for name in vertex.lorentz_structures]
         """
@@ -7759,6 +10074,8 @@ class VertexRule:
 
         Examples
         --------
+        Using the setup in the ``VertexRule`` class example:
+
         >>> vertex = model.vertex_rules[0]
         >>> names = [name for row in vertex.couplings for name in row if name is not None]
         >>> couplings = [model.coupling(name) for name in names]
@@ -7769,8 +10086,10 @@ class VertexRule:
 
         Examples
         --------
+        Using the setup in the ``VertexRule`` class example:
+
         >>> vertex.coupling_orders()
-        {'QED': 1}
+        {'QED': 2}
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -7778,6 +10097,8 @@ class VertexRule:
 
         Examples
         --------
+        Using the setup in the ``VertexRule`` class example:
+
         >>> print(next(v for v in model.vertex_rules if "e-" in v.particles))
         """
     def _repr_html_(self) -> builtins.str:
@@ -7786,7 +10107,10 @@ class VertexRule:
 
         Examples
         --------
-        Leave this object as the final expression in a notebook cell.
+        Using the setup in the ``VertexRule`` class example:
+
+        >>> from IPython.display import display
+        >>> display(vertex)
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -7794,7 +10118,10 @@ class VertexRule:
 
         Examples
         --------
-        IPython calls this automatically when formatting model members in lists.
+        Using the setup in the ``VertexRule`` class example:
+
+        >>> from IPython.lib.pretty import pretty
+        >>> text = pretty(vertex)
 
         Parameters
         ----------
@@ -7811,9 +10138,9 @@ class Axis(enum.Enum):
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> beam_axis = fk.Axis.Z
-    >>> rotation = fk.Rotation.quarter_turn(beam_axis)
+    >>> from symbolica.community import hep
+    >>> beam_axis = hep.Axis.Z
+    >>> rotation = hep.Rotation.quarter_turn(beam_axis)
     """
     X = ...
     Y = ...
@@ -7828,9 +10155,9 @@ class JetAlgorithm(enum.Enum):
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> algorithm = fk.JetAlgorithm.AntiKt
-    >>> definition = fk.JetDefinition(algorithm, radius=0.4)
+    >>> from symbolica.community import hep
+    >>> algorithm = hep.JetAlgorithm.AntiKt
+    >>> definition = hep.JetDefinition(algorithm, radius=0.4)
     """
     Kt = ...
     CambridgeAachen = ...
@@ -7843,8 +10170,10 @@ class ParameterNature(enum.Enum):
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> nature = fk.ParameterNature.EXTERNAL
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
+    >>> nature = hep.ParameterNature.EXTERNAL
     >>> external = [p for p in model.parameters if p.nature == nature]
     """
     EXTERNAL = ...
@@ -7857,8 +10186,11 @@ class ParameterType(enum.Enum):
 
     Examples
     --------
-    >>> import symbolica.community.feynkit as fk
-    >>> real_parameters = [p for p in model.parameters if p.parameter_type == fk.ParameterType.REAL]
+    >>> from symbolica import S, E
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
+    >>> real_parameters = [p for p in model.parameters
+    ...                    if p.parameter_type == hep.ParameterType.REAL]
     """
     REAL = ...
     COMPLEX = ...

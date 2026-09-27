@@ -18,8 +18,16 @@ use crate::{error, graph::PyFeynmanDiagram, model::PyParticle};
 ///
 /// Examples
 /// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> generated = process.generate_diagrams()
+/// >>> diagram = generated.diagrams[0]
+/// >>> amplitude = hep.Amplitude(generated.diagrams)
 /// >>> leg = amplitude.legs[0]
-/// >>> leg.particle.spin_sum(leg.momentum, leg.tensor_index, S("conjugate_index"))
+/// >>> state = (leg.index, leg.particle.name, leg.state)
+/// >>> spin_sum = leg.particle.spin_sum(leg.momentum, leg.tensor_index, S("conjugate_index"))
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "AmplitudeLeg",
@@ -37,16 +45,35 @@ pub struct PyAmplitudeLeg {
 #[pymethods]
 impl PyAmplitudeLeg {
     /// Stable external-leg label shared by every diagram.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``AmplitudeLeg`` class example:
+    ///
+    /// >>> label = leg.index
+    /// >>> assert label in [state.index for state in amplitude.legs]
     #[getter]
     fn index(&self) -> usize {
         self.inner.index
     }
     /// Model particle, including particle/antiparticle identity.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``AmplitudeLeg`` class example:
+    ///
+    /// >>> particle_name = leg.particle.name
     #[getter]
     fn particle(&self) -> PyParticle {
         PyParticle::new(self.inner.particle, self.model.clone())
     }
     /// Whether the state is incoming or outgoing.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``AmplitudeLeg`` class example:
+    ///
+    /// >>> incoming = [state for state in amplitude.legs if state.state == "incoming"]
     #[getter]
     fn state(&self) -> &'static str {
         match self.inner.state {
@@ -55,6 +82,12 @@ impl PyAmplitudeLeg {
         }
     }
     /// Unindexed physical momentum P(index).
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``AmplitudeLeg`` class example:
+    ///
+    /// >>> external_momentum = leg.momentum
     #[getter]
     fn momentum(&self) -> PythonExpression {
         PythonExpression {
@@ -62,6 +95,12 @@ impl PyAmplitudeLeg {
         }
     }
     /// Bare label shared by this leg's spin and color slots.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``AmplitudeLeg`` class example:
+    ///
+    /// >>> spin_sum = leg.particle.spin_sum(leg.momentum, leg.tensor_index, S("bra"))
     #[getter]
     fn tensor_index(&self) -> PythonExpression {
         PythonExpression {
@@ -69,6 +108,12 @@ impl PyAmplitudeLeg {
         }
     }
     /// Typed open spin/color slots attached to this physical state.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``AmplitudeLeg`` class example:
+    ///
+    /// >>> open_slots = leg.slots
     #[getter]
     fn slots(&self) -> Vec<SpensoSlot> {
         self.inner
@@ -81,6 +126,8 @@ impl PyAmplitudeLeg {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``AmplitudeLeg`` class example:
+    ///
     /// >>> print(amplitude.legs[0])
     fn __repr__(&self) -> String {
         format!(
@@ -102,9 +149,15 @@ impl PyAmplitudeLeg {
 ///
 /// Examples
 /// --------
-/// >>> amplitude = Amplitude(generated.diagrams)
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> generated = process.generate_diagrams()
+/// >>> diagram = generated.diagrams[0]
+/// >>> amplitude = hep.Amplitude(generated.diagrams)
 /// >>> operator = amplitude.expression()
-/// >>> conjugate = amplitude.conjugate().expression()
+/// >>> adjoint = amplitude.conjugate().expression()
 /// >>> squared = amplitude.squared().sum_spins(average_initial=True).sum_colors()
 /// >>> scalar = squared.expression().simplify_gamma().simplify_color()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -126,7 +179,9 @@ impl PyAmplitude {
     ///
     /// Examples
     /// --------
-    /// >>> amplitude = Amplitude(generated.diagrams)
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
+    /// >>> amplitude = hep.Amplitude(generated.diagrams)
     ///
     /// Parameters
     /// ----------
@@ -176,7 +231,9 @@ impl PyAmplitude {
     ///
     /// Examples
     /// --------
-    /// >>> amplitude = Amplitude.from_diagram(diagram)
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
+    /// >>> amplitude = hep.Amplitude.from_diagram(diagram)
     ///
     /// Parameters
     /// ----------
@@ -197,6 +254,12 @@ impl PyAmplitude {
     }
 
     /// Source diagrams, retaining weights, routing, and graph provenance.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
+    /// >>> assert len(amplitude.diagrams) == len(generated.diagrams)
     #[getter]
     fn diagrams(&self) -> Vec<PyFeynmanDiagram> {
         self.inner
@@ -206,6 +269,12 @@ impl PyAmplitude {
             .collect()
     }
     /// Physical external states in increasing external-label order.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
+    /// >>> external_states = [(leg.index, leg.particle.name) for leg in amplitude.legs]
     #[getter]
     fn legs(&self) -> Vec<PyAmplitudeLeg> {
         self.inner
@@ -218,6 +287,13 @@ impl PyAmplitude {
             .collect()
     }
     /// Individual weighted operators, with aligned external tensor ports.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
+    /// >>> operators = amplitude.terms
+    /// >>> assert len(operators) == len(amplitude.diagrams)
     #[getter]
     fn terms(&self, py: Python<'_>) -> PyResult<Vec<Py<TensorExpression>>> {
         self.inner
@@ -227,6 +303,13 @@ impl PyAmplitude {
             .collect()
     }
     /// Whether this amplitude is the physical adjoint of its source diagrams.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
+    /// >>> assert not amplitude.is_conjugated
+    /// >>> assert amplitude.conjugate().is_conjugated
     #[getter]
     fn is_conjugated(&self) -> bool {
         self.inner.is_conjugated()
@@ -236,6 +319,8 @@ impl PyAmplitude {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
     /// >>> operator = amplitude.expression().factor()
     fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_atom_interface(py, self.inner.expression(), self.inner.structure())
@@ -246,6 +331,8 @@ impl PyAmplitude {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
     /// >>> adjoint = amplitude.conjugate()
     fn conjugate(&self) -> PyResult<Self> {
         Ok(Self {
@@ -258,6 +345,8 @@ impl PyAmplitude {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
     /// >>> squared = amplitude.squared().sum_spins().sum_colors()
     fn squared(&self) -> PyResult<PySquaredAmplitude> {
         Ok(PySquaredAmplitude {
@@ -268,6 +357,8 @@ impl PyAmplitude {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
     /// >>> print(amplitude)
     fn __repr__(&self) -> String {
         format!(
@@ -281,7 +372,10 @@ impl PyAmplitude {
     ///
     /// Examples
     /// --------
-    /// >>> amplitude  # notebook output
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(amplitude)
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         Ok(self
             .expression(py)?
@@ -298,7 +392,14 @@ impl PyAmplitude {
 ///
 /// Examples
 /// --------
-/// >>> squared = Amplitude(generated.diagrams).squared()
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> generated = process.generate_diagrams()
+/// >>> diagram = generated.diagrams[0]
+/// >>> amplitude = hep.Amplitude(generated.diagrams)
+/// >>> squared = amplitude.squared()
 /// >>> unpolarized = squared.sum_spins(average_initial=True).sum_colors(average_initial=True)
 /// >>> tensor = unpolarized.expression()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -320,7 +421,9 @@ impl PySquaredAmplitude {
     ///
     /// Examples
     /// --------
-    /// >>> squared = SquaredAmplitude.from_diagram(diagram)
+    /// Using the setup in the ``SquaredAmplitude`` class example:
+    ///
+    /// >>> squared = hep.SquaredAmplitude.from_diagram(diagram)
     ///
     /// Parameters
     /// ----------
@@ -340,6 +443,12 @@ impl PySquaredAmplitude {
         PyAmplitude::from_diagram(diagram, dimension, real)?.squared()
     }
     /// The original coherent amplitude and its source diagrams.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``SquaredAmplitude`` class example:
+    ///
+    /// >>> source_diagrams = squared.amplitude.diagrams
     #[getter]
     fn amplitude(&self) -> PyAmplitude {
         PyAmplitude {
@@ -347,11 +456,25 @@ impl PySquaredAmplitude {
         }
     }
     /// External labels whose spin states have been summed.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``SquaredAmplitude`` class example:
+    ///
+    /// >>> summed = squared.sum_spins()
+    /// >>> assert set(summed.spin_summed) == {leg.index for leg in amplitude.legs}
     #[getter]
     fn spin_summed(&self) -> Vec<usize> {
         self.inner.spin_summed().iter().copied().collect()
     }
     /// External labels whose color states have been summed.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``SquaredAmplitude`` class example:
+    ///
+    /// >>> summed = squared.sum_colors()
+    /// >>> assert set(summed.color_summed) == {leg.index for leg in amplitude.legs}
     #[getter]
     fn color_summed(&self) -> Vec<usize> {
         self.inner.color_summed().iter().copied().collect()
@@ -360,6 +483,8 @@ impl PySquaredAmplitude {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``SquaredAmplitude`` class example:
+    ///
     /// >>> tensor = squared.expression().simplify_gamma().simplify_color()
     fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_atom_interface(py, self.inner.expression().clone(), None)
@@ -371,8 +496,10 @@ impl PySquaredAmplitude {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``SquaredAmplitude`` class example:
+    ///
     /// >>> unpolarized = squared.sum_spins(average_initial=True)
-    /// >>> photons = squared.sum_spins([2, 3], references={2: P(3), 3: P(2)})
+    /// >>> assert set(unpolarized.spin_summed) == {leg.index for leg in amplitude.legs}
     ///
     /// Parameters
     /// ----------
@@ -424,6 +551,8 @@ impl PySquaredAmplitude {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``SquaredAmplitude`` class example:
+    ///
     /// >>> color_averaged = squared.sum_colors(average_initial=True)
     ///
     /// Parameters
@@ -454,6 +583,8 @@ impl PySquaredAmplitude {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``SquaredAmplitude`` class example:
+    ///
     /// >>> print(squared)
     fn __repr__(&self) -> String {
         format!(
@@ -467,7 +598,10 @@ impl PySquaredAmplitude {
     ///
     /// Examples
     /// --------
-    /// >>> squared  # notebook output
+    /// Using the setup in the ``SquaredAmplitude`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(squared)
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         Ok(self
             .expression(py)?

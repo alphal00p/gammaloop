@@ -1258,7 +1258,7 @@ impl InterfaceInference {
     /// Observe local replacement ports without materialization or loss of
     /// encoded open-index owners. Scalar RHS expressions also undergo the
     /// normal syntax checks, including rejection of bare tagged tensor names.
-    pub(super) fn replacement_interface(atom: AtomView<'_>) -> InferenceResult<PartialStructure> {
+    pub(crate) fn replacement_interface(atom: AtomView<'_>) -> InferenceResult<PartialStructure> {
         let mut inference = Self {
             leaf_inference: LeafInference::ObserveEncoded,
             ..Self::default()

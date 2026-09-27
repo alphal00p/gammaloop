@@ -54,7 +54,9 @@ use symbolica::{
 };
 
 use crate::{
-    ModuleInit, SliceOrIntOrExpanded, Spensor, display,
+    ModuleInit, SliceOrIntOrExpanded, Spensor,
+    aliases::AliasedTensorExpression,
+    display,
     library::SpensorLibrary,
     network::{ConvertibleToSpensoNet, ExecutionMode, ReplacementCondition, SpensoNet},
     simplification::{
@@ -2840,21 +2842,66 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
-    /// Contract one selected pair of ordered interface positions.
-    #[pyo3(signature = (rhs, *, left, right))]
+    /// Contract metric/vector indices, retaining generated sums as a typed DAG.
+    /// With an operand, contract one explicitly selected pair of interface ports.
+    #[pyo3(signature = (rhs=None, *, left=None, right=None, order=None, output="aliased"))]
     #[gen_stub(skip)]
+    #[allow(clippy::too_many_arguments)] // Unary contraction and positional binary composition share this verb.
     fn contract(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
-        rhs: &Bound<'_, PyAny>,
-        left: usize,
-        right: usize,
-    ) -> PyResult<TensorDispatch> {
+        rhs: Option<&Bound<'_, PyAny>>,
+        left: Option<usize>,
+        right: Option<usize>,
+        order: Option<Vec<usize>>,
+        output: &str,
+    ) -> PyResult<Py<PyAny>> {
+        let Some(rhs) = rhs else {
+            if left.is_some() || right.is_some() {
+                return Err(PyTypeError::new_err(
+                    "left and right require a tensor operand",
+                ));
+            }
+            if !matches!(output, "aliased" | "expanded") {
+                return Err(PyValueError::new_err(
+                    "output must be 'aliased' or 'expanded'",
+                ));
+            }
+            let value = Self::structured(&self_)
+                .contract(order.as_deref())
+                .map_err(Self::inference_error)?;
+            if output == "expanded" {
+                let value = value.expanded().map_err(Self::inference_error)?;
+                return Self::from_parts_unchecked(
+                    py,
+                    value.expression,
+                    value.structure,
+                    self_.name,
+                    self_.name_args.clone(),
+                )
+                .map(|value| value.into_any());
+            }
+            return Py::new(
+                py,
+                AliasedTensorExpression::from_parts(value, self_.name, self_.name_args.clone()),
+            )
+            .map(|value| value.into_any());
+        };
+        if order.is_some() || output != "aliased" {
+            return Err(PyTypeError::new_err(
+                "order and output apply to index contraction without an operand",
+            ));
+        }
+        let (Some(left), Some(right)) = (left, right) else {
+            return Err(PyTypeError::new_err(
+                "a tensor operand requires left and right port positions",
+            ));
+        };
         if let Some(rhs) = concrete_network(rhs)? {
             return Self::promoted_network(&self_, py)?
                 .contract(ConvertibleToSpensoNet(rhs), left, right)
                 .and_then(|network| Py::new(py, network))
-                .map(TensorDispatch::Network);
+                .map(|value| value.into_any());
         }
         let value = Self::structured(&self_);
         let TensorOperand::Structured(rhs) = TensorOperand::extract(rhs)? else {
@@ -2864,7 +2911,7 @@ impl TensorExpression {
             .contract_ports(&rhs, &[composition::PortPair { left, right }])
             .map_err(|error| PyValueError::new_err(error.to_string()))
             .and_then(|value| Self::from_structured(py, value))
-            .map(TensorDispatch::Expression)
+            .map(|value| value.into_any())
     }
 
     /// Compose two selected `(input, output)` matrix channels.
@@ -3346,6 +3393,12 @@ submit! {
             @overload
             def outer(self, rhs: pyo3_stub_gen.RustType["PythonExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
                 """Form an outer product without contracting compatible ports."""
+            @overload
+            def contract(self, *, order: typing.Optional[list[int]] = None, output: typing.Literal["aliased"] = "aliased") -> pyo3_stub_gen.RustType["AliasedTensorExpression"]:
+                """Contract metric/vector indices into typed alias definitions."""
+            @overload
+            def contract(self, *, order: typing.Optional[list[int]] = None, output: typing.Literal["expanded"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
+                """Contract indices and explicitly materialize the polynomial output."""
             @overload
             def contract(self, rhs: typing.Union[Tensor, TensorNetwork], *, left: int, right: int) -> pyo3_stub_gen.RustType["SpensoNet"]:
                 """Contract one selected pair of ordered interface positions."""

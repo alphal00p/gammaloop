@@ -191,7 +191,7 @@ for node in ast.walk(tree):
 
     if not doc:
         errors.append(f"callable {node.name} has no documentation")
-    if not is_property and not has_examples:
+    if not has_examples:
         errors.append(f"callable {node.name} has no Examples section")
     if not is_property and arguments and not has_parameters:
         errors.append(f"callable {node.name} has undocumented parameters")
@@ -621,7 +621,13 @@ class Diagram:
 
     @property
     def loops(self) -> int:
-        """Return the loop count."""
+        """Return the loop count.
+
+        Examples
+        --------
+        >>> diagram.loops
+        1
+        """
         ...
 
     def render(self, width: int) -> str:

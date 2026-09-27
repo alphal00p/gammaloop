@@ -1,5 +1,7 @@
 //! Collect metric/vector components before materializing their products.
 
+mod factorized;
+
 use super::{Endpoint, SlotContraction};
 use crate::{
     shorthands::schoonschip::SimplificationCandidates,
@@ -26,13 +28,19 @@ enum Argument<'a> {
     Vector(usize, Symbol),
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum TensorSource {
+    Function(Symbol),
+    Factor(usize),
+}
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum Variable<'a> {
     Scalar(AtomView<'a>),
     Dot(usize, [Symbol; 2]),
     Vector(Symbol, AtomView<'a>),
     Metric([AtomView<'a>; 2]),
-    Tensor(Symbol, Vec<Argument<'a>>),
+    Tensor(TensorSource, Vec<Argument<'a>>),
 }
 
 #[derive(Clone, Copy)]
@@ -53,7 +61,11 @@ struct Node<'a> {
 
 // Only a key for the existing tensor plan: exact non-internal arguments and
 // (argument position, space) for internal ports. No new tensor semantics.
-type TensorKey<'a> = (Symbol, Vec<(usize, Argument<'a>)>, Vec<(usize, usize)>);
+type TensorKey<'a> = (
+    TensorSource,
+    Vec<(usize, Argument<'a>)>,
+    Vec<(usize, usize)>,
+);
 
 #[derive(PartialEq, Eq, Hash)]
 struct MonomialKey {
@@ -99,7 +111,9 @@ struct ComponentSum<'a, 'b> {
     contracted: bool,
     inference: InterfaceInference,
     tensor_ports: AHashMap<AtomView<'a>, Vec<(usize, AtomView<'a>)>>,
-    tensors: Vec<(Symbol, Vec<Argument<'a>>)>,
+    tensors: Vec<(TensorSource, Vec<Argument<'a>>)>,
+    opaque_factors: Vec<(AtomView<'a>, Vec<AtomView<'a>>, PartialStructure)>,
+    overrides: Vec<(AtomView<'a>, Argument<'a>)>,
     metrics: usize,
     alpha_tensors: AHashMap<TensorKey<'a>, usize>,
     alpha_terms: AHashMap<MonomialKey, Vec<(usize, u16)>>,
@@ -118,6 +132,7 @@ struct ComponentSum<'a, 'b> {
     input_bytes: usize,
     scalar_spectators: AHashMap<AtomView<'a>, bool>,
     distributed: bool,
+    preserve_scalar_factors: bool,
 }
 
 impl SlotContraction {
@@ -143,43 +158,7 @@ impl SlotContraction {
         if value.needs_normalization() || self.metric.get_evaluation_info().is_some() {
             return None;
         }
-        let mut state = ComponentSum {
-            contractor: self,
-            intake,
-            slots,
-            heads: AHashMap::new(),
-            spaces: Vec::new(),
-            endpoints: AHashMap::new(),
-            compact_spaces: AHashMap::new(),
-            variables: Vec::new(),
-            positions: AHashMap::new(),
-            nodes: Vec::new(),
-            occurrences: AHashMap::new(),
-            factors: Vec::new(),
-            coefficient: Rational::one(),
-            contracted: false,
-            inference: InterfaceInference::default(),
-            tensor_ports: AHashMap::new(),
-            tensors: Vec::new(),
-            metrics: 0,
-            alpha_tensors: AHashMap::new(),
-            alpha_terms: AHashMap::new(),
-            alpha_bytes: 0,
-            coefficients: Vec::new(),
-            monomials: Vec::new(),
-            input_nodes: Vec::new(),
-            input_children: Vec::new(),
-            input_leaves: AHashMap::new(),
-            input_atoms: Vec::new(),
-            input_numbers: Vec::new(),
-            input_powers: Vec::new(),
-            input_active: Vec::new(),
-            input_numeric_depth: 0,
-            input_terms: AHashMap::new(),
-            input_bytes: 0,
-            scalar_spectators: AHashMap::new(),
-            distributed: false,
-        };
+        let mut state = ComponentSum::new(self, intake, slots);
         let mut spectators = Vec::new();
         if expand_sums {
             let mut pending = Vec::new();
@@ -295,39 +274,7 @@ impl SlotContraction {
         let mut variables: Vec<PolyVariable> = Vec::new();
         let mut remap = Vec::with_capacity(state.variables.len());
         for variable in &state.variables {
-            let atom = match variable {
-                Variable::Scalar(value) => (*value).to_owned(),
-                Variable::Vector(head, slot) => FunctionBuilder::new(*head).add_arg(*slot).finish(),
-                Variable::Metric([first, second]) => FunctionBuilder::new(self.metric)
-                    .add_arg(*first)
-                    .add_arg(*second)
-                    .finish(),
-                Variable::Dot(space, [first, second]) => {
-                    let (representation, dimension) = state.spaces[*space];
-                    let compact = representation.to_symbolic([dimension]);
-                    let first = FunctionBuilder::new(*first).add_arg(&compact).finish();
-                    let second = FunctionBuilder::new(*second).add_arg(&compact).finish();
-                    FunctionBuilder::new(self.metric)
-                        .add_arg(first)
-                        .add_arg(second)
-                        .finish()
-                }
-                Variable::Tensor(head, arguments) => {
-                    let mut function = FunctionBuilder::new(*head);
-                    for argument in arguments {
-                        function = match *argument {
-                            Argument::Original(value) => function.add_arg(value),
-                            Argument::Vector(space, head) => {
-                                let (representation, dimension) = state.spaces[space];
-                                let compact = representation.to_symbolic([dimension]);
-                                function
-                                    .add_arg(FunctionBuilder::new(head).add_arg(compact).finish())
-                            }
-                        };
-                    }
-                    function.finish()
-                }
-            };
+            let atom = state.emit_variable(variable)?;
             let next = variables.len();
             let position = *atoms.entry(atom.clone()).or_insert_with(|| {
                 variables.push(atom.try_into().unwrap());
@@ -364,7 +311,88 @@ impl SlotContraction {
     }
 }
 
-impl<'a> ComponentSum<'a, '_> {
+impl<'a, 'b> ComponentSum<'a, 'b> {
+    fn new(contractor: &'b SlotContraction, intake: Intake, slots: &'b mut SlotMatcher) -> Self {
+        Self {
+            contractor,
+            intake,
+            slots,
+            heads: AHashMap::new(),
+            spaces: Vec::new(),
+            endpoints: AHashMap::new(),
+            compact_spaces: AHashMap::new(),
+            variables: Vec::new(),
+            positions: AHashMap::new(),
+            nodes: Vec::new(),
+            occurrences: AHashMap::new(),
+            factors: Vec::new(),
+            coefficient: Rational::one(),
+            contracted: false,
+            inference: InterfaceInference::default(),
+            tensor_ports: AHashMap::new(),
+            tensors: Vec::new(),
+            opaque_factors: Vec::new(),
+            overrides: Vec::new(),
+            metrics: 0,
+            alpha_tensors: AHashMap::new(),
+            alpha_terms: AHashMap::new(),
+            alpha_bytes: 0,
+            coefficients: Vec::new(),
+            monomials: Vec::new(),
+            input_nodes: Vec::new(),
+            input_children: Vec::new(),
+            input_leaves: AHashMap::new(),
+            input_atoms: Vec::new(),
+            input_numbers: Vec::new(),
+            input_powers: Vec::new(),
+            input_active: Vec::new(),
+            input_numeric_depth: 0,
+            input_terms: AHashMap::new(),
+            input_bytes: 0,
+            scalar_spectators: AHashMap::new(),
+            distributed: false,
+            preserve_scalar_factors: false,
+        }
+    }
+
+    fn emit_variable(&self, variable: &Variable<'a>) -> Option<Atom> {
+        Some(match variable {
+            Variable::Scalar(value) => (*value).to_owned(),
+            Variable::Vector(head, slot) => FunctionBuilder::new(*head).add_arg(*slot).finish(),
+            Variable::Metric([first, second]) => FunctionBuilder::new(self.contractor.metric)
+                .add_arg(*first)
+                .add_arg(*second)
+                .finish(),
+            Variable::Dot(space, [first, second]) => {
+                let (representation, dimension) = self.spaces[*space];
+                let compact = representation.to_symbolic([dimension]);
+                let first = FunctionBuilder::new(*first).add_arg(&compact).finish();
+                let second = FunctionBuilder::new(*second).add_arg(&compact).finish();
+                FunctionBuilder::new(self.contractor.metric)
+                    .add_arg(first)
+                    .add_arg(second)
+                    .finish()
+            }
+            Variable::Tensor(TensorSource::Function(head), arguments) => {
+                let mut function = FunctionBuilder::new(*head);
+                for argument in arguments {
+                    function = match *argument {
+                        Argument::Original(value) => function.add_arg(value),
+                        Argument::Vector(space, head) => {
+                            let (representation, dimension) = self.spaces[space];
+                            let compact = representation.to_symbolic([dimension]);
+                            function.add_arg(FunctionBuilder::new(head).add_arg(compact).finish())
+                        }
+                    };
+                }
+                function.finish()
+            }
+            Variable::Tensor(TensorSource::Factor(position), arguments) => {
+                return self.emit_factor(*position, arguments);
+            }
+        })
+    }
+
     // Count borrowed factor occurrences, not expanded Atom bytes. Both the
     // Cartesian work and the existing coefficient/exponent storage are bounded.
     const MAX_GENERATED_TERMS: usize = 1_000_000;
@@ -445,6 +473,23 @@ impl<'a> ComponentSum<'a, '_> {
     ) -> Option<(usize, (usize, usize))> {
         if depth > Self::MAX_EXPANSION_DEPTH || value.needs_normalization() {
             return None;
+        }
+        if self.preserve_scalar_factors
+            && matches!(
+                value,
+                AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
+            )
+            && self.scalar_spectator(value)
+        {
+            if let Some(&node) = self.input_leaves.get(&value) {
+                return Some((node, (1, 1)));
+            }
+            let position = self.input_atoms.len();
+            self.input_atoms.push(value);
+            self.input_powers.push(0);
+            let node = self.input_node(InputFactor::Atom(position))?;
+            self.input_leaves.insert(value, node);
+            return Some((node, (1, 1)));
         }
         match value {
             AtomView::Add(sum) => self.compile_group(sum.iter(), true, depth),
@@ -673,7 +718,12 @@ impl<'a> ComponentSum<'a, '_> {
     }
 
     fn monomial_key(&mut self) -> Result<Option<MonomialKey>, ()> {
-        if self.tensors.is_empty() {
+        if self.tensors.is_empty()
+            || self
+                .tensors
+                .iter()
+                .any(|(source, _)| matches!(source, TensorSource::Factor(_)))
+        {
             return Ok(None);
         }
         // These estimates include Vec headers and generous map-capacity slack;
@@ -990,14 +1040,18 @@ impl<'a> ComponentSum<'a, '_> {
             ports
         };
         let tensor = self.tensors.len();
-        self.tensors
-            .push((head, function.iter().map(Argument::Original).collect()));
+        self.tensors.push((
+            TensorSource::Function(head),
+            function.iter().map(|arg| self.argument(arg)).collect(),
+        ));
         for (position, slot) in ports {
-            let (space, index) = self.resolve_endpoint(slot)?;
-            let node = self.endpoint(slot, space, index)?;
-            self.nodes[node]
-                .terminals
-                .push(Terminal::Tensor(tensor, position));
+            if let Argument::Original(slot) = self.argument(slot) {
+                let (space, index) = self.resolve_endpoint(slot)?;
+                let node = self.endpoint(slot, space, index)?;
+                self.nodes[node]
+                    .terminals
+                    .push(Terminal::Tensor(tensor, position));
+            }
         }
         Some(())
     }
@@ -1030,27 +1084,7 @@ impl<'a> ComponentSum<'a, '_> {
                 if let Some((space, first, second)) = self.compact_dot(function) {
                     self.dot(space, first, second, exponent);
                 } else {
-                    let (space, first_index) = self.resolve_endpoint(first)?;
-                    let (second_space, second_index) = self.resolve_endpoint(second)?;
-                    if space != second_space {
-                        return None;
-                    }
-                    if exponent > 1 {
-                        if first_index == second_index {
-                            return None;
-                        }
-                        self.factor(self.spaces[space].1, exponent / 2)?;
-                        self.contracted = true;
-                    }
-                    if exponent % 2 == 1 {
-                        let a = self.endpoint(first, space, first_index)?;
-                        let b = self.endpoint(second, space, second_index)?;
-                        let a = self.root(a);
-                        let b = self.root(b);
-                        self.metrics += 1;
-                        self.nodes[a].metrics += 1;
-                        self.nodes[b].parent = a;
-                    }
+                    self.metric(self.argument(first), self.argument(second), exponent)?;
                 }
             }
             AtomView::Fun(function) => {
@@ -1059,7 +1093,14 @@ impl<'a> ComponentSum<'a, '_> {
                         .then_some(())
                         .and_then(|()| self.tensor(function));
                 };
-                let argument = function.iter().next().unwrap();
+                let argument = self.argument(function.iter().next().unwrap());
+                let Argument::Original(argument) = argument else {
+                    let Argument::Vector(space, other) = argument else {
+                        unreachable!()
+                    };
+                    self.dot(space, head, other, exponent);
+                    return Some(());
+                };
                 let (space, index) = self.resolve_endpoint(argument)?;
                 if exponent > 1 {
                     self.dot(space, head, head, exponent / 2);
@@ -1221,7 +1262,7 @@ mod tests {
     fn parse(value: &str) -> Atom {
         Atom::parse(value, "closed_component_test", ParseSettings::symbolica()).unwrap()
     }
-    fn setup() -> SlotContraction {
+    pub(super) fn setup() -> SlotContraction {
         crate::representations::initialize();
         for head in ["p", "q", "r", "s"] {
             SPENSO_TAG.rank_one_tensor_symbol(&format!("closed_component_test::{head}"));
@@ -1236,7 +1277,7 @@ mod tests {
             projectors: [*shadowing::CYCLIC, *shadowing::SYM],
         }
     }
-    fn input(value: &str) -> Atom {
+    pub(super) fn input(value: &str) -> Atom {
         let mut qualified = value.to_owned();
         for head in ["g(", "mink(", "cof("] {
             let mut output = String::with_capacity(qualified.len());

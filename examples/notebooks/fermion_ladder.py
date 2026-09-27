@@ -571,13 +571,21 @@ def consolidation_child(args):
         raise ValueError(f"Core identity changed: {before}")
     setup = process_time_ns()
     case = make_case(args.case)
-    setup = process_time_ns() - setup
     route = args.route
     if route == "scalar" and not isinstance(case, HistoricalLadder):
         raise ValueError(
             "The pure Symbolica recipe is defined only for the historical ladder"
         )
-    call = case.scalar if route == "scalar" else case.reduce
+    if route == "factorized":
+        from tensor_benchmark_factorized import prepare, reduce
+
+        if not (args.case.startswith(("historical-", "gluon-"))):
+            raise ValueError("The factorized route requires a gluonic ladder fixture")
+        prepared = prepare(case)
+        call = lambda: reduce(case, prepared)
+    else:
+        call = case.scalar if route == "scalar" else case.reduce
+    setup = process_time_ns() - setup
     warmup = call()
     warmup_identity = hashlib.sha256(atom(warmup).format_plain().encode()).hexdigest()
     del warmup
@@ -618,7 +626,18 @@ def consolidation_child(args):
         "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
         "resource": resource_snapshot(args.cpu),
     }
-    record["phases"] = case.phases(result)
+    if route == "factorized":
+        phases = {}
+        assert reduce(case, prepared, phases) == result
+        record["phases"] = phases
+        record["strategy"] = {
+            "vertex_order": list(case.order),
+            "rule_application": "reusable TensorRule per local vertex; factorized output",
+            "contraction": "existing Rust component reducer with merged states",
+            "materialization": "explicit polynomial forward pass over aliases",
+        }
+    else:
+        record["phases"] = case.phases(result)
     if args.check:
         if hasattr(case, "explicit") and case.explicit is not None:
             assert result == case.reduce(case.explicit)
@@ -789,6 +808,11 @@ def consolidation_benchmark(args):
     variants = [value.split("=", 1) for value in interpreters]
     if len({label for label, _ in variants}) != len(variants):
         raise ValueError("Interpreter labels must be unique")
+    ladder_routes = dict(value.split("=", 1) for value in (args.ladder_route or []))
+    if set(ladder_routes) - {label for label, _ in variants} or any(
+        route not in ("typed", "factorized") for route in ladder_routes.values()
+    ):
+        raise ValueError("Use --ladder-route LABEL=typed or LABEL=factorized")
     cases = args.cases.split(",") if args.cases else CASES
     if any(case not in CASES for case in cases):
         raise ValueError(f"Cases must be selected from {CASES}")
@@ -831,6 +855,7 @@ def consolidation_benchmark(args):
         "created_utc": datetime.now(UTC).isoformat(),
         "sources": sources,
         "interpreters": dict(variants),
+        "ladder_routes": ladder_routes,
         "cases": cases,
         "timing": "Fresh interpreter for each case/route/round; one fixed unmeasured warmup, checked and disposed before clocks; fixed measured calls; setup/checks/disposal excluded; no discarded measured samples or retries",
         "diagnostic_scope": "Separate check processes; phase clocks/counts never substituted for primary clocks",
@@ -864,6 +889,8 @@ def consolidation_benchmark(args):
     report["expected_cores"] = dict(cores)
 
     def child(label, python, case, route, suffix, check=False, measurement=False):
+        if route == "typed" and (case.startswith(("historical-", "gluon-"))):
+            route = ladder_routes.get(label, "typed")
         output = directory / f"{label}-{case}-{route}-{suffix}.json"
         command = [
             python,
@@ -1071,17 +1098,38 @@ def consolidation_benchmark(args):
             own = [
                 r["record"]
                 for r in rows
-                if r["label"] == label and r["route"] == "typed"
+                if r["label"] == label and r["route"] != "scalar"
             ]
             summary[label] = {
                 clock: median(r[clock] / r["calls"] for r in own)
                 for clock in ("wall_ns", "process_ns", "thread_ns")
             }
+            if own and own[0]["route"] == "factorized":
+                summary[label]["factorized"] = {
+                    "phase_cpu_ns": {
+                        phase: median(
+                            next(
+                                stage["cpu_ns"]
+                                for stage in row["phases"]["stages"]
+                                if stage["phase"] == phase
+                            )
+                            for row in own
+                        )
+                        for phase in (
+                            "rule_application_and_admission",
+                            "contraction",
+                            "explicit_materialization",
+                        )
+                    },
+                    "aliased_bytes": [row["phases"]["aliased_bytes"] for row in own],
+                    "definitions": [row["phases"]["definitions"] for row in own],
+                    "scope": "Separate diagnostic calls; primary end-to-end clocks above",
+                }
             if label != variants[0][0]:
                 base = [
                     r["record"]
                     for r in rows
-                    if r["label"] == variants[0][0] and r["route"] == "typed"
+                    if r["label"] == variants[0][0] and r["route"] != "scalar"
                 ]
                 summary[label]["paired_ratios"] = {
                     clock: [
@@ -1179,6 +1227,24 @@ def consolidation_benchmark(args):
                 ),
                 "rows": checks,
             }
+    if args.milestone == "M1" and "historical-early" in report["summary"]:
+        for label, _ in variants:
+            if ladder_routes.get(label) != "factorized":
+                continue
+            value = report["summary"]["historical-early"][label]["factorized"]
+            clocks = value["phase_cpu_ns"]
+            gates = {
+                "contraction_under_50ms": clocks["contraction"] < 50_000_000,
+                "materialization_under_150ms": clocks["explicit_materialization"]
+                < 150_000_000,
+                "aliases_under_100KB": max(value["aliased_bytes"]) < 100_000,
+            }
+            report["acceptance"][label] = {
+                "gate": "M1 historical ladder; plan's reverse order = 5,4,6,3,7,2,8,1",
+                "pass": all(gates.values()),
+                "requirements": gates,
+                "measurements": value,
+            }
     report.update(core_identities=cores, source_drift=False, completed=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     if any(not gate["pass"] for gate in report["acceptance"].values()):
@@ -1204,6 +1270,11 @@ if __name__ == "__main__":
         help="LABEL=expected core SHA256; binds release identity",
     )
     parser.add_argument("--milestone", default="M0")
+    parser.add_argument(
+        "--ladder-route",
+        action="append",
+        help="LABEL=typed or LABEL=factorized for historical/gluonic ladders only",
+    )
     parser.add_argument("--cases", help="Comma-separated consolidation case names")
     parser.add_argument("--check-only", action="store_true")
     parser.add_argument(
@@ -1228,7 +1299,10 @@ if __name__ == "__main__":
     parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--case", help=argparse.SUPPRESS)
     parser.add_argument(
-        "--route", choices=("typed", "scalar"), default="typed", help=argparse.SUPPRESS
+        "--route",
+        choices=("typed", "scalar", "factorized"),
+        default="typed",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument("--expected-core", help=argparse.SUPPRESS)
     parser.add_argument("--check", action="store_true", help=argparse.SUPPRESS)

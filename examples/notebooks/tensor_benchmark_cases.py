@@ -22,7 +22,10 @@ from symbolica.community.spenso import (
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-ORDERS = {"original": tuple(range(1, 9)), "early": (5, 4, 6, 3, 7, 2, 8, 1)}
+ORDERS = {
+    "original": tuple(range(1, 9)),
+    "early": (5, 4, 6, 3, 7, 2, 8, 1),
+}
 
 
 def atom(value):
