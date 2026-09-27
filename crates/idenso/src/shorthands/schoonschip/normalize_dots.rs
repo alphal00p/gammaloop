@@ -96,30 +96,49 @@ impl DotNormalizer {
         // replace_map treats even an unchanged pruning assignment as a change,
         // rebuilding its ancestors. A visitor can skip opaque payloads without
         // that work when no nested-vector or power identity applies.
-        if !self.has_rewrite(view) {
+        let Some((first_position, first_result)) = self.first_rewrite(view) else {
             return view.to_owned();
-        }
-        view.replace_map(|atom, _, out| match self.normalize_node(atom) {
-            DotRewrite::Rewritten(result) => **out = result,
-            DotRewrite::Opaque => out.set_from_view(&atom),
-            DotRewrite::Descend => {}
+        };
+        let mut first_result = Some(first_result);
+        let mut position = 0;
+        view.replace_map(|atom, context, out| {
+            let current = position;
+            position += 1;
+            // Both walks use the same top-down order and opaque-node pruning.
+            // The ordinal identifies one occurrence, not every equal subtree.
+            if current == first_position {
+                **out = first_result.take().unwrap();
+            } else if context.parent_type.is_some() {
+                match self.normalize_node(atom) {
+                    DotRewrite::Rewritten(result) => **out = result,
+                    DotRewrite::Opaque => out.set_from_view(&atom),
+                    DotRewrite::Descend => {}
+                }
+            }
         })
     }
 
-    fn has_rewrite(&mut self, view: AtomView<'_>) -> bool {
-        let mut found = false;
+    fn first_rewrite(&mut self, view: AtomView<'_>) -> Option<(usize, Atom)> {
+        let mut first = None;
+        let mut position = 0;
         view.visitor(&mut |atom| {
-            if found {
+            if first.is_some() {
                 return false;
             }
+            let current = position;
+            position += 1;
+            // apply already tried the root. Reuse that decline in both walks.
+            if current == 0 {
+                return true;
+            }
             match self.normalize_node(atom) {
-                DotRewrite::Rewritten(_) => found = true,
+                DotRewrite::Rewritten(result) => first = Some((current, result)),
                 DotRewrite::Opaque => return false,
                 DotRewrite::Descend => {}
             }
-            !found
+            first.is_none()
         });
-        found
+        first
     }
 
     fn normalize_node(&mut self, atom: AtomView<'_>) -> DotRewrite {
@@ -232,6 +251,52 @@ mod tests {
     use spenso::{dualizable_dual_, rep_, structure::abstract_index::AIND_SYMBOLS};
     use symbolica::{function, symbol};
     use symbolica_utils::PatternReplacement;
+
+    #[test]
+    fn first_dot_rewrite_is_constructed_once_per_occurrence() {
+        use std::sync::{Arc, Mutex};
+
+        crate::test_support::test_initialize();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&calls);
+        let p = spenso::vector_symbol!(
+            "dot_first_rewrite_p",
+            norm = move |value, _| observed.lock().unwrap().push(value.to_owned())
+        );
+        let q = T.rank_one_tensor_symbol("dot_first_rewrite_q");
+        let scope = symbol!("dot_first_rewrite_scope");
+        let scalar = symbol!("dot_first_rewrite_scalar"; Scalar);
+        let nested = function!(p, function!(q, spenso::mink!(4)));
+        let power = function!(p, spenso::mink!(4, 73401)).pow(3);
+        let opaque = function!(scalar, &nested);
+        let input = function!(scope, &opaque, &nested, &nested, &power);
+
+        calls.lock().unwrap().clear();
+        let first = DotNormalizer::normalize(nested.as_view());
+        let second = DotNormalizer::normalize(nested.as_view());
+        let third = DotNormalizer::normalize(power.as_view());
+        let transcript = calls.lock().unwrap().clone();
+        assert!(!transcript.is_empty());
+        assert!(third.exposes_product);
+        let expected = function!(
+            scope,
+            &opaque,
+            first.expression,
+            second.expression,
+            third.expression
+        );
+        calls.lock().unwrap().clear();
+        let result = DotNormalizer::normalize(input.as_view());
+        assert_eq!(result.expression, expected);
+        assert!(result.exposes_product);
+        assert_eq!(*calls.lock().unwrap(), transcript);
+        calls.lock().unwrap().clear();
+        assert_eq!(
+            DotNormalizer::run(result.expression.as_view()),
+            result.expression
+        );
+        assert!(calls.lock().unwrap().is_empty());
+    }
 
     #[test]
     fn normalization_reports_new_product_sources() {
