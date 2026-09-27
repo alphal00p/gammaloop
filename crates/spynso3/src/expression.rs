@@ -1011,7 +1011,13 @@ impl TensorExpression {
     /// Remaining user normalization or evaluation hooks are rejected; callbacks
     /// may produce an admitted normalized RHS. Use `rhs_cache_size=0` when RHS
     /// callbacks have side effects.
-    #[pyo3(signature = (pattern, rhs, *, cond=None, rhs_cache_size=100))]
+    ///
+    /// With `contract=True`, every generated term is expanded and contracted as
+    /// it is produced and the results are merged once, as a FORM module does;
+    /// the result is the contracted sum. Terms must then be products the
+    /// component collector admits (plain tensor leaves, metrics, tagged
+    /// vectors, dots and scalars).
+    #[pyo3(signature = (pattern, rhs, *, cond=None, rhs_cache_size=100, contract=false))]
     fn replace_tensor(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -1019,13 +1025,18 @@ impl TensorExpression {
         rhs: ConvertibleToReplaceWith,
         cond: Option<ReplacementCondition>,
         rhs_cache_size: usize,
+        contract: bool,
     ) -> PyResult<Py<Self>> {
         let pattern = pattern.to_expression().expr.to_pattern();
         let rhs = rhs.to_replace_with()?;
         let conditions = cond.map(|condition| condition.0);
-        let value = Self::structured(&self_)
-            .replace_tensor(&pattern, &rhs, conditions.as_ref(), rhs_cache_size)
-            .map_err(Self::inference_error)?;
+        let source = Self::structured(&self_);
+        let value = if contract {
+            source.replace_tensor_contracted(&pattern, &rhs, conditions.as_ref(), rhs_cache_size)
+        } else {
+            source.replace_tensor(&pattern, &rhs, conditions.as_ref(), rhs_cache_size)
+        }
+        .map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(&self_, &value.expression);
         Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
     }

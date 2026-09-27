@@ -7,7 +7,7 @@ use spenso::structure::{
     slot::SlotMatcher,
 };
 use symbolica::{
-    atom::{Atom, AtomOrView, AtomView, Symbol},
+    atom::{Atom, AtomOrView, AtomView, Symbol, representation::FunView},
     id::{
         AtomMatchIterator, Condition, Match, MatchSettings, Pattern, PatternRestriction,
         ReplaceWith, WrappedMatchStack,
@@ -21,6 +21,7 @@ use super::{
     composition::{self, ExplicitIndexOccurrences},
     inference::{InterfaceInference, TensorInferenceError},
 };
+use crate::shorthands::schoonschip::SlotContraction;
 
 type Result<T> = std::result::Result<T, TensorInferenceError>;
 
@@ -43,6 +44,119 @@ impl SymbolicTensor<PartialStructure> {
         conditions: Option<&Condition<PatternRestriction>>,
         rhs_cache_size: usize,
     ) -> Result<Self> {
+        let proof = self.admit_replacement(pattern, rhs)?;
+        let settings = TensorReplacement::settings();
+        let unrestricted = Condition::True;
+        let mut replacement = TensorReplacement::new(
+            pattern,
+            rhs,
+            conditions.unwrap_or(&unrestricted),
+            &settings,
+            rhs_cache_size,
+            proof,
+        );
+        match replacement.apply(self.expression.as_view())? {
+            AtomOrView::View(_) => Ok(self.clone()),
+            expression => Ok(Self::from_normalized_parts(
+                expression.into_owned(),
+                self.structure.clone(),
+            )),
+        }
+    }
+
+    /// Replace whole tensor leaves and contract every generated term as it is
+    /// produced, merging the results once, as a FORM module does. Matching,
+    /// admission and caching follow [`Self::replace_tensor`]; the result is the
+    /// expanded, contracted sum. Every term must be a product the component
+    /// collector admits (plain tensor leaves, metrics, tagged vectors, dots and
+    /// scalars); other syntax needs `replace_tensor` followed by `schoonschip`.
+    pub fn replace_tensor_contracted(
+        &self,
+        pattern: &Pattern,
+        rhs: &ReplaceWith<'_>,
+        conditions: Option<&Condition<PatternRestriction>>,
+        rhs_cache_size: usize,
+    ) -> Result<Self> {
+        let proof = self.admit_replacement(pattern, rhs)?;
+        let settings = TensorReplacement::settings();
+        let unrestricted = Condition::True;
+        let mut replacement = TensorReplacement::new(
+            pattern,
+            rhs,
+            conditions.unwrap_or(&unrestricted),
+            &settings,
+            rhs_cache_size,
+            proof,
+        );
+        let source = self.expression.as_view();
+        if source.is_zero() {
+            return Ok(self.clone());
+        }
+        let terms: Vec<AtomView<'_>> = Self::summands(source).collect();
+        // Plan every match first: the products borrow the produced right-hand
+        // sides while the collector keeps views into them.
+        let mut plan: Vec<(usize, usize, Rhs)> = Vec::new();
+        let mut fresh: Vec<Atom> = Vec::new();
+        for (index, term) in terms.iter().enumerate() {
+            for (position, factor) in Self::term_factors(*term).enumerate() {
+                let AtomView::Fun(function) = factor else {
+                    continue;
+                };
+                if !replacement.eligible(function) {
+                    continue;
+                }
+                match replacement.resolve_leaf(factor)? {
+                    None => {}
+                    Some(Resolved::Cached(cached)) => {
+                        plan.push((index, position, Rhs::Cached(cached)))
+                    }
+                    Some(Resolved::Fresh(atom)) => {
+                        fresh.push(atom);
+                        plan.push((index, position, Rhs::Fresh(fresh.len() - 1)));
+                    }
+                }
+            }
+        }
+        let cached = &replacement.rhs_atoms;
+        let mut next = 0;
+        let products: Vec<Vec<AtomView<'_>>> = terms
+            .iter()
+            .enumerate()
+            .map(|(index, term)| {
+                let start = next;
+                while next < plan.len() && plan[next].0 == index {
+                    next += 1;
+                }
+                let matches = &plan[start..next];
+                Self::term_factors(*term)
+                    .enumerate()
+                    .filter(|(position, _)| {
+                        !matches.iter().any(|(_, matched, _)| matched == position)
+                    })
+                    .map(|(_, factor)| factor)
+                    .chain(matches.iter().map(|(_, _, rhs)| match *rhs {
+                        Rhs::Cached(index) => cached[index].as_view(),
+                        Rhs::Fresh(index) => fresh[index].as_view(),
+                    }))
+                    .collect()
+            })
+            .collect();
+        let expression = SlotContraction::contracted_products(&products).ok_or_else(|| {
+            TensorInferenceError::invalid(
+                "contracted replacement requires terms the component collector admits: products of plain tensor leaves, metrics, tagged vectors, dots and scalars within its size bounds; use replace_tensor followed by schoonschip",
+            )
+        })?;
+        Ok(Self::from_normalized_parts(
+            expression,
+            self.structure.clone(),
+        ))
+    }
+
+    fn admit_replacement(
+        &self,
+        pattern: &Pattern,
+        rhs: &ReplaceWith<'_>,
+    ) -> Result<InterfaceInference> {
         let mut proof = InterfaceInference::default();
         if self.expression.as_view().needs_normalization()
             || !self.structure.open_positions().is_empty()
@@ -59,33 +173,25 @@ impl SymbolicTensor<PartialStructure> {
                 "replacement wildcard `{wildcard}` does not occur in the tensor pattern"
             )));
         }
-        let settings = MatchSettings::new()
-            .partial(false)
-            .min_level(0)
-            .max_level(0);
-        let unrestricted = Condition::True;
-        let mut replacement = TensorReplacement {
-            pattern,
-            fixed_head: match pattern {
-                Pattern::Fn(head, _) if head.get_wildcard_level() == 0 => Some(head.get_id()),
-                _ => None,
-            },
-            rhs,
-            matcher: None,
-            match_stack: WrappedMatchStack::new(conditions.unwrap_or(&unrestricted), &settings),
-            rhs_cache_size,
-            rhs_cache: HashMap::new(),
-            source_signatures: HashMap::new(),
-            proof,
-            slots: SlotMatcher::default(),
+        Ok(proof)
+    }
+
+    // Views of a sum's terms and a product's factors keep the atom's lifetime,
+    // unlike the iterators borrowed from a local view.
+    fn summands<'v>(value: AtomView<'v>) -> impl Iterator<Item = AtomView<'v>> {
+        let (sum, single) = match value {
+            AtomView::Add(sum) => (Some(sum.iter()), None),
+            other => (None, Some(other)),
         };
-        match replacement.apply(self.expression.as_view())? {
-            AtomOrView::View(_) => Ok(self.clone()),
-            expression => Ok(Self::from_normalized_parts(
-                expression.into_owned(),
-                self.structure.clone(),
-            )),
-        }
+        sum.into_iter().flatten().chain(single)
+    }
+
+    fn term_factors<'v>(term: AtomView<'v>) -> impl Iterator<Item = AtomView<'v>> {
+        let (product, single) = match term {
+            AtomView::Mul(product) => (Some(product.iter()), None),
+            other => (None, Some(other)),
+        };
+        product.into_iter().flatten().chain(single)
     }
 }
 
@@ -110,6 +216,19 @@ impl Signature {
     }
 }
 
+/// A matched leaf's right-hand side: cached by arena index, or produced for
+/// this match alone when the cache is full or disabled.
+enum Resolved {
+    Cached(usize),
+    Fresh(Atom),
+}
+
+#[derive(Clone, Copy)]
+enum Rhs {
+    Cached(usize),
+    Fresh(usize),
+}
+
 struct TensorReplacement<'source, 'rule, 'rhs> {
     pattern: &'rule Pattern,
     fixed_head: Option<u32>,
@@ -117,10 +236,56 @@ struct TensorReplacement<'source, 'rule, 'rhs> {
     matcher: Option<AtomMatchIterator<'source, 'rule>>,
     match_stack: WrappedMatchStack<'source, 'rule>,
     rhs_cache_size: usize,
-    rhs_cache: HashMap<Vec<(Symbol, Match<'source>)>, (Atom, Signature)>,
+    rhs_cache: HashMap<Vec<(Symbol, Match<'source>)>, (usize, Signature)>,
+    rhs_atoms: Vec<Atom>,
     source_signatures: HashMap<AtomView<'source>, Signature>,
     proof: InterfaceInference,
     slots: SlotMatcher,
+}
+
+impl<'source, 'rule, 'rhs> TensorReplacement<'source, 'rule, 'rhs> {
+    fn settings() -> MatchSettings {
+        MatchSettings::new()
+            .partial(false)
+            .min_level(0)
+            .max_level(0)
+    }
+
+    fn new(
+        pattern: &'rule Pattern,
+        rhs: &'rule ReplaceWith<'rhs>,
+        conditions: &'rule Condition<PatternRestriction>,
+        settings: &'rule MatchSettings,
+        rhs_cache_size: usize,
+        proof: InterfaceInference,
+    ) -> Self {
+        Self {
+            pattern,
+            fixed_head: match pattern {
+                Pattern::Fn(head, _) if head.get_wildcard_level() == 0 => Some(head.get_id()),
+                _ => None,
+            },
+            rhs,
+            matcher: None,
+            match_stack: WrappedMatchStack::new(conditions, settings),
+            rhs_cache_size,
+            rhs_cache: HashMap::new(),
+            rhs_atoms: Vec::new(),
+            source_signatures: HashMap::new(),
+            proof,
+            slots: SlotMatcher::default(),
+        }
+    }
+
+    // The matcher rejects fixed-head mismatches before bindings or conditions.
+    // Avoid classifying these impossible tensor candidates.
+    fn eligible(&self, function: FunView<'_>) -> bool {
+        !self
+            .fixed_head
+            .is_some_and(|head| head != function.get_symbol_id())
+            && composition::is_tensor_leaf_head(function.get_symbol())
+            && !function.get_symbol().is_scalar()
+    }
 }
 
 impl<'source> TensorReplacement<'source, '_, '_> {
@@ -168,21 +333,7 @@ impl<'source> TensorReplacement<'source, '_, '_> {
                 }
                 Ok(result.into())
             }
-            // The matcher rejects fixed-head mismatches before bindings or
-            // conditions. Avoid classifying these impossible tensor candidates.
-            AtomView::Fun(function)
-                if self
-                    .fixed_head
-                    .is_some_and(|head| head != function.get_symbol_id()) =>
-            {
-                Ok(value.into())
-            }
-            AtomView::Fun(function)
-                if composition::is_tensor_leaf_head(function.get_symbol())
-                    && !function.get_symbol().is_scalar() =>
-            {
-                self.replace_leaf(value)
-            }
+            AtomView::Fun(function) if self.eligible(function) => self.replace_leaf(value),
             // A tensor inside metadata, a bracket, or a power is not a whole
             // leaf of this operation's transparent sum/product context.
             _ => Ok(value.into()),
@@ -190,6 +341,28 @@ impl<'source> TensorReplacement<'source, '_, '_> {
     }
 
     fn replace_leaf(&mut self, value: AtomView<'source>) -> Result<AtomOrView<'source>> {
+        Ok(match self.resolve_leaf(value)? {
+            None => value.into(),
+            Some(Resolved::Cached(index)) => {
+                let rhs = &self.rhs_atoms[index];
+                if rhs.as_view() == value {
+                    value.into()
+                } else {
+                    rhs.clone().into()
+                }
+            }
+            Some(Resolved::Fresh(rhs)) => {
+                if rhs.as_view() == value {
+                    value.into()
+                } else {
+                    rhs.into()
+                }
+            }
+        })
+    }
+
+    /// Match one leaf and produce its right-hand side.
+    fn resolve_leaf(&mut self, value: AtomView<'source>) -> Result<Option<Resolved>> {
         self.match_stack.reset();
         // Compile only when a leaf reaches matching, preserving the behavior
         // of unsupported patterns on expressions with no eligible leaves.
@@ -198,7 +371,7 @@ impl<'source> TensorReplacement<'source, '_, '_> {
             .get_or_insert_with(|| AtomMatchIterator::new(self.pattern));
         matcher.set_new_target(value, &self.match_stack);
         let Some(used_flags) = matcher.next(&mut self.match_stack) else {
-            return Ok(value.into());
+            return Ok(None);
         };
         debug_assert!(used_flags.iter().all(|used| *used));
         let found = self.match_stack.get_match_stack();
@@ -219,17 +392,13 @@ impl<'source> TensorReplacement<'source, '_, '_> {
             }
         };
         let key = found.get_matches();
-        if let Some((rhs, signature)) = self.rhs_cache.get(key) {
-            if !source.accepts(signature, rhs.is_zero()) {
+        if let Some((index, signature)) = self.rhs_cache.get(key) {
+            if !source.accepts(signature, self.rhs_atoms[*index].is_zero()) {
                 return Err(TensorInferenceError::invalid(
                     "tensor replacement changes the matched interface or introduces explicit indices",
                 ));
             }
-            return Ok(if rhs.as_view() == value {
-                value.into()
-            } else {
-                rhs.clone().into()
-            });
+            return Ok(Some(Resolved::Cached(*index)));
         }
         let rhs = match self.rhs {
             ReplaceWith::Pattern(pattern) => Workspace::get_local().with(|workspace| {
@@ -260,14 +429,12 @@ impl<'source> TensorReplacement<'source, '_, '_> {
             ));
         }
         if self.rhs_cache.len() < self.rhs_cache_size {
-            self.rhs_cache
-                .insert(key.to_vec(), (rhs.clone(), signature));
+            let index = self.rhs_atoms.len();
+            self.rhs_atoms.push(rhs);
+            self.rhs_cache.insert(key.to_vec(), (index, signature));
+            return Ok(Some(Resolved::Cached(index)));
         }
-        Ok(if rhs.as_view() == value {
-            value.into()
-        } else {
-            rhs.into()
-        })
+        Ok(Some(Resolved::Fresh(rhs)))
     }
 }
 
@@ -957,6 +1124,168 @@ mod tests {
                 .replace_tensor(&fa.to_pattern(), &rhs.clone().into(), None, 0)
                 .unwrap();
             assert_eq!(actual.expression, expected);
+        }
+    }
+
+    #[test]
+    fn contracted_replacement_matches_replace_expand_schoonschip() {
+        use crate::shorthands::schoonschip::Schoonschip;
+        use spenso::network::library::symbolic::ETS;
+        let t = spenso::tensor_symbol!("contracted_replace_t");
+        let t2 = spenso::tensor_symbol!("contracted_replace_t2");
+        let u = spenso::tensor_symbol!("contracted_replace_u");
+        let u2 = spenso::tensor_symbol!("contracted_replace_u2");
+        let p = spenso::vector_symbol!("contracted_replace_p");
+        let q = spenso::vector_symbol!("contracted_replace_q");
+        let m = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let x = Atom::var(symbolica::symbol!("contracted_replace_x"));
+        let index = Atom::var(symbolica::symbol!("contracted_replace_i_"));
+        let other = Atom::var(symbolica::symbol!("contracted_replace_j_"));
+        let (a, b, c, d) = (slot(82101), slot(82103), slot(82105), slot(82107));
+        let dot = leaf(
+            ETS.metric,
+            &[leaf(p, &[m.to_symbolic([])]), leaf(q, &[m.to_symbolic([])])],
+        );
+        let vector_rule = (
+            leaf(t, std::slice::from_ref(&index)).to_pattern(),
+            (leaf(p, std::slice::from_ref(&index))
+                - Atom::num(3) * leaf(q, std::slice::from_ref(&index)))
+            .to_pattern(),
+        );
+        let factored_rule = (
+            leaf(t, std::slice::from_ref(&index)).to_pattern(),
+            ((leaf(p, std::slice::from_ref(&index))
+                - Atom::num(3) * leaf(q, std::slice::from_ref(&index)))
+                * (Atom::num(1) + &x))
+                .to_pattern(),
+        );
+        let metric_rule = (
+            leaf(t2, &[index.clone(), other.clone()]).to_pattern(),
+            (leaf(ETS.metric, &[index.clone(), other.clone()])
+                + leaf(p, std::slice::from_ref(&index)) * leaf(p, std::slice::from_ref(&other)))
+            .to_pattern(),
+        );
+        let sources = [
+            (
+                &x * leaf(t, std::slice::from_ref(&a)) * leaf(u, std::slice::from_ref(&a))
+                    + leaf(t, std::slice::from_ref(&b)) * leaf(q, std::slice::from_ref(&b))
+                    + leaf(t, std::slice::from_ref(&c)) * leaf(u, std::slice::from_ref(&c)) * &dot,
+                &vector_rule,
+            ),
+            (
+                leaf(t, std::slice::from_ref(&a))
+                    * leaf(t, std::slice::from_ref(&b))
+                    * leaf(u, &[a.clone(), b.clone()]),
+                &vector_rule,
+            ),
+            (
+                &x * leaf(t, std::slice::from_ref(&a)) * leaf(u, &[a.clone(), d.clone()])
+                    + leaf(u, &[c.clone(), d.clone()]) * leaf(q, std::slice::from_ref(&c)),
+                &vector_rule,
+            ),
+            (
+                leaf(t2, &[a.clone(), b.clone()])
+                    * leaf(u, std::slice::from_ref(&a))
+                    * leaf(u2, std::slice::from_ref(&b))
+                    + Atom::num(7) * &dot,
+                &metric_rule,
+            ),
+            (
+                leaf(u, std::slice::from_ref(&a)) * leaf(q, std::slice::from_ref(&a)),
+                &vector_rule,
+            ),
+            (
+                (&x + Atom::num(2))
+                    * leaf(t, std::slice::from_ref(&a))
+                    * leaf(u, &[a.clone(), d.clone()])
+                    + leaf(t, std::slice::from_ref(&b)) * leaf(u, &[b.clone(), d.clone()]),
+                &factored_rule,
+            ),
+        ];
+        for (source, (pattern, rhs)) in sources {
+            let typed = typed(source.clone());
+            let rhs = ReplaceWith::Pattern(rhs.into());
+            let contracted = typed
+                .replace_tensor_contracted(pattern, &rhs, None, 10)
+                .unwrap();
+            let replaced = typed.replace_tensor(pattern, &rhs, None, 10).unwrap();
+            assert_eq!(
+                contracted.expression,
+                replaced.expression.expand().schoonschip(),
+                "{source}"
+            );
+            assert_eq!(contracted.structure, typed.structure);
+            SymbolicTensor::<PartialStructure>::validate_interface(
+                &contracted.expression,
+                &typed.structure,
+            )
+            .unwrap();
+        }
+        let source =
+            typed(&x * leaf(t, std::slice::from_ref(&a)) * leaf(u, &[a.clone(), d.clone()]));
+        let zero = source
+            .replace_tensor_contracted(&vector_rule.0, &Atom::Zero.into(), None, 10)
+            .unwrap();
+        assert!(zero.expression.is_zero());
+        assert_eq!(zero.structure, source.structure);
+    }
+
+    #[test]
+    fn contracted_replacement_rejects_unsupported_factors_and_reuses_cached_callbacks() {
+        let t = spenso::tensor_symbol!("contracted_replace_reject_t");
+        let u = spenso::tensor_symbol!("contracted_replace_reject_u");
+        let p = spenso::vector_symbol!("contracted_replace_reject_p");
+        let index = Atom::var(symbolica::symbol!("contracted_replace_reject_i_"));
+        let (a, b) = (slot(82201), slot(82203));
+        let pattern = leaf(t, std::slice::from_ref(&index)).to_pattern();
+        let rhs = ReplaceWith::Pattern(leaf(p, std::slice::from_ref(&index)).to_pattern().into());
+        // A wildcard scalar factor is not admitted by the collector.
+        let wildcard = typed(
+            Atom::var(symbolica::symbol!("contracted_replace_reject_w_"))
+                * leaf(t, std::slice::from_ref(&a))
+                * leaf(u, std::slice::from_ref(&a)),
+        );
+        assert!(
+            wildcard
+                .replace_tensor_contracted(&pattern, &rhs, None, 10)
+                .is_err()
+        );
+        let source = typed(
+            leaf(t, std::slice::from_ref(&a)) * leaf(u, std::slice::from_ref(&a))
+                + leaf(t, std::slice::from_ref(&a)) * leaf(p, std::slice::from_ref(&a))
+                + leaf(t, std::slice::from_ref(&b)) * leaf(u, std::slice::from_ref(&b)),
+        );
+        for (cache, expected_calls) in [(0, 3), (10, 2)] {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let seen = calls.clone();
+            let rhs = ReplaceWith::Map(Box::new(move |matches| {
+                seen.fetch_add(1, Ordering::Relaxed);
+                leaf(
+                    p,
+                    &[matches
+                        .get_atom(symbolica::symbol!("contracted_replace_reject_i_"))
+                        .unwrap()
+                        .to_owned()],
+                )
+            }));
+            let result = source
+                .replace_tensor_contracted(&pattern, &rhs, None, cache)
+                .unwrap();
+            assert_eq!(calls.load(Ordering::Relaxed), expected_calls);
+            let compact = leaf(
+                p,
+                &[ExtendibleReps::MINKOWSKI
+                    .new_rep(Dimension::Concrete(4))
+                    .to_symbolic([])],
+            );
+            assert_eq!(
+                result.expression,
+                Atom::num(2) * leaf(u, std::slice::from_ref(&compact))
+                    + leaf(
+                        spenso::network::library::symbolic::ETS.metric,
+                        &[compact.clone(), compact]
+                    )
+            );
         }
     }
 }

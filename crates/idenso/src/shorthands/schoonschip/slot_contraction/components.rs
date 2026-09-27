@@ -11,10 +11,11 @@ use spenso::structure::{
     representation::{LibraryRep, RepName},
     slot::{SlotMatch, SlotMatcher},
 };
+use std::collections::hash_map::Entry;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
     domains::{
-        Ring,
+        Ring, RingOps,
         rational::{Q, Rational},
     },
     poly::{PolyVariable, polynomial::MultivariatePolynomial},
@@ -109,6 +110,7 @@ struct ComponentSum<'a, 'b> {
     input_nodes: Vec<InputFactor>,
     input_children: Vec<usize>,
     input_leaves: AHashMap<AtomView<'a>, usize>,
+    input_groups: AHashMap<AtomView<'a>, (usize, (usize, usize))>,
     input_atoms: Vec<AtomView<'a>>,
     input_numbers: Vec<Rational>,
     input_powers: Vec<u16>,
@@ -143,8 +145,98 @@ impl SlotContraction {
         if value.needs_normalization() || self.metric.get_evaluation_info().is_some() {
             return None;
         }
-        let mut state = ComponentSum {
-            contractor: self,
+        let mut state = ComponentSum::new(self, slots, intake);
+        let mut spectators = Vec::new();
+        if expand_sums {
+            let mut pending = Vec::new();
+            if let AtomView::Mul(product) = value {
+                for factor in product.iter() {
+                    if state.scalar_spectator(factor) {
+                        spectators.push(factor);
+                    } else {
+                        pending.push((factor, 1));
+                    }
+                }
+            } else {
+                pending.push((value, 1));
+            }
+            if pending.is_empty() {
+                return None;
+            }
+            let mut count = (1usize, 0usize);
+            let mut compiled = Vec::with_capacity(pending.len());
+            for (factor, exponent) in pending {
+                let (node, next) = state.compile_input(factor, 0)?;
+                count = ComponentSum::product_size(count, next)?;
+                compiled.push((node, exponent));
+            }
+            state.distribute(&mut compiled, &Rational::one(), 0)?;
+            state.contract_collected(scalar_expansion)?;
+        } else {
+            let AtomView::Add(sum) = value else {
+                unreachable!()
+            };
+            state.coefficients.reserve(sum.iter().len());
+            state.monomials.reserve(sum.iter().len());
+            for term in sum.iter() {
+                state.nodes.clear();
+                state.occurrences.clear();
+                state.factors.clear();
+                state.tensors.clear();
+                state.metrics = 0;
+                state.coefficient = Rational::one();
+                if let AtomView::Mul(product) = term {
+                    for factor in product.iter() {
+                        state.factor(factor, 1)?;
+                    }
+                } else {
+                    state.factor(term, 1)?;
+                }
+                state.reduce_components()?;
+                state.coefficients.push(state.coefficient.clone());
+                state.monomials.push(state.factors.clone());
+            }
+        }
+        if !state.contracted && !state.distributed {
+            return None;
+        }
+        state.emit(spectators)
+    }
+
+    /// Sum the given products, distributing their sums and contracting every
+    /// generated term as it is produced. Callers supply factor views directly,
+    /// so a replaced leaf's right-hand side joins its term without any
+    /// materialized intermediate; the result is the expanded contracted sum.
+    pub(crate) fn collect_products<'a>(
+        &self,
+        products: &[Vec<AtomView<'a>>],
+        slots: &mut SlotMatcher,
+    ) -> Option<Atom> {
+        if self.metric.get_evaluation_info().is_some() {
+            return None;
+        }
+        let mut state = ComponentSum::new(self, slots, Intake::FactoredContraction);
+        let mut nodes = Vec::with_capacity(products.len());
+        let mut size = (0usize, 0usize);
+        for factors in products {
+            let (node, next) = state.compile_group(factors.iter().copied(), false, 1)?;
+            size = ComponentSum::bounded_size(
+                size.0.checked_add(next.0)?,
+                size.1.checked_add(next.1)?,
+            )?;
+            nodes.push(node);
+        }
+        let root = state.group_nodes(nodes, true)?;
+        state.distribute(&mut vec![(root, 1)], &Rational::one(), 0)?;
+        state.contract_collected(false)?;
+        state.emit(Vec::new())
+    }
+}
+
+impl<'a, 'b> ComponentSum<'a, 'b> {
+    fn new(contractor: &'b SlotContraction, slots: &'b mut SlotMatcher, intake: Intake) -> Self {
+        Self {
+            contractor,
             intake,
             slots,
             heads: AHashMap::new(),
@@ -179,91 +271,50 @@ impl SlotContraction {
             input_bytes: 0,
             scalar_spectators: AHashMap::new(),
             distributed: false,
-        };
-        let mut spectators = Vec::new();
-        if expand_sums {
-            let mut pending = Vec::new();
-            if let AtomView::Mul(product) = value {
-                for factor in product.iter() {
-                    if state.scalar_spectator(factor) {
-                        spectators.push(factor);
-                    } else {
-                        pending.push((factor, 1));
-                    }
-                }
-            } else {
-                pending.push((value, 1));
-            }
-            if pending.is_empty() {
-                return None;
-            }
-            let mut count = (1usize, 0usize);
-            let mut compiled = Vec::with_capacity(pending.len());
-            for (factor, exponent) in pending {
-                let (node, next) = state.compile_input(factor, 0)?;
-                count = ComponentSum::product_size(count, next)?;
-                compiled.push((node, exponent));
-            }
-            state.distribute(&mut compiled, &Rational::one(), 0)?;
-            // Match expansion's exact collection before checking graph degree
-            // or opaque powers. Cancelled terms cannot create incidences.
-            let mut terms: Vec<_> = std::mem::take(&mut state.input_terms)
-                .into_iter()
-                .filter(|(_, (_, coefficient))| !coefficient.is_zero())
-                .collect();
-            terms.sort_unstable_by_key(|(_, (order, _))| *order);
-            state.coefficients.reserve(terms.len());
-            state.monomials.reserve(terms.len());
-            for (factors, (_, coefficient)) in terms {
-                state.nodes.clear();
-                state.occurrences.clear();
-                state.factors.clear();
-                state.tensors.clear();
-                state.metrics = 0;
-                state.coefficient = coefficient;
-                for (factor, exponent) in factors {
-                    if scalar_expansion {
-                        // Admission has already proved this literal leaf scalar.
-                        // Algebra must neither contract nor rebuild compact dots.
-                        state.variable(Variable::Scalar(state.input_atoms[factor]), exponent);
-                    } else {
-                        state.factor(state.input_atoms[factor], exponent)?;
-                    }
-                }
-                if !scalar_expansion {
-                    state.reduce_components()?;
-                }
-                state.coefficients.push(state.coefficient.clone());
-                state.monomials.push(state.factors.clone());
-            }
-        } else {
-            let AtomView::Add(sum) = value else {
-                unreachable!()
-            };
-            state.coefficients.reserve(sum.iter().len());
-            state.monomials.reserve(sum.iter().len());
-            for term in sum.iter() {
-                state.nodes.clear();
-                state.occurrences.clear();
-                state.factors.clear();
-                state.tensors.clear();
-                state.metrics = 0;
-                state.coefficient = Rational::one();
-                if let AtomView::Mul(product) = term {
-                    for factor in product.iter() {
-                        state.factor(factor, 1)?;
-                    }
+            input_groups: AHashMap::new(),
+        }
+    }
+
+    // Contract each merged pre-contraction monomial and record its factors.
+    fn contract_collected(&mut self, scalar_expansion: bool) -> Option<()> {
+        // Match expansion's exact collection before checking graph degree
+        // or opaque powers. Cancelled terms cannot create incidences.
+        let mut terms: Vec<_> = std::mem::take(&mut self.input_terms)
+            .into_iter()
+            .filter(|(_, (_, coefficient))| !coefficient.is_zero())
+            .collect();
+        terms.sort_unstable_by_key(|(_, (order, _))| *order);
+        self.coefficients.reserve(terms.len());
+        self.monomials.reserve(terms.len());
+        for (factors, (_, coefficient)) in terms {
+            self.nodes.clear();
+            self.occurrences.clear();
+            self.factors.clear();
+            self.tensors.clear();
+            self.metrics = 0;
+            self.coefficient = coefficient;
+            for (factor, exponent) in factors {
+                if scalar_expansion {
+                    // Admission has already proved this literal leaf scalar.
+                    // Algebra must neither contract nor rebuild compact dots.
+                    self.variable(Variable::Scalar(self.input_atoms[factor]), exponent);
                 } else {
-                    state.factor(term, 1)?;
+                    self.factor(self.input_atoms[factor], exponent)?;
                 }
-                state.reduce_components()?;
-                state.coefficients.push(state.coefficient.clone());
-                state.monomials.push(state.factors.clone());
             }
+            if !scalar_expansion {
+                self.reduce_components()?;
+            }
+            self.coefficients.push(self.coefficient.clone());
+            self.monomials.push(self.factors.clone());
         }
-        if !state.contracted && !state.distributed {
-            return None;
-        }
+        Some(())
+    }
+
+    /// Emit the merged sum, keeping root scalar spectators factored.
+    fn emit(self, spectators: Vec<AtomView<'a>>) -> Option<Atom> {
+        let expand_sums = self.intake != Intake::ExpandedContraction;
+        let state = self;
         if state.coefficients.is_empty() {
             return Some(Atom::Zero);
         }
@@ -277,28 +328,25 @@ impl SlotContraction {
                     .try_fold(0u16, |degree, (_, exponent)| degree.checked_add(*exponent))?;
             }
         }
-        // Dense polynomial exponents suit the few scalar variables in a ladder,
-        // but not high-entropy sums with a new variable in every monomial.
+        // Dense polynomial exponents suit the few scalar variables in a ladder;
+        // sums carrying many distinct opaque tensors merge sparsely instead.
         const MAX_EXPONENT_BYTES: usize = 64 * 1024 * 1024;
-        if state
+        let sparse = state
             .coefficients
             .len()
             .checked_mul(state.variables.len())?
             .checked_mul(std::mem::size_of::<u16>())?
-            > MAX_EXPONENT_BYTES
-        {
-            return None;
-        }
+            > MAX_EXPONENT_BYTES;
         // Admission has finished: no callback-bearing or unsupported factor can
         // reach a builder. Canonical Atom equality also merges any variable alias.
-        let mut atoms = AHashMap::new();
-        let mut variables: Vec<PolyVariable> = Vec::new();
+        let mut positions = AHashMap::new();
+        let mut atoms: Vec<Atom> = Vec::new();
         let mut remap = Vec::with_capacity(state.variables.len());
         for variable in &state.variables {
             let atom = match variable {
                 Variable::Scalar(value) => (*value).to_owned(),
                 Variable::Vector(head, slot) => FunctionBuilder::new(*head).add_arg(*slot).finish(),
-                Variable::Metric([first, second]) => FunctionBuilder::new(self.metric)
+                Variable::Metric([first, second]) => FunctionBuilder::new(state.contractor.metric)
                     .add_arg(*first)
                     .add_arg(*second)
                     .finish(),
@@ -307,7 +355,7 @@ impl SlotContraction {
                     let compact = representation.to_symbolic([dimension]);
                     let first = FunctionBuilder::new(*first).add_arg(&compact).finish();
                     let second = FunctionBuilder::new(*second).add_arg(&compact).finish();
-                    FunctionBuilder::new(self.metric)
+                    FunctionBuilder::new(state.contractor.metric)
                         .add_arg(first)
                         .add_arg(second)
                         .finish()
@@ -328,29 +376,37 @@ impl SlotContraction {
                     function.finish()
                 }
             };
-            let next = variables.len();
-            let position = *atoms.entry(atom.clone()).or_insert_with(|| {
-                variables.push(atom.try_into().unwrap());
+            let next = atoms.len();
+            let position = *positions.entry(atom.clone()).or_insert_with(|| {
+                atoms.push(atom);
                 next
             });
             remap.push(position);
         }
-        let count = variables.len();
-        let size = state.coefficients.len().checked_mul(count)?;
-        let mut exponents = vec![0u16; size];
-        for (term, factors) in state.monomials.iter().enumerate() {
-            for &(factor, exponent) in factors {
-                let entry = &mut exponents[term * count + remap[factor]];
-                *entry = entry.checked_add(exponent)?;
+        let result = if sparse {
+            Self::merge_sparse(state.coefficients, state.monomials, &remap, &atoms)?
+        } else {
+            let count = atoms.len();
+            let size = state.coefficients.len().checked_mul(count)?;
+            let mut exponents = vec![0u16; size];
+            for (term, factors) in state.monomials.iter().enumerate() {
+                for &(factor, exponent) in factors {
+                    let entry = &mut exponents[term * count + remap[factor]];
+                    *entry = entry.checked_add(exponent)?;
+                }
             }
-        }
-        let result = MultivariatePolynomial::<_, u16>::from_coefficient_list(
-            state.coefficients,
-            exponents,
-            variables.into(),
-            &Q,
-        )
-        .to_expression();
+            let variables = atoms
+                .into_iter()
+                .map(|atom| atom.try_into().unwrap())
+                .collect::<Vec<PolyVariable>>();
+            MultivariatePolynomial::<_, u16>::from_coefficient_list(
+                state.coefficients,
+                exponents,
+                variables.into(),
+                &Q,
+            )
+            .to_expression()
+        };
         if spectators.is_empty() {
             Some(result)
         } else {
@@ -361,6 +417,50 @@ impl SlotContraction {
                     .chain([result]),
             ))
         }
+    }
+    // Merge equal monomials by their variable keys and build each term once;
+    // the dense exponent table would not fit for this many variables.
+    fn merge_sparse(
+        coefficients: Vec<Rational>,
+        monomials: Vec<Vec<(usize, u16)>>,
+        remap: &[usize],
+        atoms: &[Atom],
+    ) -> Option<Atom> {
+        let mut merged: AHashMap<Vec<(usize, u16)>, Rational> =
+            AHashMap::with_capacity(coefficients.len());
+        for (coefficient, factors) in coefficients.into_iter().zip(monomials) {
+            let mut monomial: Vec<(usize, u16)> = Vec::with_capacity(factors.len());
+            for (factor, exponent) in factors {
+                let position = remap[factor];
+                match monomial.iter_mut().find(|(known, _)| *known == position) {
+                    Some((_, known)) => *known = known.checked_add(exponent)?,
+                    None => monomial.push((position, exponent)),
+                }
+            }
+            monomial.sort_unstable();
+            match merged.entry(monomial) {
+                Entry::Occupied(mut entry) => {
+                    *entry.get_mut() = Q.add(entry.get(), &coefficient);
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(coefficient);
+                }
+            }
+        }
+        let terms = merged
+            .into_iter()
+            .filter(|(_, coefficient)| !Q.is_zero(coefficient))
+            .map(|(monomial, coefficient)| {
+                let factors = monomial.into_iter().map(|(position, exponent)| {
+                    if exponent == 1 {
+                        atoms[position].clone()
+                    } else {
+                        atoms[position].pow(Atom::num(i64::from(exponent)))
+                    }
+                });
+                Atom::mul_many(std::iter::once(Atom::num(coefficient)).chain(factors))
+            });
+        Some(Atom::add_many(terms))
     }
 }
 
@@ -427,15 +527,29 @@ impl<'a> ComponentSum<'a, '_> {
             };
             nodes.push(node);
         }
+        let node = self.group_nodes(nodes, sum)?;
+        Some((node, size))
+    }
+
+    fn remember_group(
+        &mut self,
+        value: AtomView<'a>,
+        compiled: (usize, (usize, usize)),
+    ) -> Option<()> {
+        self.reserve_input(4 * std::mem::size_of::<(AtomView<'a>, (usize, (usize, usize)))>())?;
+        self.input_groups.insert(value, compiled);
+        Some(())
+    }
+
+    fn group_nodes(&mut self, nodes: Vec<usize>, sum: bool) -> Option<usize> {
         let start = self.input_children.len();
         self.input_children.extend(nodes);
         let end = self.input_children.len();
-        let node = self.input_node(if sum {
+        self.input_node(if sum {
             InputFactor::Add(start, end)
         } else {
             InputFactor::Mul(start, end)
-        })?;
-        Some((node, size))
+        })
     }
 
     fn compile_input(
@@ -447,8 +561,21 @@ impl<'a> ComponentSum<'a, '_> {
             return None;
         }
         match value {
-            AtomView::Add(sum) => self.compile_group(sum.iter(), true, depth),
-            AtomView::Mul(product) => self.compile_group(product.iter(), false, depth),
+            // A sub-sum that recurs, such as a cached right-hand side joining
+            // many terms, compiles once.
+            AtomView::Add(_) | AtomView::Mul(_) if self.input_groups.contains_key(&value) => {
+                Some(self.input_groups[&value])
+            }
+            AtomView::Add(sum) => {
+                let compiled = self.compile_group(sum.iter(), true, depth)?;
+                self.remember_group(value, compiled)?;
+                Some(compiled)
+            }
+            AtomView::Mul(product) => {
+                let compiled = self.compile_group(product.iter(), false, depth)?;
+                self.remember_group(value, compiled)?;
+                Some(compiled)
+            }
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
                 let exponent = u16::try_from(i64::try_from(exponent).ok()?).ok()?;

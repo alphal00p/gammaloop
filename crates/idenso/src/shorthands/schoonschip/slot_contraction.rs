@@ -103,6 +103,13 @@ impl SlotContraction {
         )
     }
 
+    /// Sum products of factor views, distributing their sums and contracting
+    /// each generated term as it is produced.
+    pub(crate) fn contracted_products(products: &[Vec<AtomView<'_>>]) -> Option<Atom> {
+        let mut slots = SlotMatcher::default();
+        Self::new().collect_products(products, &mut slots)
+    }
+
     /// Expand admitted scalar sums without constructing or reducing tensor ports.
     pub(crate) fn expand_scalar_sum(view: AtomView<'_>) -> Option<Atom> {
         if !matches!(view, AtomView::Add(_)) {
