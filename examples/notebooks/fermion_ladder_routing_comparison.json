@@ -1,0 +1,448 @@
+{
+  "files": {
+    "baseline": {
+      "path": "/tmp/idenso-fermion-staged-routing/fermion_ladder_baseline.py",
+      "sha256": "209234807275202ef1aad01cc5d7b9bb6a0c98610b78108df863ca74ee28559b"
+    },
+    "candidate": {
+      "path": "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/fermion_ladder.py",
+      "sha256": "08e77c66ce7cc7231a0e50c586cd7d80d1db9305403839f1ed4798d1760e3269"
+    }
+  },
+  "cpu": 8,
+  "timing": "complete algebra CPU, prebuilt rules; retained outputs, checks/disposal outside; seven alternating paired batches",
+  "cases": [
+    {
+      "loops": 3,
+      "mode": "trace4",
+      "repeats": 64,
+      "setup_cpu_ms": {
+        "baseline": 2.771232,
+        "candidate": 2.498563
+      },
+      "samples": [
+        {
+          "baseline": {
+            "cpu_ns": 50950464,
+            "wall_ns": 51706926
+          },
+          "candidate": {
+            "cpu_ns": 50109836,
+            "wall_ns": 51057753
+          }
+        },
+        {
+          "candidate": {
+            "cpu_ns": 49571152,
+            "wall_ns": 50494621
+          },
+          "baseline": {
+            "cpu_ns": 49672675,
+            "wall_ns": 50588211
+          }
+        },
+        {
+          "baseline": {
+            "cpu_ns": 51002616,
+            "wall_ns": 52179287
+          },
+          "candidate": {
+            "cpu_ns": 51706337,
+            "wall_ns": 52916270
+          }
+        },
+        {
+          "candidate": {
+            "cpu_ns": 51112086,
+            "wall_ns": 52253088
+          },
+          "baseline": {
+            "cpu_ns": 51753921,
+            "wall_ns": 53049221
+          }
+        },
+        {
+          "baseline": {
+            "cpu_ns": 51835557,
+            "wall_ns": 53024571
+          },
+          "candidate": {
+            "cpu_ns": 50412887,
+            "wall_ns": 51481435
+          }
+        },
+        {
+          "candidate": {
+            "cpu_ns": 49475865,
+            "wall_ns": 50483331
+          },
+          "baseline": {
+            "cpu_ns": 50151137,
+            "wall_ns": 51210524
+          }
+        },
+        {
+          "baseline": {
+            "cpu_ns": 49808196,
+            "wall_ns": 50744292
+          },
+          "candidate": {
+            "cpu_ns": 50941603,
+            "wall_ns": 52046567
+          }
+        }
+      ],
+      "median_cpu_ms": {
+        "baseline": 0.796101,
+        "candidate": 0.787701359375
+      },
+      "paired_cpu_ratio": 0.9875983309554459,
+      "faster_cpu_pairs": 5,
+      "all_exact": true
+    },
+    {
+      "loops": 3,
+      "mode": "tracen",
+      "repeats": 64,
+      "setup_cpu_ms": {
+        "baseline": 2.606111,
+        "candidate": 3.115823
+      },
+      "samples": [
+        {
+          "baseline": {
+            "cpu_ns": 227731316,
+            "wall_ns": 232157814
+          },
+          "candidate": {
+            "cpu_ns": 161993524,
+            "wall_ns": 165341639
+          }
+        },
+        {
+          "candidate": {
+            "cpu_ns": 157228459,
+            "wall_ns": 160053487
+          },
+          "baseline": {
+            "cpu_ns": 189245609,
+            "wall_ns": 192315466
+          }
+        },
+        {
+          "baseline": {
+            "cpu_ns": 172297266,
+            "wall_ns": 174934667
+          },
+          "candidate": {
+            "cpu_ns": 126362803,
+            "wall_ns": 128562412
+          }
+        },
+        {
+          "candidate": {
+            "cpu_ns": 133601877,
+            "wall_ns": 136090142
+          },
+          "baseline": {
+            "cpu_ns": 184400451,
+            "wall_ns": 187528626
+          }
+        },
+        {
+          "baseline": {
+            "cpu_ns": 180755548,
+            "wall_ns": 183900842
+          },
+          "candidate": {
+            "cpu_ns": 124319886,
+            "wall_ns": 126493763
+          }
+        },
+        {
+          "candidate": {
+            "cpu_ns": 125011982,
+            "wall_ns": 127432027
+          },
+          "baseline": {
+            "cpu_ns": 172841879,
+            "wall_ns": 175573439
+          }
+        },
+        {
+          "baseline": {
+            "cpu_ns": 179918026,
+            "wall_ns": 182931509
+          },
+          "candidate": {
+            "cpu_ns": 133958647,
+            "wall_ns": 136663414
+          }
+        }
+      ],
+      "median_cpu_ms": {
+        "baseline": 2.8243054375,
+        "candidate": 2.087529328125
+      },
+      "paired_cpu_ratio": 0.7245203375343154,
+      "faster_cpu_pairs": 7,
+      "all_exact": true
+    },
+    {
+      "loops": 4,
+      "mode": "trace4",
+      "repeats": 8,
+      "setup_cpu_ms": {
+        "baseline": 2.856422,
+        "candidate": 3.426923
+      },
+      "samples": [
+        {
+          "baseline": {
+            "cpu_ns": 71944606,
+            "wall_ns": 73064411
+          },
+          "candidate": {
+            "cpu_ns": 60626353,
+            "wall_ns": 61766666
+          }
+        },
+        {
+          "candidate": {
+            "cpu_ns": 59280453,
+            "wall_ns": 60367311
+          },
+          "baseline": {
+            "cpu_ns": 74489449,
+            "wall_ns": 75784812
+          }
+        },
+        {
+          "baseline": {
+            "cpu_ns": 74114908,
+            "wall_ns": 75415970
+          },
+          "candidate": {
+            "cpu_ns": 60274595,
+            "wall_ns": 61466025
+          }
+        },
+        {
+          "candidate": {
+            "cpu_ns": 57721713,
+            "wall_ns": 58818074
+          },
+          "baseline": {
+            "cpu_ns": 73574711,
+            "wall_ns": 74797208
+          }
+        },
+        {
+          "baseline": {
+            "cpu_ns": 74306080,
+            "wall_ns": 76562956
+          },
+          "candidate": {
+            "cpu_ns": 60804512,
+            "wall_ns": 62036337
+          }
+        },
+        {
+          "candidate": {
+            "cpu_ns": 65446503,
+            "wall_ns": 66799876
+          },
+          "baseline": {
+            "cpu_ns": 75269310,
+            "wall_ns": 76685346
+          }
+        },
+        {
+          "baseline": {
+            "cpu_ns": 73529794,
+            "wall_ns": 74772587
+          },
+          "candidate": {
+            "cpu_ns": 62301993,
+            "wall_ns": 63659173
+          }
+        }
+      ],
+      "median_cpu_ms": {
+        "baseline": 9.2643635,
+        "candidate": 7.578294125
+      },
+      "paired_cpu_ratio": 0.81829793739624,
+      "faster_cpu_pairs": 7,
+      "all_exact": true
+    },
+    {
+      "loops": 4,
+      "mode": "tracen",
+      "repeats": 2,
+      "setup_cpu_ms": {
+        "baseline": 3.158573,
+        "candidate": 3.607754
+      },
+      "samples": [
+        {
+          "baseline": {
+            "cpu_ns": 430470112,
+            "wall_ns": 437890723
+          },
+          "candidate": {
+            "cpu_ns": 194336785,
+            "wall_ns": 197610196
+          }
+        },
+        {
+          "candidate": {
+            "cpu_ns": 199295894,
+            "wall_ns": 203364190
+          },
+          "baseline": {
+            "cpu_ns": 429071400,
+            "wall_ns": 436417748
+          }
+        },
+        {
+          "baseline": {
+            "cpu_ns": 427247373,
+            "wall_ns": 434881822
+          },
+          "candidate": {
+            "cpu_ns": 197069557,
+            "wall_ns": 200853190
+          }
+        },
+        {
+          "candidate": {
+            "cpu_ns": 189215933,
+            "wall_ns": 192492207
+          },
+          "baseline": {
+            "cpu_ns": 425531053,
+            "wall_ns": 433637286
+          }
+        },
+        {
+          "baseline": {
+            "cpu_ns": 421997097,
+            "wall_ns": 430160192
+          },
+          "candidate": {
+            "cpu_ns": 195107403,
+            "wall_ns": 198937202
+          }
+        },
+        {
+          "candidate": {
+            "cpu_ns": 186977906,
+            "wall_ns": 190230878
+          },
+          "baseline": {
+            "cpu_ns": 437605034,
+            "wall_ns": 446045156
+          }
+        },
+        {
+          "baseline": {
+            "cpu_ns": 434354504,
+            "wall_ns": 442836493
+          },
+          "candidate": {
+            "cpu_ns": 212263755,
+            "wall_ns": 216844313
+          }
+        }
+      ],
+      "median_cpu_ms": {
+        "baseline": 214.5357,
+        "candidate": 97.5537015
+      },
+      "paired_cpu_ratio": 0.4612539934797914,
+      "faster_cpu_pairs": 7,
+      "all_exact": true
+    }
+  ],
+  "baseline_driver_source": "\"\"\"Reproducible numerator benchmarks for fermionic and gluonic propagator ladders.\n\nRun with the combined Symbolica/Spenso host, not the stock Symbolica wheel.\nThe notebook imports this driver so its timed route and CLI route stay identical.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\nimport hashlib\nimport inspect\nimport json\nimport math\nimport os\nimport platform\nimport re\nimport shutil\nimport subprocess\nimport tempfile\nfrom datetime import UTC, datetime\nfrom pathlib import Path\nfrom statistics import median\nfrom time import perf_counter_ns, process_time_ns\n\nfrom symbolica import E, Replacement, S\nfrom symbolica.community.spenso import (\n    AUTO,\n    GammaSimplifySettings,\n    Representation,\n    TensorExpression,\n    TensorName,\n    trace,\n)\n\n\nclass FermionLadder:\n    \"\"\"Massless fermion ring with planar vector rungs and a metric projection.\n\n    Both modes use tr(1)=4; only the Lorentz dimension changes. Momenta run\n    clockwise along the fermion ring. The external momentum q enters vertex1\n    and exits vertex loops+1. No denominators, couplings or color are included.\n    \"\"\"\n\n    particle = \"fermionic\"\n    dimension_symbol = S(\"fermion_ladder::D\")\n\n    def __init__(self, mode: str, loops: int = 3):\n        if mode not in (\"trace4\", \"tracen\") or loops not in (3, 4):\n            raise ValueError(\"Use trace4/tracen and three/four loops\")\n        self.mode, self.loops = mode, loops\n        self.dimension = 4 if mode == \"trace4\" else self.dimension_symbol\n        self.lorentz = Representation.mink(self.dimension)\n        self.spin = Representation.bis(4)\n        self.metric = TensorName.g().to_expression()\n        self.momenta = [\n            TensorName.vector(f\"fermion_ladder::p{i}\").to_expression()(\n                self.lorentz.to_expression()\n            )\n            for i in range(1, 2 * loops + 1)\n        ]\n        upper = [tuple(int(i <= j) for i in range(loops)) + (0,) for j in range(loops)]\n        self.routing = upper + [row[:-1] + (-1,) for row in reversed(upper)]\n        gamma = TensorExpression.gamma(self.dimension)\n        gamma_head = TensorName.gamma().to_expression()\n        names = [\"mu\"] + [f\"a{i}\" for i in range(1, loops)]\n        opposite = [\"nu\"] + [f\"b{i}\" for i in reversed(range(1, loops))]\n        labels = {\n            name: self.lorentz(S(f\"fermion_ladder::{name}\"))\n            for name in names + opposite\n        }\n\n        def word(indices):\n            factors = []\n            for index, momentum in zip(indices, self.momenta, strict=True):\n                factors.extend(\n                    (\n                        gamma(AUTO, AUTO, labels[index]),\n                        TensorExpression(\n                            gamma_head(\n                                self.spin.to_expression(),\n                                self.spin.to_expression(),\n                                momentum,\n                            )\n                        ),\n                    )\n                )\n            return trace(self.spin, *factors)\n\n        # Sewing the metric pairs is input preparation, in both engines.\n        self.source = -word(names + [\"mu\"] + list(reversed(names[1:])))\n        projected = -word(names + opposite).to_expression()\n        for left, right in [(\"mu\", \"nu\")] + [\n            (f\"a{i}\", f\"b{i}\") for i in range(1, loops)\n        ]:\n            projected *= self.metric(\n                labels[left].to_expression(), labels[right].to_expression()\n            )\n        self.explicit = TensorExpression(projected)\n        self.scalars = {\n            (i, j): S(f\"fermion_ladder::s{i + 1}{j + 1}\")\n            for i in range(loops + 1)\n            for j in range(i, loops + 1)\n        }\n        self.replacements = []\n        for i, left in enumerate(self.routing):\n            for j in range(i, len(self.routing)):\n                right = self.routing[j]\n                routed = sum(\n                    (\n                        x * y * self.scalars[min(a, b), max(a, b)]\n                        for a, x in enumerate(left)\n                        for b, y in enumerate(right)\n                        if x and y\n                    ),\n                    E(\"0\"),\n                )\n                self.replacements.append(\n                    Replacement(self.metric(self.momenta[i], self.momenta[j]), routed)\n                )\n        # The small routed scalar benefits from polynomial multiplication; the\n        # D-dimensional trace itself benefits from collecting its terms first.\n        self.settings = GammaSimplifySettings(\n            expand_traces=mode == \"tracen\" or loops == 4\n        )\n        self.form_order = \"trace-first\"\n        self.strategy = {\n            \"expand_traces\": self.settings.expand_traces,\n            \"scalar_expansion\": \"expand(via_poly=True)\",\n            \"form_order\": self.form_order,\n            \"form_routing_collection\": \"after each momentum alias\",\n        }\n\n    def reduce(self, source=None):\n        \"\"\"Trace, insert physical momentum routing, then fully collect the scalar.\"\"\"\n        if source is None:\n            source = self.source\n        traced = source.simplify_gamma(self.settings).to_expression()\n        return traced.replace_multiple(self.replacements).expand(via_poly=True)\n\n    def import_form(self, polynomial: str):\n        positions = {f\"k{i}\": i for i in range(1, self.loops + 1)}\n        positions[\"q\"] = self.loops + 1\n\n        def dot(match):\n            i, j = sorted((positions[match[1]], positions[match[2]]))\n            return f\"fermion_ladder::s{i}{j}\"\n\n        text = re.sub(r\"\\b(k\\d+|q)\\.(k\\d+|q)\\b\", dot, polynomial.strip().rstrip(\";\"))\n        text = re.sub(r\"\\bD\\b\", \"fermion_ladder::D\", text)\n        return E(text).expand()\n\n    def phases(self, expected):\n        \"\"\"Separate diagnostic clock; never substituted for the complete timing.\"\"\"\n        start = process_time_ns()\n        traced = self.source.simplify_gamma(self.settings).to_expression()\n        after_trace = process_time_ns()\n        routed = traced.replace_multiple(self.replacements)\n        after_routing = process_time_ns()\n        result = routed.expand(via_poly=True)\n        end = process_time_ns()\n        assert result == expected\n        return {\n            \"trace_cpu_ns\": after_trace - start,\n            \"routing_cpu_ns\": after_routing - after_trace,\n            \"expansion_cpu_ns\": end - after_routing,\n            \"expanded_trace_terms\": len(list(traced.expand(via_poly=True).terms())),\n            \"final_terms\": len(list(result.terms())),\n        }\n\n    def check_components(self, scalar_results, networks):\n        from fermion_ladder_validation import FermionRingComponents\n\n        return FermionRingComponents(self).check(scalar_results, networks=networks)\n\n\ndef _form_run(\n    executable,\n    script,\n    directory,\n    *,\n    mode,\n    loops,\n    repeats=1,\n    diagnostic=False,\n    order=None,\n):\n    if order is None:\n        order = \"routing-first\" if mode == \"trace4\" else \"trace-first\"\n    output = Path(directory) / f\"{mode}.txt\"\n    command = [\n        executable,\n        \"-q\",\n        \"-d\",\n        f\"MODE={mode}\",\n        \"-d\",\n        f\"LOOPS={loops}\",\n        \"-d\",\n        f\"ORDER={order}\",\n        \"-d\",\n        \"COLLECT=1\",\n        \"-d\",\n        \"ROUTEGROUP=1\",\n        \"-d\",\n        f\"DIAGNOSTIC={int(diagnostic)}\",\n        \"-d\",\n        f\"REPEATS={repeats}\",\n        \"-d\",\n        \"BATCHES=1\",\n    ]\n    if diagnostic:\n        command += [\"-d\", f\"OUTPUT={output}\"]\n    start = perf_counter_ns()\n    run = subprocess.run(\n        command + [str(script)],\n        cwd=directory,\n        text=True,\n        capture_output=True,\n        check=False,\n        timeout=180,\n    )\n    wall = perf_counter_ns() - start\n    if run.returncode:\n        raise RuntimeError(f\"FORM failed:\\n{run.stdout}\\n{run.stderr}\")\n    timers = re.findall(r\"BATCH_CPU_MS=(\\d+)\", run.stdout)\n    if not diagnostic and len(timers) != 1:\n        raise RuntimeError(f\"Expected one FORM body timer:\\n{run.stdout}\")\n    return {\n        \"command\": command + [str(script)],\n        \"stdout\": run.stdout,\n        \"stderr\": run.stderr,\n        \"process_wall_ns\": wall,\n        \"body_cpu_ns\": int(timers[0]) * 1_000_000 if timers else None,\n        \"repeats\": repeats,\n        \"polynomial\": output.read_text() if diagnostic else None,\n    }\n\n\ndef benchmark(\n    form=None,\n    *,\n    loops=3,\n    rounds=5,\n    output=None,\n    cpu=None,\n    case_factory=FermionLadder,\n    form_script=None,\n):\n    \"\"\"Compare warm algebra bodies, excluding setup, checks and serialization.\"\"\"\n\n    def time_batch(case, repeats, expected):\n        wall, cpu_start = perf_counter_ns(), process_time_ns()\n        results = [case.reduce() for _ in range(repeats)]\n        elapsed_cpu = process_time_ns() - cpu_start\n        elapsed_wall = perf_counter_ns() - wall\n        assert all(result == expected for result in results)\n        return {\n            \"repeats\": repeats,\n            \"body_cpu_ns\": elapsed_cpu,\n            \"body_wall_ns\": elapsed_wall,\n        }\n\n    if rounds < 3:\n        raise ValueError(\"Use at least three measured rounds\")\n    if cpu is not None:\n        os.sched_setaffinity(0, {cpu})\n    form = form or os.environ.get(\"FORM_EXECUTABLE\") or shutil.which(\"form\")\n    if not form:\n        raise RuntimeError(\n            \"Set FORM_EXECUTABLE or pass --form to a native FORM executable\"\n        )\n    form = str(Path(form).resolve())\n    script = (\n        Path(form_script)\n        if form_script\n        else Path(__file__).with_name(\"fermion_propagator_ladder.frm\")\n    )\n    from symbolica import core\n\n    report = {\n        \"measured_at_utc\": datetime.now(UTC).isoformat(),\n        \"loops\": loops,\n        \"particle\": case_factory.particle,\n        \"internal_edges\": 3 * loops - 1,\n        \"vertices\": 2 * loops,\n        \"trace_unit\": 4 if case_factory.particle == \"fermionic\" else None,\n        \"closed_fermion_loop_minus\": case_factory.particle == \"fermionic\",\n        \"scope\": \"Numerator only; no denominators, couplings, color, integration or on-shell constraints\",\n        \"timing\": \"Warm complete numerator reduction + momentum routing + expanded scalar collection; setup, checks, output and disposal excluded. Python call and result wrapping included. FORM internal CPU timer; process wall reported separately.\",\n        \"rounds\": rounds,\n        \"platform\": platform.platform(),\n        \"cpu_affinity\": sorted(os.sched_getaffinity(0))\n        if hasattr(os, \"sched_getaffinity\")\n        else None,\n        \"core_sha256\": hashlib.sha256(Path(core.__file__).read_bytes()).hexdigest(),\n        \"driver_sha256\": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),\n        \"case_source_sha256\": hashlib.sha256(\n            Path(inspect.getfile(case_factory)).read_bytes()\n        ).hexdigest(),\n        \"form_source_sha256\": hashlib.sha256(script.read_bytes()).hexdigest(),\n        \"form_executable_sha256\": hashlib.sha256(Path(form).read_bytes()).hexdigest(),\n        \"form_version\": subprocess.run(\n            [form, \"-v\"], text=True, capture_output=True, check=True\n        ).stdout.strip(),\n        \"cases\": [],\n    }\n    scalar_results, original_networks = {}, {}\n    with tempfile.TemporaryDirectory(prefix=\"fermion-ladder-\") as directory:\n        for mode in (\"trace4\", \"tracen\"):\n            setup_wall, setup_cpu = perf_counter_ns(), process_time_ns()\n            case = case_factory(mode, loops)\n            setup = {\n                \"wall_ns\": perf_counter_ns() - setup_wall,\n                \"cpu_ns\": process_time_ns() - setup_cpu,\n            }\n            start_wall, start_cpu = perf_counter_ns(), process_time_ns()\n            expected = case.reduce()\n            first = {\n                \"wall_ns\": perf_counter_ns() - start_wall,\n                \"cpu_ns\": process_time_ns() - start_cpu,\n            }\n            if case.explicit is not None:\n                assert expected == case.reduce(case.explicit), (\n                    \"Explicit metric projection differs\"\n                )\n                assert case.explicit.structure.rank == 0\n            assert case.source.structure.rank == 0\n            diagnostic = _form_run(\n                form,\n                script,\n                directory,\n                mode=mode,\n                loops=loops,\n                diagnostic=True,\n                order=case.form_order,\n            )\n            reference = case.import_form(diagnostic[\"polynomial\"])\n            assert expected == reference, f\"{mode}: exact FORM polynomial differs\"\n            diagnostic[\"polynomial_sha256\"] = hashlib.sha256(\n                diagnostic.pop(\"polynomial\").encode()\n            ).hexdigest()\n            scalar_results[f\"Idenso {mode}\"] = expected\n            scalar_results[f\"FORM {mode}\"] = reference\n            original_networks[f\"original compact {mode}\"] = case.source\n            if case.explicit is not None:\n                original_networks[f\"original explicit {mode}\"] = case.explicit\n            pilot_repeats = max(\n                1, min(64, math.ceil(150_000_000 / max(first[\"cpu_ns\"], 1)))\n            )\n            pilot = _form_run(\n                form,\n                script,\n                directory,\n                mode=mode,\n                loops=loops,\n                repeats=pilot_repeats,\n                order=case.form_order,\n            )\n            form_repeats = min(\n                8192,\n                max(\n                    1,\n                    math.ceil(\n                        200_000_000 / max(pilot[\"body_cpu_ns\"], 1) * pilot_repeats\n                    ),\n                ),\n            )\n            idenso_repeats = max(\n                1, min(512, math.ceil(150_000_000 / max(first[\"cpu_ns\"], 1)))\n            )\n            samples = []\n            for round_index in range(rounds):\n                row = {\"round\": round_index + 1}\n                order = (\n                    (\"idenso\", \"form\") if round_index % 2 == 0 else (\"form\", \"idenso\")\n                )\n                for engine in order:\n                    row[engine] = (\n                        time_batch(case, idenso_repeats, expected)\n                        if engine == \"idenso\"\n                        else _form_run(\n                            form,\n                            script,\n                            directory,\n                            mode=mode,\n                            loops=loops,\n                            repeats=form_repeats,\n                            order=case.form_order,\n                        )\n                    )\n                samples.append(row)\n            idenso_cpu = median(\n                row[\"idenso\"][\"body_cpu_ns\"] / idenso_repeats for row in samples\n            )\n            form_cpu = median(\n                row[\"form\"][\"body_cpu_ns\"] / form_repeats for row in samples\n            )\n            record = {\n                \"mode\": mode,\n                \"dimension\": \"4D\" if mode == \"trace4\" else \"D\",\n                \"routing\": case.routing,\n                \"terms\": len(list(expected.terms())),\n                \"strategy\": case.strategy,\n                \"first_idenso\": first,\n                \"input_and_rule_preparation\": setup,\n                \"form_pilot\": pilot,\n                \"samples\": samples,\n                \"idenso_median_cpu_ms\": idenso_cpu / 1e6,\n                \"idenso_median_wall_ms\": median(\n                    row[\"idenso\"][\"body_wall_ns\"] / idenso_repeats for row in samples\n                )\n                / 1e6,\n                \"form_median_cpu_ms\": form_cpu / 1e6,\n                \"cpu_ratio\": idenso_cpu / form_cpu,\n                \"diagnostic\": case.phases(expected),\n                \"exact_form_match\": True,\n                \"explicit_projection_match\": True\n                if case.explicit is not None\n                else None,\n                \"scalar_polynomial_sha256\": hashlib.sha256(\n                    expected.format_plain().encode()\n                ).hexdigest(),\n                \"form_diagnostic\": diagnostic,\n            }\n            report[\"cases\"].append(record)\n    assert (\n        scalar_results[\"Idenso tracen\"].replace(case.dimension_symbol, E(\"4\")).expand()\n        == scalar_results[\"Idenso trace4\"]\n    )\n    report[\"D_to_four_exact\"] = True\n    report[\"component_checks\"] = case.check_components(\n        scalar_results, original_networks\n    )\n    for key, path in (\n        (\"driver_sha256\", Path(__file__)),\n        (\"case_source_sha256\", Path(inspect.getfile(case_factory))),\n        (\"form_source_sha256\", script),\n        (\"core_sha256\", Path(core.__file__)),\n    ):\n        assert hashlib.sha256(path.read_bytes()).hexdigest() == report[key], (\n            f\"Source changed during measurement: {path}\"\n        )\n    report[\"within_factor_three\"] = all(\n        case[\"cpu_ratio\"] <= 3 for case in report[\"cases\"]\n    )\n    if output:\n        Path(output).write_text(json.dumps(report, indent=2) + \"\\n\")\n    return report\n\n\nif __name__ == \"__main__\":\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument(\"--form\")\n    parser.add_argument(\n        \"--particle\", choices=(\"fermionic\", \"gluonic\"), default=\"fermionic\"\n    )\n    parser.add_argument(\"--loops\", type=int, choices=(3, 4), default=3)\n    parser.add_argument(\"--rounds\", type=int, default=5)\n    parser.add_argument(\"--cpu\", type=int)\n    parser.add_argument(\"--output\", type=Path, required=True)\n    args = parser.parse_args()\n    options = {}\n    if args.particle == \"gluonic\":\n        if args.loops != 4:\n            parser.error(\"The gluonic comparison requires --loops 4\")\n        from gluon_ladder import GluonLadder\n\n        options = {\n            \"case_factory\": GluonLadder,\n            \"form_script\": Path(__file__).with_name(\"gluon_propagator_ladder.frm\"),\n        }\n    result = benchmark(\n        args.form,\n        loops=args.loops,\n        rounds=args.rounds,\n        output=args.output,\n        cpu=args.cpu,\n        **options,\n    )\n    for case in result[\"cases\"]:\n        print(\n            f\"{case['dimension']}: Idenso {case['idenso_median_cpu_ms']:.6f} ms, FORM {case['form_median_cpu_ms']:.6f} ms, {case['cpu_ratio']:.2f}x\"\n        )\n",
+  "core_sha256_after_measurement": "4eace9508942dd1dfe21f131459d530b32573d99f29f970be2507cf7c1101983",
+  "scalar_routing_checks": {
+    "source": "from pathlib import Path\nimport sys,json,hashlib\nsys.path.insert(0,str(Path('examples/notebooks').resolve()))\nfrom fermion_ladder import FermionLadder\nfrom symbolica import E,Replacement\nfrom symbolica.community.spenso import TensorName\nsource=Path('examples/notebooks/fermion_ladder.py');before=hashlib.sha256(source.read_bytes()).hexdigest()\nreports=[]\nfor loops,mode in [(3,'tracen'),(4,'trace4'),(4,'tracen')]:\n c=FermionLadder(mode,loops);count=loops+1\n basis=[TensorName.vector(f'fermion_ladder::{name}').to_expression()(c.lorentz.to_expression()) for name in [f'k{i}' for i in range(1,loops+1)]+['q']]\n vectors=basis+c.momenta\n rows=[tuple(int(i==j) for j in range(count)) for i in range(count)]+c.routing\n repl=[];generators=[]\n for i in range(len(vectors)):\n  for j in range(max(i,count),len(vectors)):\n   dot=c.metric(vectors[i],vectors[j])\n   expected=sum((a*b*c.scalars[min(k,l),max(k,l)] for k,a in enumerate(rows[i]) for l,b in enumerate(rows[j]) if a and b),E('0')).expand()\n   repl.append(Replacement(dot,expected));generators.append((dot,expected))\n for dot,expected in generators:\n  observed=c._substitute_momenta(dot.to_polynomial(vars=c.polynomial_variables)).to_expression()\n  assert observed==expected,(loops,mode,'generator',dot)\n d=[c.metric(p,p) for p in c.momenta]\n D=c.dimension_symbol\n cases=[('zero',E('0')),('constant',E('-7/3')),('D-only',D**3-2*D+1),\n        ('selfdot-power',d[-1]**4),('mixed-dot-powers',(d[0]+D*d[-1])**2*(c.metric(c.momenta[1],c.momenta[-2])-d[0])),\n        ('cancellation',(d[0]+d[-1])**2-d[0]**2-2*d[0]*d[-1]-d[-1]**2),\n        ('shifted-cancellation',(d[0]-d[0]+D)*(d[2]-d[1])**2),\n        ('rational-and-basis',(E('2/3')*d[0]+c.scalars[0,count-1])**3)]\n for label,expression in cases:\n  expected=expression.replace_multiple(repl).expand()\n  observed=c._substitute_momenta(expression.to_polynomial(vars=c.polynomial_variables)).to_expression()\n  assert observed==expected,(loops,mode,label,observed,expected)\n reports.append({'loops':loops,'mode':mode,'generators':len(generators),'original_dot_generators':len(c.momenta)*(len(c.momenta)+1)//2,'edge_cases':[name for name,_ in cases],'all_exact':True})\nassert before==hashlib.sha256(source.read_bytes()).hexdigest()\nprint(json.dumps({'source_sha256':before,'cases':reports,'total_exact_checks':sum(r['generators']+len(r['edge_cases']) for r in reports),'source_drift':False}))\n",
+    "result": {
+      "source_sha256": "08e77c66ce7cc7231a0e50c586cd7d80d1db9305403839f1ed4798d1760e3269",
+      "cases": [
+        {
+          "loops": 3,
+          "mode": "tracen",
+          "generators": 45,
+          "original_dot_generators": 21,
+          "edge_cases": [
+            "zero",
+            "constant",
+            "D-only",
+            "selfdot-power",
+            "mixed-dot-powers",
+            "cancellation",
+            "shifted-cancellation",
+            "rational-and-basis"
+          ],
+          "all_exact": true
+        },
+        {
+          "loops": 4,
+          "mode": "trace4",
+          "generators": 76,
+          "original_dot_generators": 36,
+          "edge_cases": [
+            "zero",
+            "constant",
+            "D-only",
+            "selfdot-power",
+            "mixed-dot-powers",
+            "cancellation",
+            "shifted-cancellation",
+            "rational-and-basis"
+          ],
+          "all_exact": true
+        },
+        {
+          "loops": 4,
+          "mode": "tracen",
+          "generators": 76,
+          "original_dot_generators": 36,
+          "edge_cases": [
+            "zero",
+            "constant",
+            "D-only",
+            "selfdot-power",
+            "mixed-dot-powers",
+            "cancellation",
+            "shifted-cancellation",
+            "rational-and-basis"
+          ],
+          "all_exact": true
+        }
+      ],
+      "total_exact_checks": 221,
+      "source_drift": false
+    },
+    "provenance": {
+      "scope": "Persisted exact stdin source and equivalent JSON outcome from the already-completed CPU17 invocation; no rerun.",
+      "original_command": [
+        "taskset",
+        "-c",
+        "17",
+        "/tmp/spenso-paper-venv/bin/python",
+        "-"
+      ],
+      "cwd": "/common/dev/gammaloop/feynkit-rich-display",
+      "exit_code": 0,
+      "source_sha256": "08e77c66ce7cc7231a0e50c586cd7d80d1db9305403839f1ed4798d1760e3269",
+      "files": {
+        "exact-checks.py": "eeb0c409487e633493e414543aa0b42f845aece358a21d25fc2b62a215ae623a",
+        "exact-checks.json": "c5b46cdf211ce8f15ae3dc3cfbf987920a75da495140db58fd531e36b6ee30f7"
+      }
+    }
+  }
+}

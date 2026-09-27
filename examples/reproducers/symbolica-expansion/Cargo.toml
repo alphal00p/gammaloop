@@ -36,3 +36,7 @@ path = "scalar_expansion_routes.rs"
 [[bin]]
 name = "visitor_shortcircuit"
 path = "visitor_shortcircuit.rs"
+
+[[bin]]
+name = "polynomial_replacement"
+path = "polynomial_replacement.rs"
