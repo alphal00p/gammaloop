@@ -28,12 +28,16 @@ use crate::error;
 ///
 /// Examples
 /// --------
-/// Select every native FeynKit momentum in a pure vacuum numerator:
+/// Average a rank-two vacuum numerator over the loop direction. The result
+/// is proportional to the metric tensor times ``k.k / D``.
 ///
-/// >>> from symbolica import E
-/// >>> reducer = fk.TensorReducer.feynkit(E("4"))
-/// >>> scalar_numerator = reducer.reduce(vacuum_numerator)
-/// >>> scalar_numerator
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> D, k, p, mu, nu = S("D", "k", "p", "mu", "nu")
+/// >>> mink = S("spenso::mink")
+/// >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
+/// >>> numerator = k(mink(D, mu)) * k(mink(D, nu))
+/// >>> projected = reducer.reduce(numerator)
 ///
 /// Parameters
 /// ----------
@@ -62,8 +66,10 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
     /// >>> from symbolica import E
-    /// >>> reducer = fk.TensorReducer(E("4 - 2*eps")).with_integrated_head("Loop::k")
+    /// >>> reducer = hep.TensorReducer(E("4 - 2*eps")).with_integrated_head("Loop::k")
     ///
     /// Parameters
     /// ----------
@@ -79,7 +85,7 @@ impl PyTensorReducer {
     /// Construct a reducer that selects every ``gammalooprs::Q`` tensor.
     ///
     /// This is the convenient constructor for vacuum numerators produced by
-    /// FeynKit's native Feynman-rule generator. It selects the entire
+    /// HEP native Feynman-rule generator. It selects the entire
     /// ``gammalooprs::Q`` head and is therefore intended for pure vacuum
     /// numerators, where every such momentum is integrated. If a graph still
     /// contains external ``gammalooprs::Q`` tensors, construct a reducer
@@ -88,8 +94,13 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica import E
-    /// >>> reducer = fk.TensorReducer.feynkit(E("4"))
+    /// The equivalent explicit selector shows which momentum head is integrated:
+    ///
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> model = hep.Model.phi4()
+    /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+    /// >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
     /// >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression())
     ///
     /// Parameters
@@ -105,6 +116,12 @@ impl PyTensorReducer {
     }
 
     /// Return the configured Lorentz-space dimension.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
+    /// >>> assert reducer.dimension == D
     #[getter]
     fn dimension(&self) -> PythonExpression {
         PythonExpression {
@@ -116,7 +133,9 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
-    /// >>> reducer = fk.TensorReducer(D).with_integrated_head("Loop::k")
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
+    /// >>> reducer = hep.TensorReducer(D).with_integrated_head("Loop::k")
     /// >>> scalar = reducer.reduce(numerator)
     ///
     /// Parameters
@@ -137,9 +156,10 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
-    /// >>> k1 = K(1, mink(D))
-    /// >>> reducer = fk.TensorReducer(D).with_integrated_vector(k1)
-    /// >>> scalar = reducer.reduce(numerator)
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
+    /// >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
+    /// >>> projected = reducer.reduce(k(mink(D, mu)) * k(mink(D, nu)))
     ///
     /// Parameters
     /// ----------
@@ -163,7 +183,9 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
-    /// >>> reducer = fk.TensorReducer(D).with_integrated_vector(k(mink(D)))
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
+    /// >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
     /// >>> reducer = reducer.with_external_vector(p(mink(D)))
     /// >>> reduced = reducer.reduce(k(mink(D, mu)))
     ///
@@ -183,6 +205,8 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
     /// >>> reducer = reducer.with_pairing_limit(200_000)
     ///
     /// Parameters
@@ -199,6 +223,8 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
     /// >>> reducer = reducer.with_pairing_product_limit(150_000_000)
     ///
     /// Parameters
@@ -215,6 +241,8 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
     /// >>> reducer = reducer.with_output_term_limit(20_000)
     ///
     /// Parameters
@@ -241,13 +269,15 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
     /// A rank-two vacuum projection becomes a product of dot products divided
     /// by the dimension:
     ///
     /// >>> from symbolica import S
-    /// >>> import symbolica.community.feynkit as fk
-    /// >>> D, mu, nu = S("feynkit_docs::D", "feynkit_docs::mu", "feynkit_docs::nu")
-    /// >>> k, p = S("feynkit_docs::k", "feynkit_docs::p")
+    /// >>> from symbolica.community import hep
+    /// >>> D, mu, nu = S("hep_docs::D", "hep_docs::mu", "hep_docs::nu")
+    /// >>> k, p = S("hep_docs::k", "hep_docs::p")
     /// >>> mink, dot = S("spenso::mink", "spenso::dot")
     /// >>> k_compact = k(mink(D))
     /// >>> p_compact = p(mink(D))
@@ -255,7 +285,7 @@ impl PyTensorReducer {
     /// ...     k(mink(D, mu)) * k(mink(D, nu))
     /// ...     * p(mink(D, mu)) * p(mink(D, nu))
     /// ... )
-    /// >>> reducer = fk.TensorReducer(D).with_integrated_vector(k_compact)
+    /// >>> reducer = hep.TensorReducer(D).with_integrated_vector(k_compact)
     /// >>> reduced = reducer.reduce(numerator)
     /// >>> expected = dot(k_compact, k_compact) * dot(p_compact, p_compact) / D
     /// >>> assert reduced == expected
@@ -277,8 +307,9 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
-    /// >>> print(reducer)
+    /// Using the setup in the ``TensorReducer`` class example:
     ///
+    /// >>> print(reducer)
     fn __repr__(&self) -> String {
         format!("TensorReducer(dimension={})", self.inner.dimension())
     }
@@ -287,7 +318,10 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
-    /// IPython calls this method when formatting a reducer for text display.
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(reducer)
     ///
     /// Parameters
     /// ----------

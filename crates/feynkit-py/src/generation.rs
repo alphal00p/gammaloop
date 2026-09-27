@@ -44,10 +44,9 @@ use symbolica::{
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> electron = fk.ParticleSelector.by_pdg(11)
-/// >>> positron = fk.ParticleSelector.by_name("e+")
-///
+/// >>> from symbolica.community import hep
+/// >>> electron = hep.ParticleSelector.by_pdg(11)
+/// >>> positron = hep.ParticleSelector.by_name("e+")
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ParticleSelector",
@@ -73,7 +72,9 @@ impl PyParticleSelector {
     ///
     /// Examples
     /// --------
-    /// >>> fk.ParticleSelector.by_name("e-").name
+    /// Using the setup in the ``ParticleSelector`` class example:
+    ///
+    /// >>> hep.ParticleSelector.by_name("e-").name
     /// 'e-'
     ///
     /// Parameters
@@ -91,7 +92,9 @@ impl PyParticleSelector {
     ///
     /// Examples
     /// --------
-    /// >>> fk.ParticleSelector.by_pdg(11).pdg
+    /// Using the setup in the ``ParticleSelector`` class example:
+    ///
+    /// >>> hep.ParticleSelector.by_pdg(11).pdg
     /// 11
     ///
     /// Parameters
@@ -109,6 +112,12 @@ impl PyParticleSelector {
     ///
     /// Raises :class:`TypeError` for a PDG selector. Use :attr:`is_name` to
     /// distinguish the selector variants before accessing their payloads.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ParticleSelector`` class example:
+    ///
+    /// >>> assert hep.ParticleSelector.by_name("e-").name == "e-"
     #[getter]
     fn name(&self) -> PyResult<&str> {
         match &self.inner {
@@ -126,6 +135,12 @@ impl PyParticleSelector {
     ///
     /// Raises :class:`TypeError` for a name selector. Use :attr:`is_pdg` to
     /// distinguish the selector variants before accessing their payloads.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ParticleSelector`` class example:
+    ///
+    /// >>> assert hep.ParticleSelector.by_pdg(11).pdg == 11
     #[getter]
     fn pdg(&self) -> PyResult<i64> {
         match &self.inner {
@@ -137,12 +152,24 @@ impl PyParticleSelector {
     }
 
     /// Report whether this selector identifies a particle by name.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ParticleSelector`` class example:
+    ///
+    /// >>> assert hep.ParticleSelector.by_name("e-").is_name
     #[getter]
     fn is_name(&self) -> bool {
         matches!(&self.inner, ParticleSelector::Name(_))
     }
 
     /// Report whether this selector identifies a particle by PDG code.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ParticleSelector`` class example:
+    ///
+    /// >>> assert hep.ParticleSelector.by_pdg(11).is_pdg
     #[getter]
     fn is_pdg(&self) -> bool {
         matches!(&self.inner, ParticleSelector::Pdg(_))
@@ -152,9 +179,10 @@ impl PyParticleSelector {
     ///
     /// Examples
     /// --------
-    /// >>> str(fk.ParticleSelector.by_pdg(11))
-    /// '11'
+    /// Using the setup in the ``ParticleSelector`` class example:
     ///
+    /// >>> str(hep.ParticleSelector.by_pdg(11))
+    /// '11'
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
@@ -163,8 +191,9 @@ impl PyParticleSelector {
     ///
     /// Examples
     /// --------
-    /// >>> print(fk.ParticleSelector.by_pdg(11))  # electron selector in a process
+    /// Using the setup in the ``ParticleSelector`` class example:
     ///
+    /// >>> print(hep.ParticleSelector.by_pdg(11))  # electron selector in a process
     fn __repr__(&self) -> String {
         match &self.inner {
             ParticleSelector::Id { particle, model } => {
@@ -179,7 +208,9 @@ impl PyParticleSelector {
     ///
     /// Examples
     /// --------
-    /// >>> fk.ParticleSelector.by_pdg(11) == 11
+    /// Using the setup in the ``ParticleSelector`` class example:
+    ///
+    /// >>> hep.ParticleSelector.by_pdg(11) == 11
     /// True
     ///
     /// Parameters
@@ -408,10 +439,12 @@ impl<const UNBOUNDED: bool> PyStubType for OrderRangeInput<UNBOUNDED> {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.standard_model()
 /// >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
-/// >>> one_loop = process.generate_diagrams(loops=1)
-///
+/// >>> result = process.generate_diagrams(loops=0)
+/// >>> assert result.report.completed
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Process",
@@ -508,6 +541,12 @@ impl PyProcess {
 #[pymethods]
 impl PyProcess {
     /// The particle model supplying this process's Feynman rules.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Process`` class example:
+    ///
+    /// >>> electron = process.model.particle("e-")
     #[getter]
     fn model(&self) -> PyModel {
         self.model.clone().into()
@@ -517,8 +556,10 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Process`` class example:
+    ///
     /// >>> repr(process)
-    /// 'Process("sm": [e-, e+] -> [a, a])'
+    /// 'Process("sm": [e-, e+] -> [mu-, mu+])'
     fn __repr__(&self) -> String {
         let names = |state: &[ParticleSelector]| {
             state
@@ -546,6 +587,8 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Process`` class example:
+    ///
     /// >>> svg = process.render()
     ///
     /// Parameters
@@ -582,7 +625,10 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
-    /// >>> process._repr_svg_()
+    /// Using the setup in the ``Process`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(process)
     fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
         self.render(py, None)
     }
@@ -591,7 +637,10 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
-    /// Leave ``process`` as the final expression in a notebook cell.
+    /// Using the setup in the ``Process`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(process)
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
         let svg = self.render(py, None)?;
         Ok(format!(
@@ -606,6 +655,8 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Process`` class example:
+    ///
     /// >>> process = model.process([11, -11], [22, 22])
     /// >>> inclusive = process.with_final_state_alternatives([[22, 22], [13, -13]])
     ///
@@ -639,6 +690,8 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Process`` class example:
+    ///
     /// >>> qed = process.with_filters(vertex_allow=["V_98"])
     /// >>> unrestricted = qed.with_filters(vertex_allow=None)
     ///
@@ -708,6 +761,12 @@ impl PyProcess {
     }
 
     /// The excluded particle selectors, shared by every generation operation.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Process`` class example:
+    ///
+    /// >>> excluded_particles = process.particle_veto
     #[getter]
     fn particle_veto(&self) -> Vec<PyParticleSelector> {
         self.inner
@@ -719,6 +778,12 @@ impl PyProcess {
     }
 
     /// Allowed model vertex rules; None permits every interaction.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Process`` class example:
+    ///
+    /// >>> allowed_interactions = process.vertex_allow
     #[getter]
     fn vertex_allow(&self) -> Option<Vec<PyVertexRule>> {
         self.inner.vertex_allow().map(|rules| {
@@ -735,6 +800,12 @@ impl PyProcess {
     }
 
     /// Excluded model vertex rules.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Process`` class example:
+    ///
+    /// >>> excluded_interactions = process.vertex_veto
     #[getter]
     fn vertex_veto(&self) -> Vec<PyVertexRule> {
         self.inner
@@ -758,6 +829,8 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Process`` class example:
+    ///
     /// >>> result = process.generate_diagrams(max_vertices=6)
     /// >>> combined_numerator = result.diagrams[0].numerator_expression()
     ///
@@ -957,6 +1030,8 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Process`` class example:
+    ///
     /// >>> result = process.generate_amplitude(max_vertices=6)
     /// >>> operator = result.expression()
     ///
@@ -1168,7 +1243,14 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
-    /// >>> result = process.generate_cross_section(max_vertices=6)
+    /// A two-particle tree cut has one loop after the amplitude sides are sewn:
+    ///
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> model = hep.Model.phi4()
+    /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    /// >>> result = process.generate_cross_section(loops=1)
+    /// >>> assert result.diagrams[0].cuts
     /// >>> combined_numerator = result.diagrams[0].numerator_expression()
     ///
     /// Parameters
@@ -1362,9 +1444,9 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
-    /// >>> [selector.pdg for selector in process.incoming]
-    /// [11, -11]
+    /// Using the setup in the ``Process`` class example:
     ///
+    /// >>> assert [selector.name for selector in process.incoming] == ["e-", "e+"]
     #[getter]
     fn incoming(&self) -> Vec<PyParticleSelector> {
         self.inner
@@ -1376,6 +1458,12 @@ impl PyProcess {
     }
 
     /// Return every allowed ordered final-state alternative.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Process`` class example:
+    ///
+    /// >>> alternatives = process.outgoing_alternatives
     #[getter]
     fn outgoing_alternatives(&self) -> Vec<Vec<PyParticleSelector>> {
         self.inner
@@ -1393,11 +1481,10 @@ impl PyProcess {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> token = fk.CancellationToken()
+/// >>> from symbolica.community import hep
+/// >>> token = hep.CancellationToken()
 /// >>> token.is_cancelled
 /// False
-///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "CancellationToken",
@@ -1416,8 +1503,9 @@ impl PyCancellationToken {
     ///
     /// Examples
     /// --------
-    /// >>> token = fk.CancellationToken()
+    /// Using the setup in the ``CancellationToken`` class example:
     ///
+    /// >>> token = hep.CancellationToken()
     #[new]
     fn new() -> Self {
         Self::default()
@@ -1427,8 +1515,9 @@ impl PyCancellationToken {
     ///
     /// Examples
     /// --------
-    /// >>> token.cancel()
+    /// Using the setup in the ``CancellationToken`` class example:
     ///
+    /// >>> token.cancel()
     fn cancel(&self) {
         self.inner.cancel();
     }
@@ -1437,11 +1526,12 @@ impl PyCancellationToken {
     ///
     /// Examples
     /// --------
-    /// >>> token = fk.CancellationToken()
+    /// Using the setup in the ``CancellationToken`` class example:
+    ///
+    /// >>> token = hep.CancellationToken()
     /// >>> token.cancel()
     /// >>> token.is_cancelled
     /// True
-    ///
     #[getter]
     fn is_cancelled(&self) -> bool {
         self.inner.is_cancelled()
@@ -1452,7 +1542,9 @@ impl PyCancellationToken {
 ///
 /// Examples
 /// --------
-/// >>> fk.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> hep.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
 ///
 /// Parameters
 /// ----------
@@ -1481,7 +1573,9 @@ impl PySelfEnergyFilterOptions {
     ///
     /// Examples
     /// --------
-    /// >>> fk.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
+    /// Using the setup in the ``SelfEnergyFilterOptions`` class example:
+    ///
+    /// >>> hep.SelfEnergyFilterOptions(veto_massive=True, veto_massless=True)
     ///
     /// Parameters
     /// ----------
@@ -1508,7 +1602,9 @@ impl PySelfEnergyFilterOptions {
 ///
 /// Examples
 /// --------
-/// >>> fk.TadpoleFilterOptions(veto_attached_to_massless=True)
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> hep.TadpoleFilterOptions(veto_attached_to_massless=True)
 ///
 /// Parameters
 /// ----------
@@ -1537,7 +1633,9 @@ impl PyTadpoleFilterOptions {
     ///
     /// Examples
     /// --------
-    /// >>> fk.TadpoleFilterOptions(veto_attached_to_massless=True)
+    /// Using the setup in the ``TadpoleFilterOptions`` class example:
+    ///
+    /// >>> hep.TadpoleFilterOptions(veto_attached_to_massless=True)
     ///
     /// Parameters
     /// ----------
@@ -1568,7 +1666,9 @@ impl PyTadpoleFilterOptions {
 ///
 /// Examples
 /// --------
-/// >>> fk.SnailFilterOptions(veto_attached_to_massless=True)
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> hep.SnailFilterOptions(veto_attached_to_massless=True)
 ///
 /// Parameters
 /// ----------
@@ -1597,7 +1697,9 @@ impl PySnailFilterOptions {
     ///
     /// Examples
     /// --------
-    /// >>> fk.SnailFilterOptions(veto_attached_to_massless=True)
+    /// Using the setup in the ``SnailFilterOptions`` class example:
+    ///
+    /// >>> hep.SnailFilterOptions(veto_attached_to_massless=True)
     ///
     /// Parameters
     /// ----------
@@ -1628,7 +1730,9 @@ impl PySnailFilterOptions {
 ///
 /// Examples
 /// --------
-/// >>> fk.NumeratorGrouping("identical", number_of_numerical_samples=7)
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> hep.NumeratorGrouping("identical", number_of_numerical_samples=7)
 ///
 /// Parameters
 /// ----------
@@ -1666,7 +1770,9 @@ impl PyNumeratorGrouping {
     ///
     /// Examples
     /// --------
-    /// >>> fk.NumeratorGrouping("identical", number_of_numerical_samples=7)
+    /// Using the setup in the ``NumeratorGrouping`` class example:
+    ///
+    /// >>> hep.NumeratorGrouping("identical", number_of_numerical_samples=7)
     ///
     /// Parameters
     /// ----------
@@ -1958,10 +2064,15 @@ impl GenerationSettings {
 ///
 /// Examples
 /// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> snapshots = []
 /// >>> def report(progress):
-/// ...     print(progress.stage, progress.completed, progress.total)
-/// >>> result = process.generate_diagrams(progress=report)
-///
+/// ...     snapshots.append((progress.stage, progress.completed, progress.total))
+/// >>> result = process.generate_diagrams(loops=1, progress=report)
+/// >>> assert result.report.completed
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "GenerationProgress",
@@ -1980,18 +2091,45 @@ impl PyGenerationProgress {
     /// Pipeline stage: topologies, topology_filters, interactions,
     /// interaction_filters, numerators, selection, grouping_preparation,
     /// grouping_samples, grouping_comparison, grouping, complete or cancelled.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationProgress`` class example:
+    ///
+    /// >>> stages = []
+    /// >>> def report(progress):
+    /// ...     stages.append(progress.stage)
+    /// >>> result = process.generate_diagrams(progress=report)
     #[getter]
     fn stage(&self) -> &'static str {
         self.inner.stage
     }
 
     /// Work items processed within this stage.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationProgress`` class example:
+    ///
+    /// >>> counts = []
+    /// >>> def report(progress):
+    /// ...     counts.append((progress.stage, progress.completed))
+    /// >>> result = process.generate_diagrams(progress=report)
     #[getter]
     fn completed(&self) -> usize {
         self.inner.completed
     }
 
     /// Stage total, or None while the amount of work is unknown.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationProgress`` class example:
+    ///
+    /// >>> totals = []
+    /// >>> def report(progress):
+    /// ...     totals.append((progress.stage, progress.total))
+    /// >>> result = process.generate_diagrams(progress=report)
     #[getter]
     fn total(&self) -> Option<usize> {
         self.inner.total
@@ -2005,9 +2143,15 @@ impl PyGenerationProgress {
 ///
 /// Examples
 /// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_diagrams(loops=1)
+/// >>> diagram = result.diagrams[0]
 /// >>> report = result.report
-/// >>> print(report)
-///
+/// >>> assert report.completed
+/// >>> assert report.retained_count == len(result.diagrams)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "GenerationReport",
@@ -2024,26 +2168,56 @@ pub struct PyGenerationReport {
 #[pymethods]
 impl PyGenerationReport {
     /// Return the number of distinct topologies considered during generation.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationReport`` class example:
+    ///
+    /// >>> assert report.topology_count >= 1
     #[getter]
     fn topology_count(&self) -> usize {
         self.inner.topology_count
     }
     /// Return the number of interaction assignments examined.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationReport`` class example:
+    ///
+    /// >>> assignments_tested = report.interaction_assignment_count
     #[getter]
     fn interaction_assignment_count(&self) -> usize {
         self.inner.interaction_assignment_count
     }
     /// Return the number of diagrams retained after removing zero numerators.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationReport`` class example:
+    ///
+    /// >>> assert report.retained_count == len(result.diagrams)
     #[getter]
     fn retained_count(&self) -> usize {
         self.inner.retained_count
     }
     /// Return the number of diagrams removed for having an exact zero numerator.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationReport`` class example:
+    ///
+    /// >>> removed_zeroes = report.zero_numerator_count
     #[getter]
     fn zero_numerator_count(&self) -> usize {
         self.inner.zero_numerator_count
     }
     /// Report whether generation finished without cancellation.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationReport`` class example:
+    ///
+    /// >>> assert report.completed  # False means generation was cancelled
     #[getter]
     fn completed(&self) -> bool {
         self.inner.completed
@@ -2053,8 +2227,9 @@ impl PyGenerationReport {
     ///
     /// Examples
     /// --------
-    /// >>> print(result.report)
+    /// Using the setup in the ``GenerationReport`` class example:
     ///
+    /// >>> print(result.report)
     fn __repr__(&self) -> String {
         format!(
             "GenerationReport(topology_count={}, interaction_assignment_count={}, retained_count={}, zero_numerator_count={}, completed={})",
@@ -2070,8 +2245,10 @@ impl PyGenerationReport {
     ///
     /// Examples
     /// --------
-    /// Leave ``result.report`` as the final expression in a notebook cell.
+    /// Using the setup in the ``GenerationReport`` class example:
     ///
+    /// >>> from IPython.display import display
+    /// >>> display(report)
     fn _repr_html_(&self) -> String {
         let status = if self.inner.completed {
             "completed"
@@ -2099,7 +2276,10 @@ impl PyGenerationReport {
     ///
     /// Examples
     /// --------
-    /// IPython invokes this method when only a text representation is supported.
+    /// Using the setup in the ``GenerationReport`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(report)
     ///
     /// Parameters
     /// ----------
@@ -2127,9 +2307,15 @@ impl PyGenerationReport {
 ///
 /// Examples
 /// --------
-/// >>> member = next(iter(next(iter(result.groups)).members))
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_diagrams(loops=1)
+/// >>> diagram = result.diagrams[0]
+/// >>> group = result.groups[0]
+/// >>> member = group.members[0]
 /// >>> diagram = result.diagrams[member.diagram]
-///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "GroupMember",
@@ -2146,16 +2332,35 @@ pub struct PyGroupMember {
 #[pymethods]
 impl PyGroupMember {
     /// Return the generated-order index from before zero-numerator removal.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GroupMember`` class example:
+    ///
+    /// >>> source_index = member.source_diagram
+    /// >>> source_identity = (source_index, member.source_id, member.source_name)
     #[getter]
     fn source_diagram(&self) -> usize {
         self.inner.source_diagram
     }
     /// Return the source diagram's stable content-derived ID.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GroupMember`` class example:
+    ///
+    /// >>> source_ids = [entry.source_id for entry in group.members]
     #[getter]
     fn source_id(&self) -> String {
         self.inner.source_id.to_string()
     }
     /// Return the finalized display name assigned to the source diagram.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GroupMember`` class example:
+    ///
+    /// >>> source_names = [entry.source_name for entry in group.members]
     #[getter]
     fn source_name(&self) -> &str {
         &self.inner.source_name
@@ -2164,13 +2369,20 @@ impl PyGroupMember {
     ///
     /// Examples
     /// --------
-    /// >>> result.diagrams[result.groups[0].members[0].diagram]
+    /// Using the setup in the ``GroupMember`` class example:
     ///
+    /// >>> result.diagrams[result.groups[0].members[0].diagram]
     #[getter]
     fn diagram(&self) -> usize {
         self.inner.diagram
     }
     /// Return the member numerator divided by the group master numerator.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GroupMember`` class example:
+    ///
+    /// >>> relative_weights = [entry.ratio for entry in group.members]
     #[getter]
     fn ratio(&self) -> String {
         self.inner.ratio.to_plain_string()
@@ -2179,8 +2391,9 @@ impl PyGroupMember {
     ///
     /// Examples
     /// --------
-    /// >>> ratio = result.groups[0].members[0].ratio_expression()
+    /// Using the setup in the ``GroupMember`` class example:
     ///
+    /// >>> ratio = result.groups[0].members[0].ratio_expression()
     fn ratio_expression(&self) -> PythonExpression {
         PythonExpression {
             expr: self.inner.ratio.clone(),
@@ -2190,6 +2403,8 @@ impl PyGroupMember {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``GroupMember`` class example:
+    ///
     /// >>> group = result.groups[0]
     /// >>> member = group.members[0]
     /// >>> master = result.diagrams[group.master]
@@ -2197,7 +2412,6 @@ impl PyGroupMember {
     /// ...                  * member.ratio_expression()
     /// ...                  * master.numerator_expression())
     /// >>> reconstructed
-    ///
     fn overall_factor_expression(&self) -> PythonExpression {
         PythonExpression {
             expr: self.inner.overall_factor.clone(),
@@ -2212,9 +2426,15 @@ impl PyGroupMember {
 ///
 /// Examples
 /// --------
-/// >>> group = next(iter(result.groups))
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_diagrams(loops=1)
+/// >>> diagram = result.diagrams[0]
+/// >>> group = result.groups[0]
 /// >>> master_diagram = result.diagrams[group.master]
-///
+/// >>> ratios = [member.ratio for member in group.members]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramGroup",
@@ -2234,13 +2454,20 @@ impl PyDiagramGroup {
     ///
     /// Examples
     /// --------
-    /// >>> result.diagrams[result.groups[0].master]
+    /// Using the setup in the ``DiagramGroup`` class example:
     ///
+    /// >>> result.diagrams[result.groups[0].master]
     #[getter]
     fn master(&self) -> usize {
         self.inner.master
     }
     /// Return the deterministically ordered group members, including the master.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramGroup`` class example:
+    ///
+    /// >>> weighted_diagrams = [(result.diagrams[m.diagram], m.ratio) for m in group.members]
     #[getter]
     fn members(&self) -> Vec<PyGroupMember> {
         self.inner
@@ -2259,10 +2486,14 @@ impl PyDiagramGroup {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> result = process.generate_diagrams()
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> result = process.generate_diagrams(loops=1)
+/// >>> diagram = result.diagrams[0]
 /// >>> diagrams = result.diagrams
-///
+/// >>> assert result.report.retained_count == len(diagrams)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "GenerationResult",
@@ -2280,6 +2511,12 @@ pub struct PyGenerationResult {
 #[pymethods]
 impl PyGenerationResult {
     /// Return every retained diagram in generated order.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationResult`` class example:
+    ///
+    /// >>> numerators = [diagram.numerator_expression() for diagram in result.diagrams]
     #[getter]
     fn diagrams(&self) -> Vec<PyFeynmanDiagram> {
         self.inner
@@ -2291,6 +2528,12 @@ impl PyGenerationResult {
     }
 
     /// Return the numerator groups in deterministic master-index order.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationResult`` class example:
+    ///
+    /// >>> masters = [result.diagrams[group.master] for group in result.groups]
     #[getter]
     fn groups(&self) -> Vec<PyDiagramGroup> {
         self.inner
@@ -2302,6 +2545,12 @@ impl PyGenerationResult {
     }
 
     /// Return generation counts and completion status.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationResult`` class example:
+    ///
+    /// >>> assert result.report.completed
     #[getter]
     fn report(&self) -> PyGenerationReport {
         PyGenerationReport {
@@ -2313,8 +2562,9 @@ impl PyGenerationResult {
     ///
     /// Examples
     /// --------
-    /// >>> number_of_diagrams = len(result)
+    /// Using the setup in the ``GenerationResult`` class example:
     ///
+    /// >>> number_of_diagrams = len(result)
     fn __len__(&self) -> usize {
         self.inner.diagrams.len()
     }
@@ -2323,6 +2573,8 @@ impl PyGenerationResult {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``GenerationResult`` class example:
+    ///
     /// >>> first_diagram = result[0]
     ///
     /// Parameters
@@ -2342,8 +2594,9 @@ impl PyGenerationResult {
     ///
     /// Examples
     /// --------
-    /// >>> one_loop = [diagram for diagram in result if diagram.loop_count == 1]
+    /// Using the setup in the ``GenerationResult`` class example:
     ///
+    /// >>> one_loop = [diagram for diagram in result if diagram.loop_count == 1]
     #[gen_stub(override_return_type(
         type_repr = "collections.abc.Iterator[FeynmanDiagram]",
         imports = ("collections.abc")
@@ -2356,8 +2609,9 @@ impl PyGenerationResult {
     ///
     /// Examples
     /// --------
-    /// >>> print(result)
+    /// Using the setup in the ``GenerationResult`` class example:
     ///
+    /// >>> print(result)
     fn __repr__(&self) -> String {
         format!(
             "GenerationResult(diagrams={}, groups={}, completed={})",
@@ -2375,8 +2629,10 @@ impl PyGenerationResult {
     ///
     /// Examples
     /// --------
-    /// Leave ``result`` as the final expression in a notebook cell.
+    /// Using the setup in the ``GenerationResult`` class example:
     ///
+    /// >>> from IPython.display import display
+    /// >>> display(result)
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
         const PREVIEW_LIMIT: usize = 6;
 
@@ -2424,7 +2680,10 @@ impl PyGenerationResult {
     ///
     /// Examples
     /// --------
-    /// IPython invokes this method when only a text representation is supported.
+    /// Using the setup in the ``GenerationResult`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(result)
     ///
     /// Parameters
     /// ----------

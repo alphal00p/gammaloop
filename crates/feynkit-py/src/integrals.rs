@@ -7,22 +7,43 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
 use crate::{error, graph::PyFeynmanDiagram, kinematics::PyKinematics};
 
-/// An ordered family of affine inverse propagators in loop scalar products.
+/// An ordered set of inverse propagators sharing loop momenta and external kinematics.
 ///
-/// Construct denominators with ``Kinematics.scalar_product``. External momenta
-/// must form an independent basis. Rank, completion, and numerator rewriting
-/// use Symbolica's exact linear algebra. Verified momentum shifts are available
-/// through ``mapping_to`` and ``find_mapping``. Parametric scaling certificates
-/// detect scaleless sectors in dimensional regularization. Integration
-/// prescriptions and IBP reduction are separate operations.
+/// Pass denominators such as ``k.k - m2``, not their reciprocals. An integral
+/// with powers ``[a1, a2, ...]`` has integrand ``1/(D1**a1 * D2**a2 * ...)``:
+/// zero powers omit a denominator and negative powers put it in the numerator.
+/// All power vectors and denominator labels follow the original input order.
+///
+/// Declare independent external momenta and their scalar products through
+/// ``Kinematics``. ``is_independent`` checks the denominator basis for linear
+/// dependence; ``is_complete`` checks whether it spans every loop scalar product.
+/// For L loops and E independent external momenta this space has
+/// L*(L+1)/2 + L*E coordinates. ``complete()`` returns a new family with missing
+/// coordinates appended; give these auxiliary slots nonpositive integral powers.
+/// Use ``partial_fraction()`` before completion when denominators are dependent.
+///
+/// Use this class to rewrite scalar numerators, compare momentum routings, test
+/// scalelessness, and construct Symanzik polynomials. Reduction is provided by
+/// ``hep.IBPFamily`` or, for one loop, ``hep.oneloop.reduce``. No integration
+/// prescription or loop-measure normalization is inferred by this container.
 ///
 /// Examples
 /// --------
-/// >>> kin = fk.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
+/// Build a massless bubble with external virtuality ``p.p = s``. The method
+/// examples below reuse this family and its symbols.
+///
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> D, k, p, s = S("D", "k", "p", "s")
+/// >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
+/// >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
 /// >>> denominators = [kin.scalar_product(k, k), kin.scalar_product(k-p, k-p)]
-/// >>> family = fk.IntegralFamily([k], [p], denominators, kinematics=kin)
-/// >>> assert family.is_complete and family.is_independent
-/// >>> reduced = family.rewrite_numerator(kin.scalar_product(k, p)**2, [d1, d2])
+/// >>> family = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
+/// >>> assert family.rank == 2 and family.is_complete and family.is_independent
+/// >>> rewritten = family.rewrite_numerator(kin.scalar_product(k, p), [d1, d2])
+/// >>> assert (rewritten - (d1 - d2 + s)/2).expand() == E("0")
+/// >>> U, F = family.symanzik([x1, x2])
+/// >>> assert U == x1 + x2
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "IntegralFamily",
@@ -57,7 +78,14 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// >>> family = fk.IntegralFamily.from_diagram(diagram)
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> model = hep.Model.phi4()
+    /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    /// >>> result = process.generate_diagrams(loops=1)
+    /// >>> diagram = result.diagrams[0]
+    /// >>> family = hep.IntegralFamily.from_diagram(diagram)
+    /// >>> assert family.is_complete
     ///
     /// Parameters
     /// ----------
@@ -97,7 +125,13 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// >>> family = fk.IntegralFamily([k], [p], denominators, kinematics=kin)
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hep
+    /// >>> D, k, p, s = S("D", "k", "p", "s")
+    /// >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
+    /// >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
+    /// >>> denominators = [kin.scalar_product(k, k), kin.scalar_product(k-p, k-p)]
+    /// >>> family = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
     /// >>> assert family.rank == 2
     ///
     /// Parameters
@@ -132,6 +166,12 @@ impl PyIntegralFamily {
     }
 
     /// Integrated momentum names in their original order.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
+    /// >>> assert family.loop_momenta == [k]
     #[getter]
     fn loop_momenta(&self) -> Vec<PythonExpression> {
         self.inner
@@ -143,6 +183,12 @@ impl PyIntegralFamily {
     }
 
     /// Scoped kinematics, including the family momentum declarations.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
+    /// >>> assert family.kinematics.scalar_product(p, p) == s
     #[getter]
     fn kinematics(&self) -> PyKinematics {
         PyKinematics {
@@ -151,6 +197,12 @@ impl PyIntegralFamily {
     }
 
     /// Independent external momentum names in their original order.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
+    /// >>> assert family.external_momenta == [p]
     #[getter]
     fn external_momenta(&self) -> Vec<PythonExpression> {
         self.inner
@@ -162,6 +214,12 @@ impl PyIntegralFamily {
     }
 
     /// Loop-loop and loop-external products spanning the numerator space.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
+    /// >>> assert len(family.scalar_products) == 2
     #[getter]
     fn scalar_products(&self) -> Vec<PythonExpression> {
         self.inner
@@ -173,6 +231,13 @@ impl PyIntegralFamily {
     }
 
     /// Ordered inverse propagators, including any auxiliary completion terms.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
+    /// >>> assert family.denominators == denominators
+    /// >>> weighted = list(zip(family.denominators, [1, 2]))
     #[getter]
     fn denominators(&self) -> Vec<PythonExpression> {
         self.inner
@@ -184,18 +249,38 @@ impl PyIntegralFamily {
     }
 
     /// Number of independent affine forms in the loop scalar products.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
+    /// >>> assert family.rank == 2
     #[getter]
     fn rank(&self) -> usize {
         self.inner.rank()
     }
 
     /// Whether the inverse propagators span every loop scalar product.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
+    /// >>> assert family.is_complete
+    /// >>> assert family.rank == len(family.scalar_products)
     #[getter]
     fn is_complete(&self) -> bool {
         self.inner.is_complete()
     }
 
     /// Whether no denominator can be eliminated by an affine relation.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
+    /// >>> assert family.is_independent
+    /// >>> assert family.rank == len(family.denominators)
     #[getter]
     fn is_independent(&self) -> bool {
         self.inner.is_independent()
@@ -205,6 +290,8 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
     /// >>> print(family)
     fn __repr__(&self) -> String {
         format!(
@@ -225,7 +312,10 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// Leave ``family`` as the final expression in a notebook cell.
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(family)
     fn _repr_html_(&self) -> PyResult<String> {
         let dimension = self.inner.kinematics().dimension().to_symbolic();
         let mut metadata = String::new();
@@ -289,7 +379,10 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// IPython uses this representation when rich HTML output is unavailable.
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(family)
     ///
     /// Parameters
     /// ----------
@@ -324,9 +417,13 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// >>> completed = family.complete()
-    /// >>> assert completed.is_complete
-    /// >>> completed = family.complete(candidates=other_family.denominators)
+    /// Using the bubble setup in ``IntegralFamily``:
+    ///
+    /// >>> incomplete = hep.IntegralFamily([k], [p], denominators[:1], kinematics=kin)
+    /// >>> completed = incomplete.complete()
+    /// >>> assert not incomplete.is_complete and completed.is_complete
+    /// >>> assert completed.denominators[0] == denominators[0]
+    /// >>> powers = [1, 0]  # the appended slot is absent from the original integral
     ///
     /// Parameters
     /// ----------
@@ -357,9 +454,13 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// >>> terms = family.partial_fraction([1, 1])
-    /// >>> for coefficient, powers in terms:
-    /// ...     print(coefficient, powers)
+    /// Using the symbols and kinematics in ``IntegralFamily``:
+    ///
+    /// >>> m2 = S("m2")
+    /// >>> dependent = hep.IntegralFamily([k], [], [kin.scalar_product(k, k),
+    /// ...     kin.scalar_product(k, k) - m2], kinematics=kin)
+    /// >>> terms = dependent.partial_fraction([1, 1])
+    /// >>> assert all(sum(power > 0 for power in powers) == 1 for coefficient, powers in terms)
     ///
     /// Parameters
     /// ----------
@@ -396,9 +497,10 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// >>> mapping = source.mapping_to(target, [l - p])
-    /// >>> assert mapping is not None
-    /// >>> target_powers = mapping.map_powers([1, 2])
+    /// Using the bubble setup in ``IntegralFamily``:
+    ///
+    /// >>> mapping = family.mapping_to(family, [k])
+    /// >>> assert mapping.map_powers([1, 2]) == [1, 2]
     ///
     /// Parameters
     /// ----------
@@ -432,9 +534,12 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// >>> mapping = source.find_mapping(target)
-    /// >>> if mapping is not None:
-    /// ...     transformed = mapping.apply(scalar_numerator)
+    /// Using the bubble setup in ``IntegralFamily``:
+    ///
+    /// >>> target = hep.IntegralFamily([k], [p], list(reversed(denominators)), kinematics=kin)
+    /// >>> mapping = family.find_mapping(target)
+    /// >>> assert mapping is not None
+    /// >>> transformed = mapping.apply(kin.scalar_product(k, p))
     ///
     /// Parameters
     /// ----------
@@ -476,10 +581,11 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// >>> mappings = fk.IntegralFamily.find_mappings(families)
-    /// >>> representatives = sorted({target for target, mapping in mappings})
-    /// >>> target, mapping = mappings[0]
-    /// >>> target_powers = mapping.map_powers(source_powers)
+    /// Using the bubble setup in ``IntegralFamily``:
+    ///
+    /// >>> families = [family, family]
+    /// >>> mappings = hep.IntegralFamily.find_mappings(families)
+    /// >>> assert [target for target, mapping in mappings] == [0, 0]
     ///
     /// Parameters
     /// ----------
@@ -517,8 +623,10 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// >>> sector = family.sector([1, 2, -1])
-    /// >>> assert len(sector.denominators) == 2
+    /// Using the bubble setup in ``IntegralFamily``:
+    ///
+    /// >>> sector = family.sector([1, 0])
+    /// >>> assert sector.denominators == denominators[:1]
     ///
     /// Parameters
     /// ----------
@@ -546,9 +654,11 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// >>> direction = family.sector(powers).scaleless_transverse_direction()
-    /// >>> if direction is not None:
-    /// ...     print("Scaleless transverse integration:", direction)
+    /// Using the bubble setup in ``IntegralFamily``:
+    ///
+    /// >>> empty_sector = family.sector([0, 0])
+    /// >>> direction = empty_sector.scaleless_transverse_direction()
+    /// >>> assert direction is not None  # no denominators constrain the loop momentum
     ///
     /// Returns
     /// -------
@@ -572,10 +682,11 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// >>> sector = family.sector([1, 1, 0])
-    /// >>> weights = sector.scaleless_scaling([x1, x2])
-    /// >>> if weights is not None:
-    /// ...     print("Scaleless in dimensional regularization", weights)
+    /// Using the bubble setup in ``IntegralFamily``:
+    ///
+    /// >>> tadpole = family.sector([1, 0])
+    /// >>> weights = tadpole.scaleless_scaling([x1])
+    /// >>> assert weights is not None  # massless tadpole vanishes in dimensional regularization
     ///
     /// Parameters
     /// ----------
@@ -609,9 +720,12 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
-    /// >>> mapping = source.parametric_mapping(target, [x1, x2])
-    /// >>> if mapping is not None:
-    /// ...     target_powers = mapping.map_powers([1, 2])
+    /// Using the bubble setup in ``IntegralFamily``:
+    ///
+    /// >>> target = hep.IntegralFamily([k], [p], list(reversed(denominators)), kinematics=kin)
+    /// >>> mapping = family.parametric_mapping(target, [x1, x2])
+    /// >>> assert mapping is not None
+    /// >>> mapped_powers = mapping.map_powers([1, 2])
     ///
     /// Parameters
     /// ----------
@@ -647,6 +761,8 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
     /// >>> U, F = family.symanzik([x1, x2])
     /// >>> assert U == x1 + x2  # two standard one-loop propagators
     ///
@@ -675,6 +791,8 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
     /// >>> rules = family.scalar_product_rules([d1, d2])
     /// >>> assert len(rules) == 2
     ///
@@ -708,6 +826,8 @@ impl PyIntegralFamily {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``IntegralFamily`` class example:
+    ///
     /// >>> numerator = kin.scalar_product(k, p)**2
     /// >>> reduced = family.rewrite_numerator(numerator, [d1, d2])
     ///
@@ -742,9 +862,21 @@ impl PyIntegralFamily {
 ///
 /// Examples
 /// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> D, k, p, s = S("D", "k", "p", "s")
+/// >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
+/// >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
+/// >>> denominators = [kin.scalar_product(k, k), kin.scalar_product(k-p, k-p)]
+/// >>> family = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
+/// >>> m2 = S("m2")
+/// >>> denominators = [denominators[0] - m2, denominators[1]]
+/// >>> source = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
+/// >>> target = hep.IntegralFamily([k], [p], list(reversed(denominators)), kinematics=kin)
 /// >>> mapping = source.find_mapping(target)
 /// >>> assert mapping is not None
-/// >>> print(mapping.momentum_rules, mapping.denominator_map)
+/// >>> target_powers = mapping.map_powers([1, 2])
+/// >>> assert target_powers == [2, 1]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "IntegralMapping",
@@ -761,6 +893,12 @@ pub struct PyIntegralMapping {
 #[pymethods]
 impl PyIntegralMapping {
     /// Source loop momentum names paired with their target-coordinate images.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``IntegralMapping`` class example:
+    ///
+    /// >>> loop_substitutions = mapping.momentum_rules
     #[getter]
     fn momentum_rules(&self) -> Vec<(PythonExpression, PythonExpression)> {
         self.inner
@@ -772,6 +910,13 @@ impl PyIntegralMapping {
     }
 
     /// Zero-based target denominator index for each source denominator.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``IntegralMapping`` class example:
+    ///
+    /// >>> mapped_powers = mapping.map_powers([1, 2])
+    /// >>> slot_map = mapping.denominator_map
     #[getter]
     fn denominator_map(&self) -> Vec<usize> {
         self.inner.denominator_map().to_vec()
@@ -781,6 +926,8 @@ impl PyIntegralMapping {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``IntegralMapping`` class example:
+    ///
     /// >>> powers = mapping.map_powers([1, 2])
     ///
     /// Parameters
@@ -797,7 +944,9 @@ impl PyIntegralMapping {
     ///
     /// Examples
     /// --------
-    /// >>> transformed_numerator = mapping.apply(numerator)
+    /// Using the setup in ``IntegralMapping``:
+    ///
+    /// >>> transformed = mapping.apply(kin.scalar_product(k, p))
     ///
     /// Parameters
     /// ----------
@@ -816,9 +965,21 @@ impl PyIntegralMapping {
 ///
 /// Examples
 /// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hep
+/// >>> D, k, p, s = S("D", "k", "p", "s")
+/// >>> d1, d2, x1, x2 = S("d1", "d2", "x1", "x2")
+/// >>> kin = hep.Kinematics(D, momenta=[k, p]).with_scalar_product(p, p, s)
+/// >>> denominators = [kin.scalar_product(k, k), kin.scalar_product(k-p, k-p)]
+/// >>> family = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
+/// >>> m2 = S("m2")
+/// >>> denominators = [denominators[0] - m2, denominators[1]]
+/// >>> source = hep.IntegralFamily([k], [p], denominators, kinematics=kin)
+/// >>> target = hep.IntegralFamily([k], [p], list(reversed(denominators)), kinematics=kin)
 /// >>> mapping = source.parametric_mapping(target, [x1, x2])
-/// >>> if mapping is not None:
-/// ...     print(mapping.denominator_map, mapping.map_powers([1, 2]))
+/// >>> assert mapping is not None
+/// >>> target_powers = mapping.map_powers([1, 2])
+/// >>> assert target_powers == [2, 1]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "PropagatorMapping",
@@ -835,6 +996,13 @@ pub struct PyPropagatorMapping {
 #[pymethods]
 impl PyPropagatorMapping {
     /// Zero-based target denominator index for each source denominator.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``PropagatorMapping`` class example:
+    ///
+    /// >>> slot_map = mapping.denominator_map
+    /// >>> mapped_powers = mapping.map_powers([1, 2])
     #[getter]
     fn denominator_map(&self) -> Vec<usize> {
         self.inner.denominator_map().to_vec()
@@ -844,6 +1012,8 @@ impl PyPropagatorMapping {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``PropagatorMapping`` class example:
+    ///
     /// >>> reordered = mapping.map_powers([1, -2])
     ///
     /// Parameters

@@ -92,6 +92,31 @@ with different interfaces. Matcher state and callback caches belong to one
 application, so a reusable rule does not retain source views or suppress
 callbacks across calls. A zero-sized RHS cache preserves per-match callbacks.
 
+Factorized metric/vector contraction is owned by
+`SymbolicTensor<PartialStructure>::contract`. It uses the existing component
+reducer: only one selected factor contributes alternatives at a time, while
+remaining factors carry occurrence-local port overrides. Equal remaining states
+share a coefficient; identical coefficient bodies share a literal alias. Scalar
+spectators, disconnected components and foreign sectors remain factorized.
+The current state key retains original factor identity and port bindings, so it
+can under-merge different bindings that normalize to equal factors. This is a
+performance limitation, not an algebraic equivalence assumption.
+
+Contraction, rule application and polynomial materialization are separate
+operations. `AliasedTensorExpression.expand()` evaluates the existing definition
+DAG forward as polynomials with a shared variable map, then constructs the final
+Symbolica expression once. Alias uses inside opaque functions and callback-
+sensitive bodies retain the ordinary checked resolution path before the
+explicit expansion. An evaluator consumes the DAG directly.
+
+Frontier growth is bounded before processing the next factor. The current guard
+counts generated alternatives and estimates state/definition bytes; it is not a
+strict heap cap on coefficient buffers. If the guard fires, the result retains
+exact pending factors, and its internal completion flag remains false. It must
+not be certified as fully contracted. Callback-sensitive inputs continue through
+the existing checked contractor, including the rank-loss rejection for a
+normalizer that turns `T(b)` in `g(a,b)*T(a)` into a scalar.
+
 Checked reconstruction preserves established interfaces where the operation justifies it.
 Public fields and low-level constructors are not validity certificates: inference can retain
 raw repeated ports until `checked_parts` merges their explicit contractions. This intermediate
@@ -303,3 +328,40 @@ Index canonicalization protects independent scalar factors and reserves explicit
 before allocating contraction dummies. Canceled representation groups do not consume canonical dummy
 names. The fallible `Concretize` implementation preserves symbolic dimensions and uses the supplied
 canonical layout to restore logical slot order in the symbolic expression.
+
+
+== M1 consolidation measurements
+
+The saved `examples/notebooks/tensor_benchmark_m1.json` compares three alternating
+fresh-interpreter runs against the immutable M0 release on CPU 8. Each run has
+one unmeasured warmup. The primary clock includes rule application, contraction
+and explicit scalar materialization; FORM uses batched body CPU time, excluding
+process startup. These measurements are pinned among cooperating jobs, not on an
+exclusive host.
+
+#table(columns: 4,
+  [Case], [M0 CPU ms], [M1 CPU ms], [FORM CPU ms],
+  [Historical ladder, early order], [451.95], [150.05], [265.00],
+  [Historical ladder, original order], [1112.81], [753.63], [848.00],
+  [Physical four-loop gluon, 4D], [763.43], [327.09], [759.00],
+  [Physical four-loop gluon, D], [1200.43], [753.08], [1148.00],
+  [Physical three-loop fermion, 4D], [0.685], [0.686], [0.360],
+  [Physical three-loop fermion, D], [2.144], [2.588], [1.640],
+  [Physical four-loop fermion, 4D], [5.592], [5.481], [6.000],
+  [Physical four-loop fermion, D], [43.87], [43.94], [55.40],
+  [Free length-14 trace, D], [416.37], [456.33], [61.33],
+)
+
+The plan's historical reverse/early order is `5,4,6,3,7,2,8,1`. Separate
+diagnostic calls give 39.84 ms for contraction and 108.14 ms for explicit
+materialization, with 180 literal alias definitions occupying 91,194 bytes. All
+three M1 thresholds pass. Diagnostic phase medians are independent samples, so
+their sum is not the primary end-to-end measurement. All ladder gains held in
+every paired run. Traces retain their existing route at M1; the long free
+D-dimensional trace remains a substantial gap and did not improve.
+
+The cohort retains 102 timing records, 34 correctness/diagnostic records and
+FORM scripts/results. Exact comparisons cover compatible polynomial bases;
+HEP component evaluations and D-to-4 specialization cover the differing
+four-dimensional trace bases. Component samples do not prove a general symbolic
+identity. Source and installed-core identities remained unchanged throughout.

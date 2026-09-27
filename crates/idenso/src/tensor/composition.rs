@@ -1101,7 +1101,7 @@ fn rewrite_ports<'a>(
     }
 }
 
-fn rewrite_interface_ports(
+pub(crate) fn rewrite_interface_ports(
     value: &SymbolicTensor<PartialStructure>,
     replacements: &HashMap<usize, Atom>,
 ) -> Result<Atom, TensorCompositionError> {

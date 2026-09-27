@@ -23,6 +23,8 @@ use super::{
     inference::{InterfaceInference, TensorInferenceError},
 };
 
+mod materialization;
+
 type Result<T> = std::result::Result<T, TensorInferenceError>;
 
 /// Logical layouts accompanying one alias registry. Keys include port labelling.
@@ -189,7 +191,11 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
 
     /// Explicit materialization. Contraction and alias construction never call this.
     pub fn expanded(&self) -> Result<SymbolicTensor<PartialStructure>> {
-        self.resolved()?.expanded(None, true)
+        if let Some(expression) = self.polynomial_materialization()? {
+            self.root().with_algebra_result(expression)
+        } else {
+            self.resolved()?.expanded(None, true)
+        }
     }
 
     /// Apply a typed operation once to each definition; handles remain opaque.

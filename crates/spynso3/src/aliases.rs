@@ -33,6 +33,18 @@ pub struct AliasedTensorExpression {
 impl ModuleInit for AliasedTensorExpression {}
 
 impl AliasedTensorExpression {
+    pub(crate) fn from_parts(
+        value: SymbolicTensor<AliasInterfaces, AliasedAtom>,
+        name: Option<Symbol>,
+        arguments: Vec<Atom>,
+    ) -> Self {
+        Self {
+            value,
+            descriptor: (name, arguments),
+            descriptors: HashMap::new(),
+        }
+    }
+
     fn wrap(
         py: Python<'_>,
         tensor: SymbolicTensor<PartialStructure>,
