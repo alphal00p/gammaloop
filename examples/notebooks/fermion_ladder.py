@@ -324,6 +324,9 @@ def _form_run(
         raise RuntimeError(f"Expected one FORM body timer:\n{run.stdout}")
     return {
         "command": command + [str(script)],
+        "source_sha256": hashlib.sha256(Path(script).read_bytes()).hexdigest(),
+        "affinity": sorted(os.sched_getaffinity(0)),
+        "term_counts": [int(value) for value in re.findall(r"TERMS=(\d+)", run.stdout)],
         "stdout": run.stdout,
         "stderr": run.stderr,
         "process_wall_ns": wall,
@@ -547,17 +550,713 @@ def benchmark(
     return report
 
 
+def consolidation_child(args):
+    """One interpreter/case/route. Setup and diagnostics never enter primary clocks."""
+    from time import thread_time_ns
+
+    from symbolica import core
+    from tensor_benchmark_cases import HistoricalLadder, atom, describe, make_case
+    from tensor_benchmark_diagnostics import (
+        FactorProbe,
+        keep_rest,
+        partial_parse,
+        validation_cost,
+    )
+
+    if args.cpu is not None:
+        os.sched_setaffinity(0, {args.cpu})
+    core_path = Path(core.__file__)
+    before = hashlib.sha256(core_path.read_bytes()).hexdigest()
+    if args.expected_core and before != args.expected_core:
+        raise ValueError(f"Core identity changed: {before}")
+    setup = process_time_ns()
+    case = make_case(args.case)
+    setup = process_time_ns() - setup
+    route = args.route
+    if route == "scalar" and not isinstance(case, HistoricalLadder):
+        raise ValueError(
+            "The pure Symbolica recipe is defined only for the historical ladder"
+        )
+    call = case.scalar if route == "scalar" else case.reduce
+    warmup = call()
+    warmup_identity = hashlib.sha256(atom(warmup).format_plain().encode()).hexdigest()
+    del warmup
+    cpu_start, thread_start, wall_start = (
+        process_time_ns(),
+        thread_time_ns(),
+        perf_counter_ns(),
+    )
+    outputs = [call() for _ in range(args.calls)]
+    wall_ns = perf_counter_ns() - wall_start
+    thread_ns, cpu_ns = thread_time_ns() - thread_start, process_time_ns() - cpu_start
+    result = outputs[-1]
+    assert (
+        hashlib.sha256(atom(result).format_plain().encode()).hexdigest()
+        == warmup_identity
+    )
+    assert all(value == result for value in outputs)
+    # Conversion of scalar-reference notation is an oracle adapter, not algebra timing.
+    result = case.convert_scalar(result) if route == "scalar" else atom(result)
+    result_path = args.output.with_suffix(".expression")
+    result_path.write_text(result.format_plain())
+    record = {
+        "input": describe(case.source),
+        "case": args.case,
+        "route": route,
+        "calls": args.calls,
+        "fixed_warmups": 1,
+        "wall_ns": wall_ns,
+        "process_ns": cpu_ns,
+        "thread_ns": thread_ns,
+        "setup_process_ns": setup,
+        "core": str(core_path),
+        "core_sha256": before,
+        "affinity": sorted(os.sched_getaffinity(0)),
+        "strategy": case.strategy,
+        "result": describe(result),
+        "expression": str(result_path),
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": resource_snapshot(args.cpu),
+    }
+    record["phases"] = case.phases(result)
+    if args.check:
+        if hasattr(case, "explicit") and case.explicit is not None:
+            assert result == case.reduce(case.explicit)
+            record["explicit_projection_exact"] = True
+        if isinstance(case, HistoricalLadder):
+            assert describe(result)["terms"] == 9652
+            typed = case.typed()
+            assert atom(typed.schoonschip(case.settings)) == result
+            record["scalar_rank_and_fixedpoint"] = typed.is_scalar
+            assert record["scalar_rank_and_fixedpoint"]
+        if args.form and hasattr(case, "import_form"):
+            with tempfile.TemporaryDirectory(prefix="r3-form-check-") as directory:
+                script = case_form_script(case, Path(directory))
+                form = _form_run(
+                    args.form,
+                    script,
+                    directory,
+                    mode=case.mode,
+                    loops=case.loops,
+                    diagnostic=True,
+                    order=case.form_order,
+                )
+                form_expression = case.import_form(form["polynomial"])
+                literal = result == form_expression
+                record["form_source"] = script.read_text()
+                record["form_exact"] = literal
+                if not literal and hasattr(case, "check_form_components"):
+                    record["form_component_checks"] = case.check_form_components(
+                        result, form_expression
+                    )
+                elif not literal:
+                    args.output.write_text(
+                        json.dumps({**record, "failed_form": form}, indent=2) + "\n"
+                    )
+                    raise AssertionError(
+                        f"{args.case}: FORM identity differs; no component oracle is installed"
+                    )
+                form_path = args.output.with_suffix(".form.txt")
+                form_path.write_text(form.pop("polynomial"))
+                form["polynomial_path"] = str(form_path)
+                form["polynomial_sha256"] = hashlib.sha256(
+                    form_path.read_bytes()
+                ).hexdigest()
+                record["form_diagnostic"] = form
+        if hasattr(case, "dimension_symbol") and case.mode == "tracen":
+            other = make_case(args.case.replace("tracen", "trace4"))
+            lowered = result.replace(case.dimension_symbol, E("4")).expand()
+            strict_four = other.reduce()
+            record["D_to_four_exact"] = lowered == strict_four
+            if not record["D_to_four_exact"] and hasattr(case, "check_form_components"):
+                record["D_to_four_component_checks"] = case.check_form_components(
+                    lowered, strict_four
+                )
+            else:
+                assert record["D_to_four_exact"]
+        if hasattr(case, "check_components"):
+            # Existing independent HEP evaluator, with the same exact input/output.
+            record["components"] = case.check_components(
+                {"result": result}, {"input": case.source}
+            )
+        if args.diagnostic:
+            if args.diagnostic == "keep-rest":
+                record["diagnostic"] = keep_rest()
+                failures = []
+                for row in record["diagnostic"]:
+                    required = row.get("required_milestone", "M3")
+                    milestone_required = args.gate_stage == "M3" or (
+                        args.gate_stage in ("baseline", "M0") and required == "M0"
+                    )
+                    known_baseline = row.get("spinor_slots") == "AUTO" or row.get(
+                        "case"
+                    ) in ("vector_power", "foreign_color")
+                    semantic_ok = row.get(
+                        "exact_expanded", True
+                    ) is not False and row.get("rerun", True)
+                    shape_ok = row.get("preserves_outer_scalar_factor") is not False
+                    row["gate"] = (
+                        "pass"
+                        if row.get("status") == "ok"
+                        and semantic_ok
+                        and (shape_ok or args.gate_stage != "M3")
+                        else "known_baseline_limitation"
+                        if args.gate_stage == "baseline" and known_baseline
+                        else "pending_M3"
+                        if not milestone_required and semantic_ok
+                        else "fail"
+                    )
+                    if row["gate"] == "fail":
+                        failures.append(row)
+                record["diagnostic_acceptance"] = {
+                    "stage": args.gate_stage,
+                    "pass": not failures,
+                    "failed_rows": len(failures),
+                }
+            elif not isinstance(case, HistoricalLadder):
+                raise ValueError("This diagnostic requires a historical ladder case")
+            elif args.diagnostic == "validation":
+                record["diagnostic"] = validation_cost(case)
+            elif args.diagnostic == "partial-parse":
+                record["diagnostic"] = partial_parse(case, args.term_limit)
+            else:
+                value, diagnostic = FactorProbe(case).run(
+                    "atom" if args.diagnostic == "factor-atom" else "polynomial"
+                )
+                assert value == result
+                record["diagnostic"] = {**diagnostic, "exact_reference": True}
+    assert hashlib.sha256(core_path.read_bytes()).hexdigest() == before
+    args.output.write_text(json.dumps(record, indent=2) + "\n")
+    if record.get("diagnostic_acceptance", {}).get("pass") is False:
+        raise AssertionError(
+            "Required keep-the-rest milestone gate failed; full outcomes retained"
+        )
+    return record
+
+
+def resource_snapshot(cpu):
+    import resource
+
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    data = {
+        "time_ns": __import__("time").time_ns(),
+        "load_average": os.getloadavg(),
+        "max_rss": usage.ru_maxrss,
+        "voluntary_switches": usage.ru_nvcsw,
+        "involuntary_switches": usage.ru_nivcsw,
+    }
+    if cpu is not None:
+        siblings = Path(
+            f"/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list"
+        )
+        data["smt_siblings"] = (
+            siblings.read_text().strip() if siblings.exists() else None
+        )
+        sibling_ids = (data["smt_siblings"] or str(cpu)).split(",")
+        names = {f"cpu{n}" for n in sibling_ids if n.isdigit()}
+        data["cpu_stat"] = [
+            line
+            for line in Path("/proc/stat").read_text().splitlines()
+            if line.split()[0] in names
+        ]
+    return data
+
+
+def case_form_script(case, directory):
+    if hasattr(case, "form_source"):
+        path = directory / "case.frm"
+        path.write_text(case.form_source())
+        return path
+    name = (
+        "fermion_propagator_ladder.frm"
+        if case.particle == "fermionic"
+        else "gluon_propagator_ladder.frm"
+    )
+    return Path(__file__).with_name(name)
+
+
+def consolidation_benchmark(args):
+    """M0 and later milestones use this scheduler around the existing case bodies."""
+    import sys
+
+    from tensor_benchmark_cases import CASES, make_case
+
+    if args.cpu is not None:
+        os.sched_setaffinity(0, {args.cpu})
+    if args.rounds < 3:
+        raise ValueError("M0 requires at least three rounds")
+    interpreters = args.interpreter or [f"baseline={sys.executable}"]
+    variants = [value.split("=", 1) for value in interpreters]
+    if len({label for label, _ in variants}) != len(variants):
+        raise ValueError("Interpreter labels must be unique")
+    cases = args.cases.split(",") if args.cases else CASES
+    if any(case not in CASES for case in cases):
+        raise ValueError(f"Cases must be selected from {CASES}")
+    directory = args.output.with_suffix("")
+    directory.mkdir(parents=True, exist_ok=False)
+    sha = lambda path: hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    sources = {
+        str(path): sha(path)
+        for path in [
+            Path(__file__),
+            *Path(__file__).parent.glob("tensor_benchmark_*.py"),
+            *(
+                Path(__file__).with_name(name)
+                for name in (
+                    "gluon_ladder.py",
+                    "fermion_ladder_validation.py",
+                    "gluon_ladder_validation.py",
+                    "gamma_simplification.py",
+                    "fermion_propagator_ladder.frm",
+                    "gluon_propagator_ladder.frm",
+                )
+            ),
+        ]
+    }
+    fixture = (
+        Path(__file__).resolve().parents[2]
+        / "crates/idenso/tests/fixtures/aa_aa_2l_gl16_integrated_uv_start_after_simplify_metrics.sym"
+    )
+    sources[str(fixture)] = sha(fixture)
+    if args.form:
+        sources[str(Path(args.form).resolve())] = sha(args.form)
+    provenance = Path(__file__).with_name("tensor_benchmark_provenance.json")
+    sources[str(provenance)] = sha(provenance)
+    report = {
+        "schema": 1,
+        "provenance": json.loads(provenance.read_text()),
+        "platform": platform.platform(),
+        "milestone": args.milestone,
+        "rounds": args.rounds,
+        "created_utc": datetime.now(UTC).isoformat(),
+        "sources": sources,
+        "interpreters": dict(variants),
+        "cases": cases,
+        "timing": "Fresh interpreter for each case/route/round; one fixed unmeasured warmup, checked and disposed before clocks; fixed measured calls; setup/checks/disposal excluded; no discarded measured samples or retries",
+        "diagnostic_scope": "Separate check processes; phase clocks/counts never substituted for primary clocks",
+        "scheduling": "Rotate interpreter order each round; raw scalar and FORM references separate from paired criterion",
+        "host_scope": "Pinned among cooperating jobs, not an exclusive-host claim",
+        "records": [],
+        "checks": [],
+        "form": [],
+        "summary": {},
+    }
+    (directory / "protocol.json").write_text(
+        json.dumps(
+            {
+                **report,
+                "calls": args.calls,
+                "fixed_warmups": 1,
+                "expected_cores": dict(
+                    value.split("=", 1) for value in (args.core or [])
+                ),
+                "form": args.form,
+                "form_batch_target_cpu_ns": 200_000_000,
+                "free4_calibration": "Start8192 copies, double until>=200ms, cap1048576; retain all trials then fix3-round copy count",
+                "form_only": args.form_only,
+                "cpu": args.cpu,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    cores = dict(value.split("=", 1) for value in (args.core or []))
+    report["expected_cores"] = dict(cores)
+
+    def child(label, python, case, route, suffix, check=False, measurement=False):
+        output = directory / f"{label}-{case}-{route}-{suffix}.json"
+        command = [
+            python,
+            str(Path(__file__).resolve()),
+            "--suite",
+            "consolidation",
+            "--child",
+            "--case",
+            case,
+            "--route",
+            route,
+            "--calls",
+            str(args.calls),
+            "--output",
+            str(output),
+        ]
+        if args.cpu is not None:
+            command += ["--cpu", str(args.cpu)]
+        if label in cores:
+            command += ["--expected-core", cores[label]]
+        if check:
+            command += [
+                "--check",
+                "--gate-stage",
+                "baseline" if label == variants[0][0] else args.gate_stage,
+            ]
+            if args.form:
+                command += ["--form", args.form]
+            if args.diagnostic:
+                command += [
+                    "--diagnostic",
+                    args.diagnostic,
+                    "--term-limit",
+                    str(args.term_limit),
+                ]
+        before = resource_snapshot(args.cpu)
+        try:
+            run = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=args.timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as error:
+
+            def decode(value):
+                return (
+                    value.decode(errors="replace")
+                    if isinstance(value, bytes)
+                    else (value or "")
+                )
+
+            run = subprocess.CompletedProcess(
+                command,
+                124,
+                decode(error.stdout),
+                decode(error.stderr) + "\nPreset timeout reached; no retry",
+            )
+        output.with_suffix(".stdout").write_text(run.stdout)
+        output.with_suffix(".stderr").write_text(run.stderr)
+        receipt = {
+            "label": label,
+            "case": case,
+            "route": route,
+            "command": command,
+            "exit_code": run.returncode,
+            "output": str(output),
+            "before": before,
+            "after": resource_snapshot(args.cpu),
+        }
+        report["checks" if check and not measurement else "records"].append(receipt)
+        args.output.write_text(json.dumps(report, indent=2) + "\n")
+        if run.returncode:
+            raise RuntimeError(
+                f"Child failed; retained output: {output.with_suffix('.stderr')}"
+            )
+        value = json.loads(output.read_text())
+        receipt["record"] = value
+        cores.setdefault(label, value["core_sha256"])
+        assert cores[label] == value["core_sha256"]
+        return value
+
+    for case in cases:
+        if not args.form_only:
+            expected = None
+            for label, python in variants:
+                value = child(label, python, case, "typed", "check", check=True)
+                expression = Path(value["expression"]).read_text()
+                if expected is None:
+                    expected = expression
+                assert expression == expected, f"Interpreter output differs for {case}"
+            if case.startswith("historical-"):
+                value = child(*variants[0], case, "scalar", "check", check=True)
+                assert Path(value["expression"]).read_text() == expected
+            if args.check_only:
+                continue
+            for round_index in range(args.rounds):
+                offset = round_index % len(variants)
+                for label, python in variants[offset:] + variants[:offset]:
+                    value = child(
+                        label,
+                        python,
+                        case,
+                        "typed",
+                        f"round{round_index + 1}",
+                        check=bool(args.diagnostic),
+                        measurement=True,
+                    )
+                    assert Path(value["expression"]).read_text() == expected
+                if case.startswith("historical-"):
+                    value = child(
+                        *variants[0], case, "scalar", f"round{round_index + 1}"
+                    )
+                    assert Path(value["expression"]).read_text() == expected
+        if args.form and case != "production-aa-aa":
+            reference = make_case(case)
+            with tempfile.TemporaryDirectory(prefix="r3-form-") as temp:
+                script = case_form_script(reference, Path(temp))
+                diagnostic = None
+                if args.form_only:
+                    diagnostic = _form_run(
+                        args.form,
+                        script,
+                        temp,
+                        mode=reference.mode,
+                        loops=reference.loops,
+                        diagnostic=True,
+                        order=reference.form_order,
+                    )
+                    polynomial = directory / f"{case}.form.txt"
+                    polynomial.write_text(diagnostic.pop("polynomial"))
+                    diagnostic.update(
+                        polynomial_path=str(polynomial),
+                        polynomial_sha256=sha(polynomial),
+                    )
+                pilot = _form_run(
+                    args.form,
+                    script,
+                    temp,
+                    mode=reference.mode,
+                    loops=reference.loops,
+                    repeats=1,
+                    order=reference.form_order,
+                )
+                repeats = min(
+                    8192,
+                    max(
+                        1, math.ceil(200_000_000 / max(pilot["body_cpu_ns"], 1_000_000))
+                    ),
+                )
+                row = {
+                    "case": case,
+                    "diagnostic": diagnostic,
+                    "pilot": pilot,
+                    "calibration": [],
+                    "samples": [],
+                }
+                report["form"].append(row)
+                if case.startswith("free4-"):
+                    repeats = 8192
+                    while True:
+                        calibration = _form_run(
+                            args.form,
+                            script,
+                            temp,
+                            mode=reference.mode,
+                            loops=reference.loops,
+                            repeats=repeats,
+                            order=reference.form_order,
+                        )
+                        row["calibration"].append(calibration)
+                        args.output.write_text(json.dumps(report, indent=2) + "\n")
+                        if calibration["body_cpu_ns"] >= 200_000_000:
+                            break
+                        if repeats >= 1_048_576:
+                            raise RuntimeError(
+                                "FORM calibration exceeds the preset copy limit"
+                            )
+                        repeats *= 2
+                row["fixed_repeats"] = repeats
+                for _ in range(args.rounds):
+                    sample = _form_run(
+                        args.form,
+                        script,
+                        temp,
+                        mode=reference.mode,
+                        loops=reference.loops,
+                        repeats=repeats,
+                        order=reference.form_order,
+                    )
+                    row["samples"].append(sample)
+                    if diagnostic is not None:
+                        assert (
+                            sample["term_counts"][-1] == diagnostic["term_counts"][-1]
+                        )
+                    args.output.write_text(json.dumps(report, indent=2) + "\n")
+                    if sample["body_cpu_ns"] == 0:
+                        raise RuntimeError(
+                            "FORM body below timer resolution; sample retained, no retry"
+                        )
+        rows = [r for r in report["records"] if r["case"] == case]
+        summary = {}
+        for label, _ in [] if args.form_only else variants:
+            own = [
+                r["record"]
+                for r in rows
+                if r["label"] == label and r["route"] == "typed"
+            ]
+            summary[label] = {
+                clock: median(r[clock] / r["calls"] for r in own)
+                for clock in ("wall_ns", "process_ns", "thread_ns")
+            }
+            if label != variants[0][0]:
+                base = [
+                    r["record"]
+                    for r in rows
+                    if r["label"] == variants[0][0] and r["route"] == "typed"
+                ]
+                summary[label]["paired_ratios"] = {
+                    clock: [
+                        c[clock] / b[clock] if b[clock] else None
+                        for b, c in zip(base, own, strict=True)
+                    ]
+                    for clock in ("wall_ns", "process_ns", "thread_ns")
+                }
+                summary[label]["faster_pairs"] = {
+                    clock: sum(value is not None and value < 1 for value in ratios)
+                    for clock, ratios in summary[label]["paired_ratios"].items()
+                }
+                summary[label]["median_paired_ratio"] = {
+                    clock: median(values)
+                    if all(x is not None for x in values)
+                    else None
+                    for clock, values in summary[label]["paired_ratios"].items()
+                }
+        scalar = [r["record"] for r in rows if r["route"] == "scalar"]
+        if scalar:
+            summary["pure_symbolica_reference"] = {
+                clock: median(r[clock] / r["calls"] for r in scalar)
+                for clock in ("wall_ns", "process_ns", "thread_ns")
+            }
+        if report["form"] and report["form"][-1]["case"] == case:
+            form_ns = median(
+                r["body_cpu_ns"] / r["repeats"] for r in report["form"][-1]["samples"]
+            )
+            summary["FORM"] = {
+                "body_cpu_ns": form_ns,
+                "scope": "Independent batch expression; excludes startup/setup/checks/disposal",
+            }
+            for label, _ in [] if args.form_only else variants:
+                summary[label]["FORM_cpu_ratio"] = (
+                    summary[label]["process_ns"] / form_ns
+                )
+        if args.diagnostic:
+            summary["diagnostics"] = {}
+            for label, _ in variants:
+                samples = [
+                    r["record"]["diagnostic"]
+                    for r in rows
+                    if r["label"] == label and r["route"] == "typed"
+                ]
+                if samples and isinstance(samples[0], list):
+                    medians = []
+                    for observations in zip(*samples, strict=True):
+                        row = {
+                            k: v
+                            for k, v in observations[0].items()
+                            if k
+                            in (
+                                "stage",
+                                "operation",
+                                "case",
+                                "route",
+                                "terms",
+                                "requested_terms",
+                                "method",
+                                "branches",
+                                "spinor_slots",
+                            )
+                        }
+                        for key in ("cpu_ns", "whole_over_individual"):
+                            if all(key in o for o in observations):
+                                row[key] = median(o[key] for o in observations)
+                        row["statuses"] = [o.get("status", "ok") for o in observations]
+                        medians.append(row)
+                    summary["diagnostics"][label] = medians
+                else:
+                    summary["diagnostics"][label] = samples
+        report["summary"][case] = summary
+        args.output.write_text(json.dumps(report, indent=2) + "\n")
+    assert all(sha(path) == digest for path, digest in sources.items()), (
+        "Source changed during cohort"
+    )
+    for receipt in report["checks"] + report["records"]:
+        value = receipt["record"]
+        assert sha(value["core"]) == value["core_sha256"], "Core changed during cohort"
+    report["acceptance"] = {}
+    if args.diagnostic == "partial-parse":
+        for label, _ in variants[1:]:
+            checks = [
+                row
+                for case in report["summary"].values()
+                for row in case["diagnostics"][label]
+                if row.get("operation") == "network_identical_termset"
+            ]
+            report["acceptance"][label] = {
+                "gate": "R1 identical-termset whole/single median <= 2",
+                "pass": bool(checks)
+                and all(
+                    row.get("whole_over_individual", float("inf")) <= 2
+                    for row in checks
+                ),
+                "rows": checks,
+            }
+    report.update(core_identities=cores, source_drift=False, completed=True)
+    args.output.write_text(json.dumps(report, indent=2) + "\n")
+    if any(not gate["pass"] for gate in report["acceptance"].values()):
+        raise AssertionError(
+            "Required milestone acceptance failed; complete cohort retained"
+        )
+    return report
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--suite", choices=("ladder", "consolidation"), default="ladder"
+    )
+    parser.add_argument(
+        "--interpreter",
+        action="append",
+        help="LABEL=/path/to/release/python; repeat for paired milestones",
+    )
+    parser.add_argument(
+        "--core",
+        action="append",
+        help="LABEL=expected core SHA256; binds release identity",
+    )
+    parser.add_argument("--milestone", default="M0")
+    parser.add_argument("--cases", help="Comma-separated consolidation case names")
+    parser.add_argument("--check-only", action="store_true")
+    parser.add_argument(
+        "--form-only",
+        action="store_true",
+        help="Measure only the separate FORM reference; do not resample Python",
+    )
+    parser.add_argument("--gate-stage", choices=("baseline", "M0", "M3"), default="M0")
+    parser.add_argument("--calls", type=int, default=1)
+    parser.add_argument("--timeout", type=int, default=300)
+    parser.add_argument(
+        "--diagnostic",
+        choices=(
+            "validation",
+            "partial-parse",
+            "keep-rest",
+            "factor-atom",
+            "factor-polynomial",
+        ),
+    )
+    parser.add_argument("--term-limit", type=int, default=200)
+    parser.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--case", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--route", choices=("typed", "scalar"), default="typed", help=argparse.SUPPRESS
+    )
+    parser.add_argument("--expected-core", help=argparse.SUPPRESS)
+    parser.add_argument("--check", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--form")
     parser.add_argument(
         "--particle", choices=("fermionic", "gluonic"), default="fermionic"
     )
     parser.add_argument("--loops", type=int, choices=(3, 4), default=3)
-    parser.add_argument("--rounds", type=int, default=5)
+    parser.add_argument("--rounds", type=int)
     parser.add_argument("--cpu", type=int)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.rounds is None:
+        args.rounds = 3 if args.suite == "consolidation" else 5
+    if args.suite == "consolidation":
+        if args.form_only and (not args.form or args.check_only or args.diagnostic):
+            parser.error("--form-only requires --form and excludes checks/diagnostics")
+        if args.calls < 1 or args.term_limit < 1:
+            parser.error("--calls and --term-limit must be positive")
+        result = (
+            consolidation_child(args) if args.child else consolidation_benchmark(args)
+        )
+        print(
+            json.dumps(
+                result.get("summary", {"case": args.case, "status": "ok"}), indent=2
+            )
+        )
+        raise SystemExit(0)
     options = {}
     if args.particle == "gluonic":
         if args.loops != 4:
