@@ -169,10 +169,19 @@ impl ColorAlgebraSimplifier {
         // Terminal trace rules can create sums; product rules such as f*f -> CA*g
         // then need to run on each generated term instead of on the whole Add.
         if let AtomView::Add(add) = expr {
-            return add
+            let terms = add
                 .iter()
                 .map(|term| self.rewrite_terms(term))
-                .fold(Atom::Zero, |sum, term| sum + term);
+                .collect::<Vec<_>>();
+            if !expr.needs_normalization()
+                && terms
+                    .iter()
+                    .zip(add.iter())
+                    .all(|(new, old)| new.as_view() == old)
+            {
+                return expr.to_owned();
+            }
+            return Self::sum_rewritten_terms(terms);
         }
 
         if let Some(rewritten) = self.rewrite_node(expr) {
@@ -181,11 +190,38 @@ impl ColorAlgebraSimplifier {
 
         // Try product-level rewrites first so trace*f contractions can fire before the
         // trace terminal expands into symmetric trace and f terms.
-        expr.to_owned().replace_map(|arg, _context, out| {
-            if let Some(rewritten) = self.rewrite_node(arg) {
+        expr.replace_map(|arg, context, out| {
+            // The root already declined above. Descendants still run in the
+            // existing top-down order, stopping below each successful rewrite.
+            if context.parent_type.is_some()
+                && let Some(rewritten) = self.rewrite_node(arg)
+            {
                 **out = rewritten;
             }
         })
+    }
+
+    fn sum_rewritten_terms(terms: Vec<Atom>) -> Atom {
+        fn exact_coefficients(term: AtomView<'_>) -> bool {
+            match term {
+                AtomView::Num(number) => matches!(
+                    number.get_coeff_view(),
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                ),
+                AtomView::Add(sum) => sum.iter().all(exact_coefficients),
+                AtomView::Mul(product) => product.iter().all(|factor| {
+                    !matches!(factor, AtomView::Num(_)) || exact_coefficients(factor)
+                }),
+                _ => true,
+            }
+        }
+        // Merging exact terms once avoids repeatedly normalizing the growing
+        // prefix. Rounded coefficients retain their original addition order.
+        if terms.iter().all(|term| exact_coefficients(term.as_view())) {
+            Atom::add_many(terms)
+        } else {
+            terms.into_iter().fold(Atom::Zero, |sum, term| sum + term)
+        }
     }
 
     fn collect_lines(&self, expr: AtomView<'_>) -> Atom {
@@ -1304,36 +1340,35 @@ impl<'a> ProductView<'a> {
     }
 
     fn replacing_pair(&self, left_index: usize, right_index: usize, replacement: Atom) -> Atom {
-        self.factors
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| *index != left_index && *index != right_index)
-            .fold(replacement, |product, (_, factor)| {
-                product * factor.atom.to_owned()
-            })
+        Atom::mul_many(
+            std::iter::once(replacement.as_view()).chain(
+                self.factors
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != left_index && *index != right_index)
+                    .map(|(_, factor)| factor.atom),
+            ),
+        )
     }
 
     fn replacing_one(&self, target_index: usize, replacement: Atom) -> Atom {
-        self.factors
-            .iter()
-            .enumerate()
-            .fold(Atom::num(1), |product, (index, factor)| {
-                if index == target_index {
-                    product * replacement.clone()
-                } else {
-                    product * factor.atom.to_owned()
-                }
-            })
+        Atom::mul_many(self.factors.iter().enumerate().map(|(index, factor)| {
+            if index == target_index {
+                replacement.as_view()
+            } else {
+                factor.atom
+            }
+        }))
     }
 
     fn excluding(&self, excluded: &[bool]) -> Atom {
-        self.factors
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| !excluded[*index])
-            .fold(Atom::num(1), |product, (_, factor)| {
-                product * factor.atom.to_owned()
-            })
+        Atom::mul_many(
+            self.factors
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !excluded[*index])
+                .map(|(_, factor)| factor.atom),
+        )
     }
 
     fn distribute_color_sum_factor(&self) -> Option<Atom> {
@@ -1348,11 +1383,11 @@ impl<'a> ProductView<'a> {
                 _ => None,
             })?;
 
-        Some(
+        Some(ColorAlgebraSimplifier::sum_rewritten_terms(
             sum.iter()
                 .map(|term| self.replacing_one(sum_index, term.to_owned()))
-                .fold(Atom::Zero, |sum, term| sum + term),
-        )
+                .collect(),
+        ))
     }
 }
 
@@ -1909,4 +1944,160 @@ fn positive_integer(expr: AtomView) -> Option<i64> {
     };
 
     (value > 0).then_some(value)
+}
+
+#[cfg(test)]
+mod reconstruction_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+    use symbolica::{domains::float::Float, parse_lit, symbol};
+
+    // Preserve the prior reconstruction schedule as an independent oracle for
+    // rounding and user normalizers, which exact polynomial equality cannot test.
+    fn prefix_rewrite(simplifier: &ColorAlgebraSimplifier, expression: AtomView<'_>) -> Atom {
+        if let AtomView::Add(sum) = expression {
+            return sum.iter().fold(Atom::Zero, |result, term| {
+                result + prefix_rewrite(simplifier, term)
+            });
+        }
+        if let Some(result) = simplifier.rewrite_node(expression) {
+            return result;
+        }
+        expression.to_owned().replace_map(|node, _context, out| {
+            if let Some(result) = simplifier.rewrite_node(node) {
+                **out = result;
+            }
+        })
+    }
+
+    #[test]
+    fn rewritten_color_sum_preserves_callbacks_and_factored_spectators() {
+        crate::test_support::test_initialize();
+        let simplifier = ColorAlgebraSimplifier {
+            settings: ColorSimplifySettings::default(),
+        };
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&calls);
+        let hook = symbol!(
+            "color_reconstruction_hook",
+            norm = move |value, _| observed.lock().unwrap().push(value.to_owned())
+        );
+        let terminal = parse_lit!(trace(cof(Nc)), default_namespace = "spenso");
+        let spectator = parse_lit!((x + y) ^ 7);
+        let input = Atom::add_many((0..12).map(|i| function!(hook, i, &terminal) * &spectator));
+        calls.lock().unwrap().clear();
+        let expected = prefix_rewrite(&simplifier, input.as_view());
+        let transcript = calls.lock().unwrap().clone();
+        assert!(!transcript.is_empty());
+        calls.lock().unwrap().clear();
+        let actual = simplifier.rewrite_terms(input.as_view());
+        assert_eq!(actual, expected);
+        assert_eq!(*calls.lock().unwrap(), transcript);
+        calls.lock().unwrap().clear();
+        assert_eq!(simplifier.rewrite_terms(actual.as_view()), actual);
+        assert!(calls.lock().unwrap().is_empty());
+        assert_eq!(
+            actual,
+            Atom::add_many((0..12).map(|i| function!(hook, i, Atom::var(CS.nc)) * &spectator))
+        );
+    }
+
+    #[test]
+    fn unchanged_color_sum_still_normalizes_unchecked_input() {
+        crate::test_support::test_initialize();
+        let simplifier = ColorAlgebraSimplifier {
+            settings: ColorSimplifySettings::default(),
+        };
+        let mut input = Atom::new();
+        input.to_add();
+        assert!(input.as_view().needs_normalization());
+        assert_eq!(simplifier.rewrite_terms(input.as_view()), Atom::Zero);
+    }
+
+    #[test]
+    fn rewritten_color_sums_keep_rounded_prefix_order() {
+        crate::test_support::test_initialize();
+        let x = parse_lit!(x);
+        let rounded = |value| Atom::num(Float::parse(value, Some(11)).unwrap());
+        for terms in [
+            vec![rounded("1e10"), rounded("1"), rounded("-1e10")],
+            vec![
+                rounded("1e10") * &x,
+                rounded("1") * &x,
+                rounded("-1e10") * &x,
+            ],
+            vec![
+                rounded("0.1") * &x + parse_lit!(y),
+                rounded("0.2") * &x - parse_lit!(y),
+                rounded("0.3") * &x,
+            ],
+        ] {
+            let expected = terms.iter().fold(Atom::Zero, |sum, term| sum + term);
+            assert_eq!(ColorAlgebraSimplifier::sum_rewritten_terms(terms), expected);
+        }
+        assert_eq!(
+            ColorAlgebraSimplifier::sum_rewritten_terms(Vec::new()),
+            Atom::Zero
+        );
+    }
+
+    #[test]
+    fn color_products_match_ordered_replacement_with_rounded_coefficients() {
+        crate::test_support::test_initialize();
+        let rounded = Atom::num(Float::parse("0.1", Some(11)).unwrap());
+        let spectator = parse_lit!((x + y) ^ 7);
+        for source in [
+            parse_lit!(a * b * c) * &spectator,
+            &rounded * parse_lit!(a * b * c) * &spectator,
+        ] {
+            let product = ProductView::parse(source.as_view());
+            for replacement in [
+                Atom::Zero,
+                parse_lit!(a * c ^ 2 / 3),
+                &rounded * parse_lit!(a * c ^ 2),
+                parse_lit!(a + b),
+            ] {
+                for left in 0..product.len() {
+                    let expected = product.factors.iter().enumerate().fold(
+                        Atom::num(1),
+                        |value, (index, factor)| {
+                            value
+                                * if index == left {
+                                    replacement.as_view()
+                                } else {
+                                    factor.atom
+                                }
+                        },
+                    );
+                    assert_eq!(product.replacing_one(left, replacement.clone()), expected);
+                    for right in left + 1..product.len() {
+                        let expected = product
+                            .factors
+                            .iter()
+                            .enumerate()
+                            .filter(|(index, _)| *index != left && *index != right)
+                            .fold(replacement.clone(), |value, (_, factor)| {
+                                value * factor.atom
+                            });
+                        assert_eq!(
+                            product.replacing_pair(left, right, replacement.clone()),
+                            expected
+                        );
+                    }
+                }
+            }
+            for mask in 0..1usize << product.len() {
+                let excluded = (0..product.len())
+                    .map(|i| mask & (1 << i) != 0)
+                    .collect::<Vec<_>>();
+                let expected = product
+                    .factors
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| !excluded[*i])
+                    .fold(Atom::num(1), |value, (_, factor)| value * factor.atom);
+                assert_eq!(product.excluding(&excluded), expected);
+            }
+        }
+    }
 }
