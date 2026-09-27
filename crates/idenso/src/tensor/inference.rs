@@ -131,6 +131,15 @@ impl SymbolicTensor<PartialStructure> {
     /// Observation checks tensor scopes before index multiplicity; scalar results
     /// still check those scopes after their interface has been accepted.
     pub fn with_checked_expression(&self, expression: Atom) -> InferenceResult<Self> {
+        self.finish_checked_expression(expression, &self.structure, LeafInference::Observe)
+    }
+
+    fn finish_checked_expression(
+        &self,
+        expression: Atom,
+        observed: &PartialStructure,
+        policy: LeafInference,
+    ) -> InferenceResult<Self> {
         if expression == self.expression {
             return Ok(Self {
                 expression,
@@ -139,11 +148,7 @@ impl SymbolicTensor<PartialStructure> {
                 is_composite: self.is_composite,
             });
         }
-        let scopes_checked = Self::validate_observed_interface(
-            &expression,
-            &self.structure,
-            LeafInference::Observe,
-        )?;
+        let scopes_checked = Self::validate_observed_interface(&expression, observed, policy)?;
         if !scopes_checked {
             InterfaceInference::validate_scopes(expression.as_view())?;
         }
@@ -251,6 +256,34 @@ impl SymbolicTensor<PartialStructure> {
                 expression,
                 self.structure.clone(),
             ));
+        }
+        if !self.structure.open_positions().is_empty()
+            && let Ok((encoded, _)) =
+                Self::observed_interface(&self.expression, LeafInference::ObserveEncoded)
+            && encoded.open_positions().is_empty()
+        {
+            // A tensor identity can move an explicit port past AUTO ports in
+            // the stored syntax (for example g(mu,nu) gamma(AUTO,AUTO,nu)).
+            // Encoded occurrence/axis identities allow that movement without
+            // changing the public logical order or trusting callback outputs.
+            let partial = PartialStructure::from_logical_slots(
+                encoded.logical_slots().into_iter().map(|slot| {
+                    let PartialIndex::Explicit(index) = slot.aind else {
+                        unreachable!("encoded interface has no anonymous ports")
+                    };
+                    slot.rep().slot(InterfaceInference::partial_index(
+                        index,
+                        LeafInference::Observe,
+                    ))
+                }),
+            );
+            if partial.canonical() == self.structure.canonical() {
+                return self.finish_checked_expression(
+                    expression,
+                    &encoded,
+                    LeafInference::ObserveEncoded,
+                );
+            }
         }
         self.with_checked_expression(expression)
     }
@@ -1680,7 +1713,9 @@ impl InterfaceInference {
                     .iter()
                     .map(|argument| {
                         if let Ok(slot) = self.slots.parse::<LibraryRep, AbstractIndex>(*argument) {
-                            Ok(slot.rep().slot(PartialIndex::Explicit(slot.aind())))
+                            Ok(slot
+                                .rep()
+                                .slot(Self::partial_index(slot.aind(), self.leaf_inference)))
                         } else if let Ok(representation) =
                             self.slots.parse_representation::<LibraryRep>(*argument)
                         {
@@ -3522,6 +3557,203 @@ mod tests {
         assert!(value.with_rewritten_expression(contracted).is_err());
         SymbolicTensor::<PartialStructure>::validate_interface(&Atom::Zero, &value.structure)
             .unwrap();
+    }
+
+    #[test]
+    fn metric_gamma_rewrites_preserve_auto_ports_and_logical_order() {
+        use crate::{dirac::GammaSimplifier, shorthands::schoonschip::Schoonschip};
+
+        crate::test_support::test_initialize();
+        let mink = LibraryRep::from(Minkowski {}).new_rep(4);
+        let [mu, nu] = [74801, 74803].map(AbstractIndex::Normal);
+        let metric = SymbolicTensor::<PartialStructure>::infer(
+            FunctionBuilder::new(ETS.metric)
+                .add_args([mu, nu].map(|index| mink.slot::<AbstractIndex, _>(index).to_atom()))
+                .finish(),
+        )
+        .unwrap();
+        for explicit_spin in [false, true] {
+            let mut indices = HashMap::from([(2, nu)]);
+            if explicit_spin {
+                indices.extend([
+                    (0, AbstractIndex::Normal(74805)),
+                    (1, AbstractIndex::Normal(74807)),
+                ]);
+            }
+            let gamma = SymbolicTensor::<PartialStructure>::from_signature(
+                &AGS.gamma_strct::<AbstractIndex>(4),
+            )
+            .unwrap()
+            .reindex_interface_ports(&indices)
+            .unwrap();
+            let expected = gamma
+                .reindex_interface_ports(&HashMap::from([(2, mu)]))
+                .unwrap();
+            for source in [
+                metric.multiply(&gamma).unwrap(),
+                gamma.multiply(&metric).unwrap(),
+            ] {
+                let original = source.expression.clone();
+                for (rewritten, expected) in [
+                    (
+                        source.expression.simplify_metrics(),
+                        expected.expression.clone(),
+                    ),
+                    (source.expression.schoonschip(), expected.expression.clone()),
+                    (
+                        source.expression.simplify_gamma(),
+                        expected.expression.simplify_gamma(),
+                    ),
+                ] {
+                    assert_eq!(rewritten, expected);
+                    let result = source.with_rewritten_expression(rewritten.clone()).unwrap();
+                    assert_eq!(result.expression, rewritten);
+                    assert_eq!(
+                        result.structure.logical_slots(),
+                        source.structure.logical_slots()
+                    );
+                    assert_eq!(
+                        result.structure.open_positions().len(),
+                        if explicit_spin { 0 } else { 2 }
+                    );
+                    assert_eq!(result.with_rewritten_expression(rewritten).unwrap(), result);
+                }
+                assert_eq!(source.expression, original);
+                let zero = source.with_rewritten_expression(Atom::Zero).unwrap();
+                assert_eq!(
+                    zero.structure.logical_slots(),
+                    source.structure.logical_slots()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rewritten_auto_ports_require_the_original_encoded_owner_and_axis() {
+        crate::test_support::test_initialize();
+        let mink = LibraryRep::from(Minkowski {}).new_rep(4);
+        let spin = LibraryRep::from(Bispinor {}).new_rep(4);
+        let owner = AbstractIndex::fresh_open_owner();
+        let ends = [0, 1].map(|axis| AbstractIndex::Open { owner, axis });
+        let mu = AbstractIndex::Normal(74811);
+        let nu = AbstractIndex::Normal(74813);
+        let gamma = |ends: [AbstractIndex; 2], index| {
+            FunctionBuilder::new(AGS.gamma)
+                .add_args(ends.map(|index| spin.slot::<AbstractIndex, _>(index).to_atom()))
+                .add_arg(mink.slot::<AbstractIndex, _>(index).to_atom())
+                .finish()
+        };
+        let metric = FunctionBuilder::new(ETS.metric)
+            .add_args([mu, nu].map(|index| mink.slot::<AbstractIndex, _>(index).to_atom()))
+            .finish();
+        let logical = PartialStructure::from_logical_slots([
+            mink.slot(PartialIndex::Explicit(mu)),
+            spin.slot(PartialIndex::open(0)),
+            spin.slot(PartialIndex::open(1)),
+        ]);
+        let source = SymbolicTensor::checked_parts(metric * gamma(ends, nu), logical).unwrap();
+        let result = gamma(ends, mu);
+        assert!(source.with_checked_expression(result.clone()).is_err());
+        assert!(source.with_rewritten_expression(result).is_ok());
+        for changed in [
+            AbstractIndex::Open {
+                owner: owner + 1,
+                axis: 0,
+            },
+            AbstractIndex::Open { owner, axis: 2 },
+        ] {
+            assert!(
+                source
+                    .with_rewritten_expression(gamma([changed, ends[1]], mu))
+                    .is_err()
+            );
+        }
+        let wrong_branch = gamma(ends, AbstractIndex::Normal(74815));
+        assert!(
+            source
+                .with_rewritten_expression(gamma(ends, mu) + wrong_branch)
+                .is_err()
+        );
+        let reordered = PartialStructure::from_logical_slots([
+            spin.slot(PartialIndex::open(0)),
+            spin.slot(PartialIndex::open(1)),
+            mink.slot(PartialIndex::Explicit(mu)),
+        ]);
+        assert!(!InterfaceInference::additive_interfaces_match(
+            &source.structure,
+            &reordered
+        ));
+        let anonymous = FunctionBuilder::new(spenso::tensor_symbol!("rewrite_anonymous_ports"))
+            .add_arg(spin.to_symbolic([]))
+            .add_arg(mink.slot::<AbstractIndex, _>(mu).to_atom())
+            .finish();
+        let anonymous = SymbolicTensor::new(
+            anonymous,
+            PartialStructure::from_logical_slots([
+                mink.slot(PartialIndex::Explicit(mu)),
+                spin.slot(PartialIndex::open(0)),
+            ]),
+        );
+        assert!(
+            anonymous
+                .with_rewritten_expression(Atom::num(2) * &anonymous.expression)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn encoded_rewrite_observation_rejects_callback_rank_loss_without_replay() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        crate::test_support::test_initialize();
+        let mink = LibraryRep::from(Minkowski {}).new_rep(4);
+        let spin = LibraryRep::from(Bispinor {}).new_rep(4);
+        let [mu, nu] = [74821, 74823].map(|i| {
+            mink.slot::<AbstractIndex, _>(AbstractIndex::Normal(i))
+                .to_atom()
+        });
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let target = mu.clone();
+        let head = spenso::tensor_symbol!(
+            "auto_metric_callback_rank_loss",
+            norm = move |node, out| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                if let AtomView::Fun(function) = node
+                    && function.iter().any(|argument| argument == target.as_view())
+                {
+                    **out = Atom::one();
+                }
+            }
+        );
+        let owner = AbstractIndex::fresh_open_owner();
+        let tensor = SymbolicTensor::<PartialStructure>::infer(
+            FunctionBuilder::new(head)
+                .add_args([0, 1].map(|axis| {
+                    spin.slot::<AbstractIndex, _>(AbstractIndex::Open { owner, axis })
+                        .to_atom()
+                }))
+                .add_arg(&nu)
+                .finish(),
+        )
+        .unwrap();
+        let metric = SymbolicTensor::<PartialStructure>::infer(
+            FunctionBuilder::new(ETS.metric)
+                .add_arg(&mu)
+                .add_arg(&nu)
+                .finish(),
+        )
+        .unwrap();
+        let source = metric.multiply(&tensor).unwrap();
+        let result = source.expression.simplify_metrics();
+        assert_eq!(result, Atom::one());
+        let before = calls.load(Ordering::Relaxed);
+        assert!(before > 0);
+        assert!(source.with_rewritten_expression(result).is_err());
+        assert_eq!(calls.load(Ordering::Relaxed), before);
     }
 
     #[test]
