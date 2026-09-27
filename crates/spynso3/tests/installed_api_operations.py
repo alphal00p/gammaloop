@@ -43,6 +43,84 @@ class TensorOperationsTests(unittest.TestCase):
         library.register(sp.Tensor.dense(replaced, [5.0, 6.0, 7.0, 8.0]))
         self.assertEqual(replaced.to_tensor(library)[:], [5.0, 6.0, 7.0, 8.0])
 
+    def test_reusable_tensor_rules_share_checked_replacement(self):
+        source = self.A(self.rep("i"))
+        result = sp.TensorName("api_operations::RuleResult")(self.rep("i"))
+        lhs, rhs = source.to_expression(), result.to_expression()
+        rule = sp.TensorRule(lhs, rhs)
+        for _ in range(2):
+            changed = source.replace_tensor(rule)
+            self.assertEqual(changed.to_expression(), rhs)
+            self.assertEqual(changed.structure.slots, source.structure.slots)
+        self.assertEqual(source.replace_tensor(lhs, rhs), result)
+        with self.assertRaisesRegex(TypeError, "already owns"):
+            source.replace_tensor(rule, rhs_cache_size=0)
+        self.assertEqual(source.to_expression(), lhs)
+        zero = source.replace_tensor(sp.TensorRule(lhs, E("0")))
+        self.assertEqual(zero.to_expression(), E("0"))
+        self.assertEqual(zero.structure.slots, source.structure.slots)
+
+        repeated = self.x * source + self.y * source
+        for cache_size, expected_calls in [(0, 4), (10, 2)]:
+            calls = []
+
+            def replace(_, calls=calls):
+                calls.append(None)
+                return rhs
+
+            rule = sp.TensorRule(lhs, replace, rhs_cache_size=cache_size)
+            self.assertEqual(calls, [])
+            for _ in range(2):
+                self.assertEqual(
+                    repeated.replace_tensor(rule), self.x * result + self.y * result
+                )
+            self.assertEqual(len(calls), expected_calls)
+
+    def test_typed_aliases_retain_order_metadata_and_callback_errors(self):
+        source = self.A(self.x, self.rep("j"), self.rep("i"))
+        value = sp.AliasedTensorExpression.from_expression(source)
+        self.assertEqual(value.root.structure.slots, source.structure.slots)
+        self.assertEqual(value.to_expression(), source)
+        handle, body = value.aliases[0]
+        self.assertEqual(body.structure.slots, source.structure.slots)
+        self.assertEqual(body.structure.arguments, (self.x,))
+        self.assertEqual(handle.structure.slots, source.structure.slots)
+        calls = []
+
+        def identity(body):
+            calls.append(body.structure.arguments)
+            return body
+
+        mapped = value.map_aliases(identity)
+        self.assertEqual(calls, [(self.x,)])
+        self.assertEqual(mapped.to_expression(), source)
+        self.assertEqual(mapped.aliases[0][1].structure.arguments, (self.x,))
+        zero = value.map_aliases(lambda body: 0 * body)
+        self.assertEqual(zero.to_expression().to_expression(), E("0"))
+        self.assertEqual(zero.to_expression().structure.slots, source.structure.slots)
+
+        def failing(_):
+            raise LookupError("alias callback sentinel")
+
+        with self.assertRaisesRegex(LookupError, "alias callback sentinel"):
+            value.map_aliases(failing)
+        with self.assertRaisesRegex(ValueError, "interface"):
+            value.map_aliases(lambda _: sp.TensorExpression(E("1")))
+
+    def test_nested_scalar_aliases_use_the_existing_symbolica_evaluator(self):
+        inner = sp.AliasedTensorExpression.from_expression(
+            sp.TensorExpression((self.x + 1) ** 3)
+        )
+        outer = sp.AliasedTensorExpression.from_expression(
+            sp.TensorExpression((inner.root + 2) ** 2)
+        )
+        value = sp.AliasedTensorExpression(outer.root, inner.aliases + outer.aliases)
+        expected = ((self.x + 1) ** 3 + 2) ** 2
+        self.assertEqual(value.to_expression().to_expression(), expected)
+        self.assertEqual(value.expand().to_expression(), expected.expand())
+        evaluator = value.evaluator([self.x], iterations=1, n_cores=1)
+        self.assertEqual(evaluator.evaluate([[2.0]])[0][0], 841.0)
+
     def test_scalar_tensor_denominator_accepts_an_open_expression(self):
         tensor = self.A(self.rep("j"), self.rep("i"))
         denominator = sp.TensorExpression(self.x)
