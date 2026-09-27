@@ -1001,7 +1001,7 @@ impl TensorExpression {
         Self::preserving_interface(&self_, py, result.expr)
     }
 
-    /// Replace whole tensor factors using locally checked right-hand sides.
+    /// Apply a TensorRule, or construct one from a pattern and right-hand side.
     ///
     /// Traverses sums and products, leaving scalar metadata and tensor arguments
     /// opaque. Each replacement must preserve the factor's explicit interface
@@ -1011,20 +1011,40 @@ impl TensorExpression {
     /// Remaining user normalization or evaluation hooks are rejected; callbacks
     /// may produce an admitted normalized RHS. Use `rhs_cache_size=0` when RHS
     /// callbacks have side effects.
-    #[pyo3(signature = (pattern, rhs, *, cond=None, rhs_cache_size=100))]
+    #[pyo3(signature = (pattern, rhs=None, *, cond=None, rhs_cache_size=None))]
     fn replace_tensor(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
-        pattern: ConvertibleToExpression,
-        rhs: ConvertibleToReplaceWith,
+        pattern: Bound<'_, PyAny>,
+        rhs: Option<ConvertibleToReplaceWith>,
         cond: Option<ReplacementCondition>,
-        rhs_cache_size: usize,
+        rhs_cache_size: Option<usize>,
     ) -> PyResult<Py<Self>> {
-        let pattern = pattern.to_expression().expr.to_pattern();
-        let rhs = rhs.to_replace_with()?;
-        let conditions = cond.map(|condition| condition.0);
+        let borrowed = pattern.extract::<PyRef<'_, crate::tensor_rule::PyTensorRule>>();
+        let prepared;
+        let rule = match &borrowed {
+            Ok(rule) => {
+                if rhs.is_some() || cond.is_some() || rhs_cache_size.is_some() {
+                    return Err(PyTypeError::new_err(
+                        "a TensorRule already owns its RHS, conditions and cache settings",
+                    ));
+                }
+                &rule.rule
+            }
+            Err(_) => {
+                prepared = crate::tensor_rule::PyTensorRule::new(
+                    pattern.extract()?,
+                    rhs.ok_or_else(|| {
+                        PyTypeError::new_err("a pattern requires a replacement RHS")
+                    })?,
+                    cond,
+                    rhs_cache_size.unwrap_or(100),
+                )?;
+                &prepared.rule
+            }
+        };
         let value = Self::structured(&self_)
-            .replace_tensor(&pattern, &rhs, conditions.as_ref(), rhs_cache_size)
+            .replace(rule)
             .map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(&self_, &value.expression);
         Self::from_parts_unchecked(py, value.expression, value.structure, name, args)

@@ -48,11 +48,13 @@ use symbolica::{
 
 use crate::NetworkToolingError;
 
+pub mod aliases;
 mod canonicalize;
 pub mod composition;
 pub mod inference;
 mod replacement;
 pub(crate) use canonicalize::remove_antisymmetric_zero_terms;
+pub use replacement::TensorRule;
 
 #[cfg(test)]
 pub mod tests;
@@ -158,12 +160,15 @@ where
 /// The structure is independent of the expression, so a zero can retain its rank.
 /// Checked construction and rewriting validate interfaces when callbacks can
 /// change them; structure mappings retain the symbolic payload.
+/// The payload defaults to `Atom`; borrowed views and Symbolica's `AliasedAtom`
+/// use the same storage type. Aliased definitions retain their logical layouts in
+/// [`aliases::AliasInterfaces`], separate from their single Symbolica registry.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>> {
+pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {
     pub structure: S,
     pub is_metric: bool,
     pub is_composite: bool,
-    pub expression: symbolica::atom::Atom,
+    pub expression: E,
 }
 
 impl<Aind: AbsInd + ParseableAind> SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
@@ -206,9 +211,9 @@ impl<Aind: AbsInd + ParseableAind> SymbolicTensor<OrderedStructure<LibraryRep, A
     }
 }
 
-impl<S> Ref for SymbolicTensor<S> {
+impl<S, E> Ref for SymbolicTensor<S, E> {
     type Ref<'a>
-        = &'a SymbolicTensor<S>
+        = &'a SymbolicTensor<S, E>
     where
         Self: 'a;
 

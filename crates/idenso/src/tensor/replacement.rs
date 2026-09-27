@@ -1,6 +1,9 @@
 //! Whole tensor-leaf substitutions with locally checked interfaces.
 
-use std::collections::{HashMap, hash_map::Entry};
+use std::{
+    collections::{HashMap, HashSet, hash_map::Entry},
+    sync::Arc,
+};
 
 use spenso::structure::{
     partial::{PartialStructure, PartialStructureExt},
@@ -24,6 +27,113 @@ use super::{
 
 type Result<T> = std::result::Result<T, TensorInferenceError>;
 
+/// A reusable whole-leaf tensor replacement.
+///
+/// Patterns, conditions and wildcard closure belong to the rule. A literal RHS
+/// can also carry its intrinsic interface proof. Wildcards which bind whole
+/// slots, argument slices or function heads still require the existing checks
+/// after substitution; a rule does not certify those unknown interfaces.
+/// Matching state and RHS callback caches are local to each application.
+#[derive(Clone)]
+pub struct TensorRule<'rhs> {
+    pattern: Pattern,
+    rhs: ReplaceWith<'rhs>,
+    conditions: Condition<PatternRestriction>,
+    settings: MatchSettings,
+    rhs_cache_size: usize,
+    fixed_head: Option<u32>,
+    literal_rhs: Option<Arc<Signature>>,
+}
+
+impl<'rhs> TensorRule<'rhs> {
+    pub fn new(
+        pattern: Pattern,
+        rhs: ReplaceWith<'rhs>,
+        conditions: Option<Condition<PatternRestriction>>,
+        rhs_cache_size: usize,
+    ) -> Result<Self> {
+        if let ReplaceWith::Pattern(rhs) = &rhs {
+            let mut available = HashSet::new();
+            let mut required = HashSet::new();
+            Self::wildcards(&pattern, &mut available);
+            Self::wildcards(rhs.borrow(), &mut required);
+            if let Some(wildcard) = required.difference(&available).min_by_key(|s| s.get_id()) {
+                return Err(TensorInferenceError::invalid(format!(
+                    "replacement wildcard `{wildcard}` does not occur in the tensor pattern"
+                )));
+            }
+        }
+        let literal_rhs = match &rhs {
+            ReplaceWith::Pattern(rhs) => match rhs.borrow() {
+                Pattern::Literal(atom)
+                    if !atom.as_view().needs_normalization()
+                        && InterfaceInference::default()
+                            .rewrites_preserve_leaf_interfaces(atom.as_view()) =>
+                {
+                    // Invalid or callback-sensitive RHS expressions still fail
+                    // only when a match uses them, as in ordinary application.
+                    Signature::observe(atom.as_view(), &mut SlotMatcher::default())
+                        .ok()
+                        .map(Arc::new)
+                }
+                _ => None,
+            },
+            ReplaceWith::Map(_) => None,
+        };
+        let fixed_head = match &pattern {
+            Pattern::Fn(head, _) if head.get_wildcard_level() == 0 => Some(head.get_id()),
+            _ => None,
+        };
+        Ok(Self {
+            pattern,
+            rhs,
+            conditions: conditions.unwrap_or(Condition::True),
+            settings: MatchSettings::new()
+                .partial(false)
+                .min_level(0)
+                .max_level(0),
+            rhs_cache_size,
+            fixed_head,
+            literal_rhs,
+        })
+    }
+
+    // Symbolica's public pattern visitor does not descend into alternatives or
+    // count wildcard function heads. This validates closure only; matching and
+    // substitution remain entirely owned by Symbolica.
+    fn wildcards(pattern: &Pattern, result: &mut HashSet<Symbol>) {
+        match pattern {
+            Pattern::Wildcard(symbol, _) => {
+                result.insert(*symbol);
+            }
+            Pattern::Fn(head, arguments) => {
+                if head.get_wildcard_level() > 0 {
+                    result.insert(*head);
+                }
+                for argument in arguments {
+                    Self::wildcards(argument, result);
+                }
+            }
+            Pattern::Pow(arguments) => {
+                for argument in arguments.iter() {
+                    Self::wildcards(argument, result);
+                }
+            }
+            Pattern::Mul(arguments) | Pattern::Add(arguments) | Pattern::Alternative(arguments) => {
+                for argument in arguments {
+                    Self::wildcards(argument, result);
+                }
+            }
+            Pattern::Transformer(transformer) => {
+                if let Some(input) = &transformer.0 {
+                    Self::wildcards(input, result);
+                }
+            }
+            Pattern::Literal(_) => {}
+        }
+    }
+}
+
 impl SymbolicTensor<PartialStructure> {
     /// Replace whole tensor leaves underneath sums and products.
     ///
@@ -43,6 +153,16 @@ impl SymbolicTensor<PartialStructure> {
         conditions: Option<&Condition<PatternRestriction>>,
         rhs_cache_size: usize,
     ) -> Result<Self> {
+        self.replace(&TensorRule::new(
+            pattern.clone(),
+            rhs.clone(),
+            conditions.cloned(),
+            rhs_cache_size,
+        )?)
+    }
+
+    /// Apply a reusable rule, preserving the source's established interface.
+    pub fn replace(&self, rule: &TensorRule<'_>) -> Result<Self> {
         let mut proof = InterfaceInference::default();
         if self.expression.as_view().needs_normalization()
             || !self.structure.open_positions().is_empty()
@@ -52,28 +172,10 @@ impl SymbolicTensor<PartialStructure> {
                 "tensor-safe replacement requires normalized intrinsic tensor leaves with explicit ports and supported powers",
             ));
         }
-        if let ReplaceWith::Pattern(rhs) = rhs
-            && let Some(wildcard) = pattern.find_new_wildcard(rhs.borrow())
-        {
-            return Err(TensorInferenceError::invalid(format!(
-                "replacement wildcard `{wildcard}` does not occur in the tensor pattern"
-            )));
-        }
-        let settings = MatchSettings::new()
-            .partial(false)
-            .min_level(0)
-            .max_level(0);
-        let unrestricted = Condition::True;
         let mut replacement = TensorReplacement {
-            pattern,
-            fixed_head: match pattern {
-                Pattern::Fn(head, _) if head.get_wildcard_level() == 0 => Some(head.get_id()),
-                _ => None,
-            },
-            rhs,
+            rule,
             matcher: None,
-            match_stack: WrappedMatchStack::new(conditions.unwrap_or(&unrestricted), &settings),
-            rhs_cache_size,
+            match_stack: WrappedMatchStack::new(&rule.conditions, &rule.settings),
             rhs_cache: HashMap::new(),
             source_signatures: HashMap::new(),
             proof,
@@ -98,6 +200,8 @@ struct Signature {
 
 impl Signature {
     fn observe(value: AtomView<'_>, slots: &mut SlotMatcher) -> Result<Self> {
+        #[cfg(test)]
+        tests::SIGNATURE_OBSERVATIONS.with(|count| count.set(count.get() + 1));
         Ok(Self {
             interface: InterfaceInference::replacement_interface(value)?,
             occurrences: ExplicitIndexOccurrences::from_atom(value, slots),
@@ -110,14 +214,13 @@ impl Signature {
     }
 }
 
+type Bindings<'source> = Vec<(Symbol, Match<'source>)>;
+
 struct TensorReplacement<'source, 'rule, 'rhs> {
-    pattern: &'rule Pattern,
-    fixed_head: Option<u32>,
-    rhs: &'rule ReplaceWith<'rhs>,
+    rule: &'rule TensorRule<'rhs>,
     matcher: Option<AtomMatchIterator<'source, 'rule>>,
     match_stack: WrappedMatchStack<'source, 'rule>,
-    rhs_cache_size: usize,
-    rhs_cache: HashMap<Vec<(Symbol, Match<'source>)>, (Atom, Signature)>,
+    rhs_cache: HashMap<Bindings<'source>, (Atom, Arc<Signature>)>,
     source_signatures: HashMap<AtomView<'source>, Signature>,
     proof: InterfaceInference,
     slots: SlotMatcher,
@@ -172,6 +275,7 @@ impl<'source> TensorReplacement<'source, '_, '_> {
             // conditions. Avoid classifying these impossible tensor candidates.
             AtomView::Fun(function)
                 if self
+                    .rule
                     .fixed_head
                     .is_some_and(|head| head != function.get_symbol_id()) =>
             {
@@ -195,7 +299,7 @@ impl<'source> TensorReplacement<'source, '_, '_> {
         // of unsupported patterns on expressions with no eligible leaves.
         let matcher = self
             .matcher
-            .get_or_insert_with(|| AtomMatchIterator::new(self.pattern));
+            .get_or_insert_with(|| AtomMatchIterator::new(&self.rule.pattern));
         matcher.set_new_target(value, &self.match_stack);
         let Some(used_flags) = matcher.next(&mut self.match_stack) else {
             return Ok(value.into());
@@ -231,7 +335,7 @@ impl<'source> TensorReplacement<'source, '_, '_> {
                 rhs.clone().into()
             });
         }
-        let rhs = match self.rhs {
+        let rhs = match &self.rule.rhs {
             ReplaceWith::Pattern(pattern) => Workspace::get_local().with(|workspace| {
                 let mut result = Atom::new();
                 pattern
@@ -246,20 +350,24 @@ impl<'source> TensorReplacement<'source, '_, '_> {
             })?,
             ReplaceWith::Map(map) => map(found),
         };
-        if rhs.as_view().needs_normalization()
-            || !self.proof.rewrites_preserve_leaf_interfaces(rhs.as_view())
-        {
-            return Err(TensorInferenceError::invalid(
-                "tensor replacement RHS requires normalized intrinsic leaves with explicit ports and supported powers",
-            ));
-        }
-        let signature = Signature::observe(rhs.as_view(), &mut self.slots)?;
+        let signature = if let Some(signature) = &self.rule.literal_rhs {
+            Arc::clone(signature)
+        } else {
+            if rhs.as_view().needs_normalization()
+                || !self.proof.rewrites_preserve_leaf_interfaces(rhs.as_view())
+            {
+                return Err(TensorInferenceError::invalid(
+                    "tensor replacement RHS requires normalized intrinsic leaves with explicit ports and supported powers",
+                ));
+            }
+            Arc::new(Signature::observe(rhs.as_view(), &mut self.slots)?)
+        };
         if !source.accepts(&signature, rhs.is_zero()) {
             return Err(TensorInferenceError::invalid(
                 "tensor replacement changes the matched interface or introduces explicit indices",
             ));
         }
-        if self.rhs_cache.len() < self.rhs_cache_size {
+        if self.rhs_cache.len() < self.rule.rhs_cache_size {
             self.rhs_cache
                 .insert(key.to_vec(), (rhs.clone(), signature));
         }
@@ -284,6 +392,7 @@ mod tests {
             slot::IsAbstractSlot,
         },
     };
+    use std::cell::Cell;
     use std::sync::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
@@ -292,6 +401,10 @@ mod tests {
         atom::{AtomCore, FunctionBuilder},
         id::ConditionResult,
     };
+
+    thread_local! {
+        pub(super) static SIGNATURE_OBSERVATIONS: Cell<usize> = const { Cell::new(0) };
+    }
 
     fn leaf(head: Symbol, args: &[Atom]) -> Atom {
         FunctionBuilder::new(head).add_args(args).finish()
@@ -307,6 +420,101 @@ mod tests {
     fn typed(expression: Atom) -> SymbolicTensor<PartialStructure> {
         let raw = SymbolicTensor::<PartialStructure>::infer(expression).unwrap();
         SymbolicTensor::checked_parts(raw.expression, raw.structure).unwrap()
+    }
+
+    #[test]
+    fn tensor_rule_reuses_literal_certification_without_caching_target_compatibility() {
+        let f = spenso::tensor_symbol!("rule_literal_f");
+        let g = spenso::tensor_symbol!("rule_literal_g");
+        let a = slot(81901);
+        let source = typed(leaf(f, std::slice::from_ref(&a)));
+        let rhs = leaf(g, std::slice::from_ref(&a));
+        SIGNATURE_OBSERVATIONS.with(|count| count.set(0));
+        let rule =
+            TensorRule::new(source.expression.to_pattern(), rhs.clone().into(), None, 0).unwrap();
+        assert!(rule.literal_rhs.is_some());
+        assert_eq!(SIGNATURE_OBSERVATIONS.with(Cell::get), 1);
+        for _ in 0..2 {
+            let result = source.replace(&rule).unwrap();
+            assert_eq!(result.expression, rhs);
+            assert_eq!(result.structure, source.structure);
+        }
+        assert_eq!(SIGNATURE_OBSERVATIONS.with(Cell::get), 3);
+
+        let extra = slot(81903);
+        let wide = leaf(f, &[a, extra]);
+        let pattern = Pattern::Alternative(vec![source.expression.to_pattern(), wide.to_pattern()]);
+        let rule = TensorRule::new(pattern, rhs.into(), None, 100).unwrap();
+        // Both literal alternatives bind nothing, so the second use hits the
+        // RHS cache. Its additional port must still cause rejection.
+        let source = typed(source.expression * wide);
+        assert!(source.replace(&rule).is_err());
+    }
+
+    #[test]
+    fn tensor_rule_checks_closure_in_alternatives_and_function_heads() {
+        let f = spenso::tensor_symbol!("rule_closure_f");
+        let g = spenso::tensor_symbol!("rule_closure_g");
+        let h = spenso::tensor_symbol!("rule_closure_h");
+        let argument = symbolica::symbol!("rule_closure_argument_");
+        let head = symbolica::symbol!("rule_closure_head_");
+        let missing = symbolica::symbol!("rule_closure_missing_");
+        let call = |head| Pattern::Fn(head, vec![Pattern::Wildcard(argument, false)]);
+        let alternatives = Pattern::Alternative(vec![call(f), call(g)]);
+        let rule = TensorRule::new(alternatives.clone(), call(h).into(), None, 10).unwrap();
+        assert!(rule.literal_rhs.is_none());
+        let a = slot(81911);
+        let source = typed(leaf(f, std::slice::from_ref(&a)) + leaf(g, std::slice::from_ref(&a)));
+        assert_eq!(source.replace(&rule).unwrap().expression, 2 * leaf(h, &[a]));
+        assert!(TensorRule::new(alternatives, call(missing).into(), None, 10).is_err());
+        assert!(TensorRule::new(call(head), call(head).into(), None, 10).is_ok());
+        assert!(TensorRule::new(call(head), call(missing).into(), None, 10).is_err());
+    }
+
+    #[test]
+    fn tensor_rule_keeps_callback_caches_local_to_each_application() {
+        let f = spenso::tensor_symbol!("rule_callback_f");
+        let g = spenso::tensor_symbol!("rule_callback_g");
+        let argument = symbolica::symbol!("rule_callback_argument_");
+        let a = slot(81921);
+        let input = leaf(f, std::slice::from_ref(&a));
+        let output = leaf(g, &[a]);
+        let x = Atom::var(symbolica::symbol!("rule_callback_x"));
+        let y = Atom::var(symbolica::symbol!("rule_callback_y"));
+        let source = typed(&x * &input + &y * &input);
+        let mut schedules = Vec::new();
+        for (cache_size, expected_calls) in [(0, 4), (1, 2)] {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let conditions = Arc::new(AtomicUsize::new(0));
+            let seen = Arc::clone(&calls);
+            let rhs = output.clone();
+            let seen_condition = Arc::clone(&conditions);
+            let rule = TensorRule::new(
+                leaf(f, &[Atom::var(argument)]).to_pattern(),
+                ReplaceWith::Map(Box::new(move |_| {
+                    seen.fetch_add(1, Ordering::Relaxed);
+                    rhs.clone()
+                })),
+                Some(Condition::match_stack(move |_| {
+                    seen_condition.fetch_add(1, Ordering::Relaxed);
+                    ConditionResult::True
+                })),
+                cache_size,
+            )
+            .unwrap();
+            assert_eq!(calls.load(Ordering::Relaxed), 0);
+            assert_eq!(conditions.load(Ordering::Relaxed), 0);
+            for _ in 0..2 {
+                assert_eq!(
+                    source.replace(&rule).unwrap().expression,
+                    &x * &output + &y * &output
+                );
+            }
+            assert_eq!(calls.load(Ordering::Relaxed), expected_calls);
+            schedules.push(conditions.load(Ordering::Relaxed));
+        }
+        assert!(schedules[0] >= 4);
+        assert_eq!(schedules[0], schedules[1]);
     }
 
     #[test]

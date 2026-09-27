@@ -49,10 +49,10 @@ must not treat printed names alone as a complete serialized registry.
 
 == Core symbolic representation
 
-`SymbolicTensor<S>` carries four fields:
+`SymbolicTensor<S, E = Atom>` carries four fields:
 
 - the structure `S`, defaulting to `OrderedStructure<LibraryRep, AbstractIndex>`;
-- the owned Symbolica `Atom` expression;
+- the symbolic payload `E`, normally an owned Symbolica `Atom`;
 - `is_metric`, used by contraction-specialized identities;
 - `is_composite`, distinguishing a direct tensor function from an expression-backed leaf.
 
@@ -70,6 +70,27 @@ distinct under ordered multiplication, and a zero retains its declared shape. Th
 the former Spynso `StructuredAtom`; Python bindings retain argument conversion, dispatch,
 error translation, and presentation metadata. `PartialStructure` does not pretend to implement
 the canonical-storage `TensorStructure` contract.
+
+Aliased results use the same tensor with Symbolica's `AliasedAtom` payload and
+`AliasInterfaces` structure. Symbolica owns the single registry of literal
+definitions; Idenso retains the root layout and each handle/body's declared
+logical layout. Re-inferring those layouts from normalized syntax would lose
+port order. Registration checks encoded interfaces, branch consistency, index
+multiplicity, conflicting definitions and cycles. A fresh literal handle is
+registered for each port labelling; a relabelled use is not a parametric lookup.
+Resolution is explicit and checks the resulting interface, including callback
+rank changes. Expansion is a separate explicit operation; the evaluator consumes
+the alias registry directly. The Python `AliasedTensorExpression` only converts
+typed arguments, invokes callbacks, retains presentation descriptors, and wraps
+these shared operations. Scalar outputs use the same class.
+
+`TensorRule` owns a Symbolica pattern, RHS, conditions and matching settings.
+Wildcard closure and eligible literal RHS interfaces are checked once. A rule
+whose wildcard bindings determine the tensor shape still checks each distinct
+instantiated RHS and each actual target; equal bindings can match alternatives
+with different interfaces. Matcher state and callback caches belong to one
+application, so a reusable rule does not retain source views or suppress
+callbacks across calls. A zero-sized RHS cache preserves per-match callbacks.
 
 Checked reconstruction preserves established interfaces where the operation justifies it.
 Public fields and low-level constructors are not validity certificates: inference can retain
