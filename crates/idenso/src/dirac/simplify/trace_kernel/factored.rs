@@ -19,7 +19,7 @@ enum Node {
 
 pub(super) struct FactoredTrace {
     nodes: Vec<Node>,
-    root: usize,
+    pub(super) root: usize,
 }
 
 struct Compiler {
@@ -225,21 +225,24 @@ impl FactoredTrace {
         id
     }
 
-    pub(super) fn recipe_leaf_count(&self, root: usize) -> usize {
+    /// Count rows without expanding the DAG; overflow is local to each subrecipe.
+    pub(super) fn recipe_leaf_count(&self, root: usize) -> Option<usize> {
         let mut counts = Vec::with_capacity(self.nodes.len());
-        for node in &self.nodes {
+        for node in &self.nodes[..=root] {
             counts.push(match node {
-                Node::Constant(c) => usize::from(*c != 0),
+                Node::Constant(c) => Some(usize::from(*c != 0)),
                 Node::Product {
                     coefficient, child, ..
                 } => {
                     if *coefficient == 0 {
-                        0
+                        Some(0)
                     } else {
                         counts[*child]
                     }
                 }
-                Node::Sum(children) => children.iter().map(|&child| counts[child]).sum(),
+                Node::Sum(children) => children
+                    .iter()
+                    .try_fold(0usize, |sum, &child| sum.checked_add(counts[child]?)),
             });
         }
         counts[root]
@@ -321,9 +324,9 @@ impl FactoredTrace {
         compiler.finish(root)
     }
 
-    pub(super) fn evaluate(&self, factors: &[Atom], unit: AtomView<'_>) -> Atom {
-        let mut values: Vec<Atom> = Vec::with_capacity(self.nodes.len());
-        for node in &self.nodes {
+    pub(super) fn evaluate(&self, root: usize, factors: &[Atom], unit: AtomView<'_>) -> Atom {
+        let mut values: Vec<Atom> = Vec::with_capacity(root + 1);
+        for node in &self.nodes[..=root] {
             let value = match node {
                 Node::Constant(coefficient) => Atom::num(*coefficient),
                 Node::Product {
@@ -344,7 +347,7 @@ impl FactoredTrace {
             };
             values.push(value);
         }
-        Atom::mul_many([unit, values[self.root].as_view()])
+        Atom::mul_many([unit, values[root].as_view()])
     }
 
     /// Reconstruct formal integer coefficients for proof tests without expanding
@@ -437,8 +440,26 @@ mod tests {
                                 .chain(ids.iter().map(|&id| factors[id].clone())),
                         )
                     }));
-                assert_eq!(factored.evaluate(&factors, unit.as_view()), expected);
+                assert_eq!(
+                    factored.evaluate(factored.root, &factors, unit.as_view()),
+                    expected
+                );
             }
         }
+    }
+
+    #[test]
+    fn runtime_leaf_count_checks_overflow_without_poisoning_other_roots() {
+        let mut recipe = FactoredTrace::unit_recipe();
+        let mut root = 0;
+        for bit in 1..usize::BITS {
+            root = recipe.push_sum(vec![root, root]);
+            assert_eq!(recipe.recipe_leaf_count(root), Some(1usize << bit));
+        }
+        root = recipe.push_sum(vec![root, root]);
+        assert_eq!(recipe.recipe_leaf_count(root), None);
+        let zero = recipe.push_product(Vec::new(), 0, root);
+        assert_eq!(recipe.recipe_leaf_count(zero), Some(0));
+        assert_eq!(recipe.recipe_leaf_count(0), Some(1));
     }
 }

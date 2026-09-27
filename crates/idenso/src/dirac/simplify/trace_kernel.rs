@@ -139,9 +139,11 @@ impl<const N: usize> TraceKernel<N> {
                     indices[d as usize],
                 )
             }));
-            return factored
-                .polynomial
-                .evaluate(&metrics, Atom::num(4).as_view());
+            return factored.polynomial.evaluate(
+                factored.polynomial.root,
+                &metrics,
+                Atom::num(4).as_view(),
+            );
         }
         let max_coefficient = self.terms.iter().map(|(_, c)| c.abs()).max().unwrap_or(0);
         let coefficients: Vec<_> = (-max_coefficient..=max_coefficient)
@@ -283,7 +285,12 @@ impl<'a, Output: TraceAlgebra> PairingTrace<'a, Output> {
     }
 
     fn supports_sparse_output(&mut self, word: &[usize]) -> bool {
-        if !self.canonical_arguments || word.len() > 14 || i64::try_from(self.trace_unit).is_err() {
+        // Extend only contracted words: a free 16-factor trace already has over
+        // two million pairings. Sparse emission also bounds its row buffers.
+        if !self.canonical_arguments
+            || (word.len() > 14 && (word.len() > 16 || self.summed_indices.is_empty()))
+            || i64::try_from(self.trace_unit).is_err()
+        {
             return false;
         }
         // Mixed free slots and compact vectors can normalize an indexed vector
@@ -753,13 +760,16 @@ macro_rules! short_trace_dispatch {
 short_trace_dispatch!(2, 4, 6, 8, 10, 12, 14);
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
 
     // Independent Clifford-algebra oracle in a Euclidean orthonormal basis.
     // Store all basis blades and multiply by each vector, without trace
     // recurrences or epsilon contraction identities from the implementation.
-    fn clifford_trace<const D: usize>(vectors: &[[i64; D]], axial: bool) -> i64 {
+    pub(in crate::dirac::simplify) fn clifford_trace<const D: usize>(
+        vectors: &[[i64; D]],
+        axial: bool,
+    ) -> i64 {
         assert!(!axial || D == 4);
         let mut blades = vec![0; 1 << D];
         blades[0] = 1;

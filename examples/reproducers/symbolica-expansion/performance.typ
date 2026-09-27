@@ -1,7 +1,7 @@
 = Symbolica expansion performance reproducer
 
 This standalone package isolates expansion, polynomial-to-expression
-conversion, symmetric function construction and visitor termination. It depends only on Symbolica main `06906976`
+conversion, polynomial substitution, symmetric function construction and visitor termination. It depends only on Symbolica main `06906976`
 and the Rust standard library. No Idenso rewrite rules, Spenso slot parsing,
 tensor networks or pattern matching execute in the timed operation.
 
@@ -571,3 +571,79 @@ That comparison therefore does not isolate addition-tree shape alone. It used
 host dependency features and different synthetic inputs; its clocks are not
 measurements of this standalone package or the complete typed ladder. The
 existing ordinary final expansion remains selected.
+
+== Polynomial replacement with repeated degrees
+
+`polynomial_replacement` compares the public `replace_with_poly` operation with
+sparse coefficient grouping followed by Horner evaluation. In the pinned
+`src/poly/polynomial.rs:2769` implementation, every source monomial containing the
+selected variable independently computes the same replacement power, multiplies
+it by the remaining monomial, and adds that result to the accumulating
+polynomial. The grouped route uses the existing
+`to_multivariate_polynomial_list(&[variable], true)` operation, sorts its occupied
+degrees, and evaluates from highest to lowest with powers of the degree gaps.
+Both routes use Symbolica's existing polynomial multiplication and addition.
+This is a standalone diagnostic; the dependency and public replacement API
+remain unchanged.
+
+The synthetic family has three variables at every size:
+$P_N(x,y,z) = (sum_(i=0)^(N-1) (1 + (i mod 7)) y^i)
+(x + x^2 + dots + x^d)$, with replacement $x arrow.r y+z$.
+There are $N d$ input monomials but only $d$ occupied powers of $x$. The common
+variable map is prepared before timing. `N` is limited to 1 through 4,096 and
+`d` to 1 through 16; the driver uses nonnegative `u16` exponents. It does not
+exercise Laurent polynomials, arbitrary coefficient domains or the Python
+wrapper's variable-map unification. Sparse grouping stores occupied degrees,
+without allocating a table proportional to the largest degree gap. The
+constant-replacement case retains the ordinary implementation's fast path.
+
+```sh
+CARGO_PROFILE_RELEASE_OPT_LEVEL=3 cargo build --release --locked --bin polynomial_replacement
+./target/release/polynomial_replacement check
+taskset -c 12 ./target/release/polynomial_replacement monomial 256 4
+taskset -c 12 ./target/release/polynomial_replacement horner 256 4
+```
+
+Each timed invocation performs one substitution and emits one raw JSON record.
+`elapsed_ns` is a native monotonic wall clock, including coefficient grouping,
+sorting and temporary polynomial destruction for the grouped route. Input
+construction, cloning for immutability checks, the independent factored oracle,
+exact equality, term counting and returned-result destruction are outside the
+clock. There is no Atom conversion, callback, Idenso initialization or tensor
+operation in either route. Alternate fresh processes on the same CPU when
+comparing routes; these primitive clocks do not describe a complete trace or
+ladder calculation.
+
+The separate correctness command checks 71 cases over rational coefficients,
+integers and the field with 17 elements. It includes zero and constant inputs
+and replacements, an unused variable, nonzero minimum degree, a sparse degree
+257, exact rational coefficients, cancellation, and the self-referential
+substitution $x arrow.r x+y$. For self-reference the original source is
+substituted once; variables inside the replacement are not recursively
+replaced. Exact evaluation identities and explicit polynomial identities
+supplement the old/new comparison, including cancellation of intermediate
+binomial coefficients in characteristic 17. The build and scoped Clippy checks
+pass with the existing pinned standalone dependency; no core rebuild or
+extension installation is involved.
+
+A bounded diagnostic on CPU 12 used four alternating fresh-process pairs per
+size at $d=4$, with driver and dependency optimization level 3:
+
+#table(
+  columns: 5,
+  table.header([Input terms], [Output terms], [Monomial median, ms],
+    [Grouped median, ms], [Median paired ratio]),
+  [256], [329], [2.138154], [0.167420], [0.078910],
+  [1,024], [1,289], [23.977221], [0.626068], [0.024612],
+  [4,096], [5,129], [347.168818], [2.898862], [0.008230],
+)
+
+All twelve pairs favored grouping and all 24 observations passed exact output
+and input-immutability checks. Side medians and medians of paired ratios are
+computed separately. Every raw clock is retained in
+#link("polynomial_replacement_measurements.json")[the measurement record], with
+source, executable and dependency hashes, features and build flags. These are
+single-call wall measurements on a shared host, with no sample exclusions or
+outcome-driven repeats. The result demonstrates this repeated-degree workload;
+it does not qualify a general replacement algorithm or establish a complete
+Idenso speedup. No upstream patch is applied or proposed for retention here.

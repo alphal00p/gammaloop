@@ -4146,6 +4146,211 @@ def _(
 
 
 @app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Fermionic outer ring: three-loop propagator ladder
+
+    This massless numerator has a clockwise fermion hexagon
+    `1 → 2 → 3 → 4 → 5 → 6 → 1`, with vector rungs `6 → 2` and `5 → 3`.
+    External momentum $q$ enters vertex 1 and leaves vertex 4. There are
+    eight internal edges and six vertices, so $L=8-6+1=3$.
+
+    The clockwise fermion momenta are
+    $p=(k_1,k_1+k_2,k_1+k_2+k_3,k_1+k_2+k_3-q,k_1+k_2-q,k_1-q)$;
+    the rungs carry $k_2,k_3$. Both ends of each internal edge have opposite
+    incoming momenta. With Feynman-gauge metric numerators and a metric
+    projection of the external vector indices, the numerator is
+
+    $$-g_{\mu\nu}g_{ab}g_{cd}\,
+    \operatorname{tr}(\gamma^\mu\slashed p_1\gamma^a\slashed p_2
+    \gamma^c\slashed p_3\gamma^\nu\slashed p_4
+    \gamma^d\slashed p_5\gamma^b\slashed p_6).$$
+
+    The fermion-loop minus sign is included. Couplings, color, propagator
+    denominators, and overall factors of $i$ are omitted; this measures
+    **numerator reduction**, without loop integration or on-shell assumptions.
+    Strict 4D uses `trace4`; symbolic $D$ uses `tracen`. Both have
+    $\operatorname{tr}(1)=4$, with no $\gamma_5$.
+
+    The Python driver uses the public typed gamma simplifier. Three-loop 4D
+    uses simultaneous dot substitutions and `expand(via_poly=True)`. The larger
+    cases keep the scalar result in polynomial form: group the coefficients
+    of every dot involving one momentum, substitute that momentum, and collect
+    before proceeding to the next. Opposite outer momentum pairs are eliminated
+    first. The final Atom is constructed once. FORM has its own
+    executable source, `fermion_propagator_ladder.frm`. Each engine uses a
+    measured native schedule: Idenso keeps the three-loop 4D trace factored
+    and collects the other traces. FORM traces first, then collects after
+    each momentum substitution.
+
+    Contracted sixteen-gamma traces now use the existing Clifford recurrence
+    to collect polynomial coefficients directly, before constructing the scalar
+    Atom. This avoids constructing a large factored expression and expanding it
+    afterward. A checked buffer limit reuses the completed recipe if direct
+    emission would require too much space; callback-sensitive inputs retain
+    their established evaluation path.
+
+    Timings include the **complete trace, momentum routing, and final scalar
+    collection**. Imports, input construction, rule preparation, assertions,
+    component checks, printing, and result disposal are outside the clocks.
+    Warm batches amortize Python dispatch and FORM's timer resolution;
+    FORM whole-process wall time is reported separately. Every batch recomputes the
+    original numerator. FORM and Idenso CPU clocks determine the ratio;
+    Idenso wall samples are retained as well. Different batch sizes hold
+    different numbers of simultaneous results.
+
+    Exact polynomial equality is checked before timing. Separately, three
+    rational momentum assignments compare the original HEP-library tensor
+    networks and both scalar results against an exact matrix contraction
+    using HEP-library gamma components. The symbolic-D result must also
+    specialize exactly to the strict-4D polynomial.
+
+    **Four-loop continuation:** extend the ring to eight vertices with three
+    rungs `8 → 2`, `7 → 3`, `6 → 4`; $q$ now enters vertex 1 and leaves
+    vertex 5. There are eleven internal edges, so $L=11-8+1=4$. The upper
+    ring momenta are $k_1,k_1+k_2,k_1+k_2+k_3,k_1+k_2+k_3+k_4$; the lower
+    ring carries these in reverse order minus $q$. Both the fermionic and
+    gluonic cases use this routing and the same external metric projection.
+    The gluonic case uses cubic gluon vertices and metric propagator
+    numerators; its 4D/D comparison does not invoke a Dirac trace. Its FORM
+    program is `gluon_propagator_ladder.frm`.
+
+    **Measured 2026-09-27:** five alternating warm batches per mode, pinned to
+    CPU 8 on the shared host, using FORM 5.0.0 and the current optimized
+    community host (`4eace950`). These are complete algebra **median CPU
+    milliseconds**; ratios divide the two engines' medians:
+
+    | Numerator | Dimension | Idenso | FORM | Idenso / FORM | Scalar terms |
+    |:--|:--|--:|--:|--:|--:|
+    | Three-loop fermion | 4D | 0.612 | 0.356 | 1.72× | 95 |
+    | Three-loop fermion | D | 2.879 | 2.231 | 1.29× | 358 |
+    | Four-loop fermion | 4D | 6.523 | 6.583 | 0.99× | 1,026 |
+    | Four-loop fermion | D | 133.257 | 71.500 | 1.86× | 5,204 |
+    | Four-loop gluon | 4D | 773.030 | 778.000 | 0.99× | 2,425 |
+    | Four-loop gluon | D | 1,410.728 | 1,479.000 | 0.95× | 7,102 |
+
+    The three-loop case meets the requested factor-three threshold in both
+    modes. The four-loop gluonic case is close to FORM; its engine-specific
+    orders are `1,2,8,3,7,4,6,5` for Idenso and `5,4,6,3,7,2,8,1` for FORM.
+    This uses tensor-safe vertex replacement, local Schoonschip contraction,
+    and contraction against the remaining opaque vertices. It does not expand
+    the whole product of eight vertices first.
+
+    Seven paired batches against the saved simultaneous-routing driver show
+    median paired CPU reductions of **27.5% for three-loop D, 18.2% for
+    four-loop 4D, and 53.9% for four-loop D**, each faster in all seven pairs.
+    Three-loop 4D retains its existing route. Rule preparation costs about
+    0.5 ms more for the changed cases in that cohort and is reported separately.
+    The gluonic algorithm is unchanged; its rows are fresh controls. Absolute
+    times across cohorts vary on this shared host.
+
+    The remaining larger gap is the four-loop D-dimensional fermion trace.
+    A separate diagnostic takes **88.6 ms tracing, 8.8 ms converting to a
+    polynomial, 29.7 ms substituting momenta, and 7.4 ms emitting the final
+    scalar**. These single-call clocks are not the medians in the table.
+    Grouped substitution uses existing Symbolica primitives after the typed
+    trace has produced a scalar; tensor-interface checks remain unchanged.
+
+    All six outputs match FORM exactly, all three D → 4 checks pass, and
+    **72 exact HEP component comparisons** pass. Raw samples, setup and
+    first-call timings, diagnostic term counts, source hashes, and checks are
+    retained in `fermion_ladder_three_staged_timing.json`,
+    `fermion_ladder_four_staged_timing.json`, and
+    `gluon_ladder_four_staged_control.json` beside this notebook.
+    `fermion_ladder_routing_comparison.json` retains all paired samples and
+    the baseline driver source. The earlier `*_timing.json` records are kept
+    as historical measurements. These characterize this installed build and
+    shared host, not universal engine parity.
+
+    Run locally with the combined Symbolica/Spenso host:
+
+    ```sh
+    python examples/notebooks/fermion_ladder.py --form /path/to/form \
+      --loops 3 --rounds 5 --cpu 8 --output /tmp/fermion-ladder.json
+    python examples/notebooks/fermion_ladder.py --form /path/to/form \
+      --particle gluonic --loops 4 --rounds 5 --cpu 8 --output /tmp/gluon-ladder.json
+    ```
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    fermion_ladder_case = mo.ui.dropdown(
+        options=["Three-loop fermion", "Four-loop fermion", "Four-loop gluon"],
+        value="Three-loop fermion",
+        label="Propagator numerator",
+    )
+    run_fermion_ladder = mo.ui.run_button(label="Compare selected ladder: 4D and D")
+    mo.hstack([fermion_ladder_case, run_fermion_ladder])
+    return fermion_ladder_case, run_fermion_ladder
+
+
+@app.cell
+def _(fermion_ladder_case, form_executable, mo, run_fermion_ladder):
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    fermion_ladder_report = None
+    if run_fermion_ladder.value:
+        mo.stop(
+            _sys.platform == "emscripten" or not form_executable,
+            mo.md(
+                "Run this comparison locally with FORM on PATH or FORM_EXECUTABLE set."
+            ),
+        )
+        _directory = str(_Path(__file__).resolve().parent)
+        if _directory not in _sys.path:
+            _sys.path.insert(0, _directory)
+        from fermion_ladder import benchmark as _benchmark
+
+        _options = {
+            "loops": 3 if fermion_ladder_case.value == "Three-loop fermion" else 4
+        }
+        if fermion_ladder_case.value == "Four-loop gluon":
+            from gluon_ladder import GluonLadder as _GluonLadder
+
+            _options.update(
+                case_factory=_GluonLadder,
+                form_script=_Path(_directory) / "gluon_propagator_ladder.frm",
+            )
+        with mo.status.spinner(
+            title="Comparing complete 4D and D-dimensional numerators"
+        ):
+            fermion_ladder_report = _benchmark(form_executable, **_options)
+    return (fermion_ladder_report,)
+
+
+@app.cell(hide_code=True)
+def _(fermion_ladder_report, mo):
+    mo.stop(fermion_ladder_report is None)
+    _rows = [
+        {
+            "dimension": _case["dimension"],
+            "terms": _case["terms"],
+            "Idenso CPU (ms)": _case["idenso_median_cpu_ms"],
+            "Idenso wall (ms)": _case["idenso_median_wall_ms"],
+            "FORM CPU (ms)": _case["form_median_cpu_ms"],
+            "Idenso / FORM": _case["cpu_ratio"],
+            "exact polynomial match": _case["exact_form_match"],
+        }
+        for _case in fermion_ladder_report["cases"]
+    ]
+    mo.vstack(
+        [
+            mo.ui.table(_rows, selection=None, pagination=False),
+            mo.md(
+                "**Passed:** exact FORM polynomials, D → 4, and independent exact HEP component checks."
+            ),
+            mo.accordion(
+                {"Raw samples and validation": mo.json(fermion_ladder_report)}
+            ),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
 def _(
     boundary_checks,
     benchmark_results,

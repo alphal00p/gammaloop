@@ -1959,6 +1959,8 @@ mod tests {
     use crate::{gamma, gamma5, test_support::test_initialize};
     use spenso::slot;
 
+    mod contracted_trace;
+
     #[test]
     fn exact_scalar_trace_products_preserve_the_terminal_result() {
         let r = test_initialize();

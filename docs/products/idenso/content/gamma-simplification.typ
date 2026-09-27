@@ -51,7 +51,116 @@ for additional notation controls.
 
 == Schoonschip performance and FORM comparison
 
-The latest qualified complete ladder takes *0.858 s* in the original order
+The notebook also includes a massless three-loop propagator with a fermionic
+outer ring, followed by four-loop fermionic and gluonic ladders. The new cases
+share a physical routing: each vertex conserves momentum and the two incoming
+momenta on every internal edge are opposite. External vector indices are
+contracted with a metric. This differs from the historical gluonic example's
+independent external polarization vectors, so their timings and term counts
+are separate benchmarks.
+
+The #source-link("examples/notebooks/fermion_ladder.py", label: "shared benchmark driver")
+uses the installed public tensor API and runs handwritten/generated native
+FORM programs. Fermionic cases compare strict four-dimensional `trace4` with
+symbolic-D `tracen`, both with spinor trace normalization four. The gluonic
+case compares four-dimensional and symbolic-D metric algebra, without a
+Dirac trace. All cases omit couplings, color, denominators and integration;
+the closed-fermion-loop minus sign is included in the fermionic numerators.
+
+Complete algebra clocks include tracing or vertex replacement, contraction,
+momentum routing and final scalar polynomial collection. Input construction,
+prepared routing rules, component checks and output are excluded and setup
+is recorded separately. Independent expressions are evaluated in alternating
+warm batches on the same CPU; FORM's internal CPU timer avoids process-launch
+overhead. Idenso's Python dispatch and typed result wrapping remain included.
+The raw records retain CPU and wall samples, source and executable hashes,
+FORM diagnostics and exact checks. Different batch sizes imply different
+numbers of simultaneously retained results.
+
+The fermionic route keeps momenta compact during the trace and inserts their
+routing into scalar products afterward. Three-loop four-dimensional reduction
+uses simultaneous dot substitution and polynomial expansion. The larger cases
+convert the scalar trace to a polynomial once, group coefficients of all dots
+touching one momentum, substitute that momentum simultaneously, and collect
+before proceeding. Opposite outer momentum pairs are eliminated first; the final
+Atom is emitted once. This uses existing Symbolica primitives after typed gamma
+simplification, without bypassing tensor-interface checks.
+Expanded traces now also use direct polynomial emission for contracted
+sixteen-factor words. This reuses the existing Clifford recurrence and
+collects its integer coefficients before constructing the scalar Atom.
+The coefficient and exponent row buffers have a checked 16 MiB limit;
+exceeding it evaluates the same completed recipe with its already normalized
+metrics. Free sixteen-factor traces and callback-sensitive mixed free-index
+and compact-vector inputs retain their established evaluation path.
+FORM collects after each momentum substitution;
+expanding all substitutions before collecting was substantially slower.
+These are measured schedules, not claims of globally optimal contraction
+ordering. Each final polynomial is checked exactly against FORM, including
+symbolic D, and D=4 must agree with strict four-dimensional reduction. Three
+rational assignments independently compare original HEP tensor networks and
+scalar results; fermionic checks additionally use exact matrix contractions
+of the HEP library's gamma components.
+
+On 2026-09-27, five alternating warm batches per mode on CPU 8 gave these
+complete algebra median CPU times with FORM 5.0.0 and the optimized installed
+host `4eace950`. Ratios divide the two engines' medians. The machine is shared;
+these are workload-specific measurements.
+
+#table(
+  columns: 5,
+  [Numerator], [Dimension], [Idenso, ms], [FORM, ms], [Ratio],
+  [Three-loop fermion], [4D], [0.612], [0.356], [1.72×],
+  [Three-loop fermion], [D], [2.879], [2.231], [1.29×],
+  [Four-loop fermion], [4D], [6.523], [6.583], [0.99×],
+  [Four-loop fermion], [D], [133.257], [71.500], [1.86×],
+  [Four-loop gluon], [4D], [773.030], [778.000], [0.99×],
+  [Four-loop gluon], [D], [1,410.728], [1,479.000], [0.95×],
+)
+
+The three-loop case meets the factor-three threshold in both dimensions;
+the four-loop comparisons follow that gate. The gluonic route uses
+tensor-safe replacement and local contraction against opaque vertices,
+with different measured rung-closing orders in the two engines. The
+remaining larger gap is the four-loop D-dimensional fermion trace: one
+diagnostic call spends 88.6 ms tracing, 8.8 ms converting to a polynomial,
+29.7 ms substituting momenta, and 7.4 ms emitting the final scalar. These phase
+clocks are separate from the complete-call medians.
+
+Seven alternating paired batches against the saved simultaneous-routing driver
+show median paired CPU reductions of *27.5%* for three-loop D, *18.2%* for
+four-loop 4D, and *53.9%* for four-loop D. Each changed case is faster in all
+seven pairs. Three-loop 4D retains its previous route. Preparing the changed
+cases' rules costs about 0.5 ms more in that cohort, outside the algebra clocks.
+The #source-link("examples/notebooks/fermion_ladder_routing_comparison.json", label: "routing comparison")
+retains every paired sample and the baseline driver source. The gluonic route
+is unchanged; its fresh measurements are controls. Shared-host absolute times
+vary between cohorts and are not substituted for paired changes.
+
+The #source-link("examples/reproducers/symbolica-expansion/polynomial_replacement.rs", label: "standalone polynomial replacement reproducer")
+isolates another Symbolica cost: its current replacement rebuilds the right-hand
+side power for each monomial, then repeatedly adds to the growing polynomial.
+Grouping coefficients and using sparse Horner evaluation avoids that repeated
+work. The reproducer uses synthetic scalar polynomials and unchanged Symbolica;
+its substitution timings are separate from the complete ladder results above.
+
+All six exact FORM polynomials, three D-to-four specializations, and 72
+HEP component comparisons pass. Full measurements are in the
+#source-link("examples/notebooks/fermion_ladder_three_staged_timing.json", label: "three-loop fermionic record"),
+#source-link("examples/notebooks/fermion_ladder_four_staged_timing.json", label: "four-loop fermionic record"), and
+#source-link("examples/notebooks/gluon_ladder_four_staged_control.json", label: "four-loop gluonic control").
+The earlier simultaneous-routing records remain available beside these files.
+
+// docs-example: syntax
+```sh
+python examples/notebooks/fermion_ladder.py --form /path/to/form \
+  --loops 3 --rounds 5 --cpu 8 --output /tmp/fermion-three.json
+python examples/notebooks/fermion_ladder.py --form /path/to/form \
+  --loops 4 --rounds 5 --cpu 8 --output /tmp/fermion-four.json
+python examples/notebooks/fermion_ladder.py --form /path/to/form \
+  --particle gluonic --loops 4 --rounds 5 --cpu 8 --output /tmp/gluon-four.json
+```
+
+For the historical gluonic fixture, the qualified checkpoint takes *0.858 s* in the original order
 and *0.300 s* with early rung contractions. Both use tensor-safe replacement
 and include final expansion. Paired gains over the saved build are 9.09% and
 6.66%; current FORM comparisons and mixed trace controls are reported in
