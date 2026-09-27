@@ -687,6 +687,21 @@ products = ["gammaloop"]
 topics = ["architecture", "roadmap"]
 review_triggers = ["crates/gammaloop-api/src/**", "crates/gammalooprs/src/**"]
 
+[[section.note]]
+id = "tensor-engine-consolidation-plan"
+title = "Tensor engine consolidation plan"
+summary = "Plan of record for one contraction engine on a borrowed structural network layer: Feynman-rule application, contraction and materialization as separate steps, aliased tensor expressions as results, rules and tensors certified once, a small public verb set, and the internal duplicates from both audits retired under measured gates."
+source = "docs/architecture/tensor-engine-consolidation-plan.typ"
+kind = "Design proposal"
+status = "Proposal"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-09-27"
+review_ref = "a27ca81d8958"
+products = ["spenso", "idenso", "gammaloop"]
+topics = ["schoonschip", "tensor-network", "parsing", "rewrites", "python"]
+review_triggers = ["crates/idenso/src/**", "crates/spenso/src/network/**", "crates/spynso3/src/**"]
+
 [[section]]
 id = "investigations"
 title = "Engineering investigations"
