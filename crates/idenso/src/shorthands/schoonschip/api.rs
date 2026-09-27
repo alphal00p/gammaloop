@@ -190,11 +190,13 @@ impl NetworkSchoonschip<'_> {
         Aind: AbsInd + DummyAind + ParseableAind + 'static,
     {
         if let AtomView::Add(add) = view {
-            let mut sum = Atom::Zero;
-            for term in add.iter() {
-                sum += self.apply::<EXPANDSUMS, Aind>(term)?;
-            }
-            return Ok(sum);
+            // Keep term evaluation (and callbacks) in source order, then merge
+            // once instead of repeatedly normalizing the growing prefix.
+            let terms = add
+                .iter()
+                .map(|term| self.apply::<EXPANDSUMS, Aind>(term))
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok(Atom::add_many(terms));
         }
 
         let scalar_shortcut =

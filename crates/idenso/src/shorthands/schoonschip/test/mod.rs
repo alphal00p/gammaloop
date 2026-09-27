@@ -70,6 +70,80 @@ fn tensor_sum_square_uses_local_contractions() {
 }
 
 #[test]
+fn network_sum_preserves_factored_spectators_logical_order_and_zero() {
+    use crate::tensor::SymbolicTensor;
+    use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+
+    test_initialize();
+    let a = mink!(4, 91201);
+    let b = mink!(4, 91202);
+    let c = mink!(4, 91203);
+    let tensor = spenso::tensor_symbol!("network_sum_ordered_tensor");
+    let x = Atom::var(symbol!("network_sum_x"));
+    let y = Atom::var(symbol!("network_sum_y"));
+    let spectator = (x + y).pow(7);
+    let contracted = &spectator * function!(tensor, &c, &b);
+    let product = &spectator * g!(&a, &b) * function!(tensor, &c, &a);
+    for (source, expected) in [
+        (&product + &contracted, Atom::num(2) * &contracted),
+        (&product - &contracted, Atom::Zero),
+    ] {
+        let mut typed = SymbolicTensor::<PartialStructure>::infer(source.clone()).unwrap();
+        typed.structure =
+            PartialStructure::from_logical_slots(typed.structure.logical_slots().into_iter().rev());
+        assert_eq!(typed.structure.logical_slots().len(), 2);
+        let result = source.schoonschip_net::<AbstractIndex>().unwrap();
+        assert_eq!(result, expected);
+        let result = typed.with_rewritten_expression(result).unwrap();
+        assert_eq!(result.structure, typed.structure);
+        assert_eq!(
+            result
+                .expression
+                .schoonschip_net::<AbstractIndex>()
+                .unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn network_sum_matches_ordered_single_term_callbacks() {
+    use std::sync::{Arc, Mutex};
+
+    test_initialize();
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let observed = Arc::clone(&calls);
+    let tensor = spenso::tensor_symbol!(
+        "network_sum_callback_tensor",
+        norm = move |value, _| observed.lock().unwrap().push(value.to_owned())
+    );
+    let a = mink!(4, 91301);
+    let b = mink!(4, 91302);
+    let source = Atom::add_many((0..8).map(|i| g!(&a, &b) * function!(tensor, i, &a)));
+    let AtomView::Add(sum) = source.as_view() else {
+        panic!("the fixture must exercise whole-sum accumulation");
+    };
+    let settings = SchoonschipSettings::single_pass(Some(1));
+    calls.lock().unwrap().clear();
+    // This is the former driver's ordered prefix accumulation, with the same
+    // single-pass reduction for each term.
+    let mut expected = Atom::Zero;
+    for term in sum.iter() {
+        expected += term
+            .schoonschip_with_net::<false, AbstractIndex>(&settings)
+            .unwrap();
+    }
+    let transcript = calls.lock().unwrap().clone();
+    assert!(!transcript.is_empty());
+    calls.lock().unwrap().clear();
+    let actual = source
+        .schoonschip_with_net::<false, AbstractIndex>(&settings)
+        .unwrap();
+    assert_eq!(actual, expected);
+    assert_eq!(*calls.lock().unwrap(), transcript);
+}
+
+#[test]
 fn simple_dot() {
     test_initialize();
     let dim = symbol!("D");
