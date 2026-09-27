@@ -23,7 +23,14 @@ python aliased_evaluator_python.py 18
 ```
 
 The Python script needs an interpreter with the Symbolica community build
-installed, for example the notebook host's environment.
+and NumPy installed; numerical evaluator output uses NumPy arrays.
+
+M0 revalidation on 2026-09-27 ran all four examples successfully against
+the preserved `cfe4e655` host and source-matching release Rust executables.
+#link("qualification.json")[The qualification record] retains executable and
+source hashes, commands, exact assertions and raw output. Its clocks are
+diagnostics, not engine performance comparisons. NumPy was installed in a
+separate reproducer environment, leaving the benchmark environments unchanged.
 
 == Request 1: parametric aliases
 <parametric-aliases>
