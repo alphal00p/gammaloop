@@ -445,10 +445,39 @@ impl PyParticle {
     /// --------
     /// Using the setup in the ``Particle`` class example:
     ///
-    /// >>> model.particle("c").mass_expression
+    /// >>> model.particle("c").mass
     #[getter]
-    fn mass_expression(&self) -> PythonExpression {
+    fn mass(&self) -> PythonExpression {
         self.inner().symbolic_mass(&self.model).into()
+    }
+
+    /// Signed symbolic electric charge Q e, including the model's coupling.
+    /// An electron has charge ``-e`` and a positron ``+e``. Neutral particles
+    /// return exact zero. Use ``charge`` for the dimensionless charge Q.
+    /// The unit charge is inferred from minimal photon (PDG 22) interactions
+    /// with fermions or scalars, including their Lorentz normalization; no
+    /// parameter name is assumed. Use ``-electron.electric_charge`` for positive e.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hep
+    /// >>> qed_model = hep.Model.qed()
+    /// >>> electron = qed_model.particle("e-")
+    /// >>> mass, charge = electron.mass, electron.electric_charge
+    /// >>> assert electron.antiparticle.electric_charge == -charge
+    /// >>> assert qed_model.particle("a").electric_charge == 0
+    ///
+    /// Raises
+    /// ------
+    /// ModelError
+    ///     If a charged particle's model has no supported minimal photon vertex,
+    ///     or its photon vertices imply inconsistent unit charges.
+    #[getter]
+    fn electric_charge(&self) -> PyResult<PythonExpression> {
+        self.inner()
+            .electric_charge(&self.model)
+            .map(Into::into)
+            .map_err(error::model)
     }
 
     /// Electric charge in units of e, as an exact Symbolica expression.
@@ -622,7 +651,7 @@ impl PyParticle {
             ("Spin", spin),
             ("Color", p.color.to_string()),
             ("Charge", model_expression_html(py, self.charge())?),
-            ("Mass", model_expression_html(py, self.mass_expression())?),
+            ("Mass", model_expression_html(py, self.mass())?),
             ("Width", escape_html(self.width_parameter())),
             (
                 "Ghost / lepton number",
@@ -777,14 +806,16 @@ impl PyParameter {
 #[pymethods]
 impl PyParameter {
     /// Return the symbolic reference used by this model's expressions.
-    /// This preserves the parameter or function identity without substituting
-    /// its defining expression or numerical value.
+    /// TeX and Typst output use the parameter's ``texname``. Plain output keeps
+    /// its symbolic name; no defining expression or numerical value is substituted.
     ///
     /// Examples
     /// --------
     /// >>> from symbolica.community import hep
     /// >>> model = hep.Model.standard_model()
     /// >>> reference = model.parameter("ee").symbol
+    /// >>> mass = model.parameter("Me").symbol
+    /// >>> assert "m_e" in (mass**2).to_latex()
     #[getter]
     fn symbol(&self) -> PythonExpression {
         Atom::var(symbol!(&format!("UFO::{}", self.inner().name))).into()

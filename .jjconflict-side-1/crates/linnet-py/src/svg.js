@@ -250,9 +250,13 @@
       }
       if (selected[kind].has(id)) {
         const current = selection();
+        const argumentsText = Object.entries(current)
+          .filter(([, entries]) => entries.length)
+          .map(([name, entries]) => `${name}=[${entries.join(', ')}]`)
+          .join(', ');
         const construction = html('div');
         construction.className = 'linnet-inspector-construction';
-        construction.append(html('span', 'Subgraph construction:'), html('code', `graph.subgraph(nodes=[${current.nodes.join(', ')}], edges=[${current.edges.join(', ')}], half_edges=[${current.half_edges.join(', ')}])`));
+        construction.append(html('span', 'Subgraph construction:'), html('code', `graph.subgraph(${argumentsText})`));
         content.append(construction);
       }
       const shortcuts = html('div', `${pinned ? 'Pinned · Close to resume hover' : 'Preview · Click or Enter/Space to pin'} · Shift/Ctrl/⌘-click: toggle selection`);

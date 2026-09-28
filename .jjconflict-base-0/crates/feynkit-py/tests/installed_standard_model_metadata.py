@@ -142,7 +142,7 @@ for name, q, yl, yr, t3, mass in (
     assert p.y_charge == E(yl)
     assert p.y_charge_right == (None if yr is None else E(yr))
     assert p.weak_isospin == E(t3)
-    assert p.mass_expression == mass
+    assert p.mass == mass
     assert p.antiparticle.charge == -E(q)
     assert p.antiparticle.y_charge == (None if yr is None else -E(yr))
     assert p.antiparticle.y_charge_right == -E(yl)

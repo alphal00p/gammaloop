@@ -23,7 +23,7 @@ from statistics import median
 from time import perf_counter_ns, process_time_ns
 
 from symbolica import E, Replacement, S
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     AUTO,
     GammaSimplifySettings,
     Representation,

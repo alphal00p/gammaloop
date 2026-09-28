@@ -7,7 +7,7 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-GaGa
 
 from symbolica import E, Replacement, S
 from symbolica.community import hep
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.tensor import CookSettings, TensorExpression
 
 model = hep.Model.standard_model()
 electron, photon = (model.particle(name) for name in ("e-", "a"))

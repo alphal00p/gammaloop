@@ -7,7 +7,7 @@ from pathlib import Path
 
 from symbolica import E, Expression, S
 from symbolica.community import hep as fk
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     CookSettings,
     GammaSimplifySettings,
     TensorExpression,
@@ -62,7 +62,7 @@ for pdg, mass, weak_isospin, electric_charge in (
     (5, S("UFO::MB"), E("-1/2"), E("-1/3")),
 ):
     particle = model.particle_by_pdg(pdg)
-    assert particle.mass_expression == mass
+    assert particle.mass == mass
     assert particle.weak_isospin == weak_isospin
     assert particle.charge == electric_charge
     generated = model.process([23], [pdg, -pdg]).generate_diagrams(

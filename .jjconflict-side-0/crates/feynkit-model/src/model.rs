@@ -21,6 +21,7 @@ use crate::{
 };
 
 mod builtins;
+mod parameter_print;
 mod quantum_number;
 
 const fn default_true() -> bool {
@@ -305,6 +306,15 @@ pub struct Particle {
 }
 
 impl Particle {
+    /// Signed physical charge Q e, inferred from the model's photon vertices.
+    pub fn electric_charge(&self, model: &Model) -> Result<Atom, ModelError> {
+        if self.charge.is_zero() {
+            Ok(Atom::Zero)
+        } else {
+            Ok(Atom::num(self.charge.clone()) * model.unit_electric_charge()?)
+        }
+    }
+
     /// Symbolic UFO mass parameter, without substituting its numerical value.
     pub fn symbolic_mass(&self, model: &Model) -> Atom {
         let mass = model.parameter_by_id(self.mass).unwrap();
@@ -587,6 +597,11 @@ impl Model {
 
     fn new(definition: ModelDefinition) -> Result<Self, ModelError> {
         let indexes = ModelIndexes::build(&definition)?;
+        // Declare every parameter before parsing any expression: a parameter
+        // can reference a later entry, and Symbolica fixes printers at creation.
+        for parameter in &definition.parameters {
+            Self::register_parameter_symbol(&parameter.name, parameter.texname.as_deref())?;
+        }
         let parameters = definition
             .parameters
             .iter()
@@ -1170,6 +1185,106 @@ impl Model {
 
     pub fn form_factors(&self) -> &[ModelFormFactor] {
         &self.form_factors
+    }
+
+    /// Extract e from minimally coupled photon–matter vertices. No parameter or
+    /// vertex names are assumed: normalize the full Lorentz coefficient by i Q.
+    fn unit_electric_charge(&self) -> Result<Atom, ModelError> {
+        let mut result: Option<Atom> = None;
+        for vertex in &self.vertex_rules {
+            if vertex.particles.len() != 3 {
+                continue;
+            }
+            let particles: Vec<_> = vertex
+                .particles
+                .iter()
+                .map(|id| &self.particles[id.index()])
+                .collect();
+            let Some(photon) = particles
+                .iter()
+                .position(|p| p.pdg_code == 22 && p.spin == 3 && p.charge.is_zero())
+            else {
+                continue;
+            };
+            let Some(matter) = particles.iter().position(|p| {
+                p.pdg_code > 0
+                    && !p.charge.is_zero()
+                    && p.ghost_number == 0
+                    && matches!(p.spin, 1 | 2)
+            }) else {
+                continue;
+            };
+            let anti = 3 - photon - matter;
+            if particles[matter].antiparticle != vertex.particles[anti] {
+                continue;
+            }
+            let parse = |expression: &str| {
+                parse_expression(
+                    EntityKind::VertexRule,
+                    &vertex.name,
+                    "structure",
+                    expression,
+                )
+            };
+            let (a, p, v) = (anti + 1, matter + 1, photon + 1);
+            let reference = if particles[matter].spin == 2 {
+                parse(&format!("Gamma(idx(1,{v}),idx(1,{a}),idx(1,{p}))"))?
+            } else {
+                parse(&format!("P(idx(1,{v}),idx(1,{p}))"))?
+            };
+            let structure = if particles[matter].spin == 2 {
+                reference.clone()
+            } else {
+                &reference - parse(&format!("P(idx(1,{v}),idx(1,{a}))"))?
+            };
+            let colors = if particles[matter].color == 1 {
+                vec![Atom::num(1)]
+            } else {
+                vec![
+                    parse(&format!("Identity({a},{p})"))?,
+                    parse(&format!("Identity({p},{a})"))?,
+                ]
+            };
+            // Only the color identity is part of an electromagnetic vertex.
+            // Keep all Lorentz components together, including split projectors.
+            if !vertex
+                .color_structures
+                .iter()
+                .all(|color| colors.contains(color))
+            {
+                continue;
+            }
+            let mut interaction = Atom::Zero;
+            for row in &vertex.couplings {
+                for (lorentz, coupling) in vertex.lorentz_structures.iter().zip(row) {
+                    if let Some(coupling) = coupling {
+                        interaction += &self.lorentz_structures[lorentz.index()].structure
+                            * &self.couplings[coupling.index()].expression;
+                    }
+                }
+            }
+            let interaction = interaction.expand();
+            let coefficient = interaction.coefficient(&reference);
+            if coefficient.is_zero() || !(interaction - &coefficient * structure).expand().is_zero()
+            {
+                continue;
+            }
+            let candidate = (coefficient
+                / (parse("1𝑖")? * Atom::num(particles[matter].charge.clone())))
+            .together();
+            if let Some(previous) = &result {
+                if !(&candidate - previous).together().is_zero() {
+                    return Err(ModelError::InconsistentElectricCharge {
+                        model: self.name.clone(),
+                    });
+                }
+            } else {
+                result = Some(candidate);
+            }
+        }
+        result.ok_or_else(|| ModelError::MissingElectricCharge {
+            model: self.name.clone(),
+        })
     }
 
     pub fn particle_id(&self, name: &str) -> Result<ParticleId, ModelError> {

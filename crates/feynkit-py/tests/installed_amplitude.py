@@ -2,7 +2,7 @@
 
 from symbolica import E, S
 from symbolica.community import hep
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.tensor import TensorExpression
 
 model = hep.Model.standard_model()
 generated = model.process(

@@ -14,7 +14,7 @@ use crate::{ModuleInit, expression::TensorExpression, network::ReplacementCondit
 /// Conditions run for each candidate match. RHS callbacks are cached only within
 /// one application; use `rhs_cache_size=0` for callbacks with side effects.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(frozen, name = "TensorRule", module = "symbolica.community.spenso")]
+#[pyclass(frozen, name = "TensorRule", module = "symbolica.community.tensor")]
 pub struct PyTensorRule {
     pub(crate) rule: TensorRule<'static>,
 }

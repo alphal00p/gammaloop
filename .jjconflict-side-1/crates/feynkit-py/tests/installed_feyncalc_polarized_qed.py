@@ -8,7 +8,7 @@ from pathlib import Path
 
 from symbolica import E, S
 from symbolica.community import hep as fk
-from symbolica.community.spenso import Representation, TensorExpression, chain
+from symbolica.community.tensor import Representation, TensorExpression, chain
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 process = model.process([11, -11], [13, -13])

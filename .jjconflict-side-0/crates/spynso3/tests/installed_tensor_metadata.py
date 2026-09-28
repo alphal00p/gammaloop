@@ -4,7 +4,7 @@ import re
 import unittest
 
 from symbolica import E, S
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     Representation,
     RepresentationName,
     Slot,

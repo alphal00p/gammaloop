@@ -3,7 +3,7 @@
 import unittest
 
 from symbolica import E, Expression, S
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     Representation,
     Tensor,
     TensorExpression,

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from symbolica import E, Replacement, S, Symbol
 from symbolica.community import hep as fk
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     CookSettings,
     GammaSimplifySettings,
     Representation,

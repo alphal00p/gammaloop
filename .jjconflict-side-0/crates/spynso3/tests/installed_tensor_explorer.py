@@ -6,7 +6,7 @@ import unittest
 from html.parser import HTMLParser
 
 from symbolica import E, Expression, S
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     DisplaySettings,
     Representation,
     Tensor,

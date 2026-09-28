@@ -26,7 +26,7 @@ type Descriptor = (Option<Symbol>, Vec<Atom>);
 #[pyclass(
     frozen,
     name = "AliasedTensorExpression",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 pub struct AliasedTensorExpression {
     pub(crate) value: Arc<SymbolicTensor<AliasInterfaces, AliasedAtom>>,

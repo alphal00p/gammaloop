@@ -214,7 +214,7 @@ def example_specification():
     PRELUDE = """from pathlib import Path
     from tempfile import TemporaryDirectory
     from symbolica import E, S
-    from symbolica.community import spenso as sp
+    from symbolica.community import tensor as sp
 
     _build = TemporaryDirectory(prefix="spenso-api-tour-")
     build_directory = Path(_build.name)
@@ -281,7 +281,7 @@ def _(mo):
 
     Every example below has been executed. Expand an entry for its code, live
     display, text representation and complete declared member list. All examples
-    share `from symbolica.community import spenso as sp` and the scalar `x = S("spenso_api_tour::x")`.
+    share `from symbolica.community import tensor as sp` and the scalar `x = S("spenso_api_tour::x")`.
     """)
     return
 

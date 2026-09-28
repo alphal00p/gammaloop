@@ -140,7 +140,7 @@ mod stubs;
 
 /// Policy for Rayon operations that manipulate Symbolica expressions.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
-#[pyclass(from_py_object, eq, eq_int, module = "symbolica.community.spenso")]
+#[pyclass(from_py_object, eq, eq_int, module = "symbolica.community.tensor")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SymbolicParallelism {
     /// Permit Rayon when licensed and use workload heuristics where available.
@@ -172,7 +172,7 @@ impl From<SymbolicParallelism> for spenso::symbolic_parallelism::SymbolicParalle
 /// operation will use it.
 #[cfg_attr(
     feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.spenso")
+    gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
 #[pyfunction]
 fn set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> bool {
@@ -250,14 +250,14 @@ define_spenso_python_surface! {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+/// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
 /// >>> rep = Representation.euc(4)
 /// >>> structure = TensorName.vector("v")(rep("mu"))
 /// >>> data = [1.0, 2.0, 3.0, 4.0]
 /// >>> tensor = Tensor.dense(structure, data)
 /// >>> sparse_tensor = Tensor.sparse(structure, float)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(from_py_object, name = "Tensor", module = "symbolica.community.spenso")]
+#[pyclass(from_py_object, name = "Tensor", module = "symbolica.community.tensor")]
 #[derive(Clone)]
 pub struct Spensor {
     pub(crate) tensor: MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
@@ -545,7 +545,7 @@ impl Spensor {
     /// Examples
     /// --------
     /// >>> import symbolica
-    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
     /// >>> rep = Representation.euc(3)
     /// >>> structure = TensorName("T")(rep, rep)
     /// >>> sparse_float = Tensor.sparse(structure, float)
@@ -609,7 +609,7 @@ impl Spensor {
     /// Examples
     /// --------
     /// >>> from symbolica import S
-    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
     /// >>> rep = Representation.euc(2)
     /// >>> structure = TensorName("T")(rep("mu"), rep("nu"))
     /// >>> data = [1.0, 2.0, 3.0, 4.0]
@@ -674,7 +674,7 @@ impl Spensor {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
     /// >>> rep = Representation.euc(4)
     /// >>> structure = TensorName.vector("v")(rep("mu"))
     /// >>> tensor = Tensor.sparse(structure, float)
@@ -696,7 +696,7 @@ impl Spensor {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
     /// >>> rep = Representation.euc(2)
     /// >>> structure = TensorName("T")(rep("mu"), rep("nu"))
     /// >>> data = [1.0, 0.0, 0.0, 2.0]
@@ -902,7 +902,7 @@ impl Spensor {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
     /// >>> rep = Representation.euc(2)
     /// >>> structure = TensorName("T")(rep("mu"), rep("nu"))
     /// >>> tensor = Tensor.sparse(structure, float)
@@ -1003,7 +1003,7 @@ impl Spensor {
     /// Examples
     /// --------
     /// >>> from symbolica import S
-    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
     /// >>> x, y = S("x", "y")
     /// >>> rep = Representation.euc(2)
     /// >>> structure = TensorName.vector("v")(rep("mu"))
@@ -1116,7 +1116,7 @@ impl Spensor {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
     /// >>> rep = Representation.euc(2)
     /// >>> p = TensorName.vector("p")
     /// >>> structure = (p(rep("mu")) * p(rep("mu"))).with_name(TensorName("p2"))
@@ -1279,7 +1279,7 @@ impl Spensor {
 #[pyclass(
     from_py_object,
     name = "TensorEvaluator",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 pub struct SpensoExpressionEvaluator {
@@ -1563,7 +1563,7 @@ impl SpensoExpressionEvaluator {
 #[pyclass(
     from_py_object,
     name = "CompiledTensorEvaluator",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 pub struct SpensoCompiledExpressionEvaluator {
@@ -1716,7 +1716,7 @@ Slot
 
 Examples
 --------
->>> from symbolica.community.spenso import Representation
+>>> from symbolica.community.tensor import Representation
 >>> import symbolica as sp
 >>> rep = Representation.euc(3)
 >>> slot1 = rep('mu')
@@ -1754,7 +1754,7 @@ Expression
 
 Examples
 --------
->>> from symbolica.community.spenso import Representation
+>>> from symbolica.community.tensor import Representation
 >>> import symbolica as sp
 >>> rep = Representation.euc(3)
 >>> expr = rep(sp.E("cos(x)"))
@@ -1894,7 +1894,7 @@ value : float, complex, or Expression
 
 Examples
 --------
->>> from symbolica.community.spenso import Tensor, TensorName, Representation
+>>> from symbolica.community.tensor import Tensor, TensorName, Representation
 >>> rep = Representation.euc(2)
 >>> structure = TensorName("T")(rep("mu"), rep("nu"))
 >>> tensor = Tensor.sparse(structure, float)
@@ -1917,7 +1917,7 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
         "symbolica".to_owned(),
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
     )?;
-    if let Some(module) = info.modules.get_mut("symbolica.community.spenso") {
+    if let Some(module) = info.modules.get_mut("symbolica.community.tensor") {
         SpensoModule::prepare_stub_module(module);
     }
     Ok(info)

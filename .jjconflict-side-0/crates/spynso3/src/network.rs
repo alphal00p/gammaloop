@@ -77,7 +77,7 @@ use pyo3_stub_gen::{PyStubType, derive::*};
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community.spenso import (
+/// >>> from symbolica.community.tensor import (
 /// ...     ExecutionMode,
 /// ...     Representation,
 /// ...     Tensor,
@@ -104,7 +104,7 @@ use pyo3_stub_gen::{PyStubType, derive::*};
 #[pyclass(
     from_py_object,
     name = "TensorNetwork",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 #[allow(clippy::type_complexity)]
@@ -183,7 +183,7 @@ fn insert_function_values<'a>(
 #[pyclass(
     from_py_object,
     name = "ExecutionMode",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 pub enum ExecutionMode {
@@ -723,7 +723,7 @@ impl SpensoNet {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorNetwork
+    /// >>> from symbolica.community.tensor import TensorNetwork
     /// >>> one_net = TensorNetwork.one()
     /// >>> result = one_net.result_scalar()
     pub fn one() -> SpensoNet {
@@ -764,7 +764,7 @@ impl SpensoNet {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorNetwork
+    /// >>> from symbolica.community.tensor import TensorNetwork
     /// >>> zero_net = TensorNetwork.zero()
     /// >>> result = zero_net.result_scalar()
     pub fn zero() -> SpensoNet {
@@ -1012,7 +1012,7 @@ impl SpensoNet {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorNetwork, ExecutionMode, TensorLibrary
+    /// >>> from symbolica.community.tensor import TensorNetwork, ExecutionMode, TensorLibrary
     /// >>> network = TensorNetwork(some_expression)
     /// >>> network.execute()
     /// >>> network.execute(n_steps=5)
@@ -1095,7 +1095,7 @@ impl SpensoNet {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorNetwork, TensorLibrary
+    /// >>> from symbolica.community.tensor import TensorNetwork, TensorLibrary
     /// >>> network = TensorNetwork(tensor_expression)
     /// >>> network.execute()
     /// >>> result = network.result_tensor()
@@ -1165,7 +1165,7 @@ impl SpensoNet {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorNetwork
+    /// >>> from symbolica.community.tensor import TensorNetwork
     /// >>> network = TensorNetwork(scalar_expression)
     /// >>> network.execute()
     /// >>> scalar_result = network.result_scalar()

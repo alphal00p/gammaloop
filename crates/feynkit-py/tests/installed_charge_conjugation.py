@@ -4,7 +4,7 @@ The ALOHA Weyl convention is C = -i gamma(2) gamma(0).
 """
 
 from symbolica import E, S
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     AUTO,
     Representation,
     TensorExpression,

@@ -7,16 +7,20 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 == Unreleased
 
+- MathML sums wrap automatically between top-level terms as the output width
+  changes. Fractions, bracketed groups, and tensor indices stay together;
+  individual terms wider than the output area remain horizontally scrollable.
+  Wrapping uses CSS and adds no JavaScript or renderer download.
 - MathML output loads the full STIX Two Math font from a pinned CDN URL when
   it is not installed locally. Expressions share the font download and contain
   no embedded font bytes.
-- `symbolica.community.spenso.load_math_font()` returns a style element with
+- `symbolica.community.tensor.load_math_font()` returns a style element with
   the bundled font for offline notebooks and standalone HTML exports. Display
   it once before expressions in the same HTML document:
 
   ```python
   from IPython.display import HTML, display
-  from symbolica.community import spenso
+  from symbolica.community import tensor as spenso
 
   display(HTML(spenso.load_math_font()))
   ```

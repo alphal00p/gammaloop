@@ -12,3 +12,17 @@
   font-size: var(--spenso-math-font-size, 21px);
   font-synthesis: none;
 }
+
+/* MathML Core cannot break a math row. Wrap whole additive terms with CSS;
+   each term still uses native math layout for fractions, fences and scripts. */
+[data-spenso-math] math[data-spenso-wrap] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  row-gap: 0.6em;
+}
+
+[data-spenso-wrap] > [data-spenso-term] {
+  flex: 0 0 auto;
+}

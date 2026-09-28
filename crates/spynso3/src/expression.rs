@@ -65,13 +65,13 @@ use crate::{
 
 /// The local placeholder used to leave a tensor port unresolved.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(frozen, name = "_AutoIndex", module = "symbolica.community.spenso")]
+#[pyclass(frozen, name = "_AutoIndex", module = "symbolica.community.tensor")]
 pub struct AutoIndex;
 
 #[cfg(feature = "python_stubgen")]
-pyo3_stub_gen::module_variable!("symbolica.community.spenso", "AUTO", AutoIndex);
+pyo3_stub_gen::module_variable!("symbolica.community.tensor", "AUTO", AutoIndex);
 #[cfg(feature = "python_stubgen")]
-pyo3_stub_gen::module_variable!("symbolica.community.spenso", "_", AutoIndex);
+pyo3_stub_gen::module_variable!("symbolica.community.tensor", "_", AutoIndex);
 
 #[pymethods]
 impl AutoIndex {
@@ -94,7 +94,7 @@ impl AutoIndex {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community.spenso import Representation, TensorExpression
+/// >>> from symbolica.community.tensor import Representation, TensorExpression
 /// >>> mink = Representation.mink(4)
 /// >>> metric = TensorExpression.g(mink)("mu", "nu")
 /// >>> flat = TensorExpression.flat(mink)("mu", "nu")
@@ -110,7 +110,7 @@ impl AutoIndex {
     frozen,
     from_py_object,
     name = "TensorExpression",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 pub struct TensorExpression {
@@ -865,7 +865,7 @@ impl TensorExpression {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorExpression
+    /// >>> from symbolica.community.tensor import TensorExpression
     /// >>> generator = TensorExpression.t(8, 3)
     /// >>> indexed = generator("a", "i", "j")
     #[staticmethod]
@@ -1094,7 +1094,7 @@ impl TensorExpression {
     /// # Examples
     /// ```python
     /// >>> from symbolica import E
-    /// >>> from symbolica.community.spenso import TensorExpression
+    /// >>> from symbolica.community.tensor import TensorExpression
     /// >>> # Built-in representations are registered automatically on import.
     /// >>> trace = E('''
     /// ...     gamma(bis(4,a),bis(4,b),mink(4,mu))
@@ -1117,8 +1117,8 @@ impl TensorExpression {
     ///
     /// # Examples:
     /// ```python
-    /// from symbolica.community.spenso import TensorLibrary, TensorName
-    /// from symbolica.community.spenso import TensorExpression
+    /// from symbolica.community.tensor import TensorLibrary, TensorName
+    /// from symbolica.community.tensor import TensorExpression
     /// from symbolica import S, Expression
     /// # Get HEP library with standard tensors
     /// hep_lib = TensorLibrary.hep_lib()
@@ -1179,7 +1179,7 @@ impl TensorExpression {
     /// # Examples
     /// ```python
     /// >>> from symbolica import S
-    /// >>> from symbolica.community.spenso import TensorExpression
+    /// >>> from symbolica.community.tensor import TensorExpression
     /// >>> # Formal dimensions are atomic; apply group-specific relations later.
     /// >>> Na, Nc = S("Na", "Nc")
     /// >>> generator = TensorExpression.t(Na, Nc)
@@ -1270,9 +1270,9 @@ impl TensorExpression {
     ///
     /// # Examples:
     /// ```python
-    /// from symbolica.community.spenso import TensorName, Slot, Representation
+    /// from symbolica.community.tensor import TensorName, Slot, Representation
     /// import symbolica as sp
-    /// from symbolica.community.spenso import TensorExpression
+    /// from symbolica.community.tensor import TensorExpression
     ///
     /// T = TensorName("T")
     /// rep = Representation.euc(3)
@@ -1330,8 +1330,8 @@ impl TensorExpression {
     ///
     /// # Examples
     /// ```python
-    /// >>> from symbolica.community.spenso import TensorExpression
-    /// >>> from symbolica.community.spenso import Representation, TensorName
+    /// >>> from symbolica.community.tensor import TensorExpression
+    /// >>> from symbolica.community.tensor import Representation, TensorName
     /// >>> # Built-in representations are registered automatically on import.
     /// >>> # Re-importing the module does not require explicit re-registration.
     /// >>> bispinor = Representation.bis(4)
@@ -2140,7 +2140,7 @@ impl TensorExpression {
 /// Restore tensor-aware dispatch after a base Symbolica transformation.
 #[cfg_attr(
     feature = "python_stubgen",
-    pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.spenso")
+    pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
 #[pyfunction]
 pub fn as_tensor(py: Python<'_>, expression: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
@@ -2187,7 +2187,7 @@ macro_rules! symbolic_function_overload {
                     },)+
                 ],
                 r#return: TensorExpression::type_output,
-                doc: $doc, module: Some("symbolica.community.spenso"),
+                doc: $doc, module: Some("symbolica.community.tensor"),
                 is_async: false, deprecated: None, type_ignored: None, is_overload: true,
                 file: file!(), line: line!(), column: column!(), index: 0,
             }
@@ -2202,7 +2202,7 @@ symbolic_function_overload!("dot", "Contract two rank-one tensors into the canon
 #[cfg_attr(
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyfunction(
-        module = "symbolica.community.spenso",
+        module = "symbolica.community.tensor",
         no_default_overload = true,
         python_overload = r#"
         import typing
@@ -2247,7 +2247,7 @@ symbolic_function_overload!("chain", "Build an explicitly-ended ordered tensor c
 #[cfg_attr(
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyfunction(
-        module = "symbolica.community.spenso",
+        module = "symbolica.community.tensor",
         no_default_overload = true,
         python_overload = r#"
         import typing
@@ -2326,7 +2326,7 @@ symbolic_function_overload!("trace", "Close an ordered factor sequence into a ca
 #[cfg_attr(
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyfunction(
-        module = "symbolica.community.spenso",
+        module = "symbolica.community.tensor",
         no_default_overload = true,
         python_overload = r#"
         import typing
@@ -2640,7 +2640,7 @@ mod tests {
 
         let functions = pyo3_stub_gen::inventory::iter::<pyo3_stub_gen::type_info::PyFunctionInfo>
             .into_iter()
-            .filter(|info| info.module == Some("symbolica.community.spenso"));
+            .filter(|info| info.module == Some("symbolica.community.tensor"));
         for name in ["chain", "trace"] {
             let overloads = functions
                 .clone()

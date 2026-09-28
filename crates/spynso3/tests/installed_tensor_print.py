@@ -5,7 +5,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 from symbolica import E, PrintMode, S
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     DisplaySettings,
     Representation,
     TensorExpression,

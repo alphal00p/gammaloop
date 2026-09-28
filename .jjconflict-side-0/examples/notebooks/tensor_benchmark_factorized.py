@@ -5,7 +5,7 @@ from math import prod
 from time import process_time_ns
 
 from symbolica import E
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.tensor import TensorExpression
 
 
 def alias_levels(result):
@@ -35,7 +35,7 @@ def alias_levels(result):
 
 def prepare(case):
     # Import only for this route: the paired baseline predates TensorRule.
-    from symbolica.community.spenso import TensorRule
+    from symbolica.community.tensor import TensorRule
 
     body = case.fixture["ladder_vertex_rule"] if hasattr(case, "fixture") else case.rule
     nodes = {next(iter(node)): node for node in case.source.to_expression()}

@@ -562,7 +562,7 @@ class PortPattern(Expression):
     Examples
     --------
     >>> import symbolica as sp
-    >>> from symbolica.community.spenso import PortPattern, Representation
+    >>> from symbolica.community.tensor import PortPattern, Representation
     >>> D_, i_ = sp.S("D_", "i_")
     >>> exact = PortPattern.exact(Representation.mink(4), i_)
     >>> generic = PortPattern.self_dual("R_", D_, i_)
@@ -615,7 +615,7 @@ class Representation:
 
     # Examples:
     ```python
-    from symbolica.community.spenso import Representation
+    from symbolica.community.tensor import Representation
 
     # Standard representations
     euclidean = Representation.euc(4)      # 4D Euclidean
@@ -662,7 +662,7 @@ class Representation:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Representation
+        >>> from symbolica.community.tensor import Representation
         >>> import symbolica as sp
         >>> rep = Representation.euc(3)
         >>> slot1 = rep('mu')
@@ -686,7 +686,7 @@ class Representation:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Representation
+        >>> from symbolica.community.tensor import Representation
         >>> import symbolica as sp
         >>> rep = Representation.euc(3)
         >>> expr = rep(sp.E("cos(x)"))
@@ -708,7 +708,7 @@ class Representation:
 
         # Examples:
         ```python
-        from symbolica.community.spenso import Representation
+        from symbolica.community.tensor import Representation
         import symbolica as sp
 
         # Self-dual representation (indices contract with themselves)
@@ -907,7 +907,7 @@ class Slot:
 
     # Examples:
     ```python
-    from symbolica.community.spenso import Slot, Representation
+    from symbolica.community.tensor import Slot, Representation
     import symbolica as sp
 
     # Create representation and slots
@@ -920,7 +920,7 @@ class Slot:
     custom_slot = Slot("MyRep", 4, 'alpha', dual=False)
 
     # Use in tensor structures
-    from symbolica.community.spenso import TensorName
+    from symbolica.community.tensor import TensorName
     tensor_expression = TensorName("T")(slot1, slot2)
     ```
     """
@@ -963,7 +963,7 @@ class Slot:
 
         # Examples:
         ```python
-        from symbolica.community.spenso import Slot
+        from symbolica.community.tensor import Slot
         import symbolica as sp
 
         # Self-dual slot
@@ -1021,7 +1021,7 @@ class Tensor:
 
     Examples
     --------
-    >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+    >>> from symbolica.community.tensor import Tensor, TensorName, Representation
     >>> rep = Representation.euc(4)
     >>> structure = TensorName.vector("v")(rep("mu"))
     >>> data = [1.0, 2.0, 3.0, 4.0]
@@ -1110,7 +1110,7 @@ class Tensor:
         Examples
         --------
         >>> import symbolica
-        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
         >>> rep = Representation.euc(3)
         >>> structure = TensorName("T")(rep, rep)
         >>> sparse_float = Tensor.sparse(structure, float)
@@ -1139,7 +1139,7 @@ class Tensor:
         Examples
         --------
         >>> from symbolica import S
-        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
         >>> rep = Representation.euc(2)
         >>> structure = TensorName("T")(rep("mu"), rep("nu"))
         >>> data = [1.0, 2.0, 3.0, 4.0]
@@ -1159,7 +1159,7 @@ class Tensor:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
         >>> rep = Representation.euc(4)
         >>> structure = TensorName.vector("v")(rep("mu"))
         >>> tensor = Tensor.sparse(structure, float)
@@ -1177,7 +1177,7 @@ class Tensor:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
         >>> rep = Representation.euc(2)
         >>> structure = TensorName("T")(rep("mu"), rep("nu"))
         >>> data = [1.0, 0.0, 0.0, 2.0]
@@ -1254,7 +1254,7 @@ class Tensor:
         Examples
         --------
         >>> from symbolica import S
-        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
         >>> x, y = S("x", "y")
         >>> rep = Representation.euc(2)
         >>> structure = TensorName.vector("v")(rep("mu"))
@@ -1278,7 +1278,7 @@ class Tensor:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
         >>> rep = Representation.euc(2)
         >>> p = TensorName.vector("p")
         >>> structure = (p(rep("mu")) * p(rep("mu"))).with_name(TensorName("p2"))
@@ -1400,7 +1400,7 @@ class Tensor:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Tensor, TensorName, Representation
+        >>> from symbolica.community.tensor import Tensor, TensorName, Representation
         >>> rep = Representation.euc(2)
         >>> structure = TensorName("T")(rep("mu"), rep("nu"))
         >>> tensor = Tensor.sparse(structure, float)
@@ -1530,7 +1530,7 @@ class TensorExpression:
 
     Examples
     --------
-    >>> from symbolica.community.spenso import Representation, TensorExpression
+    >>> from symbolica.community.tensor import Representation, TensorExpression
     >>> mink = Representation.mink(4)
     >>> metric = TensorExpression.g(mink)("mu", "nu")
     >>> flat = TensorExpression.flat(mink)("mu", "nu")
@@ -1648,7 +1648,7 @@ class TensorExpression:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import TensorExpression
+        >>> from symbolica.community.tensor import TensorExpression
         >>> generator = TensorExpression.t(8, 3)
         >>> indexed = generator("a", "i", "j")
         """
@@ -1720,7 +1720,7 @@ class TensorExpression:
         # Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.spenso import TensorExpression
+        >>> from symbolica.community.tensor import TensorExpression
         >>> # Built-in representations are registered automatically on import.
         >>> trace = E('''
         ...     gamma(bis(4,a),bis(4,b),mink(4,mu))
@@ -1743,8 +1743,8 @@ class TensorExpression:
 
         # Examples:
         ```python
-        from symbolica.community.spenso import TensorLibrary, TensorName
-        from symbolica.community.spenso import TensorExpression
+        from symbolica.community.tensor import TensorLibrary, TensorName
+        from symbolica.community.tensor import TensorExpression
         from symbolica import S, Expression
         # Get HEP library with standard tensors
         hep_lib = TensorLibrary.hep_lib()
@@ -1782,7 +1782,7 @@ class TensorExpression:
         # Examples
         ```python
         >>> from symbolica import S
-        >>> from symbolica.community.spenso import TensorExpression
+        >>> from symbolica.community.tensor import TensorExpression
         >>> # Formal dimensions are atomic; apply group-specific relations later.
         >>> Na, Nc = S("Na", "Nc")
         >>> generator = TensorExpression.t(Na, Nc)
@@ -1848,9 +1848,9 @@ class TensorExpression:
 
         # Examples:
         ```python
-        from symbolica.community.spenso import TensorName, Slot, Representation
+        from symbolica.community.tensor import TensorName, Slot, Representation
         import symbolica as sp
-        from symbolica.community.spenso import TensorExpression
+        from symbolica.community.tensor import TensorExpression
 
         T = TensorName("T")
         rep = Representation.euc(3)
@@ -1887,8 +1887,8 @@ class TensorExpression:
 
         # Examples
         ```python
-        >>> from symbolica.community.spenso import TensorExpression
-        >>> from symbolica.community.spenso import Representation, TensorName
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> from symbolica.community.tensor import Representation, TensorName
         >>> # Built-in representations are registered automatically on import.
         >>> # Re-importing the module does not require explicit re-registration.
         >>> bispinor = Representation.bis(4)
@@ -2143,7 +2143,7 @@ class TensorFunctionLibrary:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import TensorFunctionLibrary
+        >>> from symbolica.community.tensor import TensorFunctionLibrary
         >>> lib = TensorFunctionLibrary()
         """
     def register(self, function: BroadcastFunction, callback: typing.Callable[[float | complex], float | complex]) -> None:
@@ -2168,7 +2168,7 @@ class TensorLibrary:
     stored entries, excluding dimension-dependent factories.
 
     ```python
-    from symbolica.community.spenso import Tensor, TensorLibrary, TensorName, Representation
+    from symbolica.community.tensor import Tensor, TensorLibrary, TensorName, Representation
 
     lib = TensorLibrary()
     rep = Representation.euc(3)
@@ -2204,7 +2204,7 @@ class TensorLibrary:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import TensorLibrary
+        >>> from symbolica.community.tensor import TensorLibrary
         >>> lib = TensorLibrary()
         """
     @staticmethod
@@ -2222,7 +2222,7 @@ class TensorLibrary:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import TensorLibrary
+        >>> from symbolica.community.tensor import TensorLibrary
         >>> lib = TensorLibrary.construct()
         """
     def register(self, tensor: Tensor) -> None:
@@ -2240,7 +2240,7 @@ class TensorLibrary:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import Tensor, TensorLibrary, TensorName, Representation
+        >>> from symbolica.community.tensor import Tensor, TensorLibrary, TensorName, Representation
         >>> lib = TensorLibrary()
         >>> rep = Representation.euc(3)
         >>> name = TensorName("my_tensor")
@@ -2329,7 +2329,7 @@ class TensorLibrary:
         Examples
         --------
         >>> import symbolica
-        >>> from symbolica.community.spenso import TensorLibrary, TensorName
+        >>> from symbolica.community.tensor import TensorLibrary, TensorName
         >>> hep_lib = TensorLibrary.hep_lib()
         >>> gamma_tensor = hep_lib[symbolica.S("spenso::gamma")]
         >>> gamma_structure = gamma_tensor.expression()
@@ -2351,7 +2351,7 @@ class TensorLibrary:
         Examples
         --------
         >>> import symbolica
-        >>> from symbolica.community.spenso import TensorLibrary, TensorName
+        >>> from symbolica.community.tensor import TensorLibrary, TensorName
         >>> hep_lib = TensorLibrary.hep_lib_atom()
         >>> gamma_tensor = hep_lib[symbolica.S("spenso::gamma")]
         >>> gamma_structure = gamma_tensor.expression()
@@ -2374,7 +2374,7 @@ class TensorName:
 
     Examples
     --------
-    >>> from symbolica.community.spenso import TensorName, Slot, Representation
+    >>> from symbolica.community.tensor import TensorName, Slot, Representation
     >>> T = TensorName("T")
     >>> symmetric_T = TensorName("S", is_symmetric=True)
     >>> antisymmetric_T = TensorName("A", is_antisymmetric=True)
@@ -2425,7 +2425,7 @@ class TensorName:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import TensorName
+        >>> from symbolica.community.tensor import TensorName
         >>> T = TensorName("T")
         >>> g = TensorName("g", is_symmetric=True)
         >>> F = TensorName("F", is_antisymmetric=True)
@@ -2526,7 +2526,7 @@ class TensorName:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import TensorName, Slot, Representation
+        >>> from symbolica.community.tensor import TensorName, Slot, Representation
         >>> import symbolica as sp
         >>> T = TensorName("T")
         >>> rep = Representation.euc(3)
@@ -2552,7 +2552,7 @@ class TensorNetwork:
 
     Examples
     --------
-    >>> from symbolica.community.spenso import (
+    >>> from symbolica.community.tensor import (
     ...     ExecutionMode,
     ...     Representation,
     ...     Tensor,
@@ -2633,7 +2633,7 @@ class TensorNetwork:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import TensorNetwork
+        >>> from symbolica.community.tensor import TensorNetwork
         >>> one_net = TensorNetwork.one()
         >>> result = one_net.result_scalar()
         """
@@ -2659,7 +2659,7 @@ class TensorNetwork:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import TensorNetwork
+        >>> from symbolica.community.tensor import TensorNetwork
         >>> zero_net = TensorNetwork.zero()
         >>> result = zero_net.result_scalar()
         """
@@ -2744,7 +2744,7 @@ class TensorNetwork:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import TensorNetwork, ExecutionMode, TensorLibrary
+        >>> from symbolica.community.tensor import TensorNetwork, ExecutionMode, TensorLibrary
         >>> network = TensorNetwork(some_expression)
         >>> network.execute()
         >>> network.execute(n_steps=5)
@@ -2776,7 +2776,7 @@ class TensorNetwork:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import TensorNetwork, TensorLibrary
+        >>> from symbolica.community.tensor import TensorNetwork, TensorLibrary
         >>> network = TensorNetwork(tensor_expression)
         >>> network.execute()
         >>> result = network.result_tensor()
@@ -2802,7 +2802,7 @@ class TensorNetwork:
 
         Examples
         --------
-        >>> from symbolica.community.spenso import TensorNetwork
+        >>> from symbolica.community.tensor import TensorNetwork
         >>> network = TensorNetwork(scalar_expression)
         >>> network.execute()
         >>> scalar_result = network.result_scalar()
@@ -3007,7 +3007,7 @@ class TensorPattern(Expression):
     Examples
     --------
     >>> import symbolica as sp
-    >>> from symbolica.community.spenso import (
+    >>> from symbolica.community.tensor import (
     ...     PortPattern, TensorExpression, TensorName, TensorPattern,
     ... )
     >>> k_, D_, mu_, i_, j_, rest___ = sp.S(
@@ -3222,7 +3222,7 @@ def load_math_font() -> builtins.str:
     Examples
     --------
     >>> from IPython.display import HTML, display
-    >>> from symbolica.community import spenso
+    >>> from symbolica.community import tensor as spenso
     >>> display(HTML(spenso.load_math_font()))
     """
 

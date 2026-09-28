@@ -10,7 +10,7 @@ from time import process_time_ns
 
 from symbolica import E, S, T
 from symbolica.community.hep import Symbols
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     AUTO,
     AliasedTensorExpression,
     CookSettings,
@@ -219,7 +219,7 @@ class HistoricalLadder:
         ladder_vertices,
         prod,
     ):
-        from symbolica.community.spenso import TensorRule as _TensorRule
+        from symbolica.community.tensor import TensorRule as _TensorRule
 
         _vertex = TensorName("gluon_ladder_typed::vx").to_expression()
         _routing = S("gluon_ladder_typed::routing", is_scalar=True)
@@ -511,7 +511,7 @@ class FreeTrace:
         from itertools import permutations
 
         from symbolica import Expression, Replacement
-        from symbolica.community.spenso import Tensor, TensorLibrary, TensorNetwork
+        from symbolica.community.tensor import Tensor, TensorLibrary, TensorNetwork
 
         rep = Representation.mink(4)
         vectors = [
@@ -741,7 +741,7 @@ class ProductionNumerator:
         from itertools import product
 
         from symbolica import Expression, Replacement
-        from symbolica.community.spenso import Tensor, TensorLibrary, TensorNetwork
+        from symbolica.community.tensor import Tensor, TensorLibrary, TensorNetwork
 
         dimension = S("gammalooprs::dim")
         rep = Representation.mink(4)

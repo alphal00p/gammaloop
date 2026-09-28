@@ -10,7 +10,7 @@ from pathlib import Path
 
 from symbolica import E, S
 from symbolica.community import hep as fk
-from symbolica.community.spenso import ColorSimplifySettings, TensorExpression
+from symbolica.community.tensor import ColorSimplifySettings, TensorExpression
 
 source = json.loads(
     (Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json").read_text()

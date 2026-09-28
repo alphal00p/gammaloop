@@ -32,7 +32,7 @@ use crate::{
     from_py_object,
     eq,
     name = "RepresentationName",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone, PartialEq, Eq)]
 pub struct SpensoRepresentationName {
@@ -121,7 +121,7 @@ impl SpensoRepresentationName {
     from_py_object,
     eq,
     name = "TensorStructure",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone, PartialEq, Eq)]
 pub struct SpensoTensorStructure {

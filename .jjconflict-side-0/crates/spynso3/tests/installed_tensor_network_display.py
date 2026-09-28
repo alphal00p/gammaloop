@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 
 import linnet
 from symbolica import E
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     Representation,
     Tensor,
     TensorExpression,

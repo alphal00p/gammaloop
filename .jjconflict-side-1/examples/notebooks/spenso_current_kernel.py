@@ -1,4 +1,4 @@
-# Run with a combined Symbolica host exposing symbolica.community.spenso:
+# Run with a combined Symbolica host exposing symbolica.community.tensor:
 #   python -m marimo edit examples/notebooks/spenso_current_kernel.py
 # Additional packages: marimo==0.24.0, typst==0.15.0.
 # The host build lives in examples/notebooks/symbolica-host; a stock Symbolica
@@ -17,7 +17,7 @@ app = marimo.App(
 def _():
     import marimo as mo
     from symbolica import Expression
-    from symbolica.community.spenso import AUTO, trace
+    from symbolica.community.tensor import AUTO, trace
 
     return AUTO, Expression, mo, trace
 
@@ -122,7 +122,7 @@ def _():
 
     \begin{lstlisting}[language=Python,caption={A vector current constructed with \spenso{} and simplified with \idenso{}.},label={lst:spenso-current}]
     from symbolica.community.idenso import simplify_gamma, simplify_metrics
-    from symbolica.community.spenso import (
+    from symbolica.community.tensor import (
         LibraryTensor, Representation, TensorLibrary, TensorName, TensorNetwork,
     )
     lib = TensorLibrary.hep_lib_atom()
@@ -237,7 +237,7 @@ def _():
     A single gamma matrix requires no Dirac-algebra simplification.
 
     ```python
-    from symbolica.community.spenso import (
+    from symbolica.community.tensor import (
         Representation,
         TensorExpression,
         TensorLibrary,
@@ -369,7 +369,7 @@ def _(mo):
 
 @app.cell
 def _():
-    from symbolica.community.spenso import (
+    from symbolica.community.tensor import (
         Representation,
         TensorExpression,
         TensorLibrary,

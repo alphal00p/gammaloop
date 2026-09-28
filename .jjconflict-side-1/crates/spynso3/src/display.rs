@@ -62,6 +62,7 @@ const NOTEBOOK_STYLE: &str = include_str!("../typst/notebook.css");
 mod explorer;
 mod labels;
 pub(crate) mod library;
+mod mathml;
 pub(crate) mod metadata;
 pub(crate) mod network;
 
@@ -81,7 +82,7 @@ pub(crate) mod network;
     frozen,
     from_py_object,
     name = "DisplaySettings",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone, Debug, PartialEq)]
 pub struct DisplaySettings {
@@ -1097,7 +1098,8 @@ pub(crate) fn atom_to_html(
 
 fn notebook_html_fragment(document: &str) -> PyResult<String> {
     let fragment = extract_html_fragment(document).map_err(PyRuntimeError::new_err)?;
-    // Share fonts and horizontal overflow behavior for symbolic and concrete tensors.
+    let fragment = mathml::wrap_sums(&fragment);
+    // Share fonts and responsive MathML layout for symbolic and concrete tensors.
     Ok(format!(
         "<style>{NOTEBOOK_STYLE}</style><div data-spenso-math>{fragment}</div>"
     ))
@@ -1115,11 +1117,11 @@ fn notebook_html_fragment(document: &str) -> PyResult<String> {
 /// Examples
 /// --------
 /// >>> from IPython.display import HTML, display
-/// >>> from symbolica.community import spenso
+/// >>> from symbolica.community import tensor as spenso
 /// >>> display(HTML(spenso.load_math_font()))
 #[cfg_attr(
     feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.spenso")
+    gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
 #[pyfunction]
 fn load_math_font(py: Python<'_>) -> PyResult<String> {
@@ -2117,7 +2119,7 @@ pub(crate) fn format_concrete_tensor_output_rich(
 /// Format a tensor expression using compact Spenso notation.
 #[cfg_attr(
     feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.spenso")
+    gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None))]
@@ -2138,7 +2140,7 @@ fn format_tensor(
 /// Format a tensor expression as Typst math source.
 #[cfg_attr(
     feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.spenso")
+    gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None))]
@@ -2159,7 +2161,7 @@ fn to_typst(
 /// Render a tensor expression to semantic HTML through the optional Typst runtime.
 #[cfg_attr(
     feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.spenso")
+    gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None, notation_source = None))]
@@ -2177,7 +2179,7 @@ fn to_html(
 /// Render a tensor expression to an SVG string through the optional Typst runtime.
 #[cfg_attr(
     feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.spenso")
+    gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None, notation_source = None))]
@@ -2195,7 +2197,7 @@ fn to_svg(
 /// Build Symbolica's rich display wrapper for a tensor expression.
 #[cfg_attr(
     feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.spenso")
+    gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None, notation_source = None))]

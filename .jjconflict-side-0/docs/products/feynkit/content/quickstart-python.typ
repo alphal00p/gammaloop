@@ -52,6 +52,24 @@ Alternative final states are drawn separately.
 
 Model members display their defining data and expressions, rather than only their names:
 
+Particle masses and physical electric charges are symbolic expressions. The
+particle charge includes its sign and is inferred from photon interaction vertices:
+
+```python
+from symbolica.community import hep
+
+qed_model = hep.Model.qed()
+electron = qed_model.particle("e-")
+mass, charge = electron.mass, electron.electric_charge
+e = -electron.electric_charge
+assert charge == -e
+assert electron.charge == -1  # dimensionless charge in units of e
+```
+
+The charge accessor uses the normalization of minimal photon–fermion or
+photon–scalar vertices, without assuming parameter names. A neutral particle
+has zero electric charge even in a model without photon interactions.
+
 ```python
 model.vertex_rules[0]  # ordered legs, color/Lorentz structures, and coupling terms
 model.particle("scalar_0")  # quantum numbers, mass, width, and antiparticle
@@ -88,7 +106,7 @@ assert charm.y_charge == E("1/3")
 assert charm.y_charge_right == E("4/3")
 assert charm.weak_isospin == E("1/2")
 assert charm.weak_isospin_right == E("0")
-assert charm.mass_expression == S("UFO::MC")
+assert charm.mass == S("UFO::MC")
 ```
 
 Hypercharge follows $Q = T_3 + Y/2$, as in the
@@ -107,7 +125,7 @@ attribute. Use fraction strings in those attributes to avoid rounding.
 Floating-point UFO attributes retain their decimal values as rationals; the
 adapter does not guess a small-denominator fraction from a rounded number.
 
-`mass_expression` returns exact zero for the UFO `ZERO` parameter and a symbol
+`mass` returns exact zero for the UFO `ZERO` parameter and a symbol
 for every other mass parameter, including parameters whose current value is
 zero. The shipped SM values match `restrict_default.json`: electron, muon,
 and charm masses and their Yukawa inputs are zero, and the CKM matrix is

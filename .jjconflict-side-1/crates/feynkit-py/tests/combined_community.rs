@@ -128,7 +128,7 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
             }
 
             let feynkit = PyModule::import(py, "symbolica.community.feynkit")?;
-            let spenso = PyModule::import(py, "symbolica.community.spenso")?;
+            let spenso = PyModule::import(py, "symbolica.community.tensor")?;
             let model = Model::from_json(MODEL_JSON).expect("fixture is a valid model");
             let tensor_numerator = Atom::parse(
                 "k(spenso::mink(D,mu))*k(spenso::mink(D,nu))",

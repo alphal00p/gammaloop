@@ -25,13 +25,13 @@ feature is enabled. Python bindings belong to `spynso3`.
 == Python community module
 
 #boundary("Part of Symbolica community", [
-  Import `TensorExpression` and algebra settings from `symbolica.community.spenso`.
+  Import `TensorExpression` and algebra settings from `symbolica.community.tensor`.
   The `spynso3` Cargo package supplies the unified Python bindings for Spenso and Idenso;
   Idenso remains the Rust algebra implementation. There is no separate `idenso` Python module.
 ])
 
 Install a Symbolica community build with the unified `spynso3` bindings, then verify it with
-`python -c "import symbolica.community.spenso"`. There is no `pip install idenso` fallback.
+`python -c "import symbolica.community.tensor"`. There is no `pip install idenso` fallback.
 Source embedders add `spynso3` to their
 #link("https://github.com/symbolica-dev/symbolica-community")[symbolica-community] assembly and
 register `SpensoModule` through `SymbolicaCommunityModule`. Building the Rust crate alone does
@@ -50,7 +50,7 @@ operations cover:
 - conjugation: `dirac_adjoint`.
 
 ```python
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 minkowski = Representation.mink(4)
 mu = minkowski("mu")

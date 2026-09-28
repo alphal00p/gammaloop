@@ -9,7 +9,7 @@ from pathlib import Path
 
 from symbolica import E, S
 from symbolica.community import hep as fk
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     GammaSimplifySettings,
     TensorExpression,
     TensorName,

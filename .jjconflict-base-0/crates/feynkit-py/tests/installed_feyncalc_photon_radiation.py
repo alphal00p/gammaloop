@@ -9,7 +9,7 @@ https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/Ga-QQbarGl
 import numpy as np
 from symbolica import E, S, Symbol
 from symbolica.community import hep
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     ColorSimplifySettings,
     CookSettings,
     GammaSimplifySettings,

@@ -348,7 +348,7 @@ pub(crate) fn model_expression_html(
     py: Python<'_>,
     expression: symbolica::api::python::PythonExpression,
 ) -> PyResult<String> {
-    py.import("symbolica.community.spenso")?
+    py.import("symbolica.community.tensor")?
         .getattr("to_html")?
         .call1((expression,))?
         .extract()

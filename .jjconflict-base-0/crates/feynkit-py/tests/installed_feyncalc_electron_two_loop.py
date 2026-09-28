@@ -12,7 +12,7 @@ from pathlib import Path
 from symbolica import E, Replacement, S
 from symbolica.community import hep
 from symbolica.community.hep import oneloop
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.tensor import TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 d, s, mass_squared, uv_mass, eps, log_mass, log_4pi, flavors, coupling = S(

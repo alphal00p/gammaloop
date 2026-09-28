@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from symbolica import E
-from symbolica.community import spenso as sp
+from symbolica.community import tensor as sp
 
 ROOT = Path(__file__).resolve().parents[3]
 STUB = ROOT / "docs/api/python/spynso3.pyi"

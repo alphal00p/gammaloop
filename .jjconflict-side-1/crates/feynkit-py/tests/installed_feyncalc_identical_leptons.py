@@ -13,7 +13,7 @@ from pathlib import Path
 
 from symbolica import E, Expression, S
 from symbolica.community import hep as fk
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.tensor import CookSettings, TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 P = S("gammalooprs::P")

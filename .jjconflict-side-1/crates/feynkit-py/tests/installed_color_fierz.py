@@ -4,13 +4,13 @@ Reference: https://feyncalc.github.io/FeynCalcBook/SUNSimplify.html
 """
 
 from symbolica import E
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     AUTO,
     ColorSimplifySettings,
     Representation,
     TensorExpression,
 )
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     trace as tensor_trace,
 )
 

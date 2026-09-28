@@ -10,7 +10,7 @@ guide for the object boundaries and execution sequence that those signatures do 
 == Availability and version boundary
 
 #boundary("A Symbolica community module", [
-  Import Spenso as `symbolica.community.spenso`; there is no standalone `spenso` wheel. The
+  Import Spenso as `symbolica.community.tensor`; there is no standalone `spenso` wheel. The
   published Symbolica wheel bundles this community module. Its Symbolica version determines
   which Spenso API it contains. A source checkout or generated `.pyi` file does not add the
   native module to an existing Python environment.
@@ -21,7 +21,7 @@ Install the current assembly and check the environment before building a workflo
 // docs-example: syntax
 ```sh
 python -m pip install --upgrade symbolica
-python -c "import symbolica.community.spenso as spenso; print(spenso.__name__)"
+python -c "import symbolica.community.tensor as spenso; print(spenso.__name__)"
 ```
 
 Source embedders can build a custom
@@ -31,7 +31,7 @@ compatibility fact than the version of an unrelated local Rust checkout.
 
 Spenso, Idenso, and Symbolica core share one native library, one Symbolica kernel, and one
 Python `Expression` type. The community assembly registers `SpensoModule` as
-`symbolica.community.spenso_native`; its public wrapper imports the native exports and calls
+`symbolica.community.tensor_native`; its public wrapper imports the native exports and calls
 the host-provided `initialize_module`. That initializer must remain in the export list.
 Do not link Spynso into `gammaloop._gammaloop` or distribute it as a second native extension.
 
@@ -158,7 +158,7 @@ For a fundamental color identity, pair the fundamental space with its dual:
 // docs-example: compile
 ```python
 from symbolica import E
-from symbolica.community.spenso import Representation, TensorExpression
+from symbolica.community.tensor import Representation, TensorExpression
 
 fund = Representation.cof(3)
 identity = TensorExpression.g(fund, fund.dual())
@@ -178,7 +178,7 @@ row-major order, independent of the abstract index labels used in a contraction.
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import Representation, TensorName
+from symbolica.community.tensor import Representation, TensorName
 
 spinor = Representation.bis(4)
 J = TensorName("J")(spinor)
@@ -208,7 +208,7 @@ native module.
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import Representation, Tensor, TensorName
+from symbolica.community.tensor import Representation, Tensor, TensorName
 
 rep = Representation.euc(2)
 i = rep("i")
@@ -340,7 +340,7 @@ they are not scalar arguments and do not add fields to tensor-library keys.
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import _, TensorExpression
+from symbolica.community.tensor import _, TensorExpression
 
 gamma = TensorExpression.gamma(4)
 gamma_ijmu = gamma("i", "j", "mu")
@@ -362,7 +362,7 @@ Patterns retain ordinary Symbolica wildcard behavior, including wildcard dimensi
 // docs-example: compile
 ```python
 from symbolica import S
-from symbolica.community.spenso import TensorPattern
+from symbolica.community.tensor import TensorPattern
 
 D_, i_, j_, mu_ = S("D_", "i_", "j_", "mu_")
 gamma_pattern = TensorPattern.gamma(D_, i_, j_, mu_)
@@ -387,7 +387,7 @@ do not need to find and exchange endpoints separately in each channel.
 // docs-example: compile
 ```python
 from symbolica import E
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.tensor import TensorExpression
 
 gamma = TensorExpression.gamma(4)
 direct = gamma("i", "j", "mu").to_expression() * gamma("k", "l", "mu").to_expression()
@@ -442,7 +442,7 @@ the expression with the same name and compatible slots, then execute and request
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     ExecutionMode,
     Representation,
     Tensor,
@@ -575,7 +575,7 @@ Tensor names accept backend-specific head formatting through `print`:
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import Representation, TensorName
+from symbolica.community.tensor import Representation, TensorName
 
 Jbar = TensorName(
     "Jbar",
@@ -601,7 +601,7 @@ component coordinates remain independent of abstract-index styles.
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import DisplaySettings, TensorExpression
+from symbolica.community.tensor import DisplaySettings, TensorExpression
 
 trace = TensorExpression.gamma5(4).trace()
 source = trace.to_typst(
@@ -628,7 +628,7 @@ unevaluated. The result remains a `TensorExpression` with its two bispinor ports
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     GammaSimplifySettings, Representation, TensorExpression, TensorName,
 )
 
@@ -650,7 +650,7 @@ pip install 'gammaloop[typst-display]'
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import DisplaySettings, TensorExpression
+from symbolica.community.tensor import DisplaySettings, TensorExpression
 
 trace = TensorExpression.gamma5(4).trace()
 compact = DisplaySettings.schoonschip()

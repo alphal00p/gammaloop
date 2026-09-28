@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.tensor import TensorExpression
 
 fk = importlib.import_module(
     f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"

@@ -14,7 +14,7 @@ python -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install symbolica
-python -c "import symbolica.community.spenso"
+python -c "import symbolica.community.tensor"
 ```
 
 There is no standalone `idenso` Python wheel. Import the community module before constructing
@@ -27,7 +27,7 @@ Save this as `idenso_quickstart.py`:
 
 // docs-example: compile idenso-community-quickstart
 ```python
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 rep = Representation.mink(4)
 mu, nu = rep("mu"), rep("nu")

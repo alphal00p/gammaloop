@@ -31,7 +31,7 @@ use symbolica::api::python::ConvertibleToExpression;
 #[pyclass(
     from_py_object,
     name = "BroadcastFunction",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 pub struct SpensoBroadcastFunction {

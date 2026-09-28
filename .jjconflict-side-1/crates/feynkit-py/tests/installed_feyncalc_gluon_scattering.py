@@ -8,7 +8,7 @@ The gallery uses fixed 1/2 incoming spin factors; dimensional averages use 1/(D-
 import numpy as np
 from symbolica import E, S, Symbol
 from symbolica.community import hep
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     ColorSimplifySettings,
     CookSettings,
     TensorExpression,

@@ -130,7 +130,7 @@ mod tests {
                             .unwrap()
                             .extract::<String>()
                             .unwrap(),
-                        "symbolica.community.spenso",
+                        "symbolica.community.tensor",
                         "wrong public module for {name}"
                     );
                 }

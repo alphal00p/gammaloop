@@ -16,25 +16,25 @@ use pyo3_stub_gen::create_exception;
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
 
 create_exception!(
-    symbolica.community.spenso,
+    symbolica.community.tensor,
     CanonicalizationError,
     PyValueError,
     "Raised when dummy-index canonicalization fails."
 );
 create_exception!(
-    symbolica.community.spenso,
+    symbolica.community.tensor,
     CookingError,
     PyTypeError,
     "Raised when a symbolic function or representation index cannot be cooked."
 );
 create_exception!(
-    symbolica.community.spenso,
+    symbolica.community.tensor,
     DiracAdjointError,
     PyValueError,
     "Raised when a Dirac adjoint cannot be constructed consistently."
 );
 create_exception!(
-    symbolica.community.spenso,
+    symbolica.community.tensor,
     NetworkToolingError,
     PyValueError,
     "Raised when a symbolic tensor network cannot be parsed or evaluated."
@@ -51,7 +51,7 @@ create_exception!(
     from_py_object,
     eq,
     eq_int,
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PyCookMode {
@@ -85,7 +85,7 @@ impl From<RustCookMode> for PyCookMode {
     frozen,
     name = "CookTagFilter",
     from_py_object,
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 pub(crate) struct PyCookTagFilter {
@@ -146,7 +146,7 @@ impl PyCookTagFilter {
     frozen,
     name = "CookSourceFilter",
     from_py_object,
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 pub(crate) struct PyCookSourceFilter {
@@ -224,7 +224,7 @@ impl PyCookSourceFilter {
     frozen,
     name = "CookSettings",
     from_py_object,
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 pub(crate) struct PyCookSettings {

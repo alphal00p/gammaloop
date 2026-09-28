@@ -207,7 +207,7 @@ mod tests {
     #[test]
     fn public_overloads_keep_runtime_defaults_and_python_type_names() {
         let info = crate::stub_info().unwrap();
-        let module = &info.modules["symbolica.community.spenso"];
+        let module = &info.modules["symbolica.community.tensor"];
         let library = module
             .class
             .values()

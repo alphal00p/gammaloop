@@ -103,7 +103,7 @@ rust_components = [
   { id = "spenso-hep-lib", package = "spenso-hep-lib", kind = "domain-library", version_source = "crates/spenso-hep-lib/Cargo.toml", features = ["native"] },
 ]
 python_components = [
-  { id = "spynso3", package = "spynso3", kind = "symbolica-community-module", version_source = "crates/spynso3/Cargo.toml", module = "symbolica.community.spenso", features = ["python_stubgen"] },
+  { id = "spynso3", package = "spynso3", kind = "symbolica-community-module", version_source = "crates/spynso3/Cargo.toml", module = "symbolica.community.tensor", features = ["python_stubgen"] },
 ]
 
 [[product]]
@@ -132,7 +132,7 @@ rust_components = [
   { id = "idenso", package = "idenso", kind = "library", version_source = "crates/idenso/Cargo.toml", features = ["native", "bincode", "reference-cases"] },
 ]
 python_components = [
-  { id = "spynso3", package = "spynso3", kind = "symbolica-community-module", version_source = "crates/spynso3/Cargo.toml", module = "symbolica.community.spenso", features = ["python_stubgen"] },
+  { id = "spynso3", package = "spynso3", kind = "symbolica-community-module", version_source = "crates/spynso3/Cargo.toml", module = "symbolica.community.tensor", features = ["python_stubgen"] },
 ]
 
 [[product]]
@@ -156,7 +156,7 @@ rust_components = [
   { id = "vakint", package = "vakint", kind = "library", version_source = "crates/vakint/Cargo.toml" },
 ]
 python_components = [
-  { id = "vakint-community", package = "vakint", kind = "symbolica-community-module", version_source = "crates/vakint/Cargo.toml", module = "symbolica.community.vakint", features = ["symbolica_community_module", "python_stubgen"] },
+  { id = "vakint-community", package = "vakint", kind = "symbolica-community-module", version_source = "crates/vakint/Cargo.toml", module = "symbolica.community.hep.vakint", features = ["symbolica_community_module", "python_stubgen"] },
 ]
 
 [[product]]

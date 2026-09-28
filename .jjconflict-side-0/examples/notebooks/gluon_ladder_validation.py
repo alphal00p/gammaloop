@@ -10,7 +10,7 @@ from itertools import product
 
 from fermion_ladder_validation import FermionRingComponents
 from symbolica import E, Expression, Replacement
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     Representation,
     Tensor,
     TensorExpression,

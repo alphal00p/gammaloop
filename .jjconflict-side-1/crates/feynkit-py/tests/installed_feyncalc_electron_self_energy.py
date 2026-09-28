@@ -14,7 +14,7 @@ from pathlib import Path
 from symbolica import E, Replacement, S, Symbol
 from symbolica.community import hep
 from symbolica.community.hep import oneloop
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.tensor import TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 D, eps, xi, s = S("qed_full::D", "qed_full::eps", "qed_full::xi", "qed_full::s")

@@ -6,7 +6,7 @@ from pathlib import Path
 from symbolica import E, S, Symbol
 from symbolica.community import hep
 from symbolica.community.hep import oneloop
-from symbolica.community.spenso import ColorSimplifySettings, TensorExpression
+from symbolica.community.tensor import ColorSimplifySettings, TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 top, higgs = (model.particle_by_pdg(pdg) for pdg in (6, 25))

@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 import typst
 from symbolica import E, S
 from symbolica.community.hep import Model, UfoLoader
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 
 def visible_math(html: str) -> str:

@@ -100,6 +100,14 @@ pub enum ModelValidationError {
 /// Errors returned by model and parameter-card APIs.
 #[derive(Debug, Error)]
 pub enum ModelError {
+    #[error(
+        "model '{model}' has no supported minimal photon–fermion or photon–scalar vertex from which to infer electric charge"
+    )]
+    MissingElectricCharge { model: String },
+    #[error(
+        "model '{model}' has inconsistent electric charge normalizations in its photon vertices"
+    )]
+    InconsistentElectricCharge { model: String },
     #[error("could not read model data from '{}': {source}", path.display())]
     Read {
         path: PathBuf,

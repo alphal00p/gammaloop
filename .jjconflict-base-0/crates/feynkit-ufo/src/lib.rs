@@ -5,7 +5,11 @@
 
 #![forbid(unsafe_code)]
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeMap,
+    ffi::CString,
+    path::{Path, PathBuf},
+};
 
 use feynkit_model::{Model, ModelError, ParameterCard};
 use pyo3::{
@@ -152,6 +156,26 @@ fn load_model(
     let input_model_path = path.to_str().ok_or_else(|| UfoLoadError::NonUtf8Path {
         path: path.to_path_buf(),
     })?;
+    // The Python loader creates symbols while parsing parameter expressions.
+    // Declare their printers first, before even a forward reference can do so.
+    let label_source = CString::new(include_str!("parameter_labels.py")).unwrap();
+    let labels = (|| -> Result<Vec<(String, Option<String>)>, PyErr> {
+        PyModule::from_code(
+            py,
+            &label_source,
+            c"parameter_labels.py",
+            c"_parameter_labels",
+        )?
+        .getattr("parameter_labels")?
+        .call1((input_model_path,))?
+        .extract()
+    })()
+    .map_err(|source| UfoLoadError::Load { source })?;
+    let labels: BTreeMap<_, _> = labels.into_iter().collect();
+    for (name, texname) in &labels {
+        Model::register_parameter_symbol(name, texname.as_deref())
+            .map_err(|source| UfoLoadError::ModelJson { source })?;
+    }
     let commands = PyModule::import(py, "ufo_model_loader.commands")
         .map_err(|source| UfoLoadError::Import { source })?;
     let loader = commands
@@ -239,56 +263,42 @@ fn load_model(
             }
         }
         metadata.set_item("particles", particles)?;
-        let parameters = PyDict::new(py);
-        if module.hasattr("all_parameters")? {
-            for parameter in module.getattr("all_parameters")?.try_iter()? {
-                let parameter = parameter?;
-                if parameter.hasattr("texname")? {
-                    parameters
-                        .set_item(parameter.getattr("name")?, parameter.getattr("texname")?)?;
-                }
-            }
-        }
-        metadata.set_item("parameter_texnames", parameters)?;
         py.import("json")?
             .call_method1("dumps", (metadata,))?
             .extract()
             .map(Some)
     })()
     .map_err(|source| UfoLoadError::Output { source })?;
-    if let Some(metadata) = metadata {
-        let enrich = || -> Result<String, serde_json::Error> {
-            let mut serialized: serde_json::Value = serde_json::from_str(&model_json)?;
-            let metadata: serde_json::Value = serde_json::from_str(&metadata)?;
-            if let Some(declaration) = metadata.get("covariant_cut_multiplets") {
-                serialized["covariant_cut_multiplets"] = declaration.clone();
-            }
-            if let Some(particles) = serialized["particles"].as_array_mut() {
-                for particle in particles {
-                    if let Some(numbers) =
-                        metadata["particles"].get(particle["name"].as_str().unwrap_or_default())
-                    {
-                        for field in ["charge", "y_charge", "y_charge_right"] {
-                            particle[field] = numbers[field].clone();
-                        }
+    let enrich = || -> Result<String, serde_json::Error> {
+        let mut serialized: serde_json::Value = serde_json::from_str(&model_json)?;
+        let metadata: serde_json::Value =
+            serde_json::from_str(metadata.as_deref().unwrap_or("{}"))?;
+        if let Some(declaration) = metadata.get("covariant_cut_multiplets") {
+            serialized["covariant_cut_multiplets"] = declaration.clone();
+        }
+        if let Some(particles) = serialized["particles"].as_array_mut() {
+            for particle in particles {
+                if let Some(numbers) =
+                    metadata["particles"].get(particle["name"].as_str().unwrap_or_default())
+                {
+                    for field in ["charge", "y_charge", "y_charge_right"] {
+                        particle[field] = numbers[field].clone();
                     }
                 }
             }
-            if let Some(parameters) = serialized["parameters"].as_array_mut() {
-                for parameter in parameters {
-                    if let Some(texname) = metadata["parameter_texnames"]
-                        .get(parameter["name"].as_str().unwrap_or_default())
-                    {
-                        parameter["texname"] = texname.clone();
-                    }
+        }
+        if let Some(parameters) = serialized["parameters"].as_array_mut() {
+            for parameter in parameters {
+                if let Some(texname) = labels.get(parameter["name"].as_str().unwrap_or_default()) {
+                    parameter["texname"] = serde_json::to_value(texname)?;
                 }
             }
-            serde_json::to_string(&serialized)
-        };
-        model_json = enrich().map_err(|source| UfoLoadError::ModelJson {
-            source: source.into(),
-        })?;
-    }
+        }
+        serde_json::to_string(&serialized)
+    };
+    model_json = enrich().map_err(|source| UfoLoadError::ModelJson {
+        source: source.into(),
+    })?;
 
     // Deserialize into the standalone Rust types.
     let model =

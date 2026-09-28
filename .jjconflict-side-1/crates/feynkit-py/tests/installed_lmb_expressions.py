@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from symbolica import E, Expression, S
-from symbolica.community.spenso import Representation, TensorExpression, TensorName, dot
+from symbolica.community.tensor import Representation, TensorExpression, TensorName, dot
 
 fk = importlib.import_module(
     f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
@@ -196,7 +196,7 @@ for dimension in (4, S("lmb_test::D")):
 
 for edge in diagram.edges:
     assert edge.particle.name == edge.particle_name
-    assert edge.particle.mass_expression == 0
+    assert edge.particle.mass == 0
     assert edge.particle.width_parameter == "ZERO"
     if edge.is_external:
         assert edge.propagator is None
@@ -254,12 +254,12 @@ massive = next(
     )
 )
 edge = massive.internal_edges[0]
-assert edge.particle.mass_expression == model.particle("scalar_1").mass_expression
-assert edge.particle.mass_expression != 0
+assert edge.particle.mass == model.particle("scalar_1").mass
+assert edge.particle.mass != 0
 assert edge.particle.width_parameter == "width_scalar_1"
 assert edge.denominator_expression() == massive.denominator_expression()
 assert (
-    edge.particle.mass_expression
+    edge.particle.mass
     in edge.denominator_expression().to_expression().get_all_symbols()
 )
 a, b, c, quadratic = S(
@@ -273,7 +273,7 @@ explicit = (
 momentum = edge.momentum_expression(dimension=4)
 assert (
     explicit
-    == (dot(momentum, momentum) - edge.particle.mass_expression**2).to_expression()
+    == (dot(momentum, momentum) - edge.particle.mass**2).to_expression()
 )
 denominator = edge.denominator_expression(in_lmb=True)
 del massive

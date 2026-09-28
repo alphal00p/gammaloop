@@ -49,7 +49,7 @@ fn register_spenso<'py>(core: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyMo
     core.add_submodule(&native)?;
     py.import("sys")?
         .getattr("modules")?
-        .set_item("symbolica.community.spenso_native", &native)?;
+        .set_item("symbolica.community.tensor_native", &native)?;
     Ok(native)
 }
 
@@ -57,7 +57,7 @@ fn import_spenso_wrapper<'py>(
     py: Python<'py>,
     community: &Bound<'py, PyModule>,
 ) -> PyResult<Bound<'py, PyModule>> {
-    let name = "symbolica.community.spenso";
+    let name = "symbolica.community.tensor";
     let wrapper = PyModule::new(py, name)?;
     wrapper.setattr("__package__", name)?;
     wrapper.setattr("__path__", PyList::empty(py))?;

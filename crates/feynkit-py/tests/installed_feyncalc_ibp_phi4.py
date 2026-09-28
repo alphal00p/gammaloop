@@ -10,7 +10,7 @@ from math import prod
 
 from symbolica import E, Expression, Matrix, Replacement, S, Symbol
 from symbolica.community import hep
-from symbolica.community.spenso import TensorExpression, TensorName
+from symbolica.community.tensor import TensorExpression, TensorName
 
 d, mass_squared, p_squared, eps, coupling = S(
     "ibp_phi4::d",

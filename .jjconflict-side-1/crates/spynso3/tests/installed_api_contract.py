@@ -3,7 +3,7 @@
 import unittest
 
 from symbolica import E
-from symbolica.community import spenso as sp
+from symbolica.community import tensor as sp
 
 
 class FactorizedContractionTests(unittest.TestCase):

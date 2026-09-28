@@ -6,7 +6,7 @@ from time import process_time_ns
 
 from symbolica.community.hep import Symbols
 from symbolica import E, Replacement, S, T
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     AUTO,
     Representation,
     TensorExpression,

@@ -48,7 +48,7 @@ from notebooks.ludy import (
     scalar_printer,
 )
 from symbolica import E, Expression, S
-from symbolica.community.spenso import Representation, TensorName, dot
+from symbolica.community.tensor import Representation, TensorName, dot
 
 # These are the explicit dependencies of the four pinned input cells.
 ns = {

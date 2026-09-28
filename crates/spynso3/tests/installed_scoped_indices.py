@@ -5,7 +5,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 from symbolica import E, S
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 
 class ScopedIndicesTests(unittest.TestCase):

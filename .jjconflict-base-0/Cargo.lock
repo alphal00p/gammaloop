@@ -6319,6 +6319,7 @@ dependencies = [
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
+ "roxmltree 0.21.1",
  "spenso",
  "spenso-hep-lib",
  "spenso-macros",

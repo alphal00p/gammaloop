@@ -1,7 +1,7 @@
 """Typed metrics support explicit dual representations and preserve index order."""
 
 from symbolica import E, S
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     PortPattern,
     Representation,
     TensorExpression,

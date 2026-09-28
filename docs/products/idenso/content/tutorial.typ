@@ -13,13 +13,13 @@ pass and extend it into an algebra pipeline.
 
 == Prerequisites
 
-Idenso algebra is exposed by `symbolica.community.spenso`; it is not installed by `pip install idenso`.
+Idenso algebra is exposed by `symbolica.community.tensor`; it is not installed by `pip install idenso`.
 Install a Symbolica community build with the unified `spynso3` bindings, then verify the environment:
 
 // docs-example: syntax
 ```sh
 python -m pip install --upgrade symbolica
-python -c "import symbolica.community.spenso"
+python -c "import symbolica.community.tensor"
 ```
 
 If that fails, check the installed Symbolica version before continuing. Generating a `.pyi`
@@ -32,7 +32,7 @@ Save the following as `metric_first.py`:
 
 // docs-example: compile idenso-controlled-identity
 ```python
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 rep = Representation.mink(4)
 mu = rep("mu")
@@ -71,7 +71,7 @@ version; inspect the expression structure instead of comparing exact text.
 ])
 
 #callout("Import before constructing expressions", [
-  Importing `symbolica.community.spenso` registers Idenso's representation and tensor symbols.
+  Importing `symbolica.community.tensor` registers Idenso's representation and tensor symbols.
   Construct the Spenso-compatible expression after that import so Idenso's matchers see the
   intended slots and tensor names.
 ])
@@ -89,7 +89,7 @@ Keep transformations observable while developing:
 
 == Troubleshooting and next steps
 
-- `ModuleNotFoundError` for `symbolica.community.spenso` means the installed Symbolica build
+- `ModuleNotFoundError` for `symbolica.community.tensor` means the installed Symbolica build
   does not include the native module; a `.pyi` type stub or source checkout alone is not enough.
 - If the metric remains unchanged, construct its slots with the same `Representation` and
   abstract index objects as the vector. Plain Symbolica functions do not automatically carry

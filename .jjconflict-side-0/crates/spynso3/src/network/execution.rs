@@ -14,7 +14,7 @@ use pyo3_stub_gen_derive::remove_gen_stub;
     frozen,
     from_py_object,
     name = "ExecutionStatus",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 pub(crate) struct ExecutionStatus {

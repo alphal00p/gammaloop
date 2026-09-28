@@ -1,7 +1,7 @@
 """Scalar weights in compact color words reuse Symbolica conjugation."""
 
 from symbolica import E, S
-from symbolica.community.spenso import Representation, TensorExpression, _, chain, trace
+from symbolica.community.tensor import Representation, TensorExpression, _, chain, trace
 
 z, w, form_factor = S("color_weight_z", "color_weight_w", "color_form_factor")
 coefficients = (

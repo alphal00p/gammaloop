@@ -114,7 +114,7 @@ impl Recipe {
             "Representation, TensorName"
         };
         let access = format!(
-            "from symbolica import E, S\nfrom symbolica.community.spenso import {imports}\n\nkey = {constructor}\ntensor = library[key]"
+            "from symbolica import E, S\nfrom symbolica.community.tensor import {imports}\n\nkey = {constructor}\ntensor = library[key]"
         );
         let labels = indices
             .iter()

@@ -1070,8 +1070,8 @@ def run(value: str, strict: bool = False) -> str:
         let components = [
             ("gammaloop-python", "gammaloop._gammaloop"),
             ("linnet-python", "linnet"),
-            ("spynso3", "symbolica.community.spenso"),
-            ("vakint-community", "symbolica.community.vakint"),
+            ("spynso3", "symbolica.community.tensor"),
+            ("vakint-community", "symbolica.community.hep.vakint"),
         ];
         let mut catalogs = BTreeMap::new();
         for (component, module) in components {

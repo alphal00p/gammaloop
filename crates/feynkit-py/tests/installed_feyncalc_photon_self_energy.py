@@ -12,7 +12,7 @@ from pathlib import Path
 from symbolica import E, S
 from symbolica.community import hep as fk
 from symbolica.community.hep import oneloop
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.tensor import TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 generated = model.process([22], [22], vertex_allow=["V_98"]).generate_diagrams(

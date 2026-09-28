@@ -1591,7 +1591,7 @@ def run(value: int) -> int:
             component_title: "Spenso and Idenso Python".to_owned(),
             version: "0.1.0".to_owned(),
             language: ApiLanguage::Python,
-            module: Some("symbolica.community.spenso".to_owned()),
+            module: Some("symbolica.community.tensor".to_owned()),
             features: vec![],
         };
         let catalog = export_catalog(

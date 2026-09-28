@@ -30,7 +30,7 @@ each factor with a distinct header first, while leaving its external indices unt
 // docs-example: compile idenso-dummy-namespaces
 ```python
 import symbolica as sp
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     Representation,
     TensorExpression,
     TensorName,

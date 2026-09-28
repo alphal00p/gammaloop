@@ -48,8 +48,8 @@ def _(mo):
 def _():
     import linnet as lp
     import symbolica as sy
-    from symbolica.community import spenso
-    from symbolica.community.spenso import (
+    from symbolica.community import tensor as spenso
+    from symbolica.community.tensor import (
         AUTO,
         DisplaySettings,
         Representation,

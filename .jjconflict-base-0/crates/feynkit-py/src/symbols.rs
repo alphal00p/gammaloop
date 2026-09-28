@@ -16,7 +16,7 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 /// >>> from symbolica.community import hep
 /// >>> P = hep.Symbols.external_momentum
 /// >>> incoming = [P(0), P(1)]
-/// >>> mass = hep.Model.standard_model().particle("e-").mass_expression
+/// >>> mass = hep.Model.standard_model().particle("e-").mass
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(name = "Symbols", module = "symbolica.community.feynkit", frozen)]
 pub struct PySymbols;

@@ -1358,7 +1358,7 @@ this tensor; no separate reduction API is needed:
 // docs-example: compile
 ```python
 from symbolica import S
-from symbolica.community.spenso import Representation, TensorExpression
+from symbolica.community.tensor import Representation, TensorExpression
 
 spin = Representation.bis(4)
 i, j, k, mu = S("c_example::i", "c_example::j", "c_example::k", "c_example::mu")

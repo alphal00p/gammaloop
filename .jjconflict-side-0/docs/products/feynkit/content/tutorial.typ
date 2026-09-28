@@ -274,7 +274,7 @@ Each edge exposes its model particle and its instantiated momentum and denominat
 // docs-example: compile
 ```python
 edge = diagram.internal_edges[0]
-mass = edge.particle.mass_expression
+mass = edge.particle.mass
 width_parameter = edge.particle.width_parameter
 momentum = edge.momentum_expression(dimension=4, in_lmb=True)
 signature = edge.momentum_signature()
@@ -339,7 +339,7 @@ already expressed in the basis, preserving indexed and compact vector syntax.
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import TensorName
+from symbolica.community.tensor import TensorName
 
 # For a one-loop, two-point graph:
 K = TensorName.vector("example::K")

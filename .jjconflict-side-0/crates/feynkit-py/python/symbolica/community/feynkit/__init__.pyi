@@ -12,7 +12,7 @@ import symbolica.core
 import types
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.community.spenso import Slot, TensorExpression, TensorName
+from symbolica.community.tensor import Slot, TensorExpression, TensorName
 from symbolica.core import Expression
 
 @typing.final
@@ -1619,7 +1619,7 @@ class DiagramEdge:
         r"""
         The model particle, including symbolic mass, width parameter, spin and charge.
 
-        >>> edge.particle.mass_expression
+        >>> edge.particle.mass
         >>> edge.particle.width_parameter
 
         Examples
@@ -6975,14 +6975,16 @@ class Parameter:
     def symbol(self) -> Expression:
         r"""
         Return the symbolic reference used by this model's expressions.
-        This preserves the parameter or function identity without substituting
-        its defining expression or numerical value.
+        TeX and Typst output use the parameter's ``texname``. Plain output keeps
+        its symbolic name; no defining expression or numerical value is substituted.
 
         Examples
         --------
         >>> from symbolica.community import hep
         >>> model = hep.Model.standard_model()
         >>> reference = model.parameter("ee").symbol
+        >>> mass = model.parameter("Me").symbol
+        >>> assert "m_e" in (mass**2).to_latex()
         """
     @property
     def name(self) -> builtins.str:
@@ -7410,7 +7412,7 @@ class Particle:
         >>> width = model.parameter(particle.width_parameter)
         """
     @property
-    def mass_expression(self) -> Expression:
+    def mass(self) -> Expression:
         r"""
         Exact symbolic mass, with the UFO ZERO parameter represented as zero.
         Other parameters remain symbolic, even when their current value is zero.
@@ -7419,7 +7421,32 @@ class Particle:
         --------
         Using the setup in the ``Particle`` class example:
 
-        >>> model.particle("c").mass_expression
+        >>> model.particle("c").mass
+        """
+    @property
+    def electric_charge(self) -> Expression:
+        r"""
+        Signed symbolic electric charge Q e, including the model's coupling.
+        An electron has charge ``-e`` and a positron ``+e``. Neutral particles
+        return exact zero. Use ``charge`` for the dimensionless charge Q.
+        The unit charge is inferred from minimal photon (PDG 22) interactions
+        with fermions or scalars, including their Lorentz normalization; no
+        parameter name is assumed. Use ``-electron.electric_charge`` for positive e.
+
+        Examples
+        --------
+        >>> from symbolica.community import hep
+        >>> qed_model = hep.Model.qed()
+        >>> electron = qed_model.particle("e-")
+        >>> mass, charge = electron.mass, electron.electric_charge
+        >>> assert electron.antiparticle.electric_charge == -charge
+        >>> assert qed_model.particle("a").electric_charge == 0
+
+        Raises
+        ------
+        ModelError
+            If a charged particle's model has no supported minimal photon vertex,
+            or its photon vertices imply inconsistent unit charges.
         """
     @property
     def charge(self) -> Expression:
@@ -10254,7 +10281,7 @@ class Symbols:
     >>> from symbolica.community import hep
     >>> P = hep.Symbols.external_momentum
     >>> incoming = [P(0), P(1)]
-    >>> mass = hep.Model.standard_model().particle("e-").mass_expression
+    >>> mass = hep.Model.standard_model().particle("e-").mass
     """
     external_momentum: typing.ClassVar[Expression]
     r"""

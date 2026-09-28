@@ -10,7 +10,7 @@ import numpy as np
 from symbolica import E, Matrix, Replacement, S, Symbol
 from symbolica.community import hep
 from symbolica.community.hep import oneloop
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.tensor import TensorExpression
 
 model = hep.Model.standard_model()
 dimension, transfer, mass, charge, mu = S(

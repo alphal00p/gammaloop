@@ -10137,7 +10137,7 @@ mod tests {
             (None, None),
         );
 
-        assert_eq!(module, "symbolica.community.spenso");
+        assert_eq!(module, "symbolica.community.tensor");
         assert_ne!(module, catalog.component.package);
         assert_eq!(item.required_features.as_slice(), ["python_stubgen"]);
         assert!(rendered.contains(&format!("<p><code>{module}</code> · version")));

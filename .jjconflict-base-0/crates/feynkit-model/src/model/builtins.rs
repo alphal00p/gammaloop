@@ -250,6 +250,7 @@ impl Model {
         quartic.value = Some(ComplexValue::new(0.0, 0.0));
         let mut charge = quartic.clone();
         charge.name = "e".to_owned();
+        charge.texname = Some("e".to_owned());
         charge.lhacode = Some(vec![3]);
         charge.value = Some(ComplexValue::new(1.0, 0.0));
         definition.parameters.push(charge);

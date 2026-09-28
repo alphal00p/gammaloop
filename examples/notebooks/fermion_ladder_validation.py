@@ -10,7 +10,7 @@ from itertools import combinations, product
 from math import lcm
 
 from symbolica import E, Expression, Replacement
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     Representation,
     Tensor,
     TensorExpression,

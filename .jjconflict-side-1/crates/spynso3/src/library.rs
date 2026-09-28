@@ -54,7 +54,7 @@ use super::ModuleInit;
 /// stored entries, excluding dimension-dependent factories.
 ///
 /// ```python
-/// from symbolica.community.spenso import Tensor, TensorLibrary, TensorName, Representation
+/// from symbolica.community.tensor import Tensor, TensorLibrary, TensorName, Representation
 ///
 /// lib = TensorLibrary()
 /// rep = Representation.euc(3)
@@ -66,7 +66,7 @@ use super::ModuleInit;
 /// tensor_ref = stored.expression()
 /// ```
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "TensorLibrary", module = "symbolica.community.spenso")]
+#[pyclass(name = "TensorLibrary", module = "symbolica.community.tensor")]
 pub struct SpensorLibrary {
     pub(crate) library: TensorLibrary<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>,
     /// Python-facing interfaces retained for registered and preloaded references.
@@ -75,7 +75,7 @@ pub struct SpensorLibrary {
 
 /// A registry of elementwise tensor functions used during network evaluation.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "TensorFunctionLibrary", module = "symbolica.community.spenso")]
+#[pyclass(name = "TensorFunctionLibrary", module = "symbolica.community.tensor")]
 pub struct SpensorFunctionLibrary {
     pub(crate) library:
         SymbolLib<RealOrComplexTensor<f64, ShadowedStructure<AbstractIndex>>, PanicMissingConcrete>,
@@ -161,7 +161,7 @@ impl SpensorFunctionLibrary {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorFunctionLibrary
+    /// >>> from symbolica.community.tensor import TensorFunctionLibrary
     /// >>> lib = TensorFunctionLibrary()
     pub fn new() -> Self {
         let mut a = Self {
@@ -563,7 +563,7 @@ impl SpensorLibrary {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorLibrary
+    /// >>> from symbolica.community.tensor import TensorLibrary
     /// >>> lib = TensorLibrary()
     pub fn new() -> Self {
         let mut a = Self {
@@ -587,7 +587,7 @@ impl SpensorLibrary {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorLibrary
+    /// >>> from symbolica.community.tensor import TensorLibrary
     /// >>> lib = TensorLibrary.construct()
     pub fn construct() -> Self {
         Self::new()
@@ -606,7 +606,7 @@ impl SpensorLibrary {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import Tensor, TensorLibrary, TensorName, Representation
+    /// >>> from symbolica.community.tensor import Tensor, TensorLibrary, TensorName, Representation
     /// >>> lib = TensorLibrary()
     /// >>> rep = Representation.euc(3)
     /// >>> name = TensorName("my_tensor")
@@ -756,7 +756,7 @@ impl SpensorLibrary {
     /// Examples
     /// --------
     /// >>> import symbolica
-    /// >>> from symbolica.community.spenso import TensorLibrary, TensorName
+    /// >>> from symbolica.community.tensor import TensorLibrary, TensorName
     /// >>> hep_lib = TensorLibrary.hep_lib()
     /// >>> gamma_tensor = hep_lib[symbolica.S("spenso::gamma")]
     /// >>> gamma_structure = gamma_tensor.expression()
@@ -782,7 +782,7 @@ impl SpensorLibrary {
     /// Examples
     /// --------
     /// >>> import symbolica
-    /// >>> from symbolica.community.spenso import TensorLibrary, TensorName
+    /// >>> from symbolica.community.tensor import TensorLibrary, TensorName
     /// >>> hep_lib = TensorLibrary.hep_lib_atom()
     /// >>> gamma_tensor = hep_lib[symbolica.S("spenso::gamma")]
     /// >>> gamma_structure = gamma_tensor.expression()

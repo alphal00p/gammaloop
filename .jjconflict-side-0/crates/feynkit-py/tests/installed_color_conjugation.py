@@ -2,14 +2,14 @@
 
 from symbolica import E, S
 from symbolica.community.hep import Symbols  # noqa: F401 (register SU(3) components)
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     AUTO,
     ColorSimplifySettings,
     Representation,
     TensorExpression,
     chain,
 )
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     trace as tensor_trace,
 )
 

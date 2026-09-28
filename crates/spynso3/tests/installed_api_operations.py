@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 from symbolica import E, Expression, Replacement, S, T
-from symbolica.community import spenso as sp
+from symbolica.community import tensor as sp
 
 
 class TensorOperationsTests(unittest.TestCase):

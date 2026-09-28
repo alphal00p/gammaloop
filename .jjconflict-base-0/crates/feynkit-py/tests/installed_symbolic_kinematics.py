@@ -2,7 +2,7 @@
 
 from symbolica import E, Expression, S
 from symbolica.community import hep as fk
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 p1, p2, p3, p4 = (
     TensorName.vector(name).to_expression() for name in ("p1", "p2", "p3", "p4")

@@ -5,14 +5,14 @@
 import marimo
 
 __generated_with = "0.24.0"
-app = marimo.App(width="full")
+app = marimo.App(width="medium")
 
 
 @app.cell
 def _():
     import marimo as mo
     from symbolica import S
-    from symbolica.community.spenso import (
+    from symbolica.community.tensor import (
         Representation,
         TensorExpression,
         TensorLibrary,

@@ -8,7 +8,7 @@ integrated or dimensionally regulated real-emission phase-space calculation.
 
 from symbolica import E, S, Symbol
 from symbolica.community import hep
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     ColorSimplifySettings,
     GammaChainOrdering,
     GammaSimplifySettings,

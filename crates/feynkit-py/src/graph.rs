@@ -285,7 +285,7 @@ impl PyDiagramEdge {
 impl PyDiagramEdge {
     /// The model particle, including symbolic mass, width parameter, spin and charge.
     ///
-    /// >>> edge.particle.mass_expression
+    /// >>> edge.particle.mass
     /// >>> edge.particle.width_parameter
     ///
     /// Examples
@@ -2864,7 +2864,7 @@ impl PyFeynmanDiagram {
         py: Python<'_>,
         uv_mass: ConvertibleToExpression,
         dimension: i32,
-        #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.spenso.TensorExpression | None", imports=("symbolica", "symbolica.community.spenso")))]
+        #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.tensor.TensorExpression | None", imports=("symbolica", "symbolica.community.tensor")))]
         numerator: Option<&Bound<'_, PyAny>>,
         edge_powers: Option<BTreeMap<usize, isize>>,
     ) -> PyResult<Py<TensorExpression>> {
@@ -2931,7 +2931,7 @@ impl PyFeynmanDiagram {
         py: Python<'_>,
         uv_mass: ConvertibleToExpression,
         dimension: i32,
-        #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.spenso.TensorExpression | None", imports=("symbolica", "symbolica.community.spenso")))]
+        #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.tensor.TensorExpression | None", imports=("symbolica", "symbolica.community.tensor")))]
         numerator: Option<&Bound<'_, PyAny>>,
         edge_powers: Option<BTreeMap<usize, isize>>,
     ) -> PyResult<Py<TensorExpression>> {
@@ -2999,7 +2999,7 @@ impl PyFeynmanDiagram {
         &self,
         py: Python<'_>,
         dimension: ConvertibleToExpression,
-        #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.spenso.TensorExpression | None", imports=("symbolica", "symbolica.community.spenso")))]
+        #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.tensor.TensorExpression | None", imports=("symbolica", "symbolica.community.tensor")))]
         expression: Option<&Bound<'_, PyAny>>,
         projector: Option<ConvertibleToExpression>,
     ) -> PyResult<Py<TensorExpression>> {

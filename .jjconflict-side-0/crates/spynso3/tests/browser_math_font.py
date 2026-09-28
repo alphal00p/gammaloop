@@ -1,4 +1,4 @@
-"""Check stretchy MathML brackets, shared font loading, and offline setup.
+"""Check stretchy brackets, shared fonts, offline setup, and responsive MathML.
 
 Run with a Playwright-enabled Python; --python selects the installed Spenso.
 The CDN request is fulfilled locally so this regression test works offline.
@@ -30,20 +30,25 @@ def main():
             "-c",
             """import json
 from symbolica import E
-from symbolica.community import spenso
-expression = spenso.TensorExpression(E('(a/(b+c)+d/(e+f))*(g+h)'))
-print(json.dumps([expression.to_html(), spenso.load_math_font()]))
+from symbolica.community import tensor as spenso
+expression = spenso.TensorExpression(E('(a/(b+c)+d/(e+f))*(g+h)+z'))
+long_sum = spenso.TensorExpression(E('+'.join(f'a{i}/(b{i}+c{i})' for i in range(12))))
+wide_term = spenso.TensorExpression(E('*'.join(f'x{i}' for i in range(30)) + '+z'))
+print(json.dumps([expression.to_html(), spenso.load_math_font(),
+                  long_sum.to_html(), wide_term.to_html()]))
 """,
         ],
         check=True,
         capture_output=True,
         text=True,
     )
-    html, setup = json.loads(result.stdout)
+    html, setup, long_sum, wide_term = json.loads(result.stdout)
     assert "data:font" not in html
     assert len(html.encode()) < 10_000
     assert setup.count("data:font/woff2;base64,") == 1
     assert "SIL OPEN FONT LICENSE" in setup
+    assert "data-spenso-wrap" in long_sum
+    assert "<script" not in long_sum
 
     with sync_playwright() as driver:
         browser = driver.chromium.launch(executable_path=args.chromium)
@@ -63,8 +68,12 @@ print(json.dumps([expression.to_html(), spenso.load_math_font()]))
 
             context.route("https://cdn.jsdelivr.net/**", font_request)
             # Force the webfont path even on machines with STIX installed.
-            html_without_local = html.replace('local("STIX Two Math"),', "")
-            page.set_content((setup if offline else "") + html_without_local * 10)
+            output = (
+                html * 10
+                + f'<section id="sum" style="width:1200px">{long_sum}</section>'
+                + f'<section id="wide" style="width:240px">{wide_term}</section>'
+            ).replace('local("STIX Two Math"),', "")
+            page.set_content((setup if offline else "") + output)
             page.evaluate("() => document.fonts.ready")
             measurements = page.evaluate("""() => {
                 const math = document.querySelector('math');
@@ -86,6 +95,38 @@ print(json.dumps([expression.to_html(), spenso.load_math_font()]))
             assert expected_font in measurements["font"], measurements
             assert len(requests) == (0 if offline else 1), requests
             print(f"offline={offline}: {len(requests)} requests; {measurements}")
+
+            original_math = page.locator("#sum math").inner_html()
+            rows = []
+            for width in (1200, 280, 1200):
+                layout = page.evaluate(
+                    """width => {
+                        const section = document.querySelector('#sum');
+                        section.style.width = width + 'px';
+                        const box = section.querySelector('[data-spenso-math]');
+                        const terms = [...section.querySelectorAll('[data-spenso-term]')];
+                        return {
+                            rows: new Set(terms.map(x => Math.round(x.getBoundingClientRect().y))).size,
+                            width: box.clientWidth,
+                            scroll: box.scrollWidth,
+                            fractions: section.querySelectorAll('mfrac').length,
+                            signs: terms.slice(1).map(x => x.firstElementChild.textContent),
+                        };
+                    }""",
+                    width,
+                )
+                assert layout["scroll"] <= layout["width"] + 1, layout
+                assert layout["fractions"] == 12, layout
+                assert layout["signs"] == ["+"] * 11, layout
+                rows.append(layout["rows"])
+            assert rows[0] == rows[2] == 1 and rows[1] > 1, rows
+            assert page.locator("#sum math").inner_html() == original_math
+            assert page.locator("#wide [data-spenso-math]").evaluate(
+                "box => box.scrollWidth > box.clientWidth"
+            )
+            print(
+                f"offline={offline}: sum rows at 1200/280/1200px = {rows}; wide term scrolls"
+            )
             context.close()
         browser.close()
 

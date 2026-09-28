@@ -13,7 +13,7 @@ from pathlib import Path
 from time import process_time_ns
 
 from symbolica import E, Replacement, S
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     Representation,
     TensorExpression,
     TensorName,

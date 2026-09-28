@@ -1,7 +1,7 @@
 # Spenso Python adapter
 
 `spynso3` registers the unified Spenso and Idenso Python interface as
-`symbolica.community.spenso`. It is an adapter crate for the Symbolica community
+`symbolica.community.tensor`. It is an adapter crate for the Symbolica community
 module assembly, not a standalone `spenso` Python distribution.
 
 The canonical user guide is the rendered
@@ -20,7 +20,7 @@ An installed Symbolica package exposes Spenso only when its assembly includes
 this community module. Verify the actual environment with:
 
 ```bash
-python -c "import symbolica.community.spenso as spenso; print(spenso.__name__)"
+python -c "import symbolica.community.tensor as spenso; print(spenso.__name__)"
 ```
 
 For a custom build, add this crate to the

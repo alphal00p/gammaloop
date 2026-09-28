@@ -22,7 +22,7 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_py
     eq,
     eq_int,
     name = "GammaChainOrdering",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PyGammaChainOrdering {
@@ -56,7 +56,7 @@ impl From<GammaChainOrdering> for PyGammaChainOrdering {
     frozen,
     from_py_object,
     name = "GammaSimplifySettings",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct PyGammaSimplifySettings {
@@ -225,7 +225,7 @@ impl PyGammaSimplifySettings {
     frozen,
     from_py_object,
     name = "ColorSimplifySettings",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct PyColorSimplifySettings {

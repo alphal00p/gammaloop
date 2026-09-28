@@ -12,7 +12,7 @@ from math import factorial, prod
 from pathlib import Path
 
 from symbolica import E, Expression, S
-from symbolica.community.spenso import Representation, TensorExpression, TensorName, dot
+from symbolica.community.tensor import Representation, TensorExpression, TensorName, dot
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--module", choices=("feynkit", "hep"), default="feynkit")

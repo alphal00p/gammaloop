@@ -203,7 +203,7 @@ impl PyStubType for SpensoSlotOrArgOrRep {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community.spenso import TensorName, Slot, Representation
+/// >>> from symbolica.community.tensor import TensorName, Slot, Representation
 /// >>> T = TensorName("T")
 /// >>> symmetric_T = TensorName("S", is_symmetric=True)
 /// >>> antisymmetric_T = TensorName("A", is_antisymmetric=True)
@@ -215,7 +215,7 @@ impl PyStubType for SpensoSlotOrArgOrRep {
 #[pyclass(
     from_py_object,
     name = "TensorName",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone)]
 pub struct SpensoName {
@@ -342,7 +342,7 @@ impl SpensoName {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorName
+    /// >>> from symbolica.community.tensor import TensorName
     /// >>> T = TensorName("T")
     /// >>> g = TensorName("g", is_symmetric=True)
     /// >>> F = TensorName("F", is_antisymmetric=True)
@@ -545,7 +545,7 @@ impl SpensoName {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.spenso import TensorName, Slot, Representation
+    /// >>> from symbolica.community.tensor import TensorName, Slot, Representation
     /// >>> import symbolica as sp
     /// >>> T = TensorName("T")
     /// >>> rep = Representation.euc(3)
@@ -794,7 +794,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ArithmeticStructure {
     from_py_object,
     eq,
     name = "Representation",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone, PartialEq, Eq)]
 /// A representation in the sense of group representation theory for tensor indices.
@@ -817,7 +817,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ArithmeticStructure {
 ///
 /// # Examples:
 /// ```python
-/// from symbolica.community.spenso import Representation
+/// from symbolica.community.tensor import Representation
 ///
 /// # Standard representations
 /// euclidean = Representation.euc(4)      # 4D Euclidean
@@ -1002,7 +1002,7 @@ impl SpensoRepresentation {
     ///
     /// # Examples:
     /// ```python
-    /// from symbolica.community.spenso import Representation
+    /// from symbolica.community.tensor import Representation
     /// import symbolica as sp
     ///
     /// # Self-dual representation (indices contract with themselves)
@@ -1088,7 +1088,7 @@ impl SpensoRepresentation {
     ///
     /// # Examples:
     /// ```python
-    /// from symbolica.community.spenso import Representation
+    /// from symbolica.community.tensor import Representation
     /// import symbolica as sp
     ///
     /// rep = Representation.euc(3)
@@ -1318,7 +1318,7 @@ impl SpensoRepresentation {
 ///
 /// # Examples:
 /// ```python
-/// from symbolica.community.spenso import Slot, Representation
+/// from symbolica.community.tensor import Slot, Representation
 /// import symbolica as sp
 ///
 /// # Create representation and slots
@@ -1331,7 +1331,7 @@ impl SpensoRepresentation {
 /// custom_slot = Slot("MyRep", 4, 'alpha', dual=False)
 ///
 /// # Use in tensor structures
-/// from symbolica.community.spenso import TensorName
+/// from symbolica.community.tensor import TensorName
 /// tensor_expression = TensorName("T")(slot1, slot2)
 /// ```
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -1339,7 +1339,7 @@ impl SpensoRepresentation {
     from_py_object,
     eq,
     name = "Slot",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone, PartialEq, Eq)]
 pub struct SpensoSlot {
@@ -1418,7 +1418,7 @@ impl SpensoSlot {
     ///
     /// # Examples:
     /// ```python
-    /// from symbolica.community.spenso import Slot
+    /// from symbolica.community.tensor import Slot
     /// import symbolica as sp
     ///
     /// # Self-dual slot
@@ -1520,7 +1520,7 @@ TensorExpression
 
 Examples
 --------
->>> from symbolica.community.spenso import TensorName, Slot, Representation
+>>> from symbolica.community.tensor import TensorName, Slot, Representation
 >>> import symbolica as sp
 >>> T = TensorName("T")
 >>> rep = Representation.euc(3)

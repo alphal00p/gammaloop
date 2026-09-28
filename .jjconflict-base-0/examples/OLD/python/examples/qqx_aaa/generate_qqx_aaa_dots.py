@@ -37,11 +37,11 @@ from IPython.display import Markdown as md # type: ignore
 if SYMBOLICA_COMMUNITY_PATH is not None:
     sys.path.insert(0, SYMBOLICA_COMMUNITY_PATH)
 from symbolica import Expression, S,E, Replacement, PrintMode
-from symbolica.community.spenso import TensorName as \
+from symbolica.community.tensor import TensorName as \
     N,TensorNetwork,Representation,Tensor,Slot,TensorLibrary, ExecutionMode
 from symbolica.community.idenso import *
-from symbolica.community.spenso import Tensor
-#from symbolica.community.spenso import initialize as spenso_initialize
+from symbolica.community.tensor import Tensor
+#from symbolica.community.tensor import initialize as spenso_initialize
 #spenso_initialize()
 
 #print(E("spenso::{spenso::upper}::bis(4,x)").to_canonical_string())

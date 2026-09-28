@@ -2,7 +2,7 @@
 
 from symbolica import E, S
 from symbolica.community import hep
-from symbolica.community.spenso import TensorExpression, TensorName
+from symbolica.community.tensor import TensorExpression, TensorName
 
 model = hep.Model.standard_model()
 p, n = (TensorName.vector("dim_spin::" + name).to_expression() for name in ("p", "n"))

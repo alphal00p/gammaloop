@@ -19,7 +19,7 @@ from pathlib import Path
 from symbolica import E, Matrix, Replacement, S, Symbol
 from symbolica.community import hep
 from symbolica.community.hep import oneloop
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     TensorExpression,
 )
 

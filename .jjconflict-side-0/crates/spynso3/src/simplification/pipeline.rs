@@ -12,7 +12,7 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
     frozen,
     from_py_object,
     name = "SimplifySettings",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone, Copy, Default)]
 pub(crate) struct PySimplifySettings {

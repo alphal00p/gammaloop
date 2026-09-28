@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     Representation,
     TensorExpression,
     TensorName,

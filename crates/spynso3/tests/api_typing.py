@@ -5,7 +5,7 @@ from typing import Literal, assert_type
 
 import linnet
 from symbolica import Expression, S
-from symbolica.community import spenso as sp
+from symbolica.community import tensor as sp
 
 
 def check_types(

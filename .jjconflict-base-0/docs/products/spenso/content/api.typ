@@ -46,14 +46,14 @@ projectors add that package; generic Spenso users do not inherit those conventio
 == Python community module
 
 #boundary("An adapter, not a Spenso wheel", [
-  Python users import `symbolica.community.spenso`. The implementation is the `spynso3` Rust
+  Python users import `symbolica.community.tensor`. The implementation is the `spynso3` Rust
   adapter and is distributed through the Symbolica community-module mechanism. Enabling
   Spenso's Rust `python` feature only enables conversion interoperability; it does not create a
   standalone importable `spenso` Python distribution.
 ])
 
 Install the published Symbolica assembly with `python -m pip install --upgrade symbolica`, then verify
-`python -c "import symbolica.community.spenso"`. Module availability follows the Symbolica
+`python -c "import symbolica.community.tensor"`. Module availability follows the Symbolica
 assembly version; a local Spenso source checkout does not add the module to an installed wheel.
 Source embedders must add `spynso3`
 to the external #link("https://github.com/symbolica-dev/symbolica-community")[symbolica-community]
@@ -108,7 +108,7 @@ composition. Symbolic contractions remain compact dots, chains, or brackets unti
 evaluation is requested.
 
 ```python
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     Representation,
     Tensor,
     TensorName,

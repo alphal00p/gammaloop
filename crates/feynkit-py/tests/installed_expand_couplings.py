@@ -5,7 +5,7 @@ from typing_extensions import assert_type
 
 from symbolica import E, Expression, S
 from symbolica.community import hep
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 model = hep.Model.standard_model()
 coupling = S("UFO::GC_11")

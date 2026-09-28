@@ -267,7 +267,7 @@ fn antifundamental_port(dimension: &Atom, index: &Atom) -> Atom {
 /// Examples
 /// --------
 /// >>> import symbolica as sp
-/// >>> from symbolica.community.spenso import PortPattern, Representation
+/// >>> from symbolica.community.tensor import PortPattern, Representation
 /// >>> D_, i_ = sp.S("D_", "i_")
 /// >>> exact = PortPattern.exact(Representation.mink(4), i_)
 /// >>> generic = PortPattern.self_dual("R_", D_, i_)
@@ -278,7 +278,7 @@ fn antifundamental_port(dimension: &Atom, index: &Atom) -> Atom {
     extends = PythonExpression,
     from_py_object,
     name = "PortPattern",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone, Copy)]
 pub struct PortPattern;
@@ -404,7 +404,7 @@ impl ModuleInit for PortPattern {}
 /// Examples
 /// --------
 /// >>> import symbolica as sp
-/// >>> from symbolica.community.spenso import (
+/// >>> from symbolica.community.tensor import (
 /// ...     PortPattern, TensorExpression, TensorName, TensorPattern,
 /// ... )
 /// >>> k_, D_, mu_, i_, j_, rest___ = sp.S(
@@ -426,7 +426,7 @@ impl ModuleInit for PortPattern {}
     extends = PythonExpression,
     from_py_object,
     name = "TensorPattern",
-    module = "symbolica.community.spenso"
+    module = "symbolica.community.tensor"
 )]
 #[derive(Clone, Copy)]
 pub struct TensorPattern;
@@ -1258,7 +1258,7 @@ mod tests {
         .expect("the downstream community stub generator must accept this inventory");
         let rendered = stubs
             .modules
-            .get("symbolica.community.spenso")
+            .get("symbolica.community.tensor")
             .expect("the Spenso community stub module must be generated")
             .to_string();
         for class in ["PortPattern", "TensorExpression", "TensorPattern"] {

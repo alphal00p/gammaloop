@@ -11,7 +11,7 @@ import json
 from symbolica import E, Matrix, Replacement, S, Symbol
 from symbolica.community import hep
 from symbolica.community.hep import oneloop
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.tensor import TensorExpression
 
 # Reuse the built-in quartic scalar and Standard Model Dirac propagators.
 # The only extra interaction is -g phi psibar psi, or -i g phi psibar gamma5 psi.
