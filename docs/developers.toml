@@ -154,7 +154,9 @@ anchor = "struct GammaLoopAPI {"
 # Reviewed 2026-09-27: Full three_dimensional_representations and
 # three_dimensional_representation names now identify generation settings,
 # stability choices and diagnostics in configuration, Python and the manual.
-digest = "6ba66f9ee6405b34d5de60a2f249e61d17bbe08b"
+# No architecture impact 2026-09-28: Python docstrings now clarify ordered
+# stability attempts and native orientation data; binding behavior is unchanged.
+digest = "a349e4f6a61755fbdddf52b384cf4ac3fca20e4b"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"

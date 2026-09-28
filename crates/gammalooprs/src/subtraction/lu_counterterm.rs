@@ -1029,6 +1029,19 @@ pub struct LUCounterTermRepresentationEvaluators {
     pub iterated_evaluator: IteratedCtCollection<BTreeMap<CutCFFIndex, EvaluatorStack>>,
 }
 
+impl LUCounterTermRepresentationEvaluators {
+    fn generic_compileable_evaluator_count(&self) -> usize {
+        // Ignore eager-only helper and multiplier evaluators, as well as pass-two evaluators.
+        self.left_thresholds_evaluator
+            .iter()
+            .chain(self.right_thresholds_evaluator.iter())
+            .chain(self.iterated_evaluator.iter())
+            .flat_map(|evaluators| evaluators.values())
+            .map(EvaluatorStack::generic_evaluator_count)
+            .sum()
+    }
+}
+
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct LUCounterTermEvaluators {
@@ -1071,19 +1084,9 @@ impl LUCounterTermEvaluators {
     }
 
     pub(crate) fn generic_compileable_evaluator_count(&self) -> usize {
-        // Ignore eager-only helper and multiplier evaluators, as well as pass-two evaluators.
         self.integrands
             .values()
-            .map(|payload| {
-                payload
-                    .left_thresholds_evaluator
-                    .iter()
-                    .chain(payload.right_thresholds_evaluator.iter())
-                    .chain(payload.iterated_evaluator.iter())
-                    .flat_map(|evaluators| evaluators.values())
-                    .map(EvaluatorStack::generic_evaluator_count)
-                    .sum::<usize>()
-            })
+            .map(LUCounterTermRepresentationEvaluators::generic_compileable_evaluator_count)
             .sum()
     }
 
@@ -1209,14 +1212,7 @@ impl LUCounterTermEvaluators {
                 right_thresholds_evaluator,
                 iterated_evaluator,
             };
-            let evaluator_count = payload
-                .left_thresholds_evaluator
-                .iter()
-                .chain(payload.right_thresholds_evaluator.iter())
-                .chain(payload.iterated_evaluator.iter())
-                .flat_map(|evaluators| evaluators.values())
-                .map(EvaluatorStack::generic_evaluator_count)
-                .sum();
+            let evaluator_count = payload.generic_compileable_evaluator_count();
             stats.record_evaluator_build(
                 representation,
                 timings,

@@ -5581,7 +5581,7 @@ fn intern_linear_surface(
     surface_id
 }
 
-fn classify_surface_kind(expr: &LinearEnergyExpr) -> LinearSurfaceKind {
+pub(crate) fn classify_surface_kind(expr: &LinearEnergyExpr) -> LinearSurfaceKind {
     let coeffs = expr
         .internal_terms
         .iter()
