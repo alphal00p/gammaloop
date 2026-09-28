@@ -66,7 +66,7 @@ check: build check-wasm-features
     set -euo pipefail
     cd "{{ justfile_directory() }}/tydenso"
     tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../symbolica-typst-plugin}"
-    tymbolica_revision="7f869adc14dcf2758bab16aaa25e06eb10ffbfad"
+    tymbolica_revision="57b7455b37c30f4f87353c0073e49f5225e937ab"
     if [ ! -f "$tymbolica_checkout/typst.toml" ]; then
       echo "set TYMBOLICA_CHECKOUT to the pinned symbolica-dev/symbolica-typst-plugin checkout" >&2
       exit 1
@@ -115,7 +115,7 @@ check: build check-wasm-features
         fi
       done
     done
-    tree="$(cargo tree --locked --manifest-path "$tymbolica_checkout/Cargo.toml" --target wasm32-unknown-unknown --package symbolica-typst-plugin --edges normal --prefix none -e features)"
+    tree="$(cargo tree --locked --manifest-path "$tymbolica_checkout/Cargo.toml" --target wasm32-unknown-unknown --package symbolica-typst-plugin --no-default-features --features wasm,plugin --edges normal --prefix none -e features)"
     if grep -Eq 'feature "(integer-gmp|float-mpfr|native_code_generation)"|(gmp-mpfr-sys|rug) v|gammaloop-workspace-hack' <<<"$tree"; then
       echo "Tymbolica's target graph contains native-only dependencies" >&2
       printf '%s\n' "$tree" >&2

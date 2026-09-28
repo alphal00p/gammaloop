@@ -40,7 +40,9 @@ use symbolica::{
     domains::SelfRing,
     printer::{AnsiHtmlFormatter, PrintOptions, PrintState},
 };
-use symbolica_typst_atom_payload::{AttachmentSet, encode_atom_from_set, encode_atom_render_tree};
+use symbolica_typst_plugin::payload::{
+    AttachmentSet, encode_atom_from_set, encode_atom_render_tree,
+};
 use tabled::{
     builder::Builder,
     settings::{Alignment, Style},

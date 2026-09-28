@@ -6272,7 +6272,7 @@ dependencies = [
  "serde_json",
  "spenso-macros",
  "symbolica",
- "symbolica-typst-atom-payload",
+ "symbolica-typst-plugin",
  "symbolica-utils",
  "tabled",
  "thiserror 2.0.18",
@@ -6324,7 +6324,7 @@ dependencies = [
  "spenso-hep-lib",
  "spenso-macros",
  "symbolica",
- "symbolica-typst-atom-payload",
+ "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.18",
  "xpct",
@@ -6527,9 +6527,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "symbolica-typst-atom-payload"
+name = "symbolica-typst-plugin"
 version = "0.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=7f869adc14dcf2758bab16aaa25e06eb10ffbfad#7f869adc14dcf2758bab16aaa25e06eb10ffbfad"
+source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=57b7455b37c30f4f87353c0073e49f5225e937ab#57b7455b37c30f4f87353c0073e49f5225e937ab"
 dependencies = [
  "blake3",
  "ciborium",

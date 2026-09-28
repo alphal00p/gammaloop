@@ -90,7 +90,7 @@ third-party = [
     # Keep patched sources under the consuming workspace's control. Symbolica's
     # feature anchors are declared manually using the registry dependency.
     { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica", rev = "06906976bca24fefc5203aee699d90d62ebe08cd" },
-    { name = "symbolica-typst-atom-payload", git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "7f869adc14dcf2758bab16aaa25e06eb10ffbfad" },
+    { name = "symbolica-typst-plugin", git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" },
     # Stub generation is opt-in and must not leak into ordinary abi3 builds.
     { name = "pyo3-stub-gen" },
 ]

@@ -16,7 +16,7 @@ just tydenso::manual
 
 The interop tests require `TYMBOLICA_CHECKOUT` to point to
 [`symbolica-dev/symbolica-typst-plugin`](https://github.com/symbolica-dev/symbolica-typst-plugin) at Git HEAD
-`7f869adc14dcf2758bab16aaa25e06eb10ffbfad`, the exact Symbolica Typst plugin revision pinned
+`57b7455b37c30f4f87353c0073e49f5225e937ab`, the exact Symbolica Typst plugin revision pinned
 by the nested Rust workspace. The check uses Nix to rebuild its combined algebra and integration engine
 in a temporary copy. GammaLoop, Tydenso and the Typst plugin must all resolve
 the same Symbolica Git revision from the root workspace's patch, so their

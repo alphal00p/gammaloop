@@ -23,7 +23,7 @@ pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer
 pyo3-stub-gen-derive = { workspace = true }
 tabled = { workspace = true }
 thiserror = { workspace = true }
-symbolica-typst-atom-payload = { workspace = true }
+symbolica-typst-plugin = { workspace = true }
 
 [dependencies.symbolica]
 workspace = true
@@ -37,14 +37,14 @@ native = [
   "pyo3/multiple-pymethods",
   "spenso/native-code-generation",
   "spenso-hep-lib/native",
-  "symbolica-typst-atom-payload/native",
+  "symbolica-typst-plugin/native",
 ]
 wasm = [
   "idenso/wasm",
   "spenso/wasm",
   "spenso-hep-lib/wasm",
   "symbolica/wasm",
-  "symbolica-typst-atom-payload/wasm",
+  "symbolica-typst-plugin/wasm",
 ]
 python_stubgen = [
   "dep:pyo3-stub-gen",
