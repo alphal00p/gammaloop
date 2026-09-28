@@ -55,6 +55,9 @@
       else if mode == "label-default" or outside { auto } else { 0.5 },
     momentum-label-anchor: if mode == "anchor-center" { "center" }
       else if mode == "outside-outgoing-anchor" { "west" } else { auto },
+    // Pinned so the SVG probes do not depend on the style's defaults.
+    momentum-arrow-offset: 0.62,
+    momentum-label-gap: 0.45,
     momentum-arrow-side: if mode == "right" { "right" } else { "left" },
     momentum-arrow-stroke: (paint: red, thickness: 0.4pt, cap: "round"),
     momentum-arrow-mark: if mode == "no-mark" { none }

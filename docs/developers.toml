@@ -953,7 +953,10 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # files; Cargo producer inputs and the documented cache boundaries are unchanged.
 # Reviewed 2026-09-25: include the three graph inputs linked by the sampling and
 # threshold guides in the existing hermetic documentation source set.
-digest = "e122d9de5ddc9d9aea5994792a648553db25eb77"
+# No-impact attestation 2026-09-29: the documentation source adds the Kurvst
+# knot-logo example imported by the GammaLoop marks; cache boundaries are
+# unchanged.
+digest = "7110bb47b3a576ab6987cfdf0d579f3aee98859f"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -976,7 +979,9 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-09-17: No cache architecture impact: only compile-time graph and parametric numerator fixture roots were added to existing package source selections.
 # No cache architecture impact 2026-09-24: the GL638 embedded fixture and scalar
 # box subprocess fixture extend existing compile-time and runtime test inputs.
-digest = "2c98c08201e1a25ece06f9abdcf7ef826621b47c"
+# No-impact attestation 2026-09-29: Clinnet's runtime test sources add the
+# documentation theme imported by the portal edge style its Typst tests render.
+digest = "20ffdd801e1c84048a20339e8557dd7388ce5b6b"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -990,7 +995,9 @@ end_anchor = "\nin\n{\n  inherit"
 # inherited Nix packages. The reusable Cargo producer boundary is unchanged.
 # Reviewed 2026-09-14: terminal renders receive runtime Symbolica licensing;
 # the reusable Cargo producer inputs remain unchanged.
-digest = "edc84e51b071ce06d7290de8a316ffba11cae9a4"
+# No-impact attestation 2026-09-29: the rendered-SVG check also compares the
+# two GammaLoop construction marks; the Cargo producer boundary is unchanged.
+digest = "1df6d6b51f04ac78e9512f0223a73c9761ac732e"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -999,7 +1006,9 @@ anchor = "nextestPackageGroups ="
 end_anchor = "sortedUnique ="
 # Reviewed 2026-09-14: documentation provenance tests exercise standalone
 # Jujutsu workspaces; the terminal test closure supplies both Git and Jujutsu.
-digest = "66f700580ce13b9eaee90fe0111639e46968c531"
+# No-impact attestation 2026-09-29: the Clinnet group gains the pinned Typst
+# runtime tool so its Typst tests run; documentation groups are unchanged.
+digest = "0a568cb5712045aee37d96bfb2f91d3d32b7e9b9"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
