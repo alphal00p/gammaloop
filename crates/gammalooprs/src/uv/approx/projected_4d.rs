@@ -448,22 +448,7 @@ impl Localizer<'_> {
                 // rows, including maps with the same physical host, survive.
                 combined_rows.extend(rows);
             }
-            terms = remaining
-                .into_values()
-                .map(
-                    |(denominators, classes, powers, reports, numerator, parameters, rows)| {
-                        (
-                            denominators,
-                            classes,
-                            powers,
-                            reports,
-                            numerator,
-                            parameters,
-                            rows,
-                        )
-                    },
-                )
-                .collect();
+            terms = remaining.into_values().collect();
             composition_time += composition_started.elapsed();
             debug_tags!(#generation, #uv, #local, #four_d, #profile;
                 stage = "component_composition",

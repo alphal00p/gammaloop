@@ -287,7 +287,7 @@ anchor = "pub(crate) struct Local4dProjectionContext {"
 # Reviewed 2026-09-27: Exact post-Taylor projection retains one generic product
 # with Rational coefficient rows and full source-map tuples for each local-4D
 # representation; reconstruction certificates and source ownership are unchanged.
-digest = "7102e8c385a3b809315bc2d08afd25a55f00d46e"
+digest = "bb0af1f5ee4322b19f99d930017acb847bcf1540"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/final_integrand.rs"
