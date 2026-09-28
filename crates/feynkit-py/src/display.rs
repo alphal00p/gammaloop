@@ -213,6 +213,7 @@ pub(crate) fn process_svg(
 #set text(size: 10pt)
 #import "crates/linnest/typst/src/graph.typ" as graph
 #import "crates/linnest/typst/src/render/layout.typ" as renderer
+#import "crates/linnest/typst/src/draw.typ" as drawing-api
 #import "assets/embedded/drawing/templates/layout-core.typ" as physics-layout
 #import "assets/embedded/drawing/templates/physics-edge-style.typ" as physics
 #import physics: mi, palette, massive, massless, dashed, dotted, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag
@@ -282,13 +283,41 @@ pub(crate) fn process_svg(
             )
             .unwrap();
         }
-        source.push_str(r#"})
- let config = _linnet_config
+        writeln!(
+            source,
+            "}})\n let process-mode = {:?}",
+            if incoming.is_empty() || state.is_empty() {
+                "generic"
+            } else {
+                "amplitude"
+            }
+        )
+        .unwrap();
+        source.push_str(r#" let config = _linnet_config
  let title = config.at("title", default: auto)
  let config = config + (title: if title == auto { none } else { title })
- let options = (mode: "amplitude", label-fill: palette.ink) + config.at("options", default: (:))
- let style = (node-label: none, node-style: (radius: 3.0, fill: none, stroke: (paint: palette.ink, thickness: 0.7pt, dash: "dashed"))) + config.at("style", default: (:))
- physics-layout.render-layout(config + (options: options, style: style), input: raw, graph: graph, renderer: renderer, physics: physics, edge-style: (map: particle-map, default-edge: physics.default-edge))
+ let options = (mode: process-mode, label-fill: palette.ink) + config.at("options", default: (:))
+ let drawing = config.at("draw", default: (:))
+ let style = (node-label: none, node-style: (radius: drawing.at("node-radius", default: 3.0), fill: none, stroke: (paint: palette.ink, thickness: 0.7pt, dash: "dashed"))) + config.at("style", default: (:))
+ // Size the process springs from the final blob, including element styles.
+ let effective = renderer._effective-options((unit: 1.5, node-label-style: (padding: 0.08)), style, drawing)
+ let callbacks = renderer._callbacks(effective)
+ let measured = graph.style(renderer.attach-elements(raw, config.at("elements", default: (:))), ..(effective + callbacks))
+ let node = graph.nodes(measured).first()
+ let bounds = node.statements
+ let node-data = graph._impl._node-style-data(node, effective)
+ let fitted-radius = drawing-api._impl._node-radius(
+   (length: graph._impl._canvas-length(effective.unit).to-absolute()),
+   (callbacks.node-label)(node-data), (callbacks.node-style)(node-data),
+   drawing.at("node-min-radius", default: 0.16), drawing.at("node-label-padding", default: 0.08),
+ )
+ let outset = drawing.at("node-outset", default: auto)
+ let radius = calc.max(1.0, drawing-api._impl._radius-outset(fitted-radius), float(bounds.at("layout-width")) / 2, float(bounds.at("layout-height")) / 2, if outset == auto { 0 } else { outset })
+ // At the default 10 x 10 viewport, dangling spring rest length is 20 times length-scale.
+ // Repulsion leaves a visible leg beyond the blob; mixed states keep left/right groups.
+ let defaults = (length-scale: radius / 20, external-centroid-distance: 1.5)
+ let layouts = renderer._layout-passes(config.at("layouts", default: ((:),))).map(pass => defaults + pass)
+ physics-layout.render-layout(config + (options: options, style: style, layouts: layouts), input: raw, graph: graph, renderer: renderer, physics: physics, edge-style: (map: particle-map, default-edge: physics.default-edge))
 },
 "#);
     }

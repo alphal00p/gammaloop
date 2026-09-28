@@ -184,7 +184,8 @@
   if distance == 0 or length == 0 {
     _point-pair(from)
   } else {
-    let applied = calc.min(distance, length * 0.45)
+    // A one-ended outset may use the full segment, especially for large nodes.
+    let applied = calc.min(distance, length)
     (
       _point-x(from) + dx / length * applied,
       _point-y(from) + dy / length * applied,
