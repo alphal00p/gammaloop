@@ -2,6 +2,8 @@
   for (const root of document.querySelectorAll('.feynkit-collection')) {
     if (root.dataset.ready) continue;
     root.dataset.ready = 'true';
+    root.dataset.linnetFrameOwner = 'true';
+    let frameObserver;
     const entries = [...root.querySelectorAll('template')];
     const mount = (index, stage) => {
       const fragment = entries[index].content.cloneNode(true);
@@ -34,7 +36,7 @@
     }
     let previousTheme;
     const syncTheme = () => {
-      if (!root.isConnected) { observer.disconnect(); return; }
+      if (!root.isConnected) { observer.disconnect(); frameObserver?.disconnect(); return; }
       let theme = '';
       for (const element of ancestors) {
         const explicit = element.dataset.theme;
@@ -66,6 +68,23 @@
     const observer = new MutationObserver(syncTheme);
     ancestors.forEach(element => observer.observe(element, {attributes:true, childList:true, attributeFilter:['class', 'data-theme', 'data-jp-theme-light']}));
     syncTheme();
+    try {
+      const frame = window.frameElement;
+      if (frame && document.body) {
+        /* Collapsed rows have no live Linnet graph to size their frame.
+           Measure the content, not scrollHeight (which includes the old
+           viewport height), so the notebook can shrink as well as grow. */
+        document.documentElement.style.overflow = 'hidden';
+        const fitFrame = () => {
+          if (!root.isConnected) { frameObserver.disconnect(); return; }
+          const style = getComputedStyle(document.body);
+          const bottom = Math.max(...[...document.body.children].map(element => element.getBoundingClientRect().bottom)) + window.scrollY;
+          frame.style.height = Math.ceil(bottom + parseFloat(style.paddingBottom) + parseFloat(style.marginBottom) + 6) + 'px';
+        };
+        frameObserver = new ResizeObserver(() => requestAnimationFrame(fitFrame));
+        frameObserver.observe(root);
+      }
+    } catch (_) { /* Cross-origin embeddings control their own frame sizing. */ }
     const rows = root.querySelectorAll('.fk-row');
     for (const [index, row] of [...rows].entries()) {
       row.addEventListener('toggle', () => {
