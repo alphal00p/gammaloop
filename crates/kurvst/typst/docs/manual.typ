@@ -189,6 +189,19 @@
   )
   ```
 
+  `arc(center, radius, start, stop)` builds a circular arc from cubic pieces of
+  at most 90°. Angles are measured counterclockwise from the positive x axis in
+  y-up coordinates, as in CeTZ; `stop < start` runs clockwise:
+
+  ```typ
+  #let stadium = kurvst.path(
+    kurvst.arc((1, 0.5), 1, 0deg, 180deg),
+    kurvst.line((0, 0.5), (0, -0.5)),
+    kurvst.arc((1, -0.5), 1, 180deg, 360deg),
+    kurvst.close(),
+  )
+  ```
+
   `path` and `append` flatten fragments. If an appended fragment starts where
   the current path ends, its leading `move` is skipped; if it starts elsewhere, the
   `move` begins a new subpath. The edited path can go straight back into Kurvst
@@ -283,6 +296,20 @@
   String names `"wave"`, `"zigzag"`, and `"coil"` are accepted for convenience,
   but they are resolved in Typst before calling wasm.
 
+  `split-at` takes arc distances along the input path and returns the one
+  patterned path cut there as `parts`, so pieces can be styled independently
+  while following a single pattern:
+
+  ```typ
+  #let base = kurvst.from-cubic(segment)
+  #let split = kurvst.pattern(base, pattern: "coil", amplitude: 0.12,
+    wavelength: 0.4, split-at: (kurvst.length(base) / 2,))
+  #cetz.canvas({
+    kurvst.to-cetz(split.parts.at(0), stroke: blue + 0.6pt)
+    kurvst.to-cetz(split.parts.at(1), stroke: orange + 0.6pt)
+  })
+  ```
+
   Custom patterns use the same object shape:
 
   ```typ
@@ -306,9 +333,55 @@
   Use `interpolation: "linear"` for corners and `"smooth"` for a spline through
   sampled points.
 
-  `endpoint-ramp: true` tapers amplitude at anchored endpoints. This is useful
-  for coils, whose longitudinal offset would otherwise put the first and last
-  visible points inside the turn near nodes.
+  `kurvst.coil` defaults to `samples-per-period: 16`,
+  `longitudinal-scale: 1.25`, `fit-length: none`, `amplitude: 0.1`, and
+  `wavelength: 1.0`. With `fit-length: none`, the periodic coil is unchanged;
+  `amplitude` and `wavelength` are used only for fitting.
+
+  Set `fit-length: L` to return an ordinary normalized point-pattern dictionary
+  spanning `P = max(1, round(L / wavelength)) - 0.5` coil periods, using the
+  requested wavelength. It retains full amplitude with inward endpoint phases,
+  exact zero offsets at both ends, and `endpoint-ramp: false`: no taper,
+  straight stubs, or connectors. Longitudinal fitting depends on `amplitude`,
+  so apply the dictionary once over a carrier of length `L` with the same
+  amplitude, a wavelength of `L`, all its samples, and zero phase:
+
+  ```typ
+  #let base = kurvst.from-cubic(segment)
+  #let L = kurvst.length(base)
+  #let A = 0.12
+  #let coil = kurvst.coil(fit-length: L, amplitude: A, wavelength: 0.55)
+  #let fitted = kurvst.pattern(
+    base,
+    pattern: coil,
+    amplitude: A,
+    wavelength: L,
+    samples-per-period: coil.points.len() - 1,
+    phase: 0,
+  )
+  ```
+
+  Fitting requires positive, finite `fit-length` and `wavelength`, finite
+  `amplitude`, and finite, nonnegative `longitudinal-scale`. Fitting happens
+  in Typst; `kurvst.pattern` has no `natural-endpoints` argument. As for other
+  point patterns, curved carriers use local tangent/normal offsets, not
+  evaluation at a corrected arc distance. `endpoint-slope` has no effect
+  with `endpoint-ramp: false`.
+
+  Patterns with `endpoint-ramp: true`, including periodic coils, taper amplitude
+  over 75% of a wavelength at each anchored endpoint, capped at half the path
+  length for short paths. This is useful for coils, whose longitudinal offset would
+  otherwise put the first and last visible points inside the turn near nodes.
+  The longitudinal offset uses the square of the taper envelope, letting the
+  coil open sideways before it starts doubling back.
+
+  On `kurvst.pattern`, `endpoint-slope: 0` keeps the taper tangential to the
+  base path. Values from `0` to `3` control the envelope's initial slope;
+  try `1` for an angled finish with coil `phase: calc.pi / 2`. This keeps the
+  endpoint attached and still flattens the envelope into the full-sized coil.
+  It is not an angle: the direction also depends on amplitude, wavelength,
+  and the lateral offset at the endpoint phase. Unanchored endpoints and
+  patterns without `endpoint-ramp` are unaffected.
 
   ```typ
   #let base = kurvst.from-cubic(segment)
@@ -342,6 +415,29 @@
     native-cubics(kurvst.segments(right), stroke: rgb("#355c9a") + 0.8pt)
   })
   ```
+
+  == Stroke Outlines
+
+  `outline` turns a stroked path into a closed region, so a line drawing
+  becomes a filled solid with the same visible shape. It wraps Kurbo's
+  stroker: `join` is `"miter"`, `"round"`, or `"bevel"`, and `cap` (or
+  `start-cap` and `end-cap` separately) is `"butt"`, `"square"`, or `"round"`.
+  Open subpaths become one contour; closed subpaths become an outer and an inner
+  contour, so fill with the default non-zero rule.
+
+  ```typ
+  #let base = kurvst.path(
+    kurvst.line((0, 1), (0, 0)),
+    kurvst.cubic((0, 0), (1, 0), (2, 1), (3, 0)),
+  )
+  #let solid = kurvst.outline(base, width: 0.2, cap: "round")
+  #cetz.canvas(kurvst.to-cetz(solid, fill: black, stroke: none))
+  ```
+
+  CeTZ `merge-path` bridges separate subpaths with straight lines. That leaves
+  fills unchanged, but a stroked outline with several contours shows the bridge;
+  use `to-native` to stroke the contours themselves.
+  See `examples/outline-logo.typ` for a full logo converted to solids.
 
   == Path Layers
 

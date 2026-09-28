@@ -1302,6 +1302,8 @@ impl SiteBuilder {
         self.require_file(Path::new("docs/assets/spensologo.svg"))?;
         self.require_file(Path::new("assets/gammalooplogo-light.svg"))?;
         self.require_file(Path::new("assets/gammalooplogo-dark.svg"))?;
+        self.require_file(Path::new("docs/assets/gammaloop-construction-light.svg"))?;
+        self.require_file(Path::new("docs/assets/gammaloop-construction-dark.svg"))?;
 
         let mut component_ids = BTreeSet::new();
         for product in &self.registry.product {
@@ -2260,6 +2262,14 @@ impl SiteBuilder {
             ("docs/assets/spensologo.svg", "spensologo.svg"),
             ("assets/gammalooplogo-light.svg", "gammalooplogo-light.svg"),
             ("assets/gammalooplogo-dark.svg", "gammalooplogo-dark.svg"),
+            (
+                "docs/assets/gammaloop-construction-light.svg",
+                "gammaloop-construction-light.svg",
+            ),
+            (
+                "docs/assets/gammaloop-construction-dark.svg",
+                "gammaloop-construction-dark.svg",
+            ),
         ] {
             let target = assets.join(name);
             match fs::remove_file(&target) {
@@ -4566,7 +4576,7 @@ impl SiteBuilder {
             escape_html(&issue_url),
         );
         let main = format!(
-            "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"../\">αLoop</a> / Developers</nav><article class=\"docs-article developer-article\"><header class=\"developer-hero\"><p class=\"product-eyebrow\">For developers</p><h1>{}</h1><p>{}</p><aside class=\"developer-audience\" aria-label=\"Documentation audience\"><strong>Looking for usage documentation?</strong><span>Product guides and reference live with each research project. This area documents implementation details, design work, and engineering investigations for contributors.</span><a href=\"../#projects\">Browse project documentation <span aria-hidden=\"true\">→</span></a></aside></header>{sections}</article>{feedback}<footer class=\"page-footer\">{} classified notes · documented revision <code>{}</code></footer>",
+            "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"../\">αLoop</a> / Developers</nav><article class=\"docs-article developer-article\"><header class=\"developer-hero\"><span class=\"developer-hero-logo\" role=\"img\" aria-label=\"Construction of the GammaLoop logo\"></span><p class=\"product-eyebrow\">For developers</p><h1>{}</h1><p>{}</p><aside class=\"developer-audience\" aria-label=\"Documentation audience\"><strong>Looking for usage documentation?</strong><span>Product guides and reference live with each research project. This area documents implementation details, design work, and engineering investigations for contributors.</span><a href=\"../#projects\">Browse project documentation <span aria-hidden=\"true\">→</span></a></aside></header>{sections}</article>{feedback}<footer class=\"page-footer\">{} classified notes · documented revision <code>{}</code></footer>",
             escape_html(&self.developers.title),
             escape_html(&self.developers.summary),
             self.developers
@@ -12377,6 +12387,8 @@ mod tests {
             "local-unitarity-dark.svg",
             "gammalooplogo-light.svg",
             "gammalooplogo-dark.svg",
+            "gammaloop-construction-light.svg",
+            "gammaloop-construction-dark.svg",
             "spensologo.svg",
             "STIXTwoMath-Regular.woff2",
             "STIX-Two-OFL.txt",
@@ -12397,6 +12409,8 @@ mod tests {
                 "local-unitarity-dark.svg",
                 "gammalooplogo-light.svg",
                 "gammalooplogo-dark.svg",
+                "gammaloop-construction-light.svg",
+                "gammaloop-construction-dark.svg",
                 "spensologo.svg",
             ]
             .map(|asset| output.path().join("assets").join(asset)),
