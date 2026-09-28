@@ -24,12 +24,8 @@ impl SymbolicTensor<PartialStructure> {
     ) -> Result<AbstractIndex, TensorCompositionError> {
         let left = super::validate_position(&self.structure.logical_slots(), pair.left)?;
         let other = super::validate_position(&right.structure.logical_slots(), pair.right)?;
-        Ok(super::shared_index(left, other, pair)?.unwrap_or_else(|| {
-            super::fresh_dummy_index(
-                [&self.expression, &right.expression],
-                [&self.structure, &right.structure],
-            )
-        }))
+        Ok(super::shared_index(left, other, pair)?
+            .unwrap_or_else(|| Self::reserved_dummies([self, right]).fresh_index()))
     }
 
     /// Fill selected unresolved ports, preserving the order of surviving ports.

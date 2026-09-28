@@ -3,16 +3,14 @@ use std::collections::HashSet;
 use crate::{
     IndexToolingError,
     shorthands::schoonschip::DotNormalizer,
-    tensor::{SymbolicNetParse, SymbolicTensor, remove_antisymmetric_zero_terms},
+    tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor},
 };
 
 use super::schoonschip::{Schoonschip, SchoonschipSettings};
 use spenso::{
     network::{
-        Network,
-        library::{DummyLibrary, symbolic::ETS},
+        library::symbolic::ETS,
         parsing::{NetworkParse, ParseSettings, StrictTensorFilter},
-        store::NetworkStore,
         tags::SPENSO_TAG,
     },
     structure::{
@@ -50,22 +48,21 @@ spenso::symbolica_init_lazy_static! {
 }
 
 pub fn canonize_impl(view: AtomView) -> Atom {
-    let filtered = remove_antisymmetric_zero_terms::<AbstractIndex>(view);
-    let view = filtered.as_view();
-    let lib = DummyLibrary::<SymbolicTensor>::new();
     let settings =
         ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
-    let mut net = Network::<NetworkStore<SymbolicTensor, Atom>, _, Symbol>::try_from_view::<
-        SymbolicTensor,
-        _,
-    >(view, &lib, &settings)
-    .unwrap();
+    let mut net = view
+        .parse_to_symbolic_net::<AbstractIndex>(&settings)
+        .unwrap();
+    let pruned = net.remove_antisymmetric_zero_terms();
 
     let mut redual_reps = vec![];
 
     let mut indices = vec![];
-    for t in net.store.tensors.iter_mut() {
-        let mut reps = vec![];
+    for t in &net.store.tensors {
+        if t.expression.is_zero() {
+            continue;
+        }
+        let mut has_dual = false;
         let mut pat = FunctionBuilder::new(t.name().unwrap());
         let mut rhs = pat.clone();
         for s in t.structure.external_structure_iter() {
@@ -73,23 +70,27 @@ pub fn canonize_impl(view: AtomView) -> Atom {
                 pat = pat.add_arg(s.rep().dual().to_symbolic([Atom::var(RS.a_)]));
                 let slot = s.dual();
                 indices.push((slot.to_atom(), slot.rep()));
-                reps.push(Replacement::new(
-                    s.rep().to_symbolic([Atom::var(RS.a_)]).to_pattern(),
-                    s.rep().dual().to_symbolic([Atom::var(RS.a_)]),
-                ));
+                has_dual = true;
             } else {
                 pat = pat.add_arg(s.rep().to_symbolic([Atom::var(RS.a_)]));
                 indices.push((s.to_atom(), s.rep()));
             }
             rhs = rhs.add_arg(s.rep().to_symbolic([Atom::var(RS.a_)]));
         }
-        if !reps.is_empty() {
+        if has_dual {
             redual_reps.push(Replacement::new(pat.finish().to_pattern(), rhs.finish()));
-            t.expression = t.expression.replace_multiple(&reps);
         }
     }
 
-    view.canonize_tensors(indices)
+    // Preserve no-op payloads. Only a pruned graph needs reconstruction; the
+    // original dual labels remain in its stored tensors for canonicalization.
+    let filtered = if pruned {
+        net.simple_execute::<()>().unwrap()
+    } else {
+        view.to_owned()
+    };
+    filtered
+        .canonize_tensors(indices)
         .unwrap()
         .canonical_form
         .replace_multiple(&redual_reps)

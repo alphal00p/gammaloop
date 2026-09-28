@@ -347,11 +347,11 @@ impl TensorDataDescriptor {
         name: Symbol,
         args: Vec<Atom>,
     ) -> PyResult<Self> {
-        let layout = tensor_data_layout(&descriptor.structure)?;
+        let layout = tensor_data_layout(descriptor.structure())?;
         let owner = AbstractIndex::fresh_open_owner();
         let logical_axes = (0..layout.logical_shape().len()).collect::<Vec<_>>();
         let storage_axes = descriptor
-            .structure
+            .structure()
             .layout()
             .logical_to_canonical(&logical_axes);
         let mut storage_indices = vec![0; storage_axes.len()];
@@ -360,7 +360,7 @@ impl TensorDataDescriptor {
         }
         let structure = OrderedStructure::new(
             descriptor
-                .structure
+                .structure()
                 .logical_slots()
                 .into_iter()
                 .zip(storage_indices)
@@ -495,8 +495,8 @@ impl Spensor {
     pub fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_known_parts(
             py,
-            self.descriptor.expression.clone(),
-            self.descriptor.structure.clone(),
+            self.descriptor.expression().clone(),
+            self.descriptor.structure().clone(),
             self.descriptor_name,
             self.descriptor_args.clone(),
         )
@@ -506,7 +506,7 @@ impl Spensor {
     #[getter]
     fn structure(&self) -> metadata::SpensoTensorStructure {
         metadata::SpensoTensorStructure {
-            interface: self.descriptor.structure.clone(),
+            interface: self.descriptor.structure().clone(),
             name: self.descriptor_name,
             arguments: self.descriptor_args.clone(),
         }
@@ -624,7 +624,7 @@ impl Spensor {
             name,
             args,
         } = structure;
-        let layout = tensor_data_layout(&descriptor.structure)?;
+        let layout = tensor_data_layout(descriptor.structure())?;
         let storage_structure = structure.into_canonical();
         let dense = match data {
             AtomsOrFloats::Floats(f) => DenseTensor::<f64, _>::from_storage_data(
@@ -822,7 +822,7 @@ impl Spensor {
     /// Canonical storage-axis order is never exposed through this API.
     #[gen_stub(skip)]
     fn __getitem__(&self, item: SliceOrIntOrExpanded) -> PyResult<Py<PyAny>> {
-        let layout = tensor_data_layout(&self.descriptor.structure)?;
+        let layout = tensor_data_layout(self.descriptor.structure())?;
         let size = layout.size();
         let get_owned_canonical = |index: usize| {
             self.get_owned_linear(index.into())
@@ -926,7 +926,7 @@ impl Spensor {
             ));
         };
 
-        let layout = tensor_data_layout(&self.descriptor.structure)?;
+        let layout = tensor_data_layout(self.descriptor.structure())?;
         let coefficient_error = |error| {
             eyre!(
                 "assigned coefficient kind must match tensor storage (float for real, complex for complex, Expression for parametric): {error}"
@@ -1328,7 +1328,7 @@ impl SpensoExpressionEvaluator {
     fn output_shape<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(
             py,
-            tensor_data_layout(&self.descriptor.structure)?.logical_shape(),
+            tensor_data_layout(self.descriptor.structure())?.logical_shape(),
         )
     }
 
@@ -1598,7 +1598,7 @@ impl SpensoCompiledExpressionEvaluator {
     fn output_shape<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(
             py,
-            tensor_data_layout(&self.descriptor.structure)?.logical_shape(),
+            tensor_data_layout(self.descriptor.structure())?.logical_shape(),
         )
     }
 

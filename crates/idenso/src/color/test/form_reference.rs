@@ -283,6 +283,16 @@ fn six_f_k33_with_structured_indices_simplifies_to_zero() {
         * color_f!(&c, &f, &j);
 
     assert!(contraction.simplify_color().is_zero());
+    // Pruning a closed zero factor must restore every surviving structured
+    // label, including free ports on the remaining color tensor.
+    let surviving = color_f!(
+        structured_slot(21),
+        structured_slot(22),
+        structured_slot(23)
+    );
+    let simplified = ((contraction + Atom::one()) * &surviving).simplify_color();
+    assert_eq!(simplified, surviving);
+    assert!(simplified.contains_symbol(hedge));
 }
 
 #[test]

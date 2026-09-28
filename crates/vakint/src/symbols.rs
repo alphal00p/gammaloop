@@ -124,7 +124,9 @@ pub static S: LazyLock<VakintSymbols> = LazyLock::new(|| VakintSymbols {
     a_: vk_symbol!("a_"),
     b_: vk_symbol!("b_"),
     c_: vk_symbol!("c_"),
-    cmplx_i: vk_symbol!("𝑖"),
+    // Unqualified 𝑖 is a numeric literal in Symbolica. Vakint keeps its
+    // namespaced placeholder until the numerical/evaluator boundary.
+    cmplx_i: symbol!(format!("{}::𝑖", crate::NAMESPACE)),
     lambda: vk_symbol!("VakintLambdaScalingAnalysis"),
     lambda_a: Atom::var(vk_symbol!("VakintLambdaScalingAnalysis")),
     prop: vk_symbol!("prop"),

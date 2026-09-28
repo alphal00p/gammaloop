@@ -1191,7 +1191,17 @@ def consolidation_benchmark(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--suite", choices=("ladder", "consolidation"), default="ladder"
+        "--suite", choices=("ladder", "consolidation", "production"), default="ladder"
+    )
+    parser.add_argument(
+        "--production-build",
+        action="append",
+        help="LABEL=BUILD_DIRECTORY with source/build artifact manifests; supply two",
+    )
+    parser.add_argument(
+        "--fixture-root",
+        type=Path,
+        help="Frozen source tree providing the production graph fixtures and cards",
     )
     parser.add_argument(
         "--interpreter",
@@ -1242,7 +1252,16 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.rounds is None:
-        args.rounds = 3 if args.suite == "consolidation" else 5
+        args.rounds = 5 if args.suite == "ladder" else 3
+    if args.suite == "production":
+        if args.fixture_root is None or len(args.production_build or []) != 2:
+            parser.error(
+                "--suite production requires --fixture-root and two --production-build values"
+            )
+        from tensor_benchmark_production import benchmark as production_benchmark
+
+        print(json.dumps(production_benchmark(args)["summary"], indent=2))
+        raise SystemExit(0)
     if args.suite == "consolidation":
         if args.form_only and (not args.form or args.check_only or args.diagnostic):
             parser.error("--form-only requires --form and excludes checks/diagnostics")

@@ -886,10 +886,44 @@ fn parse_problem() {
         default_namespace = "spenso"
     );
 
-    let net = expr
+    // Untagged function-shaped labels need an explicit reversible admission
+    // boundary; their ports must not disappear into scalar metadata.
+    let cooking = crate::cook::CookSettings::reversible()
+        .with_index_payload_filter(None)
+        .with_output_tags(["idenso::parse_problem_index"]);
+    let cooked = cooking.cook_indices(expr.as_view());
+    assert_eq!(cooking.uncook(cooked.as_view()), expr);
+    let net = cooked
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
+    let exposed = net
+        .graph
+        .dangling_indices()
+        .into_iter()
+        .map(|slot| cooking.uncook(slot.to_atom().as_view()))
+        .collect::<std::collections::HashSet<_>>();
+    // The three tensor squares close their own ports. These four spinor
+    // endpoints and the two metric endpoints remain outside those squares.
+    let expected = parse_lit!(
+        parse_problem_ports(
+            bis(4, hedge(5)),
+            bis(4, hedge(6)),
+            bis(4, hedge(7)),
+            bis(4, hedge(8)),
+            mink(4, hedge_3),
+            mink(4, hedge_4)
+        ),
+        default_namespace = "spenso"
+    );
+    let AtomView::Fun(expected) = expected.as_view() else {
+        unreachable!()
+    };
+    assert_eq!(
+        exposed,
+        expected.iter().map(|port| port.to_owned()).collect()
+    );
+    let result = net.simple_execute::<()>().unwrap();
+    assert_eq!(cooking.uncook(result.as_view()), expr);
 }
 #[test]
 // #[should_panic]
@@ -1197,4 +1231,158 @@ fn symbolic_structure_parsing() {
 
     let _a =
         SymbolicTensor::<OrderedStructure<LibraryRep, AbstractIndex>>::parse(a.as_view()).unwrap();
+}
+
+#[test]
+fn structural_network_borrows_source_leaves_and_owns_generated_shorthand() {
+    use spenso::network::store::TensorScalarStoreMapping;
+    use symbolica::atom::AtomOrView;
+    type Tensor<'a> = SymbolicTensor<OrderedStructure, AtomOrView<'a>>;
+    type Net<'a> = SymbolicNet<AbstractIndex, AtomOrView<'a>>;
+    test_initialize();
+    let source = symbolica::function!(tensor_symbol!(borrowed_network_left), mink!(4, i))
+        + symbolica::function!(tensor_symbol!(borrowed_network_right), mink!(4, i));
+    let settings = ParseSettings {
+        precontract_scalars: false,
+        ..ParseSettings::default()
+    };
+    let network = Net::try_from_view::<OrderedStructure, _>(
+        source.as_view(),
+        &DummyLibrary::<Tensor<'_>>::new(),
+        &settings,
+    )
+    .unwrap();
+    assert_eq!(network.store.tensors.len(), 2);
+    assert!(
+        network
+            .store
+            .tensors
+            .iter()
+            .all(|tensor| matches!(tensor.expression, AtomOrView::View(_)))
+    );
+    let owned = network.map(AtomOrView::into_owned, |tensor| SymbolicTensor {
+        proofs: Default::default(),
+        structure: tensor.structure,
+        expression: tensor.expression.into_owned(),
+        is_metric: tensor.is_metric,
+        is_composite: tensor.is_composite,
+    });
+    let reference = source
+        .parse_to_symbolic_net::<AbstractIndex>(&settings)
+        .unwrap();
+    assert_eq!(owned, reference);
+
+    let compact = symbolica::function!(
+        tensor_symbol!(borrowed_network_compact),
+        vector!(p, mink!(4))
+    );
+    let materialized = Net::try_from_view::<OrderedStructure, _>(
+        compact.as_view(),
+        &DummyLibrary::<Tensor<'_>>::new(),
+        &schoonschip_only_settings(),
+    )
+    .unwrap();
+    assert!(!materialized.store.tensors.is_empty());
+    assert!(
+        materialized
+            .store
+            .tensors
+            .iter()
+            .all(|tensor| matches!(tensor.expression, AtomOrView::Atom(_)))
+    );
+    let owned = materialized.map(AtomOrView::into_owned, |tensor| SymbolicTensor {
+        proofs: Default::default(),
+        structure: tensor.structure,
+        expression: tensor.expression.into_owned(),
+        is_metric: tensor.is_metric,
+        is_composite: tensor.is_composite,
+    });
+    assert_eq!(
+        owned,
+        compact
+            .parse_to_symbolic_net::<AbstractIndex>(&schoonschip_only_settings())
+            .unwrap()
+    );
+}
+
+#[test]
+fn structural_network_requires_materialization_before_execution() {
+    use spenso::network::{
+        graph::{NetworkLeaf, NetworkNode, ScalarRef},
+        store::TensorScalarStore,
+    };
+    test_initialize();
+    let source = symbolica::function!(tensor_symbol!(bound_network_leaf), mink!(4, i));
+    let mut network = source
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    let node = network
+        .graph
+        .graph
+        .iter_nodes()
+        .find_map(|(node, _, data)| {
+            matches!(data, NetworkNode::Leaf(NetworkLeaf::LocalTensor(_))).then_some(node)
+        })
+        .unwrap();
+    let value = network.store.add_scalar(vector!(p, mink!(4)));
+    assert!(
+        network
+            .graph
+            .bind_dangling_port(node, 0, ScalarRef::Store(value))
+    );
+    let before = network.clone();
+    let library = DummyLibrary::<SymbolicTensor>::new();
+    assert!(
+        network
+            .execute::<Sequential, SmallestDegree, _, _, _>(&library, &ErroringLibrary::new())
+            .is_err()
+    );
+    assert_eq!(network, before);
+}
+
+#[test]
+fn borrowed_scalar_power_base_preserves_implicit_contractions() {
+    use spenso::structure::{HasStructure, ScalarStructure};
+    use symbolica::atom::AtomOrView;
+    test_initialize();
+    let source = vector!(p, mink!(4, i)) * vector!(q, mink!(4, i));
+    let make = |expression| SymbolicTensor {
+        proofs: Default::default(),
+        structure: OrderedStructure::<LibraryRep, AbstractIndex>::scalar_structure(),
+        expression,
+        is_metric: false,
+        is_composite: true,
+    };
+    let owned = make(AtomOrView::Atom(source.clone()))
+        .scalar_power_base()
+        .unwrap();
+    let borrowed = make(AtomOrView::View(source.as_view()))
+        .scalar_power_base()
+        .unwrap();
+    assert_eq!(borrowed, owned);
+    assert_eq!(
+        borrowed.as_view(),
+        spenso::bracket!(source.as_view()).as_view()
+    );
+}
+
+#[test]
+fn aliased_scalar_power_base_keeps_definition_registry() {
+    use spenso::structure::{HasStructure, ScalarStructure};
+    use symbolica::atom::AliasedAtom;
+    test_initialize();
+    let alias = parse_lit!(structural_alias);
+    let source = vector!(p, mink!(4, i)) * vector!(q, mink!(4, i)) * &alias;
+    let mut expression = AliasedAtom::from(source.clone());
+    expression.register_alias(alias.clone(), parse_lit!(x + y));
+    let tensor = SymbolicTensor {
+        proofs: Default::default(),
+        structure: OrderedStructure::<LibraryRep, AbstractIndex>::scalar_structure(),
+        expression,
+        is_metric: false,
+        is_composite: true,
+    };
+    let result = tensor.scalar_power_base().unwrap();
+    assert_eq!(result.get_root(), &spenso::bracket!(source));
+    assert_eq!(result.get_aliases().get(&alias), Some(&parse_lit!(x + y)));
 }

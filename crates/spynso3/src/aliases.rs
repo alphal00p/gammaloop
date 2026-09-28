@@ -1,6 +1,6 @@
 //! Python conversion and result wrapping for Idenso's typed alias registry.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use idenso::tensor::{SymbolicTensor, aliases::AliasInterfaces, inference::TensorInferenceError};
 use pyo3::{exceptions::PyValueError, prelude::*};
@@ -25,7 +25,7 @@ type Descriptor = (Option<Symbol>, Vec<Atom>);
     module = "symbolica.community.spenso"
 )]
 pub struct AliasedTensorExpression {
-    pub(crate) value: SymbolicTensor<AliasInterfaces, AliasedAtom>,
+    pub(crate) value: Arc<SymbolicTensor<AliasInterfaces, AliasedAtom>>,
     descriptor: Descriptor,
     descriptors: HashMap<Atom, (Descriptor, Descriptor)>,
 }
@@ -33,15 +33,28 @@ pub struct AliasedTensorExpression {
 impl ModuleInit for AliasedTensorExpression {}
 
 impl AliasedTensorExpression {
+    pub(crate) fn from_parts(
+        value: SymbolicTensor<AliasInterfaces, AliasedAtom>,
+        name: Option<Symbol>,
+        arguments: Vec<Atom>,
+    ) -> Self {
+        Self {
+            value: Arc::new(value),
+            descriptor: (name, arguments),
+            descriptors: HashMap::new(),
+        }
+    }
+
     fn wrap(
         py: Python<'_>,
         tensor: SymbolicTensor<PartialStructure>,
         descriptor: &Descriptor,
     ) -> PyResult<Py<TensorExpression>> {
+        let (expression, structure) = tensor.into_parts();
         TensorExpression::from_parts_unchecked(
             py,
-            tensor.expression,
-            tensor.structure,
+            expression,
+            structure,
             descriptor.0,
             descriptor.1.clone(),
         )
@@ -79,9 +92,11 @@ impl AliasedTensorExpression {
             })
             .collect::<Vec<_>>();
         Ok(Self {
-            value: TensorExpression::structured(&root)
-                .with_aliases(aliases)
-                .map_err(TensorExpression::inference_error)?,
+            value: Arc::new(
+                TensorExpression::structured(&root)
+                    .with_aliases(aliases)
+                    .map_err(TensorExpression::inference_error)?,
+            ),
             descriptor: Self::descriptor(&root),
             descriptors,
         })
@@ -96,14 +111,16 @@ impl AliasedTensorExpression {
             .map_err(TensorExpression::inference_error)?;
         let descriptor = Self::descriptor(&expression);
         let descriptors = HashMap::from([(
-            handle.expression.clone(),
+            handle.expression().clone(),
             ((None, Vec::new()), descriptor.clone()),
         )]);
         Ok(Self {
-            value: handle
-                .clone()
-                .with_aliases([(handle, body)])
-                .map_err(TensorExpression::inference_error)?,
+            value: Arc::new(
+                handle
+                    .clone()
+                    .with_aliases([(handle, body)])
+                    .map_err(TensorExpression::inference_error)?,
+            ),
             descriptor,
             descriptors,
         })
@@ -126,7 +143,7 @@ impl AliasedTensorExpression {
             .map(|(handle, body)| {
                 let empty = ((None, Vec::new()), (None, Vec::new()));
                 let (handle_descriptor, body_descriptor) =
-                    self.descriptors.get(&handle.expression).unwrap_or(&empty);
+                    self.descriptors.get(handle.expression()).unwrap_or(&empty);
                 Ok((
                     Self::wrap(py, handle, handle_descriptor)?,
                     Self::wrap(py, body, body_descriptor)?,
@@ -156,7 +173,7 @@ impl AliasedTensorExpression {
     }
 
     fn get_byte_size(&self) -> usize {
-        self.value.expression.get_byte_size()
+        self.value.expression().get_byte_size()
     }
 
     /// Apply a Python callback once per definition, retaining its typed interface.
@@ -166,12 +183,12 @@ impl AliasedTensorExpression {
         let value = self.value.map_aliases(|handle, body| {
             let result = (|| {
                 let empty = ((None, Vec::new()), (None, Vec::new()));
-                let descriptor = self.descriptors.get(&handle.expression).unwrap_or(&empty);
+                let descriptor = self.descriptors.get(handle.expression()).unwrap_or(&empty);
                 let argument = Self::wrap(py, body, &descriptor.1)?;
                 let output = callback.call1(py, (argument,))?;
                 let tensor = output.extract::<PyRef<'_, TensorExpression>>(py)?;
                 descriptors.insert(
-                    handle.expression.clone(),
+                    handle.expression().clone(),
                     (descriptor.0.clone(), Self::descriptor(&tensor)),
                 );
                 Ok::<_, PyErr>(TensorExpression::structured(&tensor))
@@ -185,7 +202,7 @@ impl AliasedTensorExpression {
             return Err(error);
         }
         Ok(Self {
-            value: value.map_err(TensorExpression::inference_error)?,
+            value: Arc::new(value.map_err(TensorExpression::inference_error)?),
             descriptor: self.descriptor.clone(),
             descriptors,
         })

@@ -48,6 +48,24 @@ pub struct ChainNestingError {
     inner: Symbol,
 }
 
+impl ChainNestingError {
+    /// Enter one function during an existing syntax walk. Scalar metadata is
+    /// opaque to placeholder scopes; callers do not descend into it.
+    pub fn enter(owner: Option<Symbol>, symbol: Symbol) -> Result<Option<Symbol>, Self> {
+        if symbol == SPENSO_TAG.chain || symbol == SPENSO_TAG.trace {
+            if let Some(outer) = owner {
+                return Err(Self {
+                    outer,
+                    inner: symbol,
+                });
+            }
+            Ok(Some(symbol))
+        } else {
+            Ok(owner)
+        }
+    }
+}
+
 pub trait StructureFromAtom: Sized {
     /// Infer the permuted tensor structure exposed by `value`.
     ///
@@ -236,14 +254,7 @@ impl TensorialSyntax {
                 if symbol.is_scalar() {
                     return Ok(());
                 }
-                let chain_like = symbol == SPENSO_TAG.chain || symbol == SPENSO_TAG.trace;
-                if chain_like && let Some(outer) = owner {
-                    return Err(ChainNestingError {
-                        outer,
-                        inner: symbol,
-                    });
-                }
-                let owner = if chain_like { Some(symbol) } else { owner };
+                let owner = ChainNestingError::enter(owner, symbol)?;
                 for argument in function.iter() {
                     Self::validate_chain_like_nesting(argument, owner)?;
                 }
@@ -370,7 +381,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
             AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.trace => {
                 Self::trace_structure_from_fun(fun, matcher)
             }
-            _ => Self::from_syntactic_atom(value, matcher).map(Canonicalized::identity),
+            _ => Self::from_syntactic_atom(value, matcher),
         }
     }
 
@@ -383,9 +394,9 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     fn from_syntactic_atom(
         value: AtomView<'_>,
         matcher: &mut SlotMatcher,
-    ) -> Result<Self, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
         let structure = Self::syntactic_structure_from_atom(value, matcher)?;
-        if structure.is_scalar() {
+        if structure.canonical().is_scalar() {
             Err(StructureError::EmptyStructure(SlotError::EmptyStructure))
         } else {
             Ok(structure)
@@ -395,18 +406,18 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     pub(super) fn syntactic_structure_from_atom(
         value: AtomView<'_>,
         matcher: &mut SlotMatcher,
-    ) -> Result<Self, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
         match value {
             AtomView::Add(add) => {
                 let Some(first) = add.iter().next() else {
-                    return Ok(OrderedStructure::empty());
+                    return Ok(Canonicalized::identity(OrderedStructure::empty()));
                 };
                 Self::syntactic_structure_from_atom(first, matcher)
             }
             AtomView::Pow(pow) => Self::from_power_atom(pow, matcher),
             AtomView::Mul(mul) => Self::from_product_atom(mul, matcher),
             AtomView::Fun(fun) => Self::from_function_atom(fun, matcher),
-            _ => Ok(OrderedStructure::empty()),
+            _ => Ok(Canonicalized::identity(OrderedStructure::empty())),
         }
     }
 
@@ -419,17 +430,17 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     fn from_power_atom(
         pow: PowView<'_>,
         matcher: &mut SlotMatcher,
-    ) -> Result<Self, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
         let (base, exp) = pow.get_base_exp();
         let base_structure = Self::syntactic_structure_from_atom(base, matcher)?;
 
-        if base_structure.is_scalar() {
+        if base_structure.canonical().is_scalar() {
             Ok(base_structure)
-        } else if base_structure.is_fully_self_dual()
+        } else if base_structure.canonical().is_fully_self_dual()
             && let Ok(r) = Rational::try_from(exp)
         {
             if r.numerator() % 2 == 0 {
-                Ok(OrderedStructure::empty())
+                Ok(Canonicalized::identity(OrderedStructure::empty()))
             } else if r.denominator() == 1 {
                 Ok(base_structure)
             } else {
@@ -453,13 +464,12 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     fn from_product_atom(
         product: MulView<'_>,
         matcher: &mut SlotMatcher,
-    ) -> Result<Self, StructureError> {
-        let mut structure = OrderedStructure::empty();
+    ) -> Result<Canonicalized<Self>, StructureError> {
+        let mut structure = Canonicalized::identity(OrderedStructure::empty());
 
         for factor in product {
             structure = structure
-                .merge(&Self::syntactic_structure_from_atom(factor, matcher)?)?
-                .0;
+                .merge_syntactic(&Self::syntactic_structure_from_atom(factor, matcher)?)?;
         }
 
         Ok(structure)
@@ -470,21 +480,23 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// A direct slot argument contributes one exposed slot. An `aind(...)`
     /// bundle is flattened into its slots. Other arguments are treated as
     /// metadata for the eventual named leaf and do not erase slots already seen.
+    /// Recognized abstract ports with invalid dimensions or indices are errors;
+    /// concrete component markers remain non-structural metadata.
     /// Chain projectors without direct structural arguments expose the combined
     /// slots of their factor sequence.
     fn from_function_atom(
         fun: FunView<'_>,
         matcher: &mut SlotMatcher,
-    ) -> Result<Self, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
         if fun.get_symbol().is_scalar() {
-            return Ok(OrderedStructure::empty());
+            return Ok(Canonicalized::identity(OrderedStructure::empty()));
         }
         if fun.get_symbol() == AIND_SYMBOLS.aind {
             let mut slots = Vec::new();
             for arg in fun.iter() {
                 slots.push(matcher.parse::<LibraryRep, Aind>(arg)?);
             }
-            return Ok(OrderedStructure::new(slots).into_canonical());
+            return Ok(OrderedStructure::new(slots));
         }
 
         let mut slots = Vec::new();
@@ -494,12 +506,23 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
                 Ok(slot) => {
                     slots.push(slot);
                 }
-                Err(_) => {
+                Err(error) => {
+                    // Explicit abstract ports must satisfy the caller's index
+                    // grammar. Concrete component markers and non-slot metadata
+                    // remain opaque; a failed abstract port cannot become scalar.
+                    if matches!(matcher.classify(arg), SlotMatch::Explicit(slot) if !slot.is_concrete_index())
+                    {
+                        return Err(error.into());
+                    }
                     if let AtomView::Fun(fun) = arg
                         && fun.get_symbol() == AIND_SYMBOLS.aind
                     {
                         let internal = Self::from_function_atom(fun, matcher)?;
-                        slots.extend(internal.structure);
+                        slots.extend(
+                            internal
+                                .layout()
+                                .canonical_to_logical(&internal.canonical().structure),
+                        );
                     }
                 }
             }
@@ -509,16 +532,15 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
             && [*shadowing::SYM, *shadowing::ANTISYM, *shadowing::CYCLIC]
                 .contains(&fun.get_symbol())
         {
-            let mut structure = OrderedStructure::empty();
+            let mut structure = Canonicalized::identity(OrderedStructure::empty());
             for factor in fun.iter() {
                 structure = structure
-                    .merge(&Self::syntactic_structure_from_atom(factor, matcher)?)?
-                    .0;
+                    .merge_syntactic(&Self::syntactic_structure_from_atom(factor, matcher)?)?;
             }
             return Ok(structure);
         }
 
-        Ok(OrderedStructure::new(slots).into_canonical())
+        Ok(OrderedStructure::new(slots))
     }
 
     /// Infer an `OrderedStructure` from expanded shorthand by reading graph dangling slots.
@@ -613,8 +635,42 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         slots: &mut Vec<Slot<LibraryRep, Aind>>,
         matcher: &mut SlotMatcher,
     ) -> Result<(), StructureError> {
-        slots.extend(Self::syntactic_structure_from_atom(value, matcher)?.structure);
+        let structure = Self::syntactic_structure_from_atom(value, matcher)?;
+        slots.extend(
+            structure
+                .layout()
+                .canonical_to_logical(&structure.canonical().structure),
+        );
         Ok(())
+    }
+}
+
+impl<Aind: AbsInd + ParseableAind> Canonicalized<OrderedStructure<LibraryRep, Aind>> {
+    /// Use the canonical merger's exact incidence decision, retaining the
+    /// original left-to-right order of the surviving ports.
+    fn merge_syntactic(&self, other: &Self) -> Result<Self, StructureError> {
+        let (canonical, left, right, _) = self.canonical().merge(other.canonical())?;
+        let surviving = |source: &Self, contracted: Vec<bool>| {
+            let ports = source
+                .canonical()
+                .structure
+                .iter()
+                .copied()
+                .zip(contracted)
+                .collect::<Vec<_>>();
+            source
+                .layout()
+                .canonical_to_logical(&ports)
+                .into_iter()
+                .filter_map(|(slot, contracted)| (!contracted).then_some(slot))
+        };
+        let result = OrderedStructure::new(
+            surviving(self, left.iter().collect())
+                .chain(surviving(other, right.iter().collect()))
+                .collect(),
+        );
+        debug_assert_eq!(result.canonical(), &canonical);
+        Ok(result)
     }
 }
 
@@ -689,6 +745,10 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
                             slots.push(slot);
                         }
                         Err(err) => {
+                            if matches!(matcher.classify(arg), SlotMatch::Explicit(slot) if !slot.is_concrete_index())
+                            {
+                                return Err(err.into());
+                            }
                             if let AtomView::Fun(fun) = arg
                                 && fun.get_symbol() == AIND_SYMBOLS.aind
                             {
@@ -902,6 +962,154 @@ mod tests {
     }
 
     #[test]
+    fn direct_slots_reject_unsupported_indices_but_keep_component_metadata() {
+        let rep = mink4();
+        let slot = |index: Atom| rep.to_symbolic([index]);
+        let invalid = slot(function!(symbol!("direct_invalid_index"), 7));
+        let valid = rep.slot::<AbstractIndex, _>(11).to_atom();
+        let head = tensor_symbol!(direct_slot_admission);
+        for arguments in [
+            vec![invalid.clone()],
+            vec![valid.clone(), invalid.clone()],
+            vec![invalid.clone(), valid.clone()],
+        ] {
+            let value = arguments
+                .into_iter()
+                .fold(FunctionBuilder::new(head), |builder, argument| {
+                    builder.add_arg(argument)
+                })
+                .finish();
+            assert!(matches!(
+                value.infer_structure::<OrderedStructure>(StructureInferenceMode::Fast),
+                Err(StructureError::SlotError(SlotError::AindError(_)))
+            ));
+            assert!(matches!(
+                value.infer_structure::<ShadowedStructure<AbstractIndex>>(
+                    StructureInferenceMode::Fast
+                ),
+                Err(StructureError::SlotError(SlotError::AindError(_)))
+            ));
+        }
+        let scalar = symbol!("direct_slot_metadata"; Scalar);
+        let metadata = [
+            function!(scalar, invalid),
+            rep.to_symbolic([]),
+            slot(function!(AIND_SYMBOLS.cind, 2)),
+            slot(function!(AIND_SYMBOLS.find, 3)),
+        ];
+        let value = metadata
+            .iter()
+            .fold(
+                FunctionBuilder::new(head).add_arg(&valid),
+                |builder, argument| builder.add_arg(argument),
+            )
+            .finish();
+        let ordered = value
+            .infer_structure::<OrderedStructure>(StructureInferenceMode::Fast)
+            .unwrap();
+        let named = value
+            .infer_structure::<ShadowedStructure<AbstractIndex>>(StructureInferenceMode::Fast)
+            .unwrap();
+        assert_eq!(ordered.canonical().order(), 1);
+        assert_eq!(
+            named.canonical().external_structure(),
+            ordered.canonical().external_structure()
+        );
+        assert_eq!(
+            named.canonical().additional_args.as_deref(),
+            Some(metadata.as_slice())
+        );
+
+        let index = function!(crate::index_symbol!(direct_named_index), 19, 2);
+        let named_slot = slot(index.clone());
+        let value = function!(head, named_slot);
+        let inferred = value
+            .infer_structure::<OrderedStructure>(StructureInferenceMode::Fast)
+            .unwrap();
+        assert_eq!(
+            inferred.canonical().external_structure()[0]
+                .aind()
+                .to_atom(),
+            index
+        );
+        assert_eq!(
+            value
+                .infer_structure::<ShadowedStructure<AbstractIndex>>(StructureInferenceMode::Fast)
+                .unwrap()
+                .canonical()
+                .order(),
+            1
+        );
+    }
+
+    #[test]
+    fn direct_slots_use_the_requested_custom_index_grammar() {
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+        struct PayloadIndex(usize);
+        impl std::fmt::Display for PayloadIndex {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "custom({})", self.0)
+            }
+        }
+        impl AbsInd for PayloadIndex {}
+        impl ParseableAind for PayloadIndex {
+            type Error = SlotError;
+            fn from_view(view: AtomView<'_>) -> Result<Self, Self::Error> {
+                if let AtomView::Fun(function) = view
+                    && function.get_symbol() == symbol!("direct_custom_index")
+                    && function.get_nargs() == 1
+                {
+                    return usize::try_from(function.iter().next().unwrap())
+                        .map(Self)
+                        .map_err(|_| SlotError::NotNatural);
+                }
+                Err(SlotError::Composite)
+            }
+            fn to_atom(&self) -> Atom {
+                function!(symbol!("direct_custom_index"), self.0)
+            }
+        }
+        impl DummyAind for PayloadIndex {
+            fn new_dummy() -> Self {
+                Self(usize::MAX)
+            }
+            fn new_dummy_at(i: usize) -> Self {
+                Self(i)
+            }
+            fn is_dummy(&self) -> bool {
+                self.0 == usize::MAX
+            }
+        }
+        let value = function!(
+            tensor_symbol!(custom_slot_admission),
+            mink4().to_symbolic([PayloadIndex(17).to_atom()])
+        );
+        let ordered = value
+            .infer_structure::<OrderedStructure<LibraryRep, PayloadIndex>>(
+                StructureInferenceMode::Fast,
+            )
+            .unwrap();
+        let named = value
+            .infer_structure::<NamedStructure<Symbol, Vec<Atom>, LibraryRep, PayloadIndex>>(
+                StructureInferenceMode::Fast,
+            )
+            .unwrap();
+        assert_eq!(
+            ordered.canonical().external_structure()[0].aind(),
+            PayloadIndex(17)
+        );
+        assert_eq!(
+            named.canonical().external_structure(),
+            ordered.canonical().external_structure()
+        );
+        assert!(
+            value
+                .infer_structure::<OrderedStructure>(StructureInferenceMode::Fast)
+                .is_err()
+        );
+    }
+
+    #[test]
     fn tagged_tensor_rejects_malformed_aind_bundle() {
         let malformed_aind = FunctionBuilder::new(AIND_SYMBOLS.aind)
             .add_arg(Atom::num(1))
@@ -918,6 +1126,40 @@ mod tests {
             error,
             StructureError::SlotError(SlotError::Composite)
         ));
+    }
+
+    #[test]
+    fn fast_inference_retains_logical_order_through_bundles_powers_and_products() {
+        let rep = Minkowski {}.new_rep(4);
+        let slots = [rep.slot(31), rep.slot(7), rep.slot(19)];
+        let bundle = FunctionBuilder::new(AIND_SYMBOLS.aind)
+            .add_arg(slots[0].to_atom())
+            .add_arg(slots[1].to_atom())
+            .finish();
+        let leaf = FunctionBuilder::new(tensor_symbol!(logical_inference_leaf))
+            .add_arg(bundle)
+            .add_arg(slots[2].to_atom())
+            .finish();
+        let logical = |atom: &Atom| {
+            let value = atom
+                .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
+                    StructureInferenceMode::Fast,
+                )
+                .unwrap();
+            value
+                .layout()
+                .canonical_to_logical(&value.canonical().external_structure())
+        };
+        let expected = slots.map(|slot| slot.to_lib()).to_vec();
+        assert_eq!(logical(&leaf), expected);
+        assert_eq!(logical(&leaf.pow(3)), expected);
+        let vector = FunctionBuilder::new(tensor_symbol!(logical_inference_partner))
+            .add_arg(slots[1].to_atom())
+            .finish();
+        assert_eq!(
+            logical(&(leaf * vector)),
+            vec![slots[0].to_lib(), slots[2].to_lib()]
+        );
     }
 
     #[test]

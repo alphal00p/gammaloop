@@ -54,7 +54,9 @@ use symbolica::{
 };
 
 use crate::{
-    ModuleInit, SliceOrIntOrExpanded, Spensor, display,
+    ModuleInit, SliceOrIntOrExpanded, Spensor,
+    aliases::AliasedTensorExpression,
+    display,
     library::SpensorLibrary,
     network::{ConvertibleToSpensoNet, ExecutionMode, ReplacementCondition, SpensoNet},
     simplification::{
@@ -162,7 +164,8 @@ impl TensorExpression {
         } else {
             SymbolicTensor::new(atom, PartialStructure::from_logical_slots([]))
         };
-        Self::from_known_parts(py, value.expression, value.structure, name, name_args)
+        let (atom, interface) = value.into_parts();
+        Self::from_known_parts(py, atom, interface, name, name_args)
     }
 
     /// Construct from tensor-aware parts whose interface was established by the
@@ -178,8 +181,7 @@ impl TensorExpression {
         let original_rank = interface.canonical().order();
         let value =
             SymbolicTensor::checked_parts(atom, interface).map_err(Self::inference_error)?;
-        let atom = value.expression;
-        let interface = value.structure;
+        let (atom, interface) = value.into_parts();
         // A contraction is a derived expression, not a declaration of the original stored data.
         let (name, name_args) = if interface.canonical().order() == original_rank {
             (name, name_args)
@@ -223,26 +225,16 @@ impl TensorExpression {
         py: Python<'_>,
         atom: Atom,
     ) -> PyResult<Py<TensorExpression>> {
-        if atom == self_.as_super().expr {
-            return Py::new(py, (Self::clone(self_), PythonExpression { expr: atom }));
-        }
-        let interface = if atom.as_view().is_zero() {
-            self_.interface.clone()
-        } else if InterfaceInference::has_structured_syntax(atom.as_view()) {
-            SymbolicTensor::infer(atom.clone())
-                .map_err(Self::inference_error)?
-                .structure
-        } else if self_.interface.canonical().is_scalar() {
-            PartialStructure::from_logical_slots([])
+        let (value, contracted) = Self::structured(self_)
+            .with_transformed_expression(atom)
+            .map_err(Self::inference_error)?;
+        let (name, args) = if contracted {
+            (None, Vec::new())
         } else {
-            return Err(PyValueError::new_err(
-                "Tensor transformation removed the tensor syntax of a non-scalar expression",
-            ));
+            Self::transformed_descriptor(self_, value.expression())
         };
-        // Descriptor identity depends on contractions of the inferred raw ports,
-        // even when the input and final result happen to have the same rank.
-        let (name, args) = Self::transformed_descriptor(self_, &atom);
-        Self::from_known_parts(py, atom, interface, name, args)
+        let (atom, interface) = value.into_parts();
+        Self::from_parts_unchecked(py, atom, interface, name, args)
     }
 
     /// Wrap a tensor identity using the shared callback-aware interface proof.
@@ -251,15 +243,12 @@ impl TensorExpression {
         py: Python<'_>,
         atom: Atom,
     ) -> PyResult<Py<Self>> {
-        if atom == self_.as_super().expr {
-            return Py::new(py, (Self::clone(self_), PythonExpression { expr: atom }));
-        }
         let value = Self::structured(self_)
             .with_rewritten_expression(atom)
             .map_err(Self::inference_error)?;
-        let atom = value.expression;
+        let (atom, interface) = value.into_parts();
         let (name, args) = Self::transformed_descriptor(self_, &atom);
-        Self::from_parts_unchecked(py, atom, value.structure, name, args)
+        Self::from_parts_unchecked(py, atom, interface, name, args)
     }
 
     /// Wrap scalar algebra using the shared tensor-interface proof.
@@ -268,14 +257,12 @@ impl TensorExpression {
         py: Python<'_>,
         atom: Atom,
     ) -> PyResult<Py<Self>> {
-        if atom == self_.as_super().expr {
-            return Py::new(py, (Self::clone(self_), PythonExpression { expr: atom }));
-        }
         let value = Self::structured(self_)
             .with_algebra_result(atom)
             .map_err(Self::inference_error)?;
-        let (name, args) = Self::transformed_descriptor(self_, &value.expression);
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        let (name, args) = Self::transformed_descriptor(self_, value.expression());
+        let (atom, interface) = value.into_parts();
+        Self::from_parts_unchecked(py, atom, interface, name, args)
     }
 
     fn with_cooked_indices(
@@ -287,11 +274,12 @@ impl TensorExpression {
             .with_cooked_indices(settings)
             .map_err(|error| CookingError::new_err(error.to_string()))?;
         let (name, args) = if value.rank() == self_.interface.canonical().order() {
-            Self::transformed_descriptor(self_, &value.expression)
+            Self::transformed_descriptor(self_, value.expression())
         } else {
             (None, Vec::new())
         };
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        let (atom, interface) = value.into_parts();
+        Self::from_parts_unchecked(py, atom, interface, name, args)
     }
 
     fn transformed_descriptor(self_: &PyRef<'_, Self>, atom: &Atom) -> (Option<Symbol>, Vec<Atom>) {
@@ -311,9 +299,6 @@ impl TensorExpression {
         py: Python<'_>,
         atom: Atom,
     ) -> PyResult<Py<Self>> {
-        if atom == self_.as_super().expr {
-            return Self::from_preserved_atom(self_, py, atom);
-        }
         let (name, args) = Self::transformed_descriptor(self_, &atom);
         let value = Self::structured(self_)
             .with_checked_expression(atom)
@@ -323,14 +308,16 @@ impl TensorExpression {
         } else {
             (None, Vec::new())
         };
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        let (atom, interface) = value.into_parts();
+        Self::from_parts_unchecked(py, atom, interface, name, args)
     }
 
     pub(crate) fn from_structured(
         py: Python<'_>,
         value: SymbolicTensor<PartialStructure>,
     ) -> PyResult<Py<Self>> {
-        Self::from_known_parts(py, value.expression, value.structure, None, Vec::new())
+        let (atom, interface) = value.into_parts();
+        Self::from_known_parts(py, atom, interface, None, Vec::new())
     }
 
     fn promoted_network(self_: &PyRef<'_, Self>, py: Python<'_>) -> PyResult<SpensoNet> {
@@ -451,7 +438,7 @@ impl TensorExpression {
         Ok(Self::structured(self_)
             .materialized()
             .map_err(|error| PyValueError::new_err(error.to_string()))?
-            .expression)
+            .into_expression())
     }
 
     pub(crate) fn from_indices(py: Python<'_>, indices: &SpensoIndices) -> PyResult<Py<Self>> {
@@ -464,7 +451,7 @@ impl TensorExpression {
         );
         let atom = SymbolicTensor::from_canonicalized(&indices.structure)
             .ok_or_else(|| PyValueError::new_err("indexed tensor structure has no name"))?
-            .expression;
+            .into_expression();
         Self::from_known_parts(
             py,
             atom,
@@ -480,10 +467,11 @@ impl TensorExpression {
     ) -> PyResult<Py<Self>> {
         let value = SymbolicTensor::from_signature(structure)
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        let (atom, interface) = value.into_parts();
         Self::from_known_parts(
             py,
-            value.expression,
-            value.structure,
+            atom,
+            interface,
             structure.canonical().name(),
             structure.canonical().args().unwrap_or_default(),
         )
@@ -1046,8 +1034,9 @@ impl TensorExpression {
         let value = Self::structured(&self_)
             .replace(rule)
             .map_err(Self::inference_error)?;
-        let (name, args) = Self::transformed_descriptor(&self_, &value.expression);
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        let (name, args) = Self::transformed_descriptor(&self_, value.expression());
+        let (atom, interface) = value.into_parts();
+        Self::from_parts_unchecked(py, atom, interface, name, args)
     }
 
     /// Apply simultaneous Symbolica replacements and validate the resulting tensor.
@@ -1125,19 +1114,20 @@ impl TensorExpression {
                 via_poly.unwrap_or(false),
             )
             .map_err(Self::inference_error)?;
-        if value.expression == self_.as_super().expr {
+        if value.expression() == &self_.as_super().expr {
             return Py::new(
                 py,
                 (
                     Self::clone(&self_),
                     PythonExpression {
-                        expr: value.expression,
+                        expr: value.into_expression(),
                     },
                 ),
             );
         }
-        let (name, args) = Self::transformed_descriptor(&self_, &value.expression);
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        let (name, args) = Self::transformed_descriptor(&self_, value.expression());
+        let (atom, interface) = value.into_parts();
+        Self::from_parts_unchecked(py, atom, interface, name, args)
     }
 
     /// Factor scalar algebra while preserving and validating the tensor interface.
@@ -1282,7 +1272,8 @@ impl TensorExpression {
         } else {
             (None, Vec::new())
         };
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        let (atom, interface) = value.into_parts();
+        Self::from_parts_unchecked(py, atom, interface, name, args)
     }
 
     /// Apply the selected algebra identities while retaining the ordered external interface.
@@ -2443,7 +2434,8 @@ impl TensorExpression {
         } else {
             (None, Vec::new())
         };
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        let (atom, interface) = value.into_parts();
+        Self::from_parts_unchecked(py, atom, interface, name, args)
     }
 
     /// Assign all external ports in logical order, including already indexed ports.
@@ -2461,13 +2453,8 @@ impl TensorExpression {
         let value = Self::structured(&self_)
             .reindex_interface_ports(&replacements)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Self::from_known_parts(
-            py,
-            value.expression,
-            value.structure,
-            self_.name,
-            self_.name_args.clone(),
-        )
+        let (atom, interface) = value.into_parts();
+        Self::from_known_parts(py, atom, interface, self_.name, self_.name_args.clone())
     }
 
     /// Rename external indices simultaneously without changing rank or capturing dummy indices.
@@ -2483,13 +2470,9 @@ impl TensorExpression {
         let value = Self::structured(&self_)
             .reindex_interface_ports(&replacements)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let result = Self::from_known_parts(
-            py,
-            value.expression,
-            value.structure,
-            self_.name,
-            self_.name_args.clone(),
-        )?;
+        let (atom, interface) = value.into_parts();
+        let result =
+            Self::from_known_parts(py, atom, interface, self_.name, self_.name_args.clone())?;
         if result.borrow(py).interface.canonical().order() != self_.interface.canonical().order() {
             return Err(PyValueError::new_err(
                 "renaming would contract external ports; use reindex() to request a contraction",
@@ -2509,13 +2492,8 @@ impl TensorExpression {
         let value = Self::structured(&self_)
             .permuted(&axes)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        Self::from_known_parts(
-            py,
-            value.expression,
-            value.structure,
-            self_.name,
-            self_.name_args.clone(),
-        )
+        let (atom, interface) = value.into_parts();
+        Self::from_known_parts(py, atom, interface, self_.name, self_.name_args.clone())
     }
 
     /// Fill the unresolved external ports with `indices` in interface order.
@@ -2554,7 +2532,7 @@ impl TensorExpression {
                 .map(TensorDispatch::Network);
         }
         let left = Self::structured(&self_);
-        let (right, interface) = match TensorOperand::extract(rhs)? {
+        let right = match TensorOperand::extract(rhs)? {
             TensorOperand::Structured(right) => {
                 return left
                     .try_add(&right)
@@ -2563,25 +2541,27 @@ impl TensorExpression {
                     .map(TensorDispatch::Expression);
             }
             TensorOperand::Scalar(right) if right.as_view().is_zero() => {
+                let (atom, interface) = left.into_parts();
                 return Self::from_known_parts(
                     py,
-                    left.expression,
-                    left.structure,
+                    atom,
+                    interface,
                     self_.name,
                     self_.name_args.clone(),
                 )
                 .map(TensorDispatch::Expression);
             }
-            TensorOperand::Scalar(right) if left.is_scalar() => (right, left.structure),
+            TensorOperand::Scalar(right) if left.is_scalar() => right,
             TensorOperand::Scalar(_) => {
                 return Err(PyValueError::new_err(
                     "cannot add a scalar expression to a non-scalar tensor",
                 ));
             }
         };
+        let (left, interface) = left.into_parts();
         Self::from_known_parts(
             py,
-            left.expression.as_ref() + right.as_ref(),
+            left.as_ref() + right.as_ref(),
             interface,
             None,
             Vec::new(),
@@ -2617,7 +2597,7 @@ impl TensorExpression {
                 .map(TensorDispatch::Network);
         }
         let left = Self::structured(&self_);
-        let (right, interface) = match TensorOperand::extract(rhs)? {
+        let right = match TensorOperand::extract(rhs)? {
             TensorOperand::Structured(right) => {
                 return left
                     .try_sub(&right)
@@ -2626,25 +2606,27 @@ impl TensorExpression {
                     .map(TensorDispatch::Expression);
             }
             TensorOperand::Scalar(right) if right.as_view().is_zero() => {
+                let (atom, interface) = left.into_parts();
                 return Self::from_known_parts(
                     py,
-                    left.expression,
-                    left.structure,
+                    atom,
+                    interface,
                     self_.name,
                     self_.name_args.clone(),
                 )
                 .map(TensorDispatch::Expression);
             }
-            TensorOperand::Scalar(right) if left.is_scalar() => (right, left.structure),
+            TensorOperand::Scalar(right) if left.is_scalar() => right,
             TensorOperand::Scalar(_) => {
                 return Err(PyValueError::new_err(
                     "cannot subtract a scalar expression from a non-scalar tensor",
                 ));
             }
         };
+        let (left, interface) = left.into_parts();
         Self::from_known_parts(
             py,
-            left.expression.as_ref() - right.as_ref(),
+            left.as_ref() - right.as_ref(),
             interface,
             None,
             Vec::new(),
@@ -2665,7 +2647,7 @@ impl TensorExpression {
                 .map(TensorDispatch::Network);
         }
         let right = Self::structured(&self_);
-        let (left, interface) = match TensorOperand::extract(lhs)? {
+        let left = match TensorOperand::extract(lhs)? {
             TensorOperand::Structured(left) => {
                 return left
                     .try_sub(&right)
@@ -2676,16 +2658,17 @@ impl TensorExpression {
             TensorOperand::Scalar(left) if left.as_view().is_zero() => {
                 return Self::__neg__(self_, py).map(TensorDispatch::Expression);
             }
-            TensorOperand::Scalar(left) if right.is_scalar() => (left, right.structure),
+            TensorOperand::Scalar(left) if right.is_scalar() => left,
             TensorOperand::Scalar(_) => {
                 return Err(PyValueError::new_err(
                     "cannot subtract a non-scalar tensor from a scalar expression",
                 ));
             }
         };
+        let (right, interface) = right.into_parts();
         Self::from_known_parts(
             py,
-            left.as_ref() - right.expression.as_ref(),
+            left.as_ref() - right.as_ref(),
             interface,
             None,
             Vec::new(),
@@ -2714,8 +2697,8 @@ impl TensorExpression {
                 .map(TensorDispatch::Expression),
             TensorOperand::Scalar(right) => Self::from_known_parts(
                 py,
-                left.expression.as_ref() * right.as_ref(),
-                left.structure,
+                left.expression().as_ref() * right.as_ref(),
+                left.into_parts().1,
                 None,
                 Vec::new(),
             )
@@ -2744,8 +2727,8 @@ impl TensorExpression {
                 .map(TensorDispatch::Expression),
             TensorOperand::Scalar(left) => Self::from_known_parts(
                 py,
-                left.as_ref() * right.expression.as_ref(),
-                right.structure,
+                left.as_ref() * right.expression().as_ref(),
+                right.into_parts().1,
                 None,
                 Vec::new(),
             )
@@ -2768,7 +2751,7 @@ impl TensorExpression {
         let value = Self::structured(&self_);
         let rhs = match TensorOperand::extract(rhs)? {
             TensorOperand::Scalar(rhs) => rhs,
-            TensorOperand::Structured(rhs) if rhs.is_scalar() => rhs.expression,
+            TensorOperand::Structured(rhs) if rhs.is_scalar() => rhs.into_expression(),
             TensorOperand::Structured(_) => {
                 return Err(PyTypeError::new_err(
                     "tensor division requires a scalar denominator",
@@ -2777,8 +2760,8 @@ impl TensorExpression {
         };
         Self::from_known_parts(
             py,
-            value.expression.as_ref() / rhs.as_ref(),
-            value.structure,
+            value.expression().as_ref() / rhs.as_ref(),
+            value.into_parts().1,
             None,
             Vec::new(),
         )
@@ -2803,13 +2786,14 @@ impl TensorExpression {
                 "a non-scalar tensor cannot be used as a denominator",
             ));
         }
+        let (denominator, interface) = value.into_parts();
         let (lhs, structure) = match TensorOperand::extract(lhs)? {
-            TensorOperand::Scalar(lhs) => (lhs, value.structure),
-            TensorOperand::Structured(lhs) => (lhs.expression, lhs.structure),
+            TensorOperand::Scalar(lhs) => (lhs, interface),
+            TensorOperand::Structured(lhs) => lhs.into_parts(),
         };
         Self::from_known_parts(
             py,
-            lhs.as_ref() / value.expression.as_ref(),
+            lhs.as_ref() / denominator.as_ref(),
             structure,
             None,
             Vec::new(),
@@ -2840,21 +2824,67 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
-    /// Contract one selected pair of ordered interface positions.
-    #[pyo3(signature = (rhs, *, left, right))]
+    /// Contract metric/vector indices, retaining generated sums as a typed DAG.
+    /// With an operand, contract one explicitly selected pair of interface ports.
+    #[pyo3(signature = (rhs=None, *, left=None, right=None, order=None, output="aliased"))]
     #[gen_stub(skip)]
+    #[allow(clippy::too_many_arguments)] // Unary contraction and positional binary composition share this verb.
     fn contract(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
-        rhs: &Bound<'_, PyAny>,
-        left: usize,
-        right: usize,
-    ) -> PyResult<TensorDispatch> {
+        rhs: Option<&Bound<'_, PyAny>>,
+        left: Option<usize>,
+        right: Option<usize>,
+        order: Option<Vec<usize>>,
+        output: &str,
+    ) -> PyResult<Py<PyAny>> {
+        let Some(rhs) = rhs else {
+            if left.is_some() || right.is_some() {
+                return Err(PyTypeError::new_err(
+                    "left and right require a tensor operand",
+                ));
+            }
+            if !matches!(output, "aliased" | "expanded") {
+                return Err(PyValueError::new_err(
+                    "output must be 'aliased' or 'expanded'",
+                ));
+            }
+            let value = Self::structured(&self_)
+                .contract(order.as_deref())
+                .map_err(Self::inference_error)?;
+            if output == "expanded" {
+                let value = value.expanded().map_err(Self::inference_error)?;
+                let (atom, interface) = value.into_parts();
+                return Self::from_parts_unchecked(
+                    py,
+                    atom,
+                    interface,
+                    self_.name,
+                    self_.name_args.clone(),
+                )
+                .map(|value| value.into_any());
+            }
+            return Py::new(
+                py,
+                AliasedTensorExpression::from_parts(value, self_.name, self_.name_args.clone()),
+            )
+            .map(|value| value.into_any());
+        };
+        if order.is_some() || output != "aliased" {
+            return Err(PyTypeError::new_err(
+                "order and output apply to index contraction without an operand",
+            ));
+        }
+        let (Some(left), Some(right)) = (left, right) else {
+            return Err(PyTypeError::new_err(
+                "a tensor operand requires left and right port positions",
+            ));
+        };
         if let Some(rhs) = concrete_network(rhs)? {
             return Self::promoted_network(&self_, py)?
                 .contract(ConvertibleToSpensoNet(rhs), left, right)
                 .and_then(|network| Py::new(py, network))
-                .map(TensorDispatch::Network);
+                .map(|value| value.into_any());
         }
         let value = Self::structured(&self_);
         let TensorOperand::Structured(rhs) = TensorOperand::extract(rhs)? else {
@@ -2864,7 +2894,7 @@ impl TensorExpression {
             .contract_ports(&rhs, &[composition::PortPair { left, right }])
             .map_err(|error| PyValueError::new_err(error.to_string()))
             .and_then(|value| Self::from_structured(py, value))
-            .map(TensorDispatch::Expression)
+            .map(|value| value.into_any())
     }
 
     /// Compose two selected `(input, output)` matrix channels.
@@ -3196,7 +3226,7 @@ fn chain(
                 (factor_channel.input, factor_channel.output),
             )?;
         }
-        let slots = value.structure.structure.logical_slots();
+        let slots = value.structure.structure().logical_slots();
         if start_slot.slot.rep() != slots[0].rep() || end_slot.slot.rep() != slots[1].rep() {
             return Err(PyValueError::new_err(
                 "chain endpoints are incompatible with the factor channel",
@@ -3265,7 +3295,7 @@ fn trace(
             .structure
             .matrix_channel()
             .ok_or_else(|| PyValueError::new_err("trace factors have no unique matrix channel"))?;
-        let input = value.structure.structure.logical_slots()[channel.input];
+        let input = value.structure.structure().logical_slots()[channel.input];
         if representation.representation != input.rep() {
             return Err(PyValueError::new_err(
                 "trace representation does not match the factor channel",
@@ -3346,6 +3376,12 @@ submit! {
             @overload
             def outer(self, rhs: pyo3_stub_gen.RustType["PythonExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
                 """Form an outer product without contracting compatible ports."""
+            @overload
+            def contract(self, *, order: typing.Optional[list[int]] = None, output: typing.Literal["aliased"] = "aliased") -> pyo3_stub_gen.RustType["AliasedTensorExpression"]:
+                """Contract metric/vector indices into typed alias definitions."""
+            @overload
+            def contract(self, *, order: typing.Optional[list[int]] = None, output: typing.Literal["expanded"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
+                """Contract indices and explicitly materialize the polynomial output."""
             @overload
             def contract(self, rhs: typing.Union[Tensor, TensorNetwork], *, left: int, right: int) -> pyo3_stub_gen.RustType["SpensoNet"]:
                 """Contract one selected pair of ordered interface positions."""
@@ -3656,14 +3692,14 @@ mod tests {
                         let product = left.multiply(right).unwrap();
                         assert!(product.is_scalar());
                         assert!(
-                            infer_interface(&product.expression)
+                            infer_interface(product.expression())
                                 .unwrap()
                                 .canonical()
                                 .is_scalar()
                         );
                         assert_eq!(
                             product
-                                .expression
+                                .expression()
                                 .schoonschip_with_net::<false, AbstractIndex>(&settings)
                                 .unwrap()
                                 .to_dots()
@@ -3705,12 +3741,12 @@ mod tests {
                 let product = left.multiply(right).unwrap();
                 assert_eq!(product.rank(), 2);
                 assert_eq!(
-                    infer_interface(&product.expression).unwrap().canonical(),
+                    infer_interface(product.expression()).unwrap().canonical(),
                     infer_interface(&expected).unwrap().canonical()
                 );
                 assert_eq!(
                     product
-                        .expression
+                        .expression()
                         .schoonschip_net::<AbstractIndex>()
                         .unwrap(),
                     expected
@@ -3748,7 +3784,7 @@ mod tests {
         assert!(contracted.is_scalar());
 
         let projected = contracted
-            .expression
+            .expression()
             .schoonschip_with_net::<false, AbstractIndex>(
                 &SchoonschipSettings::default_network().with_expanded_contracted_sums(),
             )
@@ -4223,7 +4259,7 @@ mod tests {
                 .collect::<Vec<_>>(),
         );
         let generator = SymbolicTensor::from_signature(&generator_structure).unwrap();
-        let inferred = infer_interface(&generator.expression).unwrap();
+        let inferred = infer_interface(generator.expression()).unwrap();
         assert_eq!(
             inferred
                 .logical_slots()
@@ -4271,7 +4307,7 @@ mod tests {
                 panic!("tagged tensor expression was classified as scalar")
             };
             assert_eq!(
-                value.structure.logical_slots(),
+                value.structure().logical_slots(),
                 explicit_interface(representation, index).logical_slots()
             );
             Ok(())
@@ -4789,10 +4825,10 @@ mod tests {
             assert_eq!(expanded_zero.borrow(py).interface, interface);
             let network = TensorExpression::to_network(zero.bind(py).borrow(), py, None)?;
             assert_eq!(
-                network.structure.structure.logical_slots(),
+                network.structure.structure().logical_slots(),
                 interface.logical_slots()
             );
-            assert!(network.materialized.structure.open_positions().is_empty());
+            assert!(network.materialized.structure().open_positions().is_empty());
             assert!(network.network.state.is_tensor());
             Ok(())
         })
@@ -5488,16 +5524,16 @@ mod tests {
         };
         let left = tensor("canonical_addition_left", [i, j]);
         let right = tensor("canonical_addition_right", [j, i]);
-        let expected_sum = left.expression.as_ref() + right.expression.as_ref();
-        let expected_difference = left.expression.as_ref() - right.expression.as_ref();
+        let expected_sum = left.expression().as_ref() + right.expression().as_ref();
+        let expected_difference = left.expression().as_ref() - right.expression().as_ref();
 
         assert_ne!(
-            left.structure.logical_slots(),
-            right.structure.logical_slots()
+            left.structure().logical_slots(),
+            right.structure().logical_slots()
         );
         assert!(InterfaceInference::additive_interfaces_match(
-            &left.structure,
-            &right.structure
+            left.structure(),
+            right.structure()
         ));
         let mixed_left = PartialStructure::from_logical_slots([
             representation.slot(PartialIndex::Explicit(i)),
@@ -5535,19 +5571,19 @@ mod tests {
             .infer_validated(expected_sum.as_view())
             .unwrap();
         assert!(InterfaceInference::additive_interfaces_match(
-            &left.structure,
+            left.structure(),
             &inferred
         ));
 
-        let standalone = SymbolicTensor::new(left.expression.clone(), right.structure.clone());
+        let standalone = SymbolicTensor::new(left.expression().clone(), right.structure().clone());
         assert_eq!(
             standalone.presentation_atom(),
-            tensor("canonical_addition_left", [j, i]).expression
+            tensor("canonical_addition_left", [j, i]).into_expression()
         );
 
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
-            let expected = left.structure.logical_slots();
+            let expected = left.structure().logical_slots();
             let left = TensorExpression::from_structured(py, left)?;
             let right = TensorExpression::from_structured(py, right)?;
             let TensorDispatch::Expression(sum) =
@@ -5784,8 +5820,8 @@ mod tests {
         assert!(infer_interface(&metadata).is_err());
         let product = tensor * coefficient.pow(Atom::num(-2));
         let inferred = SymbolicTensor::infer(product.clone()).unwrap();
-        assert_eq!(inferred.structure.canonical().order(), 1);
-        assert_eq!(inferred.expression, product);
+        assert_eq!(inferred.structure().canonical().order(), 1);
+        assert_eq!(inferred.expression(), &product);
     }
 
     #[test]
@@ -6091,15 +6127,15 @@ mod tests {
                 .multiply(&matrix("index_tooling_right"))
                 .expect("compatible unresolved matrices should compose");
             assert!(matches!(
-                composed.expression.as_view(),
+                composed.expression().as_view(),
                 AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.chain
             ));
             let rust_list_error = composed
-                .expression
+                .expression()
                 .list_dangling::<AbstractIndex>()
                 .expect_err("unresolved chain endpoints should return a parse error");
             let rust_wrap_error = composed
-                .expression
+                .expression()
                 .wrap_dummies::<AbstractIndex>(symbolica::symbol!("index_tooling_wrap"))
                 .expect_err("unresolved chain endpoints should return a parse error");
             assert!(matches!(

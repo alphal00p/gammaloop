@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use itertools::Itertools;
 use spenso::{
     chain,
-    network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
+    network::{library::symbolic::ETS, parsing::ParseSettings, tags::SPENSO_TAG as T},
     rep_,
     shadowing::{self, Collectable, ProjectorExpander, TensorCollectExt, TensorCollectFilter},
     structure::{
@@ -22,7 +22,7 @@ use symbolica::{
 use symbolica_utils::PatternReplacement;
 
 use crate::{
-    W_, color_f, color_t,
+    CookSettings, W_, color_f, color_t,
     representations::{ColorAdjoint, ColorFundamental, ColorSextet},
     shorthands::{
         bracket::BracketNormalizer,
@@ -30,7 +30,7 @@ use crate::{
         metric::MetricSimplifier,
         schoonschip::{Schoonschip, SchoonschipSettings},
     },
-    tensor::remove_antisymmetric_zero_terms,
+    tensor::{SymbolicNetExt, SymbolicNetParse},
 };
 
 use super::{CS, ColorSimplifier, ColorSimplifySettings};
@@ -145,9 +145,24 @@ impl ColorAlgebraSimplifier {
                         let Some(color) = collected.iter().next() else {
                             return;
                         };
-                        let reduced = remove_antisymmetric_zero_terms::<AbstractIndex>(color);
-                        pruned |= reduced.as_view() != color;
-                        **out = reduced;
+                        // Color historically accepts structured index payloads.
+                        // Use its explicit reversible boundary once; unchanged
+                        // payloads stay verbatim and changed graphs are not reparsed.
+                        out.set_from_view(&color);
+                        let cooking = CookSettings::reversible()
+                            .with_index_payload_filter(None)
+                            .with_output_tags(["idenso::canonical_color_index"]);
+                        let cooked = cooking.cook_indices(color);
+                        if let Ok(mut network) = cooked
+                            .as_view()
+                            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                            && network.remove_antisymmetric_zero_terms()
+                            && let Ok(reduced) = network.simple_execute::<()>()
+                        {
+                            let reduced = cooking.uncook(reduced.as_view());
+                            pruned |= reduced.as_view() != color;
+                            **out = reduced;
+                        }
                     });
                 if pruned {
                     current = canonicalized;

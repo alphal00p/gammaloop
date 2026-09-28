@@ -163,11 +163,7 @@ impl SymbolicTensor<PartialStructure> {
 
     /// Apply a reusable rule, preserving the source's established interface.
     pub fn replace(&self, rule: &TensorRule<'_>) -> Result<Self> {
-        let mut proof = InterfaceInference::default();
-        if self.expression.as_view().needs_normalization()
-            || !self.structure.open_positions().is_empty()
-            || !proof.rewrites_preserve_leaf_interfaces(self.expression.as_view())
-        {
+        if !self.rewrites_preserve_interface() {
             return Err(TensorInferenceError::invalid(
                 "tensor-safe replacement requires normalized intrinsic tensor leaves with explicit ports and supported powers",
             ));
@@ -178,15 +174,25 @@ impl SymbolicTensor<PartialStructure> {
             match_stack: WrappedMatchStack::new(&rule.conditions, &rule.settings),
             rhs_cache: HashMap::new(),
             source_signatures: HashMap::new(),
-            proof,
+            proof: InterfaceInference::default(),
+            rewrite_preserved: true,
             slots: SlotMatcher::default(),
         };
         match replacement.apply(self.expression.as_view())? {
             AtomOrView::View(_) => Ok(self.clone()),
-            expression => Ok(Self::from_normalized_parts(
-                expression.into_owned(),
-                self.structure.clone(),
-            )),
+            expression => {
+                let result =
+                    Self::from_normalized_parts(expression.into_owned(), self.structure.clone());
+                // Per-binding checks and product coalescence established the
+                // result interface. Unsupported but valid powers do not inherit
+                // the stronger leaf-rewrite proof.
+                let _ = result.proofs.validated.set(true);
+                if replacement.rewrite_preserved {
+                    let _ = result.proofs.rewrite.set(true);
+                    let _ = result.proofs.algebra.set(true);
+                }
+                Ok(result)
+            }
         }
     }
 }
@@ -202,9 +208,10 @@ impl Signature {
     fn observe(value: AtomView<'_>, slots: &mut SlotMatcher) -> Result<Self> {
         #[cfg(test)]
         tests::SIGNATURE_OBSERVATIONS.with(|count| count.set(count.get() + 1));
+        let (interface, occurrences) = InterfaceInference::replacement_observation(value, slots)?;
         Ok(Self {
-            interface: InterfaceInference::replacement_interface(value)?,
-            occurrences: ExplicitIndexOccurrences::from_atom(value, slots),
+            interface,
+            occurrences,
         })
     }
 
@@ -223,6 +230,7 @@ struct TensorReplacement<'source, 'rule, 'rhs> {
     rhs_cache: HashMap<Bindings<'source>, (Atom, Arc<Signature>)>,
     source_signatures: HashMap<AtomView<'source>, Signature>,
     proof: InterfaceInference,
+    rewrite_preserved: bool,
     slots: SlotMatcher,
 }
 
@@ -265,6 +273,7 @@ impl<'source> TensorReplacement<'source, '_, '_> {
                     _ => false,
                 };
                 if needs_power_check {
+                    self.rewrite_preserved = false;
                     let expected = InterfaceInference::replacement_interface(value)?;
                     SymbolicTensor::validate_encoded_interface(&result, &expected)?;
                     composition::validate_explicit_index_occurrences(&result)?;
@@ -1166,5 +1175,76 @@ mod tests {
                 .unwrap();
             assert_eq!(actual.expression, expected);
         }
+    }
+
+    #[test]
+    fn carried_rule_proof_survives_identity_and_is_cleared_by_mutable_structure() {
+        use super::super::inference::tests::SCOPE_VALIDATIONS;
+        use spenso::structure::{HasStructure, OrderedStructure, TensorStructure};
+
+        let f = spenso::tensor_symbol!("carried_rule_source");
+        let g = spenso::tensor_symbol!("carried_rule_result");
+        let a = slot(81941);
+        let inferred =
+            SymbolicTensor::<PartialStructure>::infer(leaf(f, std::slice::from_ref(&a))).unwrap();
+        assert_eq!(inferred.proofs.validated.get(), Some(&true));
+        let (expression, structure) = inferred.into_parts();
+        // Detached storage must establish its own facts even when its parts
+        // came from a previously checked value.
+        let source = SymbolicTensor::from_normalized_parts(expression, structure);
+        let rule = TensorRule::new(
+            source.expression.to_pattern(),
+            leaf(g, &[a]).into(),
+            None,
+            0,
+        )
+        .unwrap();
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        assert!(source.rewrites_preserve_interface());
+        let established = SCOPE_VALIDATIONS.with(Cell::get);
+        assert!(established > 0);
+        assert!(source.rewrites_preserve_interface());
+        let same = source
+            .with_checked_expression(source.expression.clone())
+            .unwrap();
+        assert!(same.rewrites_preserve_interface());
+        assert_eq!(SCOPE_VALIDATIONS.with(Cell::get), established);
+
+        let changed = source.replace(&rule).unwrap();
+        assert_eq!(changed.proofs.rewrite.get(), Some(&true));
+        let after_binding_checks = SCOPE_VALIDATIONS.with(Cell::get);
+        assert!(changed.rewrites_preserve_interface());
+        assert_eq!(SCOPE_VALIDATIONS.with(Cell::get), after_binding_checks);
+        // Mutable structural access exists on the ordered network carrier; the
+        // partial-interface carrier exposes only checked transformations.
+        let mut ordered = SymbolicTensor {
+            structure: changed.structure.canonical().clone(),
+            expression: changed.expression,
+            is_metric: changed.is_metric,
+            is_composite: changed.is_composite,
+            proofs: changed.proofs,
+        };
+        let mapped = ordered.clone().map_same_structure(|value| value);
+        assert!(mapped.proofs.rewrite.get().is_none());
+        // Even obtaining mutable access without an edit clears established facts.
+        let _ = ordered.mut_structure();
+        assert!(ordered.proofs.rewrite.get().is_none());
+        assert!(ordered.proofs.validated.get().is_none());
+        assert!(ordered.proofs.algebra.get().is_none());
+        *ordered.mut_structure() = OrderedStructure::new(Vec::new()).into_canonical();
+        let (expression, structure) = ordered.into_parts();
+        let changed = SymbolicTensor::from_normalized_parts(
+            expression,
+            PartialStructure::from_logical_slots(structure.external_structure()),
+        );
+        assert!(!changed.rewrites_preserve_interface());
+        assert!(changed.replace(&rule).is_err());
+
+        let (expression, _) = source.into_parts();
+        let detached = SymbolicTensor::from_normalized_parts(
+            expression,
+            PartialStructure::from_logical_slots([]),
+        );
+        assert!(!detached.rewrites_preserve_interface());
     }
 }

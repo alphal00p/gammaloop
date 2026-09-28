@@ -85,6 +85,76 @@ paired ratios and pair-win counts separately. Three rounds are a baseline
 measurement, not a confidence interval. Setup and phase records are diagnostics;
 small control differences and host interference must remain qualified.
 
+== Complete production workloads
+
+`--suite production` measures the M5 consumers with the same entry point. It
+reuses the existing grouped-diagram smoke cards for `GL000`, `GL053`, and
+`GL148`, and the existing `uv::tests::scalars_profile_new` test. These are three
+individual three-loop aa→aa graphs and the bubble/sunrise/banana scalar UV
+profile. They do not measure the complete 155-graph amplitude. The captured
+`production-aa-aa` algebra case above remains a separate measurement.
+
+```sh
+python examples/notebooks/fermion_ladder.py --suite production \
+  --production-build baseline=/path/to/saved/build \
+  --production-build candidate=/path/to/candidate/build \
+  --fixture-root /path/to/source/with/canonical/fixtures \
+  --cpu 8 --rounds 3 --timeout 900 --output m5-production.json
+```
+
+Each build directory contains its `source` tree, `source-manifest.json` with
+file hashes, and `build-results.json` with successful `test-lib` and `cli`
+artifact paths and hashes. The runner verifies these inputs before and after
+each process. Both builds must use the same compiler, profile, dependency
+revision, model environment, and common compatibility prerequisites; retain
+their build provenance with the report.
+
+There is one fixed warmup per build and case, followed by three alternating
+paired rounds. Complete fresh-process wall and child CPU clocks include
+startup, generation, and the requested computation. Card construction, input
+hashing, output parsing, and comparisons are outside those clocks. Graph cards
+use one generation/integration core, twenty samples, and seed 1337. Each run
+has a fresh state and integration workspace, a 64 GiB address-space bound,
+and a recorded timeout. Failures and timeouts retain their logs and stop the
+cohort; no observation is selected or retried.
+
+The graph checks require successful generation, twenty evaluations, finite
+integral/error estimates, matching recorded maximum-weight coordinates, and agreement within
+relative tolerance `1e-9` and absolute tolerance `1e-12`. These finite numerical
+checks supplement the exact tensor and HEP checks; they are not symbolic
+identity proofs. The UV case retains its existing seventeen-point profiles,
+scale exponents four through eight, and `pass_fail(-0.9)` assertion. FORM
+comparisons belong to the independent tensor-algebra cases above, not the
+complete production process.
+
+The graph inputs in `fixtures/production/` are complete native runtime DOT
+files. Historical compact DOT files omit required vertex numerators. The
+saved baseline CLI generated ungrouped diagrams from the restricted
+`sm-default` model; exact interaction, particle and directed-topology matches
+selected the three inputs. Their local numerator bytes are unchanged,
+historical grouped factors are retained, and every transported momentum
+signature agrees. `provenance.json` records the mappings, source hashes and
+generation commands. Both timing sides consume these identical files. Each
+input passed native import, generation and the twenty-sample smoke before the
+paired cohort. Python model serialization was not used for production input:
+its expression print ordering changed the model fingerprint across frontends.
+
+To prepare the files again, run the recorded generation and export commands
+with the saved baseline CLI, also saving its model through `save state -o`.
+Then run `tensor_benchmark_production_fixtures.py` with `--generated` pointing
+to the exported DOT directory, `--model` to that state's `model.json`,
+`--historical` to the original grouped DOT directory, `--generation-card` to
+the CLI card, and `--output` to a new directory. The preparer finds the exact
+matches and verifies the transport. Its replay reproduced all three saved
+DOT files byte for byte.
+
+The saved M1 production build exposed a startup incompatibility: unqualified
+`𝑖` is a numerical literal in the pinned Symbolica revision. Vakint's symbolic
+placeholder is now explicitly namespaced. The original failed build and log
+are retained, and this same prerequisite is applied to both sides of the
+production comparison. Production qualification is distinct from completion
+of the paired M5 timing cohort.
+
 == Diagnostics carried from the plan
 
 The original scratch scripts are ported into shared diagnostic functions, not
