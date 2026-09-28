@@ -1,6 +1,7 @@
 """UFO LaTeX labels survive import and render without changing symbolic identities."""
 
 import json
+import sys
 from pathlib import Path
 import unicodedata
 import xml.etree.ElementTree as ET
@@ -18,10 +19,14 @@ def visible_math(html: str) -> str:
 
 # Display labels must work even if notebook code created the symbols first.
 ee, mass, alpha = S("UFO::ee", "UFO::Me", "UFO::aS")
-model = Model.standard_model()
-assert model.parameter("ee").texname == "e"
-assert model.parameter("Me").texname == r"\text{Me}"
-assert model.parameter("aS").texname == r"\alpha _s"
+# Choose labels in the fixture so rendering coverage is independent of the
+# bundled model's presentation choices.
+definition = json.loads(Model.standard_model().to_json())
+labels = {"ee": "e", "Me": r"\text{testmass}", "aS": r"\alpha_s"}
+for parameter in definition["parameters"]:
+    if parameter["name"] in labels:
+        parameter["texname"] = labels[parameter["name"]]
+model = Model.from_json(json.dumps(definition))
 reloaded = Model.from_json(model.to_json())
 assert [p.texname for p in reloaded.parameters] == [p.texname for p in model.parameters]
 
@@ -29,13 +34,15 @@ expression = TensorExpression(ee**2 * mass + alpha)
 before = expression.to_expression()
 source = expression.to_typst()
 assert "@preview/mitex:0.2.6" in source
-assert r"\text{Me}" in expression.to_latex()
+assert labels["Me"] in expression.to_latex()
 assert "ee" not in expression.to_latex()
 assert expression.to_latex(max_line_length=1).startswith(r"$$\begin{gathered}")
 visible = visible_math(expression.to_html())
-assert "ee" not in visible and "e" in visible and "Me" in visible and "α" in visible
+assert (
+    "ee" not in visible and "e" in visible and "testmass" in visible and "α" in visible
+)
 assert "<msub" in expression.to_html()
-assert "Me" in visible_math(model.parameter("Me")._repr_html_())
+assert "testmass" in visible_math(model.parameter("Me")._repr_html_())
 ET.fromstring(expression.to_svg())
 ET.fromstring(typst.compile(f"$ {source} $".encode(), format="svg"))
 assert expression.to_expression() == before
@@ -64,10 +71,13 @@ assert all(p.texname is None for p in unlabelled.parameters)
 assert "mitex" not in same_labels.to_typst()
 
 root = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(root / "assets/models/ufo"))
+import sm
+
 imported = UfoLoader(simplify_model=False).load(root / "assets/models/ufo/sm").model
-assert {p.name: p.texname for p in imported.parameters} == {
-    p.name: p.texname for p in model.parameters
-}
+source_labels = {p.name: p.texname for p in sm.all_parameters}
+for parameter in imported.parameters:
+    assert parameter.texname == source_labels[parameter.name]
 print(
     "Parameter labels: JSON/UFO metadata, MiTeX MathML/SVG/source, tensor indices and exact algebra passed"
 )
