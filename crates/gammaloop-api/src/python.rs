@@ -22,8 +22,12 @@ use gammalooprs::{
     utils::tracing::LogLevel,
 };
 use idenso::shorthands::{metric::to_dots_impl, schoonschip::Schoonschip};
-use linnet::half_edge::involution::Orientation;
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
+
+mod residue_map;
+use residue_map::{
+    PyLinearEnergyExpression, PyResidue, PyResidueMap, PyResidueMapKey, PyResidueVariant,
+};
 
 use crate::{
     commands::{
@@ -239,6 +243,11 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyIntegrationResult>()?;
     m.add_class::<PyStabilityResult>()?;
     m.add_class::<PySettingsValue>()?;
+    m.add_class::<PyLinearEnergyExpression>()?;
+    m.add_class::<PyResidueMapKey>()?;
+    m.add_class::<PyResidue>()?;
+    m.add_class::<PyResidueVariant>()?;
+    m.add_class::<PyResidueMap>()?;
     /*
     m.add_class::<PyFeynGenFilters>()?;
     m.add_class::<PySnailFilterOptions>()?;
@@ -365,7 +374,7 @@ impl PySettingsValue {
 
     /// Convert the complete detached value tree to ordinary Python containers and scalars.
     fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        py_builtin_from_settings_value(py, &self.value)
+        py_builtin_from_json_value(py, &self.value)
     }
 
     #[gen_stub(skip)]
@@ -532,11 +541,11 @@ fn py_object_from_settings_value<'py>(
             )?;
             Ok(value.into_bound(py).into_any())
         }
-        _ => py_builtin_from_settings_value(py, value),
+        _ => py_builtin_from_json_value(py, value),
     }
 }
 
-fn py_builtin_from_settings_value<'py>(
+fn py_builtin_from_json_value<'py>(
     py: Python<'py>,
     value: &JsonValue,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -548,14 +557,14 @@ fn py_builtin_from_settings_value<'py>(
         JsonValue::Array(items) => {
             let list = PyList::empty(py);
             for item in items {
-                list.append(py_builtin_from_settings_value(py, item)?)?;
+                list.append(py_builtin_from_json_value(py, item)?)?;
             }
             Ok(list.into_any())
         }
         JsonValue::Object(map) => {
             let dict = PyDict::new(py);
             for (key, value) in map {
-                dict.set_item(key, py_builtin_from_settings_value(py, value)?)?;
+                dict.set_item(key, py_builtin_from_json_value(py, value)?)?;
             }
             Ok(dict.into_any())
         }
@@ -4282,13 +4291,12 @@ impl GammaLoopAPI {
             .collect())
     }
 
-    /// Return native edge directions for one graph's first generated 3D representation.
+    /// Return a detached snapshot of one graph's persisted native residue map.
     ///
-    /// Each returned dictionary maps an edge id to ``1`` (default), ``-1``
-    /// (reversed), or ``0`` (undirected). Supply process and integrand selectors when
-    /// the active state does not identify a unique integrand.
-    /// The entries describe native orientation data, not runtime execution slots.
-    /// They do not encode LTD's full affine energy maps.
+    /// Keys retain the complete direction vector and exact ordered affine loop and
+    /// edge energy maps. Values retain every native residue ID and all scalar
+    /// variants, with exact Fraction coefficients and unexpanded denominator trees.
+    /// This is graph-level generation data, not the evaluated UV/threshold catalogue.
     ///
     /// Parameters
     /// ----------
@@ -4297,98 +4305,97 @@ impl GammaLoopAPI {
     /// process_id : int, optional
     ///     Numeric process identifier; omit when process selection is unambiguous.
     /// integrand_name : str, optional
-    ///     Integrand containing the graph; omit when integrand selection is unambiguous.
+    ///     Integrand containing the graph; omit when selection is unambiguous.
+    /// three_dimensional_representation : str, optional
+    ///     ``cff`` or ``ltd``; defaults to the first representation generated for
+    ///     this integrand, independently of current mutable generation settings.
     ///
     /// Returns
     /// -------
-    /// list[dict[int, int]]
-    ///     One edge-direction mapping per native orientation entry.
-    #[pyo3(name="get_orientations", signature = (graph_name, process_id=None, integrand_name=None))]
-    pub(crate) fn get_orientations(
+    /// ResidueMap
+    ///     Detached native entries, shared surfaces and persisted normalization metadata.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the graph or representation is unavailable or the integrand is ungenerated.
+    #[pyo3(signature = (graph_name, process_id=None, integrand_name=None, three_dimensional_representation=None))]
+    pub(crate) fn get_residue_map(
         &self,
         graph_name: String,
         process_id: Option<usize>,
         integrand_name: Option<String>,
-    ) -> Result<Vec<HashMap<usize, i8>>> {
+        three_dimensional_representation: Option<String>,
+    ) -> PyResult<PyResidueMap> {
+        use three_dimensional_reps::RepresentationMode;
         let (pid, name) = self
             .gammaloop_state
             .process_list
             .find_integrand(process_id, integrand_name.as_ref())
-            .map_err(|e| {
-                exceptions::PyException::new_err(format!("Could not find integrand: {}", e))
-            })?;
-
-        let representation = self.gammaloop_state.process_list.processes[pid]
-            .settings_history
-            .as_ref()
-            .and_then(|settings| {
-                settings
-                    .generation
-                    .three_dimensional_representations
-                    .first()
-            })
-            .copied()
-            .unwrap_or(three_dimensional_reps::RepresentationMode::Cff);
-        let orientations = match &self.gammaloop_state.process_list.processes[pid].collection {
+            .map_err(to_py_value_error)?;
+        let resolved = self
+            .gammaloop_state
+            .process_list
+            .get_integrand(pid, &name)
+            .map_err(to_py_value_error)?;
+        let generated_modes = resolved
+            .require_generated()
+            .map_err(to_py_value_error)?
+            .generated_representations();
+        let representation = match three_dimensional_representation.as_deref() {
+            Some("cff") => RepresentationMode::Cff,
+            Some("ltd") => RepresentationMode::Ltd,
+            Some(mode) => {
+                return Err(exceptions::PyValueError::new_err(format!(
+                    "Unknown three-dimensional representation '{mode}'; expected 'cff' or 'ltd'"
+                )));
+            }
+            None => *generated_modes.first().ok_or_else(|| {
+                exceptions::PyValueError::new_err(
+                    "No three-dimensional representation was generated for this integrand",
+                )
+            })?,
+        };
+        if !generated_modes.contains(&representation) {
+            return Err(exceptions::PyValueError::new_err(format!(
+                "Representation '{representation}' was not generated for integrand '{name}'"
+            )));
+        }
+        let missing_graph = || {
+            exceptions::PyValueError::new_err(format!(
+                "Graph '{graph_name}' was not found in integrand '{name}'"
+            ))
+        };
+        let expression = match &self.gammaloop_state.process_list.processes[pid].collection {
             ProcessCollection::Amplitudes(amplitudes) => {
-                let data = amplitudes
-                    .get(&name)
-                    .unwrap()
+                let amplitude = amplitudes.get(&name).ok_or_else(missing_graph)?;
+                let graph = amplitude
                     .graphs
                     .iter()
                     .find(|g| g.graph.name == graph_name)
-                    .as_ref()
-                    .unwrap()
+                    .ok_or_else(missing_graph)?;
+                graph
                     .derived_data
                     .representations
                     .get(&representation)
-                    .unwrap();
-
-                data.expression
-                    .expression
-                    .orientations
-                    .iter()
-                    .map(|or_data| or_data.data.orientation.clone())
-                    .collect_vec()
+                    .map(|data| &data.expression)
             }
-
             ProcessCollection::CrossSections(cross_sections) => {
-                let data = cross_sections
-                    .get(&name)
-                    .unwrap()
+                let cross_section = cross_sections.get(&name).ok_or_else(missing_graph)?;
+                let graph = cross_section
                     .supergraphs
                     .iter()
                     .find(|g| g.graph.name == graph_name)
-                    .as_ref()
-                    .unwrap()
-                    .derived_data
-                    .expressions
-                    .get(&representation)
-                    .unwrap();
-
-                data.expression
-                    .orientations
-                    .iter()
-                    .map(|or_data| or_data.data.orientation.clone())
-                    .collect_vec()
+                    .ok_or_else(missing_graph)?;
+                graph.derived_data.expressions.get(&representation)
             }
-        };
-
-        Ok(orientations
-            .into_iter()
-            .map(|orientation| {
-                let mut result = HashMap::new();
-                for (edge_id, direction) in orientation.into_iter() {
-                    let direction = match direction {
-                        Orientation::Default => 1,
-                        Orientation::Reversed => -1,
-                        Orientation::Undirected => 0,
-                    };
-                    result.insert(edge_id.0, direction);
-                }
-                result
-            })
-            .collect())
+        }
+        .ok_or_else(|| {
+            exceptions::PyValueError::new_err(format!(
+                "Graph '{graph_name}' has no generated '{representation}' residue map"
+            ))
+        })?;
+        Ok(PyResidueMap::new(graph_name, expression))
     }
 
     /// Serialize the active physics model as JSON.

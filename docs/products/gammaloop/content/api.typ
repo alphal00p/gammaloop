@@ -120,6 +120,9 @@ connected workflows rather than forty unrelated entry points:
   for those modes; a group's `complete_residue_sum` distinguishes a full physical sum from
   individual orientation execution. The `orientations` list describes runtime slots, which can
   contain one complete-sum slot even when the native LTD map has many keys.
+- *Native residue maps:* `get_residue_map` returns the stored graph-level CFF or LTD catalogue,
+  including exact affine energy bindings, immutable map keys, scalar variants, and surfaces.
+  Its native entries are distinct from the execution slots in `IntegrandInfo`.
 - *Events and observables:* evaluation records lead to
   #link("reference/python/gammaloop-python/EventGroup/")[`EventGroup`] and
   #link("reference/python/gammaloop-python/Event/")[`Event`]. For caller-owned aggregation,
@@ -239,6 +242,66 @@ and
 #link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-get-default-runtime-settings-method")[`get_default_runtime_settings`]
 return detached, read-only `SettingsValue` snapshots. Use `get(path)`, attribute access, indexing,
 or `to_dict()` to read them; modifying derived Python values does not update the live session.
+
+=== Inspect native residue maps
+
+`get_residue_map(graph_name, process_id=None, integrand_name=None,
+three_dimensional_representation=None)` returns a detached `ResidueMap` for one generated graph.
+Select `"cff"` or `"ltd"` explicitly, or omit the representation to use the first mode in the
+stored generation order. The requested representation must already have been generated; this
+getter does not regenerate the graph. Process and integrand selectors resolve the same session
+ambiguities as the other inspection methods.
+
+// docs-example: compile gammaloop-python-residue-map
+```python
+from gammaloop import GammaLoopAPI
+
+api = GammaLoopAPI(state_folder="./state", read_only_state=True)
+residue_map = api.get_residue_map(
+    "graph_name",
+    process_id=0,
+    integrand_name="integrand_name",
+    three_dimensional_representation="ltd",
+)
+for key, residues in residue_map.entries.items():
+    print(key.canonical_string)
+    for residue in residues:
+        print(residue.native_id, residue.label, len(residue.variants))
+```
+
+`entries` is a Python dictionary from immutable, hashable `ResidueMapKey` objects to lists of
+`Residue` snapshots. A key contains the complete ordered edge `directions`, `loop_energy_map`,
+and `edge_energy_map`. Equality and hashing use these native values; labels, expression-local
+IDs, and scalar variants do not enter the key. Equal keys retain every associated native entry
+in their value list. A hash is a Python lookup value, not a persistent residue identifier.
+
+Each `LinearEnergyExpression` exposes ordered `internal_terms` and `external_terms` pairs of
+edge ID and exact `fractions.Fraction`, together with `uniform_scale_coeff` and `constant`.
+These describe on-shell energies, external energies, the uniform numerator-sampling scale M,
+and the affine constant, respectively. The map arrays retain their native loop-slot and
+edge-slot order. `canonical_string` provides the existing native identity spelling for a key
+and a readable exact spelling for an affine expression. Snapshot classes have no public
+constructors; their returned containers do not mutate the stored graph or a key's hash.
+
+Each residue retains `native_id`, `label`, `numerator_map_index`, and all scalar `variants`.
+Variants preserve the exact prefactor, origin, repeated half-edge factors, denominator-edge
+support, both denominator sign-provenance maps, uniform-scale power, numerator surfaces, and
+the denominator tree. Tree nodes retain their IDs, surface references, parents, and children;
+the getter does not expand the tree or discard repeated factors. Surface references use
+`("esurface", id)`, `("hsurface", id)`, or `("linear", id)`; unit and infinite references use
+`("unit", None)` and `("infinite", None)`.
+
+The shared `surfaces` dictionary supplies cached E/H/linear records, including physical
+E/H energy occurrences and external shifts, or exact linear expressions with their kind,
+origin, and numerator-only flag. `residual_denominators`, `energy_factor_ownership`,
+`energy_factor_components`, `denominator_only_global_prefactor_sign`, and
+`core_global_prefactor_sign` retain the generated scalar expression's remaining denominators
+and convention metadata.
+
+This is the stored graph-level native catalogue. It is not a catalogue of all projected UV or
+threshold-counterterm expressions, nor an evaluated, fully normalized production integrand.
+Native map IDs and keys also remain separate from runtime complete-sum slots and any internal
+coalescing of numerator coefficient rows. Use the evaluation methods for physical values.
 
 == Sample evaluation contract
 

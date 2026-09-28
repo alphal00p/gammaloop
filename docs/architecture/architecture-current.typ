@@ -125,6 +125,13 @@ Shared graph, four-dimensional UV, and helper work is the aggregate remainder. T
 generation summary renders these partitions, including compilation, without double counting.
 Graph-job duration sums can overlap under parallel generation and are not process wall time.
 
+Python's `get_residue_map` exposes the stored graph-level native expression through
+`python/residue_map.rs`. Detached snapshots retain immutable keys built from complete
+directions and affine loop/edge maps, exact `Fraction` coefficients, all scalar variants,
+denominator trees, surfaces and convention metadata. Equal keys retain their separate native IDs.
+This inspection boundary neither rebuilds representations nor exposes runtime row coalescing;
+it replaces the former direction-only `get_orientations` endpoint.
+
 === 2. Application State and Command Model
 <2-application-state-and-command-model>
 - Central mutable app state: `crates/gammaloop-api/src/state.rs`
