@@ -1,0 +1,18 @@
+---
+source: src/half_edge/algorithms/transitive_ops.rs
+expression: reduction_graph.debug_dot()
+---
+digraph {
+  A;
+  B;
+  C;
+  D;
+  E;
+  F;
+
+  A:0	-> B:1	 [id=0 ];
+  E:3	-> F:2	 [id=1 ];
+  D:5	-> E:4	 [id=2 ];
+  C:7	-> D:6	 [id=3 ];
+  B:8	-> C:9	 [id=4 ];
+}

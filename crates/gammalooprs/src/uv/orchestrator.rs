@@ -1,10 +1,6 @@
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
-use idenso::{
-    IndexTooling,
-    color::ColorSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
-};
+use idenso::{CookMode, CookSettings, IndexTooling, tensor::SymbolicTensor};
 use symbolica::atom::{Atom, AtomCore};
 use vakint::Vakint;
 
@@ -323,8 +319,8 @@ impl<'a> ComparableExpr<'a> {
     }
 
     fn equivalent_to(&self, other: &Self) -> Result<bool> {
-        let left = self.normalized();
-        let right = other.normalized();
+        let left = self.normalized()?;
+        let right = other.normalized()?;
 
         // Backend-local topology labels may differ on contracted indices.
         if left.collect_factors() == right.collect_factors() {
@@ -335,13 +331,16 @@ impl<'a> ComparableExpr<'a> {
             == right.canonize(Aind::Dummy)?.collect_factors())
     }
 
-    fn normalized(&self) -> Atom {
-        self.atom
-            .replace(crate::utils::GS.dim)
-            .with(4)
-            .simplify_metrics()
-            .to_dots()
-            .simplify_color()
+    fn normalized(&self) -> Result<Atom> {
+        let input = self.atom.replace(crate::utils::GS.dim).with(4);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let normalized = SymbolicTensor::infer(cooking.try_cook(input.as_view())?)?
+            .simplify_color(Default::default())?
+            .to_dots()?
+            .resolved()?;
+        Ok(cooking.uncook(normalized.expression().as_view()))
     }
 }
 
@@ -375,11 +374,12 @@ mod tests {
         let legacy = ComparableExpr::new(&legacy);
         let hedge = ComparableExpr::new(&hedge);
 
-        assert_ne!(legacy.normalized(), hedge.normalized());
+        assert_ne!(legacy.normalized().unwrap(), hedge.normalized().unwrap());
         for expression in [&legacy, &hedge] {
             assert!(
                 expression
                     .normalized()
+                    .unwrap()
                     .pattern_match(&spectator.to_pattern(), None, None)
                     .next()
                     .is_some()

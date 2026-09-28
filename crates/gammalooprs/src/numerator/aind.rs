@@ -368,8 +368,9 @@ impl TryFrom<AtomView<'_>> for Aind {
 #[cfg(test)]
 mod tests {
     use idenso::{
+        CookMode, CookSettings,
         dirac::AGS,
-        shorthands::metric::MetricSimplifier,
+        tensor::ContractionSettings,
         tensor::{SymbolicNetParse, SymbolicTensor},
     };
     use spenso::{
@@ -433,7 +434,8 @@ mod tests {
     #[test]
     fn test_structure_parsing() {
         initialise().unwrap();
-        let expr = parse_lit!(gamma(
+        let _ = spenso::tensor_symbol!("gammalooprs::tests::index_fixture");
+        let expr = parse_lit!(gammalooprs::tests::index_fixture(
             spenso::mink(4, edge(1, 1)),
             spenso::mink(4, edge(1)),
             spenso::mink(4, hedge(1, 1)),
@@ -447,10 +449,19 @@ mod tests {
 
         match structure {
             Ok(s) => {
-                let pexpr = SymbolicTensor::from_canonicalized(&s)
-                    .unwrap()
-                    .expression
-                    .simplify_metrics();
+                let expression = SymbolicTensor::from_canonicalized(&s).unwrap();
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                let contracted = SymbolicTensor::infer(
+                    cooking.try_cook(expression.expression().as_view()).unwrap(),
+                )
+                .unwrap()
+                .contract(ContractionSettings::default().without_rank_one_tensors())
+                .unwrap()
+                .resolved()
+                .unwrap();
+                let pexpr = cooking.uncook(contracted.expression().as_view());
                 assert_eq!(s.canonical().order(), 8);
                 assert_eq!(
                     expr,

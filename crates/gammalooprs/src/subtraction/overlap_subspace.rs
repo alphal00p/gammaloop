@@ -992,7 +992,7 @@ mod tests {
 
         let radial_surface = Esurface {
             energies: vec![graph.loop_momentum_basis.loop_edges[LoopIndex(0)]],
-            external_shift: vec![(EdgeIndex::from(0), -1)].into(),
+            external_shift: vec![(EdgeIndex::from(0), -1)],
             vertex_set: VertexSet::dummy(),
         };
         assert!(radial_surface.has_radial_dependence_in_subspace(&subspace, &all_lmbs, &graph,));
@@ -1034,7 +1034,7 @@ mod tests {
         let complement_edge = graph.loop_momentum_basis.loop_edges[LoopIndex(2)];
         let thresholds: crate::cff::esurface::EsurfaceCollection = vec![Esurface {
             energies: vec![complement_edge],
-            external_shift: vec![(EdgeIndex::from(0), -1)].into(),
+            external_shift: vec![(EdgeIndex::from(0), -1)],
             vertex_set: VertexSet::dummy(),
         }]
         .into();
@@ -1249,7 +1249,7 @@ mod tests {
                 graph.loop_momentum_basis.loop_edges[LoopIndex(0)],
                 support_edge,
             ],
-            external_shift: vec![(EdgeIndex::from(0), -1)].into(),
+            external_shift: vec![(EdgeIndex::from(0), -1)],
             vertex_set: VertexSet::dummy(),
         }]
         .into();

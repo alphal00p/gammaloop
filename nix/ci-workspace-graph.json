@@ -495,9 +495,7 @@
       "symbolica-utils": []
     },
     "spenso-hep-lib": {
-      "idenso": [
-        "reference-cases"
-      ],
+      "idenso": [],
       "spenso": [
         "shadowing"
       ],

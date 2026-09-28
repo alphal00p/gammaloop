@@ -1,0 +1,49 @@
+commands = [
+  "import model sm-default",
+  "import graphs ./tests/resources/graphs/dgse.dot",
+  "generate",
+]
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [
+    0.2,
+    0.0,
+    0.0,
+    0.2,
+  ],
+  [
+    0.3,
+    0.1,
+    0.0,
+    -0.282842712474619,
+  ],
+  "dependent",
+]
+helicities = [1, 1, 1]
+
+[cli_settings.global]
+logfile_directive = "off"
+display_directive = "info"
+
+[cli_settings.global.generation.uv]
+generate_integrated = false
+softct = true
+add_marker = false
+inner_products = true
+
+# [[cli_settings.global.generation.uv.renormalization_prescription.overrides]]
+# prescription = "IR"
+
+# [cli_settings.global.generation.uv.renormalization_prescription.overrides.ct_identifier]
+# external_pdg_set = [1]
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = false
+disable_tropical_generation = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false

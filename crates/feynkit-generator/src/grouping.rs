@@ -10,10 +10,11 @@ use feynkit_graph::{
 };
 use feynkit_model::{Model, ModelError, ParameterId, ParticleId};
 use idenso::{
-    IndexTooling,
+    CookMode, CookSettings, IndexTooling,
     color::{CS, ColorSimplifier, ColorSimplifySettings},
     dirac::{AGS, spinor_matrix_structure},
-    representations::Bispinor,
+    representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
+    tensor::{SymbolicTensor, inference::TensorInferenceError},
 };
 use spenso::{
     network::{
@@ -26,6 +27,7 @@ use spenso::{
         parsing::{ParseSettings as TensorParseSettings, ShadowedStructure, ShorthandParsing},
         store::NetworkStore,
     },
+    shadowing::TensorCollectFilter,
     structure::{
         Canonicalized,
         representation::{LibraryRep, Minkowski, RepName},
@@ -91,6 +93,15 @@ pub enum GroupingError {
         master: String,
         message: String,
     },
+    #[error("failed to compare numerators of diagrams '{candidate}' and '{master}': {source}")]
+    NumeratorComparison {
+        candidate: String,
+        master: String,
+        #[source]
+        source: TensorInferenceError,
+    },
+    #[error("failed to simplify numerator color for diagram '{diagram}': {message}")]
+    ColorSimplification { diagram: String, message: String },
     #[error(
         "failed to evaluate numerator tensors for diagram '{diagram}', sample {sample}: {message}"
     )]
@@ -372,22 +383,51 @@ pub(crate) fn group_diagrams(
     let mut source_diagrams = Vec::with_capacity(diagrams.len());
     let mut prepared = Vec::with_capacity(diagrams.len());
     let mut zero_numerator_count = 0;
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
     for (source_diagram, diagram) in diagrams.into_iter().enumerate() {
         // Contract color before abstract-index canonicalization. Canonizing a
         // raw product of color tensors can encounter the same concrete base
         // slot more than once, while the projector closes precisely those
         // external slots.
-        let complete = model
+        let raw_complete = model
             .expand_couplings(
                 &(diagram.numerator() * diagram.numerator_prefactor() * diagram.projector()),
             )
-            .to_parametric_color()
-            .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants());
-        let zero_check = complete
-            .expand_color()
-            .into_iter()
-            .fold(Atom::Zero, |sum, (color, lorentz)| sum + color * lorentz);
-        if zero_check.expand().is_zero() {
+            .to_parametric_color();
+        // Keep compound dimensions such as Nc²−1 and structured indices reversible
+        // across the typed boundary; decode only when returning to the raw pipeline.
+        let cooked = cooking.try_cook(raw_complete.as_view()).map_err(|error| {
+            GroupingError::ColorSimplification {
+                diagram: diagram.name().to_owned(),
+                message: format!("{error:?}"),
+            }
+        })?;
+        let simplified = SymbolicTensor::infer(cooked)
+            .and_then(|tensor| {
+                tensor.simplify_color(
+                    ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                )
+            })
+            .and_then(|tensor| tensor.resolved())
+            .map_err(|error| GroupingError::ColorSimplification {
+                diagram: diagram.name().to_owned(),
+                message: error.to_string(),
+            })?;
+        let zero_check = simplified
+            .coefficients_are_zero(TensorCollectFilter::Reps([
+                ColorAdjoint {}.into(),
+                ColorFundamental {}.into(),
+                ColorSextet {}.into(),
+            ]))
+            .map_err(|error| GroupingError::ColorSimplification {
+                diagram: diagram.name().to_owned(),
+                message: error.to_string(),
+            })?;
+        // Keep unproved identities: a conservative coefficient proof must not
+        // expand the graph numerator or turn inconclusive sampling into a zero.
+        if zero_check.is_true() {
             zero_numerator_count += 1;
             generation_options.report_progress(
                 "grouping_preparation",
@@ -397,12 +437,9 @@ pub(crate) fn group_diagrams(
             continue;
         }
         let sample_source = if compares_numerators {
-            // Preserve the symbolically simplified color tensor here.  Color
-            // expansion is useful for the zero proof above and for tensor
-            // samples, but it resolves representation dimensions to their
-            // concrete values.  Feeding that expanded form to the exact path
-            // would turn invariants such as `Nc` into `3` before an exact
-            // rescaling ratio can be extracted.
+            // Keep symbolic color dimensions for exact rescaling ratios. Tensor
+            // samples substitute concrete color values at their own boundary.
+            let complete = cooking.uncook(simplified.expression().as_view());
             normalize_momentum_routing(&diagram, complete)
         } else {
             Atom::one()
@@ -458,12 +495,16 @@ pub(crate) fn group_diagrams(
         canonical_frames.push(canonical);
         numerator.samples = numerical_tensor_samples(&numerator.sample_source, diagram, options)?;
         generation_options.report_progress("grouping_samples", index + 1, Some(total));
-        if !numerator.samples.is_empty()
-            && numerator
-                .samples
-                .iter()
-                .all(|sample| sample.expand().is_zero())
-        {
+        let mut zero_samples = !numerator.samples.is_empty();
+        for (sample, value) in numerator.samples.iter().enumerate() {
+            if !expressions_equal(value, &Atom::Zero)
+                .map_err(|error| tensor_evaluation_error(diagram, sample, error))?
+            {
+                zero_samples = false;
+                break;
+            }
+        }
+        if zero_samples {
             zero_numerator_count += 1;
             continue;
         }
@@ -476,20 +517,24 @@ pub(crate) fn group_diagrams(
     for indices in buckets.into_values() {
         let mut bucket_groups: Vec<DiagramGroup> = Vec::new();
         for diagram in indices {
-            let matching_group =
-                bucket_groups
-                    .iter()
-                    .enumerate()
-                    .find_map(|(group_index, group)| {
-                        compare(
-                            &prepared[diagram],
-                            &prepared[group.master],
-                            mode,
-                            options,
-                            &scalar_names,
-                        )
-                        .map(|ratio| (group_index, ratio))
-                    });
+            let mut matching_group = None;
+            for (group_index, group) in bucket_groups.iter().enumerate() {
+                if let Some(ratio) = compare(
+                    &prepared[diagram],
+                    &prepared[group.master],
+                    mode,
+                    options,
+                    &scalar_names,
+                )
+                .map_err(|source| GroupingError::NumeratorComparison {
+                    candidate: retained[diagram].name().to_owned(),
+                    master: retained[group.master].name().to_owned(),
+                    source,
+                })? {
+                    matching_group = Some((group_index, ratio));
+                    break;
+                }
+            }
             if let Some((group_index, ratio)) = matching_group {
                 bucket_groups[group_index].members.push(GroupMember {
                     source_diagram: source_diagrams[diagram],
@@ -975,10 +1020,26 @@ fn evaluate_tensor_sample(
         Replacement::new(Atom::var(CS.nc), Atom::num(3)),
         Replacement::new(Atom::var(CS.tr), Atom::num(1) / Atom::num(2)),
     ];
-    numerator
-        .expand_color()
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let cooked = cooking
+        .try_cook(numerator.as_view())
+        .map_err(|error| tensor_evaluation_error(diagram, sample, format!("{error:?}")))?;
+    let sectors = SymbolicTensor::infer(cooked)
+        .and_then(|source| {
+            source.coefficient_list(TensorCollectFilter::Reps([
+                ColorAdjoint {}.into(),
+                ColorFundamental {}.into(),
+                ColorSextet {}.into(),
+            ]))
+        })
+        .map_err(|error| tensor_evaluation_error(diagram, sample, error))?;
+    let contributions = sectors
         .into_iter()
-        .try_fold(Atom::Zero, |sum, (color, lorentz)| {
+        .map(|(color, lorentz)| {
+            let color = cooking.uncook(color.expression().as_view());
+            let lorentz = cooking.uncook(lorentz.expression().as_view());
             let mut network =
                 GroupingTensorNetwork::try_from_view(lorentz.as_view(), &library, &settings)
                     .map_err(|error| tensor_evaluation_error(diagram, sample, error))?;
@@ -995,9 +1056,10 @@ fn evaluate_tensor_sample(
             let color = color
                 .canonize(GroupingIndex::Dummy)
                 .map_err(|error| tensor_evaluation_error(diagram, sample, error))?;
-            Ok(sum + (color * scalar).replace_multiple(&color_replacements))
+            Ok((color * scalar).replace_multiple(&color_replacements))
         })
-        .map(|evaluated| evaluated.expand())
+        .collect::<Result<Vec<_>, GroupingError>>()?;
+    Ok(Atom::add_many(contributions))
 }
 
 fn tensor_sample_library(
@@ -1246,23 +1308,26 @@ fn compare(
     mode: ComparisonMode,
     options: &GraphGroupingOptions,
     scalar_names: &BTreeSet<String>,
-) -> Option<Atom> {
+) -> Result<Option<Atom>, TensorInferenceError> {
     if options.check_canonical_numerator
-        && let Some(ratio) = compare_atoms(&candidate.exact, &master.exact, mode, scalar_names)
+        && let Some(ratio) = compare_atoms(&candidate.exact, &master.exact, mode, scalar_names)?
     {
-        return Some(ratio);
+        return Ok(Some(ratio));
     }
-    let mut ratios = candidate
-        .samples
-        .iter()
-        .zip(&master.samples)
-        .map(|(candidate, master)| compare_atoms(candidate, master, mode, scalar_names));
-    let first = ratios.next()??;
-    if ratios.all(|ratio| ratio.is_some_and(|ratio| expressions_equal(&ratio, &first))) {
-        Some(first)
-    } else {
-        None
+    let mut first = None;
+    for (candidate, master) in candidate.samples.iter().zip(&master.samples) {
+        let Some(ratio) = compare_atoms(candidate, master, mode, scalar_names)? else {
+            return Ok(None);
+        };
+        if let Some(first) = &first {
+            if !expressions_equal(&ratio, first)? {
+                return Ok(None);
+            }
+        } else {
+            first = Some(ratio);
+        }
     }
+    Ok(first)
 }
 
 fn compare_atoms(
@@ -1270,33 +1335,53 @@ fn compare_atoms(
     master: &Atom,
     mode: ComparisonMode,
     scalar_names: &BTreeSet<String>,
-) -> Option<Atom> {
-    if expressions_equal(candidate, master) {
-        return Some(Atom::num(1));
+) -> Result<Option<Atom>, TensorInferenceError> {
+    if expressions_equal(candidate, master)? {
+        return Ok(Some(Atom::num(1)));
     }
-    if matches!(mode, ComparisonMode::UpToSign) && (candidate + master).expand().is_zero() {
-        return Some(Atom::num(-1));
+    if matches!(mode, ComparisonMode::UpToSign) && expressions_equal(candidate, &(-master))? {
+        return Ok(Some(Atom::num(-1)));
     }
     if !matches!(mode, ComparisonMode::UpToScalar) || master.is_zero() {
-        return None;
+        return Ok(None);
     }
-    let ratio = (candidate / master).cancel();
-    // A cancelled quotient is the exact symbolic rescaling.  Re-expanding
-    // `ratio * master` is not a stronger check for tensor expressions: dummy
-    // indices can be alpha-equivalent while carrying different canonical
-    // labels in separately prepared diagrams.  Requiring literal equality of
-    // that reconstruction rejects valid ratios.  Instead, as in the legacy
-    // grouping implementation, reject the quotient whenever any tensor head
-    // remains and otherwise accept the exact scalar.
-    if expression_is_scalar(&ratio, scalar_names) {
-        Some(ratio)
-    } else {
-        None
-    }
+    let ratio = (candidate / master).collect_factors();
+    // Cancel only existing common factors. Polynomial conversion would expand
+    // graph numerators, including copies used solely for this comparison.
+    // Dummy indices can be alpha-equivalent across separately prepared graphs;
+    // accept an exact quotient only after every tensor head has disappeared.
+    Ok(expression_is_scalar(&ratio, scalar_names).then_some(ratio))
 }
 
-fn expressions_equal(left: &Atom, right: &Atom) -> bool {
-    (left - right).expand().is_zero()
+fn expressions_equal(left: &Atom, right: &Atom) -> Result<bool, TensorInferenceError> {
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let cook = |expression: &Atom| {
+        cooking
+            .try_cook(expression.as_view())
+            .map_err(|error| TensorInferenceError::Invalid(error.to_string()))
+            .and_then(SymbolicTensor::infer)
+    };
+    let filter = TensorCollectFilter::Reps([
+        ColorAdjoint {}.into(),
+        ColorFundamental {}.into(),
+        ColorSextet {}.into(),
+    ]);
+    let left = cook(left)?;
+    if right.is_zero() {
+        return left
+            .coefficients_are_zero(filter)
+            .map(|proof| proof.is_true());
+    }
+    let right = cook(right)?;
+    if left.expression().is_zero() {
+        return right
+            .coefficients_are_zero(filter)
+            .map(|proof| proof.is_true());
+    }
+    left.coefficients_equal(&right, filter)
+        .map(|proof| proof.is_true())
 }
 
 fn expression_is_scalar(expression: &Atom, scalar_names: &BTreeSet<String>) -> bool {
@@ -1861,6 +1946,49 @@ mod tests {
     }
 
     #[test]
+    fn tensor_samples_preserve_symbolic_factors_and_exact_component_values() {
+        let _ = AGS.charge_conjugation;
+        let model = Arc::new(model());
+        let diagram = diagram(&model, "factored-sample", "1", 25, 25);
+        let spectator = test_atom("(UFO::M+UFO::N)^30");
+        let contracted = test_atom(
+            "spenso::charge_conjugation(spenso::bis(4,1),spenso::bis(4,2))*spenso::charge_conjugation(spenso::bis(4,2),spenso::bis(4,1))",
+        );
+        let numerator = &spectator * contracted;
+        let options = GraphGroupingOptions::default();
+        assert_eq!(
+            evaluate_tensor_sample(&numerator, &diagram, &options, 0).unwrap(),
+            Atom::num(-4) * &spectator,
+        );
+        let options = GraphGroupingOptions {
+            fully_numerical_substitution: true,
+            ..options
+        };
+        let m = complex_sample_value("model:UFO::M", options.numerical_sample_seed, 0);
+        let n = complex_sample_value("model:UFO::N", options.numerical_sample_seed, 0);
+        assert_eq!(
+            evaluate_tensor_sample(&numerator, &diagram, &options, 0).unwrap(),
+            Atom::num(-4) * (m + n).pow(30),
+        );
+    }
+
+    #[test]
+    fn factor_preserving_comparison_retains_unproved_identities_and_checks_tensor_scopes() {
+        let left = test_atom("x*(y+z)");
+        let right = test_atom("x*y+x*z");
+        assert!(expressions_equal(&left, &right).unwrap());
+        assert!(expressions_equal(&test_atom("x+y"), &test_atom("y+x")).unwrap());
+        assert!(!expressions_equal(&test_atom("(x+y)^2"), &test_atom("x^2+2*x*y+y^2"),).unwrap());
+        assert!(
+            expressions_equal(
+                &test_atom("v(spenso::mink(4,1))^3"),
+                &test_atom("v(spenso::mink(4,1))^3"),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn grouping_progress_counts_zero_and_retained_inputs() {
         let model = Arc::new(model());
         let updates = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -2005,6 +2133,7 @@ mod tests {
             ComparisonMode::UpToScalar,
             &scalar_names(&model),
         )
+        .unwrap()
         .unwrap();
 
         assert_eq!(
@@ -2020,6 +2149,7 @@ mod tests {
                 ComparisonMode::UpToScalar,
                 &scalar_names(&model),
             )
+            .unwrap()
             .is_none(),
             "a quotient retaining tensor heads must not be accepted as a scalar ratio"
         );
@@ -2212,6 +2342,26 @@ mod tests {
         assert_eq!(grouped.groups[0].members[0].diagram, 0);
         assert_eq!(grouped.groups[0].members[0].source_diagram, 1);
         assert_eq!(grouped.diagrams[0].name(), "g1");
+    }
+
+    #[test]
+    fn unproved_distributive_zero_numerators_remain_factorized_and_retained() {
+        let model = Arc::new(model());
+        let input = diagram(&model, "unproved-zero", "(x+y)^2-x^2-2*x*y-y^2", 25, 25);
+        let numerator = input.numerator().clone();
+        assert!(!numerator.is_zero());
+        let grouped = group_diagrams(
+            vec![input],
+            &model,
+            &NumeratorGrouping::OnlyDetectZeroes,
+            false,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(grouped.zero_numerator_count, 0);
+        assert_eq!(grouped.diagrams.len(), 1);
+        assert_eq!(grouped.diagrams[0].numerator(), &numerator);
+        assert_eq!(grouped.groups[0].members[0].source_diagram, 0);
     }
 
     #[test]

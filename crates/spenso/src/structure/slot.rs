@@ -7,7 +7,10 @@ use super::{
 };
 use crate::structure::dimension::Dimension;
 #[cfg(feature = "shadowing")]
-use crate::{network::tags::SPENSO_TAG, structure::abstract_index::AIND_SYMBOLS};
+use crate::{
+    network::tags::{SPENSO_TAG, SpensoTags},
+    structure::abstract_index::AIND_SYMBOLS,
+};
 use bincode::Encode;
 // #[cfg(feature = "shadowing")]
 use serde::{Deserialize, Serialize};
@@ -149,6 +152,7 @@ pub struct SlotView<'a> {
 
 #[cfg(feature = "shadowing")]
 /// Classification of an expression for a structural tensor-index walk.
+#[derive(Clone, Copy)]
 pub enum SlotMatch<'a> {
     Explicit(SlotView<'a>),
     /// A compact or malformed slot: its payload is opaque to tensor-index scans.
@@ -158,6 +162,18 @@ pub enum SlotMatch<'a> {
 
 #[cfg(feature = "shadowing")]
 impl<'a> SlotMatch<'a> {
+    /// Validate this classification without repeating the structural scan.
+    /// Index conversion still runs for every occurrence and requested index type.
+    pub(crate) fn parse<T: RepName, Aind: ParseableAind>(
+        self,
+        value: AtomView<'a>,
+        matcher: &mut SlotMatcher,
+    ) -> Result<Slot<T, Aind>, SlotError> {
+        let slot = self.into_slot(value)?;
+        let rep = matcher.representation(slot)?;
+        slot.parse(T::from_library_rep(rep)?)
+    }
+
     fn into_slot(self, value: AtomView<'a>) -> Result<SlotView<'a>, SlotError> {
         match self {
             Self::Explicit(slot) => Ok(slot),
@@ -323,8 +339,11 @@ impl<'a> SlotView<'a> {
 pub struct SlotMatcher {
     heads: [Option<(u32, SlotHead)>; 16],
     resolved: Vec<(Symbol, Option<Symbol>, LibraryRep)>,
-    representation_tag: &'static str,
+    tags: &'static SpensoTags,
+    aind: Symbol,
     wrappers: [u32; 3],
+    metric: std::sync::OnceLock<Symbol>,
+    projectors: [std::sync::OnceLock<Symbol>; 3],
 }
 
 #[cfg(feature = "shadowing")]
@@ -334,9 +353,12 @@ impl Default for SlotMatcher {
         // tensor heads miss the small recognition cache.
         let wrappers = &*AIND_SYMBOLS;
         Self {
+            metric: std::sync::OnceLock::new(),
+            projectors: std::array::from_fn(|_| std::sync::OnceLock::new()),
             heads: [None; 16],
             resolved: Vec::new(),
-            representation_tag: &SPENSO_TAG.representation,
+            tags: &SPENSO_TAG,
+            aind: wrappers.aind,
             wrappers: [wrappers.dind, wrappers.uind, wrappers.selfdualind]
                 .map(|symbol| symbol.get_id()),
         }
@@ -345,6 +367,43 @@ impl Default for SlotMatcher {
 
 #[cfg(feature = "shadowing")]
 impl SlotMatcher {
+    pub(crate) fn index_bundle(&self) -> Symbol {
+        self.aind
+    }
+
+    /// Bundle values stay local to one observation; the first access retains
+    /// the ordinary initialization boundary and a new matcher probes again.
+    pub(crate) fn metric(&self) -> Symbol {
+        *self
+            .metric
+            .get_or_init(|| crate::network::library::symbolic::ETS.metric)
+    }
+
+    fn projector(&self, index: usize) -> Symbol {
+        *self.projectors[index].get_or_init(|| match index {
+            0 => *crate::shadowing::SYM,
+            1 => *crate::shadowing::ANTISYM,
+            2 => *crate::shadowing::CYCLIC,
+            _ => unreachable!("three projector symbols"),
+        })
+    }
+
+    pub(crate) fn is_projector(&self, symbol: Symbol) -> bool {
+        (0..3).any(|index| self.projector(index) == symbol)
+    }
+
+    pub(crate) fn projectors(&self) -> [Symbol; 3] {
+        std::array::from_fn(|index| self.projector(index))
+    }
+
+    pub(crate) fn is_variance_wrapper(&self, symbol: Symbol) -> bool {
+        self.wrappers.contains(&symbol.get_id())
+    }
+
+    pub(crate) fn tags(&self) -> &'static SpensoTags {
+        self.tags
+    }
+
     #[inline]
     fn cache_index(id: u32) -> usize {
         // Symbol IDs can share their low bits; mix before selecting one of 16 buckets.
@@ -362,7 +421,7 @@ impl SlotMatcher {
         }
         let kind = SlotHead::from_symbol(
             function.get_symbol(),
-            self.representation_tag,
+            &self.tags.representation,
             &self.wrappers,
         );
         *entry = Some((id, kind));
@@ -410,15 +469,30 @@ impl SlotMatcher {
         Some(last)
     }
 
+    /// Read a canonical singleton concrete component marker. It consumes no
+    /// abstract slot. A recognized malformed marker is distinguished from
+    /// ordinary scalar metadata so typed rank-one admission cannot hide it.
+    pub fn concrete_component(&self, value: AtomView<'_>) -> Option<Result<usize, SlotError>> {
+        let AtomView::Fun(function) = value else {
+            return None;
+        };
+        if ![AIND_SYMBOLS.cind, AIND_SYMBOLS.find].contains(&function.get_symbol()) {
+            return None;
+        }
+        Some(if function.get_nargs() == 1 {
+            usize::try_from(function.get(0)).map_err(|_| SlotError::NotNatural)
+        } else {
+            Err(SlotError::NotNatural)
+        })
+    }
+
     /// Validate a recognized slot using the requested representation and index types.
     /// Use [`SlotView::index`] when exact symbolic index identity must be preserved.
     pub fn parse<T: RepName, Aind: ParseableAind>(
         &mut self,
         value: AtomView<'_>,
     ) -> Result<Slot<T, Aind>, SlotError> {
-        let slot = self.classify(value).into_slot(value)?;
-        let rep = self.representation(slot)?;
-        slot.parse(T::from_library_rep(rep)?)
+        self.classify(value).parse(value, self)
     }
 
     /// Parse a compact representation with the same recognition and resolution
@@ -431,7 +505,9 @@ impl SlotMatcher {
         let representation = self
             .compact_representation(value)
             .ok_or(SlotError::NotRepresentation)?;
-        let rep = T::from_library_rep(self.resolve_representation(representation)?)?;
+        let rep = T::from_library_rep(
+            self.resolve_representation(representation.head(), representation.wrapper())?,
+        )?;
         let dim = Dimension::try_from(representation.dimension())?;
         Ok(Representation { dim, rep })
     }
@@ -442,15 +518,34 @@ impl SlotMatcher {
         &mut self,
         slot: SlotView<'_>,
     ) -> Result<LibraryRep, RepresentationError> {
-        self.resolve_representation(slot.representation)
+        self.resolve_representation(slot.representation.head(), slot.representation.wrapper())
+    }
+
+    /// Test the existing representation-prefix grammar without resolving heads
+    /// which cannot denote either a representation or a variance wrapper.
+    /// The full parser still owns dimensions, portable payloads and trailing args.
+    pub(crate) fn is_representation(&mut self, value: AtomView<'_>) -> bool {
+        matches!(value, AtomView::Fun(function)
+            if !matches!(self.classify_head(function), SlotHead::Other))
+            && self.representation_from_atom(value).is_ok()
+    }
+
+    /// Parse the representation prefix accepted by `Representation::try_from`,
+    /// sharing this operation's successful head and variance resolutions.
+    pub(crate) fn representation_from_atom(
+        &mut self,
+        value: AtomView<'_>,
+    ) -> Result<Representation<LibraryRep>, SlotError> {
+        Representation::parse_with(value, |head, wrapper| {
+            self.resolve_representation(head, wrapper)
+        })
     }
 
     fn resolve_representation(
         &mut self,
-        representation: RepresentationView<'_>,
+        head: Symbol,
+        wrapper: Option<Symbol>,
     ) -> Result<LibraryRep, RepresentationError> {
-        let head = representation.head();
-        let wrapper = representation.wrapper();
         let rep = if let Some((_, _, rep)) = self
             .resolved
             .iter()
@@ -717,6 +812,122 @@ mod shadowing_tests {
     };
 
     #[test]
+    fn cached_representation_prefix_preserves_direct_conversion_grammar() {
+        let rep = LibraryRep::from(Lorentz {}).symbol();
+        let unknown = symbol!("slot_match_tests::unknown_representation_prefix");
+        let dimension = symbol!("slot_match_tests::prefix_dimension");
+        let mut matcher = SlotMatcher::default();
+        // Prefix conversion intentionally accepts trailing arguments. The strict
+        // compact-port recognizer has a different contract and cannot replace it.
+        for (atom, accepted) in [
+            (function!(rep, 4), true),
+            (function!(rep, dimension), true),
+            (function!(rep, 4, 7), true),
+            (function!(rep, 4, 7, 8), true),
+            (function!(AIND_SYMBOLS.dind, function!(rep, 4)), true),
+            (function!(AIND_SYMBOLS.dind, function!(rep, 4, 7), 8), true),
+            (function!(rep), false),
+            (function!(rep, -1), false),
+            (function!(rep, function!(unknown, 4)), false),
+            (function!(unknown, 4), false),
+            (function!(unknown, function!(rep, 4)), false),
+            (Atom::num(4), false),
+        ] {
+            for _ in 0..2 {
+                let expected = Representation::<LibraryRep>::try_from(atom.as_view());
+                let actual = matcher.representation_from_atom(atom.as_view());
+                assert_eq!(expected.is_ok(), accepted, "{atom}: {expected:?}");
+                assert_eq!(
+                    matcher.is_representation(atom.as_view()),
+                    accepted,
+                    "{atom}"
+                );
+                match (expected, actual) {
+                    (Ok(expected), Ok(actual)) => assert_eq!(actual, expected, "{atom}"),
+                    (Err(expected), Err(actual)) => {
+                        assert_eq!(actual.to_string(), expected.to_string(), "{atom}")
+                    }
+                    (expected, actual) => panic!("{atom}: expected {expected:?}, got {actual:?}"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn representation_predicate_skips_impossible_vector_heads() {
+        let vector = crate::vector_symbol!("slot_match_tests::representation_probe_vector");
+        let custom = LibraryRep::new_dual("slot_match_tests::predicate_custom_rep").unwrap();
+        let mut matcher = SlotMatcher::default();
+        for rep in [
+            LibraryRep::from(Minkowski {}),
+            LibraryRep::from(Lorentz {}),
+            custom,
+        ] {
+            let compact = rep.to_symbolic([Atom::num(4)]);
+            let value = function!(vector, &compact);
+            assert!(Representation::<LibraryRep>::try_from(value.as_view()).is_err());
+            assert!(!matcher.is_representation(value.as_view()));
+            // This boolean rejection must not resolve a compact vector's port
+            // as though the vector head were a variance wrapper.
+            assert!(matcher.resolved.is_empty());
+        }
+        for rep in [
+            LibraryRep::from(Minkowski {}),
+            LibraryRep::from(Lorentz {}),
+            custom,
+        ] {
+            for atom in [
+                rep.to_symbolic([Atom::num(4)]),
+                rep.to_symbolic([Atom::num(4), Atom::num(7), Atom::num(8)]),
+                rep.dual().to_symbolic([Atom::num(4)]),
+            ] {
+                assert_eq!(
+                    matcher.is_representation(atom.as_view()),
+                    Representation::<LibraryRep>::try_from(atom.as_view()).is_ok(),
+                    "{atom}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn reused_classification_still_parses_each_custom_index_occurrence() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static CALLS: AtomicUsize = AtomicUsize::new(0);
+        #[derive(Clone, Copy, Debug, PartialEq)]
+        struct Index(usize);
+        impl super::ParseableAind for Index {
+            type Error = SlotError;
+            fn from_view(value: symbolica::atom::AtomView<'_>) -> Result<Self, Self::Error> {
+                CALLS.fetch_add(1, Ordering::SeqCst);
+                usize::try_from(value)
+                    .map(Self)
+                    .map_err(|_| SlotError::NotNatural)
+            }
+            fn to_atom(&self) -> Atom {
+                Atom::num(self.0)
+            }
+        }
+        let atom = function!(LibraryRep::from(Minkowski {}).symbol(), 4, 7);
+        let mut matcher = SlotMatcher::default();
+        let recognized = matcher.classify(atom.as_view());
+        CALLS.store(0, Ordering::SeqCst);
+        for _ in 0..2 {
+            let slot = recognized
+                .parse::<LibraryRep, Index>(atom.as_view(), &mut matcher)
+                .unwrap();
+            assert_eq!(slot.aind, Index(7));
+        }
+        assert_eq!(CALLS.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn slot_matcher_remains_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<SlotMatcher>();
+    }
+
+    #[test]
     fn borrowed_slot_recognition_reads_only_explicit_index_positions() {
         let rep = LibraryRep::from(Lorentz {}).symbol();
         let index = Atom::var(symbol!("slot_match_tests::mu"));
@@ -973,6 +1184,12 @@ mod shadowing_tests {
                 .build()
                 .unwrap();
             let atom = function!(head, 4, 17);
+            // The prefix predicate must hydrate genuine portable heads through
+            // the existing resolver, before an explicit-slot parse uses them.
+            assert_eq!(
+                matcher.is_representation(atom.as_view()),
+                class != RepresentationClass::InlineMetric
+            );
             assert!(matches!(
                 matcher.classify(atom.as_view()),
                 SlotMatch::Explicit(_)
@@ -1051,5 +1268,42 @@ mod shadowing_tests {
 
         println!("{}", _slot.to_symbolic_wrapped());
         println!("{}", _slot.to_pattern(symbol!("d_")));
+    }
+    #[test]
+    fn canonical_singleton_components_are_checked_without_abstract_slots() {
+        let matcher = SlotMatcher::default();
+        for marker in [AIND_SYMBOLS.cind, AIND_SYMBOLS.find] {
+            for index in [0, 3] {
+                let component = function!(marker, Atom::num(index));
+                assert_eq!(
+                    matcher
+                        .concrete_component(component.as_view())
+                        .unwrap()
+                        .unwrap(),
+                    index as usize
+                );
+            }
+            for component in [
+                symbolica::atom::FunctionBuilder::new(marker).finish(),
+                function!(marker, -1),
+                function!(marker, Atom::num(1) / Atom::num(2)),
+                function!(marker, symbol!("component_slot::unknown")),
+                function!(marker, 0, 1),
+            ] {
+                assert!(
+                    matcher
+                        .concrete_component(component.as_view())
+                        .unwrap()
+                        .is_err(),
+                    "{component}"
+                );
+            }
+        }
+        assert!(
+            matcher
+                .concrete_component(function!(symbol!("component_slot::cind"), 0).as_view())
+                .is_none()
+        );
+        assert!(matcher.concrete_component(Atom::num(0).as_view()).is_none());
     }
 }

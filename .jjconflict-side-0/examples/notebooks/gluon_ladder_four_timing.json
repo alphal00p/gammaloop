@@ -1,0 +1,947 @@
+{
+  "measured_at_utc": "2026-09-27T20:35:05.279012+00:00",
+  "loops": 4,
+  "particle": "gluonic",
+  "internal_edges": 11,
+  "vertices": 8,
+  "trace_unit": null,
+  "closed_fermion_loop_minus": false,
+  "scope": "Numerator only; no denominators, couplings, color, integration or on-shell constraints",
+  "timing": "Warm complete numerator reduction + momentum routing + expanded scalar collection; setup, checks, output and disposal excluded. Python call and result wrapping included. FORM internal CPU timer; process wall reported separately.",
+  "rounds": 5,
+  "platform": "Linux-6.18.45-x86_64-with-glibc2.42",
+  "cpu_affinity": [
+    8
+  ],
+  "core_sha256": "4eace9508942dd1dfe21f131459d530b32573d99f29f970be2507cf7c1101983",
+  "driver_sha256": "209234807275202ef1aad01cc5d7b9bb6a0c98610b78108df863ca74ee28559b",
+  "case_source_sha256": "c1910f4d6fa10686f0ac5deb4991fba8bb373a28aeeaf0a576d45ff2268ea652",
+  "form_source_sha256": "d97bdd5bac979b1c35702687579b5b2256a5e3a456e6a3b49047b176d34f8b23",
+  "form_executable_sha256": "2b3de22e575b20328ed1d848d1821129b550f885ac32785aa73728a7fec408fd",
+  "form_version": "FORM 5.0.0 (Jan  1 1980)",
+  "cases": [
+    {
+      "mode": "trace4",
+      "dimension": "4D",
+      "routing": [
+        [
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          1,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          0
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          -1
+        ],
+        [
+          1,
+          1,
+          1,
+          0,
+          -1
+        ],
+        [
+          1,
+          1,
+          0,
+          0,
+          -1
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          -1
+        ]
+      ],
+      "terms": 2425,
+      "strategy": {
+        "vertex_order": [
+          1,
+          2,
+          8,
+          3,
+          7,
+          4,
+          6,
+          5
+        ],
+        "form_vertex_order": [
+          5,
+          4,
+          6,
+          3,
+          7,
+          2,
+          8,
+          1
+        ],
+        "local": "expand then Schoonschip",
+        "ambient": "Schoonschip with contracted-sum expansion",
+        "final": "typed expand then scalar notation",
+        "trace_instruction": null
+      },
+      "first_idenso": {
+        "wall_ns": 726402015,
+        "cpu_ns": 689038367
+      },
+      "input_and_rule_preparation": {
+        "wall_ns": 2831900,
+        "cpu_ns": 2773812
+      },
+      "form_pilot": {
+        "command": [
+          "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+          "-q",
+          "-d",
+          "MODE=trace4",
+          "-d",
+          "LOOPS=4",
+          "-d",
+          "ORDER=early",
+          "-d",
+          "COLLECT=1",
+          "-d",
+          "ROUTEGROUP=1",
+          "-d",
+          "DIAGNOSTIC=0",
+          "-d",
+          "REPEATS=1",
+          "-d",
+          "BATCHES=1",
+          "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+        ],
+        "stdout": "BATCH=1 REPEATS=1 BATCH_CPU_MS=595\nMODE=trace4 LOOPS=4 ORDER=early STAGE=scalar TERMS=2425\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+        "stderr": "",
+        "process_wall_ns": 642561112,
+        "body_cpu_ns": 595000000,
+        "repeats": 1,
+        "polynomial": null
+      },
+      "samples": [
+        {
+          "round": 1,
+          "idenso": {
+            "repeats": 1,
+            "body_cpu_ns": 676295189,
+            "body_wall_ns": 716996292
+          },
+          "form": {
+            "command": [
+              "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+              "-q",
+              "-d",
+              "MODE=trace4",
+              "-d",
+              "LOOPS=4",
+              "-d",
+              "ORDER=early",
+              "-d",
+              "COLLECT=1",
+              "-d",
+              "ROUTEGROUP=1",
+              "-d",
+              "DIAGNOSTIC=0",
+              "-d",
+              "REPEATS=1",
+              "-d",
+              "BATCHES=1",
+              "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+            ],
+            "stdout": "BATCH=1 REPEATS=1 BATCH_CPU_MS=622\nMODE=trace4 LOOPS=4 ORDER=early STAGE=scalar TERMS=2425\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+            "stderr": "",
+            "process_wall_ns": 677855780,
+            "body_cpu_ns": 622000000,
+            "repeats": 1,
+            "polynomial": null
+          }
+        },
+        {
+          "round": 2,
+          "form": {
+            "command": [
+              "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+              "-q",
+              "-d",
+              "MODE=trace4",
+              "-d",
+              "LOOPS=4",
+              "-d",
+              "ORDER=early",
+              "-d",
+              "COLLECT=1",
+              "-d",
+              "ROUTEGROUP=1",
+              "-d",
+              "DIAGNOSTIC=0",
+              "-d",
+              "REPEATS=1",
+              "-d",
+              "BATCHES=1",
+              "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+            ],
+            "stdout": "BATCH=1 REPEATS=1 BATCH_CPU_MS=593\nMODE=trace4 LOOPS=4 ORDER=early STAGE=scalar TERMS=2425\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+            "stderr": "",
+            "process_wall_ns": 637880866,
+            "body_cpu_ns": 593000000,
+            "repeats": 1,
+            "polynomial": null
+          },
+          "idenso": {
+            "repeats": 1,
+            "body_cpu_ns": 666440741,
+            "body_wall_ns": 707923830
+          }
+        },
+        {
+          "round": 3,
+          "idenso": {
+            "repeats": 1,
+            "body_cpu_ns": 630217451,
+            "body_wall_ns": 661336422
+          },
+          "form": {
+            "command": [
+              "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+              "-q",
+              "-d",
+              "MODE=trace4",
+              "-d",
+              "LOOPS=4",
+              "-d",
+              "ORDER=early",
+              "-d",
+              "COLLECT=1",
+              "-d",
+              "ROUTEGROUP=1",
+              "-d",
+              "DIAGNOSTIC=0",
+              "-d",
+              "REPEATS=1",
+              "-d",
+              "BATCHES=1",
+              "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+            ],
+            "stdout": "BATCH=1 REPEATS=1 BATCH_CPU_MS=594\nMODE=trace4 LOOPS=4 ORDER=early STAGE=scalar TERMS=2425\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+            "stderr": "",
+            "process_wall_ns": 640926077,
+            "body_cpu_ns": 594000000,
+            "repeats": 1,
+            "polynomial": null
+          }
+        },
+        {
+          "round": 4,
+          "form": {
+            "command": [
+              "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+              "-q",
+              "-d",
+              "MODE=trace4",
+              "-d",
+              "LOOPS=4",
+              "-d",
+              "ORDER=early",
+              "-d",
+              "COLLECT=1",
+              "-d",
+              "ROUTEGROUP=1",
+              "-d",
+              "DIAGNOSTIC=0",
+              "-d",
+              "REPEATS=1",
+              "-d",
+              "BATCHES=1",
+              "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+            ],
+            "stdout": "BATCH=1 REPEATS=1 BATCH_CPU_MS=642\nMODE=trace4 LOOPS=4 ORDER=early STAGE=scalar TERMS=2425\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+            "stderr": "",
+            "process_wall_ns": 702199521,
+            "body_cpu_ns": 642000000,
+            "repeats": 1,
+            "polynomial": null
+          },
+          "idenso": {
+            "repeats": 1,
+            "body_cpu_ns": 626657518,
+            "body_wall_ns": 662553587
+          }
+        },
+        {
+          "round": 5,
+          "idenso": {
+            "repeats": 1,
+            "body_cpu_ns": 664375134,
+            "body_wall_ns": 703090325
+          },
+          "form": {
+            "command": [
+              "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+              "-q",
+              "-d",
+              "MODE=trace4",
+              "-d",
+              "LOOPS=4",
+              "-d",
+              "ORDER=early",
+              "-d",
+              "COLLECT=1",
+              "-d",
+              "ROUTEGROUP=1",
+              "-d",
+              "DIAGNOSTIC=0",
+              "-d",
+              "REPEATS=1",
+              "-d",
+              "BATCHES=1",
+              "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+            ],
+            "stdout": "BATCH=1 REPEATS=1 BATCH_CPU_MS=629\nMODE=trace4 LOOPS=4 ORDER=early STAGE=scalar TERMS=2425\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+            "stderr": "",
+            "process_wall_ns": 693623581,
+            "body_cpu_ns": 629000000,
+            "repeats": 1,
+            "polynomial": null
+          }
+        }
+      ],
+      "idenso_median_cpu_ms": 664.375134,
+      "idenso_median_wall_ms": 703.090325,
+      "form_median_cpu_ms": 622.0,
+      "cpu_ratio": 1.068127225080386,
+      "diagnostic": {
+        "stages": [
+          {
+            "vertex": 1,
+            "cpu_ns": 1011311
+          },
+          {
+            "vertex": 2,
+            "cpu_ns": 1696501
+          },
+          {
+            "vertex": 8,
+            "cpu_ns": 5445824
+          },
+          {
+            "vertex": 3,
+            "cpu_ns": 6140137
+          },
+          {
+            "vertex": 7,
+            "cpu_ns": 25759233
+          },
+          {
+            "vertex": 4,
+            "cpu_ns": 59649859
+          },
+          {
+            "vertex": 6,
+            "cpu_ns": 278729349
+          },
+          {
+            "vertex": 5,
+            "cpu_ns": 203023002
+          }
+        ],
+        "final_scalar_cpu_ns": 36604833,
+        "final_terms": 2425
+      },
+      "exact_form_match": true,
+      "explicit_projection_match": true,
+      "scalar_polynomial_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+      "form_diagnostic": {
+        "command": [
+          "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+          "-q",
+          "-d",
+          "MODE=trace4",
+          "-d",
+          "LOOPS=4",
+          "-d",
+          "ORDER=early",
+          "-d",
+          "COLLECT=1",
+          "-d",
+          "ROUTEGROUP=1",
+          "-d",
+          "DIAGNOSTIC=1",
+          "-d",
+          "REPEATS=1",
+          "-d",
+          "BATCHES=1",
+          "-d",
+          "OUTPUT=/tmp/fermion-ladder-n55buonx/trace4.txt",
+          "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+        ],
+        "stdout": "\nTime =       0.00 sec    Generated terms =         20\n              F1         Terms in output =         15\n                vertex-5 Bytes used      =      14768\nSTAGE=vertex-5 TERMS=15\n\nTime =       0.00 sec    Generated terms =        240\n              F1         Terms in output =        133\n                vertex-4 Bytes used      =      77808\nSTAGE=vertex-4 TERMS=133\n\nTime =       0.01 sec    Generated terms =       2660\n              F1         Terms in output =        395\n                vertex-6 Bytes used      =      51428\nSTAGE=vertex-6 TERMS=395\n\nTime =       0.02 sec    Generated terms =       4740\n              F1         Terms in output =       2202\n                vertex-3 Bytes used      =     183992\nSTAGE=vertex-3 TERMS=2202\n\nTime =       0.11 sec    Generated terms =      35232\n              F1         Terms in output =       4869\n                vertex-7 Bytes used      =     167240\nSTAGE=vertex-7 TERMS=4869\n\nTime =       0.18 sec    Generated terms =      38952\n              F1         Terms in output =      16984\n                vertex-2 Bytes used      =     557260\nSTAGE=vertex-2 TERMS=16984\n\nTime =       0.45 sec    Generated terms =     203808\n              F1         Terms in output =      27972\n                vertex-8 Bytes used      =     962592\nSTAGE=vertex-8 TERMS=27972\n\nTime =       0.61 sec    Generated terms =     223776\n              F1         Terms in output =       2425\n                vertex-1 Bytes used      =      96276\nSTAGE=vertex-1 TERMS=2425\nMODE=trace4 LOOPS=4 ORDER=early STAGE=scalar TERMS=2425\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+        "stderr": "",
+        "process_wall_ns": 669281098,
+        "body_cpu_ns": null,
+        "repeats": 1,
+        "polynomial_sha256": "4b6acf72f02c6f74bb577191f2f53783725abfb6481d7750d128a1a65b939ed1"
+      }
+    },
+    {
+      "mode": "tracen",
+      "dimension": "D",
+      "routing": [
+        [
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          1,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          0
+        ],
+        [
+          1,
+          1,
+          1,
+          1,
+          -1
+        ],
+        [
+          1,
+          1,
+          1,
+          0,
+          -1
+        ],
+        [
+          1,
+          1,
+          0,
+          0,
+          -1
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          -1
+        ]
+      ],
+      "terms": 7102,
+      "strategy": {
+        "vertex_order": [
+          1,
+          2,
+          8,
+          3,
+          7,
+          4,
+          6,
+          5
+        ],
+        "form_vertex_order": [
+          5,
+          4,
+          6,
+          3,
+          7,
+          2,
+          8,
+          1
+        ],
+        "local": "expand then Schoonschip",
+        "ambient": "Schoonschip with contracted-sum expansion",
+        "final": "typed expand then scalar notation",
+        "trace_instruction": null
+      },
+      "first_idenso": {
+        "wall_ns": 1083392878,
+        "cpu_ns": 1040533463
+      },
+      "input_and_rule_preparation": {
+        "wall_ns": 2196588,
+        "cpu_ns": 2163922
+      },
+      "form_pilot": {
+        "command": [
+          "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+          "-q",
+          "-d",
+          "MODE=tracen",
+          "-d",
+          "LOOPS=4",
+          "-d",
+          "ORDER=early",
+          "-d",
+          "COLLECT=1",
+          "-d",
+          "ROUTEGROUP=1",
+          "-d",
+          "DIAGNOSTIC=0",
+          "-d",
+          "REPEATS=1",
+          "-d",
+          "BATCHES=1",
+          "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+        ],
+        "stdout": "BATCH=1 REPEATS=1 BATCH_CPU_MS=1145\nMODE=tracen LOOPS=4 ORDER=early STAGE=scalar TERMS=7102\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+        "stderr": "",
+        "process_wall_ns": 1320308973,
+        "body_cpu_ns": 1145000000,
+        "repeats": 1,
+        "polynomial": null
+      },
+      "samples": [
+        {
+          "round": 1,
+          "idenso": {
+            "repeats": 1,
+            "body_cpu_ns": 1068251223,
+            "body_wall_ns": 1159516519
+          },
+          "form": {
+            "command": [
+              "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+              "-q",
+              "-d",
+              "MODE=tracen",
+              "-d",
+              "LOOPS=4",
+              "-d",
+              "ORDER=early",
+              "-d",
+              "COLLECT=1",
+              "-d",
+              "ROUTEGROUP=1",
+              "-d",
+              "DIAGNOSTIC=0",
+              "-d",
+              "REPEATS=1",
+              "-d",
+              "BATCHES=1",
+              "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+            ],
+            "stdout": "BATCH=1 REPEATS=1 BATCH_CPU_MS=1120\nMODE=tracen LOOPS=4 ORDER=early STAGE=scalar TERMS=7102\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+            "stderr": "",
+            "process_wall_ns": 1237652414,
+            "body_cpu_ns": 1120000000,
+            "repeats": 1,
+            "polynomial": null
+          }
+        },
+        {
+          "round": 2,
+          "form": {
+            "command": [
+              "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+              "-q",
+              "-d",
+              "MODE=tracen",
+              "-d",
+              "LOOPS=4",
+              "-d",
+              "ORDER=early",
+              "-d",
+              "COLLECT=1",
+              "-d",
+              "ROUTEGROUP=1",
+              "-d",
+              "DIAGNOSTIC=0",
+              "-d",
+              "REPEATS=1",
+              "-d",
+              "BATCHES=1",
+              "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+            ],
+            "stdout": "BATCH=1 REPEATS=1 BATCH_CPU_MS=955\nMODE=tracen LOOPS=4 ORDER=early STAGE=scalar TERMS=7102\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+            "stderr": "",
+            "process_wall_ns": 1066122402,
+            "body_cpu_ns": 955000000,
+            "repeats": 1,
+            "polynomial": null
+          },
+          "idenso": {
+            "repeats": 1,
+            "body_cpu_ns": 1114220253,
+            "body_wall_ns": 1496108048
+          }
+        },
+        {
+          "round": 3,
+          "idenso": {
+            "repeats": 1,
+            "body_cpu_ns": 1212647477,
+            "body_wall_ns": 1322463377
+          },
+          "form": {
+            "command": [
+              "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+              "-q",
+              "-d",
+              "MODE=tracen",
+              "-d",
+              "LOOPS=4",
+              "-d",
+              "ORDER=early",
+              "-d",
+              "COLLECT=1",
+              "-d",
+              "ROUTEGROUP=1",
+              "-d",
+              "DIAGNOSTIC=0",
+              "-d",
+              "REPEATS=1",
+              "-d",
+              "BATCHES=1",
+              "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+            ],
+            "stdout": "BATCH=1 REPEATS=1 BATCH_CPU_MS=1212\nMODE=tracen LOOPS=4 ORDER=early STAGE=scalar TERMS=7102\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+            "stderr": "",
+            "process_wall_ns": 1344599789,
+            "body_cpu_ns": 1212000000,
+            "repeats": 1,
+            "polynomial": null
+          }
+        },
+        {
+          "round": 4,
+          "form": {
+            "command": [
+              "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+              "-q",
+              "-d",
+              "MODE=tracen",
+              "-d",
+              "LOOPS=4",
+              "-d",
+              "ORDER=early",
+              "-d",
+              "COLLECT=1",
+              "-d",
+              "ROUTEGROUP=1",
+              "-d",
+              "DIAGNOSTIC=0",
+              "-d",
+              "REPEATS=1",
+              "-d",
+              "BATCHES=1",
+              "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+            ],
+            "stdout": "BATCH=1 REPEATS=1 BATCH_CPU_MS=954\nMODE=tracen LOOPS=4 ORDER=early STAGE=scalar TERMS=7102\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+            "stderr": "",
+            "process_wall_ns": 1057620275,
+            "body_cpu_ns": 954000000,
+            "repeats": 1,
+            "polynomial": null
+          },
+          "idenso": {
+            "repeats": 1,
+            "body_cpu_ns": 1052175729,
+            "body_wall_ns": 1153058203
+          }
+        },
+        {
+          "round": 5,
+          "idenso": {
+            "repeats": 1,
+            "body_cpu_ns": 1066001360,
+            "body_wall_ns": 1167623808
+          },
+          "form": {
+            "command": [
+              "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+              "-q",
+              "-d",
+              "MODE=tracen",
+              "-d",
+              "LOOPS=4",
+              "-d",
+              "ORDER=early",
+              "-d",
+              "COLLECT=1",
+              "-d",
+              "ROUTEGROUP=1",
+              "-d",
+              "DIAGNOSTIC=0",
+              "-d",
+              "REPEATS=1",
+              "-d",
+              "BATCHES=1",
+              "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+            ],
+            "stdout": "BATCH=1 REPEATS=1 BATCH_CPU_MS=1089\nMODE=tracen LOOPS=4 ORDER=early STAGE=scalar TERMS=7102\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+            "stderr": "",
+            "process_wall_ns": 1213137474,
+            "body_cpu_ns": 1089000000,
+            "repeats": 1,
+            "polynomial": null
+          }
+        }
+      ],
+      "idenso_median_cpu_ms": 1068.251223,
+      "idenso_median_wall_ms": 1167.623808,
+      "form_median_cpu_ms": 1089.0,
+      "cpu_ratio": 0.9809469449035813,
+      "diagnostic": {
+        "stages": [
+          {
+            "vertex": 1,
+            "cpu_ns": 1063561
+          },
+          {
+            "vertex": 2,
+            "cpu_ns": 1712381
+          },
+          {
+            "vertex": 8,
+            "cpu_ns": 5784655
+          },
+          {
+            "vertex": 3,
+            "cpu_ns": 7375596
+          },
+          {
+            "vertex": 7,
+            "cpu_ns": 32120500
+          },
+          {
+            "vertex": 4,
+            "cpu_ns": 98367635
+          },
+          {
+            "vertex": 6,
+            "cpu_ns": 427049203
+          },
+          {
+            "vertex": 5,
+            "cpu_ns": 376884206
+          }
+        ],
+        "final_scalar_cpu_ns": 88891184,
+        "final_terms": 7102
+      },
+      "exact_form_match": true,
+      "explicit_projection_match": true,
+      "scalar_polynomial_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+      "form_diagnostic": {
+        "command": [
+          "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+          "-q",
+          "-d",
+          "MODE=tracen",
+          "-d",
+          "LOOPS=4",
+          "-d",
+          "ORDER=early",
+          "-d",
+          "COLLECT=1",
+          "-d",
+          "ROUTEGROUP=1",
+          "-d",
+          "DIAGNOSTIC=1",
+          "-d",
+          "REPEATS=1",
+          "-d",
+          "BATCHES=1",
+          "-d",
+          "OUTPUT=/tmp/fermion-ladder-n55buonx/tracen.txt",
+          "/common/dev/gammaloop/feynkit-rich-display/examples/notebooks/gluon_propagator_ladder.frm"
+        ],
+        "stdout": "\nTime =       0.00 sec    Generated terms =         20\n              F1         Terms in output =         15\n                vertex-5 Bytes used      =      14768\nSTAGE=vertex-5 TERMS=15\n\nTime =       0.00 sec    Generated terms =        240\n              F1         Terms in output =        133\n                vertex-4 Bytes used      =      77808\nSTAGE=vertex-4 TERMS=133\n\nTime =       0.01 sec    Generated terms =       2660\n              F1         Terms in output =        531\n                vertex-6 Bytes used      =      63956\nSTAGE=vertex-6 TERMS=531\n\nTime =       0.03 sec    Generated terms =       6372\n              F1         Terms in output =       2705\n                vertex-3 Bytes used      =     213972\nSTAGE=vertex-3 TERMS=2705\n\nTime =       0.15 sec    Generated terms =      43280\n              F1         Terms in output =       6599\n                vertex-7 Bytes used      =     229940\nSTAGE=vertex-7 TERMS=6599\n\nTime =       0.28 sec    Generated terms =      52792\n              F1         Terms in output =      23684\n                vertex-2 Bytes used      =     799628\nSTAGE=vertex-2 TERMS=23684\n\nTime =       0.69 sec    Generated terms =     284208\n              F1         Terms in output =      43332\n                vertex-8 Bytes used      =    1496616\nSTAGE=vertex-8 TERMS=43332\n\nTime =       0.95 sec    Generated terms =     346656\n              F1         Terms in output =       7102\n                vertex-1 Bytes used      =     239564\nSTAGE=vertex-1 TERMS=7102\nMODE=tracen LOOPS=4 ORDER=early STAGE=scalar TERMS=7102\nBATCH=1 EQUAL_EXPRESSIONS=1\n",
+        "stderr": "",
+        "process_wall_ns": 1049991429,
+        "body_cpu_ns": null,
+        "repeats": 1,
+        "polynomial_sha256": "ddcd72b1e39e155f6e7ebe72a4c7b24b1fe009a2871701761c7c02bd5e40f521"
+      }
+    }
+  ],
+  "D_to_four_exact": true,
+  "component_checks": [
+    {
+      "sample": 1,
+      "independent_vectors": {
+        "k1": [
+          "2",
+          "1",
+          "-1",
+          "3"
+        ],
+        "k2": [
+          "1",
+          "-2",
+          "3",
+          "1"
+        ],
+        "k3": [
+          "3",
+          "2",
+          "1",
+          "-1"
+        ],
+        "k4": [
+          "2",
+          "-1",
+          "2",
+          "3"
+        ],
+        "q": [
+          "1",
+          "1",
+          "2",
+          "2"
+        ]
+      },
+      "hep_vertex_oracle": "856746",
+      "observed": {
+        "original compact trace4": "856746",
+        "original explicit trace4": "856746",
+        "original compact tracen": "856746",
+        "original explicit tracen": "856746",
+        "Idenso trace4": "856746",
+        "FORM trace4": "856746",
+        "Idenso tracen": "856746",
+        "FORM tracen": "856746"
+      },
+      "exact": true
+    },
+    {
+      "sample": 2,
+      "independent_vectors": {
+        "k1": [
+          "1/2",
+          "-2/3",
+          "3/5",
+          "1/3"
+        ],
+        "k2": [
+          "-3/2",
+          "1/5",
+          "2/3",
+          "4/5"
+        ],
+        "k3": [
+          "2/5",
+          "3/2",
+          "-1/3",
+          "2/3"
+        ],
+        "k4": [
+          "-1/5",
+          "4/3",
+          "-3/2",
+          "1/2"
+        ],
+        "q": [
+          "4/3",
+          "-1/2",
+          "3/5",
+          "-2/5"
+        ]
+      },
+      "hep_vertex_oracle": "4065042721454941/82012500000",
+      "observed": {
+        "original compact trace4": "4065042721454941/82012500000",
+        "original explicit trace4": "4065042721454941/82012500000",
+        "original compact tracen": "4065042721454941/82012500000",
+        "original explicit tracen": "4065042721454941/82012500000",
+        "Idenso trace4": "4065042721454941/82012500000",
+        "FORM trace4": "4065042721454941/82012500000",
+        "Idenso tracen": "4065042721454941/82012500000",
+        "FORM tracen": "4065042721454941/82012500000"
+      },
+      "exact": true
+    },
+    {
+      "sample": 3,
+      "independent_vectors": {
+        "k1": [
+          "-2/3",
+          "5/4",
+          "1/2",
+          "-3/2"
+        ],
+        "k2": [
+          "3/4",
+          "-1/3",
+          "-5/2",
+          "2/3"
+        ],
+        "k3": [
+          "5/3",
+          "1/4",
+          "-2/3",
+          "1/2"
+        ],
+        "k4": [
+          "3/2",
+          "-5/4",
+          "1/3",
+          "-2/3"
+        ],
+        "q": [
+          "-1/2",
+          "2/3",
+          "3/4",
+          "5/4"
+        ]
+      },
+      "hep_vertex_oracle": "361949054846425/214990848",
+      "observed": {
+        "original compact trace4": "361949054846425/214990848",
+        "original explicit trace4": "361949054846425/214990848",
+        "original compact tracen": "361949054846425/214990848",
+        "original explicit tracen": "361949054846425/214990848",
+        "Idenso trace4": "361949054846425/214990848",
+        "FORM trace4": "361949054846425/214990848",
+        "Idenso tracen": "361949054846425/214990848",
+        "FORM tracen": "361949054846425/214990848"
+      },
+      "exact": true
+    }
+  ],
+  "within_factor_three": true
+}

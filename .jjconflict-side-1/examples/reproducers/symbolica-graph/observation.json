@@ -1,0 +1,141 @@
+{
+  "symbolica_revision": "6a96c9d77b217ea394770524c119e0613d4d9ef5",
+  "graphica_version": "3.0.0",
+  "receipt": {
+    "source_sha256": "e9e5f8b7991eeb17b55818dc4e04ada5410fc03c10823e9abc0817888dc9c19a",
+    "core_sha256": "ba6ede7d68973d1dcba3183f36b6e56099520a9530d5efe67ecf49e180a4284d",
+    "exit_code": 0,
+    "command": [
+      "/tmp/feynkit-tensor-python-host-6a96-v7/venv/bin/python",
+      "-B",
+      "/tmp/feynkit-symbolica-directed-loop-v1/probe.py"
+    ],
+    "log_sha256": "542aa0cf3bb4e5d3a3229f83ddf15e69b449d153071f1e8ab7b2a5c10036eb5f"
+  },
+  "tested_program": "from symbolica import Graph\nimport json\nrows=[]\nfor external in [False,True]:\n for directed in [False,True]:\n  g=Graph();v=g.add_node(1)\n  if external:g.add_edge(v,g.add_node(2),False,3)\n  g.add_edge(v,v,directed,4)\n  _,mapping,size,orbit=g.canonize()\n  rows.append({'external':external,'directed':directed,'automorphism':str(size),'mapping':mapping,'orbit':orbit,'graph':str(g)})\nprint(json.dumps(rows,indent=2))\n",
+  "observations": [
+    {
+      "external": false,
+      "directed": false,
+      "automorphism": "2",
+      "mapping": [
+        0
+      ],
+      "orbit": [
+        0
+      ],
+      "graph": "N0: 1\n4 0--0\n"
+    },
+    {
+      "external": false,
+      "directed": true,
+      "automorphism": "2",
+      "mapping": [
+        0
+      ],
+      "orbit": [
+        0
+      ],
+      "graph": "N0: 1\n4 0->0\n"
+    },
+    {
+      "external": true,
+      "directed": false,
+      "automorphism": "2",
+      "mapping": [
+        0,
+        1
+      ],
+      "orbit": [
+        0,
+        1
+      ],
+      "graph": "N0: 1\nN1: 2\n3 0--1\n4 0--0\n"
+    },
+    {
+      "external": true,
+      "directed": true,
+      "automorphism": "2",
+      "mapping": [
+        0,
+        1
+      ],
+      "orbit": [
+        0,
+        1
+      ],
+      "graph": "N0: 1\nN1: 2\n3 0--1\n4 0->0\n"
+    }
+  ],
+  "baseline": {
+    "symbolica_revision_prefix": "939c4de",
+    "receipt": {
+      "source_sha256": "e9e5f8b7991eeb17b55818dc4e04ada5410fc03c10823e9abc0817888dc9c19a",
+      "core_sha256": "cf2b86e753aa4177deee1699f8eca47961e948765571326a2b16b345520a5fe1",
+      "exit_code": 0,
+      "command": [
+        "/tmp/feynkit-tensor-python-host-939-v1/venv/bin/python",
+        "-B",
+        "-c",
+        "import hashlib,pathlib,runpy,sys;import symbolica.core as c;assert hashlib.sha256(pathlib.Path(c.__file__).read_bytes()).hexdigest()==sys.argv[1];runpy.run_path(sys.argv[2],run_name=\"__main__\")",
+        "cf2b86e753aa4177deee1699f8eca47961e948765571326a2b16b345520a5fe1",
+        "/tmp/feynkit-symbolica-directed-loop-v1/probe.py"
+      ],
+      "log_sha256": "542aa0cf3bb4e5d3a3229f83ddf15e69b449d153071f1e8ab7b2a5c10036eb5f"
+    },
+    "observations": [
+      {
+        "external": false,
+        "directed": false,
+        "automorphism": "2",
+        "mapping": [
+          0
+        ],
+        "orbit": [
+          0
+        ],
+        "graph": "N0: 1\n4 0--0\n"
+      },
+      {
+        "external": false,
+        "directed": true,
+        "automorphism": "2",
+        "mapping": [
+          0
+        ],
+        "orbit": [
+          0
+        ],
+        "graph": "N0: 1\n4 0->0\n"
+      },
+      {
+        "external": true,
+        "directed": false,
+        "automorphism": "2",
+        "mapping": [
+          0,
+          1
+        ],
+        "orbit": [
+          0,
+          1
+        ],
+        "graph": "N0: 1\nN1: 2\n3 0--1\n4 0--0\n"
+      },
+      {
+        "external": true,
+        "directed": true,
+        "automorphism": "2",
+        "mapping": [
+          0,
+          1
+        ],
+        "orbit": [
+          0,
+          1
+        ],
+        "graph": "N0: 1\nN1: 2\n3 0--1\n4 0->0\n"
+      }
+    ]
+  }
+}

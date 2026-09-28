@@ -12,7 +12,6 @@ from symbolica.community.spenso import (
     GammaChainOrdering,
     GammaSimplifySettings,
     Representation,
-    SchoonschipSettings,
     TensorExpression,
     TensorName,
 )
@@ -56,10 +55,11 @@ def simplify(expression):
         kin.apply(
             TensorExpression(expression)
             .expand()
-            .schoonschip(SchoonschipSettings(simplify_chain_like_functions=True))
+            .contract()
             .simplify_gamma(ordering)
             .expand()
-            .simplify_metrics()
+            .contract()
+            .to_expression()
             .to_dots()
         )
         .to_expression()
@@ -166,7 +166,11 @@ for outgoing in (["b", "b~"], ["b", "b~", "g"]):
             denominator = denominator.replace(P(position, idx), momentum)
         denominator = (
             kin.apply(
-                TensorExpression(denominator).expand().simplify_metrics().to_dots()
+                TensorExpression(denominator)
+                .expand()
+                .contract()
+                .to_expression()
+                .to_dots()
             )
             .to_expression()
             .expand()
@@ -221,6 +225,7 @@ for tensor in (color_born, color_real):
             tensor.to_expression() * tensor.spenso_conjugate().to_expression()
         )
         .simplify_color()
+        .to_expression()
         .to_expression()
     )
     colors.append(

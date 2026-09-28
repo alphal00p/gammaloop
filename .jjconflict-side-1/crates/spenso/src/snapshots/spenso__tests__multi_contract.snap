@@ -1,0 +1,42 @@
+---
+source: spenso/src/tests.rs
+expression: dense_dense
+---
+DenseTensor(
+  data: [
+    -1995271,
+    -1761719,
+    2795758,
+    -5186401,
+    -2816621,
+    -2362113,
+    1485040,
+    1042967,
+    -2593662,
+    1088558,
+    -202113,
+    -3074687,
+    -598365,
+    4341727,
+    -882624,
+    -1844254,
+  ],
+  structure: VecStructure(
+    structure: [
+      Slot(
+        aind: Normal(6),
+        rep: Representation(
+          dim: Concrete(4),
+          rep: Dualizable(1),
+        ),
+      ),
+      Slot(
+        aind: Normal(5),
+        rep: Representation(
+          dim: Concrete(4),
+          rep: Dualizable(1),
+        ),
+      ),
+    ],
+  ),
+)

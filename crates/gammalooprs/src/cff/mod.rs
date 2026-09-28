@@ -1535,6 +1535,12 @@ impl Graph {
     }
 }
 
+pub use esurface::{
+    Esurface, EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId,
+};
+pub use expression::{OrientationData, OrientationID};
+pub use surface::HybridSurfaceID;
+
 #[cfg(test)]
 mod tests {
     use std::{collections::BTreeSet, fmt::Write};
@@ -7606,9 +7612,3 @@ mod tests {
         Ok(())
     }
 }
-
-pub use esurface::{
-    Esurface, EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId,
-};
-pub use expression::{OrientationData, OrientationID};
-pub use surface::HybridSurfaceID;

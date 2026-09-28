@@ -10,6 +10,7 @@ import weakref
 from pathlib import Path
 
 import linnet
+from symbolica.community.spenso import TensorExpression
 
 fk = importlib.import_module(
     f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
@@ -64,8 +65,8 @@ assert isinstance(full, fk.Subgraph)
 assert isinstance(full, fk.FeynmanDiagram)
 assert full.numerator_expression() == diagram.numerator_expression()
 assert full.denominator_expression() == diagram.denominator_expression()
-assert empty.denominator_expression() == 1
-assert empty.numerator_expression() == 1
+assert empty.denominator_expression() == TensorExpression(1)
+assert empty.numerator_expression() == TensorExpression(1)
 assert full.loop_count == diagram.loop_count
 assert internal.loop_count == diagram.loop_count
 external = diagram.filter(edge=lambda edge: edge.data.is_external)
@@ -75,11 +76,11 @@ external_vertices = {
 }
 assert len(external.connected_components()) == len(external_vertices)
 assert external.loop_count == 0
-assert external.denominator_expression() == 1
+assert external.denominator_expression() == TensorExpression(1)
 paired = next(edge for edge in graph.edges() if not edge.data.is_external)
 boundary_half = diagram.subgraph(half_edges=[paired.source.index])
-assert boundary_half.denominator_expression() == 1
-assert boundary_half.numerator_expression() == 1
+assert boundary_half.denominator_expression() == TensorExpression(1)
+assert boundary_half.numerator_expression() == TensorExpression(1)
 assert full.is_connected()
 assert len(full.connected_components()) == 1
 assert full.momentum_basis().loop_edges
@@ -153,7 +154,7 @@ for cut in cross_section.cuts:
     assert all(particle.name == "scalar_0" for particle in cut.particles)
     assert isinstance(cut.left.subgraph, fk.Subgraph)
     assert isinstance(cut.right.subgraph, fk.Subgraph)
-    assert cut.left.subgraph.numerator_expression() != 1
+    assert cut.left.subgraph.numerator_expression() != TensorExpression(1)
     assert len(cut.propagators()) == 2
     assert len(cut.propagators(edge_powers={cut.edges[0].id: 2})) == 2
 for candidate in cross_section.topology_threshold_candidates:

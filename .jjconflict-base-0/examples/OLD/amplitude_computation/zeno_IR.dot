@@ -1,0 +1,1041 @@
+digraph qq_AAA_pentagon_coll1{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu3))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,tau2))*
+                2*Q(11,spenso::mink(4,tau2))*Q(5,spenso::mink(4,tau1))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v1 -> ext [id=1];
+            v2 -> ext [id=2];
+            v3 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v5 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v3 -> v4 [id=10];
+            v4 -> v5 [id=11 lmb_id = 0];
+
+            //extra edge
+            v5 -> v0 [id=12];
+
+
+}
+
+
+digraph qq_AAA_pentagon_coll2{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,tau2))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu3))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,tau1))*
+                2*Q(11,spenso::mink(4,tau2))*Q(5,spenso::mink(4,tau1))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v1 -> ext [id=1];
+            v2 -> ext [id=2];
+            v3 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v5 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v3 -> v4 [id=10];
+            v4 -> v5 [id=11 lmb_id = 0];
+
+            //extra edge
+            v5 -> v0 [id=12];
+
+
+}
+
+
+
+digraph qq_AAA_pentagon_soft{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*(Q(0,spenso::mink(4,sigma2))-Q(1,spenso::mink(4,sigma2)))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*(Q(0,spenso::mink(4,sigma3))-Q(1,spenso::mink(4,sigma3))-Q(2,spenso::mink(4,sigma3)))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu3))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(8,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,tau1))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext0    [style=invis]
+
+			ext -> v0 [id=0];
+            v1 -> ext [id=1];
+            v1 -> ext [id=2];
+            v1 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];   
+
+            v0 -> v1 [id=7];
+            v1 -> v4 [id=8];
+            v4 -> v0 [id=9 lmb_id = 0];
+}
+
+digraph qq_AAA_pentagon_soft_coll1{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*(Q(0,spenso::mink(4,sigma2))-Q(1,spenso::mink(4,sigma2)))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*(Q(0,spenso::mink(4,sigma3))-Q(1,spenso::mink(4,sigma3))-Q(2,spenso::mink(4,sigma3)))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu3))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(8,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,tau2))*
+                2*Q(9,spenso::mink(4,tau2))*Q(5,spenso::mink(4,tau1))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v1 -> ext [id=1];
+            v1 -> ext [id=2];
+            v1 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v5 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v4 [id=8];
+            v4 -> v5 [id=9 lmb_id = 0];
+
+            //extra edge
+            v5 -> v0 [id=10];
+
+
+}
+
+digraph qq_AAA_pentagon_soft_coll1{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*(Q(0,spenso::mink(4,sigma2))-Q(1,spenso::mink(4,sigma2)))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*(Q(0,spenso::mink(4,sigma3))-Q(1,spenso::mink(4,sigma3))-Q(2,spenso::mink(4,sigma3)))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu3))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(8,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,tau2))*
+                2*Q(9,spenso::mink(4,tau1))*Q(5,spenso::mink(4,tau2))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v1 -> ext [id=1];
+            v1 -> ext [id=2];
+            v1 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v5 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v4 [id=8];
+            v4 -> v5 [id=9 lmb_id = 0];
+
+            //extra edge
+            v5 -> v0 [id=10];
+
+
+}
+
+//BUBBLE 1
+
+digraph qq_AAA_bubble_1{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v3 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v3 -> v4 [id=10];
+            v2 -> v1 [id=11 lmb_id = 0];
+
+
+}
+
+
+digraph qq_AAA_bubble_1_uv1{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*(Q(8,spenso::mink(4,sigma2))+Q(0,spenso::mink(4,sigma2))-Q(1,spenso::mink(4,sigma2)))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v3 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v1 -> v3 [id=9];
+            v3 -> v4 [id=10];
+            v2 -> v1 [id=11 lmb_id = 0];
+
+
+}
+
+
+digraph qq_AAA_bubble_1_uv2{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*(Q(8,spenso::mink(4,sigma2)))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))*
+                (-2)*Q(11,spenso::mink(4,chi))*(Q(0,spenso::mink(4,chi))-Q(1,spenso::mink(4,chi)))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v3 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v1 -> v3 [id=9];
+            v3 -> v4 [id=10];
+            v2 -> v5 [id=11 lmb_id = 0];
+
+            //extra uv edge
+            v5 -> v1 [id=12];
+
+
+}
+
+
+
+
+//BUBBLE 2
+
+digraph qq_AAA_bubble_2{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v1 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v3 -> v4 [id=10];
+            v3 -> v2 [id=11 lmb_id = 0];
+
+
+}
+
+digraph qq_AAA_bubble_2_uv1{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*(Q(9,spenso::mink(4,sigma3))+Q(0,spenso::mink(4,sigma3))-Q(1,spenso::mink(4,sigma3))-Q(2,spenso::mink(4,sigma3)))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v1 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v2 -> v4 [id=10];
+            v3 -> v2 [id=11 lmb_id = 0];
+
+
+}
+
+
+
+
+
+digraph qq_AAA_bubble_2_uv2{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*(Q(9,spenso::mink(4,sigma3)))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))*
+                (-2)*Q(11,spenso::mink(4,sigma3))*(Q(0,spenso::mink(4,sigma3))-Q(1,spenso::mink(4,sigma3))-Q(2,spenso::mink(4,sigma3)))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v1 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v2 -> v4 [id=10];
+            v3 -> v5 [id=11 lmb_id = 0];
+
+            //extra uv edge
+            v5 -> v2 [id=12];
+
+
+}
+
+
+
+
+
+//TRIANGLE 1
+
+digraph qq_AAA_triangle_1{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(10,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(11,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v1 -> ext [id=1];
+            v3 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v0 [id=9 lmb_id = 0];
+            v2 -> v3 [id=10];
+            v3 -> v4 [id=11];
+
+
+            
+
+}
+
+
+digraph qq_AAA_triangle_1_coll1{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,tau2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(10,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(11,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))*
+                2*Q(9,spenso::mink(4,tau2))*Q(5,spenso::mink(4,tau1))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v1 -> ext [id=1];
+            v3 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v5 [id=5];
+            v0 -> ext [id=6];    
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v5 [id=9 lmb_id = 0];
+            v2 -> v3 [id=10];
+            v3 -> v4 [id=11];
+
+            //extra edge
+            v5 -> v0 [id=12];
+
+}
+
+
+digraph qq_AAA_triangle_1_uv{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(10,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(11,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v2 [id=0];
+            v2 -> ext [id=1];
+            v3 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];  
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v0 [id=9 lmb_id = 0];
+
+            v2 -> v3 [id=10];
+            v3 -> v4 [id=11];
+
+            
+
+}
+
+
+//TRIANGLE 2
+
+digraph qq_AAA_triangle_2{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(11,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v2 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];  
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v3 -> v1 [id=10 lmb_id = 0];
+            v3 -> v4 [id=11];
+
+}
+
+digraph qq_AAA_triangle_2_uv{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(11,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v2 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];  
+            
+            v0 -> v2 [id=7];
+            v2 -> v1 [id=8];
+            v1 -> v3 [id=9];
+            v3 -> v2 [id=10 lmb_id = 0];
+            v2 -> v4 [id=11];
+
+}
+
+
+
+//TRIANGLE 3
+
+
+digraph qq_AAA_triangle_3{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu3))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,tau1))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v1 -> ext [id=2];
+            v3 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];  
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v3 -> v4 [id=10];
+            v4 -> v2 [id=11 lmb_id = 0];
+
+}
+
+
+
+digraph qq_AAA_triangle_3_coll1{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,tau2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu3))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,tau1))*
+                2*Q(11,spenso::mink(4,tau2))*Q(5,spenso::mink(4,tau1))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v1 -> ext [id=2];
+            v3 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v5 [id=5];
+            v2 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v3 -> v4 [id=10];
+            v4 -> v5 [id=11 lmb_id = 0];
+
+            //extra edge
+            v5 -> v2 [id=12];
+
+              
+
+}
+
+
+digraph qq_AAA_triangle_3_uv{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu3))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,tau1))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v1 -> ext [id=2];
+            v2 -> ext [id=3];
+            ext -> v2 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v3 -> v4 [id=10];
+            v4 -> v2 [id=11 lmb_id = 0];
+
+}
+
+//BOX 1
+
+digraph qq_AAA_box_1{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(11,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v1 -> ext [id=1];
+            v2 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v3 -> v0 [id=10 lmb_id = 0];
+            v3 -> v4 [id=11];
+
+}
+
+digraph qq_AAA_box_1_coll1{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,tau2))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(11,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,nu3))*
+                2*Q(11,spenso::mink(4,tau2))*Q(5,spenso::mink(4,tau1))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v1 -> ext [id=1];
+            v2 -> ext [id=2];
+            v4 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v5 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v3 -> v5 [id=10 lmb_id = 0];
+            v3 -> v4 [id=11];
+
+            //extra edge
+            v5 -> v0 [id=12];
+
+
+}
+
+
+
+
+
+
+//BOX 2
+
+digraph qq_AAA_box_2{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,tau1))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu3))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,tau1))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v2 -> ext [id=2];
+            v3 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v0 [id=5];
+            v0 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v3 -> v4 [id=10];
+            v4 -> v1 [id=11 lmb_id = 0];
+
+}
+
+digraph qq_AAA_box_2_coll2{
+graph	 [num = "spenso::gamma(spenso::bis(4,s1000),spenso::bis(4,s1),spenso::mink(4,nu1))*
+                spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(4,sigma1))*Q(7,spenso::mink(4,sigma1))*
+                spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(4,tau2))*
+                spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s4),spenso::mink(4,sigma2))*Q(8,spenso::mink(4,sigma2))*
+                spenso::gamma(spenso::bis(4,s4),spenso::bis(4,s5),spenso::mink(4,nu2))*
+                spenso::gamma(spenso::bis(4,s5),spenso::bis(4,s6),spenso::mink(4,sigma3))*Q(9,spenso::mink(4,sigma3))*
+                spenso::gamma(spenso::bis(4,s6),spenso::bis(4,s7),spenso::mink(4,nu3))*
+                spenso::gamma(spenso::bis(4,s7),spenso::bis(4,s8),spenso::mink(4,sigma4))*Q(10,spenso::mink(4,sigma4))*
+                spenso::gamma(spenso::bis(4,s8),spenso::bis(4,s1001),spenso::mink(4,tau1))*
+                2*Q(11,spenso::mink(4,tau2))*Q(5,spenso::mink(4,tau1))", 
+        overall_factor = "1", 
+        projector = "u(0,spenso::bis(4,s1001))*
+                    ϵ(1,spenso::mink(4,nu1))*
+                    ϵ(2,spenso::mink(4,nu2))*
+                    ϵbar(3,spenso::mink(4,nu3))*
+                    vbar(4,spenso::bis(4,s1000))"]
+
+        edge[
+            num=1 dod=-100]
+        node[
+            num=1 dod=-100]
+
+            ext    [style=invis]
+            ext -> v0 [id=0];
+            v0 -> ext [id=1];
+            v2 -> ext [id=2];
+            v3 -> ext [id=3];
+            ext -> v4 [id=4];
+
+            //eta1 externals
+            ext -> v5 [id=5];
+            v1 -> ext [id=6];   
+            
+            v0 -> v1 [id=7];
+            v1 -> v2 [id=8];
+            v2 -> v3 [id=9];
+            v3 -> v4 [id=10];
+            v4 -> v5 [id=11 lmb_id = 0];
+
+            //extra edge
+            v5 -> v1 [id=12];
+
+
+}

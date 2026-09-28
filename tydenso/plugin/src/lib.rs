@@ -3,10 +3,9 @@
 use std::{io::Cursor, sync::Once};
 
 use ciborium::value::Value;
-use idenso::color::ColorSimplifier;
-use idenso::dirac::GammaSimplifier;
-use idenso::selective_expand::SelectiveExpand;
-use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
+use idenso::color::ColorSimplifySettings;
+use idenso::dirac::GammaSimplifySettings;
+use idenso::tensor::{ContractionSettings, SymbolicTensor};
 use idenso::{Cookable, IndexTooling};
 use spenso::network::tags::SPENSO_TAG;
 use spenso::portable_payload::{
@@ -1324,14 +1323,6 @@ fn symbol_from_atom(atom: &Atom, label: &str) -> Result<Symbol, String> {
     }
 }
 
-fn expanded(terms: Vec<(Atom, Atom)>) -> Atom {
-    terms
-        .into_iter()
-        .fold(Atom::Zero, |sum, (coefficient, tensor)| {
-            sum + coefficient * tensor
-        })
-}
-
 fn encode_atom_array(atoms: Vec<Atom>, context: &InputContext) -> Result<Vec<u8>, String> {
     let values = atoms
         .iter()
@@ -1410,36 +1401,6 @@ pub fn dirac_adjoint(expr: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 #[wasm_func]
-pub fn expand_bis(expr: &[u8]) -> Result<Vec<u8>, String> {
-    let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&expanded(atom.expand_bis()), &context)
-}
-
-#[wasm_func]
-pub fn expand_color(expr: &[u8]) -> Result<Vec<u8>, String> {
-    let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&expanded(atom.expand_color()), &context)
-}
-
-#[wasm_func]
-pub fn expand_metrics(expr: &[u8]) -> Result<Vec<u8>, String> {
-    let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&expanded(atom.expand_metrics()), &context)
-}
-
-#[wasm_func]
-pub fn expand_mink(expr: &[u8]) -> Result<Vec<u8>, String> {
-    let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&expanded(atom.expand_mink()), &context)
-}
-
-#[wasm_func]
-pub fn expand_mink_bis(expr: &[u8]) -> Result<Vec<u8>, String> {
-    let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&expanded(atom.expand_mink_bis()), &context)
-}
-
-#[wasm_func]
 pub fn list_dangling(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
     let dangling = atom
@@ -1451,25 +1412,57 @@ pub fn list_dangling(expr: &[u8]) -> Result<Vec<u8>, String> {
 #[wasm_func]
 pub fn simplify_color(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&atom.simplify_color(), &context)
+    let source = SymbolicTensor::infer(atom).map_err(|error| error.to_string())?;
+    let result = source
+        .simplify_color(ColorSimplifySettings::default())
+        .and_then(|result| result.resolved())
+        .map_err(|error| error.to_string())?;
+    encode_atom_with_context(result.expression(), &context)
 }
 
 #[wasm_func]
 pub fn simplify_gamma(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&atom.simplify_gamma(), &context)
+    let source = SymbolicTensor::infer(atom).map_err(|error| error.to_string())?;
+    let result = source
+        .simplify_gamma(GammaSimplifySettings::default())
+        .and_then(|result| result.resolved())
+        .map_err(|error| error.to_string())?;
+    encode_atom_with_context(result.expression(), &context)
 }
 
 #[wasm_func]
-pub fn simplify_metrics(expr: &[u8]) -> Result<Vec<u8>, String> {
+pub fn contract(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&atom.simplify_metrics(), &context)
+    let source = SymbolicTensor::infer(atom).map_err(|error| error.to_string())?;
+    let result = source
+        .contract(ContractionSettings::default())
+        .map_err(|error| error.to_string())?;
+    if !result.contraction_complete() {
+        return Err("tensor contraction did not complete".into());
+    }
+    let result = result.resolved().map_err(|error| error.to_string())?;
+    encode_atom_with_context(result.expression(), &context)
 }
 
 #[wasm_func]
 pub fn to_dots(expr: &[u8]) -> Result<Vec<u8>, String> {
     let (atom, context) = decode_atom_with_context(expr, "expr")?;
-    encode_atom_with_context(&atom.to_dots(), &context)
+    let result = SymbolicTensor::infer(atom)
+        .map_err(|error| error.to_string())?
+        .to_dots()
+        .map_err(|error| error.to_string())?;
+    encode_atom_with_context(result.expression(), &context)
+}
+
+#[wasm_func]
+pub fn undo_dots(expr: &[u8]) -> Result<Vec<u8>, String> {
+    let (atom, context) = decode_atom_with_context(expr, "expr")?;
+    let result = SymbolicTensor::infer(atom)
+        .map_err(|error| error.to_string())?
+        .undo_dots()
+        .map_err(|error| error.to_string())?;
+    encode_atom_with_context(result.expression(), &context)
 }
 
 #[wasm_func]
@@ -2181,6 +2174,38 @@ mod tests {
     }
 
     #[test]
+    fn dot_toggles_preserve_indexed_inputs_and_roundtrip_compact_products() {
+        use spenso::{dot, g, mink, vector};
+        let indexed =
+            vector!(tydenso_dot_p, mink!(4, 99001)) * vector!(tydenso_dot_q, mink!(4, 99001));
+        assert_eq!(
+            decode_atom(
+                &to_dots(&encode_atom(&indexed).unwrap()).unwrap(),
+                "indexed dots"
+            )
+            .unwrap(),
+            indexed,
+        );
+        let p = vector!(tydenso_dot_p, mink!(4));
+        let q = vector!(tydenso_dot_q, mink!(4));
+        let compact = encode_atom(&g!(&p, &q)).unwrap();
+        let dotted = to_dots(&compact).unwrap();
+        let expected = dot!(&p, &q);
+        assert_eq!(decode_atom(&dotted, "compact dots").unwrap(), expected);
+        let opened = undo_dots(&dotted).unwrap();
+        assert!(
+            !decode_atom(&opened, "opened dots")
+                .unwrap()
+                .contains_symbol(SPENSO_TAG.dot)
+        );
+        let closed = contract(&opened).unwrap();
+        assert_eq!(
+            decode_atom(&to_dots(&closed).unwrap(), "dot roundtrip").unwrap(),
+            expected
+        );
+    }
+
+    #[test]
     fn custom_dual_slots_share_one_head_and_contract() {
         use spenso::network::library::symbolic::ETS;
 
@@ -2201,9 +2226,24 @@ mod tests {
         };
         assert_eq!(i_representation.get_symbol(), j_representation.get_symbol());
 
-        let vector = parse_symbol("q", namespace, None).unwrap();
+        let vector = parse_tensor_symbol("q", namespace, &[], true).unwrap();
         let expression = ETS.metric(i.clone(), dual_j) * vector.call(j);
-        assert_eq!(expression.simplify_metrics(), vector.call(i));
+        assert_eq!(
+            SymbolicTensor::infer(expression.clone())
+                .unwrap()
+                .contract(ContractionSettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            vector.call(i.clone())
+        );
+        let payload = encode_atom(&expression).unwrap();
+        let contracted = contract(&payload).unwrap();
+        assert_eq!(
+            decode_atom(&contracted, "contract result").unwrap(),
+            vector.call(i)
+        );
     }
 
     #[test]
@@ -2531,13 +2571,17 @@ mod tests {
         )
         .unwrap();
 
-        let unary = cook_indices(&payload).unwrap();
-        let unary = parse_payload(&unary).unwrap();
-        assert_eq!(
-            unary.attachment(&unknown_key),
-            Some(b"preserve me".as_slice())
-        );
-        assert!(unary.attachment(&rep_key).is_some());
+        for unary in [cook_indices, contract, simplify_gamma, simplify_color] {
+            let result = unary(&payload).unwrap();
+            let imported = decode_atom(&result, "unary result").unwrap();
+            assert_eq!(imported, decode_atom(&payload, "source").unwrap());
+            let result = parse_payload(&result).unwrap();
+            assert_eq!(
+                result.attachment(&unknown_key),
+                Some(b"preserve me".as_slice())
+            );
+            assert!(result.attachment(&rep_key).is_some());
+        }
 
         let fanout = list_dangling(&payload).unwrap();
         let Value::Array(outputs) = decode_cbor(&fanout, "fanout").unwrap() else {

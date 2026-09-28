@@ -12,12 +12,12 @@ from math import prod
 from pathlib import Path
 from time import process_time_ns
 
-from symbolica import E, Replacement, S, T
+from symbolica import E, Replacement, S
 from symbolica.community.spenso import (
     Representation,
-    SchoonschipSettings,
     TensorExpression,
     TensorName,
+    TensorRule,
 )
 
 # (sign, metric port pair, momentum leg, remaining component port), zero-based.
@@ -92,14 +92,13 @@ class GluonLadder:
         self.strategy = {
             "vertex_order": self.order,
             "form_vertex_order": ORDERS[self.form_order],
-            "local": "expand then Schoonschip",
-            "ambient": "Schoonschip with contracted-sum expansion",
+            "local": "compiled factorized tensor rule",
+            "ambient": "shared graph contraction with retained aliases",
             "final": "typed expand then scalar notation",
             "trace_instruction": None,
         }
         self.lorentz = Representation.mink(self.dimension)
         self.metric = TensorName.g().to_expression()
-        self.settings = SchoonschipSettings(expand_contracted_sums=True)
         self.vertices, self.edges = graph_data()
         self.momenta = [
             TensorName.vector(f"physical_gluon_ladder::{name}").to_expression()(
@@ -161,10 +160,10 @@ class GluonLadder:
             E("0"),
         )
 
-        def contract_rhs(value):
-            return TensorExpression(value).schoonschip(self.settings).to_expression()
-
-        self.rhs = self.rule.hold(T().expand().map(contract_rhs))
+        self.rules = [
+            TensorRule(pattern, self.rule, rhs_cache_size=1000)
+            for pattern in self.patterns
+        ]
         self.scalars = {
             (i, j): S(f"physical_gluon_ladder::s{i + 1}{j + 1}")
             for i in range(5)
@@ -178,11 +177,8 @@ class GluonLadder:
     def reduce(self, source=None):
         result = self.source if source is None else source
         for vertex in self.order:
-            result = result.replace_tensor(
-                self.patterns[vertex - 1], self.rhs, rhs_cache_size=1000
-            ).schoonschip(self.settings)
-        # Retain the proven typed-hybrid boundary; only final notation conversion
-        # to scalar indeterminates is added for exact FORM polynomial comparison.
+            result = result.replace(self.rules[vertex - 1]).contract()
+        # Materialize once, then name scalar products for the exact FORM comparison.
         return result.expand().to_expression().replace_multiple(self.replacements)
 
     def import_form(self, polynomial):
@@ -203,10 +199,17 @@ class GluonLadder:
         rows = []
         for vertex in self.order:
             start = process_time_ns()
-            result = result.replace_tensor(
-                self.patterns[vertex - 1], self.rhs, rhs_cache_size=1000
-            ).schoonschip(self.settings)
-            rows.append({"vertex": vertex, "cpu_ns": process_time_ns() - start})
+            result = result.replace(self.rules[vertex - 1])
+            replaced = process_time_ns()
+            result = result.contract()
+            contracted = process_time_ns()
+            rows.append(
+                {
+                    "vertex": vertex,
+                    "replacement_cpu_ns": replaced - start,
+                    "contraction_cpu_ns": contracted - replaced,
+                }
+            )
         start = process_time_ns()
         scalar = result.expand().to_expression().replace_multiple(self.replacements)
         final = process_time_ns() - start

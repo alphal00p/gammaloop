@@ -1,0 +1,150 @@
+[default_runtime_settings.kinematics]
+e_cm = 300.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+    [500.0, 0.0, 0.0, 500.0],
+    [500.0, 0.0, 0.0, -500.0],
+    [500.0, 500.0, 0.0, 0.0],
+    "dependent"
+]
+helicities = [+1, +1, -1, -1]
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "none"
+mu_r = 20.0
+m_uv = 20.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.stability]
+check_on_norm = true
+escalate_if_exact_zero = false
+loop_momenta_norm_escalation_factor = -1.0
+
+[[default_runtime_settings.stability.rotation_axis]]
+type = "z"
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 1.0e-10
+required_precision_for_im = 1.0e-10
+escalate_for_large_weight_threshold = 0.9
+
+[[default_runtime_settings.stability.levels]]
+precision = "Quad"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = -1.0
+
+[[default_runtime_settings.stability.levels]]
+precision = "Arb"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = -1.0
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = true
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = false
+
+[cli_settings.global.generation.compile]
+compilation_mode = "symjit"
+optimization_level = "O0"
+fast_math = false
+unsafe_math = false
+custom = []
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 1
+compile = 1
+integrate = 1
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+    "set model MT=173.0",
+    "set model WT=0.0",
+    "set model ymt=173.0",
+    "set model aS=0.118",
+    "set model aEWM1=137.036",
+    "set model Gf=1.166390e-05",
+    "set model MZ=91.188",
+]
+
+[[command_blocks]]
+name = "set_kinematics_a"
+commands = [
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+        [86.5, 0.0, 0.0, 86.5],
+        [86.5, 0.0, 0.0, -86.5],
+        [86.5, 0.0, -79.27855952273603, -34.6],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_b"
+commands = [
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+        [103.8, 0.0, 0.0, 103.8],
+        [103.8, 0.0, 0.0, -103.8],
+        [103.8, 0.0, -95.13427142728324, -41.52],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_f"
+commands = [
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+        [1751.8893288527534, 0.0, 0.0, 1751.8893288527534],
+        [1751.8893288527534, 0.0, 0.0, -1751.8893288527534],
+        [1751.8893288527534, 0.0, -1605.6330917306252, -700.755731541101],
+        "dependent"
+    ]
+    '""",
+]

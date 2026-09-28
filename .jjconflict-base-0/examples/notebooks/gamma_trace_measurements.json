@@ -1,0 +1,364 @@
+{
+  "date": "2026-09-23",
+  "cpu": "AMD EPYC 9754 128-Core Processor",
+  "platform": "Linux x86_64; shared host, no CPU pinning",
+  "rustc": "1.98.1 (48a229cea 2026-09-01)",
+  "symbolica": "3.0.0",
+  "form": "FORM 5.0.0 (Jan  1 1980)",
+  "form_executable": "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+  "profile": "dev-optim; Idenso/workspace opt-level 2, external dependencies opt-level 3",
+  "method": {
+    "idenso": "first call plus median of five subsequent in-process simplify_gamma calls; inputs and exact assertions excluded",
+    "form": "median of five complete processes after one warm-up; includes startup, parse, trace, sort and symbolic scalar verification",
+    "correctness": "exact scalar polynomials in pp, qq, pq; free indices projected onto p,p,q,...,q; current trace4 term counts also checked",
+    "baseline": "same example and optimization settings, with the pre-change simplify.rs copied into an isolated temporary crate; lengths 2-10"
+  },
+  "before_simplify_sha256": "61d5c5cf17d2649fd8b539424d676d5f755883a2e7bcf8255d1a719af2cf37f4",
+  "after_sources_sha256": {
+    "crates/idenso/src/dirac/simplify.rs": "76adb67a6061a4b1293f55ea73a5ae774bd775016de5740977ecb9ab8468acad",
+    "crates/idenso/src/dirac/simplify/trace_kernel.rs": "bf1df312af6e6adc238e30c878270ef790007b96fde6f31510d68f0038ac4b5c",
+    "crates/idenso/examples/trace_form.rs": "0c851664719b395309ba4bf0242ffd0a6285533275ab5693a30e38652bc3eaa4"
+  },
+  "after": [
+    {
+      "case": "free",
+      "length": 2,
+      "terms": 1,
+      "idenso_cold_ms": 0.698691,
+      "idenso_warm_ms": 0.0046,
+      "form_trace4_process_ms": 9.331418,
+      "form_tracen_process_ms": 9.605799
+    },
+    {
+      "case": "paired",
+      "length": 2,
+      "terms": 1,
+      "idenso_cold_ms": 1.695034,
+      "idenso_warm_ms": 0.08878,
+      "form_trace4_process_ms": 9.737729,
+      "form_tracen_process_ms": 9.524409
+    },
+    {
+      "case": "alternating",
+      "length": 2,
+      "terms": 1,
+      "idenso_cold_ms": 0.23601,
+      "idenso_warm_ms": 0.08589,
+      "form_trace4_process_ms": 9.6986,
+      "form_tracen_process_ms": 9.376179
+    },
+    {
+      "case": "free",
+      "length": 4,
+      "terms": 3,
+      "idenso_cold_ms": 0.15663,
+      "idenso_warm_ms": 0.01474,
+      "form_trace4_process_ms": 9.862849,
+      "form_tracen_process_ms": 9.586569
+    },
+    {
+      "case": "paired",
+      "length": 4,
+      "terms": 1,
+      "idenso_cold_ms": 0.408921,
+      "idenso_warm_ms": 0.17745,
+      "form_trace4_process_ms": 9.580179,
+      "form_tracen_process_ms": 9.548179
+    },
+    {
+      "case": "alternating",
+      "length": 4,
+      "terms": 2,
+      "idenso_cold_ms": 0.968252,
+      "idenso_warm_ms": 0.40019,
+      "form_trace4_process_ms": 9.580249,
+      "form_tracen_process_ms": 9.461629
+    },
+    {
+      "case": "free",
+      "length": 6,
+      "terms": 15,
+      "idenso_cold_ms": 0.215,
+      "idenso_warm_ms": 0.03987,
+      "form_trace4_process_ms": 9.495619,
+      "form_tracen_process_ms": 9.846829
+    },
+    {
+      "case": "paired",
+      "length": 6,
+      "terms": 1,
+      "idenso_cold_ms": 0.438131,
+      "idenso_warm_ms": 0.266571,
+      "form_trace4_process_ms": 9.525129,
+      "form_tracen_process_ms": 9.311078
+    },
+    {
+      "case": "alternating",
+      "length": 6,
+      "terms": 2,
+      "idenso_cold_ms": 1.098453,
+      "idenso_warm_ms": 0.815871,
+      "form_trace4_process_ms": 9.739799,
+      "form_tracen_process_ms": 9.437179
+    },
+    {
+      "case": "free",
+      "length": 8,
+      "terms": 105,
+      "idenso_cold_ms": 0.344971,
+      "idenso_warm_ms": 0.15283,
+      "form_trace4_process_ms": 9.98343,
+      "form_tracen_process_ms": 10.583291
+    },
+    {
+      "case": "paired",
+      "length": 8,
+      "terms": 1,
+      "idenso_cold_ms": 0.546871,
+      "idenso_warm_ms": 0.37744,
+      "form_trace4_process_ms": 9.807589,
+      "form_tracen_process_ms": 9.272608
+    },
+    {
+      "case": "alternating",
+      "length": 8,
+      "terms": 3,
+      "idenso_cold_ms": 2.090804,
+      "idenso_warm_ms": 1.802164,
+      "form_trace4_process_ms": 9.668029,
+      "form_tracen_process_ms": 9.587219
+    },
+    {
+      "case": "free",
+      "length": 10,
+      "terms": 693,
+      "idenso_cold_ms": 1.613963,
+      "idenso_warm_ms": 1.119332,
+      "form_trace4_process_ms": 10.806281,
+      "form_tracen_process_ms": 10.633771
+    },
+    {
+      "case": "paired",
+      "length": 10,
+      "terms": 1,
+      "idenso_cold_ms": 0.667821,
+      "idenso_warm_ms": 0.487771,
+      "form_trace4_process_ms": 9.742319,
+      "form_tracen_process_ms": 9.590359
+    },
+    {
+      "case": "alternating",
+      "length": 10,
+      "terms": 3,
+      "idenso_cold_ms": 3.407147,
+      "idenso_warm_ms": 3.095436,
+      "form_trace4_process_ms": 9.497019,
+      "form_tracen_process_ms": 9.530579
+    },
+    {
+      "case": "free",
+      "length": 12,
+      "terms": 4383,
+      "idenso_cold_ms": 10.1459,
+      "idenso_warm_ms": 7.998505,
+      "form_trace4_process_ms": 16.536543,
+      "form_tracen_process_ms": 22.571864
+    },
+    {
+      "case": "paired",
+      "length": 12,
+      "terms": 1,
+      "idenso_cold_ms": 0.795812,
+      "idenso_warm_ms": 0.608642,
+      "form_trace4_process_ms": 9.340289,
+      "form_tracen_process_ms": 9.542239
+    },
+    {
+      "case": "alternating",
+      "length": 12,
+      "terms": 4,
+      "idenso_cold_ms": 6.192822,
+      "idenso_warm_ms": 5.872931,
+      "form_trace4_process_ms": 9.853869,
+      "form_tracen_process_ms": 9.608289
+    },
+    {
+      "case": "free",
+      "length": 14,
+      "terms": 26931,
+      "idenso_cold_ms": 73.121345,
+      "idenso_warm_ms": 63.612106,
+      "form_trace4_process_ms": 54.418747,
+      "form_tracen_process_ms": 190.453047
+    },
+    {
+      "case": "paired",
+      "length": 14,
+      "terms": 1,
+      "idenso_cold_ms": 0.944922,
+      "idenso_warm_ms": 0.745032,
+      "form_trace4_process_ms": 9.118328,
+      "form_tracen_process_ms": 8.738887
+    },
+    {
+      "case": "alternating",
+      "length": 14,
+      "terms": 4,
+      "idenso_cold_ms": 9.78063,
+      "idenso_warm_ms": 9.521499,
+      "form_trace4_process_ms": 9.576429,
+      "form_tracen_process_ms": 9.496699
+    }
+  ],
+  "before": [
+    {
+      "case": "free",
+      "length": 2,
+      "terms": 1,
+      "idenso_cold_ms": 2.198685,
+      "idenso_warm_ms": 0.10425,
+      "form_trace4_process_ms": 8.790688,
+      "form_tracen_process_ms": 8.458276
+    },
+    {
+      "case": "paired",
+      "length": 2,
+      "terms": 1,
+      "idenso_cold_ms": 0.20354,
+      "idenso_warm_ms": 0.08448,
+      "form_trace4_process_ms": 9.109468,
+      "form_tracen_process_ms": 6.925994
+    },
+    {
+      "case": "alternating",
+      "length": 2,
+      "terms": 1,
+      "idenso_cold_ms": 0.19927,
+      "idenso_warm_ms": 0.07969,
+      "form_trace4_process_ms": 6.756813,
+      "form_tracen_process_ms": 9.607919
+    },
+    {
+      "case": "free",
+      "length": 4,
+      "terms": 3,
+      "idenso_cold_ms": 0.807041,
+      "idenso_warm_ms": 0.492011,
+      "form_trace4_process_ms": 9.250078,
+      "form_tracen_process_ms": 9.343869
+    },
+    {
+      "case": "paired",
+      "length": 4,
+      "terms": 1,
+      "idenso_cold_ms": 0.352161,
+      "idenso_warm_ms": 0.17991,
+      "form_trace4_process_ms": 9.341568,
+      "form_tracen_process_ms": 9.332958
+    },
+    {
+      "case": "alternating",
+      "length": 4,
+      "terms": 2,
+      "idenso_cold_ms": 0.42189,
+      "idenso_warm_ms": 0.243191,
+      "form_trace4_process_ms": 9.494519,
+      "form_tracen_process_ms": 9.255808
+    },
+    {
+      "case": "free",
+      "length": 6,
+      "terms": 15,
+      "idenso_cold_ms": 2.866266,
+      "idenso_warm_ms": 2.662535,
+      "form_trace4_process_ms": 9.238309,
+      "form_tracen_process_ms": 9.293848
+    },
+    {
+      "case": "paired",
+      "length": 6,
+      "terms": 1,
+      "idenso_cold_ms": 0.441411,
+      "idenso_warm_ms": 0.294531,
+      "form_trace4_process_ms": 9.528109,
+      "form_tracen_process_ms": 9.510488
+    },
+    {
+      "case": "alternating",
+      "length": 6,
+      "terms": 2,
+      "idenso_cold_ms": 0.787072,
+      "idenso_warm_ms": 0.607902,
+      "form_trace4_process_ms": 9.154529,
+      "form_tracen_process_ms": 9.083698
+    },
+    {
+      "case": "free",
+      "length": 8,
+      "terms": 105,
+      "idenso_cold_ms": 18.782618,
+      "idenso_warm_ms": 18.498337,
+      "form_trace4_process_ms": 9.585908,
+      "form_tracen_process_ms": 9.732679
+    },
+    {
+      "case": "paired",
+      "length": 8,
+      "terms": 1,
+      "idenso_cold_ms": 0.563151,
+      "idenso_warm_ms": 0.417,
+      "form_trace4_process_ms": 9.307618,
+      "form_tracen_process_ms": 9.215908
+    },
+    {
+      "case": "alternating",
+      "length": 8,
+      "terms": 3,
+      "idenso_cold_ms": 2.071844,
+      "idenso_warm_ms": 1.875364,
+      "form_trace4_process_ms": 9.202028,
+      "form_tracen_process_ms": 7.064654
+    },
+    {
+      "case": "free",
+      "length": 10,
+      "terms": 945,
+      "idenso_cold_ms": 169.168384,
+      "idenso_warm_ms": 168.053082,
+      "form_trace4_process_ms": 8.566088,
+      "form_tracen_process_ms": 10.18068
+    },
+    {
+      "case": "paired",
+      "length": 10,
+      "terms": 1,
+      "idenso_cold_ms": 0.740211,
+      "idenso_warm_ms": 0.571101,
+      "form_trace4_process_ms": 7.525305,
+      "form_tracen_process_ms": 9.380399
+    },
+    {
+      "case": "alternating",
+      "length": 10,
+      "terms": 3,
+      "idenso_cold_ms": 6.229982,
+      "idenso_warm_ms": 6.033702,
+      "form_trace4_process_ms": 9.275099,
+      "form_tracen_process_ms": 9.201749
+    }
+  ],
+  "notebook_default": {
+    "case": "eight paired slash factors",
+    "host_profile": "unoptimized temporary Python host; separate from Rust comparison",
+    "median_seconds": {
+      "Trace first": 0.5901566159445792,
+      "Contract first": 0.018877067137509584,
+      "Compact input": 0.004664369160309434
+    },
+    "early_contraction_speedup": 31.263151825736287
+  },
+  "saved_form_programs_and_logs": {
+    "after": "/tmp/gamma-trace-form-programs/after",
+    "before": "/tmp/gamma-trace-form-programs/before"
+  }
+}

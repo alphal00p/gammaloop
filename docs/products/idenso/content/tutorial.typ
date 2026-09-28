@@ -43,7 +43,7 @@ q = TensorName.vector("q")
 expression = g(mu, nu) * q(mu)
 
 free_before = expression.list_dangling()
-reduced = expression.schoonschip_net()
+reduced = expression.contract().to_expression()
 free_after = reduced.list_dangling()
 
 assert len(free_before) == 1
@@ -52,9 +52,9 @@ assert reduced == q(nu)
 print("reduced:", reduced)
 ```
 
-The typed product carries a `bracket` contraction, so this example executes the network with
-`schoonschip_net()`. Focused `simplify_metrics()` rewrites ordinary indexed products rather
-than executing bracket shorthands.
+The typed product carries a `bracket` contraction. `contract()` handles that structure
+and ordinary indexed products through the same shared contractor. `to_expression()` resolves
+the returned aliases; `expand()` is a separate, explicit materialization operation.
 
 Run `python metric_first.py`. Success means both rank assertions pass, the metric is removed from
 the reduced expression, and the result is a rank-one expression carrying `nu`. The rewrite is
@@ -82,8 +82,8 @@ Keep transformations observable while developing:
 
 - call `list_dangling` before and after a pass to catch accidental contractions;
 - use `wrap_dummies` before multiplying expressions built in independent index namespaces;
-- expand only the Minkowski, bispinor, or color sector needed by the next pass;
-- apply `simplify_metrics`, `simplify_gamma`, and `simplify_color` as distinct phases;
+- use typed `collect` to select the Minkowski, bispinor, or color sector needed by the next pass;
+- apply `contract`, `simplify_gamma`, and `simplify_color` as distinct phases;
 - canonicalize only after the physics-specific identities required by the calculation are
   explicit.
 

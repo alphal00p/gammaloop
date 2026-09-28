@@ -1,0 +1,14 @@
+digraph hairy_glue_box{
+    v10->v1 [pdg=21,mom=p1];
+    v11->v1 [pdg=21,mom=p2];
+    v20->v2 [pdg=21,mom=p3];
+    v21->v2 [pdg=21,mom=p4];
+    v30->v3 [pdg=21,mom=p5];
+    v31->v3 [pdg=21,mom=p6];
+    v40->v4 [pdg=21,mom=p7];
+    v41->v4 [pdg=21,mom=p8];
+    v1->v2 [pdg=21];
+    v2->v3 [pdg=21];
+    v3->v4 [pdg=21];
+    v4->v1 [pdg=21];
+}

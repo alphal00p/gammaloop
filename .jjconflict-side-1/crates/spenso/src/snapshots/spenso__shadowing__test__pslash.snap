@@ -1,0 +1,42 @@
+---
+source: src/shadowing.rs
+expression: result
+---
+Dense(DenseTensor(
+  data: [
+    "0",
+    "0",
+    "p(1,cind(0))-p(1,cind(3))",
+    "-p(1,cind(1))+𝑖*p(1,cind(2))",
+    "0",
+    "0",
+    "-p(1,cind(1))-𝑖*p(1,cind(2))",
+    "p(1,cind(0))+p(1,cind(3))",
+    "p(1,cind(0))+p(1,cind(3))",
+    "p(1,cind(1))-𝑖*p(1,cind(2))",
+    "0",
+    "0",
+    "p(1,cind(1))+𝑖*p(1,cind(2))",
+    "p(1,cind(0))-p(1,cind(3))",
+    "0",
+    "0",
+  ],
+  structure: VecStructure(
+    structure: [
+      Slot(
+        aind: Symbol("i"),
+        rep: Representation(
+          dim: Concrete(4),
+          rep: Bispinor(Bispinor()),
+        ),
+      ),
+      Slot(
+        aind: Symbol("j"),
+        rep: Representation(
+          dim: Concrete(4),
+          rep: Bispinor(Bispinor()),
+        ),
+      ),
+    ],
+  ),
+))

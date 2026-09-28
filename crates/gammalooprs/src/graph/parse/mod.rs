@@ -24,10 +24,11 @@ use feynkit_graph::{
     FeynmanDiagram,
 };
 use idenso::{
-    color::{ColorSimplifier, ColorSimplifySettings},
-    tensor::SymbolicNetParse,
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    tensor::{SymbolicNetParse, SymbolicTensor},
 };
-use spenso::shadowing::symbolica_utils::LogPrint;
+use spenso::shadowing::{TensorCollectFilter, symbolica_utils::LogPrint};
 
 use color_eyre::{Report, Result, Section};
 
@@ -45,7 +46,7 @@ use linnet::{
     permutation::Permutation,
 };
 use spenso::{network::parsing::ParseSettings, structure::slot::IsAbstractSlot};
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::{atom::Atom, id::ConditionResult};
 use tracing::instrument;
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
@@ -314,7 +315,9 @@ impl Graph {
         writer: &mut impl std::io::Write,
         settings: &DotExportSettings,
     ) -> Result<(), std::io::Error> {
-        let g = self.to_dot_graph_with_settings(settings);
+        let g = self
+            .to_dot_graph_with_settings(settings)
+            .map_err(std::io::Error::other)?;
         g.write_io(writer)
     }
 
@@ -332,7 +335,9 @@ impl Graph {
         writer: &mut impl std::fmt::Write,
         settings: &DotExportSettings,
     ) -> Result<(), std::fmt::Error> {
-        let g = self.to_dot_graph_with_settings(settings);
+        let g = self
+            .to_dot_graph_with_settings(settings)
+            .map_err(|_| std::fmt::Error)?;
         g.write_fmt(writer)
     }
 
@@ -484,11 +489,23 @@ impl Graph {
         let runtime_numerator = result
             .numerator(&result.full_filter(), &result.empty_subgraph())
             .get_single_atom()?;
-        if runtime_numerator.expand() != diagram.numerator().expand() {
-            return Err(eyre!(
-                "GammaLoop runtime conversion of FeynKit diagram '{}' did not preserve its finalized numerator",
-                diagram.name()
-            ));
+        if runtime_numerator != diagram.numerator() {
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let runtime = SymbolicTensor::infer(cooking.try_cook(runtime_numerator.as_view())?)?;
+            let finalized =
+                SymbolicTensor::infer(cooking.try_cook(diagram.numerator().as_view())?)?;
+            // Keep graph numerators factorized, including at this validation
+            // boundary. Only an exact coefficient proof certifies a rewrite.
+            if runtime.coefficients_equal(&finalized, TensorCollectFilter::<0>::Tensors)?
+                != ConditionResult::True
+            {
+                return Err(eyre!(
+                    "GammaLoop runtime conversion of FeynKit diagram '{}' could not certify its finalized numerator",
+                    diagram.name()
+                ));
+            }
         }
         Ok(result)
     }
@@ -627,10 +644,16 @@ impl Graph {
             * &self.global_prefactor.num
             * &self.global_prefactor.projector
             * &self.overall_factor;
-        let color_simplified = full_num
-            .as_view()
-            .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants());
-        if !full_num.is_zero() && color_simplified.is_zero() {
+        let cooking =
+            idenso::CookSettings::indices().with_mode(idenso::CookMode::ReversibleEncoding);
+        let color_simplified = idenso::tensor::SymbolicTensor::infer(
+            cooking
+                .try_cook(full_num.as_view())
+                .map_err(|error| eyre!("{error}"))?,
+        )?
+        .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())?
+        .resolved()?;
+        if !full_num.is_zero() && color_simplified.expression().is_zero() {
             warn!(
                 "Full numerator for graph '{}' becomes zero after color algebra. The graph/projector color structure likely annihilates the amplitude.",
                 self.name

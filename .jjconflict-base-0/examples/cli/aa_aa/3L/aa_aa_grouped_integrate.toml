@@ -1,0 +1,133 @@
+commands = ["run integrate_smoke"]
+
+[cli_settings]
+override_state = false
+
+[cli_settings.state]
+name = "aa_aa_3L_grouped"
+folder = "./examples/cli/aa_aa/3L/gammaloop_state_grouped"
+
+[cli_settings.global]
+display_directive = "info"
+logfile_directive = "info"
+
+[cli_settings.global.log_style]
+include_fields = true
+full_line_source = true
+log_format = "Full"
+short_timestamp = true
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 1
+integrate = 20
+
+[[command_blocks]]
+name = "integrate_smoke"
+commands = [
+  "run set_model_parameters",
+  "run set_kinematics_a",
+  "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
+  "set process -p aa_aa kv general.mu_r=91.188 general.m_uv=9.188 general.evaluator_method=\"SingleParametric\"",
+  "set process -p aa_aa kv integrator.n_increase=0 integrator.n_start=20 integrator.n_max=20 integrator.seed=1337 integrator.integrated_phase=\"imag\" integrator.target_relative_accuracy=1.0",
+  """set process -p aa_aa string '
+        [sampling]
+        graphs = "monte_carlo"
+        orientations = "monte_carlo"
+        lmb_multichanneling = true
+        lmb_channels = "monte_carlo"
+        lmb_channel_weight = "inverse_jacobian"
+        coordinate_system = "spherical"
+        mapping = "linear"
+        b = 1.0
+    '""",
+  """integrate -p aa_aa -i 3L
+             --n-cores 20
+             --workspace-path /tmp/aa_aa_3l_grouped_overall_smoke_mc_workspace
+             --renderer tabled
+             --batch-size 1
+             --show-phase both
+             --show-max-weight-info
+             --show-top-discrete-grid
+             --show-discrete-contributions-sum
+             --write-results-for-each-iteration
+             --restart
+    """,
+  "quit",
+]
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+  "set model MT=173.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=137.036",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+]
+
+[[command_blocks]]
+name = "set_kinematics_a"
+commands = [
+  # s / m_t^2 = 1, u / s = -0.3
+  """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+        [ 86.5, 0.0, 0.0, 86.5 ],
+        [ 86.5, 0.0, 0.0, -86.5 ],
+        [ 86.5, 0.0, -79.27855952273603, -34.6 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 300.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [86.5, 0.0, 0.0, 86.5],
+  [86.5, 0.0, 0.0, -86.5],
+  [86.5, 0.0, -79.27855952273603, -34.6],
+  "dependent",
+]
+helicities = [+1, -1, +1, -1]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "none"
+mu_r = 91.188
+m_uv = 9.188
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "monte_carlo"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+lmb_channel_weight = "inverse_jacobian"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.integrator]
+n_start = 20
+n_increase = 0
+n_max = 20
+integrated_phase = "imag"
+target_relative_accuracy = 1.0
+seed = 1337

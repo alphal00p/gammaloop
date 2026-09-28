@@ -163,7 +163,7 @@ from symbolica.community.spenso import Representation, TensorExpression
 fund = Representation.cof(3)
 identity = TensorExpression.g(fund, fund.dual())
 indexed_identity = identity("i", "j")
-assert identity("i", "i").simplify_metrics().to_expression() == E("3")
+assert identity("i", "i").contract().to_expression().to_expression() == E("3")
 ```
 
 The same constructor supports symbolic dimensions. Distinct symbolic dimensions
@@ -628,12 +628,16 @@ unevaluated. The result remains a `TensorExpression` with its two bispinor ports
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.spenso import (
+    GammaSimplifySettings, Representation, TensorExpression, TensorName,
+)
 
 mink = Representation.mink(4)
 p = TensorName.vector("p")
 indexed = TensorExpression.gamma(4)("a", "b", "mu") * p(mink("mu"))
-pslash = indexed.schoonschip_net().collect_gamma_chains()
+pslash = indexed.contract().simplify_gamma(
+    GammaSimplifySettings(output="chains")
+).to_expression()
 pslash.formatted()
 ```
 

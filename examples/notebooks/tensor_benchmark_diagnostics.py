@@ -9,9 +9,9 @@ from symbolica import E, Replacement, S, T
 from symbolica.community.spenso import (
     AUTO,
     Representation,
-    SchoonschipSettings,
     TensorExpression,
     TensorName,
+    TensorRule,
 )
 from tensor_benchmark_cases import atom, describe
 
@@ -36,30 +36,29 @@ def validation_cost(case):
     absent = TensorName("r3::absent").to_expression()
     old = TensorName("gluon_ladder_typed::vx").to_expression()
     a = S("r3::args___")
-    pattern = case.patterns[0].replace(old(a), absent(a))
+    pattern = case.fixture["ladder_native_patterns"][0].replace(old(a), absent(a))
+    no_match = TensorRule(
+        pattern, case.fixture["ladder_native_rhs"], rhs_cache_size=1000
+    )
     stages = {}
     result = case.source
     for step, vertex in enumerate(case.order, 1):
-        result = result.replace_tensor(
-            case.patterns[vertex - 1], case.rhs, rhs_cache_size=1000
-        ).schoonschip(case.settings)
+        result = result.replace(case.rules[vertex - 1]).contract()
         stages[step] = result
     stages[8] = result.expand()
     rows = []
     for stage in (5, 7, 8):
         source = stages[stage]
+        # Resolving the diagnostic input is outside the measured admission call.
+        raw = atom(source)
         for name, call in (
-            ("schoonschip", lambda source=source: source.schoonschip()),
-            ("simplify_metrics", lambda source=source: source.simplify_metrics()),
-            ("collector", lambda source=source: source.schoonschip(case.settings)),
+            ("contract", lambda source=source: source.contract()),
             ("expand", lambda source=source: source.expand()),
             (
                 "no_match_replace",
-                lambda source=source: source.replace_tensor(
-                    pattern, case.rhs, rhs_cache_size=1000
-                ),
+                lambda source=source: source.replace(no_match),
             ),
-            ("reinfer", lambda source=source: TensorExpression(source.to_expression())),
+            ("reinfer", lambda raw=raw: TensorExpression(raw)),
         ):
             value, row = observe(call)
             row.update(stage=stage, operation=name, input=describe(source))
@@ -74,19 +73,15 @@ def validation_cost(case):
 def partial_parse(case, limit=200):
     result, stages = case.source, {}
     for step, vertex in enumerate(case.order, 1):
-        result = result.replace_tensor(
-            case.patterns[vertex - 1], case.rhs, rhs_cache_size=1000
-        ).schoonschip(case.settings)
+        result = result.replace(case.rules[vertex - 1]).contract()
         if step in (5, 7, 8):
             stages[step] = result.expand() if step == 8 else result
     rows = []
     for step, source in stages.items():
         terms = [TensorExpression(t) for t in list(atom(source).terms())[:limit]]
         for method in (
-            "schoonschip",
-            "simplify_metrics",
-            "schoonschip_net",
-            "list_dangling",
+            "contract",
+            "to_network",
             "canonize",
             "to_dots",
         ):
@@ -108,12 +103,12 @@ def partial_parse(case, limit=200):
                 continue
             whole = TensorExpression(sum((atom(t) for t in selected), E("0")))
             singles, individual = observe(
-                lambda selected=selected: [t.schoonschip_net() for t in selected]
+                lambda selected=selected: [t.contract() for t in selected]
             )
-            combined, batch = observe(whole.schoonschip_net)
+            combined, batch = observe(whole.contract)
             row = {
                 "stage": step,
-                "operation": "network_identical_termset",
+                "operation": "contract_identical_termset",
                 "terms": len(selected),
                 "requested_terms": count,
                 "individual": individual,
@@ -140,7 +135,7 @@ def keep_rest():
     ]
     gamma = TensorName.gamma().to_expression()
     a = rep(S("r3rest::a_")).to_expression()
-    pattern, rhs = v(a), p(a) + 2 * q(a)
+    rule = TensorRule(v(a), p(a) + 2 * q(a))
     generator = TensorExpression.t(8, 3)
     color = (
         generator("r3rest::ca", "r3rest::ci", "r3rest::cj")
@@ -162,45 +157,31 @@ def keep_rest():
     for name, expression in cases.items():
         source = TensorExpression(expression)
         oracle, oracle_record = observe(
-            lambda source=source: (
-                source.replace_tensor(pattern, rhs).expand().schoonschip()
-            )
+            lambda source=source: source.replace(rule).expand().contract()
         )
-        for route, call in (
-            (
-                "replace_then_contract",
-                lambda source=source: source.replace_tensor(pattern, rhs).schoonschip(),
-            ),
-            (
-                "replace_then_fused_contract",
-                lambda source=source: source.replace_tensor(pattern, rhs).schoonschip(
-                    SchoonschipSettings(expand_contracted_sums=True)
-                ),
-            ),
-        ):
-            output, row = observe(call)
+        output, row = observe(lambda source=source: source.replace(rule).contract())
+        row.update(
+            case=name,
+            route="replace_then_contract",
+            input=expression.format_plain(),
+            oracle=oracle_record,
+            required_milestone="M3"
+            if name in ("vector_power", "foreign_color")
+            else "M0",
+        )
+        if output is not None:
             row.update(
-                case=name,
-                route=route,
-                input=expression.format_plain(),
-                oracle=oracle_record,
-                required_milestone="M3"
-                if name in ("vector_power", "foreign_color")
-                else "M0",
+                exact_expanded=(atom(output) - atom(oracle)).expand() == E("0")
+                if oracle is not None
+                else None,
+                output=atom(output).format_plain(),
+                rank=output.root.structure.rank,
+                preserves_outer_scalar_factor=bool(atom(output).contains(1 + x))
+                if name in ("factored_scalar", "nested_sum")
+                else None,
+                rerun=atom(output.contract()) == atom(output),
             )
-            if output is not None:
-                row.update(
-                    exact_expanded=(atom(output) - atom(oracle)).expand() == E("0")
-                    if oracle is not None
-                    else None,
-                    output=atom(output).format_plain(),
-                    rank=output.structure.rank,
-                    preserves_outer_scalar_factor=bool(atom(output).contains(1 + x))
-                    if name in ("factored_scalar", "nested_sum")
-                    else None,
-                    rerun=atom(output.schoonschip()) == atom(output),
-                )
-            rows.append(row)
+        rows.append(row)
     gam = TensorExpression.gamma(4)
     metric = TensorExpression.g(rep)
     ends = {
@@ -213,7 +194,7 @@ def keep_rest():
             if branches == 2:
                 gamma_value = gamma_value + gam(*indices, rep(S("r3rest::nu")))
             source = metric(rep(S("r3rest::mu")), rep(S("r3rest::nu"))) * gamma_value
-            for method in ("simplify_metrics", "simplify_gamma", "schoonschip"):
+            for method in ("contract", "simplify_gamma"):
                 output, row = observe(getattr(source, method))
                 row.update(
                     case="metric_into_gamma",
@@ -284,7 +265,7 @@ class FactorProbe:
             value = value.replace(*self.dot_fix)
         if internal:
             self.internal += 1
-            value = TensorExpression(value).schoonschip().to_expression()
+            value = atom(TensorExpression(value).contract())
         state[index] = value
 
     def apply(self, term, state):

@@ -647,3 +647,62 @@ single-call wall measurements on a shared host, with no sample exclusions or
 outcome-driven repeats. The result demonstrates this repeated-degree workload;
 it does not qualify a general replacement algorithm or establish a complete
 Idenso speedup. No upstream patch is applied or proposed for retention here.
+
+== Main expansion update, 2026-09-28
+
+A matched native comparison isolates the non-polynomial expansion series between
+`0a5a26b09b082433451699159db0947a2e732554` and
+`6a96c9d77b217ea394770524c119e0613d4d9ef5`. The baseline is immediately before
+“Normalize sub-products during expansion”; the candidate also includes the
+Settable expansion changes. Both already contain the earlier polynomial-emission
+improvements. The later `578dfcb` polynomial-replacement-context change arrived
+after this measurement and is not part of these clocks.
+
+The largest gain occurs when products generate many duplicate intermediate
+monomials. Direct expansion becomes 242 times faster for eight overlapping
+six-term linear sums, and 2.17 times faster for six overlapping quadratic sums.
+Independent products barely change. The recursive metric-valued trace inputs
+and large outer sums regress slightly on this host.
+
+#table(
+  columns: 5,
+  table.header([Input], [Output terms], [Direct before, ms],
+    [Direct candidate, ms], [Candidate via polynomial, ms]),
+  [Eight overlapping linear sums], [1,287], [2,475.93], [10.23], [2.20],
+  [Six overlapping quadratic sums], [18,436], [109.35], [50.48], [29.39],
+  [Six independent linear sums], [46,656], [33.78], [33.31], [37.72],
+  [Six-variable sum to power eight], [1,287], [2.86], [2.48], [3.19],
+  [Trace 12, metric payload], [10,395], [34.08], [36.77], [37.21],
+  [Trace 14, metric payload], [135,135], [624.24], [680.47], [559.27],
+  [Trace 14, scalar-variable payload], [135,135], [462.26], [399.60], [357.24],
+  [40,000 scalar summands], [126,078], [197.46], [224.91], [435.16],
+)
+
+Every case is a synthetic scalar algebra or standalone Clifford-pairing
+polynomial. No graph numerator is expanded. The overlapping linear input is
+$product_(i=0)^7 (sum_(j=0)^5 (1+((3i+2j) mod 7)) x_j)$;
+the quadratic input has six factors with the additional factor
+$x_((j+i+1) mod 10)$ in each summand. Exact input strings are saved with the
+measurements. The independent case uses disjoint variables in each of six
+six-term sums. The other inputs are the existing `expansion` and
+`scalar_expansion_routes` reproducer families above.
+
+Both revisions use the same compiler, dependency features and profiles: driver
+optimization level 2, dependencies level 3, no LTO. Each process is pinned to
+CPU 20 on the same shared host. Trace cases use three alternating process rounds
+with three timed samples each; outer scalar sums use five fresh-process rounds;
+scalar products use three. The table contains medians with no excluded samples.
+Construction, parsing, reference calculation, exact checks, serialization and
+returned-result destruction are outside the expansion clocks. Each timed output
+passes the existing exact check; canonical output hashes additionally agree
+across both methods and both revisions for every input.
+
+#link("main_expansion_measurements.json")[The complete measurement record]
+contains all 540 raw samples, all nineteen inputs, commands, source and executable
+hashes, exact measured driver sources, dependency lockfiles and protocols. The
+isolated drivers only add untimed canonical-output export, a construction clock
+and a configurable trace sample count to the existing reproducers. These are
+primitive expansion timings, not new FORM or complete-ladder measurements.
+The polynomial route still wins on the two overlapping-product examples and
+length-14 traces; direct expansion wins on the large outer scalar sums. The data
+does not support switching every workload to one route.

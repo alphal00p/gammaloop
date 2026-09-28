@@ -82,7 +82,9 @@ i, j = S("color_i", "color_j")
 assert model.particle_by_pdg(11).color_sum(i, j, average=True) == E("1")
 for pdg in (5, -5, 21):
     identity = model.particle_by_pdg(pdg).color_sum(i, i, average=True)
-    assert TensorExpression(identity).simplify_metrics().to_expression() == E("1")
+    assert TensorExpression(identity).contract().to_expression().to_expression() == E(
+        "1"
+    )
 
 # A named adjoint dimension is required by Spenso. Impose dA=Nc²-1 after
 # contraction, when the dimensions are ordinary scalar expressions.
@@ -93,10 +95,10 @@ generic = (
     .replace(coad(8, index), coad(dA, index))
 )
 contracted = (
-    TensorExpression(generic.expand())
+    TensorExpression(generic)
     .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
     .simplify_gamma()
-    .expand()
+    .to_expression()
     .to_dots()
 )
 assert contracted.is_scalar

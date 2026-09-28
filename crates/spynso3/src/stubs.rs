@@ -91,6 +91,28 @@ pub(crate) fn refine(module: &mut Module) {
                         });
                     }
                 }
+                if class.name == "TensorExpression" {
+                    match (method.name, parameter.name) {
+                        ("__new__", "expression")
+                        | ("__pow__", "exponent")
+                        | ("__rpow__", "base") => {
+                            parameter.type_info = named("TensorExpression | _ScalarInput");
+                        }
+                        ("replace", "rules") => {
+                            parameter.type_info = named("TensorRule | list[TensorRule]");
+                        }
+                        _ => {}
+                    }
+                }
+                if class.name == "TensorRule" && method.name == "__new__" {
+                    parameter.type_info = match parameter.name {
+                        "pattern" => named("TensorExpression | _ScalarInput | HeldExpression"),
+                        "rhs" => named(
+                            "TensorExpression | _ScalarInput | HeldExpression | typing.Callable[[dict[Expression, Expression]], TensorExpression | _ScalarInput]",
+                        ),
+                        _ => parameter.type_info.clone(),
+                    };
+                }
                 if class.name == "DisplaySettings"
                     && let Some(value) = display_type(parameter.name)
                 {
@@ -126,10 +148,12 @@ pub(crate) fn refine(module: &mut Module) {
             });
             let mut without_default = with_default.clone();
             without_default.r#return = named("Tensor | None");
-            without_default
-                .parameters
-                .positional_or_keyword
-                .retain(|parameter| parameter.name != "default");
+            parameters(&mut without_default.parameters, |parameter| {
+                if parameter.name == "default" {
+                    parameter.type_info = named("None");
+                    parameter.default = ParameterDefault::Expr("None".to_owned());
+                }
+            });
             *overloads = vec![without_default, with_default];
         }
     }
@@ -173,5 +197,34 @@ pub(crate) fn refine(module: &mut Module) {
                 default: Some(format!("{value:?}")),
             },
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn public_overloads_keep_runtime_defaults_and_python_type_names() {
+        let info = crate::stub_info().unwrap();
+        let module = &info.modules["symbolica.community.spenso"];
+        let library = module
+            .class
+            .values()
+            .find(|class| class.name == "TensorLibrary")
+            .unwrap();
+        let get = &library.methods["get"];
+        assert_eq!(get.len(), 2);
+        let default = get[0]
+            .parameters
+            .positional_or_keyword
+            .iter()
+            .find(|parameter| parameter.name == "default")
+            .unwrap();
+        assert_eq!(default.type_info.name, "None");
+        assert_eq!(default.default, ParameterDefault::Expr("None".to_owned()));
+        let source = module.to_string();
+        assert!(!source.contains("PythonExpression"));
+        assert!(!source.contains("ConvertibleToExpression"));
     }
 }

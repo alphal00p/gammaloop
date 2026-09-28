@@ -1,0 +1,16 @@
+digraph ir_ct {
+            
+            ext    [style=invis]
+
+			// Externals
+            ext -> vl1:1 [particle="d" id=1];
+            ext -> vl2:2 [particle="d~" id=2];
+            v1:3 -> ext [id=3 particle="a"];
+            v1:4 -> ext [id=4 particle="a"];
+            v1:0 -> ext [id=0 particle="a"];
+
+            vl1 -> v1 [particle="d" id=5];
+            v1 -> vl2 [particle="d" id=6];
+
+            vl1 -> vl2 [particle="g" id=7 lmb_id=0];
+}

@@ -4,7 +4,13 @@ The ALOHA Weyl convention is C = -i gamma(2) gamma(0).
 """
 
 from symbolica import E, S
-from symbolica.community.spenso import Representation, TensorExpression, chain
+from symbolica.community.spenso import (
+    AUTO,
+    Representation,
+    TensorExpression,
+    TensorName,
+    chain,
+)
 
 spin = Representation.bis(4)
 mink = Representation.mink(4)
@@ -32,7 +38,9 @@ assert charge.spenso_conjugate().to_expression() == charge.to_expression()
 assert c_head(bis_j, bis_i) == -charge.to_expression()
 identity = TensorExpression.g(spin)(i, j)
 square = TensorExpression(c_head(bis_i, bis_k) * c_head(bis_k, bis_j))
-assert square.simplify_gamma().to_expression() == -identity.to_expression()
+assert (
+    square.simplify_gamma().to_expression().to_expression() == -identity.to_expression()
+)
 
 c = c_head(incoming, outgoing)
 gamma_mu = g_head(incoming, outgoing, mink_mu)
@@ -40,31 +48,38 @@ transposed_mu = g_head(outgoing, incoming, mink_mu)
 transposed_nu = g_head(outgoing, incoming, mink_nu)
 sandwich = TensorExpression(chain_head(bis_i, bis_j, c, gamma_mu, c))
 transposed_sandwich = TensorExpression(chain_head(bis_i, bis_j, c, transposed_mu, c))
-assert sandwich.simplify_gamma().to_expression() == chain_head(
+assert sandwich.simplify_gamma().to_expression().to_expression() == chain_head(
     bis_i, bis_j, transposed_mu
 )
-assert transposed_sandwich.simplify_gamma().to_expression() == chain_head(
-    bis_i, bis_j, gamma_mu
+assert (
+    transposed_sandwich.simplify_gamma().to_expression().to_expression()
+    == chain_head(bis_i, bis_j, gamma_mu)
 )
 
 # The public chain builder selects each matrix channel; no sewing indices are
 # manufactured here. A product of transposes retains the original factor order.
 scalar = E("2+3𝑖")
+open_charge = TensorExpression(
+    chain_head(spin.to_expression(), spin.to_expression(), c)
+)
 word = scalar * chain(
     spin(i),
     spin(j),
-    charge,
-    TensorExpression.gamma(4)(i, j, mu),
-    TensorExpression.gamma(4)(i, j, nu),
-    charge,
+    open_charge,
+    TensorExpression.gamma(4)(AUTO, AUTO, mu),
+    TensorExpression.gamma(4)(AUTO, AUTO, nu),
+    open_charge,
 )
 expected = -scalar * chain_head(bis_i, bis_j, transposed_mu, transposed_nu)
-reduced = word.simplify_gamma()
+reduced = word.simplify_gamma().to_expression()
 assert reduced.to_expression() == expected
-assert reduced.simplify_gamma().to_expression() == reduced.to_expression()
+assert (
+    reduced.simplify_gamma().to_expression().to_expression() == reduced.to_expression()
+)
 
 # Slash dimension inference also accepts a momentum label followed by mink(D).
-momentum, mink_head = S("charge_python::P", "spenso::mink")
+momentum = TensorName.vector("charge_python::P").to_expression()
+mink_head = S("spenso::mink")
 for dim in (E("4"), dimension):
     slash = g_head(incoming, outgoing, momentum(7, mink_head(dim)))
     compact = TensorExpression(chain_head(bis_i, bis_j, c, slash, c))
@@ -72,14 +87,19 @@ for dim in (E("4"), dimension):
         expected_slash = chain_head(
             bis_i, bis_j, g_head(outgoing, incoming, momentum(7, mink_head(dim)))
         )
-        assert compact.simplify_gamma().to_expression() == expected_slash
+        assert (
+            compact.simplify_gamma().to_expression().to_expression() == expected_slash
+        )
     else:
-        assert compact.simplify_gamma().to_expression() == compact.to_expression()
+        assert (
+            compact.simplify_gamma().to_expression().to_expression()
+            == compact.to_expression()
+        )
     ordinary = g_head(incoming, outgoing, mink_head(dim, mu))
     ordinary_word = TensorExpression(chain_head(bis_i, bis_j, c, ordinary, c))
     if dim == dimension:
         assert (
-            ordinary_word.simplify_gamma().to_expression()
+            ordinary_word.simplify_gamma().to_expression().to_expression()
             == ordinary_word.to_expression()
         )
 

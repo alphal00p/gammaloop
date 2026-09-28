@@ -39,9 +39,14 @@ def prepare(case):
 
     body = case.fixture["ladder_vertex_rule"] if hasattr(case, "fixture") else case.rule
     nodes = {next(iter(node)): node for node in case.source.to_expression()}
+    patterns = (
+        case.fixture["ladder_native_patterns"]
+        if hasattr(case, "fixture")
+        else case.patterns
+    )
     return [
         (nodes[E(str(i))], TensorRule(pattern, body, rhs_cache_size=1000))
-        for i, pattern in enumerate(case.patterns, 1)
+        for i, pattern in enumerate(patterns, 1)
     ]
 
 
@@ -50,8 +55,10 @@ def reduce(case, prepared, observer=None):
     start = process_time_ns() if observer is not None else 0
     factors = {}
     for i, (node, rule) in enumerate(prepared, 1):
-        value = TensorExpression(node).replace_tensor(rule)
-        factors[i] = value.normalize_dots().to_expression()
+        # The registered metric normalizer canonicalizes compact products while
+        # the typed rule constructs its result; resolve only this local vertex.
+        value = TensorExpression(node).replace(rule)
+        factors[i] = value.to_expression()
     expression = prod(factors.values())
     actual = list(expression)
     if len(actual) != len(factors):

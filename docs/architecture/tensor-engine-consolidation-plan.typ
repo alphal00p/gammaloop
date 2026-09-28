@@ -1,11 +1,12 @@
 = Tensor engine consolidation plan
 <tensor-engine-consolidation-plan>
 #quote(block: true)[
-#strong[Lifecycle:] Design proposal and plan of record. No code in this plan
-has been written; the measurements are point-in-time evidence taken on
-2026-09-27 against `a27ca81d8958` with release wheels of the Python
-bindings, and they must be re-taken by the benchmark harness in M0 before
-they are used as acceptance thresholds.
+#strong[Lifecycle:] Consolidated implementation at a correctness checkpoint;
+see #link("tensor-engine-checkpoint.typ")[validation scope and remaining limitation].
+The evidence below is historical, taken on 2026-09-27 against `a27ca81d8958`. Saved M0/M1
+measurements and later qualification records are separate artifacts; these
+tables are not claims about the final implementation. The audit of
+`15d64dd1` and the R5 work adds the correctness gates recorded below.
 
 #strong[Scope:] the index-contraction and simplification stack shared by
 `spenso`, `idenso` and `spynso3` (`TensorExpression`), and the way
@@ -32,9 +33,9 @@ Symbolica on the factorized expression, contraction expands one factor at a
 time and pushes its index structure into the still-factorized neighbours
 while merging states whose remaining factors are identical, and the result is
 an aliased tensor expression, a DAG whose nodes are typed tensor aliases,
-expanded to a polynomial or a plain atom only on demand. Rules and tensors are
-certified once and carry their certificates; nothing is re-proved on the
-production path. The public surface shrinks to a small set of verbs, and the
+materialized to a polynomial or a plain atom only on demand. Rules and tensors carry the interface facts established by their shared
+owners. Reuse those facts while the sealed payload is unchanged; dynamic rule
+bindings and callback-produced results still require their actual interface checks. The public surface shrinks to a small set of verbs, and the
 internal duplicates identified by both audits are retired under the existing
 regression suites.
 
@@ -91,10 +92,11 @@ correct and not faster; there is nothing to merge.
 
 A no-op pass costs as much as the productive pass that produced its input,
 because every call re-classifies every leaf. Production works on bare atoms
-(`simplify_metrics` 25 call sites, `to_dots` 28, `normalize_dots` 19,
-`simplify_gamma` 13, `simplify_color` 15, `replace_multiple` 171,
-`schoonschip` 2, `schoonschip_net` and `replace_tensor` 0), so this is paid on
-every call. `simplify_metrics` also disables rank-one handling, which bypasses
+(audited production-only counts at the fixed base: `simplify_metrics` 13,
+`to_dots` 8, `normalize_dots` 5, `simplify_gamma` 4 plus one settings call,
+`simplify_color` 6 plus nine settings calls, `replace_multiple` 96, and
+`schoonschip_net` 1), so this is paid on every call. Tests are excluded from
+these counts. `simplify_metrics` also disables rank-one handling, which bypasses
 every collector fast path.
 
 === Network versus collector, per ladder-shaped term (Rust, release)
@@ -209,14 +211,15 @@ What this plan takes from their work:
   rule outputs are owned once per distinct binding; the graph is owned and
   arena-reused; atoms are created at emission, one per distinct variable, and
   never per generated term.
-+ #strong[Trust once.] A rule is compiled and certified at construction. A
-  tensor produced by the engine carries its interface and a normal-form
-  marker, so admission and idempotent calls are O(1). Bare atoms pay inference
-  once, at construction. The hard constraint from the second audit stands: a
-  callback right-hand side can change the interface a contraction predicted
-  (`g(a,b)·T(a)` where normalization turns `T(b)` into a scalar), so callback
-  outputs are certified per distinct output, and only pattern right-hand sides
-  are certified structurally once per rule.
++ #strong[Trust established facts.] Rule construction validates wildcard
+  closure and caches a structural proof when the pattern has a fixed interface.
+  Dynamic shapes and callback right-hand sides require checks after binding;
+  they cannot claim a once-only template proof. A sealed tensor carries facts
+  for its exact payload and logical interface. A certified aliased contraction
+  can reuse the same allocation on a default rerun. Bare atoms pay admission at
+  construction. The callback counterexample remains decisive: contracting
+  `g(a,b)*T(a)` may normalize `T(b)` to a scalar, so the actual callback output
+  must be checked, including when replacement caching is enabled.
 + #strong[One graph.] The partial parser's structure is the only graph.
   Contraction, interface inference, canonization, component partition,
   dummy allocation and dot conversion read it; nothing re-walks atoms to
@@ -254,7 +257,7 @@ What this plan takes from their work:
   the owned right-hand-side arena) with a port list from the fast syntactic
   inference and an incidence table; the graph is arena-allocated and reused
   across terms and operations. Parse settings are the existing partial ones
-  (`depth_limit`, `ShorthandParsing::Opaque { Fast }`, pre-contracted
+  (`depth_limit`, `ShorthandParsing::Opaque`, pre-contracted
   scalars); the strict tensor filter decides which heads are leaves.
 - Two kinds of leaves. Library leaves (metric, identity, tagged vectors) have
   algebra; every other leaf, including gammas and colour structures in a
@@ -303,7 +306,11 @@ What this plan takes from their work:
   root `TensorExpression`, aliases as `(handle, body)` pairs of
   `TensorExpression`s whose interfaces match, with `to_expression()`
   (resolve), `expand()` (polynomial forward pass), `evaluator(...)`,
-  `map_aliases(f)`, and every verb acting on the root with handles opaque.
+  `map_aliases(f)`, and the supported contraction, replacement, domain passes,
+  and dot toggles acting on the root and reachable definitions with handles
+  opaque. `canonize()` is the ordinary `TensorExpression` operation; callers
+  explicitly resolve an aliased value at that boundary. No alias definition is
+  guessed from a shared head after an index relabelling.
   The rank-zero case is the scalar `AliasedExpression`; no separate wrapper.
 - `TensorRule` is exposed so a rule is built once and applied many times.
 - Transformation policy (identity results, typed zeros, inference, lost
@@ -320,23 +327,55 @@ land in one change together with every caller.
 #table(
   columns: (1.2fr, 2.6fr, 2.6fr),
   table.header([*Verb*], [*Meaning*], [*Absorbs*]),
-  [`replace(rule | rules)`], [tensor-safe rule application, factorized output, certified once per rule], [`replace_tensor`, `replace_multiple` for tensor leaves, `contract=` flag],
-  [`contract(order=None, output="aliased")`], [metric, identity and vector contraction on the structural graph; output aliased, or `"expanded"` on request], [`schoonschip`, `schoonschip_net`, `simplify_metrics`, `expand_metrics`, `expand_mink`, `expand_bis`, `expand_mink_bis`, `expand_in_patterns`, `undo_schoonschip`],
-  [`simplify_gamma(settings)`], [unchanged algebra, aliases foreign structure], [`simplify_gamma0`, `simplify_gamma_conjugate` become settings],
-  [`simplify_color(settings)`], [unchanged algebra, aliases foreign structure], [`expand_color`, `collect_color`, `collect_color_constants`, `wrap_color` become outputs or settings],
+  [`replace(rule | rules)`], [tensor-safe rule application, factorized output, construction checks and binding-dependent interface checks], [`replace_tensor`, `replace_multiple` for tensor leaves, `contract=` flag],
+  [`contract(order=None, *, rank_one=True)`], [metric, identity and optional rank-one contraction on the structural graph; returns aliases, with separate explicit materialization], [`schoonschip`, `schoonschip_net`, `simplify_metrics`],
+  [`simplify_gamma(settings)`], [unchanged algebra, aliases foreign structure], [`simplify_gamma0`, `simplify_gamma_conjugate` become settings; `collect_gamma_chains` becomes `output="chains"`],
+  [`simplify_color(settings)`], [unchanged algebra, aliases foreign structure], [remove unused coefficient-splitting helpers; retain required local colour algebra in this owner],
   [`simplify_epsilon()`], [unchanged], [—],
   [`canonize()`], [graph canonization on the shared graph], [`wrap_dummies`, `wrap_indices` where they only served canonization],
-  [`to_dots()` / `undo_dots()`], [representation toggles; distinct paths by design], [`normalize_dots`, `metric_shorthand_to_dot`, `expand_dots`],
+  [`to_dots()` / `undo_dots()`], [representation toggles; distinct paths by design], [`normalize_dots`, `metric_shorthand_to_dot`; `undo_schoonschip` belongs to the undo family],
   [`expand()` / `evaluator()`], [materialization, explicit], [—],
 )
+
+Binary positional contraction is `contract_ports`; it is not an overload of
+unary index contraction. The unused `expand_metrics`, `expand_mink`,
+`expand_bis`, `expand_mink_bis` and `expand_in_patterns` coefficient-list
+methods are removed. `undo_schoonschip` belongs to the explicit undo family.
+Production callers that relied on `to_dots` to contract rank-one tensors use
+`contract()` before `to_dots()`. `canonize`, `simplify_epsilon` and
+`undo_dots` are target verbs even if their current callers are tests only.
+
+Spenso's explicit filtered collect/expand operations remain available, with
+one shared helper returning `AliasedAtom` before optional resolution. Remove
+only the eight unused forwarding methods. These operations also own raw
+frontend ingress where a local rewrite must still see the original physical
+slot spelling, such as Vakint input; typed domain passes use the shared
+structural engine after admission. They are not a second implicit expansion
+path in tensor simplification.
 
 Retained as distinct because they handle different situations (second
 audit): intrinsic `g` normalization, nested-vector normalization and product
 contraction; the bulk collector and the callback-sensitive fallback; sparse
-and factored trace outputs; a network's semantic expression, materialized
+and factored trace outputs (the sparse trace emitter is a test oracle); a network's semantic expression, materialized
 indices and component data. Verbs with no caller outside tests and the
 notebook (about a quarter of the current ninety-odd methods) are removed in
-the same change unless a product doc claims them.
+the same change unless a product doc claims them. The target verbs `canonize`,
+`simplify_epsilon` and `undo_dots` are retained regardless of current caller
+counts. The unused `expand_metrics`, `expand_mink`, `expand_bis`,
+`expand_mink_bis` and `expand_in_patterns` return structure/coefficient lists;
+remove them rather than treating them as contraction aliases.
+
+Old `to_dots` performs rank-one contraction before converting representation.
+Callers that rely on that behavior must explicitly call `contract` first.
+The shared typed `expand_dots()` is an explicit finite-component boundary and
+returns an `Atom`, not another symbolic tensor. It differs from symbolic
+`undo_dots()`: it realizes only selected finite dots through the existing Spenso
+component executor, including callback-created contractions, while unsupported
+symbolic dimensions remain unchanged. Intrinsic dots may share construction;
+callback-sensitive dots preserve their original parse/execute and enclosing
+normalization order. No whole numerator is realized. A caller that needs prior
+index contraction requests `contract()` explicitly.
+No simplification verb receives an implicit expansion setting (decision D5).
 
 == Consolidation register
 <register>
@@ -358,14 +397,14 @@ findings of the other agent; their line references are to
   [R2], [metric into gamma with `AUTO` spinor indices fails], [measured], [M0],
   [R3], [benchmark harness: ladder, traces, keep-the-rest probe, idempotent cost, production-derived numerator; alternating interpreters, medians, FORM reference], [this plan], [M0],
   [R4], [`AliasedTensorExpression` and `TensorRule` types; parametric aliases in Symbolica or literal-per-labelling fallback], [this plan], [M1],
-  [R5], [factor-graph DP contraction in Rust over the existing collector graph, `contract(output="aliased")`], [prototype], [M1],
+  [R5], [factor-graph DP contraction in Rust over the existing collector graph, `contract()`], [prototype], [M1],
   [R6], [colour `rewrite_terms` and `ProductView` rebuild sums and products by repeated binary operations; colour retries a failed root rewrite], [second audit, 5], [M1],
   [R7], [dot-normalization preflight constructs a replacement the rewrite constructs again], [second audit, 5], [M1],
   [R8], [borrowed structural layer in Spenso: leaf views, ports, incidence, port overrides, component partition, arena reuse; materialization to the owned network], [this plan], [M2],
   [R9], [Spenso returns logical port ordering; Idenso stops rescanning arguments; dummy names reserved once], [second audit, 2], [M2],
   [R10], [one product plan and one batched relabel for composition; logical composition in `SymbolicTensor`, graph and store maintenance in Spenso], [second audit, 1], [M2],
   [R11], [`Signature::observe` and scope validation share one traversal through `InterfaceInference`; certified rules and carried certificates make the per-call source proof disappear], [second audit, 3; this plan], [M3],
-  [R12], [engine on the structural layer: rules at once, DP contraction, per-term reducer, emission; retire `contraction.rs` strategies and the graph half of `slot_contraction`/`components`], [this plan], [M3],
+  [R12], [engine on the structural layer: rules, DP contraction, shared component reducer, emission. Cover metric-only inputs in that reducer and keep ordered substitution for callback-sensitive inputs. Migrate the production integrated-UV `schoonschip_net` caller before deleting the network route, its strategies and duplicate metric collector; retire per-dot networks from the metric API], [this plan; production audit], [M3],
   [R13], [shared Rust orchestration of passes with carried observations and invalidation; Python pipeline stops nesting cleanup loops; gamma and Schoonschip stop rescanning unchanged input], [second audit, 4], [M3],
   [R14], [one owner for transformation policy (`from_transformed_atom` duplicates `SymbolicTensor`'s decisions)], [second audit, 6], [M3],
   [R15], [public verbs: renames and removals in one change with every caller, `.pyi` and product docs regenerated; no compatibility aliases], [audit; decision D1], [M4],
@@ -378,8 +417,15 @@ findings of the other agent; their line references are to
 <milestones>
 
 Every milestone lands under the existing exact-identity and HEP-library
-regression suites plus the M0 harness; a milestone is accepted when its gates
-hold on the harness, not on ad-hoc runs. Ownership: the second agent's line is
+regression suites plus the M0 harness. Correctness and API gates remain required.
+The user's 2026-09-28 steering removes performance limits as completion gates:
+finish the implementation and consolidation first, then measure the complete
+result against the saved baseline and FORM. Historical timing targets below
+remain useful reference points, not reasons to delay functional completion.
+On 2026-09-29 the user requested a cleaned, validated checkpoint and deferred
+further performance improvements. The closing work therefore focuses on
+correctness, caller migration, formatting, documentation and reproducible
+FORM/HEP checks; it does not introduce another optimization campaign. Ownership: the second agent's line is
 the base; parser and collector files under their edit land first, and R8 and
 R12 are designed with them before code is written. Workflow (decision D3):
 every register item is its own jj change created with `jj new default@-` when
@@ -387,37 +433,53 @@ the item starts, so its parent is the second agent's last completed change and
 does not move while the item is in progress.
 
 + #strong[M0 — measure and stop the bleeding.] R1, R2, R3, R17 (inventory),
-  R18. Gates: the network driver's whole-sum per-term cost within 2× of its
-  single-term cost; the `AUTO` reproducer passes; the harness reproduces the
-  evidence tables above within host drift; the expansion inventory names an
-  owner and a replacement for every call site; each Symbolica reproducer runs
-  and prints the limitation it demonstrates.
+  R18. Gates: the `AUTO` reproducer passes; the harness preserves baseline
+  inputs and modes; the expansion inventory names an owner and replacement
+  for every call site; each Symbolica reproducer runs and prints its limitation.
+  Measure whole-sum versus single-term cost after completion.
 + #strong[M1 — the result type and the algorithm, on today's graph.] R4,
-  R5, R6, R7. Gates: `contract(output="aliased")` on the ladder equals the
-  FORM-certified polynomial after `expand()`; contraction-only time in the
-  reverse order under 50 ms and the aliased result under 100 KB; the
-  polynomial forward pass under 150 ms; colour and dot changes are
-  behaviour-preserving on their suites.
+  R5, R6, R7. Gates: `contract()` on the ladder equals the
+  FORM-certified polynomial after explicit materialization; colour and dot
+  changes are behaviour-preserving on their suites. Include an independent
+  FORM or HEP-component oracle that contracts before expanding, particularly
+  powers of sums containing internal dummy pairs. Squares and cubes with
+  metric cycles, surviving open ports and disjoint spectators must pass without
+  expanding the input first. Budget exhaustion must remain visible and cannot
+  acquire a completion certificate. Report contraction time,
+  alias size and materialization time afterward (historical targets: 50 ms,
+  100 KB and 150 ms respectively).
 + #strong[M2 — the structural layer.] R8, R9, R10. Gates: partial structural
-  parse per ladder-shaped term within 2× of the collector's whole pass;
-  interface inference and `canonize` read the graph without a second walk;
-  composition builds one plan.
+  parse preserves graph incidence and logical port order; interface inference
+  and `canonize` read the graph without a second walk; composition builds one
+  plan. Measure parse cost against the collector afterward (historical target:
+  2× per ladder-shaped term).
 + #strong[M3 — one engine.] R11, R12, R13, R14. Gates: `contract` on an
   already-contracted certified input is O(1); no verb calls another verb's
   full pass on unchanged input; the slot engine's strategies and graph code are
-  deleted; ladder and trace numbers do not regress against M1; every
-  keep-the-rest probe passes, including foreign factors and factored sums
+  deleted; every keep-the-rest probe passes, including foreign factors and factored sums
   inside the fused replace-and-contract path.
 + #strong[M4 — the surface.] R15. Gates: the public-API test lists the
   target verbs and nothing else; every caller in production, notebooks and
   tests uses them; docs and stubs regenerate cleanly.
 + #strong[M5 — production.] R16. Gates: `gammalooprs` numerator pipelines
-  use certified rules and aliased results; the aa→aa three-loop smoke and the
-  UV scalar profile are re-measured and recorded.
+  use certified rules and aliased results and preserve the aa→aa three-loop
+  smoke and UV correctness checks. Measure the completed pipelines afterward.
 
 The `tensor-module` change is not merged; its tests for fused
 replace-and-contract carry over to `replace(...).contract()` in M1, and its
-sparse-emission fallback carries over to the expansion path.
+trace-specific sparse emitter remains a test-only oracle. Explicit expansion
+uses the common alias materializer, without a second trace dispatcher.
+
+`contraction_complete` reports the shared default metric/vector contractor's
+certificate, not completion of a milestone, concrete component evaluation, or
+removal of arbitrary repeated tensor indices. `false` covers an exact retained
+frontier and a result not yet certified; a fresh metric-only contraction with
+`rank_one=False` does not claim default completion. Reusing an already complete
+sealed result preserves its stronger certificate. Materialization is separate.
+
+The milestone paragraphs are acceptance requirements. Historical M0/M1 records
+and isolated passing checks do not certify the final combined API, production
+callers or completion state; the composed source must pass those checks.
 
 == Decisions
 <decisions>
@@ -429,18 +491,20 @@ Taken on 2026-09-27 unless marked open.
   M0 to M5 in order, the second agent's line as the base.
 - #strong[D1 — old Python names: no compatibility layer.] The renames land in
   one change together with every caller: the production sites
-  (`simplify_metrics` 25, `to_dots` 28, `normalize_dots` 19, `simplify_gamma`
-  13, `simplify_color` 15, and the tensor-leaf uses among 171
-  `replace_multiple`), the notebooks, the tests, and the generated stubs and
-  docs. Nothing is kept for compatibility.
-- #strong[D2 — `TensorNetwork` in Python: open.] Facts for the call: no
+  (production-only audited counts: `simplify_metrics` 13, `to_dots` 8,
+  `normalize_dots` 5, `simplify_gamma` 4 plus one settings call,
+  `simplify_color` 6 plus nine settings calls, `schoonschip_net` 1, and the
+  tensor-leaf uses among 96 `replace_multiple`), the notebooks, tests, and
+  generated stubs and docs. Nothing is kept for compatibility.
+- #strong[D2 — `TensorNetwork` in Python: retained for execution and display.] Facts for the call: no
   production Python caller (`gammaloop-api` and `feynkit-py`: none); 12
   notebook and 13 product-doc mentions and 26 test uses, all for execution and
   display (`to_network`, `execute`, `step`, `result_tensor`, `to_tensor`,
   `result_scalar`, `to_dot`, `render`, `to_linnest`); `gammalooprs` uses
-  networks in Rust in six files, for execution. Recommendation: keep it as the
-  execution and rendering object and remove its simplification entry point
-  (`schoonschip_net`); removing the type would only move those same methods
+  networks in Rust in six files, for execution. Keep it as the execution and
+  rendering object. `TensorNetwork` has no simplification method:
+  `schoonschip_net` belongs to `TensorExpression` and is retired there.
+  Removing the network type would only move its execution and display methods
   onto `TensorExpression`.
 - #strong[D3 — separate changes on a fixed base.] Every register item is its
   own jj change created with `jj new default@-` when the item starts: its
@@ -462,13 +526,14 @@ Taken on 2026-09-27 unless marked open.
 
 - The structural layer's constant factors: the collector's 6 µs per term is a
   flat incidence table with union-find; a generic graph may not reach it.
-  Mitigation: M2's gate is 2×, and the per-term reducer keeps its flat form.
+  Mitigation: retain the flat per-term reducer and measure the final implementation
+  after consolidation; the historical 2× target is not a completion gate.
 - State growth in the DP with a poor order (17,515 edges against 1,730 on the
   ladder). Mitigation: order chosen from the contraction graph; budgets that
-  flush partial results instead of failing.
+  return partial results with an incomplete status rather than certifying them.
 - Callback right-hand sides can change predicted interfaces. Mitigation:
-  certification per distinct callback output remains; only pattern rules are
-  certified once.
+  certification of actual outputs and dynamic bindings remains; only a
+  fixed-shape rule template can carry a construction-time interface proof.
 - Alias resolution with port overrides is only correct with parametric
   aliases or literal-per-labelling registration. Mitigation: the latter is the
   M1 fallback and is tested by resolving and comparing with the expanded
@@ -480,6 +545,46 @@ Taken on 2026-09-27 unless marked open.
   collection, the collector's polynomial output). Mitigation: the M0
   inventory sizes each site before M1 commits to a replacement; term
   iteration over factorized input is the default replacement.
+
+== Audit acceptance requirements
+<audit-acceptance>
+
+The `15d64dd1`/R5 audit extends the existing register owners rather than adding
+parallel types or engines:
+
+- R2/R14 must preserve the per-representation order of encoded
+  `Open(owner, axis)` identities. A multiset match cannot certify positional
+  AUTO axes, including in individual sum branches. Identity substitutions,
+  typed zero and explicit-index movement retain their existing valid paths.
+- R4/R5 must admit bare-representation AUTO alias handles, preserve metadata,
+  retain independent internal dummy scopes in powers, and propagate incomplete
+  contraction. Materialization uses local variable sets and bulk sum construction;
+  an already-expanded alias-free root does not enter polynomial conversion.
+- R8/R9 use the shared slot walk and borrowed graph. Cache the scope symbol in
+  the existing symbol bundle, avoid discarded scalar pre-contraction, and retain
+  callback order. Open markers are not wrapped as explicit indices.
+- R12 keeps the component reducer, the callback-sensitive substitution fallback
+  and intrinsic metric normalization. Metric-only, unfamiliar tensor, scalar,
+  sum and power factors are accepted. Retire the duplicate metric contractor,
+  symbolic-network algebra, strategy knobs and per-dot network parsing only
+  after migrating their production callers and capturing their inputs.
+- R13 removes materializing sector collection and repeated cleanup. Gamma chain
+  collection is an output of `simplify_gamma`; scalar and foreign spectators
+  remain opaque. Callback outputs still undergo the necessary interface checks.
+- R15 regenerates stubs and documentation from the installed bindings and removes
+  compatibility names and obsolete coefficient-list APIs in the same change.
+- R16 measures the production numerator and UV routes. Compare colour groups
+  independently for zero/equality, check structural equality before expansion,
+  and avoid redundant colour/metric passes and repeated undo parsing.
+- R17 includes indirect distribution, powers, cofactor copying, trace terminal
+  output, colour payloads, lazy network sums and materialization. Expansion-based
+  algebra checks supplement independent factored/component oracles; they cannot
+  establish dummy-scope correctness by themselves.
+
+Completed intermediate changes retain their saved evidence. Follow-up fixes
+must requalify the combined source before it is called complete. Remove tracked
+compiler-output binaries and ignore benchmark archives before snapshotting;
+production HEP dependencies must not enable benchmark-only reference code.
 
 == Measurement protocol
 <protocol>
@@ -496,7 +601,7 @@ scratchpad into the repository as the M0 harness.
 <related>
 
 - #link("schoonschip-net-parsing.typ")[Schoonschip network architecture] —
-  the current network path this plan replaces.
+  the shared graph, component and callback boundaries.
 - #link("network-simplification-status.typ")[Network simplification status] —
   earlier measurements of the same path.
 - #link("idenso-architecture.typ")[Idenso implementation architecture] and

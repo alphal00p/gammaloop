@@ -21,7 +21,7 @@ original = bubble.to_json()
 expanded = bubble.uv_expansion(mass)
 assert isinstance(expanded, TensorExpression)
 assert expanded.is_scalar
-assert expanded != 0
+assert expanded
 assert bubble.uv_counterterm(mass) == -expanded
 assert bubble.to_json() == original
 region = bubble.filter(
@@ -29,11 +29,11 @@ region = bubble.filter(
 )
 assert region.uv_expansion(mass) == expanded
 assert region.uv_counterterm(mass) == -expanded
-assert bubble.uv_expansion(mass, dimension=2) == 0
-assert bubble.uv_expansion(mass, numerator=0) == 0
-assert bubble.subgraph().uv_expansion(mass) == 0
+assert not bubble.uv_expansion(mass, dimension=2)
+assert not bubble.uv_expansion(mass, numerator=0)
+assert not bubble.subgraph().uv_expansion(mass)
 tree = bubble.filter(edge=lambda e: e.data.id == bubble.internal_edges[0].id)
-assert tree.uv_expansion(mass) == 0
+assert not tree.uv_expansion(mass)
 
 # Signed powers share denominator_expression's edge IDs and selection semantics.
 internal_ids = [edge.id for edge in bubble.internal_edges]
@@ -51,7 +51,7 @@ for powers in ({internal_ids[0]: 2}, {internal_ids[0]: 0}, {internal_ids[0]: -1}
         region.uv_counterterm(mass, dimension=6, numerator=1, edge_powers=powers)
         == -powered
     )
-assert bubble.uv_expansion(mass, numerator=1, edge_powers={internal_ids[0]: 2}) == 0
+assert not bubble.uv_expansion(mass, numerator=1, edge_powers={internal_ids[0]: 2})
 assert bubble.uv_expansion(mass, edge_powers={10**6: 2}) == expanded
 for operation in (
     bubble.denominator_expression,
@@ -74,7 +74,7 @@ tensor = bubble.uv_expansion(mass, numerator=soft * bubble.numerator_expression(
 assert isinstance(tensor, TensorExpression)
 assert tensor.rank == 1
 assert tensor == soft * expanded
-assert bubble.uv_expansion(mass, numerator=soft**4, dimension=2) == 0
+assert not bubble.uv_expansion(mass, numerator=soft**4, dimension=2)
 
 # Filters carry diagram ownership, even for an identical serialized topology.
 copy = fk.FeynmanDiagram.from_json(model, original)
@@ -104,8 +104,8 @@ triangle = next(
     if len({e.source if e.source is not None else e.target for e in d.external_edges})
     == 3
 )
-assert triangle.uv_counterterm(mass) == 0
-assert triangle.uv_counterterm(mass, dimension=6) != 0
+assert not triangle.uv_counterterm(mass)
+assert triangle.uv_counterterm(mass, dimension=6)
 
 # The HEP example's gluon, ghost and massive-quark bubbles retain their open
 # Lorentz/color interface; callers can contract a projector after expansion.
@@ -124,7 +124,7 @@ assert len(diagrams) >= 3
 for diagram in diagrams:
     counterterm = diagram.uv_counterterm(mass)
     assert isinstance(counterterm, TensorExpression)
-    assert counterterm != 0
+    assert counterterm
     assert counterterm.rank == 4
     assert set(counterterm.list_dangling()) == set(
         diagram.numerator_expression().list_dangling()

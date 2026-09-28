@@ -16,7 +16,12 @@ use std::cmp::Reverse;
 use ahash::AHashMap;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::LogMessage;
-use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
+use idenso::{
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    representations::{ColorAdjoint, ColorFundamental, ColorSextet},
+    tensor::SymbolicTensor,
+};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
@@ -28,6 +33,7 @@ use linnet::half_edge::{
     nodestore::{NodeStorageOps, NodeStorageVec},
     subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
+use spenso::shadowing::TensorCollectFilter;
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
     function,
@@ -1362,7 +1368,21 @@ impl Forests {
                     .require(operation)?
                     .cut(operation, cutset)?
                     .final_integrands
-                    .map_expressions(|integrand| Ok(integrand.clone().collect_color()))?;
+                    .map_expressions(|integrand| {
+                        let color = TensorCollectFilter::Reps([
+                            ColorAdjoint {}.into(),
+                            ColorFundamental {}.into(),
+                            ColorSextet {}.into(),
+                        ]);
+                        let cooking = CookSettings::indices()
+                            .with_mode(CookMode::ReversibleEncoding)
+                            .with_representation_payloads(true, true);
+                        let collected =
+                            SymbolicTensor::infer(cooking.try_cook(integrand.as_view())?)?
+                                .collect(color)?
+                                .resolved()?;
+                        Ok(cooking.uncook(collected.expression().as_view()))
+                    })?;
                 sum = Some(match sum {
                     Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
                         format!("while aggregating hedge-poset term {operation} for cut {cutset:?}")
@@ -1472,15 +1492,20 @@ impl Forests {
             let atom = marker.prefix(&graph.full_filter(), forest_node.subgraph(), &physical);
             debug!(
                 key=%key,
-               expr = % atom.expand_num().log_print(None),"Term before simplification"
+               expr = % atom.log_print(None),"Term before simplification"
             );
-            let atom = (&atom
+            let atom = &atom
                 * &graph.global_prefactor.projector
                 * &graph.global_prefactor.num
-                * &graph.overall_factor)
-                .simplify_color()
-                .expand_num()
-                .to_dots();
+                * &graph.overall_factor;
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+                .simplify_color(ColorSimplifySettings::default())?
+                .to_dots()?
+                .resolved()?;
+            let atom = cooking.uncook(reduced.expression().as_view());
 
             debug!(
                 key=%key,
@@ -1557,6 +1582,8 @@ mod tests {
         processes::DotExportSettings,
         uv::{UltravioletGraph, Wood as OldWood, settings::RenormalizationPrescriptionSettings},
     };
+    use idenso::tensor::ContractionSettings;
+    use symbolica::id::ConditionResult;
 
     use super::*;
     use color_eyre::Result;
@@ -2077,10 +2104,15 @@ mod tests {
         let wild = Atom::var(W_.x___);
         let replacements =
             graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
-        let expected = expected
-            .simplify_color()
-            .expand_num()
-            .to_dots()
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let expected = SymbolicTensor::infer(cooking.try_cook(expected.as_view())?)?
+            .simplify_color(ColorSimplifySettings::default())?
+            .to_dots()?
+            .resolved()?;
+        let expected = cooking
+            .uncook(expected.expression().as_view())
             .replace_multiple(&replacements)
             .replace(GS.m_uv_expansion)
             .with(GS.m_uv_vacuum);
@@ -2806,14 +2838,23 @@ mod tests {
             &graph.loop_momentum_basis,
             &[Atom::var(W_.x___)],
         );
-        let [actual, expected] = [actual, expected].map(|expression| {
-            GS.erase_uv_momentum_provenance(&expression)
+        let [actual, expected] = [actual, expected].map(|expression| -> Result<Atom> {
+            let expression = GS
+                .erase_uv_momentum_provenance(&expression)
                 .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
                 .with(W_.prop_)
-                .replace_multiple(&replacements)
-                .normalize_dots()
-                .collect_factors()
+                .replace_multiple(&replacements);
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
+                .contract(ContractionSettings::default().without_rank_one_tensors())?
+                .resolved()?;
+            Ok(cooking
+                .uncook(expression.expression().as_view())
+                .collect_factors())
         });
+        let (actual, expected) = (actual?, expected?);
         assert!(
             !atomic.atom().is_zero(),
             "the atomic Taylor term must be nonzero"
@@ -2991,8 +3032,16 @@ mod tests {
                 .erase_uv_momentum_provenance(&(atomic.atom() + nested.atom()))
                 .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
                 .with(W_.prop_)
-                .replace_multiple(&replacements)
-                .normalize_dots()
+                .replace_multiple(&replacements);
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let mixed_remainder =
+                SymbolicTensor::infer(cooking.try_cook(mixed_remainder.as_view())?)?
+                    .contract(ContractionSettings::default().without_rank_one_tensors())?
+                    .resolved()?;
+            let mixed_remainder = cooking
+                .uncook(mixed_remainder.expression().as_view())
                 .collect_factors();
             assert!(
                 mixed_remainder.is_zero(),
@@ -3069,15 +3118,29 @@ mod tests {
                         .local_4d(operation)?
                         .atom())
             })?;
-        let [actual, expected] = [actual, expected].map(|expression| {
-            GS.erase_uv_momentum_provenance(&expression)
+        let [actual, expected] = [actual, expected].map(|expression| -> Result<Atom> {
+            let expression = GS
+                .erase_uv_momentum_provenance(&expression)
                 .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
                 .with(W_.prop_)
-                .replace_multiple(&replacements)
-                .normalize_dots()
+                .replace_multiple(&replacements);
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
+                .contract(ContractionSettings::default().without_rank_one_tensors())?
+                .resolved()?;
+            Ok(cooking.uncook(expression.expression().as_view()))
         });
-        assert!(
-            (actual - expected).expand().is_zero(),
+        let (actual, expected) = (actual?, expected?);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let actual = SymbolicTensor::infer(cooking.try_cook(actual.as_view())?)?;
+        let expected = SymbolicTensor::infer(cooking.try_cook(expected.as_view())?)?;
+        assert_eq!(
+            actual.coefficients_equal(&expected, TensorCollectFilter::<0>::Tensors)?,
+            ConditionResult::True,
             "the complete collective Taylor value must equal -T_U(1-T_A)(1-T_B)I"
         );
 

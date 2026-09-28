@@ -1,0 +1,18 @@
+---
+source: src/graph/lmb.rs
+expression: "g.dot_lmb(&subgraph, &lmb)"
+---
+digraph {
+  node	 [shape=circle,height=0.1,label=""];
+  overlap = "scale";
+  layout = "neato";
+  start=2;
+  0	 [label=""];
+  2	 [label=""];
+  0:0	-> 1:1	 [id=0  color="gray" label="Q(0)"];
+  0:2	-> 1:3	 [id=1  color="gray" label="Q(1)"];
+  0:4:s	-> 2:5:s	 [id=2  color="red:blue;0.5" label="Q(2)"];
+  1:6	-> 2:7	 [id=3  color="gray" label="Q(3)"];
+  1:8	-> 2:9	 [id=4  color="gray" label="Q(4)"];
+  2:10:s	-> 0:11:s	 [id=5  color="red:blue;0.5" label="Q(0)+Q(1)+Q(2)"];
+}

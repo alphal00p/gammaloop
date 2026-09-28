@@ -1,0 +1,18 @@
+digraph physical_2L_6photons_0 {
+    ext [style=invis]
+    ext -> v7:0 [pdg=22, id=0];
+    ext -> v8:1 [pdg=22, id=1];
+    v9:2 -> ext [pdg=22, id=2];
+    v10:3 -> ext [pdg=22, id=3];
+    v11:4 -> ext [pdg=22, id=4];
+    v12:5 -> ext [pdg=22, id=5];
+    v7 -> v8 [pdg=6, id=6];
+    v13 -> v10 [pdg=6, id=7, lmb_index=0];
+    v13 -> v14 [pdg=21, id=8, lmb_index=1];
+    v14 -> v7 [pdg=6, id=9];
+    v8 -> v9 [pdg=6, id=10];
+    v9 -> v13 [pdg=6, id=11];
+    v10 -> v11 [pdg=6, id=12];
+    v11 -> v12 [pdg=6, id=13];
+    v12 -> v14 [pdg=6, id=14];
+}

@@ -1,0 +1,42 @@
+commands = [
+"import model sm",
+"generate xs z > d d~",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 1.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [[91.188, 0.0, 0.0, 0.0]]
+helicities = [1]
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+compile = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.integrator]
+n_max = 1000000
+n_start = 100000
+
+#[cli_settings.global.generation.orientation_pattern]
+#pat = "orientation_delta(1,1,1,-1,1,-1,1)"
+

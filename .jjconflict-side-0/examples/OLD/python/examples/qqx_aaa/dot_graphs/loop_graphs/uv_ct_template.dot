@@ -1,0 +1,14 @@
+digraph uv_CT_template {
+            ext    [style=invis]
+
+			// Externals
+            ext -> vl1:1 [particle="d" id=1 is_dummy=true];
+            ext -> vl2:2 [particle="d~" id=2 is_dummy=true];
+            v1:3 -> ext [id=3 is_dummy=true particle="a"];
+            v1:4 -> ext [id=4 is_dummy=true particle="a"];
+            v1:0 -> ext [id=0 is_dummy=true particle="a"];
+
+            vl1 -> vl2 [particle="g" id=5 lmb_id=0 mass="gammalooprs::mUV"];
+            vl1 -> v1 [particle="d" id=6 mass="gammalooprs::mUV"];
+            v1 -> vl2 [particle="d" id=7 mass="gammalooprs::mUV"];
+}

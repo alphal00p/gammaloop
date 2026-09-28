@@ -44,7 +44,7 @@ impl Numerator<UnInit> {
             &selected,
             &graph.underlying.empty_subgraph(),
             |_, vertex| vertex.get_num(),
-            |edge| edge.num.value.clone(), //.kill_color();
+            |edge| edge.num.value.clone(),
             |edge| edge.is_dummy,
         );
 

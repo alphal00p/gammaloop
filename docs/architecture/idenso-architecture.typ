@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Idenso source on
-2026-09-14.
+2026-09-29.
 
 This note covers the `idenso` Rust crate: representation-aware Symbolica transformations built
 on Spenso's tensor syntax and network parser. It does not describe concrete tensor-component
@@ -20,7 +20,7 @@ follows:
   and `SymbolicNet`;
 - `shorthands` owns chain, trace, dot-product, metric, and Schoonschip-style normalization;
 - `dirac`, `color`, and `epsilon` own domain-specific identities and settings;
-- `selective_expand`, `IndexTooling`, and `cook` provide expression preparation, index hygiene,
+- typed collection, `IndexTooling`, and `cook` provide expression preparation, index hygiene,
   compact symbol encodings, and canonicalization;
 - `spynso3` owns the unified Python facade, exposing Idenso algebra on `TensorExpression`.
 
@@ -49,12 +49,14 @@ must not treat printed names alone as a complete serialized registry.
 
 == Core symbolic representation
 
-`SymbolicTensor<S, E = Atom>` carries four fields:
+`SymbolicTensor<S, E = Atom>` owns the tensor interface and symbolic payload:
 
 - the structure `S`, defaulting to `OrderedStructure<LibraryRep, AbstractIndex>`;
 - the symbolic payload `E`, normally an owned Symbolica `Atom`;
 - `is_metric`, used by contraction-specialized identities;
-- `is_composite`, distinguishing a direct tensor function from an expression-backed leaf.
+- `is_composite`, distinguishing a direct tensor function from an expression-backed leaf;
+- private interface, observation and completion proofs, invalidated when the operation cannot
+  justify carrying them to its result.
 
 The explicit ordered specialization implements `TensorStructure` and network contraction.
 Structural methods delegate to the ordered slots, while permutations rewrite slot atoms and
@@ -70,6 +72,17 @@ distinct under ordered multiplication, and a zero retains its declared shape. Th
 the former Spynso `StructuredAtom`; Python bindings retain argument conversion, dispatch,
 error translation, and presentation metadata. `PartialStructure` does not pretend to implement
 the canonical-storage `TensorStructure` contract.
+
+Canonical singleton `cind(n)` and `find(n)` markers select a concrete component,
+so a rank-one leaf ending in one of these markers has a scalar interface. The
+shared slot matcher validates a nonnegative integer component and its final
+argument position; malformed markers, extra structural arguments and unrelated
+functions with the same short name are rejected. This agrees with Spenso's
+existing concrete-component interpretation without admitting arbitrary
+zero-port vector syntax. The built-in basis vector `δ(cind(k), port)` is
+an explicit exception for metadata: its first marker selects the basis component,
+while its final argument is the sole tensor port. This does not admit a second
+component marker on arbitrary rank-one functions.
 
 Aliased results use the same tensor with Symbolica's `AliasedAtom` payload and
 `AliasInterfaces` structure. Symbolica owns the single registry of literal
@@ -104,8 +117,9 @@ performance limitation, not an algebraic equivalence assumption.
 
 Contraction, rule application and polynomial materialization are separate
 operations. `AliasedTensorExpression.expand()` evaluates the existing definition
-DAG forward as polynomials with a shared variable map, then constructs the final
-Symbolica expression once. Alias uses inside opaque functions and callback-
+DAG forward with a variable table local to each definition. An additive root
+merges its emitted summands in one bulk construction, avoiding a global dense
+variable table. Alias uses inside opaque functions and callback-
 sensitive bodies retain the ordinary checked resolution path before the
 explicit expansion. An evaluator consumes the DAG directly.
 
@@ -130,16 +144,19 @@ ports, checks every sum branch, and retains necessary multiplicity checks. Uncha
 are borrowed; changed exact sums and products use bulk construction when callback ordering
 permits it.
 
-Closed gamma traces reuse the Dirac evaluator's terminal-word recognition to
-certify their interface before expansion. The shared tensor checks intrinsic
-normalization, explicit external ports, compact-vector eligibility, and the
-small source's declared interface. Eligible tensor identities can then retain
-that interface without walking the expanded pairing polynomial. This proof does
-not widen scalar-algebra or index-cooking admission; callback-sensitive and
-unresolved expressions still validate the rewritten result.
-The proof runs only when the output's encoded size exceeds twice the source's:
-small trace results are cheaper to check directly. The cyclic-wrapper exception
-applies only to the admitted trace's own wrapper, not to arbitrary metadata.
+Closed gamma traces emit factored local identities into the existing literal alias
+registry. Four-dimensional short-word and symbolic-dimensional recurrence rules
+share that result owner. The interface proof checks dimensions, surviving ports,
+unresolved identities and normalization behavior. Callback-sensitive output is
+validated rather than inheriting the original interface blindly. Neither trace
+simplification nor its surrounding scheduler expands the full result.
+
+Uniformly reversed closed gamma and gamma5 words use the trace transpose
+identity before entering those same kernels: reverse the factor order and
+restore forward endpoints. The normalization remains local to the trace, so
+surrounding callbacks observe the evaluated result in the same pass. Mixed
+orientations and open chains remain opaque, and gamma5 retains its existing
+four-dimensional restrictions.
 
 Lorentz-dimension changes map both the Atom and its declared interface here. Newly coincident
 explicit indices contract; excess occurrences fail. Callback validation compares the encoded
@@ -154,21 +171,24 @@ Spenso's `ContainsReps` tensor filter, so representation-bearing functions can b
 leaves even without a separate tensor tag. `SymbolicNetExt::simple_execute` uses sequential
 Spenso execution and reconstructs the final atom from zero, one, or the result tensor.
 
-This representation is deliberately ephemeral. It is a topology-aware vehicle for parsing,
-canonicalization, and contractions; the authoritative public result of Idenso transformations is
-normally an `Atom`.
+The owned network remains the boundary for concrete component execution and
+structural consumers which need owned tensors. Symbolic contraction instead
+reads Spenso's borrowed operation graph. Public tensor transformations return
+the shared typed tensor or its aliased specialization; raw `Atom` utilities are
+explicit lower-level boundaries.
 
 == Rewrite families and execution flow
 
-Idenso does not expose one universal simplification pipeline. Each family selects and owns its
+The shared tensor scheduler runs the selected identity families. Each family owns its
 normal form:
 
 - `IndexTooling` parses enough structure to canonicalize tensor indices, list dangling slots,
   wrap all indices or only dummies, form adjoints, and alias tensor subexpressions;
-- `SelectiveExpand` distributes only factors carrying selected representation families, keeping
-  unrelated sectors factorized;
-- `MetricSimplifier` and `Chain` normalize metrics, dot products, open chains, and closed traces;
-- `GammaSimplifier` collects bispinor chains and applies dimension-gated Clifford, trace,
+- Typed `collect` and `coefficient_list` use the shared graph/tape owner to retain selected
+  representation sectors while keeping unrelated coefficients factored;
+- the shared component contractor and internal chain/dot normalization own metric
+  contraction, compact scalar products, open chains and closed traces;
+- the Dirac pass collects bispinor chains and applies dimension-gated Clifford, trace,
   projector, gamma5, and optional four-dimensional epsilon rules;
 - `ColorSimplifier` collects fundamental color lines, closes traces, applies generator,
   structure-constant, Fierz, and Casimir rules, prunes antisymmetric zero terms, and iterates to a
@@ -178,7 +198,7 @@ normal form:
   either as readable flattened names or reversible Symbolica `UserData::Atom` encodings.
 
 Settings objects are part of the semantics. Gamma ordering and trace evaluation, color Fierz and
-invariant substitutions, Schoonschip depth and traversal, and cooking source/tag filters can all
+invariant substitutions, contraction budgets, and cooking source/tag filters can all
 change the result form. Reproducible callers should record the exact settings and the order in
 which independent rewrite families ran.
 
@@ -186,43 +206,60 @@ Most pattern engines use a local fixed-point loop: transform the current atom, c
 the previous atom, and stop when unchanged. That guarantees termination only for the implemented
 oriented rule set; custom rules composed by a caller remain the caller's responsibility.
 
-== Schoonschip network path
+== One symbolic contraction path
 
-The Schoonschip-style simplifier is the main bridge from domain rewrites to Spenso network
-execution:
+The tensor contractor reads the shared structural graph once, keeping opaque
+leaves and their logical ports. It selects an incident factor, visits its
+alternatives and applies port substitutions through the existing component
+reducer. Equal remaining states merge before result emission. Metrics alone
+and metrics with rank-one tensors use this same owner. Powers whose bases
+contain local dummy pairs finish that scalar scope before the power is applied.
 
-```text
-Atom or one term of an Add
-  -> normalize dot-product syntax
-  -> parse a SymbolicNet with opaque shorthand leaves
-  -> limit parser depth and composite-scalar recursion from settings
-  -> execute sequentially with a Schoonschip contraction strategy
-  -> choose tensor pairs by degree or expression-size policy
-  -> simplify the contracted symbolic boundary
-  -> extract an Atom and normalize dots again
-  -> repeat until unchanged, unless SinglePass was selected
-```
+Callback-sensitive syntax uses the existing ordered substitution schedule and
+checked result construction. It does not acquire a trusted interface merely
+because a substitution was algebraically a contraction. The example
+`g(a,b)*T(a)` whose normalizer turns `T(b)` into a scalar remains a rejection.
 
-Additions are processed term by term. `SchoonschipSettings` chooses single-pass or recursive
-depth-/breadth-first traversal, parse depth, contracted-sum expansion, chain-like function and
-rank-one handling, and one of several topology- or expression-size contraction orders. The
-custom `Schoonschipify` strategies plug into Spenso's `ContractionStrategy`; they do not replace
-Spenso's graph or store.
+Ordered substitutions carry committed alias-port changes into the existing
+literal-use registry. Discovery probes and refused linear branches discard
+those observations; a product that vanishes publishes none. The alias owner
+registers the rewritten definition with its checked surviving interface before
+publishing the result, including when the ordered fallback exposes more work
+for the component reducer. Literal relabellings use the pass's original
+uncontracted templates. Completed bodies are staged separately and published
+together, so traversal order cannot compare definitions at different rewrite
+stages. Exact imaginary coefficients remain scalar leaves of the same graph.
 
-The direct path exposed by `schoonschip_with_settings` contracts explicit slots without building
-the full network. Its initial scan records pending
-contractions, dot identities, bracket scopes, and whether normalization can invoke user code.
-For intrinsic normalization without brackets, dot rewrites remove index occurrences, so the
-input's contraction candidate remains a conservative guide without rescanning the result.
-The dot stage reports when an odd tensor power exposes a factor; that flag carries pending
-contraction work beyond the contractor's fixed point. Otherwise intrinsic cleanup completes
-the direct pass. Callback-sensitive expressions and compound opaque slot metadata retain
-result scans and the observable discovery/replacement order. Bracket scopes retain their
-normalization schedule because opening a scope can expose further products.
+After the original alias templates finish, the existing repeated-index scan
+decides whether a domain can contract across literal alias boundaries. Disjoint
+open definitions stay opaque; their sums are not visited merely because they
+contain metrics. Sum alternatives and powers retain the scanner's established
+scope rules. The private contraction status distinguishes deferred opaque work
+from an exhausted budget. Deferred work can expose its registered definitions
+and is checked again by the existing simplification fixed point; an exhausted
+frontier is retained exactly and never restarted by this exposure. Neither
+state is certified complete merely because its algebraic output is valid.
 
-The network path is preferable when contraction topology and ordering matter. Their exact
-behavior and settings are detailed in the
-#link("schoonschip-net-parsing.typ")[Schoonschip network parsing note].
+Epsilon simplification uses the same selected collector with the literal
+registry. This exposes epsilon bodies and their incident metric/vector factors,
+so antisymmetry also acts across alias boundaries. Unrelated definitions and
+callback-sensitive templates remain opaque.
+
+`contract_ports` is the separate logical binary composition operation.
+`to_dots` and `undo_dots` change symbolic notation; `to_dots` does not silently
+run a full contraction. The intrinsic `g` normalizer exploits dot symmetry at
+construction. A finite `expand_dots` request crosses Spenso's component
+execution boundary and leaves unrelated factors untouched.
+
+The former network Schoonschip engine, its traversal/order strategy family and
+duplicate metric collector have been removed. The shared tensor scheduler runs
+one fixed point over the root and reachable definitions, carrying observations
+and completion proofs when their invariants allow it. A default rerun of a
+certified complete aliased result reuses its sealed allocation. Budgets retain
+exact unfinished work and do not certify it complete.
+
+The graph, substitution and callback boundaries are detailed in the
+#link("schoonschip-net-parsing.typ")[shared contraction architecture note].
 
 == Parsing, shorthand, and index invariants
 
@@ -233,14 +270,22 @@ are parser-owned shorthands rather than arbitrary opaque functions.
 
 `UndoShorthands` selects Spenso `ShorthandParsing::Expand` modes, parses a symbolic network, and
 executes it to reconstruct explicit tensor products with fresh parse-local dummies. The
-Schoonschip path instead requests opaque shorthand with fast structure inference so it can
+shared contractor requests opaque shorthand with fast structure inference so it can
 simplify contraction boundaries selectively. These two modes are intentionally different:
 expansion exposes topology but can grow expressions, while opaque inference preserves compact
-syntax and trusts the inferred external slots.
+syntax and validates its declared boundary.
 
-Index wrapping is an ownership operation. `list_dangling` discovers external slots from a parsed
-network; `wrap_dummies` changes only non-external index payloads; `wrap_indices` changes every
-recognized slot. Independently created expressions should be wrapped before multiplication when
+Compact inner products may retain explicit spectator ports. The shared slot
+matcher identifies the contracted implicit axis in each operand; both ordered
+and partial inference retain the other ports. Gamma chain assembly exposes only
+inner products containing a selected gamma or chain endpoint, through Spenso's
+existing shorthand materializer. Scalar dot coefficients and unrelated sectors
+remain opaque. Alias definitions are handled by the typed alias owner rather
+than guessed by the raw chain walker.
+
+Index wrapping is an ownership operation. `list_dangling` discovers external slots through the
+shared parser's structure-only construction; `wrap_dummies` changes only non-external index payloads; `wrap_indices` changes explicit index payloads while leaving unresolved
+open-port markers intact. Independently created expressions should be wrapped before multiplication when
 same-spelled dummy names must not contract.
 
 The shared concrete syntax and which crate owns each rewrite are specified in the
@@ -263,18 +308,19 @@ alone are not a portable physics-result archive.
 
 == Ownership and error boundaries
 
-Most high-level identity traits take an `Atom` or `AtomView` and return a newly owned `Atom`;
-Symbolica owns internal expression memory and symbol metadata. Settings are borrowed for one
-transformation. Parsed `SymbolicNet` values, dummy libraries, and contraction plans are local to
-the call and are discarded after atom extraction.
+The public tensor operations retain the logical interface, typed zeros and alias
+metadata in `SymbolicTensor`. Spynso converts arguments, dispatches to this
+owner, translates errors and wraps the result. Symbolica owns atom memory,
+normalization and literal alias definitions; Spenso owns graph topology,
+logical layouts and component execution.
 
-Fallible structural entry points use typed errors: `SymbolicNetParse` returns
-`TensorNetworkError`, structure inference returns `StructureError`, `dirac_adjoint` reports
-`AdjointError`, and `CookSettings::try_cook`/`try_cook_indices` report `CookingError`.
-Canonicalization returns `CanonicalizationError`; dangling-index queries and dummy wrapping
-return `IndexToolingError`. Shorthand expansion, network Schoonschip passes, and
-`simple_execute` return `Result<Atom, NetworkToolingError>` rather than unwrapping parser or
-execution failures. The direct pattern-based `schoonschip` path still returns an `Atom`.
+Structural entry points are fallible. Inference and certified tensor rewrites
+report `TensorInferenceError`; network parsing and execution keep their typed
+network errors. `dirac_adjoint` reports `AdjointError`, cooking reports
+`CookingError`, canonicalization reports `CanonicalizationError`, and raw index
+queries report `IndexToolingError`. A raw-expression escape hatch does not
+retain a separately declared logical layout automatically. Callers restoring
+that layout must supply the original structure.
 
 Domain simplifiers usually leave unmatched syntax unchanged rather than diagnosing it as an
 error. A successful return therefore means the configured rewrite reached its fixed point, not
@@ -295,13 +341,13 @@ representation-bearing factors when completeness matters.
   are part of their termination contract.
 - A reversible cooked symbol is meaningful only with its Symbolica user data and matching tag
   policy; a flattened cooked name intentionally cannot reconstruct its source.
-- Schoonschip contraction order is semantic/performance policy over one parsed network. Changing
-  it must not be confused with changing the parser's shorthand or depth policy.
+- Contraction completeness is an explicit certificate. A valid retained frontier, metric-only
+  result, or unrecognized residual tensor is not automatically fully contracted.
 
 == Verification and related documentation
 
 Tests live beside tensor parsing and canonicalization, cooking, index tooling, shorthand
-expansion, Schoonschip traversal and contraction orders, metric/chain normalization, and the
+expansion, shared factor-graph contraction, metric/chain normalization, and the
 Dirac, color, and epsilon rules. Snapshot tests pin canonical Symbolica strings. Curated FORM
 and FeynCalc examples are reference fixtures checked by tests; they are not runtime calls to
 those external systems. Benchmarks separately cover Schoonschip modes and vertex-algebra paths.
@@ -330,7 +376,7 @@ names. The fallible `Concretize` implementation preserves symbolic dimensions an
 canonical layout to restore logical slot order in the symbolic expression.
 
 
-== M1 consolidation measurements
+== Historical M1 consolidation measurements
 
 The saved `examples/notebooks/tensor_benchmark_m1.json` compares three alternating
 fresh-interpreter runs against the immutable M0 release on CPU 8. Each run has

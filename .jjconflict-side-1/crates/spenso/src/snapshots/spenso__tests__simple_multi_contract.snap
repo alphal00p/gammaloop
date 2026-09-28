@@ -1,0 +1,13 @@
+---
+source: src/tests.rs
+expression: f.data()
+---
+- 36
+- 120
+- 89
+- 36
+- 120
+- 89
+- 36
+- 120
+- 89

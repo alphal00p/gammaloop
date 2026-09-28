@@ -1,0 +1,12 @@
+digraph basketball{
+    node [num = "1" ]
+    edge [particle=scalar_1]
+    e    [style=invis]
+
+    e -> A:1   [ id=5]
+    B:0 -> e   [ id=4]
+    A -> B    [ id=0 lmb_id=0]
+    A -> B    [ id=1 lmb_id=1]
+    A -> B    [ id=2 lmb_id=2]
+    A -> B    [ id=3 ]
+}

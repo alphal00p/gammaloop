@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+binary=""
+selected_profile=""
+
+profile_override=""
+if [ "${1-}" = "--release" ]; then
+    profile_override="release"
+    shift
+elif [ "${1-}" = "-r" ]; then
+    profile_override="release"
+    shift
+elif [ "${1-}" = "--dev-optim" ]; then
+    profile_override="dev-optim"
+    shift
+elif [ "${1-}" = "-o" ]; then
+    profile_override="dev-optim"
+    shift
+elif [ "${1-}" = "--debug" ]; then
+    profile_override="debug"
+    shift
+elif [ "${1-}" = "-d" ]; then
+    profile_override="debug"
+    shift
+fi
+
+select_binary() {
+    if [ -n "$profile_override" ]; then
+        selected_profile="$profile_override"
+        binary="$script_dir/target/$profile_override/gammaloop"
+        return
+    fi
+
+    local release_binary="$script_dir/target/release/gammaloop"
+    local dev_optim_binary="$script_dir/target/dev-optim/gammaloop"
+    local debug_binary="$script_dir/target/debug/gammaloop"
+
+    if [ -x "$release_binary" ] && [ -x "$dev_optim_binary" ]; then
+        if [ "$dev_optim_binary" -nt "$release_binary" ]; then
+            selected_profile="dev-optim"
+            binary="$dev_optim_binary"
+        else
+            selected_profile="release"
+            binary="$release_binary"
+        fi
+        return
+    fi
+
+    if [ -x "$release_binary" ]; then
+        selected_profile="release"
+        binary="$release_binary"
+        return
+    fi
+
+    if [ -x "$dev_optim_binary" ]; then
+        selected_profile="dev-optim"
+        binary="$dev_optim_binary"
+        return
+    fi
+
+    if [ -x "$debug_binary" ]; then
+        selected_profile="debug"
+        binary="$debug_binary"
+        return
+    fi
+
+    selected_profile="release"
+    binary="$release_binary"
+}
+
+print_profile_banner() {
+    [ "$selected_profile" = "release" ] && return
+
+    local red="" green="" reset=""
+    if [ -t 2 ]; then
+        red=$'\033[31m'
+        green=$'\033[32m'
+        reset=$'\033[0m'
+    fi
+
+    local plain_message="WARNING: Running gammaloop with profile '$selected_profile'"
+    local colored_message="${red}WARNING:${green} Running gammaloop compiled with '${red}${selected_profile}${green}'${reset}"
+    local inner_width=60
+    local total_padding=$(( inner_width - ${#plain_message} ))
+    if [ "$total_padding" -lt 0 ]; then
+        total_padding=0
+    fi
+    local left_padding_width=$(( total_padding / 2 ))
+    local right_padding_width=$(( total_padding - left_padding_width -1))
+    local left_padding right_padding
+    left_padding="$(printf '%*s' "$left_padding_width" '')"
+    right_padding="$(printf '%*s' "$right_padding_width" '')"
+    local border
+    border="$(printf '%*s' "$inner_width" '' | tr ' ' '─')"
+
+    {
+        printf '┌%s┐\n' "$border"
+        printf '│%s%s%s│\n' "$left_padding" "$colored_message" "$right_padding"
+        printf '└%s┘\n' "$border"
+    } >&2
+}
+
+select_binary
+
+if [ ! -x "$binary" ]; then
+    cat >&2 <<EOF
+Could not find an executable gammaloop binary.
+Expected one of:
+  $script_dir/target/release/gammaloop
+  $script_dir/target/dev-optim/gammaloop
+  $script_dir/target/debug/gammaloop
+
+Build one first with, for example:
+  just build-cli
+  just build-cli-release
+EOF
+    exit 1
+fi
+
+print_profile_banner
+
+exec "$binary" "$@"

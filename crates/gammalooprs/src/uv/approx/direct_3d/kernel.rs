@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::color::{ColorSimplifier, ColorSimplifySettings};
+use idenso::{CookMode, CookSettings, color::ColorSimplifySettings, tensor::SymbolicTensor};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::HedgePair,
@@ -256,11 +256,17 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         .graph
         .numerator(&reduced, given.subgraph())
         .get_single_atom()
-        .expect("graph numerator should be available")
-        .simplify_color_with(ColorSimplifySettings {
+        .expect("graph numerator should be available");
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let numerator = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?
+        .simplify_color(ColorSimplifySettings {
             simplify_non_color: false,
             ..Default::default()
-        });
+        })?
+        .resolved()?;
+    let numerator = cooking.uncook(numerator.expression().as_view());
     let scope = DirectResidueBranches::numerator_scope();
     let numerator_tag = scope.1.clone();
     let integrands = integrands.multiply_key_mapped(orientation, ctx.graph, &numerator, scope)?;

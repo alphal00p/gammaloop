@@ -1,0 +1,29 @@
+---
+source: spenso/src/tests.rs
+expression: dense_dense.structure()
+---
+VecStructure(
+  structure: [
+    Slot(
+      aind: Normal(3),
+      rep: Representation(
+        dim: Concrete(4),
+        rep: Dualizable(-1),
+      ),
+    ),
+    Slot(
+      aind: Normal(4),
+      rep: Representation(
+        dim: Concrete(5),
+        rep: Dualizable(1),
+      ),
+    ),
+    Slot(
+      aind: Normal(2),
+      rep: Representation(
+        dim: Concrete(4),
+        rep: Dualizable(1),
+      ),
+    ),
+  ],
+)

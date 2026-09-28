@@ -23,8 +23,9 @@ use crate::{
 use color_eyre::Result;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{
-    color::{ColorSimplifier, ColorSimplifySettings},
-    shorthands::metric::MetricSimplifier,
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    tensor::{ContractionSettings, SymbolicTensor},
 };
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use spenso::network::parsing::{AtomStructureExt, StrictTensorFilter};
@@ -172,12 +173,17 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let resnum = graph
             .numerator(&reduced, current.subgraph())
             .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
+            .expect("graph numerator should be available");
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?
+            .simplify_color(ColorSimplifySettings {
                 simplify_non_color: false,
                 ..Default::default()
-            })
-            * global_num;
+            })?
+            .resolved()?;
+        let resnum = cooking.uncook(resnum.expression().as_view()) * global_num;
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
             graph = %graph.name,
@@ -249,12 +255,17 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let resnum = graph
             .numerator(&reduced, current.subgraph())
             .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
+            .expect("graph numerator should be available");
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?
+            .simplify_color(ColorSimplifySettings {
                 simplify_non_color: false,
                 ..Default::default()
-            })
-            * global_num;
+            })?
+            .resolved()?;
+        let resnum = cooking.uncook(resnum.expression().as_view()) * global_num;
         let localizer = self.localizer.with_independent_source_sum();
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
@@ -527,7 +538,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 .with(W_.prop_);
             // Preserve the sum of CFF denominators after residue mapping, just
             // as the Taylor stage preserves its separate propagator topologies.
-            atom = atom.replace(GS.dim).with(4).simplify_metrics();
+            atom = atom.replace(GS.dim).with(4);
             debug_tags!(#generation, #profile, #uv, #numerator, #dump;
                 stage = "final_integrand_before_color",
                 graph = %graph.name,
@@ -535,15 +546,15 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 file.atom = %atom.to_canonical_string(),
                 "Mapped factorized integrand before final color simplification"
             );
-            atom = atom
-                .simplify_color_with(
-                    ColorSimplifySettings {
-                        simplify_non_color: false,
-                        ..Default::default()
-                    }
-                    .with_cof_dimension_invariants(),
-                )
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+                .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())?
+                .contract(ContractionSettings::default())?
+                .resolved()?
                 .expand_dots()?;
+            atom = cooking.uncook(reduced.as_view());
 
             // Exact production branches have already mapped every owned
             // numerator fragment. The former coarse export sign replacement

@@ -206,7 +206,7 @@ fn unresolved_factory_ports_survive_composition() {
         let kwargs = PyDict::new(py);
         kwargs.set_item("left", 2)?;
         kwargs.set_item("right", 0)?;
-        let contracted = gamma.call_method("contract", (vector,), Some(&kwargs))?;
+        let contracted = gamma.call_method("contract_ports", (vector,), Some(&kwargs))?;
         let indexed = contracted.call1(("r", "s"))?;
         assert_eq!(indexed.getattr("rank")?.extract::<usize>()?, 2);
 
@@ -261,9 +261,12 @@ fn metric_factory_accepts_dual_ports_and_preserves_logical_order() {
                 logical_slot_representations(&metric.call1(("i", "j"))?)?,
                 expected
             );
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("rank_one", false)?;
             let trace = metric
                 .call1(("i", "i"))?
-                .call_method0("simplify_metrics")?
+                .call_method("contract", (), Some(&kwargs))?
+                .call_method0("to_expression")?
                 .call_method0("to_expression")?
                 .extract::<PythonExpression>()?;
             assert_eq!(trace.expr, Atom::num(3));

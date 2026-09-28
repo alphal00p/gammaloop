@@ -9,11 +9,18 @@ from pathlib import Path
 
 from symbolica import E, S
 from symbolica.community import hep as fk
-from symbolica.community.spenso import GammaSimplifySettings, TensorExpression
+from symbolica.community.spenso import (
+    GammaSimplifySettings,
+    TensorExpression,
+    TensorName,
+)
 
 # The fixture declares a nonzero tau mass; its muon mass parameter is zero.
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
-p, spin, mass = S("spin_density::p", "spin_density::s", "UFO::MTA")
+p, spin = (
+    TensorName.vector("spin_density::" + name).to_expression() for name in ("p", "s")
+)
+mass = S("UFO::MTA")
 i, j, k, slot = S(
     "spin_density::i", "spin_density::j", "spin_density::k", "spin_density::slot_"
 )
@@ -40,6 +47,7 @@ for pdg, sign, ket_name, bra_name in (
     traced = (
         TensorExpression(density.replace(j, i))
         .simplify_gamma(GammaSimplifySettings.canonical())
+        .to_expression()
         .to_expression()
     )
     assert (traced - sign * 2 * mass).expand() == E("0")

@@ -1,0 +1,17 @@
+digraph massless_box_self_energy {
+ext0 [style=invis];
+ext1 [style=invis];
+ext2 [style=invis];
+ext3 [style=invis];
+ext0 -> v5:0 [pdg=1000];
+ext1 -> v6:1 [pdg=1000];
+ext2 -> v7:2 [pdg=1000];
+v8:3 -> ext3 [pdg=1000];
+v5 -> v6 [pdg=1000];
+v6 -> v9 [pdg=1000, lmb_id=0];
+v9 -> v10 [pdg=1000, lmb_id=1];
+v9 -> v10 [pdg=1000];
+v10 -> v7 [pdg=1000]
+v7 -> v8 [pdg=1000];
+v8 -> v5 [pdg=1000];
+}

@@ -17,8 +17,7 @@ use feynkit_graph::{
 };
 use feynkit_model::{Model, ModelError, ParameterType, ParticleId};
 use idenso::{
-    IndexTooling, dirac::GammaSimplifier, representations::Bispinor,
-    shorthands::metric::MetricSimplifier,
+    IndexTooling, dirac::GammaSimplifySettings, representations::Bispinor, tensor::SymbolicTensor,
 };
 use linnet::half_edge::involution::HedgePair;
 use spenso::{
@@ -215,6 +214,16 @@ impl Amplitude {
     /// and reversal of complex scalar coefficients are delegated to Idenso.
     pub fn conjugate(&self) -> Result<Self, AmplitudeError> {
         let mut result = self.clone();
+        for leg in &mut result.legs {
+            leg.slots = leg.slots.iter().map(|slot| slot.dual()).collect();
+            leg.slots.sort();
+        }
+        let interface = result.structure();
+        let settings = GammaSimplifySettings {
+            gamma0: true,
+            evaluate_traces: false,
+            ..GammaSimplifySettings::default()
+        };
         result.terms = self
             .terms
             .iter()
@@ -222,21 +231,16 @@ impl Amplitude {
                 let adjoint = term
                     .dirac_adjoint::<AbstractIndex>(true)
                     .map_err(|e| AmplitudeError::Tensor(e.to_string()))?;
-                let mut adjoint = self.apply_reality(&adjoint);
-                loop {
-                    let next = adjoint.simplify_gamma0().simplify_metrics();
-                    if next == adjoint {
-                        break;
-                    }
-                    adjoint = next;
-                }
-                Ok(adjoint)
+                let adjoint = self.apply_reality(&adjoint);
+                // Physical leg labels and their declared order belong to the
+                // amplitude. The shared scheduler owns gamma/metric cleanup.
+                SymbolicTensor::checked_parts(adjoint, interface.clone())
+                    .and_then(|value| value.simplify_gamma(settings))
+                    .and_then(|value| value.resolved())
+                    .map(SymbolicTensor::into_expression)
+                    .map_err(|error| AmplitudeError::Tensor(error.to_string()))
             })
             .collect::<Result<_, AmplitudeError>>()?;
-        for leg in &mut result.legs {
-            leg.slots = leg.slots.iter().map(|slot| slot.dual()).collect();
-            leg.slots.sort();
-        }
         result.conjugated = !self.conjugated;
         Ok(result)
     }

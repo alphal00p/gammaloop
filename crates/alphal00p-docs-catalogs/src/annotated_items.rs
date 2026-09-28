@@ -943,16 +943,6 @@ fn idenso_cook_settings() {}
 )]
 fn idenso_cookable() {}
 
-#[alphal00p_docs::trait_item(
-    id = "SelectiveExpand",
-    title = "Selective expansion",
-    summary = "Expands only tensor families selected by their representation.",
-    format = "rust-markdown",
-    source = "crates/idenso/src/selective_expand.rs",
-    source_id = "idenso::selective_expand::SelectiveExpand"
-)]
-fn idenso_selective_expand() {}
-
 #[alphal00p_docs::macro_item(
     id = "bis",
     name = "bis!",
@@ -1266,7 +1256,6 @@ pub(super) fn for_component(component: &str) -> Option<Vec<DocItem>> {
             __alphal00p_docs_trait_idenso_index_tooling(),
             __alphal00p_docs_ty_idenso_cook_settings(),
             __alphal00p_docs_trait_idenso_cookable(),
-            __alphal00p_docs_trait_idenso_selective_expand(),
             __alphal00p_docs_macro_idenso_bis(),
             __alphal00p_docs_macro_idenso_cof(),
             __alphal00p_docs_macro_idenso_coad(),

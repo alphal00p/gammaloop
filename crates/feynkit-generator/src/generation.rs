@@ -6375,10 +6375,7 @@ mod tests {
 
     #[test]
     fn lowers_covariant_propagator_with_compact_momentum_slots() {
-        use idenso::{
-            IndexTooling,
-            shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
-        };
+        use idenso::{CookMode, CookSettings, IndexTooling, tensor::SymbolicTensor};
         use spenso::structure::abstract_index::AbstractIndex;
 
         let legs = tensor_test_legs();
@@ -6408,14 +6405,18 @@ mod tests {
         let metric = instantiation
             .instantiate(&test_atom("Metric(1,2)"), NumeratorSector::Spin)
             .unwrap();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let source = SymbolicTensor::infer(cooking.cook((numerator * metric).as_view())).unwrap();
+        let result = source
+            .contract(Default::default())
+            .unwrap()
+            .resolved()
+            .unwrap();
+        let result = result.to_dots().unwrap();
+        let scalar = cooking.uncook(result.expression().as_view());
         assert_eq!(
-            (numerator * metric)
-                .expand()
-                .simplify_metrics()
-                .to_dots()
-                .expand()
-                .cancel(),
-            test_atom("-1i*(3+xi)").expand()
+            (scalar - test_atom("-1i*(3+xi)")).together().cancel(),
+            Atom::Zero
         );
     }
 
@@ -6509,7 +6510,20 @@ mod tests {
 
     #[test]
     fn lowers_ufo_symmetric_color_tensor_with_standard_normalization() {
-        use idenso::{IndexTooling, color::ColorSimplifier};
+        use idenso::{
+            CookMode, CookSettings, IndexTooling, color::ColorSimplifySettings,
+            tensor::SymbolicTensor,
+        };
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let simplify = |expression: Atom| {
+            let source = SymbolicTensor::infer(cooking.cook(expression.as_view())).unwrap();
+            let result = source
+                .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())
+                .unwrap()
+                .resolved()
+                .unwrap();
+            cooking.uncook(result.expression().as_view())
+        };
 
         let mut legs = [0, 1, 2].map(|edge| NumeratorHalfEdge {
             edge,
@@ -6531,19 +6545,12 @@ mod tests {
                 .instantiate(&test_atom("d(3,1,2)"), NumeratorSector::Color)
                 .unwrap()
         );
-        assert_eq!(
-            (tensor.clone() * &tensor)
-                .simplify_color()
-                .to_cof_dimension_invariants(),
-            test_atom("40/3")
-        );
+        assert_eq!(simplify(tensor.clone() * &tensor), test_atom("40/3"));
         let third = instantiation.index(legs[2], 1).unwrap();
         let other = test_atom("other_color_index");
         let right = tensor.replace(third.to_pattern()).with(other.clone());
         assert_eq!(
-            (tensor * right)
-                .simplify_color()
-                .to_cof_dimension_invariants(),
+            simplify(tensor * right),
             test_atom("5/3")
                 * ETS.metric(
                     ColorRepresentation::Adjoint
@@ -6555,10 +6562,11 @@ mod tests {
                 )
         );
         assert_eq!(
-            instantiation
-                .instantiate(&test_atom("d(-1,-1,3)"), NumeratorSector::Color)
-                .unwrap()
-                .simplify_color(),
+            simplify(
+                instantiation
+                    .instantiate(&test_atom("d(-1,-1,3)"), NumeratorSector::Color)
+                    .unwrap()
+            ),
             Atom::Zero
         );
         legs[0].color = 3;
@@ -6575,7 +6583,13 @@ mod tests {
 
     #[test]
     fn lowers_ufo_color_epsilon_and_dual_contractions() {
-        use idenso::{IndexTooling, epsilon::EpsilonSimplifier};
+        use idenso::{CookMode, CookSettings, IndexTooling, tensor::SymbolicTensor};
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let simplify = |expression: Atom| {
+            let source = SymbolicTensor::infer(cooking.cook(expression.as_view())).unwrap();
+            let result = source.simplify_epsilon().unwrap().resolved().unwrap();
+            cooking.uncook(result.expression().as_view())
+        };
 
         for (color, name, conjugate_name) in
             [(3, "Epsilon", "EpsilonBar"), (-3, "EpsilonBar", "Epsilon")]
@@ -6605,7 +6619,7 @@ mod tests {
             assert_eq!(tensor, -exchanged);
             assert_eq!(tensor.spenso_conj().spenso_conj(), tensor);
             assert_eq!(
-                (tensor.clone() * tensor.spenso_conj()).simplify_epsilon(),
+                simplify(tensor.clone() * tensor.spenso_conj()),
                 Atom::num(6)
             );
             assert!(
@@ -6643,13 +6657,14 @@ mod tests {
             legs: &[],
         };
         assert_eq!(
-            closed
-                .instantiate(
-                    &test_atom("Epsilon(-1,-2,-3)*EpsilonBar(-1,-2,-3)"),
-                    NumeratorSector::Color,
-                )
-                .unwrap()
-                .simplify_epsilon(),
+            simplify(
+                closed
+                    .instantiate(
+                        &test_atom("Epsilon(-1,-2,-3)*EpsilonBar(-1,-2,-3)"),
+                        NumeratorSector::Color,
+                    )
+                    .unwrap()
+            ),
             Atom::num(6)
         );
         assert!(
@@ -6664,7 +6679,9 @@ mod tests {
 
     #[test]
     fn lowers_summed_fundamental_color_indices() {
-        use idenso::color::ColorSimplifier;
+        use idenso::{
+            CookMode, CookSettings, color::ColorSimplifySettings, tensor::SymbolicTensor,
+        };
 
         let legs = [0, 1].map(|edge| NumeratorHalfEdge {
             edge,
@@ -6682,10 +6699,14 @@ mod tests {
         let expected = instantiation
             .instantiate(&test_atom("Identity(1,2)/2"), NumeratorSector::Color)
             .unwrap();
-        assert_eq!(
-            trace.simplify_color().to_cof_dimension_invariants(),
-            expected
-        );
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let source = SymbolicTensor::infer(cooking.cook(trace.as_view())).unwrap();
+        let result = source
+            .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())
+            .unwrap()
+            .resolved()
+            .unwrap();
+        assert_eq!(cooking.uncook(result.expression().as_view()), expected);
     }
 
     #[test]

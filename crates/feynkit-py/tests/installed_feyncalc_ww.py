@@ -3,7 +3,13 @@
 import numpy as np
 from symbolica import E, S, Symbol
 from symbolica.community import hep
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.spenso import (
+    CookSettings,
+    GammaSimplifySettings,
+    TensorExpression,
+)
+
+index_scope = S("spenso::index_scope")
 
 model = hep.Model.standard_model()
 vertices = [
@@ -88,13 +94,14 @@ projection = model.particle_by_pdg(-24).spin_sum(
 ) * model.particle_by_pdg(24).spin_sum(P(3), ports[3], polar_ports[1])
 # Certify that the Z propagator's longitudinal numerator vanishes against
 # both physical W sums before removing it. This keeps the later traces small.
-longitudinal = (diagram_terms[23] * (s - mz**2)).expand().coefficient(mz**-2) * mz**-2
+longitudinal_weight = S("ww::longitudinal_weight")
+longitudinal = (diagram_terms[23] * (s - mz**2)).replace(
+    mz**-2, longitudinal_weight
+).derivative(longitudinal_weight).replace(longitudinal_weight, zero) * mz**-2
 transverse_test = (longitudinal * projection).replace(
     P(3, a), P(0, a) + P(1, a) - P(2, a)
 )
-transverse_test = (
-    TensorExpression(transverse_test).expand().simplify_metrics().to_dots()
-)
+transverse_test = TensorExpression(transverse_test).contract().to_expression().to_dots()
 transverse_test = (
     kin.apply(transverse_test.to_expression())
     .replace(u, 2 * me**2 + 2 * mw**2 - s - t)
@@ -102,28 +109,30 @@ transverse_test = (
 )
 assert transverse_test == zero
 
-diagram_terms[23] = (diagram_terms[23] - longitudinal / (s - mz**2)).together().expand()
+diagram_terms[23] = diagram_terms[23] - longitudinal / (s - mz**2)
 spins = model.particle_by_pdg(11).spin_sum(
-    P(0), ports[0], wrapped(ports[1]), average=True
-) * model.particle_by_pdg(-11).spin_sum(P(1), wrapped(ports[0]), ports[1], average=True)
+    P(0), ports[0], index_scope(wrapped, ports[1]), average=True
+) * model.particle_by_pdg(-11).spin_sum(
+    P(1), index_scope(wrapped, ports[0]), ports[1], average=True
+)
 density = model.particle_by_pdg(-24).spin_sum(
-    P(2), ports[2], wrapped(ports[2])
-) * model.particle_by_pdg(24).spin_sum(P(3), ports[3], wrapped(ports[3]))
+    P(2), ports[2], index_scope(wrapped, ports[2])
+) * model.particle_by_pdg(24).spin_sum(P(3), ports[3], index_scope(wrapped, ports[3]))
 operators = {}
 adjoints = {}
 for pdg, term in diagram_terms.items():
-    operator = TensorExpression(term.expand())
+    operator = TensorExpression(term)
     adjoint = (
         operator.dirac_adjoint()
-        .expand()
-        .simplify_gamma0()
+        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .to_expression()
         .to_expression()
         .replace(conjugate(P(a, b)), P(a, b))
     )
     for real in (charge, sw, cw, mw, mz, mh, me, s, t, u, H):
         adjoint = adjoint.replace(conjugate(real), real)
     operators[pdg] = operator
-    adjoints[pdg] = TensorExpression(adjoint).wrap_indices(wrapped)
+    adjoints[pdg] = TensorExpression(adjoint).wrap_indices(wrapped).to_expression()
 squared = zero
 pair_results = {}
 for left, left_operator in operators.items():
@@ -132,14 +141,13 @@ for left, left_operator in operators.items():
             left_operator.to_expression() * right_adjoint * spins,
             cook_indices=CookSettings.indices(),
         )
-        paired = paired.expand()
-        traced = paired.simplify_gamma().expand().simplify_gamma().simplify_epsilon()
+        traced = paired.simplify_gamma().simplify_epsilon().to_expression()
         scalar = (
             TensorExpression(
                 traced.to_expression() * density, cook_indices=CookSettings.indices()
             )
-            .expand()
-            .simplify_metrics()
+            .contract()
+            .to_expression()
             .to_dots()
         )
         assert scalar.is_scalar
@@ -151,16 +159,20 @@ for left, left_operator in operators.items():
             .together()
         )
         # Scalar-product substitutions alone do not impose the dependence of
-        # four vectors inside epsilon. Reuse Spenso's compact/indexed conversion.
-        conserved = TensorExpression(result).undo_schoonschip().to_expression()
+        # four vectors inside epsilon. Explicitly expose compact tensor bindings
+        # with the shared shorthand materializer before replacing the momentum.
+        conserved = TensorExpression(result).undo_all().to_expression()
         conserved = conserved.replace(P(3, a), P(0, a) + P(1, a) - P(2, a))
         result = (
-            TensorExpression(conserved)
-            .expand()
-            .simplify_epsilon()
-            .simplify_metrics()
-            .to_dots()
-            .to_expression()
+            kin.apply(
+                TensorExpression(conserved)
+                .simplify_epsilon()
+                .contract()
+                .to_expression()
+                .to_dots()
+                .to_expression()
+            )
+            .replace(u, 2 * me**2 + 2 * mw**2 - s - t)
             .together()
         )
         pair_results[left, right] = result

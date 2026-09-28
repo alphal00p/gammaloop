@@ -6,7 +6,7 @@ use symbolica::{
 };
 
 use super::{
-    IntoAtom, TensorCollectExt,
+    IntoAtom,
     trace::{chain_like_with_factors, trace, trace_factor_views},
 };
 
@@ -107,13 +107,11 @@ impl ProjectorExpander for AtomView<'_> {
 fn expand_projectors_impl(expression: AtomView) -> Atom {
     let mut current = expression.to_owned();
     loop {
-        let next = current
-            .replace_map(|arg, _context, out| {
-                if let Some(expanded) = expand_chain_like_projector(arg) {
-                    **out = expanded;
-                }
-            })
-            .collect_tensors();
+        let next = current.replace_map(|arg, _context, out| {
+            if let Some(expanded) = expand_chain_like_projector(arg) {
+                **out = expanded;
+            }
+        });
 
         if next == current {
             return next;

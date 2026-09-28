@@ -1,0 +1,103 @@
+digraph epem_a_ddx_NLO_0 {
+overall_factor="-1";
+multiplicity_factor=1;
+v1;
+v2;
+v3;
+v4;
+v5 [int_id="V_98"];
+v6 [int_id="V_98"];
+v7 [int_id="V_71"];
+v8 [int_id="V_71"];
+v9 [int_id="V_74"];
+v10 [int_id="V_74"];
+v1 -> v5 [pdg=-11, name=p1_IN, mom=p1];
+v2 -> v5 [pdg=11, name=p2_IN, mom=p2];
+v6 -> v3 [pdg=-11, name=p1_OUT, mom=p1];
+v6 -> v4 [pdg=11, name=p2_OUT, mom=p2];
+v7 -> v5 [pdg=22, name=q1];
+v8 -> v6 [pdg=22, name=q2];
+v9 -> v7 [pdg=1, name=q3];
+v7 -> v10 [pdg=1, name=q4];
+v8 -> v9 [pdg=1, name=q5];
+v10 -> v8 [pdg=1, name=q6, lmb_index=0];
+v10 -> v9 [pdg=21, name=q7, lmb_index=1];
+}
+
+digraph epem_a_ddx_NLO_1 {
+overall_factor="+1";
+multiplicity_factor=1;
+v1;
+v2;
+v3;
+v4;
+v5 [int_id="V_98"];
+v6 [int_id="V_98"];
+v7 [int_id="V_71"];
+v8 [int_id="V_71"];
+v9 [int_id="V_74"];
+v10 [int_id="V_74"];
+v1 -> v5 [pdg=-11, name=p1_IN, mom=p1];
+v2 -> v5 [pdg=11, name=p2_IN, mom=p2];
+v6 -> v3 [pdg=-11, name=p1_OUT, mom=p1];
+v6 -> v4 [pdg=11, name=p2_OUT, mom=p2];
+v7 -> v5 [pdg=22, name=q1];
+v8 -> v6 [pdg=22, name=q2];
+v9 -> v7 [pdg=1, name=q3];
+v7 -> v9 [pdg=1, name=q4, lmb_index=0];
+v10 -> v8 [pdg=1, name=q5];
+v8 -> v10 [pdg=1, name=q6, lmb_index=1];
+v10 -> v9 [pdg=21, name=q7];
+}
+
+digraph epem_a_ddx_NLO_2 {
+overall_factor="-1";
+multiplicity_factor=1;
+v1;
+v2;
+v3;
+v4;
+v5 [int_id="V_98"];
+v6 [int_id="V_98"];
+v7 [int_id="V_71"];
+v8 [int_id="V_71"];
+v9 [int_id="V_74"];
+v10 [int_id="V_74"];
+v1 -> v5 [pdg=-11, name=p1_IN, mom=p1];
+v2 -> v5 [pdg=11, name=p2_IN, mom=p2];
+v6 -> v3 [pdg=-11, name=p1_OUT, mom=p1];
+v6 -> v4 [pdg=11, name=p2_OUT, mom=p2];
+v7 -> v5 [pdg=22, name=q1];
+v8 -> v6 [pdg=22, name=q2];
+v8 -> v7 [pdg=1, name=q3];
+v7 -> v9 [pdg=1, name=q4];
+v10 -> v8 [pdg=1, name=q5];
+v10 -> v9 [pdg=21, name=q6, lmb_index=0];
+v9 -> v10 [pdg=1, name=q7, lmb_index=1];
+}
+
+digraph epem_a_ddx_NLO_3 {
+overall_factor="-1";
+multiplicity_factor=1;
+v1;
+v2;
+v3;
+v4;
+v5 [int_id="V_98"];
+v6 [int_id="V_98"];
+v7 [int_id="V_71"];
+v8 [int_id="V_71"];
+v9 [int_id="V_74"];
+v10 [int_id="V_74"];
+v1 -> v5 [pdg=-11, name=p1_IN, mom=p1];
+v2 -> v5 [pdg=11, name=p2_IN, mom=p2];
+v6 -> v3 [pdg=-11, name=p1_OUT, mom=p1];
+v6 -> v4 [pdg=11, name=p2_OUT, mom=p2];
+v7 -> v5 [pdg=22, name=q1];
+v8 -> v6 [pdg=22, name=q2];
+v7 -> v8 [pdg=1, name=q3];
+v9 -> v7 [pdg=1, name=q4];
+v8 -> v10 [pdg=1, name=q5];
+v10 -> v9 [pdg=21, name=q6, lmb_index=0];
+v10 -> v9 [pdg=1, name=q7, lmb_index=1];
+}

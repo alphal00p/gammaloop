@@ -10,9 +10,8 @@ use gammalooprs::{
     utils::{FUN_LIB, GS, TENSORLIB},
 };
 use idenso::{
-    color::ColorSimplifier,
-    dirac::GammaSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+    CookMode, CookSettings, color::ColorSimplifySettings, dirac::GammaSimplifySettings,
+    tensor::SymbolicTensor,
 };
 use spenso::{
     network::{MinResultRank, Sequential},
@@ -53,11 +52,16 @@ fn main() -> Result<()> {
     run_network("dim4_raw", &dim4_atom)?;
 
     let algebra_started = Instant::now();
-    let simplified = atom
-        .simplify_color()
-        .simplify_gamma()
-        .simplify_metrics()
-        .to_dots();
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let simplified = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+        .simplify_color(ColorSimplifySettings::default())?
+        .simplify_gamma(GammaSimplifySettings::default())?
+        .contract(Default::default())?
+        .to_dots()?
+        .resolved()?;
+    let simplified = cooking.uncook(simplified.expression().as_view());
     println!(
         "evaluator_algebra\telapsed_ms={:.3}\tterms={}\tbytes={}",
         algebra_started.elapsed().as_secs_f64() * 1000.0,

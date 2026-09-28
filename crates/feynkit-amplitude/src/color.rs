@@ -114,7 +114,7 @@ impl ColorSum {
 mod tests {
     use super::*;
     use feynkit_model::Model;
-    use idenso::shorthands::metric::MetricSimplifier;
+    use idenso::tensor::{ContractionSettings, SymbolicTensor};
     use symbolica::parse;
 
     #[test]
@@ -128,14 +128,22 @@ mod tests {
         for color in [1, 3, -3, 6, -6, 8] {
             particle.color = color;
             let sum = ColorSum::new(&particle).unwrap();
-            let trace = sum
-                .expression([parse!("i"), parse!("i")])
-                .simplify_metrics();
+            let trace = SymbolicTensor::infer(sum.expression([parse!("i"), parse!("i")]))
+                .unwrap()
+                .contract(ContractionSettings::default().without_rank_one_tensors())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
             assert_eq!(trace, Atom::num(color.unsigned_abs()));
-            let average = sum
-                .averaged(true)
-                .expression([parse!("i"), parse!("i")])
-                .simplify_metrics();
+            let average =
+                SymbolicTensor::infer(sum.averaged(true).expression([parse!("i"), parse!("i")]))
+                    .unwrap()
+                    .contract(ContractionSettings::default().without_rank_one_tensors())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression();
             assert_eq!(average, Atom::one());
         }
         particle.color = 10;

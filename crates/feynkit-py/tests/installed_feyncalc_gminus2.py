@@ -213,9 +213,9 @@ for invariant, electron_mass, scale in [
                 {
                     transfer: invariant,
                     mass: electron_mass,
-                    finite_a: complex(oneloop.A0(electron_mass**2, scale)[0]),
+                    finite_a: complex(oneloop.a0(electron_mass**2, scale)[0]),
                     finite_b: complex(
-                        oneloop.B0(
+                        oneloop.b0(
                             invariant, electron_mass**2, electron_mass**2, scale
                         )[0]
                     ),
@@ -231,7 +231,7 @@ for invariant, electron_mass, scale in [
         )
     )
     derivative = 1 + invariant * complex(
-        oneloop.dB0(invariant, electron_mass**2, electron_mass**2, scale)[0]
+        oneloop.db0(invariant, electron_mass**2, electron_mass**2, scale)[0]
     )
     assert abs(normalized - parameter_integral) < 2e-12
     assert abs(normalized - derivative) < 2e-12
@@ -274,9 +274,9 @@ for ratio in ratios:
                         {
                             transfer: invariant,
                             mass: electron_mass,
-                            finite_a: complex(oneloop.A0(electron_mass**2, scale)[0]),
+                            finite_a: complex(oneloop.a0(electron_mass**2, scale)[0]),
                             finite_b: complex(
-                                oneloop.B0(
+                                oneloop.b0(
                                     invariant, electron_mass**2, electron_mass**2, scale
                                 )[0]
                             ),
@@ -286,7 +286,7 @@ for ratio in ratios:
                 / 2
             )
             derivative = 1 + invariant * complex(
-                oneloop.dB0(invariant, electron_mass**2, electron_mass**2, scale)[0]
+                oneloop.db0(invariant, electron_mass**2, electron_mass**2, scale)[0]
             )
             error = max(
                 abs(generated - value)
@@ -327,7 +327,7 @@ assert (
 ).together() == 0
 for delta in (1e-2, 1e-4, 1e-6):
     below, above = [
-        -2 * (2 - complex(oneloop.B0(point, 1.0, 1.0, 1.0)[0])) / (point - 4)
+        -2 * (2 - complex(oneloop.b0(point, 1.0, 1.0, 1.0)[0])) / (point - 4)
         for point in (4 - delta, 4 + delta)
     ]
     assert abs(np.sqrt(delta) * below.real - np.pi) < 2 * np.sqrt(delta)

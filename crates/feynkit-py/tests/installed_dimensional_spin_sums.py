@@ -2,12 +2,11 @@
 
 from symbolica import E, S
 from symbolica.community import hep
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.spenso import TensorExpression, TensorName
 
 model = hep.Model.standard_model()
-p, n, i, j, D = S(
-    "dim_spin::p", "dim_spin::n", "dim_spin::i", "dim_spin::j", "dim_spin::D"
-)
+p, n = (TensorName.vector("dim_spin::" + name).to_expression() for name in ("p", "n"))
+i, j, D = S("dim_spin::i", "dim_spin::j", "dim_spin::D")
 mink, metric, ket, bra = S(
     "spenso::mink", "spenso::g", "gammalooprs::ϵ", "gammalooprs::ϵbar"
 )
@@ -28,7 +27,8 @@ for dimension in (4, 6, E("4"), E("6"), D):
             for vector in (p, n) if reference is not None else (p,):
                 contraction = (
                     TensorExpression((projector * vector(mink(dimension, i))).expand())
-                    .simplify_metrics()
+                    .contract()
+                    .to_expression()
                     .to_dots()
                 )
                 assert kin.apply(contraction.to_expression()).together() == zero
@@ -38,7 +38,8 @@ for dimension in (4, 6, E("4"), E("6"), D):
                         projector * metric(mink(dimension, i), mink(dimension, j))
                     ).expand()
                 )
-                .simplify_metrics()
+                .contract()
+                .to_expression()
                 .to_dots()
             )
             expected = -one if average else missing - dimension

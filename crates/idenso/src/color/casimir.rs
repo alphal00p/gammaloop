@@ -1,4 +1,3 @@
-use spenso::shadowing::TensorCollectExt;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     coefficient::CoefficientView,
@@ -45,21 +44,18 @@ impl ColorCasimirRewriter {
     }
 
     fn run(&self, expression: AtomView<'_>) -> Atom {
-        expression
-            .to_owned()
-            .replace_map(|arg, _context, out| {
-                if let Some(replacement) = self.rewrite_node(arg) {
-                    **out = replacement;
-                    return;
-                }
-                // Function arguments may carry tensor-interface or occurrence metadata.
-                // Treat the function as an atomic coefficient and only rewrite an exact
-                // invariant function matched above.
-                if matches!(arg, AtomView::Fun(_)) {
-                    **out = arg.to_owned();
-                }
-            })
-            .collect_tensors()
+        expression.to_owned().replace_map(|arg, _context, out| {
+            if let Some(replacement) = self.rewrite_node(arg) {
+                **out = replacement;
+                return;
+            }
+            // Function arguments may carry tensor-interface or occurrence metadata.
+            // Treat the function as an atomic coefficient and only rewrite an exact
+            // invariant function matched above.
+            if matches!(arg, AtomView::Fun(_)) {
+                **out = arg.to_owned();
+            }
+        })
     }
 
     fn rewrite_node(&self, arg: AtomView<'_>) -> Option<Atom> {
@@ -309,7 +305,14 @@ impl CofDimensionInvariantRewriter {
             return None;
         }
 
-        f.iter().next().map(|dimension| dimension.to_owned())
+        f.iter().next().map(|dimension| {
+            if let AtomView::Var(symbol) = dimension
+                && let Some(payload) = crate::CookSettings::dimension_payload(symbol.get_symbol())
+            {
+                return payload;
+            }
+            dimension.to_owned()
+        })
     }
 
     fn fundamental_dimension_from_adjoint_dimension(dimension: AtomView<'_>) -> Option<Atom> {
@@ -390,4 +393,39 @@ fn integer_sqrt(value: i64) -> Option<i64> {
         root -= 1;
     }
     Some(root)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color::ColorSimplifier;
+    use crate::representations::{ColorAdjoint, ColorFundamental};
+    use spenso::structure::representation::RepName;
+    use symbolica::{function, symbol};
+
+    #[test]
+    fn casimir_substitution_preserves_factored_tensor_spectators() {
+        crate::test_support::test_initialize();
+        let df = Atom::var(symbol!("casimir_factored_df"));
+        let da = Atom::var(symbol!("casimir_factored_da"));
+        let fundamental = ColorFundamental {}.to_symbolic([df.clone()]);
+        let adjoint = ColorAdjoint {}.to_symbolic([da.clone()]);
+        let port = spenso::mink!(4, 97531);
+        let a = function!(spenso::tensor_symbol!("casimir_factored_a"), port.clone());
+        let b = function!(spenso::tensor_symbol!("casimir_factored_b"), port);
+        let x = Atom::var(symbol!("casimir_factored_x"));
+        let y = Atom::var(symbol!("casimir_factored_y"));
+        // A tensor-bearing sum and a scalar power both remain factored. The
+        // dimension inside opaque metadata is deliberately not substituted.
+        let metadata = function!(symbol!("casimir_factored_metadata"), df);
+        let spectator = (a + b) * (x + y).pow(8) * metadata;
+        let source = &da * &spectator;
+        let result = source.to_color_casimir(fundamental.as_view(), adjoint.as_view());
+        let expected_coefficient = da.to_color_casimir(fundamental.as_view(), adjoint.as_view());
+        assert_eq!(result, expected_coefficient * spectator);
+        assert_eq!(
+            result.to_color_casimir(fundamental.as_view(), adjoint.as_view()),
+            result
+        );
+    }
 }

@@ -10,16 +10,17 @@ from math import prod
 
 from symbolica import E, Expression, Matrix, Replacement, S, Symbol
 from symbolica.community import hep
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.spenso import TensorExpression, TensorName
 
-d, k1, k2, mass_squared, p_squared, eps, coupling = S(
+d, mass_squared, p_squared, eps, coupling = S(
     "ibp_phi4::d",
-    "ibp_phi4::k1",
-    "ibp_phi4::k2",
     "ibp_phi4::M",
     "ibp_phi4::p2",
     "ibp_phi4::eps",
     "ibp_phi4::g",
+)
+k1, k2 = (
+    TensorName.vector("ibp_phi4::" + name).to_expression() for name in ("k1", "k2")
 )
 tadpole_squared, vacuum_integral, log_mass, log_4pi = S(
     "ibp_phi4::T2",
@@ -32,9 +33,8 @@ zero = E("0")
 pi = Expression.PI
 
 # Taylor-expand the shifted line, then project its rank-two vacuum numerator.
-q, p, scaling, denominator = S(
-    "ibp_phi4::q", "ibp_phi4::p", "ibp_phi4::scaling", "ibp_phi4::D3"
-)
+q, p = (TensorName.vector("ibp_phi4::" + name).to_expression() for name in ("q", "p"))
+scaling, denominator = S("ibp_phi4::scaling", "ibp_phi4::D3")
 mink, dot = S("spenso::mink", "spenso::dot")
 qc, pc = q(mink(d)), p(mink(d))
 shifted_line = 1 / (denominator + 2 * scaling * dot(qc, pc) + scaling**2 * dot(pc, pc))
@@ -337,7 +337,13 @@ for loops, ct_order in [(1, 1), (0, 2)]:
         numerator = ct_model.expand_couplings(
             diagram.numerator_expression().to_expression()
         )
-        numerator = TensorExpression(numerator.expand()).to_dots().to_expression()
+        numerator = (
+            TensorExpression(numerator)
+            .contract()
+            .to_expression()
+            .to_dots()
+            .to_expression()
+        )
         if loops:
             numerator = diagram.uv_expansion(
                 model_mass, numerator=numerator
@@ -572,7 +578,13 @@ for loops, order in [(1, 1), (0, 2)]:
         numerator = ct_model.expand_couplings(
             diagram.numerator_expression().to_expression()
         )
-        numerator = TensorExpression(numerator.expand()).to_dots().to_expression()
+        numerator = (
+            TensorExpression(numerator)
+            .contract()
+            .to_expression()
+            .to_dots()
+            .to_expression()
+        )
         numerator = diagram.momentum_basis().route_expression(numerator)
         if loops:
             numerator /= diagram.denominator_expression(

@@ -1,0 +1,103 @@
+{
+  "scope": "M0/R18 executable limitation checks, not engine performance comparisons; existing source-matching release MRE binaries reused",
+  "upstream_change": "zsxonozu / b9b878ba",
+  "source_sha256": {
+    "streaming_expansion.rs": "1b85cfc4b74abc64501a3613758aab01a1ace55a863733a8dc97d28c4c06677d",
+    "Cargo.toml": "077a1e7a359e99858e96c53d4c0662ed5e343d006040596a02e801d6266ad9f4",
+    "aliased_evaluator.rs": "20e5a36458fab3c3386a84becb5b6167218a1b8d741704c736ccaef56317be1e",
+    "parametric_alias.rs": "6e18b50b3cc42eaa9276082b587850af1d6efa7a06b2d89b85fbe4a0ac06451a",
+    "aliased_evaluator_python.py": "19a86e50ce11af0be38d49b43bd937e9c3f873d9da63712c90d03cbae35388a9",
+    "Cargo.lock": "1186d599107194fd6b366ba9ef96edd225437ac2e614e436edabf04289c194b5"
+  },
+  "core_sha256": "cfe4e655591faf6b871e12d32de18ad00e7ae76a27a793c7b66441149e69de8c",
+  "records": [
+    {
+      "name": "parametric_alias",
+      "command": [
+        "taskset",
+        "-c",
+        "12",
+        "/tmp/idenso-plan-r18/parametric_alias"
+      ],
+      "started_ns": 1790545093146141343,
+      "finished_ns": 1790545093188218965,
+      "exit_code": 0,
+      "binary_sha256": "a78c74f65b7a36d012b7d501f547718960c8ff00091949b1182caf45fcd94bcb",
+      "binary_origin": "/common/dev/gammaloop/feynkit-tensor-trust/examples/reproducers/symbolica-aliases/target/release/parametric_alias",
+      "stdout": "root:                 T(1,mink(4,mu),mink(4,nu))+T(1,mink(4,rho),mink(4,nu))\nalias:                T(1,mink(4,mu),mink(4,nu)) = m*g(mink(4,mu),mink(4,nu))+p(mink(4,mu))*q(mink(4,nu))\ninto_inner():         m*g(mink(4,mu),mink(4,nu))+p(mink(4,mu))*q(mink(4,nu))+T(1,mink(4,rho),mink(4,nu))\nrelabeled handle left unresolved by literal lookup: true\npattern resolution:   m*g(mink(4,mu),mink(4,nu))+m*g(mink(4,rho),mink(4,nu))+p(mink(4,mu))*q(mink(4,nu))+p(mink(4,rho))*q(mink(4,nu))\nhandles left after pattern resolution: false\nbytes: one pattern alias 182 | 8 literal aliases 966 (5x the definition)\nper-labelling into_inner() resolves the relabeled use: true\n\nask: AliasedAtom::register_pattern_alias(pattern, body) used by into_inner,\n     get_aliases and EvaluatorBuilder::add_aliases, so a handle with slot\n     arguments resolves like a function of its ports.\n",
+      "stderr": "",
+      "checks": {
+        "relabeled handle left unresolved by literal lookup: true": true,
+        "per-labelling into_inner() resolves the relabeled use: true": true
+      }
+    },
+    {
+      "name": "streaming_expansion",
+      "command": [
+        "taskset",
+        "-c",
+        "12",
+        "/tmp/idenso-plan-r18/streaming_expansion",
+        "8",
+        "6"
+      ],
+      "started_ns": 1790545093941304404,
+      "finished_ns": 1790545100501001462,
+      "exit_code": 0,
+      "binary_sha256": "64855cf3d3dfacb3d664fd4f309eee0899be8bcd6c5b5bb4528fcd33c1ab38b4",
+      "binary_origin": "/common/dev/gammaloop/feynkit-tensor-trust/examples/reproducers/symbolica-aliases/target/release/streaming_expansion",
+      "stdout": "product of 8 sums with 6 terms: 1679616 generated terms\nexpand():      6.474 s, 1679616 terms, 52.3 MB\nwalk views:    0.032 s, 1679616 terms visited, coefficient checksum 1, 0 atoms built\nmaterialization costs 201x the traversal\n\nask: an `expand`/`replace` that hands each generated term to a consumer as\n     borrowed factor views (with Symbolica's coefficient and power folding),\n     so an engine can contract and merge terms without the expanded atom.\n",
+      "stderr": "",
+      "checks": {
+        "1679616 generated terms": true,
+        "0 atoms built": true
+      }
+    },
+    {
+      "name": "aliased_evaluator",
+      "command": [
+        "taskset",
+        "-c",
+        "12",
+        "/tmp/idenso-plan-r18/aliased_evaluator",
+        "18"
+      ],
+      "started_ns": 1790545101123142475,
+      "finished_ns": 1790545102788449502,
+      "exit_code": 0,
+      "binary_sha256": "6f9ada622bcf475310caf698793803416399b67811a42d686ed72330d2985e8b",
+      "binary_origin": "/common/dev/gammaloop/feynkit-tensor-trust/examples/reproducers/symbolica-aliases/target/release/aliased_evaluator",
+      "stdout": "alias table: 19 definitions, 883 bytes\nevaluator from aliases:  built in 0.002 s, operations OperationCount { additions: 18, multiplications: 54, inversions: 0, function_calls: 0 }\ninto_inner():            1.202 s, 7.1 MB tree (46 bytes per definition otherwise)\nevaluator from the tree: built in 0.419 s, operations OperationCount { additions: 18, multiplications: 54, inversions: 0, function_calls: 0 }\nsame value: true (3.3225074082222934e-6)\n\nask: expose the alias route in Python \u2014 an `AliasedExpression` (root + alias\n     pairs) with `evaluator(...)`, or an `aliases=` input on `Expression.evaluator`,\n     so results are consumed as DAGs without resolving them to trees.\n",
+      "stderr": "",
+      "checks": {
+        "same value: true": true
+      }
+    },
+    {
+      "name": "aliased_evaluator_python",
+      "command": [
+        "taskset",
+        "-c",
+        "12",
+        "/tmp/idenso-plan-r18/venv/bin/python",
+        "/common/dev/gammaloop/feynkit-rich-display/examples/reproducers/symbolica-aliases/aliased_evaluator_python.py",
+        "18"
+      ],
+      "exit_code": 0,
+      "stdout": "symbolica 3.0.0\nExpression.evaluator parameters: self, params, functions, iterations, cpe_iterations, n_cores, verbose, jit_compile, direct_translation, jit_direct_translation, jit_optimization_level, jit_options, max_horner_scheme_variables, max_common_pair_cache_entries, max_common_pair_distance\nalias input available: False\naliased expression type available: False\nresolved tree for depth 18: 0.070 s, 7.1 MB\nevaluator from the tree: built in 0.177 s\nvalue at x = 0.5: [[3.32250741e-06]]\n\nask: an AliasedExpression (root + (alias, body) pairs) with .evaluator(...) in the\n     Python bindings, mirroring AliasedAtom::evaluator_multiple in Rust.\n",
+      "stderr": "",
+      "numpy_version": "2.5.3"
+    }
+  ],
+  "initial_python_attempt": {
+    "command": [
+      "/tmp/idenso-sparse-contracted16-host/candidate/venv/bin/python",
+      "/common/dev/gammaloop/feynkit-rich-display/examples/reproducers/symbolica-aliases/aliased_evaluator_python.py",
+      "18"
+    ],
+    "exit_code": 1,
+    "cause": "MRE numerical evaluator requires NumPy, absent from immutable benchmark environments",
+    "correction": "Separate R18 venv with NumPy2.5.3 and read-only qualified host site path; neither candidate nor canonical environment changed"
+  },
+  "passed": true
+}

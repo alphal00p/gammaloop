@@ -59,13 +59,21 @@ def check_types(
     assert_type(sp.dot(expression, network), sp.TensorNetwork)
     assert_type(expression.outer(expression), sp.TensorExpression)
     assert_type(expression.outer(tensor), sp.TensorNetwork)
-    assert_type(expression.contract(expression, left=0, right=0), sp.TensorExpression)
-    assert_type(expression.contract(network, left=0, right=0), sp.TensorNetwork)
+    assert_type(
+        expression.contract_ports(expression, left=0, right=0), sp.TensorExpression
+    )
+    assert_type(expression.contract_ports(network, left=0, right=0), sp.TensorNetwork)
     assert_type(
         expression.compose(expression, left=(0, 1), right=(0, 1)), sp.TensorExpression
     )
     assert_type(expression.compose(tensor, left=(0, 1), right=(0, 1)), sp.TensorNetwork)
+    assert_type(expression.contract(), sp.AliasedTensorExpression)
+    assert_type(expression.contract().contraction_complete, bool)
+    assert_type(expression.contract().expand(), sp.TensorExpression)
     assert_type(expression.trace(), sp.TensorExpression)
+    assert_type(expression**2, sp.TensorExpression)
+    assert_type(2**expression, sp.TensorExpression)
+    assert_type(bool(expression), bool)
     assert_type(tensor.trace(), sp.TensorNetwork)
     assert_type(sp.trace(representation, expression), sp.TensorExpression)
     assert_type(sp.trace(representation, tensor, expression), sp.TensorNetwork)
@@ -80,14 +88,16 @@ def check_types(
     assert_type(sp.chain(start, end, expression), sp.TensorExpression)
     assert_type(sp.chain(start, end, tensor, expression), sp.TensorNetwork)
     assert_type(sp.chain(start, end, expression, tensor), sp.TensorNetwork)
-    assert_type(expression.factor(), sp.TensorExpression)
-    assert_type(expression.collect_num(), sp.TensorExpression)
-    assert_type(expression.collect_factors(), sp.TensorExpression)
-    assert_type(expression.simplify_gamma(), sp.TensorExpression)
-    assert_type(expression.simplify_color(), sp.TensorExpression)
-    assert_type(expression.replace(scalar, 2), sp.TensorExpression)
-    assert_type(expression.derivative(scalar), sp.TensorExpression)
-    assert_type(expression.simplify(sp.SimplifySettings.hep()), sp.TensorExpression)
+    assert_type(expression.to_expression().factor(), Expression)
+    assert_type(expression.to_expression().collect_num(), Expression)
+    assert_type(expression.to_expression().collect_factors(), Expression)
+    assert_type(expression.simplify_gamma(), sp.AliasedTensorExpression)
+    assert_type(expression.simplify_color(), sp.AliasedTensorExpression)
+    assert_type(expression.replace(sp.TensorRule(expression, 0)), sp.TensorExpression)
+    assert_type(expression.to_expression().derivative(scalar), Expression)
+    assert_type(
+        expression.simplify(sp.SimplifySettings.hep()), sp.AliasedTensorExpression
+    )
     assert_type(expression.reindex("mu", sp.AUTO), sp.TensorExpression)
     assert_type(expression.rename_indices({"mu": "nu"}), sp.TensorExpression)
     assert_type(expression.permute_axes([1, 0]), sp.TensorExpression)
@@ -141,9 +151,11 @@ def check_types(
     policy: sp.ExecutionMode = sp.ExecutionMode.All
     assert_type(int(policy), int)
     settings = sp.GammaSimplifySettings(
-        chain_ordering=sp.GammaChainOrdering.Canonical, expand_traces=True
+        chain_ordering=sp.GammaChainOrdering.Canonical, gamma0=True, conjugate=True
     )
-    assert_type(settings.expand_traces, bool)
+    assert_type(settings.output, Literal["reduced", "chains"])
+    assert_type(settings.gamma0, bool)
+    assert_type(settings.conjugate, bool)
     assert_type(settings.chain_ordering, sp.GammaChainOrdering)
     name = sp.TensorName("typing::Jbar", print={"typst": "macron(J)"})
     assert_type(name(representation), sp.TensorExpression)

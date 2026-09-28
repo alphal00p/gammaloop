@@ -4,7 +4,10 @@ from symbolica import E, Expression, S
 from symbolica.community import hep as fk
 from symbolica.community.spenso import Representation, TensorExpression, TensorName
 
-p1, p2, p3, p4, s, t, a = S("p1", "p2", "p3", "p4", "s", "t", "a")
+p1, p2, p3, p4 = (
+    TensorName.vector(name).to_expression() for name in ("p1", "p2", "p3", "p4")
+)
+s, t, a = S("s", "t", "a")
 masses = list(S("m1sq", "m2sq", "m3sq", "m4sq"))
 u = sum(masses) - s - t
 kin = fk.Kinematics.mandelstam([p1, p2, p3, p4], masses, [s, t, u])
@@ -48,7 +51,7 @@ for tensor in (
     assert result.to_expression() == plain
     assert assumed.apply(result) == result
 assert assumed.apply((dot - s) * ordered).rank == 2
-assert assumed.apply((dot - s) * ordered) == 0
+assert not assumed.apply((dot - s) * ordered)
 assert assumed.apply(dot * ordered) == s * ordered
 for scalar in (E("3"), 3, 2.5):
     result = assumed.apply(scalar)

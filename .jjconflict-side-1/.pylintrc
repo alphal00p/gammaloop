@@ -1,0 +1,10 @@
+[MASTER]
+disable=missing-function-docstring, missing-module-docstring, missing-class-docstring
+extension-pkg-allow-list=gammaloop._gammaloop
+
+[MESSAGES CONTROL]
+disable=missing-function-docstring, missing-module-docstring, missing-class-docstring
+extension-pkg-allow-list=gammaloop._gammaloop
+
+[FORMAT]
+max-line-length=240

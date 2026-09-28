@@ -3,15 +3,12 @@
 //! `cargo run -p idenso --features reference-cases --profile dev-optim --example metric_contraction_benchmark
 //! -- OUTPUT_DIRECTORY [samples=5] [target_batch_ms=15]`
 //!
-//! The isolated metric-only and shared metric/vector contractors belong to
-//! the same library so this diagnostic can call the private operation directly. The two public
-//! Schoonschip methods and gamma simplification use their normal library entry points.
-//! The repeated-index check is timed separately; it never guards the contractor.
+//! Domain methods include checked typed admission, the shared operation, and
+//! explicit alias resolution into the diagnostic Atom result. They do not time
+//! retired raw contractors. Repeated-index discovery is measured independently.
 //! Input creation, validation and output snapshots are outside timing except for
-//! `parse_only` and `parse_and_normalize_dots`, which start from the saved source.
-//! Comparing those methods exposes work moved into construction. Timed calls
-//! include output destruction. Settings with chain-like functions enabled also
-//! cover contractions into ordered chains and cyclic/symmetric traces.
+//! the named parser methods. Timed calls include output destruction. Inputs that
+//! the typed interface rejects are reported before sampling and are not timed.
 //!
 //! JSONL records whether the operation changed its input. Exact input/output
 //! snapshots permit before/after comparisons; different symbolic forms still need
@@ -20,11 +17,11 @@
 use std::{hint::black_box, path::Path, time::Instant};
 
 use crate::{
-    dirac::GammaSimplifier,
-    epsilon::EpsilonSimplifier,
+    dirac::GammaSimplifySettings,
     gamma, gamma5,
     representations::Bispinor,
-    shorthands::schoonschip::{Schoonschip, SchoonschipSettings, SlotContraction},
+    shorthands::schoonschip::DotNormalizer,
+    tensor::{SymbolicTensor, inference::TensorInferenceError},
 };
 use spenso::{
     g,
@@ -271,7 +268,9 @@ impl Case {
             let input = trace!(&spin; factors);
             cases.push(Self {
                 name: format!("axial_{length}"),
-                expression: input.simplify_gamma(),
+                expression: Method::FullGamma
+                    .apply(input.as_view(), None)
+                    .expect("valid gamma fixture"),
                 gamma_input: Some(input),
                 source: None,
             });
@@ -282,7 +281,9 @@ impl Case {
         let free = trace!(&spin;indices.iter().map(|index|gamma!(index)));
         cases.push(Self {
             name: "free_trace_8".into(),
-            expression: free.simplify_gamma(),
+            expression: Method::FullGamma
+                .apply(free.as_view(), None)
+                .expect("valid gamma fixture"),
             gamma_input: Some(free),
             source: None,
         });
@@ -291,7 +292,9 @@ impl Case {
         let compact = trace!(&spin;(0..8).map(|i|gamma!(if i<2{&p}else{&q})));
         cases.push(Self {
             name: "compact_paired_8".into(),
-            expression: compact.simplify_gamma(),
+            expression: Method::FullGamma
+                .apply(compact.as_view(), None)
+                .expect("valid gamma fixture"),
             gamma_input: Some(compact),
             source: None,
         });
@@ -343,7 +346,9 @@ impl Case {
             let input = trace!(&spin; factors);
             cases.push(Self {
                 name: name.into(),
-                expression: input.simplify_gamma(),
+                expression: Method::FullGamma
+                    .apply(input.as_view(), None)
+                    .expect("valid gamma fixture"),
                 gamma_input: Some(input),
                 source: None,
             });
@@ -355,7 +360,9 @@ impl Case {
         for (name, input) in [("external_metrics_12", external), ("free_12", free)] {
             cases.push(Self {
                 name: name.into(),
-                expression: input.simplify_gamma(),
+                expression: Method::FullGamma
+                    .apply(input.as_view(), None)
+                    .expect("valid gamma fixture"),
                 gamma_input: Some(input),
                 source: None,
             });
@@ -379,7 +386,9 @@ impl Case {
                 &format!("g(mink({dimension},late_mu0),mink({dimension},late_mu1))"),
             )
             .expression;
-            let evaluated = trace.simplify_gamma();
+            let evaluated = Method::FullGamma
+                .apply(trace.as_view(), None)
+                .expect("valid gamma fixture");
             assert!(
                 !evaluated.contains_symbol(SPENSO_TAG.trace),
                 "late-metric fixture must start from an evaluated Dirac trace"
@@ -405,25 +414,17 @@ enum Method {
     ParseOnly,
     ParseAndNormalizeDots,
     Repeated,
-    MetricCore,
-    SlotCore,
-    GuardedMetricCore,
-    MetricSettings,
-    FullSchoonschip,
+    Contract,
     EpsilonCleanup,
     FullGamma,
 }
 impl Method {
-    const ALL: [Self; 11] = [
+    const ALL: [Self; 7] = [
         Self::NormalizeDots,
         Self::ParseOnly,
         Self::ParseAndNormalizeDots,
         Self::Repeated,
-        Self::MetricCore,
-        Self::SlotCore,
-        Self::GuardedMetricCore,
-        Self::MetricSettings,
-        Self::FullSchoonschip,
+        Self::Contract,
         Self::EpsilonCleanup,
         Self::FullGamma,
     ];
@@ -433,13 +434,9 @@ impl Method {
             Self::ParseOnly => "parse_only",
             Self::ParseAndNormalizeDots => "parse_and_normalize_dots",
             Self::Repeated => "repeated_indices_only",
-            Self::MetricCore => "metric_contractor_only",
-            Self::SlotCore => "slot_contractor",
-            Self::GuardedMetricCore => "guarded_metric_contractor",
-            Self::MetricSettings => "metric_schoonschip",
-            Self::FullSchoonschip => "full_schoonschip",
-            Self::EpsilonCleanup => "epsilon_cleanup",
-            Self::FullGamma => "full_gamma",
+            Self::Contract => "typed_contract_resolved",
+            Self::EpsilonCleanup => "typed_epsilon_resolved",
+            Self::FullGamma => "typed_gamma_resolved",
         }
     }
     fn input(self, case: &Case) -> Option<AtomView<'_>> {
@@ -451,9 +448,13 @@ impl Method {
             _ => Some(case.expression.as_view()),
         }
     }
-    fn apply(self, expression: AtomView<'_>, source: Option<&str>) -> Atom {
-        match self {
-            Self::NormalizeDots => expression.normalize_dots(),
+    fn apply(
+        self,
+        expression: AtomView<'_>,
+        source: Option<&str>,
+    ) -> Result<Atom, TensorInferenceError> {
+        Ok(match self {
+            Self::NormalizeDots => DotNormalizer::run(expression),
             Self::ParseOnly | Self::ParseAndNormalizeDots => {
                 let parsed = Atom::parse(
                     source.unwrap(),
@@ -464,36 +465,32 @@ impl Method {
                 if matches!(self, Self::ParseOnly) {
                     parsed
                 } else {
-                    parsed.normalize_dots()
+                    DotNormalizer::run(parsed.as_view())
                 }
             }
             Self::Repeated => Atom::num(i64::from(expression.has_repeated_explicit_indices())),
-            Self::MetricCore => SlotContraction::run(expression, true, false, true),
-            Self::SlotCore => SlotContraction::run(expression, true, true, true),
-            Self::GuardedMetricCore => {
-                if expression.has_repeated_explicit_indices() {
-                    SlotContraction::run(expression, true, false, true)
-                } else {
-                    expression.to_owned()
-                }
-            }
-            Self::MetricSettings => expression.schoonschip_with_settings(
-                &SchoonschipSettings::default()
-                    .without_rank1_tensors()
-                    .with_chain_like_functions(),
-            ),
-            Self::FullSchoonschip => expression.schoonschip_with_settings(
-                &SchoonschipSettings::default().with_chain_like_functions(),
-            ),
-            Self::EpsilonCleanup => expression.simplify_epsilon(),
-            Self::FullGamma => expression.simplify_gamma(),
-        }
+            Self::Contract => SymbolicTensor::infer(expression.to_owned())?
+                .contract(Default::default())?
+                .resolved()?
+                .into_expression(),
+            Self::EpsilonCleanup => SymbolicTensor::infer(expression.to_owned())?
+                .simplify_epsilon()?
+                .resolved()?
+                .into_expression(),
+            Self::FullGamma => SymbolicTensor::infer(expression.to_owned())?
+                .simplify_gamma(GammaSimplifySettings::default())?
+                .resolved()?
+                .into_expression(),
+        })
     }
     fn run(self, expression: AtomView<'_>, source: Option<&str>) {
         if matches!(self, Self::Repeated) {
             black_box(black_box(expression).has_repeated_explicit_indices());
         } else {
-            let _ = black_box(self.apply(black_box(expression), black_box(source)));
+            let _ = black_box(
+                self.apply(black_box(expression), black_box(source))
+                    .expect("validated diagnostic input"),
+            );
         }
     }
     fn batch(self, expression: AtomView<'_>, source: Option<&str>, repetitions: usize) -> f64 {
@@ -534,14 +531,23 @@ pub fn run() {
         }
         let methods: Vec<_> = Method::ALL
             .into_iter()
-            .filter(|m| m.input(&case).is_some())
+            .filter(|m| {
+                let Some(input) = m.input(&case) else {
+                    return false;
+                };
+                if let Err(error) = m.apply(input, case.source.as_deref()) {
+                    eprintln!("{} {} rejected: {error}", case.name, m.name());
+                    return false;
+                }
+                true
+            })
             .collect();
         let mut changed = Vec::new();
         let mut repetitions = Vec::new();
         let mut output_terms = Vec::new();
         for &method in &methods {
             let input = method.input(&case).unwrap();
-            let output = method.apply(input, case.source.as_deref());
+            let output = method.apply(input, case.source.as_deref()).unwrap();
             changed.push(output.as_view() != input);
             output_terms.push(output.nterms());
             std::fs::write(
@@ -551,16 +557,10 @@ pub fn run() {
             .unwrap();
             if matches!(
                 method,
-                Method::NormalizeDots
-                    | Method::MetricCore
-                    | Method::SlotCore
-                    | Method::GuardedMetricCore
-                    | Method::MetricSettings
-                    | Method::FullSchoonschip
-                    | Method::EpsilonCleanup
+                Method::NormalizeDots | Method::Contract | Method::EpsilonCleanup
             ) {
                 assert_eq!(
-                    method.apply(output.as_view(), None),
+                    method.apply(output.as_view(), None).unwrap(),
                     output,
                     "{} {} is not idempotent",
                     case.name,

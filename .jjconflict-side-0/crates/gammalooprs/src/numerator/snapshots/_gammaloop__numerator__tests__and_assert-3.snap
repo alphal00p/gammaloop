@@ -1,0 +1,5 @@
+---
+source: src/numerator/tests.rs
+expression: g_simp.to_canonical_string()
+---
+4*Metric(mink(4,1),mink(4,2))

@@ -1,0 +1,26 @@
+[package]
+name = "symbolica-aliases-mre"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "06906976bca24fefc5203aee699d90d62ebe08cd", default-features = false, features = ["float-mpfr", "integer-gmp", "native_code_generation"] }
+
+[profile.release]
+opt-level = 3
+debug = 1
+
+[[bin]]
+name = "parametric_alias"
+path = "parametric_alias.rs"
+
+[[bin]]
+name = "streaming_expansion"
+path = "streaming_expansion.rs"
+
+[[bin]]
+name = "aliased_evaluator"
+path = "aliased_evaluator.rs"

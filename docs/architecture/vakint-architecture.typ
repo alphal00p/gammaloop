@@ -170,13 +170,18 @@ Rust signatures are in the
 
 The default tensor-projection path reduces universal loop-momentum kernels while preserving graph
 coefficients as factorized expressions. Temporary coefficient aliases are restored after analytic
-integration. `project_onto_tensor_integrals = false` instead reduces each complete numerator through
-FORM. Both modes retain separate denominator topologies and validate Lorentz domains.
+integration. The native FeynKit backend uses its existing tensor reducer; the
+`project_onto_tensor_integrals` choice selects the factorized projection or complete-numerator
+FORM route when the AlphaLoop backend is requested. Both backends retain separate denominator
+topologies and validate Lorentz domains.
 
-Opaque spin tensors declare their Lorentz slots with `vakint::tensor(body, slot, ...)`. Projection
-may introduce `vakint::tensor_index` slots, which the caller translates before completing spin algebra.
-Vakint does not evaluate that algebra. Numerator and normalization poles increase the required epsilon
-order; positive powers do not reduce the conservative depth. Opaque epsilon-dependent functions error.
+GammaLoop passes its actual spin tensors through the existing opaque-slot bridge. Their Lorentz
+ports stay connected to the projected metrics, and GammaLoop completes the d-dimensional Dirac
+algebra before Laurent truncation. Duplicating a tensor body and its port list in a frontend wrapper
+would allow the two copies to diverge during projection; dropping that wrapper afterward would
+restore stale indices. The bridge requires no such duplicate representation. Vakint itself does not
+evaluate spin algebra. Numerator and normalization poles increase the required epsilon order;
+positive powers do not reduce the conservative depth. Opaque epsilon-dependent functions error.
 
 The Python adapter accepts complex mass/numerator substitutions as `numerical_parameters`; the
 PySecDec boundary requires real pole masses and external momenta, with complex numerator coefficients

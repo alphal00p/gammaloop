@@ -104,8 +104,8 @@ for power in (2, 3):
         laporta.reduce([power], integral=integral) - reductions[power]
     ).together() == zero
 
-master_reduction = oneloop.IntegralFamily([oneloop.Propagator(M)], []).reduce()
-master = master_reduction.terms[0][1].to_oneloopmaster(mu2)
+master_reduction = oneloop.reduce(family, [1])
+master = master_reduction.terms[0][1].to_expression(mu2)
 master_pole = oneloop.get_expression(master, coefficient=-1)
 assert master_pole == M
 master_finite = oneloop.reduction_coefficients(master_reduction, mu2)[0]
@@ -145,10 +145,17 @@ invariant = routed_kinematics.scalar_product(
     shifts[0] - shifts[1], shifts[0] - shifts[1]
 )
 assert invariant == p2
-bubble_reduction = oneloop.IntegralFamily(
-    [oneloop.Propagator(M)] * 2, [invariant]
-).reduce()
-bubble_master = bubble_reduction.terms[0][1].to_oneloopmaster(mu2)
+bubble_kinematics = hep.Kinematics(d, momenta=[K(0), P(0)]).with_scalar_product(
+    P(0), P(0), invariant
+)
+bubble_family = hep.IntegralFamily(
+    [K(0)],
+    [P(0)],
+    [bubble_kinematics.scalar_product(q, q) - M for q in (K(0), K(0) - P(0))],
+    kinematics=bubble_kinematics,
+)
+bubble_reduction = oneloop.reduce(bubble_family, [1, 1])
+bubble_master = bubble_reduction.terms[0][1].to_expression(mu2)
 bubble_pole = oneloop.select_branch(
     oneloop.get_expression(bubble_master, coefficient=-1),
     [Replacement(M, one), Replacement(p2, one)],
@@ -207,7 +214,13 @@ for label, incoming, count in [("self_energy", 1, 2), ("vertex", 2, 1)]:
         numerator = ct_model.expand_couplings(
             diagram.numerator_expression().to_expression()
         )
-        numerator = TensorExpression(numerator.expand()).to_dots().to_expression()
+        numerator = (
+            TensorExpression(numerator)
+            .contract()
+            .to_expression()
+            .to_dots()
+            .to_expression()
+        )
         numerator = diagram.momentum_basis().route_expression(numerator)
         amplitude += (
             self_kinematics.apply(numerator)

@@ -1,9 +1,14 @@
 """Generated diagrams use shared propagators, routing, and family algorithms."""
 
+import importlib
+import sys
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community import feynkit as fk
+
+fk = importlib.import_module(
+    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
+)
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = (

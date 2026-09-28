@@ -1,0 +1,30 @@
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/alphal00p/linnet/6ecc76560c68fa3c988e64f0e46f3009e84cca3d/assets/linnet-logo.webp">
+  <img src="https://raw.githubusercontent.com/alphal00p/linnet/6ecc76560c68fa3c988e64f0e46f3009e84cca3d/assets/linnet-logo.webp" width="200" height="200">
+</picture>
+
+[![crates.io](https://img.shields.io/crates/v/linnet.svg)](https://crates.io/crates/linnet)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18429583.svg)](https://doi.org/10.5281/zenodo.18429583)
+</div>
+
+# Linnet
+
+Linnet is a half-edge graph library designed for tensor networks, Feynman diagrams, and
+subgraph-first algorithms.
+
+The canonical [Linnet overview](https://alphal00p.github.io/gammaloop/products/linnet/latest/),
+[first-graph tutorial](https://alphal00p.github.io/gammaloop/products/linnet/latest/tutorial/), and
+[algorithm guide](https://alphal00p.github.io/gammaloop/products/linnet/latest/guides/algorithms/) explain construction,
+boundaries, cuts, cycles, mutation, and drawing. Use the
+[native Rustdoc](https://alphal00p.github.io/gammaloop/products/linnet/latest/reference/rust/linnet/)
+for exact signatures at the documented revision.
+
+```toml
+[dependencies]
+linnet = "0.17"
+```
+
+Citation metadata, including the software DOI above, is maintained in the repository's
+[`docs/products/registry.toml`](../../docs/products/registry.toml). Contributor policy is in
+[`CONTRIBUTING.typ`](../../CONTRIBUTING.typ).

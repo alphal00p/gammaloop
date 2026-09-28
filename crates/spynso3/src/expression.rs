@@ -1,19 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use idenso::{
     Cookable, IndexTooling,
     color::{CS, ColorCasimirSettings, ColorSimplifier},
-    dirac::{AGS, GammaSimplifier},
-    epsilon::EpsilonSimplifier,
-    selective_expand::SelectiveExpand,
-    shorthands::{
-        UndoShorthands,
-        chain::Chain,
-        metric::MetricSimplifier,
-        schoonschip::{Schoonschip, SchoonschipSettings},
-    },
+    dirac::AGS,
+    shorthands::{UndoShorthands, chain::Chain},
     tensor::{
-        SymbolicTensor, composition,
+        ContractionSettings, SymbolicTensor, composition,
         inference::{InterfaceInference, TensorInferenceError},
     },
 };
@@ -47,10 +40,11 @@ use spenso::{
 };
 use symbolica::{
     api::python::{
-        ConvertibleToExpression, ConvertibleToPatternRestriction, ConvertibleToReplaceWith,
-        PythonExpression, PythonFormattedOutput, PythonReplacement, PythonTransformer,
+        ConvertibleToExpression, PythonExpression, PythonExpressionEvaluator, PythonFormattedOutput,
     },
-    atom::{Atom, AtomCore, AtomView, Symbol},
+    atom::{Atom, AtomView, Symbol},
+    domains::float::Complex,
+    evaluate::{EvaluatorBuilder, OptimizationSettings},
 };
 
 use crate::{
@@ -58,12 +52,10 @@ use crate::{
     aliases::AliasedTensorExpression,
     display,
     library::SpensorLibrary,
-    network::{ConvertibleToSpensoNet, ExecutionMode, ReplacementCondition, SpensoNet},
+    network::{ConvertibleToSpensoNet, ExecutionMode, SpensoNet},
     simplification::{
-        CanonicalizationError, CookingError, DiracAdjointError, DotExpansionError,
-        GammaConjugationError, NetworkToolingError, PyColorCasimirSettings,
-        PyColorSimplifySettings, PyCookSettings, PyGammaSimplifySettings, PySchoonschipSettings,
-        expansion::{PythonTerm, python_terms},
+        CanonicalizationError, CookingError, DiracAdjointError, NetworkToolingError,
+        PyColorCasimirSettings, PyColorSimplifySettings, PyCookSettings, PyGammaSimplifySettings,
     },
     structure::{
         ArithmeticStructure, ConvertibleToAbstractIndex, ConvertibleToDimension,
@@ -92,7 +84,9 @@ impl AutoIndex {
     }
 }
 
-/// A Symbolica expression with an ordered external tensor interface.
+/// An immutable symbolic tensor with an ordered external interface.
+///
+/// `to_expression()` is the explicit boundary for generic Symbolica algebra.
 ///
 /// Predefined tensors are constructed by typed factories and indexed afterward
 /// in logical interface order. Dimensions are representation metadata, not
@@ -114,14 +108,13 @@ impl AutoIndex {
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     frozen,
-    extends = PythonExpression,
     from_py_object,
     name = "TensorExpression",
     module = "symbolica.community.spenso"
 )]
 #[derive(Clone)]
 pub struct TensorExpression {
-    pub(crate) interface: PartialStructure,
+    pub(crate) value: Arc<SymbolicTensor<PartialStructure>>,
     /// An optional data identity, independent of the immutable Symbolica atom.
     ///
     /// In particular, naming a composite expression must not rewrite it into a
@@ -136,6 +129,9 @@ impl TensorExpression {
     pub(crate) fn inference_error(error: TensorInferenceError) -> PyErr {
         let message = match error {
             TensorInferenceError::Interrupted => return PyKeyboardInterrupt::new_err(()),
+            TensorInferenceError::Network(error) => {
+                return NetworkToolingError::new_err(error.to_string());
+            }
             TensorInferenceError::InvalidBuiltinSignature { factory, signature } => format!(
                 "predefined tensor `{factory}` requires {signature}; use TensorExpression.{factory}(...) to construct it"
             ),
@@ -152,11 +148,17 @@ impl TensorExpression {
         interface: impl Into<Option<PartialStructure>>,
     ) -> PyResult<Py<Self>> {
         if let Some(interface) = interface.into() {
+            let original_rank = interface.canonical().order();
             let interface = InterfaceInference::merge_explicit_interface_sequence(&[interface])
                 .map_err(Self::inference_error)?
                 .canonicalize_open_ports();
             SymbolicTensor::validate_interface(&atom, &interface).map_err(Self::inference_error)?;
-            return Self::from_known_parts(py, atom, interface, None, Vec::new());
+            let (name, arguments) = if interface.canonical().order() == original_rank {
+                inferred_descriptor(atom.as_view())
+            } else {
+                (None, Vec::new())
+            };
+            return Self::from_known_parts(py, atom, interface, name, arguments);
         }
         let (name, name_args) = inferred_descriptor(atom.as_view());
         let value = if InterfaceInference::has_structured_syntax(atom.as_view()) {
@@ -164,7 +166,14 @@ impl TensorExpression {
         } else {
             SymbolicTensor::new(atom, PartialStructure::from_logical_slots([]))
         };
-        Self::from_known_parts(py, value.expression, value.structure, name, name_args)
+        let original_rank = value.rank();
+        let value = value.finish_parts().map_err(Self::inference_error)?;
+        let (name, name_args) = if value.rank() == original_rank {
+            (name, name_args)
+        } else {
+            (None, Vec::new())
+        };
+        Self::from_shared(py, Arc::new(value), name, name_args)
     }
 
     /// Construct from tensor-aware parts whose interface was established by the
@@ -180,21 +189,13 @@ impl TensorExpression {
         let original_rank = interface.canonical().order();
         let value =
             SymbolicTensor::checked_parts(atom, interface).map_err(Self::inference_error)?;
-        let atom = value.expression;
-        let interface = value.structure;
         // A contraction is a derived expression, not a declaration of the original stored data.
-        let (name, name_args) = if interface.canonical().order() == original_rank {
+        let (name, name_args) = if value.rank() == original_rank {
             (name, name_args)
         } else {
             (None, Vec::new())
         };
-        Self::from_parts_unchecked(
-            py,
-            atom,
-            interface.canonicalize_open_ports(),
-            name,
-            name_args,
-        )
+        Self::from_shared(py, Arc::new(value), name, name_args)
     }
 
     /// Construct without inferring, validating, or normalizing the supplied parts.
@@ -207,17 +208,67 @@ impl TensorExpression {
         name: Option<Symbol>,
         name_args: Vec<Atom>,
     ) -> PyResult<Py<Self>> {
+        Self::from_shared(
+            py,
+            Arc::new(SymbolicTensor::from_normalized_parts(atom, interface)),
+            name,
+            name_args,
+        )
+    }
+
+    pub(crate) fn from_shared(
+        py: Python<'_>,
+        value: Arc<SymbolicTensor<PartialStructure>>,
+        name: Option<Symbol>,
+        name_args: Vec<Atom>,
+    ) -> PyResult<Py<Self>> {
         Py::new(
             py,
-            (
-                Self {
-                    interface,
-                    name,
-                    name_args,
-                },
-                PythonExpression { expr: atom },
-            ),
+            Self {
+                value,
+                name,
+                name_args,
+            },
         )
+    }
+
+    /// Both symbolic payload forms use Symbolica's evaluator state and options.
+    pub(crate) fn build_evaluator(
+        py: Python<'_>,
+        builder: EvaluatorBuilder<'_>,
+        iterations: usize,
+        n_cores: usize,
+    ) -> PyResult<PythonExpressionEvaluator> {
+        let settings = OptimizationSettings::new()
+            .horner_iterations(iterations)
+            .cores(n_cores);
+        let evaluator = py
+            .detach(|| builder.optimization_settings(settings).build())
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Ok(PythonExpressionEvaluator {
+            rational_constants: evaluator.get_constants().to_vec(),
+            eval_complex: evaluator.map_coeff(&|c| Complex::new(c.re.to_f64(), c.im.to_f64())),
+            eval_real: None,
+            #[cfg(feature = "native")]
+            jit_real: None,
+            #[cfg(feature = "native")]
+            jit_complex: None,
+            eval_double_float: None,
+            eval_double_float_complex: None,
+            eval_arb_prec: None,
+            eval_arb_prec_complex: None,
+            jit_compile: false,
+            #[cfg(feature = "native")]
+            jit_settings: symbolica::evaluate::JITCompilationSettings::new(),
+        })
+    }
+
+    pub(crate) fn atom(&self) -> &Atom {
+        self.value.expression()
+    }
+
+    pub(crate) fn interface(&self) -> &PartialStructure {
+        self.value.structure()
     }
 
     pub(crate) fn from_transformed_atom(
@@ -225,26 +276,15 @@ impl TensorExpression {
         py: Python<'_>,
         atom: Atom,
     ) -> PyResult<Py<TensorExpression>> {
-        if atom == self_.as_super().expr {
-            return Py::new(py, (Self::clone(self_), PythonExpression { expr: atom }));
-        }
-        let interface = if atom.as_view().is_zero() {
-            self_.interface.clone()
-        } else if InterfaceInference::has_structured_syntax(atom.as_view()) {
-            SymbolicTensor::infer(atom.clone())
-                .map_err(Self::inference_error)?
-                .structure
-        } else if self_.interface.canonical().is_scalar() {
-            PartialStructure::from_logical_slots([])
+        let (value, contracted) = Self::structured(self_)
+            .with_transformed_expression(atom)
+            .map_err(Self::inference_error)?;
+        let (name, args) = if contracted {
+            (None, Vec::new())
         } else {
-            return Err(PyValueError::new_err(
-                "Tensor transformation removed the tensor syntax of a non-scalar expression",
-            ));
+            Self::transformed_descriptor(self_, value.expression())
         };
-        // Descriptor identity depends on contractions of the inferred raw ports,
-        // even when the input and final result happen to have the same rank.
-        let (name, args) = Self::transformed_descriptor(self_, &atom);
-        Self::from_known_parts(py, atom, interface, name, args)
+        Self::from_shared(py, Arc::new(value), name, args)
     }
 
     /// Wrap a tensor identity using the shared callback-aware interface proof.
@@ -253,31 +293,11 @@ impl TensorExpression {
         py: Python<'_>,
         atom: Atom,
     ) -> PyResult<Py<Self>> {
-        if atom == self_.as_super().expr {
-            return Py::new(py, (Self::clone(self_), PythonExpression { expr: atom }));
-        }
         let value = Self::structured(self_)
             .with_rewritten_expression(atom)
             .map_err(Self::inference_error)?;
-        let atom = value.expression;
-        let (name, args) = Self::transformed_descriptor(self_, &atom);
-        Self::from_parts_unchecked(py, atom, value.structure, name, args)
-    }
-
-    /// Wrap scalar algebra using the shared tensor-interface proof.
-    fn from_algebra_atom(
-        self_: &PyRef<'_, Self>,
-        py: Python<'_>,
-        atom: Atom,
-    ) -> PyResult<Py<Self>> {
-        if atom == self_.as_super().expr {
-            return Py::new(py, (Self::clone(self_), PythonExpression { expr: atom }));
-        }
-        let value = Self::structured(self_)
-            .with_algebra_result(atom)
-            .map_err(Self::inference_error)?;
-        let (name, args) = Self::transformed_descriptor(self_, &value.expression);
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        let (name, args) = Self::transformed_descriptor(self_, value.expression());
+        Self::from_shared(py, Arc::new(value), name, args)
     }
 
     fn with_cooked_indices(
@@ -288,16 +308,16 @@ impl TensorExpression {
         let value = Self::structured(self_)
             .with_cooked_indices(settings)
             .map_err(|error| CookingError::new_err(error.to_string()))?;
-        let (name, args) = if value.rank() == self_.interface.canonical().order() {
-            Self::transformed_descriptor(self_, &value.expression)
+        let (name, args) = if value.rank() == self_.interface().canonical().order() {
+            Self::transformed_descriptor(self_, value.expression())
         } else {
             (None, Vec::new())
         };
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        Self::from_shared(py, Arc::new(value), name, args)
     }
 
     fn transformed_descriptor(self_: &PyRef<'_, Self>, atom: &Atom) -> (Option<Symbol>, Vec<Atom>) {
-        let original = inferred_descriptor(self_.as_super().expr.as_view());
+        let original = inferred_descriptor(self_.atom().as_view());
         if original == (self_.name, self_.name_args.clone()) {
             inferred_descriptor(atom.as_view())
         } else {
@@ -313,44 +333,34 @@ impl TensorExpression {
         py: Python<'_>,
         atom: Atom,
     ) -> PyResult<Py<Self>> {
-        if atom == self_.as_super().expr {
-            return Self::from_preserved_atom(self_, py, atom);
-        }
         let (name, args) = Self::transformed_descriptor(self_, &atom);
         let value = Self::structured(self_)
             .with_checked_expression(atom)
             .map_err(Self::inference_error)?;
-        let (name, args) = if value.rank() == self_.interface.canonical().order() {
+        let (name, args) = if value.rank() == self_.interface().canonical().order() {
             (name, args)
         } else {
             (None, Vec::new())
         };
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        Self::from_shared(py, Arc::new(value), name, args)
     }
 
     pub(crate) fn from_structured(
         py: Python<'_>,
         value: SymbolicTensor<PartialStructure>,
     ) -> PyResult<Py<Self>> {
-        Self::from_known_parts(py, value.expression, value.structure, None, Vec::new())
+        Self::from_shared(py, Arc::new(value), None, Vec::new())
     }
 
     fn promoted_network(self_: &PyRef<'_, Self>, py: Python<'_>) -> PyResult<SpensoNet> {
-        let expression = Self::from_known_parts(
-            py,
-            self_.as_super().expr.clone(),
-            self_.interface.clone(),
-            self_.name,
-            self_.name_args.clone(),
-        )?;
-        SpensoNet::from_arithmetic(ArithmeticStructure::Tensor(expression), None)
+        SpensoNet::from_arithmetic(
+            ArithmeticStructure::Tensor(Py::new(py, Self::clone(self_))?),
+            None,
+        )
     }
 
-    pub(crate) fn structured(self_: &PyRef<'_, Self>) -> SymbolicTensor<PartialStructure> {
-        SymbolicTensor::from_normalized_parts(
-            self_.as_super().expr.clone(),
-            self_.interface.clone(),
-        )
+    pub fn structured(&self) -> &SymbolicTensor<PartialStructure> {
+        &self.value
     }
 
     pub(crate) fn index_replacements(
@@ -453,7 +463,7 @@ impl TensorExpression {
         Ok(Self::structured(self_)
             .materialized()
             .map_err(|error| PyValueError::new_err(error.to_string()))?
-            .expression)
+            .into_expression())
     }
 
     pub(crate) fn from_indices(py: Python<'_>, indices: &SpensoIndices) -> PyResult<Py<Self>> {
@@ -466,7 +476,7 @@ impl TensorExpression {
         );
         let atom = SymbolicTensor::from_canonicalized(&indices.structure)
             .ok_or_else(|| PyValueError::new_err("indexed tensor structure has no name"))?
-            .expression;
+            .into_expression();
         Self::from_known_parts(
             py,
             atom,
@@ -482,10 +492,9 @@ impl TensorExpression {
     ) -> PyResult<Py<Self>> {
         let value = SymbolicTensor::from_signature(structure)
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        Self::from_known_parts(
+        Self::from_shared(
             py,
-            value.expression,
-            value.structure,
+            Arc::new(value),
             structure.canonical().name(),
             structure.canonical().args().unwrap_or_default(),
         )
@@ -527,9 +536,21 @@ fn concrete_network(value: &Bound<'_, PyAny>) -> PyResult<Option<SpensoNet>> {
 }
 
 impl TensorOperand {
+    fn into_structured(self) -> PyResult<SymbolicTensor<PartialStructure>> {
+        match self {
+            Self::Structured(value) => Ok(value),
+            Self::Scalar(atom) => {
+                SymbolicTensor::checked_parts(atom, PartialStructure::from_logical_slots([]))
+                    .map_err(TensorExpression::inference_error)
+            }
+        }
+    }
+
     pub(crate) fn extract(value: &Bound<'_, PyAny>) -> PyResult<Self> {
         if let Ok(value) = value.extract::<PyRef<'_, TensorExpression>>() {
-            return Ok(Self::Structured(TensorExpression::structured(&value)));
+            return Ok(Self::Structured(
+                TensorExpression::structured(&value).clone(),
+            ));
         }
         if let Ok(value) = value.extract::<ConvertibleToExpression>() {
             let atom = value.to_expression().expr;
@@ -676,14 +697,39 @@ impl TensorExpression {
     /// Pass `cook_indices=CookSettings.indices()` to flatten nested index payloads before
     /// inferring the tensor interface for arbitrary nested index expressions.
     /// Custom settings control the index encoding, source filters, and output tags.
+    /// An explicit `structure` is checked against the resulting expression and
+    /// retains declared logical order and the interface of a symbolic zero.
     #[new]
-    #[pyo3(signature = (expression, *, cook_indices = None))]
+    #[pyo3(signature = (expression, *, structure = None, cook_indices = None))]
     #[gen_stub(override_return_type(type_repr = "TensorExpression"))]
     fn new(
         py: Python<'_>,
         expression: &Bound<'_, PyAny>,
+        structure: Option<&crate::metadata::SpensoTensorStructure>,
         cook_indices: Option<&PyCookSettings>,
-    ) -> PyResult<(TensorExpression, PythonExpression)> {
+    ) -> PyResult<Self> {
+        if let Some(structure) = structure {
+            let atom = if let Ok(value) = expression.extract::<PyRef<'_, Self>>() {
+                value.atom().clone()
+            } else {
+                expression
+                    .extract::<ConvertibleToExpression>()?
+                    .to_expression()
+                    .expr
+            };
+            let atom = if let Some(settings) = cook_indices {
+                settings
+                    .rust()
+                    .try_cook_indices(atom.as_view())
+                    .map_err(|error| {
+                        CookingError::new_err(format!("cannot cook indices: {error:?}"))
+                    })?
+            } else {
+                atom
+            };
+            let checked = Self::from_atom_interface(py, atom, Some(structure.interface.clone()))?;
+            return Ok(checked.borrow(py).clone());
+        }
         let tensor = if let Some(settings) = cook_indices {
             if let Ok(expression) = expression.extract::<PyRef<'_, Self>>() {
                 Self::with_cooked_indices(&expression, py, &settings.rust())?
@@ -704,12 +750,7 @@ impl TensorExpression {
             as_tensor(py, expression)?
         };
         let tensor = tensor.borrow(py);
-        Ok((
-            tensor.clone(),
-            PythonExpression {
-                expr: tensor.as_super().expr.clone(),
-            },
-        ))
+        Ok(tensor.clone())
     }
 
     /// Construct without tensor inference, validation, or contraction normalization.
@@ -777,8 +818,6 @@ impl TensorExpression {
     /// The bispinor dimension is four. Call the result with `(i, j, mu)` to
     /// index it.
     #[staticmethod]
-    // Tensor semantics intentionally specialize the inherited Expression API.
-    #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
     fn gamma(
         py: Python<'_>,
         minkowski_dimension: ConvertibleToDimension,
@@ -866,13 +905,13 @@ impl TensorExpression {
     /// Number of external tensor ports in the ordered interface.
     #[getter]
     fn rank(&self) -> usize {
-        self.interface.canonical().order()
+        self.interface().canonical().order()
     }
 
     /// Whether the expression has no external tensor ports.
     #[getter]
     fn is_scalar(&self) -> bool {
-        self.interface.canonical().is_scalar()
+        self.interface().canonical().is_scalar()
     }
 
     /// Tensor identity, scalar arguments, and external ports in logical order.
@@ -886,7 +925,7 @@ impl TensorExpression {
     #[getter]
     fn structure(&self) -> crate::metadata::SpensoTensorStructure {
         crate::metadata::SpensoTensorStructure {
-            interface: self.interface.clone(),
+            interface: self.interface().clone(),
             name: self.name,
             arguments: self.name_args.clone(),
         }
@@ -905,22 +944,16 @@ impl TensorExpression {
         name: ConvertibleToSpensoName,
     ) -> PyResult<Py<Self>> {
         let ConvertibleToSpensoName(name, args) = name;
-        Self::from_known_parts(
-            py,
-            self_.as_super().expr.clone(),
-            self_.interface.clone(),
-            Some(name.name),
-            args,
-        )
+        Self::from_shared(py, Arc::clone(&self_.value), Some(name.name), args)
     }
 
     fn __len__(&self) -> PyResult<usize> {
-        logical_size(&logical_dimensions(&self.interface)?)
+        logical_size(&logical_dimensions(self.interface())?)
     }
 
     #[gen_stub(skip)]
     fn __getitem__(&self, py: Python<'_>, item: SliceOrIntOrExpanded) -> PyResult<Py<PyAny>> {
-        let dimensions = logical_dimensions(&self.interface)?;
+        let dimensions = logical_dimensions(self.interface())?;
         match item {
             SliceOrIntOrExpanded::Selection(_) => Err(PyTypeError::new_err(
                 "coordinate conversion accepts nonnegative integers, integer coordinates, or a flat slice",
@@ -950,60 +983,18 @@ impl TensorExpression {
     /// Drop the structured interface and return an ordinary Symbolica `Expression`.
     fn to_expression(self_: PyRef<'_, Self>) -> PythonExpression {
         PythonExpression {
-            expr: self_.as_super().expr.clone(),
+            expr: self_.atom().clone(),
         }
     }
 
     /// Re-parse the underlying symbolic expression and rebuild its ordered tensor interface.
     fn reinfer(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        Self::from_atom_interface(py, self_.as_super().expr.clone(), None)
+        Self::from_atom_interface(py, self_.atom().clone(), None)
     }
 
-    /// Replace scalar coefficients or tensor factors and validate the external interface.
-    ///
-    /// Supports Symbolica's patterns, callbacks, conditions and traversal options.
-    /// Index-changing rewrites must use reindex/rename_indices, or explicitly drop
-    /// the tensor interface with to_expression() before rebuilding it.
-    #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (pattern, rhs, cond=None, non_greedy_wildcards=None, min_level=0, max_level=None, level_is_tree_depth=false, partial=true, allow_new_wildcards_on_rhs=false, rhs_cache_size=None, repeat=false, once=false, bottom_up=false, nested=false))]
-    fn replace(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        pattern: ConvertibleToExpression,
-        rhs: ConvertibleToReplaceWith,
-        cond: Option<ConvertibleToPatternRestriction>,
-        non_greedy_wildcards: Option<Vec<PythonExpression>>,
-        min_level: usize,
-        max_level: Option<usize>,
-        level_is_tree_depth: bool,
-        partial: bool,
-        allow_new_wildcards_on_rhs: bool,
-        rhs_cache_size: Option<usize>,
-        repeat: bool,
-        once: bool,
-        bottom_up: bool,
-        nested: bool,
-    ) -> PyResult<Py<Self>> {
-        let result = self_.as_super().replace(
-            pattern,
-            rhs,
-            cond,
-            non_greedy_wildcards,
-            min_level,
-            max_level,
-            level_is_tree_depth,
-            partial,
-            allow_new_wildcards_on_rhs,
-            rhs_cache_size,
-            repeat,
-            once,
-            bottom_up,
-            nested,
-        )?;
-        Self::preserving_interface(&self_, py, result.expr)
-    }
-
-    /// Apply a TensorRule, or construct one from a pattern and right-hand side.
+    /// Apply a TensorRule or an ordered list of rules in one tensor-aware pass.
+    /// The first matching rule owns each source leaf; freshly produced right-hand
+    /// sides are not matched again during the same application.
     ///
     /// Traverses sums and products, leaving scalar metadata and tensor arguments
     /// opaque. Each replacement must preserve the factor's explicit interface
@@ -1013,103 +1004,19 @@ impl TensorExpression {
     /// Remaining user normalization or evaluation hooks are rejected; callbacks
     /// may produce an admitted normalized RHS. Use `rhs_cache_size=0` when RHS
     /// callbacks have side effects.
-    #[pyo3(signature = (pattern, rhs=None, *, cond=None, rhs_cache_size=None))]
-    fn replace_tensor(
+    #[pyo3(signature = (rules))]
+    fn replace(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
-        pattern: Bound<'_, PyAny>,
-        rhs: Option<ConvertibleToReplaceWith>,
-        cond: Option<ReplacementCondition>,
-        rhs_cache_size: Option<usize>,
+        rules: &Bound<'_, PyAny>,
     ) -> PyResult<Py<Self>> {
-        let borrowed = pattern.extract::<PyRef<'_, crate::tensor_rule::PyTensorRule>>();
-        let prepared;
-        let rule = match &borrowed {
-            Ok(rule) => {
-                if rhs.is_some() || cond.is_some() || rhs_cache_size.is_some() {
-                    return Err(PyTypeError::new_err(
-                        "a TensorRule already owns its RHS, conditions and cache settings",
-                    ));
-                }
-                &rule.rule
-            }
-            Err(_) => {
-                prepared = crate::tensor_rule::PyTensorRule::new(
-                    pattern.extract()?,
-                    rhs.ok_or_else(|| {
-                        PyTypeError::new_err("a pattern requires a replacement RHS")
-                    })?,
-                    cond,
-                    rhs_cache_size.unwrap_or(100),
-                )?;
-                &prepared.rule
-            }
-        };
-        let value = Self::structured(&self_)
-            .replace(rule)
+        let rules = crate::tensor_rule::PyTensorRule::extract_rules(rules)?;
+        let value = self_
+            .value
+            .replace_rules(&rules)
             .map_err(Self::inference_error)?;
-        let (name, args) = Self::transformed_descriptor(&self_, &value.expression);
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
-    }
-
-    /// Apply simultaneous Symbolica replacements and validate the resulting tensor.
-    #[pyo3(signature = (replacements, repeat=false, once=false, bottom_up=false, nested=false))]
-    fn replace_multiple(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        replacements: Vec<PythonReplacement>,
-        repeat: bool,
-        once: bool,
-        bottom_up: bool,
-        nested: bool,
-    ) -> PyResult<Py<Self>> {
-        let result =
-            self_
-                .as_super()
-                .replace_multiple(replacements, repeat, once, bottom_up, nested)?;
-        Self::preserving_interface(&self_, py, result.expr)
-    }
-
-    /// Apply a Symbolica Transformer and retain the validated tensor interface.
-    #[pyo3(signature = (op, n_cores=None, stats_to_file=None))]
-    fn map(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        op: PythonTransformer,
-        n_cores: Option<usize>,
-        stats_to_file: Option<String>,
-    ) -> PyResult<Py<Self>> {
-        let result = self_.as_super().map(op, py, n_cores, stats_to_file)?;
-        Self::preserving_interface(&self_, py, result.expr)
-    }
-
-    /// Differentiate scalar coefficients, preserving tensor zeros and ports.
-    /// Formal derivatives of unknown tensor functions are not supported by the
-    /// network executor. Differentiate their component expressions with
-    /// Tensor.map_components() instead, or supply a TensorName derivative callback.
-    fn derivative(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        x: ConvertibleToExpression,
-    ) -> PyResult<Py<Self>> {
-        let result = self_.as_super().derivative(x)?;
-        let mut formal_tensor_derivative = false;
-        result.expr.visitor(&mut |value| {
-            if let AtomView::Fun(function) = value
-                && function.get_symbol() == Symbol::DERIVATIVE
-                && function.get_nargs() % 2 == 1
-                && matches!(function.iter().nth(function.get_nargs() / 2), Some(AtomView::Var(head)) if head.get_symbol().has_tag(&SPENSO_TAG.tensor))
-            {
-                formal_tensor_derivative = true;
-            }
-            !formal_tensor_derivative
-        });
-        if formal_tensor_derivative {
-            return Err(PyValueError::new_err(
-                "formal tensor derivatives are not supported; differentiate component expressions with Tensor.map_components()",
-            ));
-        }
-        Self::preserving_interface(&self_, py, result.expr)
+        let (name, args) = Self::transformed_descriptor(&self_, value.expression());
+        Self::from_shared(py, Arc::new(value), name, args)
     }
 
     /// Expand scalar algebra while preserving and validating the tensor interface.
@@ -1127,144 +1034,34 @@ impl TensorExpression {
                 via_poly.unwrap_or(false),
             )
             .map_err(Self::inference_error)?;
-        if value.expression == self_.as_super().expr {
-            return Py::new(
-                py,
-                (
-                    Self::clone(&self_),
-                    PythonExpression {
-                        expr: value.expression,
-                    },
-                ),
-            );
+        if value.expression() == self_.atom() {
+            return Py::new(py, self_.clone());
         }
-        let (name, args) = Self::transformed_descriptor(&self_, &value.expression);
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
-    }
-
-    /// Factor scalar algebra while preserving and validating the tensor interface.
-    #[pyo3(signature = (complex = false, extension = None))]
-    fn factor(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        complex: bool,
-        extension: Option<Vec<ConvertibleToExpression>>,
-    ) -> PyResult<Py<Self>> {
-        let result = self_.as_super().factor(complex, extension)?;
-        Self::from_algebra_atom(&self_, py, result.expr)
-    }
-
-    /// Collect terms while preserving the tensor interface. Callback results are validated.
-    #[pyo3(signature = (*x, key_map = None, coeff_map = None))]
-    fn collect(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        x: &Bound<'_, PyTuple>,
-        key_map: Option<Py<PyAny>>,
-        coeff_map: Option<Py<PyAny>>,
-    ) -> PyResult<Py<Self>> {
-        let has_callbacks = key_map.is_some() || coeff_map.is_some();
-        let result = self_.as_super().collect(x, key_map, coeff_map)?;
-        if has_callbacks {
-            Self::preserving_interface(&self_, py, result.expr)
-        } else {
-            Self::from_algebra_atom(&self_, py, result.expr)
-        }
-    }
-
-    /// Distribute numerical factors while preserving the tensor interface.
-    fn expand_num(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expand_num();
-        Self::from_preserved_atom(&self_, py, result.expr)
-    }
-
-    /// Extract common numerical factors while preserving the tensor interface.
-    fn collect_num(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().collect_num();
-        Self::from_preserved_atom(&self_, py, result.expr)
-    }
-
-    /// Collect common factors from nested sums while preserving the tensor interface.
-    fn collect_factors(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().collect_factors();
-        Self::from_algebra_atom(&self_, py, result.expr)
-    }
-
-    /// Group terms with equal numerical coefficients while preserving the tensor interface.
-    fn collect_by_coefficient(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().collect_by_coefficient();
-        Self::from_preserved_atom(&self_, py, result.expr)
-    }
-
-    /// Combine scalar denominators while preserving the tensor interface.
-    fn together(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().together()?;
-        Self::from_algebra_atom(&self_, py, result.expr)
-    }
-
-    /// Cancel common numerator and denominator factors while preserving the tensor interface.
-    fn cancel(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().cancel()?;
-        Self::from_algebra_atom(&self_, py, result.expr)
-    }
-
-    /// Collect powers of a symbol while preserving the tensor interface.
-    /// Callback results are validated, as for `collect`.
-    #[pyo3(signature = (x, key_map = None, coeff_map = None))]
-    fn collect_symbol(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        x: PythonExpression,
-        key_map: Option<Py<PyAny>>,
-        coeff_map: Option<Py<PyAny>>,
-    ) -> PyResult<Py<Self>> {
-        let has_callbacks = key_map.is_some() || coeff_map.is_some();
-        let result = self_.as_super().collect_symbol(x, key_map, coeff_map)?;
-        if has_callbacks {
-            Self::preserving_interface(&self_, py, result.expr)
-        } else {
-            Self::from_algebra_atom(&self_, py, result.expr)
-        }
-    }
-
-    /// Rewrite in Horner form while preserving the tensor interface.
-    /// Omit `vars` to choose the variable order heuristically.
-    #[pyo3(signature = (vars = None))]
-    fn collect_horner(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        vars: Option<Vec<PythonExpression>>,
-    ) -> PyResult<Py<Self>> {
-        let result = self_.as_super().collect_horner(vars)?;
-        Self::from_algebra_atom(&self_, py, result.expr)
-    }
-
-    /// Decompose scalar denominators into partial fractions while preserving the tensor interface.
-    /// Omit `variables` to decompose in all variables.
-    #[pyo3(signature = (*variables))]
-    fn apart(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        variables: &Bound<'_, PyTuple>,
-    ) -> PyResult<Py<Self>> {
-        // Zero has no partial fractions; Symbolica's multivariate path cannot
-        // lift an empty numerator polynomial into its coefficient ring.
-        if self_.as_super().expr.is_zero() {
-            return Self::__copy__(self_, py);
-        }
-        let result = self_.as_super().apart(variables)?;
-        Self::from_algebra_atom(&self_, py, result.expr)
+        let (name, args) = Self::transformed_descriptor(&self_, value.expression());
+        Self::from_shared(py, Arc::new(value), name, args)
     }
 
     /// Copy the expression together with its ordered interface and data identity.
+    /// Build a symbolic evaluator without expanding the tensor expression.
+    /// Supply symbolic leaves as parameters; use `to_tensor(library)` to evaluate
+    /// tensor components from registered data.
+    #[pyo3(signature = (params, *, iterations=1, n_cores=1))]
+    fn evaluator(
+        &self,
+        py: Python<'_>,
+        params: Vec<PythonExpression>,
+        iterations: usize,
+        n_cores: usize,
+    ) -> PyResult<PythonExpressionEvaluator> {
+        let params = params
+            .into_iter()
+            .map(|value| value.expr)
+            .collect::<Vec<_>>();
+        Self::build_evaluator(py, self.value.evaluator(&params), iterations, n_cores)
+    }
+
     fn __copy__(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        Self::from_known_parts(
-            py,
-            self_.as_super().expr.clone(),
-            self_.interface.clone(),
-            self_.name,
-            self_.name_args.clone(),
-        )
+        Py::new(py, self_.clone())
     }
 
     /// Replace four-dimensional Lorentz slots and compact representations by dimension `D`.
@@ -1279,60 +1076,32 @@ impl TensorExpression {
         let value = Self::structured(&self_)
             .with_lorentz_dimension(dimension.0)
             .map_err(Self::inference_error)?;
-        let (name, args) = if value.rank() == self_.interface.canonical().order() {
+        let (name, args) = if value.rank() == self_.interface().canonical().order() {
             (self_.name, self_.name_args.clone())
         } else {
             (None, Vec::new())
         };
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        Self::from_shared(py, Arc::new(value), name, args)
     }
 
-    /// Apply the selected algebra identities while retaining the ordered external interface.
-    ///
-    /// Apply selected algebra passes to a fixed point and return a tensor expression.
-    ///
-    /// The default contracts metrics only. Use SimplifySettings.hep() for gamma,
-    /// color, and epsilon algebra too, or construct explicit settings. Dimensions
-    /// are taken from slots; dimension changes remain an explicit operation.
-    /// No full polynomial expansion occurs unless settings.expand is true.
-    /// Raises ValueError if the selected passes have not stabilized by max_passes.
+    /// Apply selected tensor identities to a shared fixed point, retaining aliases.
+    /// The default contracts metrics. `SimplifySettings.hep()` also selects gamma,
+    /// color and epsilon identities. Call `expand()` on the result to materialize it.
     #[pyo3(signature=(settings=None))]
     fn simplify(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
+        &self,
         settings: Option<&crate::simplification::PySimplifySettings>,
-    ) -> PyResult<Py<Self>> {
+    ) -> PyResult<AliasedTensorExpression> {
         let settings = settings.copied().unwrap_or_default();
-        let mut atom = self_.as_super().expr.clone();
-        for _ in 0..settings.max_passes {
-            let before = atom.clone();
-            if settings.metrics {
-                atom = atom.simplify_metrics();
-            }
-            if let Some(gamma) = settings.gamma {
-                atom = atom.simplify_gamma_with(gamma.rust());
-            }
-            if let Some(color) = settings.color {
-                atom = atom.simplify_color_with(color.rust());
-            }
-            if settings.epsilon {
-                atom = atom.simplify_epsilon();
-            }
-            if settings.expand {
-                atom = atom.expand();
-            }
-            if atom == before {
-                return if settings.expand {
-                    Self::from_algebra_atom(&self_, py, atom)
-                } else {
-                    Self::from_preserved_atom(&self_, py, atom)
-                };
-            }
-        }
-        Err(PyValueError::new_err(format!(
-            "simplification did not stabilize within {} passes",
-            settings.max_passes
-        )))
+        let value = self
+            .value
+            .simplify(settings.rust())
+            .map_err(Self::inference_error)?;
+        Ok(AliasedTensorExpression::from_parts(
+            value,
+            self.name,
+            self.name_args.clone(),
+        ))
     }
 
     /// Simplify registered Spenso gamma chains and traces with Idenso's default rules.
@@ -1387,92 +1156,32 @@ impl TensorExpression {
     /// ```
     #[pyo3(signature = (settings = None))]
     fn simplify_gamma(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
+        &self,
         settings: Option<&PyGammaSimplifySettings>,
-    ) -> PyResult<Py<Self>> {
-        let result = match settings {
-            Some(settings) => self_.as_super().expr.simplify_gamma_with(settings.rust()),
-            None => self_.as_super().expr.simplify_gamma(),
-        };
-        Self::from_preserved_atom(&self_, py, result)
+    ) -> PyResult<AliasedTensorExpression> {
+        let settings = settings.map_or_else(Default::default, PyGammaSimplifySettings::rust);
+        let value = self
+            .value
+            .simplify_gamma(settings)
+            .map_err(Self::inference_error)?;
+        Ok(AliasedTensorExpression::from_parts(
+            value,
+            self.name,
+            self.name_args.clone(),
+        ))
     }
 
-    /// Convert bispinor tensors into chain/trace shorthands and join adjacent gamma chains.
-    fn collect_gamma_chains(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.collect_gamma_chains();
-        Self::from_preserved_atom(&self_, py, result)
-    }
-
-    /// Simplify products and linear combinations involving the time-like gamma matrix `gamma0`.
-    fn simplify_gamma0(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.simplify_gamma0();
-        Self::from_preserved_atom(&self_, py, result)
-    }
-
-    /// Rewrite conjugated Dirac matrices using gamma0 sandwiches and fresh spinor indices.
-    ///
-    /// Includes ordinary gamma matrices and Hermitian four-dimensional gamma0,
-    /// gamma5, and chiral projectors. The special-matrix rules leave other spinor
-    /// dimensions unchanged; this does not choose a gamma-five regularization scheme.
-    ///
-    /// Raises `GammaConjugationError` when the expression cannot be rewritten consistently.
-    fn simplify_gamma_conjugate(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_
-            .as_super()
-            .expr
-            .simplify_gamma_conj::<AbstractIndex>()
-            .map_err(|error| GammaConjugationError::new_err(error.to_string()))?;
-        Self::from_preserved_atom(&self_, py, result)
-    }
-
-    /// Simplify Levi-Civita/metric contractions and pairs of Levi-Civita tensors.
-    ///
-    /// Simplify Levi-Civita/metric contractions and pairs of Levi-Civita tensors to a fixed point.
-    fn simplify_epsilon(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.simplify_epsilon();
-        Self::from_preserved_atom(&self_, py, result)
-    }
-
-    /// Contract metric and identity tensors while retaining the ordered external interface.
-    ///
-    /// Simplifies contractions involving metric tensors and identity tensors.
-    ///
-    /// Applies fundamental tensor algebra rules for metric and identity tensors:
-    ///
-    /// **Metric tensor rules:**
-    /// - `gᵘᵛ pᵥ → pᵘ` (index raising/lowering)
-    /// - `gᵘᵛ gᵥρ → gᵘρ` or `δᵘρ` (metric composition)
-    /// - `gᵘᵤ → D` (dimension of spacetime)
-    /// - `ηᵘᵛ pᵥ → pᵘ` (flat metric contractions)
-    ///
-    /// **Identity tensor rules:**
-    /// - `δᵘᵛ pᵥ → pᵘ` (Kronecker delta contraction)
-    /// - `δᵘᵤ → D` (trace of identity)
-    ///
-    /// The function recognizes metrics as `spenso::g(...)`
-    ///
-    /// # Arguments
-    /// - `self`: expression containing metric/identity tensor contractions
-    ///
-    /// # Returns
-    /// The simplified expression with metric rules applied.
-    ///
-    /// # Examples:
-    /// ```python
-    /// from symbolica.community.spenso import TensorExpression
-    /// from symbolica.community.spenso import Representation, TensorExpression, TensorName
-    /// q = TensorName("q")
-    /// rep = Representation.euc(3)
-    /// g = TensorExpression.g(rep)
-    /// # With slots (creates TensorExpression)
-    /// mu = rep("mu")
-    /// nu = rep("nu")
-    /// print(TensorExpression(g('mu', 'nu') * q(mu)).simplify_metrics())
-    /// ```
-    fn simplify_metrics(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.simplify_metrics();
-        Self::from_preserved_atom(&self_, py, result)
+    /// Simplify Levi-Civita/metric contractions, retaining generated aliases.
+    fn simplify_epsilon(&self) -> PyResult<AliasedTensorExpression> {
+        let value = self
+            .value
+            .simplify_epsilon()
+            .map_err(Self::inference_error)?;
+        Ok(AliasedTensorExpression::from_parts(
+            value,
+            self.name,
+            self.name_args.clone(),
+        ))
     }
 
     /// Apply Idenso's SU(N) color-algebra simplifier while retaining the external interface.
@@ -1496,14 +1205,13 @@ impl TensorExpression {
     ///
     /// # Examples
     /// ```python
-    /// >>> from symbolica import E
+    /// >>> from symbolica import S
     /// >>> from symbolica.community.spenso import TensorExpression
-    /// >>> # Built-in representations are registered automatically on import.
-    /// >>> generators = E('''
-    /// ...     t(coad(Nc^2-1,a),cof(Nc,i),dind(cof(Nc,j)))
-    /// ...     * t(coad(Nc^2-1,a),cof(Nc,k),dind(cof(Nc,l)))
-    /// ... ''', default_namespace="spenso")
-    /// >>> simplified = TensorExpression(generators).simplify_color()
+    /// >>> # Formal dimensions are atomic; apply group-specific relations later.
+    /// >>> Na, Nc = S("Na", "Nc")
+    /// >>> generator = TensorExpression.t(Na, Nc)
+    /// >>> generators = generator("a", "i", "j") * generator("a", "k", "l")
+    /// >>> simplified = generators.simplify_color().to_expression()
     /// >>> "t(" not in str(simplified) and "g(" in str(simplified)
     /// True
     /// ```
@@ -1525,31 +1233,19 @@ impl TensorExpression {
     /// similar names are left unchanged.
     #[pyo3(signature = (settings = None))]
     fn simplify_color(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
+        &self,
         settings: Option<&PyColorSimplifySettings>,
-    ) -> PyResult<Py<Self>> {
-        let result = match settings {
-            Some(settings) => self_.as_super().expr.simplify_color_with(settings.rust()),
-            None => self_.as_super().expr.simplify_color(),
-        };
-        Self::from_preserved_atom(&self_, py, result)
-    }
-
-    /// Factor around tensors carrying fundamental, antifundamental, or adjoint color.
-    ///
-    /// Factor an expression around tensors carrying fundamental, antifundamental, or adjoint color.
-    fn collect_color(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.collect_color();
-        Self::from_preserved_atom(&self_, py, result)
-    }
-
-    /// Factor around recognized scalar color invariants such as Casimirs and indices.
-    ///
-    /// Factor an expression around recognized scalar color invariants such as Casimirs and indices.
-    fn collect_color_constants(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.collect_color_constants();
-        Self::from_preserved_atom(&self_, py, result)
+    ) -> PyResult<AliasedTensorExpression> {
+        let settings = settings.map_or_else(Default::default, PyColorSimplifySettings::rust);
+        let value = self
+            .value
+            .simplify_color(settings)
+            .map_err(Self::inference_error)?;
+        Ok(AliasedTensorExpression::from_parts(
+            value,
+            self.name,
+            self.name_args.clone(),
+        ))
     }
 
     /// Rewrite supplied color dimensions and invariants into a representation-aware Casimir basis.
@@ -1568,7 +1264,7 @@ impl TensorExpression {
     ) -> PyResult<Py<Self>> {
         let fundamental = fundamental.representation.to_symbolic([]);
         let adjoint = adjoint.representation.to_symbolic([]);
-        let result = self_.as_super().expr.to_color_casimir_with(
+        let result = self_.atom().to_color_casimir_with(
             fundamental.as_view(),
             adjoint.as_view(),
             settings.map_or_else(ColorCasimirSettings::default, PyColorCasimirSettings::rust),
@@ -1580,200 +1276,8 @@ impl TensorExpression {
     ///
     /// Replace supported `cof(N)` Casimir, Dynkin-index, and Gram invariants by dimension formulas.
     fn to_cof_dimension_invariants(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.to_cof_dimension_invariants();
+        let result = self_.atom().to_cof_dimension_invariants();
         Self::from_preserved_atom(&self_, py, result)
-    }
-
-    /// Expand around color structures and wrap each scalar coefficient with `symbol`.
-    ///
-    /// Expand around color structures and wrap each resulting scalar coefficient with `symbol`.
-    fn wrap_color(self_: PyRef<'_, Self>, py: Python<'_>, symbol: Symbol) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.wrap_color(symbol);
-        Self::from_transformed_atom(&self_, py, result)
-    }
-
-    /// Selectively expand around Minkowski structures into `(structure, coefficient)` pairs.
-    ///
-    /// Expand products around factors carrying registered Minkowski indices.
-    ///
-    /// This is a selective symbolic expansion: Minkowski-bearing factors become polynomial
-    /// variables while unrelated sectors remain coefficients. It does not substitute explicit
-    /// four-vector components or choose a metric signature.
-    ///
-    /// # Arguments
-    /// - `self`: a factorized Spenso-compatible expression.
-    ///
-    /// # Returns
-    /// `(structure, coefficient)` pairs distributed around Minkowski-bearing factors.
-    ///
-    /// # Examples
-    /// ```python
-    /// >>> from symbolica.community.spenso import TensorExpression
-    /// >>> from symbolica.community.spenso import Representation, TensorName
-    /// >>> # Built-in representations are registered automatically on import.
-    /// >>> minkowski = Representation.mink(4)
-    /// >>> mu, nu = minkowski("mu"), minkowski("nu")
-    /// >>> p, q, r = TensorName("p"), TensorName("q"), TensorName("r")
-    /// >>> p_mu = p(mu).to_expression()
-    /// >>> q_nu, r_nu = q(nu).to_expression(), r(nu).to_expression()
-    /// >>> factorized = p_mu * (q_nu + r_nu)
-    /// >>> terms = TensorExpression(factorized).expand_mink()
-    /// >>> sum(structure * coefficient for structure, coefficient in terms) == p_mu * q_nu + p_mu * r_nu
-    /// True
-    /// ```
-    fn expand_mink(self_: PyRef<'_, Self>) -> Vec<PythonTerm> {
-        python_terms(self_.as_super().expr.expand_mink())
-    }
-
-    /// Selectively expand around bispinor structures into `(structure, coefficient)` pairs.
-    ///
-    /// Expand products around factors carrying registered bispinor indices.
-    ///
-    /// # Arguments
-    /// - `self`: a factorized Spenso-compatible expression.
-    ///
-    /// # Returns
-    /// `(structure, coefficient)` pairs distributed around bispinor-bearing factors. No explicit
-    /// spinor components are substituted.
-    ///
-    /// # Examples
-    /// ```python
-    /// >>> from symbolica.community.spenso import TensorExpression
-    /// >>> from symbolica.community.spenso import Representation, TensorName
-    /// >>> # Built-in representations are registered automatically on import.
-    /// >>> bispinor = Representation.bis(4)
-    /// >>> alpha, beta = bispinor("alpha"), bispinor("beta")
-    /// >>> u, v, w = TensorName("u"), TensorName("v"), TensorName("w")
-    /// >>> u_alpha = u(alpha).to_expression()
-    /// >>> v_beta, w_beta = v(beta).to_expression(), w(beta).to_expression()
-    /// >>> factorized = u_alpha * (v_beta + w_beta)
-    /// >>> terms = TensorExpression(factorized).expand_bis()
-    /// >>> sum(structure * coefficient for structure, coefficient in terms) == u_alpha * v_beta + u_alpha * w_beta
-    /// True
-    /// ```
-    fn expand_bis(self_: PyRef<'_, Self>) -> Vec<PythonTerm> {
-        python_terms(self_.as_super().expr.expand_bis())
-    }
-
-    /// Selectively expand around Minkowski and bispinor structures into factorized pairs.
-    ///
-    /// Expand products around factors carrying Minkowski or bispinor indices.
-    ///
-    /// This combines the selection patterns of `expand_mink()` and `expand_bis()` in one
-    /// coefficient pass. Other representation families remain in the coefficient sector.
-    ///
-    /// # Arguments
-    /// - `self`: a factorized Spenso-compatible expression.
-    ///
-    /// # Returns
-    /// `(structure, coefficient)` pairs distributed around both selected representation families.
-    ///
-    /// # Examples
-    /// ```python
-    /// >>> from symbolica.community.spenso import TensorExpression
-    /// >>> from symbolica.community.spenso import Representation, TensorName
-    /// >>> # Built-in representations are registered automatically on import.
-    /// >>> minkowski, bispinor = Representation.mink(4), Representation.bis(4)
-    /// >>> p_mu = TensorName("p")(minkowski("mu")).to_expression()
-    /// >>> q_mu = TensorName("q")(minkowski("mu")).to_expression()
-    /// >>> u_a = TensorName("u")(bispinor("a")).to_expression()
-    /// >>> v_a = TensorName("v")(bispinor("a")).to_expression()
-    /// >>> factorized = (p_mu + q_mu) * (u_a + v_a)
-    /// >>> expected = p_mu * u_a + p_mu * v_a + q_mu * u_a + q_mu * v_a
-    /// >>> terms = TensorExpression(factorized).expand_mink_bis()
-    /// >>> sum(structure * coefficient for structure, coefficient in terms) == expected
-    /// True
-    /// ```
-    fn expand_mink_bis(self_: PyRef<'_, Self>) -> Vec<PythonTerm> {
-        python_terms(self_.as_super().expr.expand_mink_bis())
-    }
-
-    /// Selectively expand around metric tensors into `(structure, coefficient)` pairs.
-    ///
-    /// Expand products around registered metric tensors.
-    ///
-    /// This is a structural expansion only. It neither contracts the metrics nor substitutes a
-    /// dimension or signature; call `simplify_metrics()` separately for supported contractions.
-    ///
-    /// # Arguments
-    /// - `self`: a factorized Spenso-compatible expression.
-    ///
-    /// # Returns
-    /// `(structure, coefficient)` pairs distributed around metric factors.
-    ///
-    /// # Examples
-    /// ```python
-    /// >>> from symbolica.community.spenso import TensorExpression
-    /// >>> from symbolica.community.spenso import Representation, TensorExpression
-    /// >>> # Built-in representations are registered automatically on import.
-    /// >>> minkowski = Representation.mink(4)
-    /// >>> metric = TensorExpression.g(minkowski)
-    /// >>> g_mn = metric(minkowski("mu"), minkowski("nu")).to_expression()
-    /// >>> g_rs = metric(minkowski("rho"), minkowski("sigma")).to_expression()
-    /// >>> g_ab = metric(minkowski("alpha"), minkowski("beta")).to_expression()
-    /// >>> factorized = g_mn * (g_rs + g_ab)
-    /// >>> terms = TensorExpression(factorized).expand_metrics()
-    /// >>> sum(structure * coefficient for structure, coefficient in terms) == g_mn * g_rs + g_mn * g_ab
-    /// True
-    /// ```
-    fn expand_metrics(self_: PyRef<'_, Self>) -> Vec<PythonTerm> {
-        python_terms(self_.as_super().expr.expand_metrics())
-    }
-
-    /// Selectively expand around color structures into `(structure, coefficient)` pairs.
-    ///
-    /// Expand products around registered color factors.
-    ///
-    /// Fundamental, antifundamental, adjoint, color-chain, color-trace, and supported invariant
-    /// factors form the selected sector. This only distributes the symbolic expression; use
-    /// `simplify_color()` separately to apply SU(N) identities.
-    ///
-    /// # Arguments
-    /// - `self`: a factorized Spenso-compatible expression.
-    ///
-    /// # Returns
-    /// `(structure, coefficient)` pairs distributed around color-bearing factors.
-    ///
-    /// # Examples
-    /// ```python
-    /// >>> from symbolica.community.spenso import TensorExpression
-    /// >>> from symbolica.community.spenso import Representation, TensorExpression
-    /// >>> # Built-in representations are registered automatically on import.
-    /// >>> adjoint, fundamental = Representation.coad(8), Representation.cof(3)
-    /// >>> antifundamental = fundamental.dual()
-    /// >>> generator = TensorExpression.t(8, 3)
-    /// >>> t_a = generator(
-    /// ...     adjoint("a"), fundamental("i"), antifundamental("j")
-    /// ... ).to_expression()
-    /// >>> t_b = generator(
-    /// ...     adjoint("b"), fundamental("k"), antifundamental("l")
-    /// ... ).to_expression()
-    /// >>> t_c = generator(
-    /// ...     adjoint("c"), fundamental("m"), antifundamental("n")
-    /// ... ).to_expression()
-    /// >>> factorized = t_a * (t_b + t_c)
-    /// >>> terms = TensorExpression(factorized).expand_color()
-    /// >>> sum(structure * coefficient for structure, coefficient in terms) == t_a * t_b + t_a * t_c
-    /// True
-    /// ```
-    fn expand_color(self_: PyRef<'_, Self>) -> Vec<PythonTerm> {
-        python_terms(ColorSimplifier::expand_color(&self_.as_super().expr))
-    }
-
-    /// Selectively expand around the supplied Symbolica patterns into factorized pairs.
-    ///
-    /// Selectively expand around the supplied expression patterns.
-    ///
-    /// Results retain the Rust API's `(structure, coefficient)` factorization.
-    fn expand_in_patterns(
-        self_: PyRef<'_, Self>,
-        patterns: Vec<PythonExpression>,
-    ) -> Vec<PythonTerm> {
-        let patterns = patterns
-            .iter()
-            .map(|pattern| pattern.expr.to_pattern())
-            .collect::<Vec<_>>();
-        python_terms(self_.as_super().expr.expand_in_patterns(&patterns))
     }
 
     /// Put all explicit indices in a named scope, preserving the tensor interface.
@@ -1784,15 +1288,19 @@ impl TensorExpression {
     ///
     /// >>> conjugate = tensor.dirac_adjoint().wrap_indices(S("bra"))
     fn wrap_indices(self_: PyRef<'_, Self>, py: Python<'_>, header: Symbol) -> PyResult<Py<Self>> {
-        let slots = self_.interface.logical_slots().into_iter().map(|mut slot| {
-            if let PartialIndex::Explicit(index) = slot.aind {
-                slot.aind = PartialIndex::Explicit(index.scoped(header));
-            }
-            slot
-        });
+        let slots = self_
+            .interface()
+            .logical_slots()
+            .into_iter()
+            .map(|mut slot| {
+                if let PartialIndex::Explicit(index) = slot.aind {
+                    slot.aind = PartialIndex::Explicit(index.scoped(header));
+                }
+                slot
+            });
         Self::from_known_parts(
             py,
-            self_.as_super().expr.wrap_indices(header),
+            self_.atom().wrap_indices(header),
             PartialStructure::from_logical_slots(slots),
             self_.name,
             self_.name_args.clone(),
@@ -1891,8 +1399,7 @@ impl TensorExpression {
     ) -> PyResult<PythonExpression> {
         let settings = PyCookSettings::flattened_or(settings);
         self_
-            .as_super()
-            .expr
+            .atom()
             .cook_function_with_settings(&settings)
             .map(Into::into)
             .map_err(|error| CookingError::new_err(format!("cannot cook: {error:?}")))
@@ -1945,8 +1452,7 @@ impl TensorExpression {
     /// ```
     fn wrap_dummies(self_: PyRef<'_, Self>, header: Symbol) -> PyResult<PythonExpression> {
         self_
-            .as_super()
-            .expr
+            .atom()
             .wrap_dummies::<AbstractIndex>(header)
             .map(Into::into)
             .map_err(|error| PyValueError::new_err(error.to_string()))
@@ -1994,17 +1500,16 @@ impl TensorExpression {
     /// print(tensor_with_args.list_dangling())
     /// ```
     fn list_dangling(self_: PyRef<'_, Self>) -> PyResult<Vec<PythonExpression>> {
-        if self_.interface.open_positions().is_empty() {
+        if self_.interface().open_positions().is_empty() {
             return Ok(self_
-                .interface
+                .interface()
                 .logical_slots()
                 .into_iter()
                 .map(|slot| composition::port_atom(slot).into())
                 .collect());
         }
         self_
-            .as_super()
-            .expr
+            .atom()
             .list_dangling::<AbstractIndex>()
             .map(|indices| indices.into_iter().map(Into::into).collect())
             .map_err(|error| PyValueError::new_err(error.to_string()))
@@ -2014,12 +1519,14 @@ impl TensorExpression {
     ///
     /// Raises `CanonicalizationError` when the expression cannot be parsed or canonicalized.
     fn canonize(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_
-            .as_super()
-            .expr
-            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
-            .map_err(|error| CanonicalizationError::new_err(error.to_string()))?;
-        Self::from_preserved_atom(&self_, py, result)
+        let value = Self::structured(&self_)
+            .canonize()
+            .map_err(|error| match error {
+                idenso::CanonicalizationError::Tensor(error) => Self::inference_error(error),
+                error => CanonicalizationError::new_err(error.to_string()),
+            })?;
+        let (name, args) = Self::transformed_descriptor(&self_, value.expression());
+        Self::from_shared(py, Arc::new(value), name, args)
     }
 
     /// Replace nested tensor subexpressions by aliases and return the root plus alias mappings.
@@ -2032,8 +1539,7 @@ impl TensorExpression {
         tensor_name: &str,
     ) -> (PythonExpression, Vec<(PythonExpression, PythonExpression)>) {
         let (root, aliases) = self_
-            .as_super()
-            .expr
+            .atom()
             .alias_subtensors(tensor_name)
             .into_inner_with_aliases();
         let mut aliases = aliases.into_iter().collect::<Vec<_>>();
@@ -2051,7 +1557,7 @@ impl TensorExpression {
     ///
     /// Complex-conjugate an expression while keeping unevaluated conjugations explicit.
     fn spenso_conjugate(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.spenso_conj();
+        let result = self_.atom().spenso_conj();
         Self::from_transformed_atom(&self_, py, result)
     }
 
@@ -2064,8 +1570,7 @@ impl TensorExpression {
         representation: &SpensoRepresentation,
     ) -> PyResult<Py<Self>> {
         let result = self_
-            .as_super()
-            .expr
+            .atom()
             .conjugate_transpose(representation.representation.rep);
         Self::from_transformed_atom(&self_, py, result)
     }
@@ -2111,8 +1616,7 @@ impl TensorExpression {
         preserve_indices: bool,
     ) -> PyResult<Py<Self>> {
         let result = self_
-            .as_super()
-            .expr
+            .atom()
             .dirac_adjoint::<AbstractIndex>(preserve_indices)
             .map_err(|error| DiracAdjointError::new_err(error.to_string()))?;
         Self::from_transformed_atom(&self_, py, result)
@@ -2129,7 +1633,7 @@ impl TensorExpression {
         settings: Option<&PyCookSettings>,
     ) -> PyResult<PythonExpression> {
         PyCookSettings::reversible_or(settings)
-            .try_cook(self_.as_super().expr.as_view())
+            .try_cook(self_.atom().as_view())
             .map(Into::into)
             .map_err(|error| CookingError::new_err(format!("cannot cook: {error:?}")))
     }
@@ -2143,121 +1647,16 @@ impl TensorExpression {
         py: Python<'_>,
         settings: Option<&PyCookSettings>,
     ) -> PyResult<Py<Self>> {
-        let result =
-            PyCookSettings::reversible_or(settings).uncook(self_.as_super().expr.as_view());
+        let result = PyCookSettings::reversible_or(settings).uncook(self_.atom().as_view());
         Self::from_transformed_atom(&self_, py, result)
     }
 
-    /// Simplify tensor shorthands using the configured Schoonschip traversal.
-    #[pyo3(signature = (settings = None))]
-    fn schoonschip(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        settings: Option<&PySchoonschipSettings>,
-    ) -> PyResult<Py<Self>> {
-        let result = match settings {
-            Some(settings) => self_
-                .as_super()
-                .expr
-                .schoonschip_with_settings(&settings.rust()),
-            None => self_.as_super().expr.schoonschip(),
-        };
-        Self::from_preserved_atom(&self_, py, result)
-    }
-
-    /// Parse and contract this expression as a symbolic tensor network.
-    ///
-    /// Parse and contract a symbolic tensor network using Schoonschip rules.
-    ///
-    /// Set `expand_contracted_sums=True` to distribute sums before contracted products are executed.
-    ///
-    /// Raises `NetworkToolingError` when the expression is not a valid tensor network or contraction
-    /// fails.
-    #[pyo3(signature = (settings = None, *, expand_contracted_sums = false))]
-    fn schoonschip_net(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        settings: Option<&PySchoonschipSettings>,
-        expand_contracted_sums: bool,
-    ) -> PyResult<Py<Self>> {
-        let mut settings = settings
-            .map(PySchoonschipSettings::rust)
-            .unwrap_or_else(SchoonschipSettings::default_network);
-        settings.expand_contracted_sums |= expand_contracted_sums;
-        let result = self_
-            .as_super()
-            .expr
-            .schoonschip_with_net::<false, AbstractIndex>(&settings)
-            .map_err(|error| NetworkToolingError::new_err(error.to_string()))?;
-        Self::from_preserved_atom(&self_, py, result)
-    }
-
-    /// Convert contracted rank-one tensors into compact dot-product notation.
-    ///
-    /// Converts contracted Lorentz/Minkowski indices into dot product notation.
-    ///
-    /// Automatically identifies and converts patterns like `p(mink(D, mu)) * q(mink(D, mu))`
-    /// into the compact, representation-carrying `dot(p(mink(D)), q(mink(D)))` notation. This
-    /// simplification is essential for physics calculations involving four-vectors.
-    ///
-    /// The function recognizes:
-    /// - Contracted vector indices: `pᵘqᵤ → p·q`
-    /// - Multiple contractions: `pᵘqᵤrᵛsᵥ → (p·q)(r·s)`
-    /// - Self-contractions: `pᵘpᵤ → p²`
-    ///
-    /// # Arguments
-    /// - `self`: expression containing contracted Minkowski vector indices
-    ///
-    /// # Returns
-    /// The expression with vector contractions converted to dot products.
-    ///
-    /// # Examples:
-    /// ```python
-    /// from symbolica.community.spenso import TensorExpression
-    /// from symbolica.community.spenso import Representation, TensorName
-    /// p = TensorName("p")
-    /// q = TensorName("q")
-    /// rep = Representation.euc(3)
-    /// # With slots (creates TensorExpression)
-    /// mu = rep("mu")
-    /// nu = rep("nu")
-    ///
-    /// print(TensorExpression(p(mu) * q(mu)).to_dots())
-    /// ```
+    /// Render compact metric products as dots without contracting indexed factors.
+    /// Use `contract()` first when explicit vector indices should be contracted.
     fn to_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.to_dots();
-        Self::from_preserved_atom(&self_, py, result)
-    }
-
-    /// Canonicalize compact dot-product shorthands without expanding them.
-    ///
-    /// Canonicalize compact dot-product shorthands without expanding their tensor structure.
-    fn normalize_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.normalize_dots();
-        Self::from_preserved_atom(&self_, py, result)
-    }
-
-    /// Expand dot products into explicit metric and indexed-vector contractions.
-    ///
-    /// Expand compact dot products into explicit metric and indexed-vector contractions.
-    ///
-    /// Raises `DotExpansionError` when a dot product does not define a valid tensor contraction.
-    fn expand_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_
-            .as_super()
-            .expr
-            .expand_dots()
-            .map_err(|error| DotExpansionError::new_err(error.to_string()))?;
-        Self::from_preserved_atom(&self_, py, result)
-    }
-
-    /// Replace metric shorthand such as `g(p(rep), q(rep))` by a compact dot product.
-    ///
-    /// Replace metric shorthand such as `g(p(rep), q(rep.dual()))` by
-    /// `dot(p(rep), q(rep.dual()))`.
-    fn metric_shorthand_to_dot(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.metric_shorthand_to_dot();
-        Self::from_preserved_atom(&self_, py, result)
+        let value = self_.value.to_dots().map_err(Self::inference_error)?;
+        let (name, args) = Self::transformed_descriptor(&self_, value.expression());
+        Self::from_shared(py, Arc::new(value), name, args)
     }
 
     /// Expand every Idenso tensor shorthand into explicit tensor syntax.
@@ -2265,8 +1664,7 @@ impl TensorExpression {
     /// Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
     fn undo_all(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         let result = self_
-            .as_super()
-            .expr
+            .atom()
             .undo_all::<AbstractIndex>()
             .map_err(|error| NetworkToolingError::new_err(error.to_string()))?;
         Self::from_preserved_atom(&self_, py, result)
@@ -2277,23 +1675,18 @@ impl TensorExpression {
     /// Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
     fn undo_schoonschip(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         let result = self_
-            .as_super()
-            .expr
+            .atom()
             .undo_schoonschip::<AbstractIndex>()
             .map_err(|error| NetworkToolingError::new_err(error.to_string()))?;
         Self::from_preserved_atom(&self_, py, result)
     }
 
-    /// Expand dot-product shorthands while leaving other shorthands compact.
-    ///
-    /// Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
+    /// Open dots into symbolic indexed contractions, retaining other shorthands.
+    /// This does not expand the numerator or evaluate finite tensor components.
     fn undo_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_
-            .as_super()
-            .expr
-            .undo_dots::<AbstractIndex>()
-            .map_err(|error| NetworkToolingError::new_err(error.to_string()))?;
-        Self::from_preserved_atom(&self_, py, result)
+        let value = self_.value.undo_dots().map_err(Self::inference_error)?;
+        let (name, args) = Self::transformed_descriptor(&self_, value.expression());
+        Self::from_shared(py, Arc::new(value), name, args)
     }
 
     /// Expand open-chain shorthands while leaving other shorthands compact.
@@ -2301,8 +1694,7 @@ impl TensorExpression {
     /// Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
     fn undo_chain(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         let result = self_
-            .as_super()
-            .expr
+            .atom()
             .undo_chain::<AbstractIndex>()
             .map_err(|error| NetworkToolingError::new_err(error.to_string()))?;
         Self::from_preserved_atom(&self_, py, result)
@@ -2313,8 +1705,7 @@ impl TensorExpression {
     /// Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
     fn undo_trace(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         let result = self_
-            .as_super()
-            .expr
+            .atom()
             .undo_trace::<AbstractIndex>()
             .map_err(|error| NetworkToolingError::new_err(error.to_string()))?;
         Self::from_preserved_atom(&self_, py, result)
@@ -2322,19 +1713,6 @@ impl TensorExpression {
 
     /// Join adjacent open chains for `representation`, retaining the external interface.
     ///
-    /// Join adjacent open chains for the supplied representation.
-    fn collect_chains(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        representation: &SpensoRepresentation,
-    ) -> PyResult<Py<Self>> {
-        let result = self_
-            .as_super()
-            .expr
-            .collect_chains(representation.representation.rep);
-        Self::from_preserved_atom(&self_, py, result)
-    }
-
     /// Rewrite tensors with two `representation` slots as open-chain factors.
     ///
     /// Rewrite tensors with two slots in `representation` as explicit open-chain factors.
@@ -2343,22 +1721,19 @@ impl TensorExpression {
         py: Python<'_>,
         representation: &SpensoRepresentation,
     ) -> PyResult<Py<Self>> {
-        let result = self_
-            .as_super()
-            .expr
-            .chainify(representation.representation.rep);
+        let result = self_.atom().chainify(representation.representation.rep);
         Self::from_preserved_atom(&self_, py, result)
     }
 
     /// Convert chains whose endpoints coincide into trace shorthands.
     fn normalize_chains(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.normalize_chains();
+        let result = self_.atom().normalize_chains();
         Self::from_preserved_atom(&self_, py, result)
     }
 
     /// Replace one-factor chain shorthands by their underlying tensor factor.
     fn undo_single_length(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
-        let result = self_.as_super().expr.undo_single_length();
+        let result = self_.atom().undo_single_length();
         Self::from_preserved_atom(&self_, py, result)
     }
 
@@ -2373,8 +1748,8 @@ impl TensorExpression {
     ) -> PyResult<SpensoNet> {
         let expression = Self::from_known_parts(
             py,
-            self_.as_super().expr.clone(),
-            self_.interface.clone(),
+            self_.atom().clone(),
+            self_.interface().clone(),
             self_.name,
             self_.name_args.clone(),
         )?;
@@ -2436,16 +1811,16 @@ impl TensorExpression {
         indices: &Bound<'_, PyTuple>,
         cook_indices: Option<&crate::simplification::PyCookSettings>,
     ) -> PyResult<Py<Self>> {
-        let replacements = Self::index_replacements(&self_.interface, indices, cook_indices)?;
+        let replacements = Self::index_replacements(self_.interface(), indices, cook_indices)?;
         let value = Self::structured(&self_)
             .indexed(&replacements)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        let (name, args) = if value.rank() == self_.interface.canonical().order() {
+        let (name, args) = if value.rank() == self_.interface().canonical().order() {
             (self_.name, self_.name_args.clone())
         } else {
             (None, Vec::new())
         };
-        Self::from_parts_unchecked(py, value.expression, value.structure, name, args)
+        Self::from_shared(py, Arc::new(value), name, args)
     }
 
     /// Assign all external ports in logical order, including already indexed ports.
@@ -2457,19 +1832,14 @@ impl TensorExpression {
         indices: &Bound<'_, PyTuple>,
         cook_indices: Option<&PyCookSettings>,
     ) -> PyResult<Py<Self>> {
-        let positions = (0..self_.interface.canonical().order()).collect::<Vec<_>>();
+        let positions = (0..self_.interface().canonical().order()).collect::<Vec<_>>();
         let replacements =
-            Self::port_replacements(&self_.interface, &positions, indices, cook_indices)?;
+            Self::port_replacements(self_.interface(), &positions, indices, cook_indices)?;
         let value = Self::structured(&self_)
             .reindex_interface_ports(&replacements)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Self::from_known_parts(
-            py,
-            value.expression,
-            value.structure,
-            self_.name,
-            self_.name_args.clone(),
-        )
+        let (atom, interface) = value.into_parts();
+        Self::from_known_parts(py, atom, interface, self_.name, self_.name_args.clone())
     }
 
     /// Rename external indices simultaneously without changing rank or capturing dummy indices.
@@ -2481,18 +1851,16 @@ impl TensorExpression {
         mapping: &Bound<'_, PyDict>,
         cook_indices: Option<&PyCookSettings>,
     ) -> PyResult<Py<Self>> {
-        let replacements = Self::named_replacements(&self_.interface, mapping, cook_indices)?;
+        let replacements = Self::named_replacements(self_.interface(), mapping, cook_indices)?;
         let value = Self::structured(&self_)
             .reindex_interface_ports(&replacements)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let result = Self::from_known_parts(
-            py,
-            value.expression,
-            value.structure,
-            self_.name,
-            self_.name_args.clone(),
-        )?;
-        if result.borrow(py).interface.canonical().order() != self_.interface.canonical().order() {
+        let (atom, interface) = value.into_parts();
+        let result =
+            Self::from_known_parts(py, atom, interface, self_.name, self_.name_args.clone())?;
+        if result.borrow(py).interface().canonical().order()
+            != self_.interface().canonical().order()
+        {
             return Err(PyValueError::new_err(
                 "renaming would contract external ports; use reindex() to request a contraction",
             ));
@@ -2511,19 +1879,12 @@ impl TensorExpression {
         let value = Self::structured(&self_)
             .permuted(&axes)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        Self::from_known_parts(
-            py,
-            value.expression,
-            value.structure,
-            self_.name,
-            self_.name_args.clone(),
-        )
+        let (atom, interface) = value.into_parts();
+        Self::from_known_parts(py, atom, interface, self_.name, self_.name_args.clone())
     }
 
     /// Fill the unresolved external ports with `indices` in interface order.
     #[pyo3(signature = (*indices, cook_indices = None))]
-    // Tensor semantics intentionally specialize the inherited Expression API.
-    #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
     fn __call__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2536,8 +1897,8 @@ impl TensorExpression {
     fn __neg__(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         Self::from_known_parts(
             py,
-            Atom::num(-1) * self_.as_super().expr.as_ref(),
-            self_.interface.clone(),
+            Atom::num(-1) * self_.atom(),
+            self_.interface().clone(),
             None,
             Vec::new(),
         )
@@ -2556,7 +1917,7 @@ impl TensorExpression {
                 .map(TensorDispatch::Network);
         }
         let left = Self::structured(&self_);
-        let (right, interface) = match TensorOperand::extract(rhs)? {
+        let right = match TensorOperand::extract(rhs)? {
             TensorOperand::Structured(right) => {
                 return left
                     .try_add(&right)
@@ -2565,30 +1926,24 @@ impl TensorExpression {
                     .map(TensorDispatch::Expression);
             }
             TensorOperand::Scalar(right) if right.as_view().is_zero() => {
-                return Self::from_known_parts(
+                return Self::from_shared(
                     py,
-                    left.expression,
-                    left.structure,
+                    Arc::clone(&self_.value),
                     self_.name,
                     self_.name_args.clone(),
                 )
                 .map(TensorDispatch::Expression);
             }
-            TensorOperand::Scalar(right) if left.is_scalar() => (right, left.structure),
+            TensorOperand::Scalar(right) if left.is_scalar() => right,
             TensorOperand::Scalar(_) => {
                 return Err(PyValueError::new_err(
                     "cannot add a scalar expression to a non-scalar tensor",
                 ));
             }
         };
-        Self::from_known_parts(
-            py,
-            left.expression.as_ref() + right.as_ref(),
-            interface,
-            None,
-            Vec::new(),
-        )
-        .map(TensorDispatch::Expression)
+        let (left, interface) = (left.expression(), left.structure().clone());
+        Self::from_known_parts(py, left + right.as_ref(), interface, None, Vec::new())
+            .map(TensorDispatch::Expression)
     }
 
     #[gen_stub(skip)]
@@ -2619,7 +1974,7 @@ impl TensorExpression {
                 .map(TensorDispatch::Network);
         }
         let left = Self::structured(&self_);
-        let (right, interface) = match TensorOperand::extract(rhs)? {
+        let right = match TensorOperand::extract(rhs)? {
             TensorOperand::Structured(right) => {
                 return left
                     .try_sub(&right)
@@ -2628,30 +1983,24 @@ impl TensorExpression {
                     .map(TensorDispatch::Expression);
             }
             TensorOperand::Scalar(right) if right.as_view().is_zero() => {
-                return Self::from_known_parts(
+                return Self::from_shared(
                     py,
-                    left.expression,
-                    left.structure,
+                    Arc::clone(&self_.value),
                     self_.name,
                     self_.name_args.clone(),
                 )
                 .map(TensorDispatch::Expression);
             }
-            TensorOperand::Scalar(right) if left.is_scalar() => (right, left.structure),
+            TensorOperand::Scalar(right) if left.is_scalar() => right,
             TensorOperand::Scalar(_) => {
                 return Err(PyValueError::new_err(
                     "cannot subtract a scalar expression from a non-scalar tensor",
                 ));
             }
         };
-        Self::from_known_parts(
-            py,
-            left.expression.as_ref() - right.as_ref(),
-            interface,
-            None,
-            Vec::new(),
-        )
-        .map(TensorDispatch::Expression)
+        let (left, interface) = (left.expression(), left.structure().clone());
+        Self::from_known_parts(py, left - right.as_ref(), interface, None, Vec::new())
+            .map(TensorDispatch::Expression)
     }
 
     #[gen_stub(skip)]
@@ -2667,10 +2016,10 @@ impl TensorExpression {
                 .map(TensorDispatch::Network);
         }
         let right = Self::structured(&self_);
-        let (left, interface) = match TensorOperand::extract(lhs)? {
+        let left = match TensorOperand::extract(lhs)? {
             TensorOperand::Structured(left) => {
                 return left
-                    .try_sub(&right)
+                    .try_sub(right)
                     .map_err(|error| PyValueError::new_err(error.to_string()))
                     .and_then(|value| Self::from_structured(py, value))
                     .map(TensorDispatch::Expression);
@@ -2678,21 +2027,16 @@ impl TensorExpression {
             TensorOperand::Scalar(left) if left.as_view().is_zero() => {
                 return Self::__neg__(self_, py).map(TensorDispatch::Expression);
             }
-            TensorOperand::Scalar(left) if right.is_scalar() => (left, right.structure),
+            TensorOperand::Scalar(left) if right.is_scalar() => left,
             TensorOperand::Scalar(_) => {
                 return Err(PyValueError::new_err(
                     "cannot subtract a non-scalar tensor from a scalar expression",
                 ));
             }
         };
-        Self::from_known_parts(
-            py,
-            left.as_ref() - right.expression.as_ref(),
-            interface,
-            None,
-            Vec::new(),
-        )
-        .map(TensorDispatch::Expression)
+        let (right, interface) = (right.expression(), right.structure().clone());
+        Self::from_known_parts(py, left.as_ref() - right, interface, None, Vec::new())
+            .map(TensorDispatch::Expression)
     }
 
     #[gen_stub(skip)]
@@ -2716,8 +2060,8 @@ impl TensorExpression {
                 .map(TensorDispatch::Expression),
             TensorOperand::Scalar(right) => Self::from_known_parts(
                 py,
-                left.expression.as_ref() * right.as_ref(),
-                left.structure,
+                left.expression() * right.as_ref(),
+                left.structure().clone(),
                 None,
                 Vec::new(),
             )
@@ -2740,14 +2084,14 @@ impl TensorExpression {
         let right = Self::structured(&self_);
         match TensorOperand::extract(lhs)? {
             TensorOperand::Structured(left) => left
-                .multiply(&right)
+                .multiply(right)
                 .map_err(|error| PyValueError::new_err(error.to_string()))
                 .and_then(|value| Self::from_structured(py, value))
                 .map(TensorDispatch::Expression),
             TensorOperand::Scalar(left) => Self::from_known_parts(
                 py,
-                left.as_ref() * right.expression.as_ref(),
-                right.structure,
+                left.as_ref() * right.expression(),
+                right.structure().clone(),
                 None,
                 Vec::new(),
             )
@@ -2767,24 +2111,12 @@ impl TensorExpression {
                 .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
-        let value = Self::structured(&self_);
-        let rhs = match TensorOperand::extract(rhs)? {
-            TensorOperand::Scalar(rhs) => rhs,
-            TensorOperand::Structured(rhs) if rhs.is_scalar() => rhs.expression,
-            TensorOperand::Structured(_) => {
-                return Err(PyTypeError::new_err(
-                    "tensor division requires a scalar denominator",
-                ));
-            }
-        };
-        Self::from_known_parts(
-            py,
-            value.expression.as_ref() / rhs.as_ref(),
-            value.structure,
-            None,
-            Vec::new(),
-        )
-        .map(TensorDispatch::Expression)
+        let denominator = TensorOperand::extract(rhs)?.into_structured()?;
+        let value = self_
+            .value
+            .divide(&denominator)
+            .map_err(Self::inference_error)?;
+        Self::from_structured(py, value).map(TensorDispatch::Expression)
     }
 
     #[gen_stub(skip)]
@@ -2799,24 +2131,85 @@ impl TensorExpression {
                 .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
-        let value = Self::structured(&self_);
-        if !value.is_scalar() {
-            return Err(PyValueError::new_err(
-                "a non-scalar tensor cannot be used as a denominator",
+        let numerator = TensorOperand::extract(lhs)?.into_structured()?;
+        let value = numerator
+            .divide(&self_.value)
+            .map_err(Self::inference_error)?;
+        Self::from_structured(py, value).map(TensorDispatch::Expression)
+    }
+
+    /// Raise this tensor to a scalar power through typed composition.
+    fn __pow__(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        exponent: &Bound<'_, PyAny>,
+        modulo: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Py<Self>> {
+        if modulo.is_some() {
+            return Err(PyTypeError::new_err(
+                "modular tensor powers are not supported",
             ));
         }
-        let (lhs, structure) = match TensorOperand::extract(lhs)? {
-            TensorOperand::Scalar(lhs) => (lhs, value.structure),
-            TensorOperand::Structured(lhs) => (lhs.expression, lhs.structure),
+        let exponent = TensorOperand::extract(exponent)?.into_structured()?;
+        let value = self_.value.pow(&exponent).map_err(Self::inference_error)?;
+        Self::from_structured(py, value)
+    }
+
+    /// Use this scalar tensor as a power's exponent.
+    fn __rpow__(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        base: &Bound<'_, PyAny>,
+        modulo: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Py<Self>> {
+        if modulo.is_some() {
+            return Err(PyTypeError::new_err(
+                "modular tensor powers are not supported",
+            ));
+        }
+        let base = TensorOperand::extract(base)?.into_structured()?;
+        let value = base.pow(&self_.value).map_err(Self::inference_error)?;
+        Self::from_structured(py, value)
+    }
+
+    /// Compare exact normalized tensor values, including their logical interfaces.
+    /// Compare to ordinary Symbolica expressions through `to_expression()`.
+    fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let Ok(other) = other.extract::<PyRef<'_, Self>>() else {
+            return Ok(py.NotImplemented());
         };
-        Self::from_known_parts(
-            py,
-            lhs.as_ref() / value.expression.as_ref(),
-            structure,
-            None,
-            Vec::new(),
-        )
-        .map(TensorDispatch::Expression)
+        Ok(self
+            .value
+            .same_value(&other.value)
+            .into_pyobject(py)?
+            .to_owned()
+            .into_any()
+            .unbind())
+    }
+
+    fn __ne__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let Ok(other) = other.extract::<PyRef<'_, Self>>() else {
+            return Ok(py.NotImplemented());
+        };
+        Ok((!self.value.same_value(&other.value))
+            .into_pyobject(py)?
+            .to_owned()
+            .into_any()
+            .unbind())
+    }
+
+    fn __hash__(&self) -> isize {
+        use std::hash::{DefaultHasher, Hasher};
+        let mut state = DefaultHasher::new();
+        self.value.hash_value(&mut state);
+        let hash = state.finish() as isize;
+        if hash == -1 { -2 } else { hash }
+    }
+
+    /// False only when the normalized tensor value is exactly zero.
+    /// This does not solve symbolic conditions or inspect component count.
+    fn __bool__(&self) -> bool {
+        !self.value.is_zero()
     }
 
     /// Form an outer product without contracting compatible ports.
@@ -2843,75 +2236,58 @@ impl TensorExpression {
     }
 
     /// Contract metric/vector indices, retaining generated sums as a typed DAG.
-    /// With an operand, contract one explicitly selected pair of interface ports.
-    #[pyo3(signature = (rhs=None, *, left=None, right=None, order=None, output="aliased"))]
-    #[gen_stub(skip)]
-    #[allow(clippy::too_many_arguments)] // Unary contraction and positional binary composition share this verb.
+    /// Call `expand()` on the result to materialize it explicitly.
+    #[pyo3(signature = (order=None, *, rank_one=true))]
     fn contract(
+        &self,
+        order: Option<Vec<usize>>,
+        rank_one: bool,
+    ) -> PyResult<AliasedTensorExpression> {
+        let mut settings = ContractionSettings::default();
+        if let Some(order) = &order {
+            settings = settings.with_order(order);
+        }
+        if !rank_one {
+            settings = settings.without_rank_one_tensors();
+        }
+        let value = self
+            .value
+            .contract(settings)
+            .map_err(Self::inference_error)?;
+        Ok(AliasedTensorExpression::from_parts(
+            Arc::new(value),
+            self.name,
+            self.name_args.clone(),
+        ))
+    }
+
+    /// Contract one selected pair of logical interface positions.
+    #[pyo3(signature = (rhs, *, left, right))]
+    #[gen_stub(skip)]
+    fn contract_ports(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
-        rhs: Option<&Bound<'_, PyAny>>,
-        left: Option<usize>,
-        right: Option<usize>,
-        order: Option<Vec<usize>>,
-        output: &str,
-    ) -> PyResult<Py<PyAny>> {
-        let Some(rhs) = rhs else {
-            if left.is_some() || right.is_some() {
-                return Err(PyTypeError::new_err(
-                    "left and right require a tensor operand",
-                ));
-            }
-            if !matches!(output, "aliased" | "expanded") {
-                return Err(PyValueError::new_err(
-                    "output must be 'aliased' or 'expanded'",
-                ));
-            }
-            let value = Self::structured(&self_)
-                .contract(order.as_deref())
-                .map_err(Self::inference_error)?;
-            if output == "expanded" {
-                let value = value.expanded().map_err(Self::inference_error)?;
-                return Self::from_parts_unchecked(
-                    py,
-                    value.expression,
-                    value.structure,
-                    self_.name,
-                    self_.name_args.clone(),
-                )
-                .map(|value| value.into_any());
-            }
-            return Py::new(
-                py,
-                AliasedTensorExpression::from_parts(value, self_.name, self_.name_args.clone()),
-            )
-            .map(|value| value.into_any());
-        };
-        if order.is_some() || output != "aliased" {
-            return Err(PyTypeError::new_err(
-                "order and output apply to index contraction without an operand",
-            ));
-        }
-        let (Some(left), Some(right)) = (left, right) else {
-            return Err(PyTypeError::new_err(
-                "a tensor operand requires left and right port positions",
-            ));
-        };
+        rhs: &Bound<'_, PyAny>,
+        left: usize,
+        right: usize,
+    ) -> PyResult<TensorDispatch> {
         if let Some(rhs) = concrete_network(rhs)? {
             return Self::promoted_network(&self_, py)?
                 .contract(ConvertibleToSpensoNet(rhs), left, right)
                 .and_then(|network| Py::new(py, network))
-                .map(|value| value.into_any());
+                .map(TensorDispatch::Network);
         }
         let value = Self::structured(&self_);
         let TensorOperand::Structured(rhs) = TensorOperand::extract(rhs)? else {
-            return Err(PyTypeError::new_err("contract() requires a tensor operand"));
+            return Err(PyTypeError::new_err(
+                "contract_ports() requires a tensor operand",
+            ));
         };
         value
             .contract_ports(&rhs, &[composition::PortPair { left, right }])
             .map_err(|error| PyValueError::new_err(error.to_string()))
             .and_then(|value| Self::from_structured(py, value))
-            .map(|value| value.into_any())
+            .map(TensorDispatch::Expression)
     }
 
     /// Compose two selected `(input, output)` matrix channels.
@@ -2935,7 +2311,7 @@ impl TensorExpression {
             return Err(PyTypeError::new_err("compose() requires a tensor operand"));
         };
         SymbolicTensor::compose(
-            &value,
+            value,
             &rhs,
             composition::MatrixChannel {
                 input: left.0,
@@ -2980,7 +2356,7 @@ impl TensorExpression {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::validate_plain_source_settings(&settings)?;
         Ok(display::format_structured_settings(
-            &Self::structured(&self_),
+            Self::structured(&self_),
             &settings,
         ))
     }
@@ -2989,13 +2365,11 @@ impl TensorExpression {
     /// ``max_line_length`` wraps top-level sums using Symbolica's usual rules.
     #[pyo3(signature = (max_line_length = None))]
     fn to_latex(self_: PyRef<'_, Self>, max_line_length: Option<usize>) -> String {
-        display::structured_to_latex(&Self::structured(&self_), false, max_line_length)
+        display::structured_to_latex(Self::structured(&self_), false, max_line_length)
     }
 
     /// Format this structured expression as Typst math source.
     #[pyo3(signature = (show_dimensions = None, *, settings = None))]
-    // Tensor semantics intentionally specialize the inherited Expression API.
-    #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
     fn to_typst(
         self_: PyRef<'_, Self>,
         show_dimensions: Option<bool>,
@@ -3004,7 +2378,7 @@ impl TensorExpression {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::validate_typst_source_settings(&settings)?;
         Ok(display::structured_to_typst_with_settings(
-            &Self::structured(&self_),
+            Self::structured(&self_),
             &settings,
         ))
     }
@@ -3016,8 +2390,6 @@ impl TensorExpression {
     /// ``notation_source`` is a trusted complete replacement for the bundled
     /// ``notation.typ`` module, not a style fragment. Typst executes it. When
     /// HTML cannot be rendered, the result retains its LaTeX and text forms.
-    // Tensor semantics intentionally specialize the inherited Expression API.
-    #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
     fn formatted(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -3028,7 +2400,7 @@ impl TensorExpression {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::format_structured_output_rich(
             py,
-            &Self::structured(&self_),
+            Self::structured(&self_),
             &settings,
             notation_source.as_deref(),
         )
@@ -3051,7 +2423,7 @@ impl TensorExpression {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::structured_to_html(
             py,
-            &Self::structured(&self_),
+            Self::structured(&self_),
             &settings,
             notation_source.as_deref(),
         )
@@ -3073,18 +2445,18 @@ impl TensorExpression {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::structured_to_svg(
             py,
-            &Self::structured(&self_),
+            Self::structured(&self_),
             &settings,
             notation_source.as_deref(),
         )
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> String {
-        display::format_structured(&Self::structured(&self_), false)
+        display::format_structured(Self::structured(&self_), false)
     }
 
     fn __str__(self_: PyRef<'_, Self>) -> String {
-        display::format_structured(&Self::structured(&self_), false)
+        display::format_structured(Self::structured(&self_), false)
     }
 
     fn _repr_pretty_(
@@ -3095,17 +2467,15 @@ impl TensorExpression {
         let text = if cycle {
             "...".to_string()
         } else {
-            display::format_structured(&Self::structured(&self_), false)
+            display::format_structured(Self::structured(&self_), false)
         };
         pretty.call_method1("text", (text,))?;
         Ok(())
     }
 
-    // Tensor semantics intentionally specialize the inherited Expression API.
-    #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
     fn _repr_html_(self_: PyRef<'_, Self>, py: Python<'_>) -> Option<String> {
         let settings = display::DisplaySettings::default();
-        display::structured_to_html(py, &Self::structured(&self_), &settings, None).ok()
+        display::structured_to_html(py, Self::structured(&self_), &settings, None).ok()
     }
 
     fn _repr_latex_(self_: PyRef<'_, Self>) -> String {
@@ -3121,13 +2491,7 @@ impl TensorExpression {
 #[pyfunction]
 pub fn as_tensor(py: Python<'_>, expression: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
     if let Ok(expression) = expression.extract::<PyRef<'_, TensorExpression>>() {
-        return TensorExpression::from_known_parts(
-            py,
-            expression.as_super().expr.clone(),
-            expression.interface.clone(),
-            expression.name,
-            expression.name_args.clone(),
-        );
+        return Py::new(py, expression.clone());
     }
     let expression = expression
         .extract::<ConvertibleToExpression>()
@@ -3147,6 +2511,39 @@ fn structured_operand(
     }
 }
 
+// Preserve actual Rust type names/imports for the symbolic function overloads.
+#[cfg(feature = "python_stubgen")]
+macro_rules! symbolic_function_overload {
+    ($name:literal, $doc:literal, [$($argument:literal: $input:ty),*], [$($value:literal: $kind:ident),+]) => {
+        submit! {
+            pyo3_stub_gen::type_info::PyFunctionInfo {
+                name: $name,
+                parameters: &[
+                    $(ParameterInfo {
+                        name: $argument,
+                        kind: ParameterKind::PositionalOrKeyword,
+                        default: ParameterDefault::None,
+                        type_info: <$input>::type_input,
+                    },)*
+                    $(ParameterInfo {
+                        name: $value,
+                        kind: ParameterKind::$kind,
+                        default: ParameterDefault::None,
+                        type_info: || TensorExpression::type_input() | PythonExpression::type_input(),
+                    },)+
+                ],
+                r#return: TensorExpression::type_output,
+                doc: $doc, module: Some("symbolica.community.spenso"),
+                is_async: false, deprecated: None, type_ignored: None, is_overload: true,
+                file: file!(), line: line!(), column: column!(), index: 0,
+            }
+        }
+    };
+}
+
+#[cfg(feature = "python_stubgen")]
+symbolic_function_overload!("dot", "Contract two rank-one tensors into the canonical dot form.", [], ["left": PositionalOrKeyword, "right": PositionalOrKeyword]);
+
 /// Contract two rank-one tensors into the canonical dot form.
 #[cfg_attr(
     feature = "python_stubgen",
@@ -3161,8 +2558,6 @@ fn structured_operand(
             """Contract two rank-one tensors into the canonical dot form."""
         @overload
         def dot(left: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"], right: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
-        @overload
-        def dot(left: pyo3_stub_gen.RustType["PythonExpression"], right: pyo3_stub_gen.RustType["PythonExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
         "#,
     )
 )]
@@ -3191,6 +2586,9 @@ fn dot(
 // Python typing permits only one unbounded tuple unpack. A concrete first or last
 // factor guarantees a network; an arbitrary mixed sequence needs the union fallback
 // because it may be empty or contain only symbolic factors at runtime.
+#[cfg(feature = "python_stubgen")]
+symbolic_function_overload!("chain", "Build an explicitly-ended ordered tensor chain.", ["start_slot": SpensoSlot, "end_slot": SpensoSlot], ["factors": VarPositional]);
+
 /// Build an explicitly-ended ordered tensor chain.
 #[cfg_attr(
     feature = "python_stubgen",
@@ -3204,9 +2602,6 @@ fn dot(
         def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], factor: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
         @overload
         def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], first: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"], second: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
-        @overload
-        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: pyo3_stub_gen.RustType["PythonExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
-            """Build an explicitly-ended ordered tensor chain."""
         @overload
         def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["TensorDispatch"]: ...
         "#,
@@ -3243,7 +2638,7 @@ fn chain(
                 (factor_channel.input, factor_channel.output),
             )?;
         }
-        let slots = value.structure.structure.logical_slots();
+        let slots = value.structure.structure().logical_slots();
         if start_slot.slot.rep() != slots[0].rep() || end_slot.slot.rep() != slots[1].rep() {
             return Err(PyValueError::new_err(
                 "chain endpoints are incompatible with the factor channel",
@@ -3270,6 +2665,9 @@ fn chain(
         .map(TensorDispatch::Expression)
 }
 
+#[cfg(feature = "python_stubgen")]
+symbolic_function_overload!("trace", "Close an ordered factor sequence into a canonical cyclic trace.", ["representation": SpensoRepresentation], ["factors": VarPositional]);
+
 /// Close an ordered factor sequence into a canonical cyclic trace.
 #[cfg_attr(
     feature = "python_stubgen",
@@ -3283,9 +2681,6 @@ fn chain(
         def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], factor: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
         @overload
         def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], first: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"], second: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
-        @overload
-        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: pyo3_stub_gen.RustType["PythonExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
-            """Close an ordered factor sequence into a canonical cyclic trace."""
         @overload
         def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["TensorDispatch"]: ...
         "#,
@@ -3312,7 +2707,7 @@ fn trace(
             .structure
             .matrix_channel()
             .ok_or_else(|| PyValueError::new_err("trace factors have no unique matrix channel"))?;
-        let input = value.structure.structure.logical_slots()[channel.input];
+        let input = value.structure.structure().logical_slots()[channel.input];
         if representation.representation != input.rep() {
             return Err(PyValueError::new_err(
                 "trace representation does not match the factor channel",
@@ -3347,6 +2742,65 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+// Nested RustType markers in Python unions lose their trait mapping. Register
+// symbolic overloads with the same typed inventory used by __getitem__ below.
+#[cfg(feature = "python_stubgen")]
+macro_rules! symbolic_method_overload {
+    ($name:literal, $argument:literal, $input:ty $(, $keyword:literal: $kind:ty)*) => {
+        submit! {
+            PyMethodsInfo {
+                struct_id: std::any::TypeId::of::<TensorExpression>,
+                attrs: &[], getters: &[], setters: &[],
+                file: file!(), line: line!(), column: column!(),
+                methods: &[MethodInfo {
+                    name: $name,
+                    parameters: &[
+                        ParameterInfo {
+                            name: $argument,
+                            kind: ParameterKind::PositionalOrKeyword,
+                            default: ParameterDefault::None,
+                            type_info: || TensorExpression::type_input() | <$input>::type_input(),
+                        },
+                        $(ParameterInfo {
+                            name: $keyword,
+                            kind: ParameterKind::KeywordOnly,
+                            default: ParameterDefault::None,
+                            type_info: <$kind>::type_input,
+                        },)*
+                    ],
+                    r#type: MethodType::Instance,
+                    r#return: TensorExpression::type_output,
+                    doc: "", is_async: false, deprecated: None, type_ignored: None,
+                    is_overload: true,
+                }],
+            }
+        }
+    };
+}
+
+#[cfg(feature = "python_stubgen")]
+symbolic_method_overload!("__add__", "rhs", ConvertibleToExpression);
+#[cfg(feature = "python_stubgen")]
+symbolic_method_overload!("__radd__", "lhs", ConvertibleToExpression);
+#[cfg(feature = "python_stubgen")]
+symbolic_method_overload!("__sub__", "rhs", ConvertibleToExpression);
+#[cfg(feature = "python_stubgen")]
+symbolic_method_overload!("__rsub__", "lhs", ConvertibleToExpression);
+#[cfg(feature = "python_stubgen")]
+symbolic_method_overload!("__mul__", "rhs", ConvertibleToExpression);
+#[cfg(feature = "python_stubgen")]
+symbolic_method_overload!("__rmul__", "lhs", ConvertibleToExpression);
+#[cfg(feature = "python_stubgen")]
+symbolic_method_overload!("__truediv__", "rhs", ConvertibleToExpression);
+#[cfg(feature = "python_stubgen")]
+symbolic_method_overload!("__rtruediv__", "lhs", ConvertibleToExpression);
+#[cfg(feature = "python_stubgen")]
+symbolic_method_overload!("outer", "rhs", PythonExpression);
+#[cfg(feature = "python_stubgen")]
+symbolic_method_overload!("contract_ports", "rhs", PythonExpression, "left": usize, "right": usize);
+#[cfg(feature = "python_stubgen")]
+symbolic_method_overload!("compose", "rhs", PythonExpression, "left": (usize, usize), "right": (usize, usize));
+
 // The stub generator's Python parser requires typing.Union instead of `|`.
 #[cfg(feature = "python_stubgen")]
 submit! {
@@ -3358,58 +2812,27 @@ submit! {
             @overload
             def __add__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
             @overload
-            def __add__(self, rhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
-            @overload
             def __radd__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
-            @overload
-            def __radd__(self, lhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
             @overload
             def __sub__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
             @overload
-            def __sub__(self, rhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
-            @overload
             def __rsub__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
-            @overload
-            def __rsub__(self, lhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
             @overload
             def __mul__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
             @overload
-            def __mul__(self, rhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
-            @overload
             def __rmul__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
-            @overload
-            def __rmul__(self, lhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
             @overload
             def __truediv__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
             @overload
-            def __truediv__(self, rhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
-            @overload
             def __rtruediv__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
-            @overload
-            def __rtruediv__(self, lhs: pyo3_stub_gen.RustType["ConvertibleToExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]: ...
             @overload
             def outer(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]:
                 """Form an outer product without contracting compatible ports."""
             @overload
-            def outer(self, rhs: pyo3_stub_gen.RustType["PythonExpression"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
-                """Form an outer product without contracting compatible ports."""
-            @overload
-            def contract(self, *, order: typing.Optional[list[int]] = None, output: typing.Literal["aliased"] = "aliased") -> pyo3_stub_gen.RustType["AliasedTensorExpression"]:
-                """Contract metric/vector indices into typed alias definitions."""
-            @overload
-            def contract(self, *, order: typing.Optional[list[int]] = None, output: typing.Literal["expanded"]) -> pyo3_stub_gen.RustType["TensorExpression"]:
-                """Contract indices and explicitly materialize the polynomial output."""
-            @overload
-            def contract(self, rhs: typing.Union[Tensor, TensorNetwork], *, left: int, right: int) -> pyo3_stub_gen.RustType["SpensoNet"]:
-                """Contract one selected pair of ordered interface positions."""
-            @overload
-            def contract(self, rhs: pyo3_stub_gen.RustType["PythonExpression"], *, left: int, right: int) -> pyo3_stub_gen.RustType["TensorExpression"]:
+            def contract_ports(self, rhs: typing.Union[Tensor, TensorNetwork], *, left: int, right: int) -> pyo3_stub_gen.RustType["SpensoNet"]:
                 """Contract one selected pair of ordered interface positions."""
             @overload
             def compose(self, rhs: typing.Union[Tensor, TensorNetwork], *, left: tuple[int, int], right: tuple[int, int]) -> pyo3_stub_gen.RustType["SpensoNet"]:
-                """Compose two selected `(input, output)` matrix channels."""
-            @overload
-            def compose(self, rhs: pyo3_stub_gen.RustType["PythonExpression"], *, left: tuple[int, int], right: tuple[int, int]) -> pyo3_stub_gen.RustType["TensorExpression"]:
                 """Compose two selected `(input, output)` matrix channels."""
         "#
     }
@@ -3481,6 +2904,7 @@ submit! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use idenso::epsilon::EpsilonSimplifier;
     use idenso::{
         IndexTooling, IndexToolingError,
         representations::{Bispinor, ColorAdjoint, ColorFundamental},
@@ -3489,7 +2913,10 @@ mod tests {
         dimension::Dimension,
         representation::{ExtendibleReps, Minkowski, RepName},
     };
-    use symbolica::{atom::FunctionBuilder, symbol};
+    use symbolica::{
+        atom::{AtomCore, FunctionBuilder},
+        symbol,
+    };
 
     fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
         InterfaceInference::default()
@@ -3521,7 +2948,7 @@ mod tests {
             "__truediv__",
             "__rtruediv__",
             "outer",
-            "contract",
+            "contract_ports",
             "compose",
         ] {
             let overloads = methods
@@ -3535,9 +2962,9 @@ mod tests {
             );
             assert!(overloads.iter().all(|method| method.is_overload));
             let symbolic = if name.starts_with("__") {
-                ConvertibleToExpression::type_input()
+                TensorExpression::type_input() | ConvertibleToExpression::type_input()
             } else {
-                PythonExpression::type_input()
+                TensorExpression::type_input() | PythonExpression::type_input()
             };
             assert!(overloads.iter().any(|method| {
                 (method.parameters[0].type_info)() == symbolic
@@ -3582,7 +3009,8 @@ mod tests {
             assert!(overloads.iter().any(|function| {
                 let factors = function.parameters.last().unwrap();
                 matches!(factors.kind, ParameterKind::VarPositional)
-                    && (factors.type_info)() == PythonExpression::type_input()
+                    && (factors.type_info)()
+                        == (TensorExpression::type_input() | PythonExpression::type_input())
                     && (function.r#return)() == TensorExpression::type_output()
             }));
             // A possibly empty, mixed sequence cannot promise concrete promotion.
@@ -3597,8 +3025,6 @@ mod tests {
 
     #[test]
     fn default_color_simplification_preserves_external_tensor_ports() {
-        use idenso::color::ColorSimplifier;
-
         idenso::representations::initialize();
         Python::initialize();
         let mink = Minkowski {}.new_rep(Dimension::from(symbol!("color_ports_D")));
@@ -3627,7 +3053,13 @@ mod tests {
             assert_eq!(expected.canonical().order(), 4);
 
             // Casimir/index representation arguments are scalar metadata, not ports.
-            let simplified = numerator.simplify_color();
+            let simplified = SymbolicTensor::infer(numerator)
+                .unwrap()
+                .simplify_color(idenso::color::ColorSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
             let actual = infer_interface(&simplified).unwrap();
             assert_eq!(actual.canonical(), expected.canonical(), "{simplified}");
         }
@@ -3669,7 +3101,6 @@ mod tests {
     fn explicit_dyad_projection_is_independent_of_metric_and_operand_order() {
         idenso::representations::initialize();
         Python::initialize();
-        let settings = SchoonschipSettings::new(None).with_expanded_contracted_sums();
         let p = spenso::vector_symbol!("dyad_projection_p");
         let q = spenso::vector_symbol!("dyad_projection_q");
         for dimension in [
@@ -3709,21 +3140,20 @@ mod tests {
                         let product = left.multiply(right).unwrap();
                         assert!(product.is_scalar());
                         assert!(
-                            infer_interface(&product.expression)
+                            infer_interface(product.expression())
                                 .unwrap()
                                 .canonical()
                                 .is_scalar()
                         );
                         assert_eq!(
                             product
-                                .expression
-                                .schoonschip_with_net::<false, AbstractIndex>(&settings)
+                                .contract(Default::default())
+                                .unwrap()
+                                .expanded()
                                 .unwrap()
                                 .to_dots()
-                                .expand_in(Atom::var(ETS.metric).as_view())
-                                .schoonschip_with_net::<false, AbstractIndex>(&settings)
                                 .unwrap()
-                                .to_dots(),
+                                .into_expression(),
                             expected
                         );
                     }
@@ -3758,14 +3188,16 @@ mod tests {
                 let product = left.multiply(right).unwrap();
                 assert_eq!(product.rank(), 2);
                 assert_eq!(
-                    infer_interface(&product.expression).unwrap().canonical(),
+                    infer_interface(product.expression()).unwrap().canonical(),
                     infer_interface(&expected).unwrap().canonical()
                 );
                 assert_eq!(
                     product
-                        .expression
-                        .schoonschip_net::<AbstractIndex>()
-                        .unwrap(),
+                        .contract(Default::default())
+                        .unwrap()
+                        .resolved()
+                        .unwrap()
+                        .into_expression(),
                     expected
                 );
             }
@@ -3774,8 +3206,6 @@ mod tests {
 
     #[test]
     fn raw_gamma_trace_accepts_longitudinal_projection() {
-        use idenso::shorthands::schoonschip::{Schoonschip, SchoonschipSettings};
-
         idenso::representations::initialize();
         Python::initialize();
         let mink = Minkowski {}.new_rep(Dimension::from(symbol!("gamma_projection_D")));
@@ -3801,11 +3231,11 @@ mod tests {
         assert!(contracted.is_scalar());
 
         let projected = contracted
-            .expression
-            .schoonschip_with_net::<false, AbstractIndex>(
-                &SchoonschipSettings::default_network().with_expanded_contracted_sums(),
-            )
-            .unwrap();
+            .contract(Default::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         // Network contraction produces valid slashed gamma factors inside the trace.
         let interface = infer_interface(&projected)
             .expect("projecting a valid gamma trace must retain a valid tensor expression");
@@ -3832,12 +3262,17 @@ mod tests {
                         * vector.clone()
                         * idenso::gamma!(&b, endpoint.as_view(), &nu);
                     let tensor = TensorExpression::from_atom_interface(py, original.clone(), None)?;
-                    let compact = TensorExpression::schoonschip(tensor.borrow(py), py, None)?;
-                    let collected = TensorExpression::collect_gamma_chains(compact.borrow(py), py)?;
+                    let compact = TensorExpression::from_structured(py, tensor.borrow(py).value.contract(Default::default()).map_err(TensorExpression::inference_error)?.resolved().map_err(TensorExpression::inference_error)?)?;
+                    let settings = PyGammaSimplifySettings::from_rust(idenso::dirac::GammaSimplifySettings {
+                        output: idenso::dirac::GammaOutput::Chains,
+                        ..Default::default()
+                    });
+                    let collected = compact.borrow(py).simplify_gamma(Some(&settings))?;
+                    let collected = TensorExpression::from_structured(py, collected.value.resolved().map_err(TensorExpression::inference_error)?)?;
                     let collected = collected.borrow(py);
                     let expected = infer_interface(&original)?;
-                    assert_eq!(collected.interface.canonical(), expected.canonical());
-                    let atom = &collected.as_super().expr;
+                    assert_eq!(collected.interface().canonical(), expected.canonical());
+                    let atom = &collected.atom();
                     let head = if endpoint == &a { SPENSO_TAG.trace } else { SPENSO_TAG.chain };
                     assert!(matches!(atom.as_view(), AtomView::Fun(function) if function.get_symbol() == head));
                     let slash = idenso::gamma!(
@@ -3904,7 +3339,6 @@ mod tests {
                 .add_arg(bis.to_symbolic([]))
                 .add_arg(Atom::num(1))
                 .finish(),
-            SPENSO_TAG.trace(wrong_bis.to_symbolic([]), [idenso::gamma!(&compact)]),
         ];
         for atom in invalid {
             assert!(
@@ -3912,6 +3346,15 @@ mod tests {
                 "invalid compact gamma accepted: {atom}"
             );
         }
+        // A trace supplies its formal spin channel; this is distinct from
+        // the fixed standalone gamma factory signature checked above.
+        let formal_trace = SPENSO_TAG.trace(wrong_bis.to_symbolic([]), [idenso::gamma!(&compact)]);
+        assert!(
+            infer_interface(&formal_trace)
+                .unwrap()
+                .canonical()
+                .is_scalar()
+        );
     }
 
     #[test]
@@ -3938,23 +3381,10 @@ mod tests {
                 "reinfer",
                 "expand",
                 "simplify_gamma",
-                "collect_gamma_chains",
-                "simplify_gamma0",
-                "simplify_gamma_conjugate",
                 "simplify_epsilon",
-                "simplify_metrics",
                 "simplify_color",
-                "collect_color",
-                "collect_color_constants",
                 "to_color_casimir",
                 "to_cof_dimension_invariants",
-                "wrap_color",
-                "expand_mink",
-                "expand_bis",
-                "expand_mink_bis",
-                "expand_metrics",
-                "expand_color",
-                "expand_in_patterns",
                 "wrap_indices",
                 "cook_indices",
                 "cook_function",
@@ -3967,18 +3397,12 @@ mod tests {
                 "dirac_adjoint",
                 "cook",
                 "uncook",
-                "schoonschip",
-                "schoonschip_net",
                 "to_dots",
-                "normalize_dots",
-                "expand_dots",
-                "metric_shorthand_to_dot",
                 "undo_all",
                 "undo_schoonschip",
                 "undo_dots",
                 "undo_chain",
                 "undo_trace",
-                "collect_chains",
                 "chainify",
                 "normalize_chains",
                 "undo_single_length",
@@ -4087,7 +3511,7 @@ mod tests {
                 let tensor = value.extract::<PyRef<'_, TensorExpression>>()?;
                 assert_eq!(
                     tensor
-                        .interface
+                        .interface()
                         .logical_slots()
                         .into_iter()
                         .map(|slot| slot.rep())
@@ -4095,8 +3519,8 @@ mod tests {
                     *expected
                 );
                 assert!(tensor.name_args.is_empty());
-                assert_eq!(tensor.interface.open_positions().len(), expected.len());
-                let AtomView::Fun(function) = tensor.as_super().expr.as_view() else {
+                assert_eq!(tensor.interface().open_positions().len(), expected.len());
+                let AtomView::Fun(function) = tensor.atom().as_view() else {
                     panic!("a predefined tensor factory must remain an atomic leaf")
                 };
                 let canonical_slots = function
@@ -4135,13 +3559,13 @@ mod tests {
                     .call(&full, None)?
                     .extract::<PyRef<'_, TensorExpression>>()?;
                 assert_eq!(
-                    indexed.interface.logical_slots(),
+                    indexed.interface().logical_slots(),
                     logical_slots
                         .iter()
                         .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind())))
                         .collect::<Vec<_>>()
                 );
-                let AtomView::Fun(function) = indexed.as_super().expr.as_view() else {
+                let AtomView::Fun(function) = indexed.atom().as_view() else {
                     panic!("an indexed predefined tensor must remain an atomic leaf")
                 };
                 assert_eq!(
@@ -4227,7 +3651,7 @@ mod tests {
                 let expression = expression.bind(py).borrow();
                 assert_eq!(
                     expression
-                        .interface
+                        .interface()
                         .logical_slots()
                         .iter()
                         .map(IsAbstractSlot::dim)
@@ -4235,7 +3659,7 @@ mod tests {
                     expected_dimensions
                 );
                 assert!(expression.name_args.is_empty());
-                let AtomView::Fun(function) = expression.as_super().expr.as_view() else {
+                let AtomView::Fun(function) = expression.atom().as_view() else {
                     panic!("a symbolic-dimension factory must produce one tensor leaf")
                 };
                 assert_eq!(function.get_nargs(), expected_dimensions.len());
@@ -4276,7 +3700,7 @@ mod tests {
                 .collect::<Vec<_>>(),
         );
         let generator = SymbolicTensor::from_signature(&generator_structure).unwrap();
-        let inferred = infer_interface(&generator.expression).unwrap();
+        let inferred = infer_interface(generator.expression()).unwrap();
         assert_eq!(
             inferred
                 .logical_slots()
@@ -4324,7 +3748,7 @@ mod tests {
                 panic!("tagged tensor expression was classified as scalar")
             };
             assert_eq!(
-                value.structure.logical_slots(),
+                value.structure().logical_slots(),
                 explicit_interface(representation, index).logical_slots()
             );
             Ok(())
@@ -4363,14 +3787,14 @@ mod tests {
 
             let relabeled = expression.bind(py).call1(("i", "j"))?;
             let relabeled = relabeled.extract::<PyRef<'_, TensorExpression>>()?;
-            assert_eq!(relabeled.interface.canonical().order(), 2);
+            assert_eq!(relabeled.interface().canonical().order(), 2);
             assert_eq!(relabeled.name, Some(name));
             assert_eq!(relabeled.name_args, vec![argument]);
             drop(relabeled);
 
             let contracted = expression.bind(py).call1(("i", "i"))?;
             let contracted = contracted.extract::<PyRef<'_, TensorExpression>>()?;
-            assert!(contracted.interface.canonical().is_scalar());
+            assert!(contracted.interface().canonical().is_scalar());
             assert_eq!(contracted.name, None);
             assert!(contracted.name_args.is_empty());
             Ok(())
@@ -4404,25 +3828,76 @@ mod tests {
                 let restored = tensor_type.call1((&wrapped,))?;
                 let restored = restored.extract::<PyRef<'_, TensorExpression>>()?;
                 let scoped = wrapped.extract::<PyRef<'_, TensorExpression>>()?;
-                assert_eq!(restored.as_super().expr, scoped.as_super().expr);
-                assert_eq!(restored.interface, scoped.interface);
-                assert_eq!(scoped.interface.canonical().order(), rank);
+                assert_eq!(restored.atom(), scoped.atom());
+                assert_eq!(restored.interface(), scoped.interface());
+                assert_eq!(scoped.interface().canonical().order(), rank);
                 let cooked = tensor_type.call((&wrapped,), Some(&kwargs))?;
                 let cooked = cooked.extract::<Py<TensorExpression>>()?;
-                assert_eq!(cooked.borrow(py).interface.canonical().order(), rank);
+                assert_eq!(cooked.borrow(py).interface().canonical().order(), rank);
                 if rank == 0 {
-                    let simplified = cooked.bind(py).call_method0("simplify_metrics")?;
+                    let simplified = cooked
+                        .bind(py)
+                        .call_method0("contract")?
+                        .call_method0("to_expression")?;
                     let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
-                    assert_eq!(simplified.as_super().expr, Atom::num(3));
+                    assert_eq!(*simplified.atom(), Atom::num(3));
                 }
                 let encoded = indexed.call_method0("cook")?;
                 assert!(!encoded.is_instance_of::<TensorExpression>());
                 let restored = tensor_type.call1((encoded,))?.call_method0("uncook")?;
                 let restored = restored.extract::<PyRef<'_, TensorExpression>>()?;
                 let indexed = indexed.extract::<PyRef<'_, TensorExpression>>()?;
-                assert_eq!(restored.as_super().expr, indexed.as_super().expr);
-                assert_eq!(restored.interface, indexed.interface);
+                assert_eq!(restored.atom(), indexed.atom());
+                // The symmetric metric can normalize its arguments into a different
+                // order. Bare cooking cannot retain the separately declared layout.
+                assert_eq!(
+                    restored.interface().canonical(),
+                    indexed.interface().canonical()
+                );
+                let declared_layout = pyo3::types::PyDict::new(py);
+                declared_layout.set_item("structure", indexed.structure())?;
+                let restored = tensor_type.call(
+                    (PythonExpression {
+                        expr: restored.atom().clone(),
+                    },),
+                    Some(&declared_layout),
+                )?;
+                let restored = restored.extract::<PyRef<'_, TensorExpression>>()?;
+                assert_eq!(restored.atom(), indexed.atom());
+                assert_eq!(restored.interface(), indexed.interface());
             }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn nonsymmetric_tensor_cooking_preserves_argument_and_port_order() {
+        idenso::representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::EUCLIDEAN
+                .new_rep(Dimension::Concrete(3))
+                .cast::<LibraryRep>();
+            let structure = ExplicitKey::<AbstractIndex>::from_iter(
+                [representation, representation],
+                SPENSO_TAG.tensor_symbol("nonsymmetric_cooking_tensor"),
+                None,
+            );
+            let tensor = TensorExpression::from_structure(py, &structure)?;
+            let tensor_type = py.get_type::<TensorExpression>();
+            let mut atoms = Vec::new();
+            for indices in [("mu", "nu"), ("nu", "mu")] {
+                let indexed = tensor.bind(py).call1(indices)?;
+                let encoded = indexed.call_method0("cook")?;
+                let restored = tensor_type.call1((encoded,))?.call_method0("uncook")?;
+                let restored = restored.extract::<PyRef<'_, TensorExpression>>()?;
+                let indexed = indexed.extract::<PyRef<'_, TensorExpression>>()?;
+                assert_eq!(restored.atom(), indexed.atom());
+                assert_eq!(restored.interface(), indexed.interface());
+                atoms.push(indexed.atom().clone());
+            }
+            assert_ne!(atoms[0], atoms[1]);
             Ok(())
         })
         .unwrap();
@@ -4464,7 +3939,7 @@ mod tests {
                 kwargs.set_item("cook_indices", settings.clone())?;
                 let cooked = tensor_type.call((&expression,), Some(&kwargs))?;
                 let cooked = cooked.extract::<PyRef<'_, TensorExpression>>()?;
-                let slots = cooked.interface.logical_slots();
+                let slots = cooked.interface().logical_slots();
                 assert_eq!(slots.len(), 1);
                 assert_eq!(slots[0].rep(), representation);
                 let PartialIndex::Explicit(AbstractIndex::Symbol(symbol)) = slots[0].aind else {
@@ -4478,10 +3953,7 @@ mod tests {
                 };
                 assert!(symbol.has_tag(expected_tag));
                 assert_eq!(symbol.get_data(), &UserData::Atom(payload.clone()));
-                assert_eq!(
-                    settings.rust().uncook(cooked.as_super().expr.as_view()),
-                    raw
-                );
+                assert_eq!(settings.rust().uncook(cooked.atom().as_view()), raw);
             }
             Ok(())
         })
@@ -4520,11 +3992,14 @@ mod tests {
                 .get_type::<TensorExpression>()
                 .call((wrapped,), Some(&kwargs))?;
             let cooked = cooked.extract::<Py<TensorExpression>>()?;
-            assert_eq!(cooked.borrow(py).interface, tensor.borrow(py).interface);
-            let simplified = cooked.bind(py).call_method0("simplify_metrics")?;
+            assert_eq!(cooked.borrow(py).interface(), tensor.borrow(py).interface());
+            let simplified = cooked
+                .bind(py)
+                .call_method0("contract")?
+                .call_method0("to_expression")?;
             let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
             assert_eq!(
-                simplified.as_super().expr,
+                *simplified.atom(),
                 FunctionBuilder::new(momentum).add_arg(nu).finish()
             );
             Ok(())
@@ -4548,25 +4023,20 @@ mod tests {
                 representation.slot(PartialIndex::Explicit(index)),
                 representation.slot(PartialIndex::Explicit(index)),
             ]);
-            let expression = TensorExpression::from_structured(
-                py,
-                SymbolicTensor::new(atom.clone(), interface),
-            )?;
+            let expression =
+                TensorExpression::from_known_parts(py, atom.clone(), interface, None, Vec::new())?;
             assert!(
                 expression
                     .bind(py)
                     .borrow()
-                    .interface
+                    .interface()
                     .canonical()
                     .is_scalar()
             );
 
             let header = symbolica::symbol!("wrapped_index_header");
             let wrapped = TensorExpression::wrap_indices(expression.bind(py).borrow(), py, header)?;
-            assert_eq!(
-                wrapped.borrow(py).as_super().expr,
-                atom.wrap_indices(header)
-            );
+            assert_eq!(*wrapped.borrow(py).atom(), atom.wrap_indices(header));
             assert!(wrapped.bind(py).is_instance_of::<TensorExpression>());
             Ok(())
         })
@@ -4574,7 +4044,7 @@ mod tests {
     }
 
     #[test]
-    fn inherited_algebra_preserves_open_indexed_zero_and_scalar_tensors() {
+    fn explicit_algebra_preserves_open_indexed_zero_and_scalar_tensors() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
             let open = TensorExpression::gamma(py, ConvertibleToDimension(4.into()))?;
@@ -4585,7 +4055,7 @@ mod tests {
             let zero = TensorExpression::from_atom_interface(
                 py,
                 Atom::Zero,
-                open.borrow(py).interface.clone(),
+                open.borrow(py).interface().clone(),
             )?;
             let scalar = TensorExpression::from_atom_interface(py, Atom::one(), None)?;
             let x = Atom::var(symbol!("algebra_x"));
@@ -4606,8 +4076,8 @@ mod tests {
                 let tensor = tensor.borrow(py);
                 let expression = TensorExpression::from_known_parts(
                     py,
-                    &coefficient * &tensor.as_super().expr,
-                    tensor.interface.clone(),
+                    &coefficient * tensor.atom(),
+                    tensor.interface().clone(),
                     Some(name),
                     vec![Atom::num(7)],
                 )?;
@@ -4626,13 +4096,17 @@ mod tests {
                     ("apart", &one),
                     ("apart", &two),
                 ] {
-                    let result = expression.bind(py).call_method1(method, args)?;
-                    let result = result.extract::<PyRef<'_, TensorExpression>>()?;
-                    assert_eq!(result.interface, original.interface, "{method}");
+                    let raw = TensorExpression::to_expression(expression.borrow(py))
+                        .into_pyobject(py)?
+                        .call_method1(method, args)?
+                        .extract::<PythonExpression>()?;
+                    let result = TensorExpression::preserving_interface(&original, py, raw.expr)?;
+                    let result = result.borrow(py);
+                    assert_eq!(result.interface(), original.interface(), "{method}");
                     assert_eq!(result.name, original.name, "{method}");
                     assert_eq!(result.name_args, original.name_args, "{method}");
                     assert!(
-                        (result.as_super().expr.clone() - original.as_super().expr.clone())
+                        (result.atom().clone() - original.atom().clone())
                             .together()
                             .cancel()
                             .expand()
@@ -4644,10 +4118,10 @@ mod tests {
                     .import("copy")?
                     .call_method1("copy", (expression.bind(py),))?;
                 let copied = copied.extract::<PyRef<'_, TensorExpression>>()?;
-                assert_eq!(copied.interface, original.interface);
+                assert_eq!(copied.interface(), original.interface());
                 assert_eq!(copied.name, original.name);
                 assert_eq!(copied.name_args, original.name_args);
-                assert_eq!(copied.as_super().expr, original.as_super().expr);
+                assert_eq!(copied.atom(), original.atom());
             }
             Ok(())
         })
@@ -4664,18 +4138,21 @@ mod tests {
             };
             let expression = TensorExpression::from_atom_interface(
                 py,
-                &x.expr * &tensor.borrow(py).as_super().expr,
-                tensor.borrow(py).interface.clone(),
+                &x.expr * tensor.borrow(py).atom(),
+                tensor.borrow(py).interface().clone(),
             )?;
             let kwargs = pyo3::types::PyDict::new(py);
             let callback = pyo3::types::PyCFunction::new_closure(py, None, None, |_, _| {
                 Ok::<_, PyErr>(PythonExpression { expr: Atom::one() })
             })?;
             kwargs.set_item("coeff_map", callback)?;
-            let error = expression
-                .bind(py)
-                .call_method("collect_symbol", (x,), Some(&kwargs))
-                .unwrap_err();
+            let raw = TensorExpression::to_expression(expression.borrow(py))
+                .into_pyobject(py)?
+                .call_method("collect_symbol", (x,), Some(&kwargs))?
+                .extract::<PythonExpression>()?;
+            let error =
+                TensorExpression::preserving_interface(&expression.borrow(py), py, raw.expr)
+                    .unwrap_err();
             assert!(error.is_instance_of::<PyValueError>(py));
             Ok(())
         })
@@ -4701,36 +4178,43 @@ mod tests {
                 .get_type::<TensorExpression>()
                 .call1((tensor.bind(py),))?;
             let constructed = constructed.extract::<PyRef<'_, TensorExpression>>()?;
-            assert_eq!(constructed.interface, tensor.borrow(py).interface);
+            assert_eq!(constructed.interface(), tensor.borrow(py).interface());
             assert_eq!(constructed.name, tensor.borrow(py).name);
             let ordinary = TensorExpression::to_expression(tensor.borrow(py)).into_pyobject(py)?;
             let inferred = py.get_type::<TensorExpression>().call1((&ordinary,))?;
             assert_eq!(
-                inferred.extract::<PyRef<'_, TensorExpression>>()?.interface,
-                tensor.borrow(py).interface
+                inferred
+                    .extract::<PyRef<'_, TensorExpression>>()?
+                    .interface(),
+                tensor.borrow(py).interface()
             );
 
             let x = PythonExpression {
                 expr: Atom::var(symbol!("tensor_convenience_x")),
             };
-            let atom =
-                (x.expr.clone() + Atom::one()).pow(2) * tensor.borrow(py).as_super().expr.clone();
+            let atom = (x.expr.clone() + Atom::one()).pow(2) * tensor.borrow(py).atom().clone();
             let expression = TensorExpression::from_known_parts(
                 py,
                 atom.expand(),
-                tensor.borrow(py).interface.clone(),
+                tensor.borrow(py).interface().clone(),
                 tensor.borrow(py).name,
                 vec![Atom::num(7)],
             )?;
             let x = x.into_pyobject(py)?;
-            let factored = expression.bind(py).call_method0("factor")?;
-            let collected = factored.call_method1("collect", (&x,))?;
-            let collected = collected.extract::<PyRef<'_, TensorExpression>>()?;
-            assert_eq!(collected.interface, expression.borrow(py).interface);
+            let factored = TensorExpression::to_expression(expression.borrow(py))
+                .into_pyobject(py)?
+                .call_method0("factor")?;
+            let collected = factored
+                .call_method1("collect", (&x,))?
+                .extract::<PythonExpression>()?;
+            let collected =
+                TensorExpression::preserving_interface(&expression.borrow(py), py, collected.expr)?;
+            let collected = collected.borrow(py);
+            assert_eq!(collected.interface(), expression.borrow(py).interface());
             assert_eq!(collected.name, expression.borrow(py).name);
             assert_eq!(collected.name_args, vec![Atom::num(7)]);
             assert!(
-                (collected.as_super().expr.clone() - expression.borrow(py).as_super().expr.clone())
+                (collected.atom().clone() - expression.borrow(py).atom().clone())
                     .expand()
                     .is_zero()
             );
@@ -4740,20 +4224,24 @@ mod tests {
                 Ok::<_, PyErr>(PythonExpression { expr: Atom::one() })
             })?;
             kwargs.set_item("coeff_map", strip_tensor)?;
-            let error = factored
-                .call_method("collect", (&x,), Some(&kwargs))
-                .unwrap_err();
+            let raw = factored
+                .call_method("collect", (&x,), Some(&kwargs))?
+                .extract::<PythonExpression>()?;
+            let error =
+                TensorExpression::preserving_interface(&expression.borrow(py), py, raw.expr)
+                    .unwrap_err();
             assert!(error.is_instance_of::<PyValueError>(py));
             let zero = TensorExpression::from_atom_interface(
                 py,
                 Atom::Zero,
-                tensor.borrow(py).interface.clone(),
+                tensor.borrow(py).interface().clone(),
             )?;
-            let zero = zero.bind(py).call_method0("factor")?;
-            assert_eq!(
-                zero.extract::<PyRef<'_, TensorExpression>>()?.interface,
-                tensor.borrow(py).interface
-            );
+            let raw = TensorExpression::to_expression(zero.borrow(py))
+                .into_pyobject(py)?
+                .call_method0("factor")?
+                .extract::<PythonExpression>()?;
+            let zero = TensorExpression::preserving_interface(&zero.borrow(py), py, raw.expr)?;
+            assert_eq!(zero.borrow(py).interface(), tensor.borrow(py).interface());
 
             let d = Dimension::from(symbol!("tensor_convenience_D"));
             let promoted = TensorExpression::with_lorentz_dimension(
@@ -4767,22 +4255,17 @@ mod tests {
             assert_eq!(
                 promoted_indexed
                     .extract::<PyRef<'_, TensorExpression>>()?
-                    .as_super()
-                    .expr,
+                    .atom(),
                 expected_indexed
                     .extract::<PyRef<'_, TensorExpression>>()?
-                    .as_super()
-                    .expr,
+                    .atom(),
             );
             let again = TensorExpression::with_lorentz_dimension(
                 promoted.borrow(py),
                 py,
                 ConvertibleToDimension(d),
             )?;
-            assert_eq!(
-                again.borrow(py).as_super().expr,
-                promoted.borrow(py).as_super().expr
-            );
+            assert_eq!(again.borrow(py).atom(), promoted.borrow(py).atom());
             assert_eq!(promoted.borrow(py).name, tensor.borrow(py).name);
             Ok(())
         })
@@ -4811,22 +4294,19 @@ mod tests {
 
             let expanded = TensorExpression::expand(expression.bind(py).borrow(), py, None, None)?;
             let expanded_ref = expanded.bind(py).borrow();
-            assert!(matches!(expanded_ref.as_super().expr, Atom::Add(_)));
+            assert!(matches!(expanded_ref.atom(), Atom::Add(_)));
             assert_eq!(
-                expanded_ref.interface.logical_slots(),
+                expanded_ref.interface().logical_slots(),
                 interface.logical_slots()
             );
             assert_eq!(expanded_ref.name, Some(name));
             assert_eq!(expanded_ref.name_args, vec![Atom::num(7)]);
             drop(expanded_ref);
             let unchanged = TensorExpression::expand(expanded.borrow(py), py, None, None)?;
+            assert_eq!(unchanged.borrow(py).atom(), expanded.borrow(py).atom());
             assert_eq!(
-                unchanged.borrow(py).as_super().expr,
-                expanded.borrow(py).as_super().expr
-            );
-            assert_eq!(
-                unchanged.borrow(py).interface,
-                expanded.borrow(py).interface
+                unchanged.borrow(py).interface(),
+                expanded.borrow(py).interface()
             );
             assert_eq!(unchanged.borrow(py).name, Some(name));
             assert_eq!(unchanged.borrow(py).name_args, vec![Atom::num(7)]);
@@ -4838,14 +4318,14 @@ mod tests {
 
             let zero = TensorExpression::from_atom_interface(py, Atom::Zero, interface.clone())?;
             let expanded_zero = TensorExpression::expand(zero.borrow(py), py, None, None)?;
-            assert!(expanded_zero.borrow(py).as_super().expr.as_view().is_zero());
-            assert_eq!(expanded_zero.borrow(py).interface, interface);
+            assert!(expanded_zero.borrow(py).atom().as_view().is_zero());
+            assert_eq!(*expanded_zero.borrow(py).interface(), interface);
             let network = TensorExpression::to_network(zero.bind(py).borrow(), py, None)?;
             assert_eq!(
-                network.structure.structure.logical_slots(),
+                network.structure.structure().logical_slots(),
                 interface.logical_slots()
             );
-            assert!(network.materialized.structure.open_positions().is_empty());
+            assert!(network.materialized.structure().open_positions().is_empty());
             assert!(network.network.state.is_tensor());
             Ok(())
         })
@@ -4889,12 +4369,15 @@ mod tests {
                     Some(name),
                     vec![Atom::num(7)],
                 )?;
-                for method in ["simplify", "simplify_metrics"] {
-                    let result = expression.bind(py).call_method0(method)?;
+                for method in ["simplify", "contract"] {
+                    let result = expression
+                        .bind(py)
+                        .call_method0(method)?
+                        .call_method0("to_expression")?;
                     let result = result.extract::<PyRef<'_, TensorExpression>>()?;
-                    assert_eq!(result.as_super().expr, expected, "{method}");
+                    assert_eq!(*result.atom(), expected, "{method}");
                     assert_eq!(
-                        result.interface.logical_slots(),
+                        result.interface().logical_slots(),
                         interface.logical_slots(),
                         "{method}"
                     );
@@ -4941,15 +4424,26 @@ mod tests {
                 gamma_product.clone(),
                 PartialStructure::from_logical_slots(ports),
             )?;
-            for method in ["simplify_gamma", "collect_gamma_chains"] {
-                let result = gamma_expression.bind(py).call_method0(method)?;
+            for output in [
+                idenso::dirac::GammaOutput::Reduced,
+                idenso::dirac::GammaOutput::Chains,
+            ] {
+                let settings =
+                    PyGammaSimplifySettings::from_rust(idenso::dirac::GammaSimplifySettings {
+                        output,
+                        ..Default::default()
+                    });
+                let result = gamma_expression
+                    .bind(py)
+                    .call_method1("simplify_gamma", (Py::new(py, settings)?,))?;
+                let result = result.call_method0("to_expression")?;
                 let result = result.extract::<PyRef<'_, TensorExpression>>()?;
                 assert_ne!(
-                    result.as_super().expr,
+                    *result.atom(),
                     gamma_product,
-                    "fixture must exercise {method}"
+                    "fixture must exercise {output:?}"
                 );
-                assert_eq!(result.interface.logical_slots(), ports, "{method}");
+                assert_eq!(result.interface().logical_slots(), ports, "{output:?}");
             }
             let vector = |name| {
                 FunctionBuilder::new(name)
@@ -4972,13 +4466,48 @@ mod tests {
             for method in ["undo_dots", "undo_all"] {
                 let result = expression.bind(py).call_method0(method)?;
                 let result = result.extract::<PyRef<'_, TensorExpression>>()?;
-                assert_ne!(
-                    result.as_super().expr,
-                    atom,
-                    "fixture must exercise {method}"
-                );
-                assert_eq!(result.interface.logical_slots(), ports, "{method}");
+                assert_ne!(*result.atom(), atom, "fixture must exercise {method}");
+                assert_eq!(result.interface().logical_slots(), ports, "{method}");
             }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn metric_only_contract_keeps_explicit_vectors_until_full_contraction() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let mu = spenso::mink!(4, 94431);
+            let nu = spenso::mink!(4, 94432);
+            let source = spenso::g!(&mu, &nu) * spenso::p!(&nu) * spenso::q!(&mu);
+            let tensor = TensorExpression::from_atom_interface(py, source, None)?;
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("rank_one", false)?;
+            let metric_only = tensor.bind(py).call_method("contract", (), Some(&kwargs))?;
+            let value = metric_only.extract::<PyRef<'_, AliasedTensorExpression>>()?;
+            assert_eq!(
+                value
+                    .value
+                    .resolved()
+                    .map_err(TensorExpression::inference_error)?
+                    .expression(),
+                &(spenso::p!(&nu) * spenso::q!(&nu))
+            );
+            assert!(!value.value.contraction_complete());
+            let again = metric_only.call_method("contract", (), Some(&kwargs))?;
+            let again = again.extract::<PyRef<'_, AliasedTensorExpression>>()?;
+            assert_eq!(again.value.root(), value.value.root());
+            let full = metric_only.call_method0("contract")?;
+            let full = full.extract::<PyRef<'_, AliasedTensorExpression>>()?;
+            assert_eq!(
+                full.value
+                    .resolved()
+                    .map_err(TensorExpression::inference_error)?
+                    .expression(),
+                &spenso::g!(spenso::p!(spenso::mink!(4)), spenso::q!(spenso::mink!(4)))
+            );
+            assert!(full.value.contraction_complete());
             Ok(())
         })
         .unwrap();
@@ -5021,10 +4550,10 @@ mod tests {
                     original.bind(py).call_method0("cook_indices")?
                 };
                 let result = result.extract::<PyRef<'_, TensorExpression>>()?;
-                assert_ne!(result.as_super().expr, atom);
+                assert_ne!(*result.atom(), atom);
                 assert_eq!(
                     result
-                        .interface
+                        .interface()
                         .logical_slots()
                         .into_iter()
                         .map(composition::port_atom)
@@ -5043,10 +4572,10 @@ mod tests {
             )?;
             let cooked_zero = TensorExpression::cook_indices(zero.borrow(py), py, Some(&settings))?;
             let cooked_zero = cooked_zero.borrow(py);
-            assert!(cooked_zero.as_super().expr.is_zero());
-            assert_eq!(cooked_zero.interface.open_positions(), vec![2]);
+            assert!(cooked_zero.atom().is_zero());
+            assert_eq!(cooked_zero.interface().open_positions(), vec![2]);
             assert_eq!(
-                cooked_zero.interface.logical_slots()[..2]
+                cooked_zero.interface().logical_slots()[..2]
                     .iter()
                     .copied()
                     .map(composition::port_atom)
@@ -5065,11 +4594,18 @@ mod tests {
                 .add_arg(cooked_slot)
                 .finish();
             let metric = TensorExpression::from_atom_interface(py, metric, None)?;
-            assert_eq!(metric.borrow(py).interface.canonical().order(), 2);
+            assert_eq!(metric.borrow(py).interface().canonical().order(), 2);
             let cooked = TensorExpression::cook_indices(metric.borrow(py), py, Some(&settings))?;
-            assert!(cooked.borrow(py).interface.canonical().is_scalar());
-            let simplified = TensorExpression::simplify_metrics(cooked.borrow(py), py)?;
-            assert_eq!(simplified.borrow(py).as_super().expr, Atom::num(3));
+            assert!(cooked.borrow(py).interface().canonical().is_scalar());
+            let simplified = TensorExpression::contract(&cooked.borrow(py), None, true)?;
+            assert_eq!(
+                simplified
+                    .value
+                    .resolved()
+                    .map_err(TensorExpression::inference_error)?
+                    .expression(),
+                &Atom::num(3)
+            );
             Ok(())
         })
         .unwrap();
@@ -5094,19 +4630,17 @@ mod tests {
             let original =
                 TensorExpression::from_atom_interface(py, atom.clone(), interface.clone())?;
             let expanded = TensorExpression::expand(original.borrow(py), py, None, None)?;
-            let settings = crate::simplification::PySimplifySettings {
-                metrics: false,
-                expand: true,
-                ..Default::default()
-            };
-            let simplified = TensorExpression::simplify(original.borrow(py), py, Some(&settings))?;
-            assert_ne!(simplified.borrow(py).as_super().expr, atom);
+            let settings =
+                crate::simplification::PySimplifySettings::new(false, None, None, false, 16)?;
+            let simplified = original.borrow(py).simplify(Some(&settings))?;
+            let simplified = simplified
+                .value
+                .expanded()
+                .map_err(TensorExpression::inference_error)?;
+            assert_ne!(simplified.expression(), &atom);
+            assert_eq!(simplified.expression(), expanded.borrow(py).atom());
             assert_eq!(
-                simplified.borrow(py).as_super().expr,
-                expanded.borrow(py).as_super().expr
-            );
-            assert_eq!(
-                simplified.borrow(py).interface.logical_slots(),
+                simplified.structure().logical_slots(),
                 interface.logical_slots()
             );
             Ok(())
@@ -5152,9 +4686,9 @@ mod tests {
                     Some(&kwargs),
                 )?;
                 let result = result.extract::<PyRef<'_, TensorExpression>>()?;
-                assert_eq!(result.as_super().expr, atom);
+                assert_eq!(*result.atom(), atom);
                 assert_eq!(
-                    result.interface.logical_slots(),
+                    result.interface().logical_slots(),
                     structure.interface.logical_slots()
                 );
                 assert_eq!(result.name, structure.name);
@@ -5202,15 +4736,20 @@ mod tests {
                     ("cancel", &empty),
                     ("apart", &one),
                 ] {
-                    let result = original.bind(py).call_method1(method, args)?;
-                    let result = result.extract::<PyRef<'_, TensorExpression>>()?;
+                    let raw = TensorExpression::to_expression(original.borrow(py))
+                        .into_pyobject(py)?
+                        .call_method1(method, args)?
+                        .extract::<PythonExpression>()?;
+                    let result =
+                        TensorExpression::preserving_interface(&original.borrow(py), py, raw.expr)?;
+                    let result = result.borrow(py);
                     assert_eq!(
-                        result.interface.logical_slots(),
+                        result.interface().logical_slots(),
                         interface.logical_slots(),
                         "{method}"
                     );
                     assert!(
-                        (&result.as_super().expr - &atom)
+                        (result.atom() - &atom)
                             .together()
                             .cancel()
                             .expand()
@@ -5222,19 +4761,19 @@ mod tests {
                     let expanded =
                         TensorExpression::expand(original.borrow(py), py, None, Some(via_poly))?;
                     assert_eq!(
-                        expanded.borrow(py).interface.logical_slots(),
+                        expanded.borrow(py).interface().logical_slots(),
                         interface.logical_slots()
                     );
                 }
-                let settings = crate::simplification::PySimplifySettings {
-                    metrics: false,
-                    expand: true,
-                    ..Default::default()
-                };
-                let simplified =
-                    TensorExpression::simplify(original.borrow(py), py, Some(&settings))?;
+                let settings =
+                    crate::simplification::PySimplifySettings::new(false, None, None, false, 16)?;
+                let simplified = original.borrow(py).simplify(Some(&settings))?;
+                let simplified = simplified
+                    .value
+                    .expanded()
+                    .map_err(TensorExpression::inference_error)?;
                 assert_eq!(
-                    simplified.borrow(py).interface.logical_slots(),
+                    simplified.structure().logical_slots(),
                     interface.logical_slots()
                 );
             }
@@ -5292,7 +4831,7 @@ mod tests {
             assert!(
                 TensorExpression::from_atom_interface(
                     py,
-                    tensor.borrow(py).as_super().expr.clone(),
+                    tensor.borrow(py).atom().clone(),
                     PartialStructure::from_logical_slots([mismatched])
                 )
                 .is_err()
@@ -5300,18 +4839,18 @@ mod tests {
             let number = PythonExpression { expr: Atom::num(2) }.into_pyobject(py)?;
             let doubled = tensor.bind(py).call_method1("__mul__", (number,))?;
             let doubled = doubled.extract::<PyRef<'_, TensorExpression>>()?;
-            assert_eq!(doubled.interface.logical_slots(), interface.logical_slots());
+            assert_eq!(
+                doubled.interface().logical_slots(),
+                interface.logical_slots()
+            );
             let original = tensor.borrow(py);
             let invalid_rewrite =
                 TensorExpression::preserving_interface(&original, py, Atom::one());
             assert!(invalid_rewrite.is_err());
-            let unchanged = TensorExpression::preserving_interface(
-                &original,
-                py,
-                original.as_super().expr.clone(),
-            )?;
+            let unchanged =
+                TensorExpression::preserving_interface(&original, py, original.atom().clone())?;
             assert_eq!(
-                unchanged.borrow(py).interface.logical_slots(),
+                unchanged.borrow(py).interface().logical_slots(),
                 interface.logical_slots()
             );
             Ok(())
@@ -5363,8 +4902,8 @@ mod tests {
                     let expanded =
                         TensorExpression::expand(original.borrow(py), py, var, via_poly)?;
                     let expanded = expanded.borrow(py);
-                    assert_eq!(expanded.as_super().expr, atom.expand());
-                    assert_eq!(expanded.interface, interface);
+                    assert_eq!(*expanded.atom(), atom.expand());
+                    assert_eq!(*expanded.interface(), interface);
                     assert_eq!(expanded.name, Some(name));
                     assert_eq!(expanded.name_args, vec![Atom::num(7)]);
                 }
@@ -5428,7 +4967,7 @@ mod tests {
                 cancellation.expand(),
                 PartialStructure::from_logical_slots([]),
             )?;
-            assert!(canceled.borrow(py).as_super().expr.is_zero());
+            assert!(canceled.borrow(py).atom().is_zero());
             assert!(
                 TensorExpression::from_atom_interface(
                     py,
@@ -5460,8 +4999,8 @@ mod tests {
                     (Ok(actual), Ok(expected)) => {
                         let actual = actual.borrow(py);
                         let expected = expected.borrow(py);
-                        assert_eq!(actual.as_super().expr, expected.as_super().expr);
-                        assert_eq!(actual.interface, expected.interface);
+                        assert_eq!(actual.atom(), expected.atom());
+                        assert_eq!(actual.interface(), expected.interface());
                         assert_eq!(actual.name, expected.name);
                         assert_eq!(actual.name_args, expected.name_args);
                     }
@@ -5512,8 +5051,8 @@ mod tests {
             assert_eq!(*calls.lock().unwrap(), expansion_calls);
             let actual = actual.borrow(py);
             let expected = expected.borrow(py);
-            assert_eq!(actual.as_super().expr, expected.as_super().expr);
-            assert_eq!(actual.interface, expected.interface);
+            assert_eq!(actual.atom(), expected.atom());
+            assert_eq!(actual.interface(), expected.interface());
             Ok(())
         })
         .unwrap();
@@ -5541,16 +5080,16 @@ mod tests {
         };
         let left = tensor("canonical_addition_left", [i, j]);
         let right = tensor("canonical_addition_right", [j, i]);
-        let expected_sum = left.expression.as_ref() + right.expression.as_ref();
-        let expected_difference = left.expression.as_ref() - right.expression.as_ref();
+        let expected_sum = left.expression() + right.expression();
+        let expected_difference = left.expression() - right.expression();
 
         assert_ne!(
-            left.structure.logical_slots(),
-            right.structure.logical_slots()
+            left.structure().logical_slots(),
+            right.structure().logical_slots()
         );
         assert!(InterfaceInference::additive_interfaces_match(
-            &left.structure,
-            &right.structure
+            left.structure(),
+            right.structure()
         ));
         let mixed_left = PartialStructure::from_logical_slots([
             representation.slot(PartialIndex::Explicit(i)),
@@ -5588,19 +5127,19 @@ mod tests {
             .infer_validated(expected_sum.as_view())
             .unwrap();
         assert!(InterfaceInference::additive_interfaces_match(
-            &left.structure,
+            left.structure(),
             &inferred
         ));
 
-        let standalone = SymbolicTensor::new(left.expression.clone(), right.structure.clone());
+        let standalone = SymbolicTensor::new(left.expression().clone(), right.structure().clone());
         assert_eq!(
             standalone.presentation_atom(),
-            tensor("canonical_addition_left", [j, i]).expression
+            tensor("canonical_addition_left", [j, i]).into_expression()
         );
 
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
-            let expected = left.structure.logical_slots();
+            let expected = left.structure().logical_slots();
             let left = TensorExpression::from_structured(py, left)?;
             let right = TensorExpression::from_structured(py, right)?;
             let TensorDispatch::Expression(sum) =
@@ -5609,8 +5148,8 @@ mod tests {
                 panic!("adding symbolic tensor expressions produced a network")
             };
             let sum = sum.bind(py).borrow();
-            assert_eq!(sum.interface.logical_slots(), expected);
-            assert_eq!(sum.as_super().expr, expected_sum);
+            assert_eq!(sum.interface().logical_slots(), expected);
+            assert_eq!(*sum.atom(), expected_sum);
             assert_eq!(
                 TensorExpression::structured(&sum).presentation_atom(),
                 expected_sum
@@ -5623,8 +5162,8 @@ mod tests {
                 panic!("subtracting symbolic tensor expressions produced a network")
             };
             let difference = difference.bind(py).borrow();
-            assert_eq!(difference.interface.logical_slots(), expected);
-            assert_eq!(difference.as_super().expr, expected_difference);
+            assert_eq!(difference.interface().logical_slots(), expected);
+            assert_eq!(*difference.atom(), expected_difference);
             assert_eq!(
                 TensorExpression::structured(&difference).presentation_atom(),
                 expected_difference
@@ -5637,8 +5176,8 @@ mod tests {
                 panic!("reverse-subtracting symbolic tensor expressions produced a network")
             };
             let reverse_difference = reverse_difference.bind(py).borrow();
-            assert_eq!(reverse_difference.interface.logical_slots(), expected);
-            assert_eq!(reverse_difference.as_super().expr, expected_difference);
+            assert_eq!(reverse_difference.interface().logical_slots(), expected);
+            assert_eq!(*reverse_difference.atom(), expected_difference);
             Ok(())
         })
         .unwrap();
@@ -5682,9 +5221,9 @@ mod tests {
                     panic!("symbolic reflected division produced a network")
                 };
                 let quotient = quotient.borrow(py);
-                assert_eq!(quotient.as_super().expr, &expression / &divisor);
-                assert_eq!(quotient.interface.logical_slots(), ports);
-                assert_eq!(numerator.borrow(py).interface.logical_slots(), ports);
+                assert_eq!(*quotient.atom(), &expression / &divisor);
+                assert_eq!(quotient.interface().logical_slots(), ports);
+                assert_eq!(numerator.borrow(py).interface().logical_slots(), ports);
                 let error = TensorExpression::__rtruediv__(
                     numerator.bind(py).borrow(),
                     py,
@@ -5723,8 +5262,8 @@ mod tests {
             )?;
             let assert_identity = |value: &Bound<'_, PyAny>| -> PyResult<()> {
                 let value = value.extract::<PyRef<'_, TensorExpression>>()?;
-                assert_eq!(value.as_super().expr, atom);
-                assert_eq!(value.interface.logical_slots(), interface.logical_slots());
+                assert_eq!(*value.atom(), atom);
+                assert_eq!(value.interface().logical_slots(), interface.logical_slots());
                 assert_eq!(value.name, Some(name));
                 assert_eq!(value.name_args, vec![argument.clone()]);
                 Ok(())
@@ -5742,16 +5281,19 @@ mod tests {
             let pair = PyTuple::new(py, [expression.clone_ref(py), expression.clone_ref(py)])?;
             let sum = py.import("builtins")?.call_method1("sum", (pair,))?;
             let sum = sum.extract::<PyRef<'_, TensorExpression>>()?;
-            assert_eq!(sum.as_super().expr, atom.as_ref() + atom.as_ref());
-            assert_eq!(sum.interface.logical_slots(), interface.logical_slots());
+            assert_eq!(*sum.atom(), atom.as_ref() + atom.as_ref());
+            assert_eq!(sum.interface().logical_slots(), interface.logical_slots());
             assert_eq!(sum.name, None);
             assert!(sum.name_args.is_empty());
             drop(sum);
 
             let negated = expression.bind(py).call_method1("__rsub__", (0,))?;
             let negated = negated.extract::<PyRef<'_, TensorExpression>>()?;
-            assert_eq!(negated.as_super().expr, Atom::num(-1) * atom.as_ref());
-            assert_eq!(negated.interface.logical_slots(), interface.logical_slots());
+            assert_eq!(*negated.atom(), Atom::num(-1) * atom.as_ref());
+            assert_eq!(
+                negated.interface().logical_slots(),
+                interface.logical_slots()
+            );
             assert_eq!(negated.name, None);
             assert!(negated.name_args.is_empty());
             drop(negated);
@@ -5837,8 +5379,8 @@ mod tests {
         assert!(infer_interface(&metadata).is_err());
         let product = tensor * coefficient.pow(Atom::num(-2));
         let inferred = SymbolicTensor::infer(product.clone()).unwrap();
-        assert_eq!(inferred.structure.canonical().order(), 1);
-        assert_eq!(inferred.expression, product);
+        assert_eq!(inferred.structure().canonical().order(), 1);
+        assert_eq!(inferred.expression(), &product);
     }
 
     #[test]
@@ -5875,18 +5417,21 @@ mod tests {
             let expression = PythonExpression { expr: atom.clone() }.into_pyobject(py)?;
             let tensor = py.get_type::<TensorExpression>().call1((expression,))?;
             let tensor = tensor.extract::<Py<TensorExpression>>()?;
-            assert!(tensor.borrow(py).interface.canonical().is_scalar());
-            assert_eq!(tensor.borrow(py).as_super().expr, atom);
-            let simplified = tensor.bind(py).call_method0("simplify_color")?;
+            assert!(tensor.borrow(py).interface().canonical().is_scalar());
+            assert_eq!(*tensor.borrow(py).atom(), atom);
+            let simplified = tensor
+                .bind(py)
+                .call_method0("simplify_color")?
+                .call_method0("to_expression")?;
             let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
-            assert!(simplified.interface.canonical().is_scalar());
+            assert!(simplified.interface().canonical().is_scalar());
             assert_eq!(
-                simplified.as_super().expr,
+                *simplified.atom(),
                 Atom::num(-8) * CS.cas(Atom::num(2), adjoint.to_symbolic([]))
             );
 
             let open = TensorExpression::f(py, ConvertibleToDimension(8.into()))?;
-            let square = open.borrow(py).as_super().expr.as_ref().pow(Atom::num(2));
+            let square = open.borrow(py).atom().as_ref().pow(Atom::num(2));
             let error = TensorExpression::from_atom_interface(py, square, None)
                 .expect_err("a bare rank-three square still has ambiguous port pairings");
             assert!(error.to_string().contains("ambiguous"));
@@ -6020,7 +5565,7 @@ mod tests {
             };
             let reinferred = TensorExpression::reinfer(composed.bind(py).borrow(), py)?;
             assert_eq!(
-                reinferred.bind(py).borrow().interface.canonical().order(),
+                reinferred.bind(py).borrow().interface().canonical().order(),
                 2
             );
             Ok(())
@@ -6084,9 +5629,9 @@ mod tests {
             let indexed = expression.bind(py).call1(("i", "i"))?;
             let indexed = indexed.extract::<PyRef<'_, TensorExpression>>()?;
 
-            assert!(indexed.interface.canonical().is_scalar());
+            assert!(indexed.interface().canonical().is_scalar());
             assert!(
-                matches!(indexed.as_super().expr.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
+                matches!(indexed.atom().as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
             );
             Ok(())
         })
@@ -6115,9 +5660,9 @@ mod tests {
             };
             let expression = expression.bind(py).borrow();
 
-            assert!(expression.interface.canonical().is_scalar());
+            assert!(expression.interface().canonical().is_scalar());
             assert!(
-                matches!(expression.as_super().expr.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
+                matches!(expression.atom().as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
             );
             Ok(())
         })
@@ -6144,15 +5689,15 @@ mod tests {
                 .multiply(&matrix("index_tooling_right"))
                 .expect("compatible unresolved matrices should compose");
             assert!(matches!(
-                composed.expression.as_view(),
+                composed.expression().as_view(),
                 AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.chain
             ));
             let rust_list_error = composed
-                .expression
+                .expression()
                 .list_dangling::<AbstractIndex>()
                 .expect_err("unresolved chain endpoints should return a parse error");
             let rust_wrap_error = composed
-                .expression
+                .expression()
                 .wrap_dummies::<AbstractIndex>(symbolica::symbol!("index_tooling_wrap"))
                 .expect_err("unresolved chain endpoints should return a parse error");
             assert!(matches!(
@@ -6206,7 +5751,7 @@ mod tests {
                 Vec::new(),
             )?;
 
-            for name in ["undo_dots", "schoonschip_net", "dirac_adjoint"] {
+            for name in ["undo_dots", "dirac_adjoint"] {
                 let error = expression
                     .bind(py)
                     .call_method0(name)
@@ -6241,13 +5786,13 @@ mod tests {
                 Some(name),
                 vec![Atom::num(7)],
             )?;
-            assert_eq!(original.borrow(py).interface.canonical().order(), 2);
+            assert_eq!(original.borrow(py).interface().canonical().order(), 2);
             let result = TensorExpression::with_lorentz_dimension(
                 original.borrow(py),
                 py,
                 ConvertibleToDimension(Dimension::Concrete(6)),
             )?;
-            assert!(result.borrow(py).interface.canonical().is_scalar());
+            assert!(result.borrow(py).interface().canonical().is_scalar());
             assert!(result.borrow(py).name.is_none());
             assert!(result.borrow(py).name_args.is_empty());
 
@@ -6257,7 +5802,7 @@ mod tests {
                     py,
                     ConvertibleToDimension(Dimension::Concrete(dimension)),
                 )?;
-                assert_eq!(result.borrow(py).interface.canonical().order(), 2);
+                assert_eq!(result.borrow(py).interface().canonical().order(), 2);
                 assert_eq!(result.borrow(py).name, Some(name));
                 assert_eq!(result.borrow(py).name_args, vec![Atom::num(7)]);
             }
@@ -6290,8 +5835,8 @@ mod tests {
                         .finish();
                     let tensor = TensorExpression::from_atom_interface(py, atom.clone(), None)?;
                     let tensor = tensor.borrow(py);
-                    assert_eq!(tensor.as_super().expr, atom);
-                    assert_eq!(tensor.interface.canonical().order(), 1);
+                    assert_eq!(*tensor.atom(), atom);
+                    assert_eq!(tensor.interface().canonical().order(), 1);
                     assert!(tensor.name.is_none());
                     assert!(tensor.name_args.is_empty());
                 }
@@ -6326,8 +5871,8 @@ mod tests {
             let atom = FunctionBuilder::new(ETS.metric).add_args(&vectors).finish();
             let tensor = TensorExpression::from_atom_interface(py, atom.clone(), None)?;
             let tensor = tensor.borrow(py);
-            assert_eq!(tensor.as_super().expr, atom);
-            assert!(tensor.interface.canonical().is_scalar());
+            assert_eq!(*tensor.atom(), atom);
+            assert!(tensor.interface().canonical().is_scalar());
             assert_eq!(tensor.name, Some(ETS.metric));
             assert_eq!(tensor.name_args, vectors);
             Ok(())
@@ -6368,7 +5913,7 @@ mod tests {
             let result =
                 TensorExpression::from_transformed_atom(&original.borrow(py), py, diagonal)?;
             let result = result.borrow(py);
-            assert_eq!(result.interface.canonical().order(), 0);
+            assert_eq!(result.interface().canonical().order(), 0);
             assert!(result.name.is_none());
             assert!(result.name_args.is_empty());
 

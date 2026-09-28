@@ -1,0 +1,2069 @@
+use std::sync::LazyLock;
+
+use itertools::Itertools;
+use spenso::{
+    chain,
+    network::{library::symbolic::ETS, parsing::ParseSettings, tags::SPENSO_TAG as T},
+    rep_,
+    shadowing::{self, ProjectorExpander, TensorCollectFilter},
+    structure::{
+        abstract_index::{AIND_SYMBOLS, AbstractIndex},
+        partial::PartialStructure,
+        representation::RepName,
+    },
+    trace, trace_sym,
+};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView, Symbol},
+    coefficient::CoefficientView,
+    function,
+    id::{Context, Replacement},
+    utils::Settable,
+};
+use symbolica_utils::PatternReplacement;
+
+use crate::{
+    W_, color_f, color_t,
+    representations::{ColorAdjoint, ColorFundamental, ColorSextet},
+    shorthands::chain::Chain,
+    tensor::{
+        SymbolicNetExt, SymbolicNetParse, SymbolicTensor, aliases::Definition,
+        inference::TensorInferenceError,
+    },
+};
+
+use super::{CS, ColorSimplifier, ColorSimplifySettings};
+
+static TRACE_TERMINALS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
+    [Replacement::new(
+        // Empty color trace: Tr_rep(1) -> dim(rep).
+        trace!(rep_!(0; W_.d_)).to_pattern(),
+        Atom::var(W_.d_),
+    )]
+});
+
+pub(crate) struct ColorAlgebraSimplifier {
+    pub settings: ColorSimplifySettings,
+}
+
+impl SymbolicTensor<PartialStructure> {
+    pub(crate) fn simplify_color_parts(
+        &self,
+        registry: &[Definition],
+        settings: ColorSimplifySettings,
+    ) -> Result<(Self, Vec<Definition>), TensorInferenceError> {
+        let simplifier = ColorAlgebraSimplifier { settings };
+        self.collect_with_map(
+            None,
+            registry,
+            atom_contains_color_node,
+            |selected, registry, complete| {
+                let expression = simplifier.step(selected.expression.as_view(), complete);
+                let mut network = expression
+                    .as_view()
+                    .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                    .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?;
+                let expression = if network.remove_antisymmetric_zero_terms() {
+                    network
+                        .simple_execute::<()>()
+                        .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?
+                } else {
+                    expression
+                };
+                let expression = restore_explicit_su_n_generator_chains(expression);
+                let rewritten = selected.with_rewritten_expression(expression)?;
+                if settings.simplify_non_color {
+                    // The shared scheduler contracts the complete changed domain.
+                    Ok((rewritten, Vec::new()))
+                } else {
+                    // Internal colour metrics still close, while the collector keeps
+                    // foreign coefficients outside this selected monomial. Carry any
+                    // generated aliases instead of resolving their bodies here.
+                    let contracted = rewritten.contract_parts(Default::default())?;
+                    let mut registry = registry
+                        .iter()
+                        .cloned()
+                        .map(|pair| (pair.0.expression.clone(), pair))
+                        .collect();
+                    SymbolicTensor::<
+                        crate::tensor::aliases::AliasInterfaces,
+                        symbolica::atom::AliasedAtom,
+                    >::retain_contracted_definitions(
+                        &contracted, &mut registry
+                    )?;
+                    Ok((contracted.root, registry.into_values().collect()))
+                }
+            },
+        )
+    }
+}
+
+impl ColorAlgebraSimplifier {
+    /// Apply the local colour identities. Contraction and cross-domain
+    /// scheduling belong to the shared tensor owner.
+    pub(crate) fn step(&self, expression: AtomView<'_>, complete: bool) -> Atom {
+        let collected = self.collect_lines(expression);
+        let rewritten = self.rewrite_terms(collected.as_view(), complete);
+        if self.settings.substitute_cof_dimension_invariants {
+            rewritten.to_cof_dimension_invariants()
+        } else {
+            rewritten
+        }
+    }
+
+    fn rewrite_terms(&self, expr: AtomView<'_>, complete: bool) -> Atom {
+        // Terminal trace rules can create sums; product rules such as f*f -> CA*g
+        // then need to run on each generated term instead of on the whole Add.
+        if let AtomView::Add(add) = expr {
+            let terms = add
+                .iter()
+                .map(|term| self.rewrite_terms(term, complete))
+                .collect::<Vec<_>>();
+            if !expr.needs_normalization()
+                && terms
+                    .iter()
+                    .zip(add.iter())
+                    .all(|(new, old)| new.as_view() == old)
+            {
+                return expr.to_owned();
+            }
+            return Self::sum_rewritten_terms(terms);
+        }
+
+        if let Some(rewritten) = self.rewrite_node(expr, complete) {
+            return rewritten;
+        }
+
+        // Try product-level rewrites first so trace*f contractions can fire before the
+        // trace terminal expands into symmetric trace and f terms.
+        expr.replace_map(|arg, context, out| {
+            // The root already declined above. Descendants still run in the
+            // existing top-down order, stopping below each successful rewrite.
+            if context.parent_type.is_some()
+                && let Some(rewritten) = self.rewrite_node(arg, complete)
+            {
+                **out = rewritten;
+            }
+        })
+    }
+
+    fn sum_rewritten_terms(terms: Vec<Atom>) -> Atom {
+        fn exact_coefficients(term: AtomView<'_>) -> bool {
+            match term {
+                AtomView::Num(number) => matches!(
+                    number.get_coeff_view(),
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                ),
+                AtomView::Add(sum) => sum.iter().all(exact_coefficients),
+                AtomView::Mul(product) => product.iter().all(|factor| {
+                    !matches!(factor, AtomView::Num(_)) || exact_coefficients(factor)
+                }),
+                _ => true,
+            }
+        }
+        // Merging exact terms once avoids repeatedly normalizing the growing
+        // prefix. Rounded coefficients retain their original addition order.
+        if terms.iter().all(|term| exact_coefficients(term.as_view())) {
+            Atom::add_many(terms)
+        } else {
+            terms.into_iter().fold(Atom::Zero, |sum, term| sum + term)
+        }
+    }
+
+    fn collect_lines(&self, expr: AtomView<'_>) -> Atom {
+        let rep = ColorFundamental {}.into();
+        expr.to_owned()
+            .chainify(rep)
+            .join_chains(ColorFundamental {}.into())
+            .replace_map(&Self::close_trace_chain)
+    }
+
+    fn close_trace_chain(arg: AtomView, _context: &Context, out: &mut Settable<'_, Atom>) {
+        let Some((start, end, factors)) = chain_parts(arg) else {
+            return;
+        };
+        let Some((dimension, start_index, false)) = color_fundamental_slot(start.as_view()) else {
+            return;
+        };
+        let Some((end_dimension, end_index, true)) = color_fundamental_slot(end.as_view()) else {
+            return;
+        };
+        if dimension != end_dimension || start_index != end_index {
+            return;
+        }
+
+        **out = trace!(ColorFundamental {}.to_symbolic([dimension]); factors);
+    }
+
+    fn rewrite_node(&self, arg: AtomView<'_>, complete: bool) -> Option<Atom> {
+        self.simplify_product(arg, complete)
+            .or_else(|| Self::simplify_chain_node(arg))
+            .or_else(|| {
+                self.settings
+                    .evaluate_traces
+                    .then(|| Self::simplify_trace_node(arg, complete))
+                    .flatten()
+            })
+            .or_else(|| self.simplify_power(arg))
+    }
+
+    fn simplify_chain_node(chain: AtomView) -> Option<Atom> {
+        let (start, end, factors) = chain_parts(chain)?;
+        if factors.is_empty()
+            || factors
+                .iter()
+                .all(|factor| is_chain_identity_factor(factor.as_view()))
+        {
+            return Some(color_metric(start.clone(), end.clone()));
+        }
+
+        if let Some(identity_index) = factors
+            .iter()
+            .position(|factor| is_chain_identity_factor(factor.as_view()))
+        {
+            return Some(chain_with_factors(
+                start,
+                end,
+                factors_excluding_indices(&factors, &[identity_index]),
+            ));
+        }
+
+        if let Some(rewritten) =
+            Self::simplify_antisymmetric_chain_projector(&start, &end, &factors)
+        {
+            return Some(rewritten);
+        }
+
+        for i in 0..factors.len().saturating_sub(1) {
+            let Some(left) = color_generator_adjoint(factors[i].as_view()) else {
+                continue;
+            };
+            let Some(right) = color_generator_adjoint(factors[i + 1].as_view()) else {
+                continue;
+            };
+            if left != right {
+                continue;
+            }
+
+            return Some(
+                fundamental_casimir(fundamental_chain_dimension(&start, &end)?)
+                    * chain_with_removed_range(&start, &end, &factors, i, i + 2),
+            );
+        }
+
+        if factors.len() > 2
+            && let Some(rewritten) = Self::simplify_separated_chain_casimir(&start, &end, &factors)
+        {
+            return Some(rewritten);
+        }
+
+        None
+    }
+
+    fn simplify_trace_node(trace: AtomView, complete: bool) -> Option<Atom> {
+        let (rep, factors) = trace_parts(trace)?;
+
+        if factors.is_empty()
+            || factors
+                .iter()
+                .all(|factor| is_chain_identity_factor(factor.as_view()))
+        {
+            // Tr(1) and Tr(identity-line factors) collapse to the traced
+            // representation dimension.
+            return trace_terminal_dimension(rep.as_view());
+        }
+
+        if let Some(identity_index) = factors
+            .iter()
+            .position(|factor| is_chain_identity_factor(factor.as_view()))
+        {
+            // An identity line inside a longer trace is neutral:
+            // Tr(... 1 ... ) -> Tr(...).
+            return Some(trace_with_factors(
+                rep,
+                factors_excluding_indices(&factors, &[identity_index]),
+            ));
+        }
+
+        // Through degree four, every cyclic ordering of a repeated adjoint pair
+        // reduces by the adjacent or separated Casimir rules below. Preserve open
+        // symmetric invariants and higher-degree projectors without factorial expansion.
+        if let [factor] = factors.as_slice()
+            && let Some(args) = color_symmetric_trace_arg_views(factor.as_view())
+            && args.len() <= 4
+            && args
+                .iter()
+                .enumerate()
+                .any(|(i, a)| args[i + 1..].contains(a))
+        {
+            return Some(trace.expand_projectors());
+        }
+
+        if let Some(rewritten) = Self::simplify_antisymmetric_trace_projector(&rep, &factors) {
+            return Some(rewritten);
+        }
+
+        if factors.len() > 2
+            && let Some(rewritten) = Self::simplify_adjacent_trace_casimir(&rep, &factors)
+        {
+            return Some(rewritten);
+        }
+
+        if factors.len() > 3
+            && let Some(rewritten) = Self::simplify_separated_trace_casimir(&rep, &factors)
+        {
+            return Some(rewritten);
+        }
+
+        // Later selected factors can still contract with this ordered trace.
+        // Keep its terminal decomposition until the frontier is complete;
+        // identity, Casimir and product rewrites remain available on prefixes.
+        if !complete {
+            return None;
+        }
+
+        let generators = factors
+            .iter()
+            .map(|factor| color_generator_adjoint(factor.as_view()))
+            .collect::<Option<Vec<_>>>()?;
+
+        match generators.as_slice() {
+            // Tr(T^a) -> 0.
+            [_] => Some(Atom::Zero),
+            // Tr(T^a T^b) -> idx(2,rep) g^{ab}.
+            [a, b] => Some(quadratic_index(rep.clone()) * color_metric(a.clone(), b.clone())),
+            // Tr(T^a T^b T^c) ->
+            //   Tr(sym(T^a,T^b,T^c)) + i/2 idx(2,rep) f^{abc}.
+            [a, b, c] => Some(
+                color_symmetric_trace(&rep, [a.clone(), b.clone(), c.clone()])
+                    + Atom::i() * Atom::num(1) / Atom::num(2)
+                        * quadratic_index(rep.clone())
+                        * color_f!(a.clone(), b.clone(), c.clone()),
+            ),
+            [a, b, c, d] => Self::simplify_four_generator_trace_terminal(&rep, a, b, c, d),
+            _ => None,
+        }
+    }
+
+    fn simplify_adjacent_trace_casimir(rep: &Atom, factors: &[Atom]) -> Option<Atom> {
+        for i in 0..factors.len().saturating_sub(1) {
+            let Some(left) = color_generator_adjoint(factors[i].as_view()) else {
+                continue;
+            };
+            let Some(right) = color_generator_adjoint(factors[i + 1].as_view()) else {
+                continue;
+            };
+            if left != right {
+                continue;
+            }
+
+            // Adjacent equal generators inside a fundamental trace:
+            // Tr(... T^a T^a ...) -> cas(2,rep) Tr(...).
+            return Some(
+                quadratic_casimir(rep.clone())
+                    * trace_with_factors(rep.clone(), factors_excluding_range(factors, i, i + 2)),
+            );
+        }
+
+        None
+    }
+
+    fn simplify_antisymmetric_chain_projector(
+        start: &Atom,
+        end: &Atom,
+        factors: &[Atom],
+    ) -> Option<Atom> {
+        // `antisym(T^a,T^b)` is the normalized commutator: i/2 f^{abx} T^x.
+        for (position, factor) in factors.iter().enumerate() {
+            let Some((prefactor, args)) = color_antisymmetric_generator_args(factor.as_view())
+            else {
+                continue;
+            };
+            let [a, b] = args.as_slice() else {
+                continue;
+            };
+            let x = color_adjoint_dummy_for_pair(a, b)?;
+
+            let mut replacement_factors = factors.to_vec();
+            replacement_factors[position] = color_t!(x.clone());
+            return Some(
+                prefactor * Atom::i() / Atom::num(2)
+                    * color_f!(a.clone(), b.clone(), x.clone())
+                    * chain_with_factors(start.clone(), end.clone(), replacement_factors),
+            );
+        }
+
+        None
+    }
+
+    fn simplify_antisymmetric_trace_projector(rep: &Atom, factors: &[Atom]) -> Option<Atom> {
+        if let [factor] = factors {
+            let (prefactor, args) = color_antisymmetric_generator_args(factor.as_view())?;
+            return match args.as_slice() {
+                // Tr(antisym(T^a,T^b)) is the trace of a commutator.
+                [_, _] => Some(Atom::Zero),
+                // Tr(antisym(T^a,T^b,T^c)) -> i/2 idx(2,rep) f^{abc}.
+                [a, b, c] => Some(
+                    prefactor
+                        * Atom::i()
+                        * quadratic_index(rep.clone())
+                        * color_f!(a.clone(), b.clone(), c.clone())
+                        / Atom::num(2),
+                ),
+                _ => None,
+            };
+        }
+
+        for (position, factor) in factors.iter().enumerate() {
+            let Some((prefactor, args)) = color_antisymmetric_generator_args(factor.as_view())
+            else {
+                continue;
+            };
+            let [a, b] = args.as_slice() else {
+                continue;
+            };
+            let x = color_adjoint_dummy_for_pair(a, b)?;
+
+            let mut replacement_factors = factors.to_vec();
+            replacement_factors[position] = color_t!(x.clone());
+            // In a longer trace, antisym(T^a,T^b) is the normalized
+            // commutator: i/2 f^{abx} T^x.
+            return Some(
+                prefactor * Atom::i() / Atom::num(2)
+                    * color_f!(a.clone(), b.clone(), x.clone())
+                    * trace_with_factors(rep.clone(), replacement_factors),
+            );
+        }
+
+        None
+    }
+
+    fn simplify_separated_trace_casimir(rep: &Atom, factors: &[Atom]) -> Option<Atom> {
+        for i in 0..factors.len().saturating_sub(2) {
+            let Some(left) = color_generator_adjoint(factors[i].as_view()) else {
+                continue;
+            };
+            let Some(right) = color_generator_adjoint(factors[i + 2].as_view()) else {
+                continue;
+            };
+            if left != right {
+                continue;
+            }
+
+            // Separated equal generators with one generator between them:
+            // Tr(... T^a T^b T^a ...) -> (cas(2,rep) - cas(2,adj)/2) Tr(... T^b ...).
+            return Some(
+                (quadratic_casimir(rep.clone())
+                    - adjoint_casimir_for_dimension(color_adjoint_dimension(&left)?)
+                        / Atom::num(2))
+                    * trace_with_factors(
+                        rep.clone(),
+                        factors_excluding_indices(factors, &[i, i + 2]),
+                    ),
+            );
+        }
+
+        None
+    }
+
+    fn simplify_separated_chain_casimir(
+        start: &Atom,
+        end: &Atom,
+        factors: &[Atom],
+    ) -> Option<Atom> {
+        for i in 0..factors.len().saturating_sub(2) {
+            let Some(left) = color_generator_adjoint(factors[i].as_view()) else {
+                continue;
+            };
+            let Some(right) = color_generator_adjoint(factors[i + 2].as_view()) else {
+                continue;
+            };
+            if left != right {
+                continue;
+            }
+
+            let coefficient = fundamental_casimir(fundamental_chain_dimension(start, end)?)
+                - adjoint_casimir_for_dimension(color_adjoint_dimension(&left)?) / Atom::num(2);
+
+            return Some(
+                coefficient
+                    * chain_with_factors(
+                        start.clone(),
+                        end.clone(),
+                        factors_excluding_indices(factors, &[i, i + 2]),
+                    ),
+            );
+        }
+
+        None
+    }
+
+    fn simplify_four_generator_trace_terminal(
+        rep: &Atom,
+        a: &Atom,
+        b: &Atom,
+        c: &Atom,
+        d: &Atom,
+    ) -> Option<Atom> {
+        let x = color_adjoint_dummy_like(a)?;
+
+        // Four-generator terminal decomposition:
+        // Tr(T^a T^b T^c T^d) is split into a fully symmetric trace, two
+        // f * symmetric-trace terms, and two f*f terms.
+        Some(
+            color_symmetric_trace(rep, [a.clone(), b.clone(), c.clone(), d.clone()])
+                + Atom::i() / Atom::num(2)
+                    * color_symmetric_trace(rep, [a.clone(), b.clone(), x.clone()])
+                    * color_f!(c.clone(), d.clone(), x.clone())
+                + Atom::i() / Atom::num(2)
+                    * color_symmetric_trace(rep, [c.clone(), d.clone(), x.clone()])
+                    * color_f!(a.clone(), b.clone(), x.clone())
+                - quadratic_index(rep.clone()) / Atom::num(6)
+                    * color_f!(a.clone(), c.clone(), x.clone())
+                    * color_f!(b.clone(), d.clone(), x.clone())
+                + quadratic_index(rep.clone()) / Atom::num(3)
+                    * color_f!(a.clone(), d.clone(), x.clone())
+                    * color_f!(b.clone(), c.clone(), x.clone()),
+        )
+    }
+
+    fn simplify_product(&self, product: AtomView, complete: bool) -> Option<Atom> {
+        let product = ProductView::parse(product);
+        if product.len() < 2 {
+            return None;
+        }
+
+        product
+            .distribute_color_sum_factor()
+            .or_else(|| Self::join_color_chain_product(&product))
+            .or_else(|| {
+                self.settings
+                    .evaluate_traces
+                    .then(|| self.simplify_trace_structure_product(&product))
+                    .flatten()
+            })
+            .or_else(|| self.simplify_chain_structure_product(&product))
+            .or_else(|| Self::simplify_symmetric_structure_product(&product))
+            .or_else(|| self.simplify_two_f_loop_product(&product))
+            .or_else(|| self.simplify_three_f_loop_product(&product))
+            .or_else(|| Self::simplify_symmetric_invariant_product(&product))
+            .or_else(|| {
+                self.settings
+                    .expand_cross_chain_fierz
+                    .then(|| Self::simplify_cross_chain_fierz_product(&product))
+                    .flatten()
+            })
+            .or_else(|| self.simplify_embedded_color_node(&product, complete))
+    }
+
+    fn join_color_chain_product(product: &ProductView) -> Option<Atom> {
+        for (left_index, left_factor) in product.factors.iter().enumerate() {
+            let Some(left_chain) = &left_factor.chain else {
+                continue;
+            };
+            let Some((left_end_dim, left_end_index, true)) = color_fundamental_slot(left_chain.end)
+            else {
+                continue;
+            };
+
+            for (right_index, right_factor) in product.factors.iter().enumerate() {
+                if right_index == left_index {
+                    continue;
+                }
+                let Some(right_chain) = &right_factor.chain else {
+                    continue;
+                };
+                let Some((right_start_dim, right_start_index, false)) =
+                    color_fundamental_slot(right_chain.start)
+                else {
+                    continue;
+                };
+                if left_end_dim != right_start_dim || left_end_index != right_start_index {
+                    continue;
+                }
+
+                let replacement = chain!(
+                    left_chain.start,
+                    right_chain.end;
+                    left_chain.factors.iter().cloned().chain(right_chain.factors.iter().cloned())
+                );
+                return Some(product.replacing_pair(left_index, right_index, replacement));
+            }
+        }
+
+        None
+    }
+
+    fn simplify_embedded_color_node(&self, product: &ProductView, complete: bool) -> Option<Atom> {
+        for (index, factor) in product.factors.iter().enumerate() {
+            let rewritten = Self::simplify_chain_node(factor.atom)
+                .or_else(|| {
+                    self.settings
+                        .evaluate_traces
+                        .then(|| Self::simplify_trace_node(factor.atom, complete))
+                        .flatten()
+                })
+                .or_else(|| self.simplify_power(factor.atom));
+            let Some(rewritten) = rewritten else {
+                continue;
+            };
+
+            return Some(product.replacing_one(index, rewritten));
+        }
+
+        None
+    }
+
+    fn simplify_cross_chain_fierz_product(product: &ProductView) -> Option<Atom> {
+        let lines = product
+            .factors
+            .iter()
+            .enumerate()
+            .filter_map(|(index, factor)| {
+                let (dimension, factors) = if let Some(chain) = &factor.chain {
+                    (
+                        fundamental_chain_dimension_view(chain.start, chain.end)?,
+                        &chain.factors,
+                    )
+                } else if let Some(trace) = &factor.trace {
+                    let AtomView::Fun(rep) = trace.rep else {
+                        return None;
+                    };
+                    if rep.get_symbol() != CS.fundamental_rep || rep.get_nargs() != 1 {
+                        return None;
+                    }
+                    (rep.iter().next()?.to_owned(), &trace.factors)
+                } else {
+                    return None;
+                };
+                Some((index, factor, dimension, factors))
+            })
+            .collect::<Vec<_>>();
+
+        for (position, (left_index, left, left_dimension, left_factors)) in lines.iter().enumerate()
+        {
+            for (right_index, right, right_dimension, right_factors) in &lines[position + 1..] {
+                if left_dimension != right_dimension {
+                    continue;
+                }
+                for (left_position, left_generator) in left_factors.iter().enumerate() {
+                    let Some(left_adjoint) = color_generator_adjoint(*left_generator) else {
+                        continue;
+                    };
+                    for (right_position, right_generator) in right_factors.iter().enumerate() {
+                        if color_generator_adjoint(*right_generator).as_ref() != Some(&left_adjoint)
+                        {
+                            continue;
+                        }
+                        let left_before = &left_factors[..left_position];
+                        let left_after = &left_factors[left_position + 1..];
+                        let right_before = &right_factors[..right_position];
+                        let right_after = &right_factors[right_position + 1..];
+                        let dimension = left_dimension.to_owned();
+                        let rep = fundamental_rep(dimension.clone());
+                        let left_trace = trace_with_factors(
+                            rep.clone(),
+                            left_after
+                                .iter()
+                                .chain(left_before)
+                                .map(|factor| (*factor).to_owned())
+                                .collect(),
+                        );
+                        let right_trace = trace_with_factors(
+                            rep.clone(),
+                            right_after
+                                .iter()
+                                .chain(right_before)
+                                .map(|factor| (*factor).to_owned())
+                                .collect(),
+                        );
+                        // Cutting a trace at the contracted generator leaves its
+                        // remaining word in cyclic order: after, then before.
+                        let (crossed, uncrossed) = match (&left.chain, &right.chain) {
+                            (Some(left), Some(right)) => (
+                                chain_with_factor_view_slices(
+                                    left.start,
+                                    right.end,
+                                    &[left_before, right_after],
+                                ) * chain_with_factor_view_slices(
+                                    right.start,
+                                    left.end,
+                                    &[right_before, left_after],
+                                ),
+                                chain_with_factor_view_slices(
+                                    left.start,
+                                    left.end,
+                                    &[left_before, left_after],
+                                ) * chain_with_factor_view_slices(
+                                    right.start,
+                                    right.end,
+                                    &[right_before, right_after],
+                                ),
+                            ),
+                            (Some(left), None) => (
+                                chain_with_factor_view_slices(
+                                    left.start,
+                                    left.end,
+                                    &[left_before, right_after, right_before, left_after],
+                                ),
+                                chain_with_factor_view_slices(
+                                    left.start,
+                                    left.end,
+                                    &[left_before, left_after],
+                                ) * right_trace,
+                            ),
+                            (None, Some(right)) => (
+                                chain_with_factor_view_slices(
+                                    right.start,
+                                    right.end,
+                                    &[right_before, left_after, left_before, right_after],
+                                ),
+                                left_trace
+                                    * chain_with_factor_view_slices(
+                                        right.start,
+                                        right.end,
+                                        &[right_before, right_after],
+                                    ),
+                            ),
+                            (None, None) => (
+                                trace_with_factors(
+                                    rep,
+                                    left_after
+                                        .iter()
+                                        .chain(left_before)
+                                        .chain(right_after)
+                                        .chain(right_before)
+                                        .map(|factor| (*factor).to_owned())
+                                        .collect(),
+                                ),
+                                left_trace * right_trace,
+                            ),
+                        };
+                        let replacement = fundamental_index(dimension.clone())
+                            * (crossed - uncrossed / dimension);
+                        return Some(product.replacing_pair(
+                            *left_index,
+                            *right_index,
+                            replacement,
+                        ));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn simplify_power(&self, power: AtomView) -> Option<Atom> {
+        let AtomView::Pow(pow) = power else {
+            return None;
+        };
+        let (base, exponent) = pow.get_base_exp();
+        if positive_integer(exponent)? != 2 {
+            return None;
+        }
+
+        if let Some(invariant) = color_symmetric_invariant(base)
+            && invariant.args.len() >= 3
+        {
+            return Some(color_symmetric_product(
+                invariant.args.len(),
+                invariant.rep.clone(),
+                invariant.rep,
+            ));
+        }
+
+        let args = structure_constant_args(base)?;
+        let dimension = color_structure_dimension(&args)?;
+        Some(adjoint_casimir_for_dimension(dimension.clone()) * dimension)
+    }
+
+    fn simplify_trace_structure_product(&self, product: &ProductView) -> Option<Atom> {
+        for (trace_index, trace_factor) in product.factors.iter().enumerate() {
+            let Some(trace) = &trace_factor.trace else {
+                continue;
+            };
+            if trace.factors.len() < 2 {
+                continue;
+            }
+
+            for (f_index, f_factor) in product.factors.iter().enumerate() {
+                if f_index == trace_index {
+                    continue;
+                }
+                let Some(structure) = &f_factor.structure else {
+                    continue;
+                };
+                let Some(structure_dimension) =
+                    color_structure_dimension(&structure.args.map(|arg| arg.to_owned()))
+                else {
+                    continue;
+                };
+
+                for pair_index in 0..trace.factors.len() {
+                    let first = trace.factors[pair_index];
+                    let second = trace.factors[(pair_index + 1) % trace.factors.len()];
+                    let Some(a) = color_generator_adjoint_view(first) else {
+                        continue;
+                    };
+                    let Some(b) = color_generator_adjoint_view(second) else {
+                        continue;
+                    };
+                    let Some((target, structure_prefactor)) =
+                        Self::structure_target_for_generator_pair(&structure.args, &a, &b)
+                    else {
+                        continue;
+                    };
+
+                    let rest = (0..trace.factors.len() - 2).map(|offset| {
+                        trace.factors[(pair_index + 2 + offset) % trace.factors.len()].to_owned()
+                    });
+                    let replacement_factors = std::iter::once(color_t!(target.clone()))
+                        .chain(rest)
+                        .collect::<Vec<_>>();
+
+                    // f^{abx} Tr(T^a T^b rest) -> i CA/2 Tr(T^x rest).
+                    let replacement = structure_prefactor
+                        * Atom::i()
+                        * adjoint_casimir_for_dimension(structure_dimension.clone())
+                        / Atom::num(2)
+                        * trace_with_factors(trace.rep.to_owned(), replacement_factors);
+                    return Some(product.replacing_pair(trace_index, f_index, replacement));
+                }
+            }
+        }
+
+        None
+    }
+
+    fn simplify_chain_structure_product(&self, product: &ProductView) -> Option<Atom> {
+        for (chain_index, chain_factor) in product.factors.iter().enumerate() {
+            let Some(chain) = &chain_factor.chain else {
+                continue;
+            };
+
+            for pair_index in 0..chain.factors.len().saturating_sub(1) {
+                let Some(left) = color_generator_adjoint_view(chain.factors[pair_index]) else {
+                    continue;
+                };
+                let Some(right) = color_generator_adjoint_view(chain.factors[pair_index + 1])
+                else {
+                    continue;
+                };
+
+                for (f_index, f_factor) in product.factors.iter().enumerate() {
+                    if f_index == chain_index {
+                        continue;
+                    }
+                    let Some(structure) = &f_factor.structure else {
+                        continue;
+                    };
+                    let Some(structure_dimension) =
+                        color_structure_dimension(&structure.args.map(|arg| arg.to_owned()))
+                    else {
+                        continue;
+                    };
+                    let Some((target, structure_prefactor)) =
+                        Self::structure_target_for_generator_pair(&structure.args, &left, &right)
+                    else {
+                        continue;
+                    };
+
+                    let coefficient = structure_prefactor
+                        * Atom::i()
+                        * adjoint_casimir_for_dimension(structure_dimension)
+                        / Atom::num(2);
+                    let chain_factors = chain
+                        .factors
+                        .iter()
+                        .map(|factor| factor.to_owned())
+                        .collect::<Vec<_>>();
+                    let replacement = coefficient
+                        * chain_replacing_factor_pair(
+                            &chain.start.to_owned(),
+                            &chain.end.to_owned(),
+                            &chain_factors,
+                            pair_index,
+                            color_t!(target.clone()),
+                        );
+                    return Some(product.replacing_pair(chain_index, f_index, replacement));
+                }
+            }
+        }
+
+        None
+    }
+
+    fn structure_target_for_generator_pair(
+        args: &[AtomView<'_>; 3],
+        left: &AtomView<'_>,
+        right: &AtomView<'_>,
+    ) -> Option<(Atom, Atom)> {
+        let actual = color_f!(args[0].to_owned(), args[1].to_owned(), args[2].to_owned());
+
+        args.iter().find_map(|target| {
+            let oriented = color_f!(target.to_owned(), left.to_owned(), right.to_owned());
+            let prefactor = oriented.coefficient(actual.as_view());
+            (!prefactor.is_zero()).then_some((target.to_owned(), prefactor))
+        })
+    }
+
+    fn simplify_symmetric_structure_product(product: &ProductView) -> Option<Atom> {
+        for (symmetric_index, symmetric_factor) in product.factors.iter().enumerate() {
+            let Some(symmetric) = &symmetric_factor.symmetric_invariant else {
+                continue;
+            };
+
+            for (f_index, f_factor) in product.factors.iter().enumerate() {
+                if f_index == symmetric_index {
+                    continue;
+                }
+                let Some(structure) = &f_factor.structure else {
+                    continue;
+                };
+                if color_structure_dimension(&structure.args.map(|arg| arg.to_owned())).is_none() {
+                    continue;
+                }
+                let common_count = symmetric
+                    .args
+                    .iter()
+                    .filter(|arg| structure.args.iter().any(|candidate| candidate == *arg))
+                    .count();
+                if common_count >= 2 {
+                    return Some(Atom::Zero);
+                }
+            }
+        }
+
+        None
+    }
+
+    fn simplify_two_f_loop_product(&self, product: &ProductView) -> Option<Atom> {
+        for (left_index, left_factor) in product.factors.iter().enumerate() {
+            let Some(left_structure) = &left_factor.structure else {
+                continue;
+            };
+            let left = left_structure.args.map(|arg| arg.to_owned());
+            let Some(dimension) = color_structure_dimension(&left) else {
+                continue;
+            };
+
+            for (right_index, right_factor) in
+                product.factors.iter().enumerate().skip(left_index + 1)
+            {
+                let Some(right_structure) = &right_factor.structure else {
+                    continue;
+                };
+                let right = right_structure.args.map(|arg| arg.to_owned());
+                if color_structure_dimension(&right).as_ref() != Some(&dimension) {
+                    continue;
+                }
+                let Some(replacement) = two_structure_loop_contraction(
+                    &left,
+                    &right,
+                    adjoint_casimir_for_dimension(dimension.clone()),
+                ) else {
+                    continue;
+                };
+                return Some(product.replacing_pair(left_index, right_index, replacement));
+            }
+        }
+
+        None
+    }
+
+    fn simplify_three_f_loop_product(&self, product: &ProductView) -> Option<Atom> {
+        for indices in (0..product.factors.len()).combinations(3) {
+            let Some(f_args) = indices
+                .iter()
+                .map(|index| {
+                    product.factors[*index]
+                        .structure
+                        .as_ref()
+                        .map(|structure| structure.args.map(|arg| arg.to_owned()))
+                })
+                .collect::<Option<Vec<_>>>()
+            else {
+                continue;
+            };
+            let Some(dimensions) = f_args
+                .iter()
+                .map(color_structure_dimension)
+                .collect::<Option<Vec<_>>>()
+            else {
+                continue;
+            };
+            if !dimensions
+                .iter()
+                .all(|dimension| dimension == &dimensions[0])
+            {
+                continue;
+            }
+
+            let common01 = common_structure_positions(&f_args[0], &f_args[1]);
+            let common12 = common_structure_positions(&f_args[1], &f_args[2]);
+            let common20 = common_structure_positions(&f_args[2], &f_args[0]);
+            let ([edge01], [edge12], [edge20]) = (
+                common01.as_slice(),
+                common12.as_slice(),
+                common20.as_slice(),
+            ) else {
+                continue;
+            };
+            if edge01.left == edge20.right
+                || edge01.right == edge12.left
+                || edge12.right == edge20.left
+            {
+                continue;
+            }
+
+            let Some(external0) =
+                (0..3).find(|position| *position != edge01.left && *position != edge20.right)
+            else {
+                continue;
+            };
+            let Some(external1) =
+                (0..3).find(|position| *position != edge01.right && *position != edge12.left)
+            else {
+                continue;
+            };
+            let Some(external2) =
+                (0..3).find(|position| *position != edge12.right && *position != edge20.left)
+            else {
+                continue;
+            };
+
+            let internal01 = f_args[0][edge01.left].clone();
+            let internal12 = f_args[1][edge12.left].clone();
+            let internal20 = f_args[2][edge20.left].clone();
+            let externals = [
+                f_args[0][external0].clone(),
+                f_args[1][external1].clone(),
+                f_args[2][external2].clone(),
+            ];
+            let actual = f_args
+                .iter()
+                .map(|args| color_f!(args[0].clone(), args[1].clone(), args[2].clone()))
+                .collect::<Vec<_>>();
+            let oriented = [
+                color_f!(internal20.clone(), internal01.clone(), externals[0].clone()),
+                color_f!(internal01, internal12.clone(), externals[1].clone()),
+                color_f!(internal12, internal20, externals[2].clone()),
+            ];
+            // Orient all three structures around the cycle; their coefficient
+            // product carries the permutation parity into the reduced f.
+            let prefactor = oriented
+                .iter()
+                .zip(actual)
+                .fold(Atom::num(1), |prefactor, (oriented, actual)| {
+                    prefactor * oriented.coefficient(actual.as_view())
+                });
+            if prefactor.is_zero() {
+                continue;
+            }
+
+            let replacement = prefactor * adjoint_casimir_for_dimension(dimensions[0].clone())
+                / Atom::num(2)
+                * color_f!(
+                    externals[0].clone(),
+                    externals[1].clone(),
+                    externals[2].clone()
+                );
+            let mut excluded = vec![false; product.factors.len()];
+            for index in indices {
+                excluded[index] = true;
+            }
+            return Some(product.excluding(&excluded) * replacement);
+        }
+
+        None
+    }
+
+    fn simplify_symmetric_invariant_product(product: &ProductView) -> Option<Atom> {
+        for (left_index, left_factor) in product.factors.iter().enumerate() {
+            let Some(left) = &left_factor.symmetric_invariant else {
+                continue;
+            };
+            for (right_index, right_factor) in
+                product.factors.iter().enumerate().skip(left_index + 1)
+            {
+                let Some(right) = &right_factor.symmetric_invariant else {
+                    continue;
+                };
+                if left.args.len() != right.args.len() || left.args.len() < 3 {
+                    continue;
+                };
+
+                let left_args = left
+                    .args
+                    .iter()
+                    .map(|arg| arg.to_owned())
+                    .collect::<Vec<_>>();
+                let right_args = right
+                    .args
+                    .iter()
+                    .map(|arg| arg.to_owned())
+                    .collect::<Vec<_>>();
+                // Contract equal-rank symmetric traces into the corresponding
+                // scalar invariant family, leaving a metric for one open pair.
+                let (common, left_open, right_open) =
+                    symmetric_common_and_open_args(&left_args, &right_args);
+                if common.len() == left_args.len() {
+                    let replacement = color_symmetric_product(
+                        left_args.len(),
+                        left.rep.to_owned(),
+                        right.rep.to_owned(),
+                    );
+                    return Some(product.replacing_pair(left_index, right_index, replacement));
+                }
+                let ([left_open], [right_open]) = (left_open.as_slice(), right_open.as_slice())
+                else {
+                    continue;
+                };
+                let dimension = color_adjoint_dimension(left_open)
+                    .or_else(|| color_adjoint_dimension(right_open))
+                    .or_else(|| common.iter().find_map(color_adjoint_dimension))?;
+                let replacement = color_symmetric_product(
+                    left_args.len(),
+                    left.rep.to_owned(),
+                    right.rep.to_owned(),
+                ) * color_metric(left_open.clone(), right_open.clone())
+                    / dimension;
+                return Some(product.replacing_pair(left_index, right_index, replacement));
+            }
+        }
+
+        None
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ChainView<'a> {
+    start: AtomView<'a>,
+    end: AtomView<'a>,
+    factors: Vec<AtomView<'a>>,
+}
+
+impl<'a> ChainView<'a> {
+    fn parse(expr: AtomView<'a>) -> Option<Self> {
+        let AtomView::Fun(f) = expr else {
+            return None;
+        };
+        if f.get_symbol() != T.chain {
+            return None;
+        }
+
+        let args = f.iter().collect::<Vec<_>>();
+        let [start, end, factors @ ..] = args.as_slice() else {
+            return None;
+        };
+        Some(Self {
+            start: *start,
+            end: *end,
+            factors: factors.to_vec(),
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+struct TraceView<'a> {
+    rep: AtomView<'a>,
+    factors: Vec<AtomView<'a>>,
+}
+
+impl<'a> TraceView<'a> {
+    fn parse(expr: AtomView<'a>) -> Option<Self> {
+        let AtomView::Fun(f) = expr else {
+            return None;
+        };
+        let (rep, factors) = shadowing::trace_parts(f)?;
+        Some(Self { rep, factors })
+    }
+}
+
+#[derive(Clone, Debug)]
+struct StructureView<'a> {
+    args: [AtomView<'a>; 3],
+}
+
+impl<'a> StructureView<'a> {
+    fn parse(expr: AtomView<'a>) -> Option<Self> {
+        let AtomView::Fun(f) = expr else {
+            return None;
+        };
+        if f.get_symbol() != CS.f || f.get_nargs() != 3 {
+            return None;
+        }
+
+        let args = f.iter().collect::<Vec<_>>();
+        Some(Self {
+            args: [args[0], args[1], args[2]],
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+struct SymmetricInvariantView<'a> {
+    rep: AtomView<'a>,
+    args: Vec<AtomView<'a>>,
+}
+
+impl<'a> SymmetricInvariantView<'a> {
+    fn parse(expr: AtomView<'a>) -> Option<Self> {
+        if let Some(trace) = TraceView::parse(expr) {
+            let [factor] = trace.factors.as_slice() else {
+                return None;
+            };
+            let args = color_symmetric_trace_arg_views(*factor)?;
+            return Some(Self {
+                rep: trace.rep,
+                args,
+            });
+        }
+
+        let AtomView::Fun(f) = expr else {
+            return None;
+        };
+        if f.get_symbol() != CS.d || f.get_nargs() < 4 {
+            return None;
+        }
+
+        let args = f.iter().collect::<Vec<_>>();
+        Some(Self {
+            rep: args[0],
+            args: args[1..].to_vec(),
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ProductFactor<'a> {
+    atom: AtomView<'a>,
+    chain: Option<ChainView<'a>>,
+    trace: Option<TraceView<'a>>,
+    structure: Option<StructureView<'a>>,
+    symmetric_invariant: Option<SymmetricInvariantView<'a>>,
+}
+
+impl<'a> ProductFactor<'a> {
+    fn parse(atom: AtomView<'a>) -> Self {
+        let chain = ChainView::parse(atom);
+        let trace = TraceView::parse(atom);
+        let structure = StructureView::parse(atom);
+        let symmetric_invariant = SymmetricInvariantView::parse(atom);
+        Self {
+            atom,
+            chain,
+            trace,
+            structure,
+            symmetric_invariant,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ProductView<'a> {
+    factors: Vec<ProductFactor<'a>>,
+}
+
+impl<'a> ProductView<'a> {
+    fn parse(expr: AtomView<'a>) -> Self {
+        Self {
+            factors: multiplicative_factor_views(expr)
+                .into_iter()
+                .map(ProductFactor::parse)
+                .collect(),
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.factors.len()
+    }
+
+    fn replacing_pair(&self, left_index: usize, right_index: usize, replacement: Atom) -> Atom {
+        Atom::mul_many(
+            std::iter::once(replacement.as_view()).chain(
+                self.factors
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != left_index && *index != right_index)
+                    .map(|(_, factor)| factor.atom),
+            ),
+        )
+    }
+
+    fn replacing_one(&self, target_index: usize, replacement: Atom) -> Atom {
+        Atom::mul_many(self.factors.iter().enumerate().map(|(index, factor)| {
+            if index == target_index {
+                replacement.as_view()
+            } else {
+                factor.atom
+            }
+        }))
+    }
+
+    fn excluding(&self, excluded: &[bool]) -> Atom {
+        Atom::mul_many(
+            self.factors
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !excluded[*index])
+                .map(|(_, factor)| factor.atom),
+        )
+    }
+
+    fn distribute_color_sum_factor(&self) -> Option<Atom> {
+        let (sum_index, sum) = self
+            .factors
+            .iter()
+            .enumerate()
+            .find_map(|(index, factor)| match factor.atom {
+                AtomView::Add(add) if add.iter().any(atom_contains_color_node) => {
+                    Some((index, add))
+                }
+                _ => None,
+            })?;
+
+        Some(ColorAlgebraSimplifier::sum_rewritten_terms(
+            sum.iter()
+                .map(|term| self.replacing_one(sum_index, term.to_owned()))
+                .collect(),
+        ))
+    }
+}
+
+fn chain_parts(chain: AtomView) -> Option<(Atom, Atom, Vec<Atom>)> {
+    let AtomView::Fun(f) = chain else {
+        return None;
+    };
+    if f.get_symbol() != T.chain {
+        return None;
+    }
+
+    let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
+    let [start, end, factors @ ..] = args.as_slice() else {
+        return None;
+    };
+    Some((start.clone(), end.clone(), factors.to_vec()))
+}
+
+fn trace_parts(trace: AtomView) -> Option<(Atom, Vec<Atom>)> {
+    let AtomView::Fun(f) = trace else {
+        return None;
+    };
+    let (rep, factors) = shadowing::trace_parts(f)?;
+    Some((
+        rep.to_owned(),
+        factors
+            .into_iter()
+            .map(|factor| factor.to_owned())
+            .collect(),
+    ))
+}
+
+fn color_generator_adjoint(factor: AtomView) -> Option<Atom> {
+    color_generator_adjoint_view(factor).map(|arg| arg.to_owned())
+}
+
+pub(super) fn color_generator_adjoint_view(factor: AtomView<'_>) -> Option<AtomView<'_>> {
+    let AtomView::Fun(f) = factor else {
+        return None;
+    };
+    if f.get_symbol() != CS.t || f.get_nargs() != 3 {
+        return None;
+    }
+
+    let args = f.iter().collect::<Vec<_>>();
+    if !has_chain_endpoints(args[1], args[2]) {
+        return None;
+    }
+
+    Some(args[0])
+}
+
+fn structure_constant_args(factor: AtomView) -> Option<[Atom; 3]> {
+    let AtomView::Fun(f) = factor else {
+        return None;
+    };
+    if f.get_symbol() != CS.f || f.get_nargs() != 3 {
+        return None;
+    }
+
+    let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
+    Some([args[0].clone(), args[1].clone(), args[2].clone()])
+}
+
+#[derive(Clone, Debug)]
+struct ColorSymmetricInvariant {
+    rep: Atom,
+    args: Vec<Atom>,
+}
+
+fn color_symmetric_invariant(invariant: AtomView) -> Option<ColorSymmetricInvariant> {
+    if let Some((rep, factors)) = trace_parts(invariant) {
+        let [factor] = factors.as_slice() else {
+            return None;
+        };
+        let args = color_symmetric_trace_args(factor.as_view())?;
+        return Some(ColorSymmetricInvariant { rep, args });
+    }
+
+    let AtomView::Fun(f) = invariant else {
+        return None;
+    };
+    if f.get_symbol() != CS.d || f.get_nargs() < 4 {
+        return None;
+    }
+
+    let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
+    Some(ColorSymmetricInvariant {
+        rep: args[0].clone(),
+        args: args[1..].to_vec(),
+    })
+}
+
+fn color_symmetric_trace_args(projector: AtomView) -> Option<Vec<Atom>> {
+    color_symmetric_trace_arg_views(projector).map(|args| {
+        args.into_iter()
+            .map(|arg| arg.to_owned())
+            .collect::<Vec<_>>()
+    })
+}
+
+fn color_symmetric_trace_arg_views(projector: AtomView<'_>) -> Option<Vec<AtomView<'_>>> {
+    let AtomView::Fun(f) = projector else {
+        return None;
+    };
+    if f.get_symbol() != *shadowing::SYM {
+        return None;
+    }
+
+    f.iter()
+        .map(color_generator_adjoint_view)
+        .collect::<Option<Vec<_>>>()
+}
+
+fn color_antisymmetric_generator_args(factor: AtomView) -> Option<(Atom, Vec<Atom>)> {
+    let (prefactor, projector_symbol, factors) = projector_factor(factor)?;
+    if projector_symbol != *shadowing::ANTISYM {
+        return None;
+    }
+
+    let args = factors
+        .iter()
+        .map(|factor| color_generator_adjoint(factor.as_view()))
+        .collect::<Option<Vec<_>>>()?;
+    Some((prefactor, args))
+}
+
+fn projector_factor(factor: AtomView) -> Option<(Atom, Symbol, Vec<Atom>)> {
+    if let Some((projector_symbol, factors)) = projector_parts(factor) {
+        return Some((Atom::num(1), projector_symbol, factors));
+    }
+
+    let AtomView::Mul(product) = factor else {
+        return None;
+    };
+
+    let mut prefactor = Atom::num(1);
+    let mut projector = None;
+    for factor in product.iter() {
+        if let Some(parts) = projector_parts(factor) {
+            if projector.is_some() {
+                return None;
+            }
+            projector = Some(parts);
+        } else if matches!(factor, AtomView::Num(_)) {
+            prefactor *= factor.to_owned();
+        } else {
+            return None;
+        }
+    }
+
+    let (projector_symbol, factors) = projector?;
+    Some((prefactor, projector_symbol, factors))
+}
+
+fn projector_parts(projector: AtomView) -> Option<(Symbol, Vec<Atom>)> {
+    let AtomView::Fun(f) = projector else {
+        return None;
+    };
+    if f.get_symbol() != *shadowing::SYM && f.get_symbol() != *shadowing::ANTISYM {
+        return None;
+    }
+
+    Some((f.get_symbol(), f.iter().map(|arg| arg.to_owned()).collect()))
+}
+
+fn color_fundamental_slot(slot: AtomView) -> Option<(Atom, Atom, bool)> {
+    if let Some((dimension, index)) = representation_slot(slot, CS.fundamental_rep) {
+        return Some((dimension, index, false));
+    }
+
+    let AtomView::Fun(f) = slot else {
+        return None;
+    };
+    if f.get_symbol() != AIND_SYMBOLS.dind || f.get_nargs() != 1 {
+        return None;
+    }
+
+    representation_slot(f.iter().next()?, CS.fundamental_rep)
+        .map(|(dimension, index)| (dimension, index, true))
+}
+
+fn color_adjoint_dimension(slot: &Atom) -> Option<Atom> {
+    representation_slot(slot.as_view(), CS.adjoint_rep).map(|(dimension, _)| dimension)
+}
+
+fn color_structure_dimension(args: &[Atom; 3]) -> Option<Atom> {
+    let mut dimensions = args.iter().map(color_adjoint_dimension);
+    let dimension = dimensions.next()??;
+    dimensions
+        .all(|candidate| candidate.is_some_and(|candidate| candidate == dimension))
+        .then_some(dimension)
+}
+
+fn color_adjoint_dummy_like(slot: &Atom) -> Option<Atom> {
+    let dimension = color_adjoint_dimension(slot)?;
+    Some(ColorAdjoint {}.to_symbolic([dimension, Atom::var(CS.trace_dummy)]))
+}
+
+fn color_adjoint_dummy_for_pair(left: &Atom, right: &Atom) -> Option<Atom> {
+    let left_dimension = color_adjoint_dimension(left)?;
+    let right_dimension = color_adjoint_dimension(right)?;
+    (left_dimension == right_dimension)
+        .then(|| ColorAdjoint {}.to_symbolic([left_dimension, Atom::var(CS.trace_dummy)]))
+}
+
+fn representation_slot(slot: AtomView, symbol: Symbol) -> Option<(Atom, Atom)> {
+    let AtomView::Fun(f) = slot else {
+        return None;
+    };
+    if f.get_symbol() != symbol || f.get_nargs() != 2 {
+        return None;
+    }
+
+    let args = f.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
+    Some((args[0].clone(), args[1].clone()))
+}
+
+fn trace_terminal_dimension(rep: AtomView) -> Option<Atom> {
+    let trace = trace!(rep.to_owned());
+    let simplified = trace.replace_multiple_repeat(TRACE_TERMINALS.as_ref());
+    (simplified != trace).then_some(simplified)
+}
+
+fn has_chain_endpoints(left: AtomView, right: AtomView) -> bool {
+    is_chain_endpoint(left, T.chain_in) && is_chain_endpoint(right, T.chain_out)
+}
+
+fn is_chain_identity_factor(factor: AtomView) -> bool {
+    // `chain!` represents an empty line as a metric over the placeholder
+    // endpoints; collapse it to the physical endpoint metric/dimension.
+    let AtomView::Fun(f) = factor else {
+        return false;
+    };
+    if f.get_symbol() != ETS.metric || f.get_nargs() != 2 {
+        return false;
+    }
+
+    let args = f.iter().collect::<Vec<_>>();
+    has_chain_endpoints(args[0], args[1])
+}
+
+fn is_chain_endpoint(arg: AtomView, expected: Symbol) -> bool {
+    matches!(arg, AtomView::Var(symbol) if symbol.get_symbol() == expected)
+}
+
+fn color_metric(left: Atom, right: Atom) -> Atom {
+    function!(ETS.metric, left, right)
+}
+
+fn quadratic_casimir(rep: Atom) -> Atom {
+    CS.cas(Atom::num(2), rep)
+}
+
+fn quadratic_index(rep: Atom) -> Atom {
+    CS.idx(Atom::num(2), rep)
+}
+
+fn fundamental_rep(dimension: Atom) -> Atom {
+    ColorFundamental {}.to_symbolic([dimension])
+}
+
+fn adjoint_rep(dimension: Atom) -> Atom {
+    ColorAdjoint {}.to_symbolic([dimension])
+}
+
+fn fundamental_casimir(dimension: Atom) -> Atom {
+    quadratic_casimir(fundamental_rep(dimension))
+}
+
+fn fundamental_index(dimension: Atom) -> Atom {
+    quadratic_index(fundamental_rep(dimension))
+}
+
+fn adjoint_casimir_for_dimension(dimension: Atom) -> Atom {
+    quadratic_casimir(adjoint_rep(dimension))
+}
+
+fn color_symmetric_trace(rep: &Atom, factors: impl IntoIterator<Item = Atom>) -> Atom {
+    let sym_factors = factors
+        .into_iter()
+        .map(|factor| color_t!(factor.clone()))
+        .collect::<Vec<_>>();
+    trace_sym!(rep.clone(); sym_factors)
+}
+
+fn color_symmetric_product(rank: usize, left_rep: Atom, right_rep: Atom) -> Atom {
+    CS.gram(Atom::num(rank as i64), left_rep, right_rep)
+}
+
+fn fundamental_chain_dimension(start: &Atom, end: &Atom) -> Option<Atom> {
+    fundamental_chain_dimension_view(start.as_view(), end.as_view())
+}
+
+pub(super) fn fundamental_chain_dimension_view(
+    start: AtomView<'_>,
+    end: AtomView<'_>,
+) -> Option<Atom> {
+    let Some((start_dimension, _, false)) = color_fundamental_slot(start) else {
+        return None;
+    };
+    let Some((end_dimension, _, true)) = color_fundamental_slot(end) else {
+        return None;
+    };
+    (start_dimension == end_dimension).then_some(start_dimension)
+}
+
+fn is_su_n_fundamental_chain(start: &Atom, end: &Atom) -> bool {
+    fundamental_chain_dimension(start, end).is_some_and(|dimension| dimension == Atom::var(CS.nc))
+}
+
+fn is_su_n_adjoint_slot(slot: &Atom) -> bool {
+    let n = Atom::var(CS.nc);
+    let su_n_adjoint_dimension = n.clone().pow(Atom::num(2)) - Atom::num(1);
+    color_adjoint_dimension(slot).is_some_and(|dimension| dimension == su_n_adjoint_dimension)
+}
+
+fn restore_explicit_su_n_generator_chains(expression: Atom) -> Atom {
+    expression.replace_map(|arg, _context, out| {
+        let Some((start, end, factors)) = chain_parts(arg) else {
+            return;
+        };
+        let [factor] = factors.as_slice() else {
+            return;
+        };
+        if !is_su_n_fundamental_chain(&start, &end) {
+            return;
+        }
+        let Some(adjoint) = color_generator_adjoint(factor.as_view()) else {
+            return;
+        };
+        if !is_su_n_adjoint_slot(&adjoint) {
+            return;
+        }
+
+        **out = CS.explicit_t(adjoint, start, end);
+    })
+}
+
+fn symmetric_common_and_open_args(
+    left: &[Atom],
+    right: &[Atom],
+) -> (Vec<Atom>, Vec<Atom>, Vec<Atom>) {
+    let mut right_used = vec![false; right.len()];
+    let mut common = Vec::new();
+    let mut left_open = Vec::new();
+
+    for left_arg in left {
+        if let Some((right_index, _)) = right
+            .iter()
+            .enumerate()
+            .find(|(index, right_arg)| !right_used[*index] && *right_arg == left_arg)
+        {
+            right_used[right_index] = true;
+            common.push(left_arg.clone());
+        } else {
+            left_open.push(left_arg.clone());
+        }
+    }
+
+    let right_open = right
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !right_used[*index])
+        .map(|(_, right_arg)| right_arg.clone())
+        .collect();
+
+    (common, left_open, right_open)
+}
+
+fn chain_with_removed_range(
+    start: &Atom,
+    end: &Atom,
+    factors: &[Atom],
+    from: usize,
+    to: usize,
+) -> Atom {
+    let remaining = factors_excluding_range(factors, from, to);
+    if remaining.is_empty() {
+        color_metric(start.clone(), end.clone())
+    } else {
+        chain!(start.clone(), end.clone(); remaining)
+    }
+}
+
+fn chain_with_factors(start: Atom, end: Atom, factors: Vec<Atom>) -> Atom {
+    if factors.is_empty() {
+        color_metric(start, end)
+    } else {
+        chain!(start, end; factors)
+    }
+}
+
+fn chain_with_factor_view_slices(
+    start: AtomView<'_>,
+    end: AtomView<'_>,
+    slices: &[&[AtomView<'_>]],
+) -> Atom {
+    let factors = slices
+        .iter()
+        .flat_map(|slice| slice.iter().map(|factor| factor.to_owned()))
+        .collect::<Vec<_>>();
+    chain_with_factors(start.to_owned(), end.to_owned(), factors)
+}
+
+fn chain_replacing_factor_pair(
+    start: &Atom,
+    end: &Atom,
+    factors: &[Atom],
+    pair_index: usize,
+    replacement: Atom,
+) -> Atom {
+    let mut remaining = factors.to_vec();
+    remaining.splice(pair_index..pair_index + 2, [replacement]);
+    chain_with_factors(start.clone(), end.clone(), remaining)
+}
+
+fn trace_with_factors(rep: Atom, factors: Vec<Atom>) -> Atom {
+    if factors.is_empty() {
+        trace_terminal_dimension(rep.as_view()).unwrap_or(rep)
+    } else {
+        trace!(rep; factors)
+    }
+}
+
+fn factors_excluding_range(factors: &[Atom], from: usize, to: usize) -> Vec<Atom> {
+    factors
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index < from || *index >= to)
+        .map(|(_, factor)| factor.clone())
+        .collect()
+}
+
+fn factors_excluding_indices(factors: &[Atom], excluded: &[usize]) -> Vec<Atom> {
+    factors
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !excluded.contains(index))
+        .map(|(_, factor)| factor.clone())
+        .collect()
+}
+
+fn multiplicative_factor_views(expr: AtomView<'_>) -> Vec<AtomView<'_>> {
+    match expr {
+        AtomView::Mul(mul) => mul.iter().collect(),
+        _ => vec![expr],
+    }
+}
+
+fn atom_contains_color_node(expr: AtomView<'_>) -> bool {
+    match expr {
+        AtomView::Fun(f) => {
+            let symbol = f.get_symbol();
+            TensorCollectFilter::Reps([
+                ColorAdjoint {}.into(),
+                ColorFundamental {}.into(),
+                ColorSextet {}.into(),
+            ])
+            .matches(expr)
+                || symbol == CS.f
+                || symbol == CS.d
+                || symbol == CS.t
+                || symbol == CS.gram
+                || symbol == CS.cas
+                || symbol == CS.idx
+                || f.iter().any(atom_contains_color_node)
+        }
+        AtomView::Add(add) => add.iter().any(atom_contains_color_node),
+        AtomView::Mul(mul) => mul.iter().any(atom_contains_color_node),
+        AtomView::Pow(pow) => {
+            let (base, exponent) = pow.get_base_exp();
+            atom_contains_color_node(base) || atom_contains_color_node(exponent)
+        }
+        AtomView::Num(_) | AtomView::Var(_) => false,
+    }
+}
+
+fn two_structure_loop_contraction(
+    left: &[Atom; 3],
+    right: &[Atom; 3],
+    adjoint_casimir: Atom,
+) -> Option<Atom> {
+    let common = common_structure_positions(left, right);
+    match common.as_slice() {
+        [first, second] => {
+            let left_open = (0..3).find(|index| *index != first.left && *index != second.left)?;
+            let right_open =
+                (0..3).find(|index| *index != first.right && *index != second.right)?;
+            let common = [left[first.left].clone(), left[second.left].clone()];
+            let left_actual = color_f!(left[0].clone(), left[1].clone(), left[2].clone());
+            let right_actual = color_f!(right[0].clone(), right[1].clone(), right[2].clone());
+            let left_oriented = color_f!(
+                left[left_open].clone(),
+                common[0].clone(),
+                common[1].clone()
+            );
+            let right_oriented = color_f!(
+                right[right_open].clone(),
+                common[0].clone(),
+                common[1].clone()
+            );
+
+            let left_prefactor = left_oriented.coefficient(left_actual.as_view());
+            let right_prefactor = right_oriented.coefficient(right_actual.as_view());
+            if left_prefactor.is_zero() || right_prefactor.is_zero() {
+                return None;
+            }
+            Some(
+                left_prefactor
+                    * right_prefactor
+                    * adjoint_casimir
+                    * color_metric(left[left_open].clone(), right[right_open].clone()),
+            )
+        }
+        [_, _, _] => Some(adjoint_casimir * color_structure_dimension(left)?),
+        _ => None,
+    }
+}
+
+#[derive(Clone, Copy)]
+struct CommonStructurePosition {
+    left: usize,
+    right: usize,
+}
+
+fn common_structure_positions(left: &[Atom; 3], right: &[Atom; 3]) -> Vec<CommonStructurePosition> {
+    let mut right_used = [false; 3];
+    let mut common = Vec::new();
+
+    for (left_index, left_arg) in left.iter().enumerate() {
+        if let Some((right_index, _)) = right
+            .iter()
+            .enumerate()
+            .find(|(right_index, right_arg)| !right_used[*right_index] && *right_arg == left_arg)
+        {
+            right_used[right_index] = true;
+            common.push(CommonStructurePosition {
+                left: left_index,
+                right: right_index,
+            });
+        }
+    }
+
+    common
+}
+
+fn positive_integer(expr: AtomView) -> Option<i64> {
+    let AtomView::Num(number) = expr else {
+        return None;
+    };
+    let CoefficientView::Natural(value, 1, 0, 1) = number.get_coeff_view() else {
+        return None;
+    };
+
+    (value > 0).then_some(value)
+}
+
+#[cfg(test)]
+mod reconstruction_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+    use symbolica::{domains::float::Float, parse, parse_lit, symbol};
+
+    // Preserve the prior reconstruction schedule as an independent oracle for
+    // rounding and user normalizers, which exact polynomial equality cannot test.
+    fn prefix_rewrite(simplifier: &ColorAlgebraSimplifier, expression: AtomView<'_>) -> Atom {
+        if let AtomView::Add(sum) = expression {
+            return sum.iter().fold(Atom::Zero, |result, term| {
+                result + prefix_rewrite(simplifier, term)
+            });
+        }
+        if let Some(result) = simplifier.rewrite_node(expression, true) {
+            return result;
+        }
+        expression.to_owned().replace_map(|node, _context, out| {
+            if let Some(result) = simplifier.rewrite_node(node, true) {
+                **out = result;
+            }
+        })
+    }
+
+    #[test]
+    fn incomplete_frontiers_keep_traces_for_product_rules() {
+        crate::test_support::test_initialize();
+        let simplifier = ColorAlgebraSimplifier {
+            settings: ColorSimplifySettings::default(),
+        };
+        let left = parse!(
+            "trace(cof(Nc), cyclic(t(coad(A,b),in,out), t(coad(A,a),in,out), t(coad(A,c),in,out)))",
+            default_namespace = "spenso"
+        );
+        let right = parse!(
+            "trace(cof(Nc), cyclic(t(coad(A,d),in,out), t(coad(A,a),in,out), t(coad(A,e),in,out)))",
+            default_namespace = "spenso"
+        );
+        assert_eq!(simplifier.step(left.as_view(), false), left);
+        let terminal = simplifier.step(left.as_view(), true);
+        assert_ne!(terminal, left);
+        assert_eq!(simplifier.step(terminal.as_view(), true), terminal);
+
+        let product = &left * &right;
+        let prefix = simplifier.step(product.as_view(), false);
+        assert_ne!(prefix, product);
+        // Fierz is a product identity and must not be disabled with the terminal.
+        assert_eq!(prefix, simplifier.step(product.as_view(), true));
+    }
+
+    #[test]
+    fn rewritten_color_sum_preserves_callbacks_and_factored_spectators() {
+        crate::test_support::test_initialize();
+        let simplifier = ColorAlgebraSimplifier {
+            settings: ColorSimplifySettings::default(),
+        };
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&calls);
+        let hook = symbol!(
+            "color_reconstruction_hook",
+            norm = move |value, _| observed.lock().unwrap().push(value.to_owned())
+        );
+        let terminal = parse_lit!(trace(cof(Nc)), default_namespace = "spenso");
+        let spectator = parse_lit!((x + y) ^ 7);
+        let input = Atom::add_many((0..12).map(|i| function!(hook, i, &terminal) * &spectator));
+        calls.lock().unwrap().clear();
+        let expected = prefix_rewrite(&simplifier, input.as_view());
+        let transcript = calls.lock().unwrap().clone();
+        assert!(!transcript.is_empty());
+        calls.lock().unwrap().clear();
+        let actual = simplifier.rewrite_terms(input.as_view(), true);
+        assert_eq!(actual, expected);
+        assert_eq!(*calls.lock().unwrap(), transcript);
+        calls.lock().unwrap().clear();
+        assert_eq!(simplifier.rewrite_terms(actual.as_view(), true), actual);
+        assert!(calls.lock().unwrap().is_empty());
+        assert_eq!(
+            actual,
+            Atom::add_many((0..12).map(|i| function!(hook, i, Atom::var(CS.nc)) * &spectator))
+        );
+    }
+
+    #[test]
+    fn unchanged_color_sum_still_normalizes_unchecked_input() {
+        crate::test_support::test_initialize();
+        let simplifier = ColorAlgebraSimplifier {
+            settings: ColorSimplifySettings::default(),
+        };
+        let mut input = Atom::new();
+        input.to_add();
+        assert!(input.as_view().needs_normalization());
+        assert_eq!(simplifier.rewrite_terms(input.as_view(), true), Atom::Zero);
+    }
+
+    #[test]
+    fn rewritten_color_sums_keep_rounded_prefix_order() {
+        crate::test_support::test_initialize();
+        let x = parse_lit!(x);
+        let rounded = |value| Atom::num(Float::parse(value, Some(11)).unwrap());
+        for terms in [
+            vec![rounded("1e10"), rounded("1"), rounded("-1e10")],
+            vec![
+                rounded("1e10") * &x,
+                rounded("1") * &x,
+                rounded("-1e10") * &x,
+            ],
+            vec![
+                rounded("0.1") * &x + parse_lit!(y),
+                rounded("0.2") * &x - parse_lit!(y),
+                rounded("0.3") * &x,
+            ],
+        ] {
+            let expected = terms.iter().fold(Atom::Zero, |sum, term| sum + term);
+            assert_eq!(ColorAlgebraSimplifier::sum_rewritten_terms(terms), expected);
+        }
+        assert_eq!(
+            ColorAlgebraSimplifier::sum_rewritten_terms(Vec::new()),
+            Atom::Zero
+        );
+    }
+
+    #[test]
+    fn color_products_match_ordered_replacement_with_rounded_coefficients() {
+        crate::test_support::test_initialize();
+        let rounded = Atom::num(Float::parse("0.1", Some(11)).unwrap());
+        let spectator = parse_lit!((x + y) ^ 7);
+        for source in [
+            parse_lit!(a * b * c) * &spectator,
+            &rounded * parse_lit!(a * b * c) * &spectator,
+        ] {
+            let product = ProductView::parse(source.as_view());
+            for replacement in [
+                Atom::Zero,
+                parse_lit!(a * c ^ 2 / 3),
+                &rounded * parse_lit!(a * c ^ 2),
+                parse_lit!(a + b),
+            ] {
+                for left in 0..product.len() {
+                    let expected = product.factors.iter().enumerate().fold(
+                        Atom::num(1),
+                        |value, (index, factor)| {
+                            value
+                                * if index == left {
+                                    replacement.as_view()
+                                } else {
+                                    factor.atom
+                                }
+                        },
+                    );
+                    assert_eq!(product.replacing_one(left, replacement.clone()), expected);
+                    for right in left + 1..product.len() {
+                        let expected = product
+                            .factors
+                            .iter()
+                            .enumerate()
+                            .filter(|(index, _)| *index != left && *index != right)
+                            .fold(replacement.clone(), |value, (_, factor)| {
+                                value * factor.atom
+                            });
+                        assert_eq!(
+                            product.replacing_pair(left, right, replacement.clone()),
+                            expected
+                        );
+                    }
+                }
+            }
+            for mask in 0..1usize << product.len() {
+                let excluded = (0..product.len())
+                    .map(|i| mask & (1 << i) != 0)
+                    .collect::<Vec<_>>();
+                let expected = product
+                    .factors
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| !excluded[*i])
+                    .fold(Atom::num(1), |value, (_, factor)| value * factor.atom);
+                assert_eq!(product.excluding(&excluded), expected);
+            }
+        }
+    }
+}

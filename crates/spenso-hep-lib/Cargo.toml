@@ -5,7 +5,7 @@ edition = "2024"
 description = "A spenso tensor library for high energy physics"
 
 [dependencies]
-idenso = { workspace = true, features = ["reference-cases"] }
+idenso = { workspace = true }
 spenso = { workspace = true, features = ["shadowing"] }
 spenso-macros = { workspace = true }
 symbolica = { workspace = true }
@@ -19,5 +19,6 @@ native = ["idenso/native", "spenso/native"]
 wasm = ["idenso/wasm", "spenso/wasm"]
 
 [dev-dependencies]
+idenso = { workspace = true, features = ["reference-cases"] }
 insta = { workspace = true, features = ["json", "ron", "toml", "yaml"] }
 tabled = { workspace = true }

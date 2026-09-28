@@ -1,0 +1,23 @@
+[package]
+name = "alphal00p-docs-python-exporter"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+feynkit-py = { path = "../feynkit-py", optional = true, features = ["python_stubgen"] }
+gammaloop-api = { path = "../gammaloop-api", optional = true, default-features = false, features = ["python_stubgen"] }
+linnet-py = { path = "../linnet-py", optional = true, features = ["python_stubgen"] }
+pyo3 = { workspace = true, features = ["auto-initialize"] }
+pyo3-stub-gen = { workspace = true, features = ["infer_signature"] }
+spynso3 = { path = "../spynso3", optional = true, features = ["python_stubgen"] }
+symbolica = { workspace = true, optional = true }
+vakint = { workspace = true, optional = true, features = ["python_stubgen", "symbolica_community_module"] }
+
+[features]
+default = []
+feynkit = ["dep:feynkit-py"]
+gammaloop = ["dep:gammaloop-api"]
+linnet = ["dep:linnet-py"]
+spenso = ["dep:spynso3"]
+vakint = ["dep:symbolica", "dep:vakint"]

@@ -58,7 +58,7 @@ impl ConcreteTensorView<'_> {
             IndexAliases::for_descriptor(&self.tensor.descriptor, &self.settings.index_style);
         self.tensor
             .descriptor
-            .structure
+            .structure()
             .logical_slots()
             .into_iter()
             .map(|slot| aliases.port_label(slot, self.settings))

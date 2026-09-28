@@ -186,11 +186,8 @@ pub fn color_conj_impl(expression: AtomView<'_>) -> Atom {
 mod tests {
     use super::*;
     use crate::{
-        IndexTooling,
-        color::ColorSimplifier,
-        epsilon::EpsilonSimplifier,
-        shorthands::{UndoShorthands, metric::MetricSimplifier},
-        test_support::test_initialize,
+        IndexTooling, color::ColorSimplifier, epsilon::EpsilonSimplifier,
+        shorthands::UndoShorthands, test_support::test_initialize,
     };
     use spenso::{shadowing::ProjectorExpander, structure::abstract_index::AbstractIndex};
     use symbolica::parse;
@@ -245,10 +242,24 @@ mod tests {
                 default_namespace = "spenso"
             )
         );
-        let norm = (generator * adjoint)
-            .simplify_color()
-            .to_cof_dimension_invariants()
-            .simplify_metrics();
+        let norm = crate::tensor::SymbolicTensor::infer(
+            (crate::tensor::SymbolicTensor::infer((generator * adjoint).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+                .to_cof_dimension_invariants())
+            .as_atom_view()
+            .to_owned(),
+        )
+        .unwrap()
+        .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
         assert_eq!(norm, Atom::num(4));
     }
 
@@ -288,13 +299,41 @@ mod tests {
         assert_eq!(conjugate.spenso_conj(), chain);
         let explicit = chain.undo_chain::<AbstractIndex>().unwrap();
         assert_eq!(
-            conjugate.simplify_color(),
-            explicit.spenso_conj().simplify_color()
+            crate::tensor::SymbolicTensor::infer((conjugate).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            crate::tensor::SymbolicTensor::infer(
+                (explicit.spenso_conj()).as_atom_view().to_owned()
+            )
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
         );
-        let norm = (chain * conjugate)
-            .simplify_color()
-            .to_cof_dimension_invariants()
-            .simplify_metrics();
+        let norm = crate::tensor::SymbolicTensor::infer(
+            (crate::tensor::SymbolicTensor::infer((chain * conjugate).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+                .to_cof_dimension_invariants())
+            .as_atom_view()
+            .to_owned(),
+        )
+        .unwrap()
+        .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
         assert_eq!(norm, parse!("16/3"));
     }
 
@@ -319,8 +358,22 @@ mod tests {
         assert_eq!((Atom::i() * &trace).spenso_conj(), -Atom::i() * &conjugate);
         let explicit = trace.undo_trace::<AbstractIndex>().unwrap();
         assert_eq!(
-            conjugate.simplify_color(),
-            explicit.spenso_conj().simplify_color()
+            crate::tensor::SymbolicTensor::infer((conjugate).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            crate::tensor::SymbolicTensor::infer(
+                (explicit.spenso_conj()).as_atom_view().to_owned()
+            )
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
         );
     }
 

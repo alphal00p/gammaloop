@@ -152,8 +152,8 @@ impl Graph {
         DotGraph::from(self).debug_dot()
     }
 
-    pub fn debug_dot_with_settings(&self, settings: &DotExportSettings) -> String {
-        self.to_dot_graph_with_settings(settings).debug_dot()
+    pub fn debug_dot_with_settings(&self, settings: &DotExportSettings) -> eyre::Result<String> {
+        Ok(self.to_dot_graph_with_settings(settings)?.debug_dot())
     }
 
     pub fn pretty_dot(&self) -> String {

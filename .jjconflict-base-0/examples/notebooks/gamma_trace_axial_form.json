@@ -1,0 +1,396 @@
+{
+  "date": "2026-09-23",
+  "cpu": "AMD EPYC 9754 128-Core Processor; shared host, no CPU pinning",
+  "rust_profile": "dev-optim workspace opt-level 2, dependencies opt-level 3; standalone copied first-rewrite module at opt-level 2; Rust 1.98.1, Symbolica 3.0.0",
+  "source_sha256": {
+    "crates/idenso/src/dirac/simplify.rs": "76adb67a6061a4b1293f55ea73a5ae774bd775016de5740977ecb9ab8468acad",
+    "crates/idenso/src/dirac/simplify/trace_kernel.rs": "bf1df312af6e6adc238e30c878270ef790007b96fde6f31510d68f0038ac4b5c",
+    "crates/idenso/src/epsilon.rs": "162a59b8027cb5a2e8aa9abe8278c3f6df90e49c84c9e63d46991f283e2c0468"
+  },
+  "comparison": {
+    "input": "Tr(gamma5 gamma(mu0) ... gamma(mu11)), distinct four-dimensional Lorentz indices",
+    "idenso_terms": 1029,
+    "form_terms": 1029,
+    "first_equals_full": true,
+    "symbolic_equality_after_convention_mapping": false,
+    "convention": "FORM d_ -> Spenso g; FORM e_ -> Spenso epsilon, whose HEP components have epsilon0123=-i; gamma5 before ordinary gamma sequence. No fitted sign.",
+    "validation": "Exact HEP tensor-network evaluations of original gamma matrices and both projected metric/epsilon polynomials, with three full-rank integer four-vector assignments. Finite samples supplement symbolic comparison.",
+    "samples": [
+      {
+        "sample": 0,
+        "contravariant_momenta": [
+          [
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            -2,
+            4,
+            2,
+            -1
+          ],
+          [
+            -1,
+            2,
+            -2,
+            -2
+          ],
+          [
+            -3,
+            -2,
+            -5,
+            -5
+          ],
+          [
+            -1,
+            -1,
+            -1,
+            3
+          ],
+          [
+            -4,
+            -2,
+            -4,
+            0
+          ],
+          [
+            -2,
+            1,
+            -5,
+            -5
+          ],
+          [
+            1,
+            -1,
+            2,
+            2
+          ],
+          [
+            4,
+            1,
+            3,
+            4
+          ]
+        ],
+        "original_gamma_network": "-96536\ud835\udc56",
+        "idenso_first_rewrite": "-96536\ud835\udc56",
+        "form_trace4": "-96536\ud835\udc56",
+        "exactly_equal": true
+      },
+      {
+        "sample": 1,
+        "contravariant_momenta": [
+          [
+            2,
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            2,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            2,
+            1
+          ],
+          [
+            1,
+            1,
+            1,
+            2
+          ],
+          [
+            -1,
+            -5,
+            -5,
+            5
+          ],
+          [
+            0,
+            0,
+            2,
+            -5
+          ],
+          [
+            3,
+            4,
+            3,
+            4
+          ],
+          [
+            -2,
+            5,
+            4,
+            3
+          ],
+          [
+            -4,
+            -5,
+            5,
+            -5
+          ],
+          [
+            5,
+            0,
+            -5,
+            -3
+          ],
+          [
+            -1,
+            -3,
+            -4,
+            5
+          ],
+          [
+            3,
+            -3,
+            -5,
+            1
+          ]
+        ],
+        "original_gamma_network": "468485024\ud835\udc56",
+        "idenso_first_rewrite": "468485024\ud835\udc56",
+        "form_trace4": "468485024\ud835\udc56",
+        "exactly_equal": true
+      },
+      {
+        "sample": 2,
+        "contravariant_momenta": [
+          [
+            3,
+            2,
+            2,
+            2
+          ],
+          [
+            2,
+            3,
+            2,
+            2
+          ],
+          [
+            2,
+            2,
+            3,
+            2
+          ],
+          [
+            2,
+            2,
+            2,
+            3
+          ],
+          [
+            -1,
+            1,
+            2,
+            3
+          ],
+          [
+            2,
+            -3,
+            1,
+            -5
+          ],
+          [
+            -3,
+            -2,
+            -1,
+            -3
+          ],
+          [
+            3,
+            -2,
+            -5,
+            5
+          ],
+          [
+            1,
+            4,
+            -4,
+            -2
+          ],
+          [
+            -3,
+            3,
+            3,
+            5
+          ],
+          [
+            -4,
+            0,
+            -1,
+            -3
+          ],
+          [
+            1,
+            -4,
+            -3,
+            1
+          ]
+        ],
+        "original_gamma_network": "114798012\ud835\udc56",
+        "idenso_first_rewrite": "114798012\ud835\udc56",
+        "form_trace4": "114798012\ud835\udc56",
+        "exactly_equal": true
+      }
+    ]
+  },
+  "polynomial_structure": {
+    "idenso_terms": 1029,
+    "form_terms": 1029,
+    "common_monomials": 741,
+    "identical_terms": 741,
+    "opposite_terms": 0,
+    "idenso_only": 288,
+    "form_only": 288,
+    "difference_terms": 576,
+    "idenso_coefficients": {
+      "4": 517,
+      "-4": 512
+    },
+    "form_coefficients": {
+      "-4": 512,
+      "4": 517
+    },
+    "cyclic_or_reversal_matches": []
+  },
+  "timings": {
+    "idenso_first_rewrite": {
+      "samples_ms": [
+        2.45109185,
+        2.42146736,
+        2.41647755,
+        2.41652585,
+        2.4023667
+      ],
+      "median_ms": 2.41652585,
+      "method": "Five warm samples, each averaging 100 rewrite_expression calls on a cloned input. The copied method is unmodified apart from visibility; input clone and result destruction included. Each output is asserted exactly equal to full production simplify_gamma. No tensor contraction or printing timed."
+    },
+    "form": {
+      "date": "2026-09-23",
+      "input": "g_(1,5_,mu0,mu1,mu2,mu3,mu4,mu5,mu6,mu7,mu8,mu9,mu10,mu11)",
+      "length": 12,
+      "gamma5_position": "before all ordinary gamma matrices",
+      "form": "FORM 5.0.0 (Jan  1 1980)",
+      "form_executable": "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+      "terms": 1029,
+      "process_ms_samples": [
+        10.445011081174016,
+        11.968065053224564,
+        11.626973981037736,
+        12.622247217223048,
+        12.590546859428287
+      ],
+      "process_ms_median": 11.968065053224564,
+      "batch_repetitions": 250,
+      "batches_per_process": 6,
+      "process_samples": 3,
+      "amortized_wall_ms_samples": [
+        0.653915127273649,
+        0.6652149405951301,
+        0.6352020186992983
+      ],
+      "amortized_wall_ms_median": 0.653915127273649,
+      "internal_cpu_ms_samples": [
+        0.624,
+        0.636,
+        0.612
+      ],
+      "internal_cpu_ms_median": 0.624,
+      "raw_batch_cpu_ms": [
+        [
+          166,
+          163,
+          156,
+          155,
+          156,
+          156
+        ],
+        [
+          166,
+          166,
+          162,
+          159,
+          159,
+          157
+        ],
+        [
+          157,
+          159,
+          153,
+          153,
+          152,
+          151
+        ]
+      ],
+      "method": {
+        "process": "One warmup then median of5 complete process wall times, including startup, parsing, trace4, sort, count printing and shutdown; excludes polynomial printing and correctness validation.",
+        "wall": "Median of3 complete process wall times divided by6 batches*250traces; includes startup/parsing, trace4,sort,countprinting,drop,shutdown; no polynomial printing or correctness validation.",
+        "cpu": "FORM TIMER_ around trace4 and .sort after inputs prepared; median last5of6batchtimes then median3processes; millisecondresolution perbatch.",
+        "output": "Separate untimed execution writes complete FORM polynomial and term count."
+      },
+      "artifacts": "/tmp/gamma-axial-form",
+      "commands": [
+        "python3 /tmp/gamma-axial-form/measure.py"
+      ],
+      "cpu": "AMD EPYC 9754 128-Core Processor; shared host, no CPU pinning",
+      "convention": {
+        "sources": [
+          "https://form-dev.github.io/form-docs/master/manual/#dirac-algebra",
+          "https://form-dev.github.io/form-docs/master/manual/#a-few-notes-on-the-use-of-a-metric",
+          "https://github.com/form-dev/form/blob/v5.0.0/sources/opera.c"
+        ],
+        "manual": "Chapters 14 and 15 define g_(1,5_)=g5_(1), gamma5^2=1, and Tr(gamma5 gamma_mu gamma_nu gamma_rho gamma_sigma)=4 e_(mu,nu,rho,sigma). FORM does not choose a concrete metric; component interpretation must use the same input/output convention.",
+        "checked_form_5_output": "RESULT=4*e_(mu0,mu1,mu2,mu3)",
+        "hep_conversion": "Map e_(a,b,c,d) directly to Idenso epsilon(a,b,c,d), and d_(a,b) to the metric. No additional i or overall sign is inserted.",
+        "component_derivation": "In the chosen (+---) explicit gamma basis, gamma5=i gamma0 gamma1 gamma2 gamma3 and (gamma0 gamma1 gamma2 gamma3)^2=-1. Therefore trace(gamma5 gamma0 gamma1 gamma2 gamma3)=-4i; dividing by4 fixes epsilon(0,1,2,3)=-i. This fixes the convention before the length12 comparison."
+      },
+      "program_sha256": {
+        "convention4.frm": "41571b973cc523f99634640ce62f272803a359d58bfa1d7726163b93788f266b",
+        "axial12-process.frm": "cb94f57b5262b27204c5a866926ffa935b929b26e63d9b8a651d80d05d902280",
+        "axial12-output.frm": "dcbf74cf3422bd42f7d55c6604f489f05415ac4b60f7772815803fac46990c70",
+        "axial12-batches.frm": "3cb49a25808f4d7eab95585a18a456ac3995d54fb5fe1df0ad7b07e96b9390c1"
+      },
+      "output_sha256": "d9ca217ce716faa88f4d5f13dc445155846020788b86caab5e7ddb3f154a2520"
+    },
+    "ratio_first_rewrite_to_form_amortized_wall": 3.695473233774477,
+    "full_pipeline_previous_ms": 2555.571569,
+    "limits": "Shared host, unpinned. FORM batches hold multiple expressions simultaneously; first rewrite measures only the useful Idenso stage, not the public simplify_gamma pipeline. Distinguish amortized wall, process latency and internal CPU times."
+  },
+  "form_program": "Off Statistics;\nIndices mu0,mu1,mu2,mu3,mu4,mu5,mu6,mu7,mu8,mu9,mu10,mu11;\nLocal F=g_(1,5_,mu0,mu1,mu2,mu3,mu4,mu5,mu6,mu7,mu8,mu9,mu10,mu11);\ntrace4,1;\n.sort\n#$n=termsin_(F);\n#write \"TERMS=%$\",$n\n#write \"RESULT=%E\",F\n.end\n",
+  "form_timing_program": "Off Statistics;\nIndices mu0,mu1,mu2,mu3,mu4,mu5,mu6,mu7,mu8,mu9,mu10,mu11;\n#do batch=1,6\n#do j=1,250\nLocal F`j'=g_(1,5_,mu0,mu1,mu2,mu3,mu4,mu5,mu6,mu7,mu8,mu9,mu10,mu11);\n#enddo\n.sort\n#reset timer\ntrace4,1;\n.sort\n#write \"BATCH_CPU_MS=`timer_'\"\n#$n=termsin_(F1);\n#write \"TERMS=%$\",$n\nDrop;\n.sort\n#enddo\n.end\n",
+  "artifacts_directory": "/tmp/gamma-axial-output",
+  "artifact_sha256": {
+    "idenso-12-input.txt": "532e6a4634d2001ef198fb2082758eb7c6f1801b7bba1be9eb9bf50bbe7bf45f",
+    "idenso-12-first.txt": "4c3d23c62a71d8bc67f70c8b9f111c53f136d4f95c4524d8727454695267519b",
+    "idenso-12-full.txt": "4c3d23c62a71d8bc67f70c8b9f111c53f136d4f95c4524d8727454695267519b",
+    "form-imported.txt": "9c265991b778f6b74c41466a98c96c93d5a18d0734c3f7c2f7ffb3b1f6a00691",
+    "compare.py": "2dd3f6e4bb3341a0e1430f5845d595a5b03aec8e9b282a335b693d53e27bd8fb"
+  }
+}

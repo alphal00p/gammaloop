@@ -2,7 +2,8 @@
 //! cargo run -p idenso --profile dev-optim --example trace_scaling -- /path/to/form
 //! [maximum_even_length] > trace_scaling.csv
 //!
-//! Idenso measures warm simplify_gamma loops, including result destruction.
+//! Idenso measures typed admission, gamma simplification, alias resolution, and
+//! result destruction in each warm loop.
 //! FORM wall times divide complete processes by all traces, including amortized
 //! startup, parsing, sorting and disposal. Its separate CPU timer covers only
 //! trace4 and sorting. Input construction and correctness checks are excluded
@@ -11,12 +12,12 @@
 
 use std::{hint::black_box, process::Command, time::Instant};
 
-use idenso::{dirac::GammaSimplifier, gamma, representations::Bispinor};
+use idenso::{gamma, representations::Bispinor};
 use spenso::{
     structure::representation::{Minkowski, RepName},
     trace,
 };
-use symbolica::symbol;
+use symbolica::{atom::AtomCore, symbol};
 
 fn main() {
     let args: Vec<_> = std::env::args().collect();
@@ -48,12 +49,29 @@ fn main() {
             .map(|i| mink.pattern(symbol!(&format!("trace_benchmark::mu{i}"))))
             .collect();
         let input = trace!(&spin; indices.iter().map(|mu| gamma!(mu)));
-        let terms = input.simplify_gamma().nterms();
+        let terms = idenso::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+            .nterms();
         let repeats = if n < 12 { 100 } else { 20 };
         for sample in 0..5 {
             let start = Instant::now();
             for _ in 0..repeats {
-                let _ = black_box(black_box(&input).simplify_gamma());
+                let _ = black_box(
+                    idenso::tensor::SymbolicTensor::infer(
+                        (black_box(&input)).as_atom_view().to_owned(),
+                    )
+                    .unwrap()
+                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
+                );
             }
             let per_trace = start.elapsed().as_secs_f64() * 1000. / f64::from(repeats);
             println!("idenso,{n},{terms},{sample},{repeats},{per_trace:.9},");

@@ -1,0 +1,28 @@
+digraph hexagon_0 {
+overall_factor=1;
+multiplicity_factor=1;
+v1;
+v2;
+v3;
+v4;
+v5;
+v6;
+v7 [int_id="V_3_SCALAR_000"];
+v8 [int_id="V_3_SCALAR_000"];
+v9 [int_id="V_3_SCALAR_000"];
+v10 [int_id="V_3_SCALAR_000"];
+v11 [int_id="V_3_SCALAR_000"];
+v12 [int_id="V_3_SCALAR_000"];
+v1 -> v7 [pdg=1000, name=p1, mom=p1];
+v2 -> v8 [pdg=1000, name=p2, mom=p2];
+v3 -> v9 [pdg=1000, name=p3, mom=p3];
+v10 -> v4 [pdg=1000, name=p4, mom=p4];
+v11 -> v5 [pdg=1000, name=p5, mom=p5];
+v12 -> v6 [pdg=1000, name=p6, mom=p6];
+v7 -> v8 [pdg=1000, name=q1];
+v8 -> v9 [pdg=1000, name=q2];
+v9 -> v10 [pdg=1000, name=q3];
+v10 -> v11 [pdg=1000, name=q4];
+v11 -> v12 [pdg=1000, name=q5, lmb_index=0];
+v12 -> v7 [pdg=1000, name=q6];
+}

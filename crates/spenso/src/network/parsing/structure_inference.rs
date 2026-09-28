@@ -4,7 +4,8 @@
 //! 1. dispatch known shorthand (`chain`, `trace`) to its visible-slot convention;
 //! 2. otherwise infer ordinary tensor syntax from sums, products, powers, and functions;
 //! 3. wrap the ordered slots in the requested structure type;
-//! 4. optionally validate by expanding shorthand and comparing the graph's dangling slots.
+//!
+//! Tests compare this syntax result to the existing fully expanded graph parser.
 
 use symbolica::{
     atom::{
@@ -15,25 +16,17 @@ use symbolica::{
 };
 use thiserror::Error;
 
-use super::{NetworkParse, ParseSettings, ShadowedStructure, ShorthandParsing, StrictTensorFilter};
-use crate::network::library::symbolic::ETS;
+use super::{ParseState, ShadowedStructure, StrictTensorFilter};
 use crate::structure::{
     Canonicalized, HasName, NamedStructure, OrderedStructure, StructureContract, StructureError,
     TensorStructure,
-    abstract_index::AIND_SYMBOLS,
     representation::{BaseRepName, LibraryRep, Minkowski},
     slot::{AbsInd, DummyAind, ParseableAind, Slot, SlotError, SlotMatch, SlotMatcher},
 };
-use crate::{network::tags::SPENSO_TAG, shadowing};
-
-/// Chooses how tensor structure is inferred from symbolic syntax.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StructureInferenceMode {
-    /// Use a syntactic walk. This is cheap and is the production default.
-    Fast,
-    /// Build the expanded shorthand network and read its dangling slots.
-    Expanded,
-}
+use crate::{
+    network::tags::{SPENSO_TAG, SpensoTags},
+    shadowing,
+};
 
 /// A chain or trace found inside another chain or trace.
 ///
@@ -48,21 +41,52 @@ pub struct ChainNestingError {
     inner: Symbol,
 }
 
+impl ChainNestingError {
+    /// Enter one function during an existing syntax walk. Scalar metadata is
+    /// opaque to placeholder scopes; callers do not descend into it.
+    pub fn enter(
+        owner: Option<Symbol>,
+        symbol: Symbol,
+        tags: &SpensoTags,
+    ) -> Result<Option<Symbol>, Self> {
+        if symbol == tags.chain || symbol == tags.trace {
+            if let Some(outer) = owner {
+                return Err(Self {
+                    outer,
+                    inner: symbol,
+                });
+            }
+            Ok(Some(symbol))
+        } else {
+            Ok(owner)
+        }
+    }
+}
+
 pub trait StructureFromAtom: Sized {
     /// Infer the permuted tensor structure exposed by `value`.
     ///
-    /// Implementations should treat `Fast` as a non-semantic syntax pass and
-    /// reserve graph construction or dummy materialization for `Expanded`.
+    /// This syntactic observation does not materialize dummies or build a graph.
     /// Implementations reject nested chain/trace placeholder scopes; delegating
-    /// wrappers must not repeat that whole-expression validation.
+    /// wrappers must not repeat that whole-expression validation. The caller
+    /// supplies operation-local recognition state; implementations must not
+    /// retain source views or a borrow of that state during materialization.
     fn structure_from_atom(
         value: AtomView<'_>,
-        mode: StructureInferenceMode,
+        matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError>;
 
-    /// Infer structure with the default fast syntactic mode.
+    /// Infer the parser's current subtree. Custom implementations retain the
+    /// checked entry by default; the parser alone binds the source view.
+    fn structure_from_parser<Aind>(
+        state: &ParseState<Aind, AtomView<'_>>,
+    ) -> Result<Canonicalized<Self>, StructureError> {
+        Self::structure_from_atom(state.current_view(), &mut state.matcher.borrow_mut())
+    }
+
+    /// Infer structure with operation-local recognition state.
     fn parse(value: AtomView<'_>) -> Result<Canonicalized<Self>, StructureError> {
-        Self::structure_from_atom(value, StructureInferenceMode::Fast)
+        Self::structure_from_atom(value, &mut SlotMatcher::default())
     }
 }
 
@@ -100,10 +124,7 @@ pub trait AtomStructureExt {
     fn with_lorentz_dimension(&self, dimension: AtomView<'_>) -> Atom;
 
     /// Convenience wrapper for `StructureFromAtom::structure_from_atom`.
-    fn infer_structure<S: StructureFromAtom>(
-        &self,
-        mode: StructureInferenceMode,
-    ) -> Result<Canonicalized<S>, StructureError>;
+    fn infer_structure<S: StructureFromAtom>(&self) -> Result<Canonicalized<S>, StructureError>;
 
     /// Reject more than one chain/trace placeholder consumer on any expression path.
     fn validate_chain_like_nesting(&self) -> Result<(), ChainNestingError>;
@@ -136,11 +157,8 @@ impl AtomStructureExt for Atom {
         self.as_view().with_lorentz_dimension(dimension)
     }
 
-    fn infer_structure<S: StructureFromAtom>(
-        &self,
-        mode: StructureInferenceMode,
-    ) -> Result<Canonicalized<S>, StructureError> {
-        self.as_view().infer_structure(mode)
+    fn infer_structure<S: StructureFromAtom>(&self) -> Result<Canonicalized<S>, StructureError> {
+        self.as_view().infer_structure()
     }
 
     fn validate_chain_like_nesting(&self) -> Result<(), ChainNestingError> {
@@ -184,68 +202,71 @@ impl AtomStructureExt for AtomView<'_> {
         })
     }
 
-    fn infer_structure<S: StructureFromAtom>(
-        &self,
-        mode: StructureInferenceMode,
-    ) -> Result<Canonicalized<S>, StructureError> {
+    fn infer_structure<S: StructureFromAtom>(&self) -> Result<Canonicalized<S>, StructureError> {
         // StructureFromAtom owns validation, including callers that bypass this wrapper.
-        S::structure_from_atom(*self, mode)
+        S::structure_from_atom(*self, &mut SlotMatcher::default())
     }
 
     fn validate_chain_like_nesting(&self) -> Result<(), ChainNestingError> {
-        TensorialSyntax::validate_chain_like_nesting(*self, None)
+        TensorialSyntax::validate_chain_like_nesting(*self, None, &SPENSO_TAG)
     }
 
     fn is_tensorial(&self, filter: StrictTensorFilter) -> bool {
-        match *self {
-            AtomView::Fun(fun) => TensorialSyntax::function_is_tensorial(fun, filter),
-            AtomView::Var(var) => var.get_symbol().has_attributes_of(SPENSO_TAG.rep_),
-            AtomView::Add(add) => add.iter().any(|arg| arg.is_tensorial(filter)),
-            AtomView::Mul(mul) => mul.iter().any(|arg| arg.is_tensorial(filter)),
-            AtomView::Pow(pow) => pow.get_base_exp().0.is_tensorial(filter),
-            _ => false,
-        }
+        TensorialSyntax::is_tensorial(*self, filter, &SlotMatcher::default())
     }
 }
 
 pub(crate) struct TensorialSyntax;
 
 impl TensorialSyntax {
+    pub(crate) fn is_tensorial(
+        value: AtomView<'_>,
+        filter: StrictTensorFilter,
+        matcher: &SlotMatcher,
+    ) -> bool {
+        match value {
+            AtomView::Fun(fun) => Self::function_is_tensorial(fun, filter, matcher),
+            AtomView::Var(var) => var.get_symbol().has_attributes_of(matcher.tags().rep_),
+            AtomView::Add(add) => add
+                .iter()
+                .any(|arg| Self::is_tensorial(arg, filter, matcher)),
+            AtomView::Mul(mul) => mul
+                .iter()
+                .any(|arg| Self::is_tensorial(arg, filter, matcher)),
+            AtomView::Pow(pow) => Self::is_tensorial(pow.get_base_exp().0, filter, matcher),
+            _ => false,
+        }
+    }
+
     fn validate_chain_like_nesting(
         value: AtomView<'_>,
         owner: Option<Symbol>,
+        tags: &SpensoTags,
     ) -> Result<(), ChainNestingError> {
         match value {
             AtomView::Add(sum) => {
                 for term in sum.iter() {
-                    Self::validate_chain_like_nesting(term, owner)?;
+                    Self::validate_chain_like_nesting(term, owner, tags)?;
                 }
             }
             AtomView::Mul(product) => {
                 for factor in product.iter() {
-                    Self::validate_chain_like_nesting(factor, owner)?;
+                    Self::validate_chain_like_nesting(factor, owner, tags)?;
                 }
             }
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
-                Self::validate_chain_like_nesting(base, owner)?;
-                Self::validate_chain_like_nesting(exponent, owner)?;
+                Self::validate_chain_like_nesting(base, owner, tags)?;
+                Self::validate_chain_like_nesting(exponent, owner, tags)?;
             }
             AtomView::Fun(function) => {
                 let symbol = function.get_symbol();
                 if symbol.is_scalar() {
                     return Ok(());
                 }
-                let chain_like = symbol == SPENSO_TAG.chain || symbol == SPENSO_TAG.trace;
-                if chain_like && let Some(outer) = owner {
-                    return Err(ChainNestingError {
-                        outer,
-                        inner: symbol,
-                    });
-                }
-                let owner = if chain_like { Some(symbol) } else { owner };
+                let owner = ChainNestingError::enter(owner, symbol, tags)?;
                 for argument in function.iter() {
-                    Self::validate_chain_like_nesting(argument, owner)?;
+                    Self::validate_chain_like_nesting(argument, owner, tags)?;
                 }
             }
             _ => {}
@@ -253,20 +274,28 @@ impl TensorialSyntax {
         Ok(())
     }
 
-    pub(crate) fn function_is_tensorial(fun: FunView<'_>, filter: StrictTensorFilter) -> bool {
+    pub(crate) fn function_is_tensorial(
+        fun: FunView<'_>,
+        filter: StrictTensorFilter,
+        matcher: &SlotMatcher,
+    ) -> bool {
         let symbol = fun.get_symbol();
         if symbol.is_scalar() {
             return false;
         }
         // Public bundle access probes Symbolica initialization. Reuse the
         // handles throughout this predicate instead of probing for every field.
-        let tags = &*SPENSO_TAG;
+        let tags = matcher.tags();
         if symbol == tags.pure_scalar || symbol == tags.scalar {
             return false;
         }
 
-        if symbol == tags.bracket {
-            return fun.iter().any(|arg| arg.is_tensorial(filter));
+        // Registered projectors preserve tensor structure through arithmetic
+        // prefactors just like brackets. Ordinary function metadata remains opaque.
+        if symbol == tags.bracket || matcher.is_projector(symbol) {
+            return fun
+                .iter()
+                .any(|arg| Self::is_tensorial(arg, filter, matcher));
         }
 
         if symbol.has_attributes_of(tags.rep_)
@@ -279,13 +308,7 @@ impl TensorialSyntax {
 
         // Variance wrappers preserve representation syntax. In particular,
         // g(rep(i), dind(rep(j))) must retain its oriented tensor ports.
-        let index_symbols = &*AIND_SYMBOLS;
-        if [
-            index_symbols.dind,
-            index_symbols.uind,
-            index_symbols.selfdualind,
-        ]
-        .contains(&symbol)
+        if matcher.is_variance_wrapper(symbol)
             && fun.get_nargs() == 1
             && fun.iter().next().is_some_and(|arg| match arg {
                 AtomView::Fun(rep) => rep.get_symbol().has_attributes_of(tags.rep_),
@@ -296,13 +319,16 @@ impl TensorialSyntax {
             return true;
         }
 
-        if symbol == ETS.metric {
-            return fun.get_nargs() == 2 && fun.iter().all(|arg| arg.is_tensorial(filter));
+        if symbol == matcher.metric() {
+            return fun.get_nargs() == 2
+                && fun
+                    .iter()
+                    .all(|arg| Self::is_tensorial(arg, filter, matcher));
         }
 
         if symbol.has_tag(&tags.broadcast) {
             let args = fun.iter().collect::<Vec<_>>();
-            return matches!(args.as_slice(), [arg] if arg.is_tensorial(filter));
+            return matches!(args.as_slice(), [arg] if Self::is_tensorial(*arg, filter, matcher));
         }
 
         match filter {
@@ -310,25 +336,35 @@ impl TensorialSyntax {
             StrictTensorFilter::TaggedChecked => {
                 symbol.has_tag(&tags.tensor)
                     && (fun.get_nargs() == 0
-                        || fun.iter().any(Self::contains_representation_syntax))
+                        || fun
+                            .iter()
+                            .any(|arg| Self::contains_representation_syntax(arg, matcher)))
             }
-            StrictTensorFilter::ContainsReps => {
-                fun.iter().any(Self::contains_representation_syntax)
-            }
+            StrictTensorFilter::ContainsReps => fun
+                .iter()
+                .any(|arg| Self::contains_representation_syntax(arg, matcher)),
         }
     }
 
-    fn contains_representation_syntax(value: AtomView<'_>) -> bool {
+    fn contains_representation_syntax(value: AtomView<'_>, matcher: &SlotMatcher) -> bool {
         match value {
             AtomView::Fun(fun) => {
                 !fun.get_symbol().is_scalar()
-                    && (fun.get_symbol().has_attributes_of(SPENSO_TAG.rep_)
-                        || fun.iter().any(Self::contains_representation_syntax))
+                    && (fun.get_symbol().has_attributes_of(matcher.tags().rep_)
+                        || fun
+                            .iter()
+                            .any(|arg| Self::contains_representation_syntax(arg, matcher)))
             }
-            AtomView::Var(var) => var.get_symbol().has_attributes_of(SPENSO_TAG.rep_),
-            AtomView::Add(add) => add.iter().any(Self::contains_representation_syntax),
-            AtomView::Mul(mul) => mul.iter().any(Self::contains_representation_syntax),
-            AtomView::Pow(pow) => Self::contains_representation_syntax(pow.get_base_exp().0),
+            AtomView::Var(var) => var.get_symbol().has_attributes_of(matcher.tags().rep_),
+            AtomView::Add(add) => add
+                .iter()
+                .any(|arg| Self::contains_representation_syntax(arg, matcher)),
+            AtomView::Mul(mul) => mul
+                .iter()
+                .any(|arg| Self::contains_representation_syntax(arg, matcher)),
+            AtomView::Pow(pow) => {
+                Self::contains_representation_syntax(pow.get_base_exp().0, matcher)
+            }
             _ => false,
         }
     }
@@ -339,15 +375,21 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom
 {
     fn structure_from_atom(
         value: AtomView<'_>,
-        mode: StructureInferenceMode,
+        matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
-        TensorialSyntax::validate_chain_like_nesting(value, None)
+        TensorialSyntax::validate_chain_like_nesting(value, None, matcher.tags())
             .map_err(|error| StructureError::ParsingError(error.to_string()))?;
-        match mode {
-            StructureInferenceMode::Fast => {
-                Self::leaf_structure_from_atom(value, &mut SlotMatcher::default())
-            }
-            StructureInferenceMode::Expanded => Self::expanded_shorthand_structure_from_atom(value),
+        Self::leaf_structure_from_atom(value, matcher)
+    }
+
+    fn structure_from_parser<Index>(
+        state: &ParseState<Index, AtomView<'_>>,
+    ) -> Result<Canonicalized<Self>, StructureError> {
+        let mut matcher = state.matcher.borrow_mut();
+        if state.chain_scope_validated {
+            Self::leaf_structure_from_atom(state.current_view(), &mut matcher)
+        } else {
+            Self::structure_from_atom(state.current_view(), &mut matcher)
         }
     }
 }
@@ -364,13 +406,13 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
         match value {
-            AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.chain => {
+            AtomView::Fun(fun) if fun.get_symbol() == matcher.tags().chain => {
                 Self::chain_structure_from_fun(fun, matcher)
             }
-            AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.trace => {
+            AtomView::Fun(fun) if fun.get_symbol() == matcher.tags().trace => {
                 Self::trace_structure_from_fun(fun, matcher)
             }
-            _ => Self::from_syntactic_atom(value, matcher).map(Canonicalized::identity),
+            _ => Self::from_syntactic_atom(value, matcher),
         }
     }
 
@@ -383,9 +425,9 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     fn from_syntactic_atom(
         value: AtomView<'_>,
         matcher: &mut SlotMatcher,
-    ) -> Result<Self, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
         let structure = Self::syntactic_structure_from_atom(value, matcher)?;
-        if structure.is_scalar() {
+        if structure.canonical().is_scalar() {
             Err(StructureError::EmptyStructure(SlotError::EmptyStructure))
         } else {
             Ok(structure)
@@ -395,18 +437,18 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     pub(super) fn syntactic_structure_from_atom(
         value: AtomView<'_>,
         matcher: &mut SlotMatcher,
-    ) -> Result<Self, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
         match value {
             AtomView::Add(add) => {
                 let Some(first) = add.iter().next() else {
-                    return Ok(OrderedStructure::empty());
+                    return Ok(Canonicalized::identity(OrderedStructure::empty()));
                 };
                 Self::syntactic_structure_from_atom(first, matcher)
             }
             AtomView::Pow(pow) => Self::from_power_atom(pow, matcher),
             AtomView::Mul(mul) => Self::from_product_atom(mul, matcher),
             AtomView::Fun(fun) => Self::from_function_atom(fun, matcher),
-            _ => Ok(OrderedStructure::empty()),
+            _ => Ok(Canonicalized::identity(OrderedStructure::empty())),
         }
     }
 
@@ -419,17 +461,17 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     fn from_power_atom(
         pow: PowView<'_>,
         matcher: &mut SlotMatcher,
-    ) -> Result<Self, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
         let (base, exp) = pow.get_base_exp();
         let base_structure = Self::syntactic_structure_from_atom(base, matcher)?;
 
-        if base_structure.is_scalar() {
+        if base_structure.canonical().is_scalar() {
             Ok(base_structure)
-        } else if base_structure.is_fully_self_dual()
+        } else if base_structure.canonical().is_fully_self_dual()
             && let Ok(r) = Rational::try_from(exp)
         {
             if r.numerator() % 2 == 0 {
-                Ok(OrderedStructure::empty())
+                Ok(Canonicalized::identity(OrderedStructure::empty()))
             } else if r.denominator() == 1 {
                 Ok(base_structure)
             } else {
@@ -453,13 +495,12 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     fn from_product_atom(
         product: MulView<'_>,
         matcher: &mut SlotMatcher,
-    ) -> Result<Self, StructureError> {
-        let mut structure = OrderedStructure::empty();
+    ) -> Result<Canonicalized<Self>, StructureError> {
+        let mut structure = Canonicalized::identity(OrderedStructure::empty());
 
         for factor in product {
             structure = structure
-                .merge(&Self::syntactic_structure_from_atom(factor, matcher)?)?
-                .0;
+                .merge_syntactic(&Self::syntactic_structure_from_atom(factor, matcher)?)?;
         }
 
         Ok(structure)
@@ -470,76 +511,80 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// A direct slot argument contributes one exposed slot. An `aind(...)`
     /// bundle is flattened into its slots. Other arguments are treated as
     /// metadata for the eventual named leaf and do not erase slots already seen.
+    /// Recognized abstract ports with invalid dimensions or indices are errors;
+    /// concrete component markers remain non-structural metadata.
     /// Chain projectors without direct structural arguments expose the combined
     /// slots of their factor sequence.
     fn from_function_atom(
         fun: FunView<'_>,
         matcher: &mut SlotMatcher,
-    ) -> Result<Self, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
         if fun.get_symbol().is_scalar() {
-            return Ok(OrderedStructure::empty());
+            return Ok(Canonicalized::identity(OrderedStructure::empty()));
         }
-        if fun.get_symbol() == AIND_SYMBOLS.aind {
+        if matcher.compact_inner_product_parts::<Aind>(fun).is_some() {
+            let mut arguments = fun.iter();
+            let left = Self::syntactic_structure_from_atom(arguments.next().unwrap(), matcher)?;
+            let right = Self::syntactic_structure_from_atom(arguments.next().unwrap(), matcher)?;
+            return left.merge_syntactic(&right);
+        }
+        // Nested chain/trace operands retain their established shorthand interface.
+        if fun.get_symbol() == matcher.tags().chain || fun.get_symbol() == matcher.tags().trace {
+            return match Self::leaf_structure_from_atom(fun.as_view(), matcher) {
+                Err(StructureError::EmptyStructure(_)) => {
+                    Ok(Canonicalized::identity(Self::empty()))
+                }
+                result => result,
+            };
+        }
+        if fun.get_symbol() == matcher.index_bundle() {
             let mut slots = Vec::new();
             for arg in fun.iter() {
                 slots.push(matcher.parse::<LibraryRep, Aind>(arg)?);
             }
-            return Ok(OrderedStructure::new(slots).into_canonical());
+            return Ok(OrderedStructure::new(slots));
         }
 
         let mut slots = Vec::new();
 
         for arg in fun.iter() {
-            match matcher.parse::<LibraryRep, Aind>(arg) {
+            let recognized = matcher.classify(arg);
+            match recognized.parse::<LibraryRep, Aind>(arg, matcher) {
                 Ok(slot) => {
                     slots.push(slot);
                 }
-                Err(_) => {
+                Err(error) => {
+                    // Explicit abstract ports must satisfy the caller's index
+                    // grammar. Concrete component markers and non-slot metadata
+                    // remain opaque; a failed abstract port cannot become scalar.
+                    if matches!(recognized, SlotMatch::Explicit(slot) if !slot.is_concrete_index())
+                    {
+                        return Err(error.into());
+                    }
                     if let AtomView::Fun(fun) = arg
-                        && fun.get_symbol() == AIND_SYMBOLS.aind
+                        && fun.get_symbol() == matcher.index_bundle()
                     {
                         let internal = Self::from_function_atom(fun, matcher)?;
-                        slots.extend(internal.structure);
+                        slots.extend(
+                            internal
+                                .layout()
+                                .canonical_to_logical(&internal.canonical().structure),
+                        );
                     }
                 }
             }
         }
 
-        if slots.is_empty()
-            && [*shadowing::SYM, *shadowing::ANTISYM, *shadowing::CYCLIC]
-                .contains(&fun.get_symbol())
-        {
-            let mut structure = OrderedStructure::empty();
+        if slots.is_empty() && matcher.projectors().contains(&fun.get_symbol()) {
+            let mut structure = Canonicalized::identity(OrderedStructure::empty());
             for factor in fun.iter() {
                 structure = structure
-                    .merge(&Self::syntactic_structure_from_atom(factor, matcher)?)?
-                    .0;
+                    .merge_syntactic(&Self::syntactic_structure_from_atom(factor, matcher)?)?;
             }
             return Ok(structure);
         }
 
-        Ok(OrderedStructure::new(slots).into_canonical())
-    }
-
-    /// Infer an `OrderedStructure` from expanded shorthand by reading graph dangling slots.
-    ///
-    /// This is an oracle/debug path: it allocates any dummies required by
-    /// expansion, builds the network, and then throws away everything except the
-    /// external slots.
-    fn expanded_shorthand_structure_from_atom(
-        value: AtomView<'_>,
-    ) -> Result<Canonicalized<Self>, StructureError>
-    where
-        Aind: DummyAind,
-    {
-        let network = value
-            .parse_to_atom_net::<Aind>(&ParseSettings {
-                shorthand_parsing: ShorthandParsing::expand_all(),
-                ..Default::default()
-            })
-            .map_err(|err| StructureError::ParsingError(err.to_string()))?;
-
-        Self::from_slots(network.graph.dangling_indices())
+        Ok(OrderedStructure::new(slots))
     }
 
     /// Infer an `OrderedStructure` from an opaque open chain.
@@ -613,26 +658,63 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         slots: &mut Vec<Slot<LibraryRep, Aind>>,
         matcher: &mut SlotMatcher,
     ) -> Result<(), StructureError> {
-        slots.extend(Self::syntactic_structure_from_atom(value, matcher)?.structure);
+        let structure = Self::syntactic_structure_from_atom(value, matcher)?;
+        slots.extend(
+            structure
+                .layout()
+                .canonical_to_logical(&structure.canonical().structure),
+        );
         Ok(())
+    }
+}
+
+impl<Aind: AbsInd + ParseableAind> Canonicalized<OrderedStructure<LibraryRep, Aind>> {
+    /// Use the canonical merger's exact incidence decision, retaining the
+    /// original left-to-right order of the surviving ports.
+    fn merge_syntactic(&self, other: &Self) -> Result<Self, StructureError> {
+        let (canonical, left, right, _) = self.canonical().merge(other.canonical())?;
+        let surviving = |source: &Self, contracted: Vec<bool>| {
+            let ports = source
+                .canonical()
+                .structure
+                .iter()
+                .copied()
+                .zip(contracted)
+                .collect::<Vec<_>>();
+            source
+                .layout()
+                .canonical_to_logical(&ports)
+                .into_iter()
+                .filter_map(|(slot, contracted)| (!contracted).then_some(slot))
+        };
+        let result = OrderedStructure::new(
+            surviving(self, left.iter().collect())
+                .chain(surviving(other, right.iter().collect()))
+                .collect(),
+        );
+        debug_assert_eq!(result.canonical(), &canonical);
+        Ok(result)
     }
 }
 
 impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom for ShadowedStructure<Aind> {
     fn structure_from_atom(
         value: AtomView<'_>,
-        mode: StructureInferenceMode,
+        matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
-        match mode {
-            StructureInferenceMode::Fast => {
-                TensorialSyntax::validate_chain_like_nesting(value, None)
-                    .map_err(|error| StructureError::ParsingError(error.to_string()))?;
-                Self::from_fast_atom(value, &mut SlotMatcher::default())
-            }
-            StructureInferenceMode::Expanded => {
-                OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, mode)
-                    .map(|structure| Self::from_ordered_atom(value, structure))
-            }
+        TensorialSyntax::validate_chain_like_nesting(value, None, matcher.tags())
+            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
+        Self::from_fast_atom(value, matcher)
+    }
+
+    fn structure_from_parser<Index>(
+        state: &ParseState<Index, AtomView<'_>>,
+    ) -> Result<Canonicalized<Self>, StructureError> {
+        let mut matcher = state.matcher.borrow_mut();
+        if state.chain_scope_validated {
+            Self::from_fast_atom(state.current_view(), &mut matcher)
+        } else {
+            Self::structure_from_atom(state.current_view(), &mut matcher)
         }
     }
 }
@@ -645,9 +727,12 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
     ) -> Result<Canonicalized<Self>, StructureError> {
         match value {
             AtomView::Fun(fun)
-                if fun.get_symbol() != SPENSO_TAG.chain && fun.get_symbol() != SPENSO_TAG.trace =>
+                if fun.get_symbol() != matcher.tags().chain
+                    && fun.get_symbol() != matcher.tags().trace
+                    && fun.get_symbol() != matcher.tags().dot
+                    && matcher.compact_inner_product_parts::<Aind>(fun).is_none() =>
             {
-                if !fun.get_symbol().has_tag(&SPENSO_TAG.tensor) {
+                if !fun.get_symbol().has_tag(&matcher.tags().tensor) {
                     OrderedStructure::<LibraryRep, Aind>::from_syntactic_atom(value, matcher)?;
                 }
                 Self::from_fast_function(fun, matcher)
@@ -668,7 +753,7 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
         matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
         match value.get_symbol() {
-            s if s == AIND_SYMBOLS.aind => {
+            s if s == matcher.index_bundle() => {
                 let mut structure = Vec::new();
                 for arg in value.iter() {
                     structure.push(matcher.parse::<LibraryRep, Aind>(arg)?);
@@ -683,14 +768,19 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
                     Some(SlotError::EmptyStructure.into());
 
                 for arg in value.iter() {
-                    match matcher.parse::<LibraryRep, Aind>(arg) {
+                    let recognized = matcher.classify(arg);
+                    match recognized.parse::<LibraryRep, Aind>(arg, matcher) {
                         Ok(slot) => {
                             is_structure = None;
                             slots.push(slot);
                         }
                         Err(err) => {
+                            if matches!(recognized, SlotMatch::Explicit(slot) if !slot.is_concrete_index())
+                            {
+                                return Err(err.into());
+                            }
                             if let AtomView::Fun(fun) = arg
-                                && fun.get_symbol() == AIND_SYMBOLS.aind
+                                && fun.get_symbol() == matcher.index_bundle()
                             {
                                 let structure = Self::from_fast_function(fun, matcher)?;
                                 let internal_slots = structure.layout().canonical_to_logical(
@@ -767,7 +857,7 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
     /// Return true for arguments that are represented by the inferred structure.
     fn is_direct_structure_arg(arg: AtomView<'_>, matcher: &mut SlotMatcher) -> bool {
         matcher.parse::<LibraryRep, Aind>(arg).is_ok()
-            || matches!(arg, AtomView::Fun(fun) if fun.get_symbol() == AIND_SYMBOLS.aind)
+            || matches!(arg, AtomView::Fun(fun) if fun.get_symbol() == matcher.index_bundle())
     }
 }
 
@@ -778,7 +868,7 @@ mod tests {
         bracket, chain, slot,
         structure::{
             TensorStructure,
-            abstract_index::AbstractIndex,
+            abstract_index::{AIND_SYMBOLS, AbstractIndex},
             representation::{Lorentz, Minkowski, RepName},
             slot::IsAbstractSlot,
         },
@@ -788,6 +878,81 @@ mod tests {
         atom::{Atom, AtomCore, FunctionBuilder, Symbol},
         function, symbol,
     };
+
+    // Independent oracle: execute the existing parser's shorthand lowering,
+    // then read the graph incidence instead of invoking syntax inference again.
+    fn expanded_graph_structure(expression: &Atom) -> Canonicalized<OrderedStructure> {
+        use crate::network::parsing::{NetworkParse, ParseSettings};
+        let network = expression
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        OrderedStructure::from_slots(network.graph.dangling_indices()).unwrap()
+    }
+
+    #[test]
+    fn opaque_inner_product_preserves_explicit_spectators_and_chain_boundaries() {
+        let rep = Minkowski {}.new_rep(4);
+        let compact = rep.to_symbolic([]);
+        let left = rep.to_symbolic([Atom::num(91201)]);
+        let inner = rep.to_symbolic([Atom::num(91202)]);
+        let right = rep.to_symbolic([Atom::num(91203)]);
+        let head = tensor_symbol!("opaque_inner_product_word");
+        let direct = function!(
+            SPENSO_TAG.dot,
+            function!(head, &left, &inner, &compact),
+            function!(head, &inner, &right, &compact)
+        );
+        let chained = function!(
+            SPENSO_TAG.dot,
+            chain!(
+                &left,
+                &inner,
+                function!(head, SPENSO_TAG.chain_in, SPENSO_TAG.chain_out, &compact)
+            ),
+            chain!(
+                &inner,
+                &right,
+                function!(head, SPENSO_TAG.chain_in, SPENSO_TAG.chain_out, &compact)
+            )
+        );
+        let mut matcher = SlotMatcher::default();
+        let expected = vec![
+            matcher
+                .parse::<LibraryRep, AbstractIndex>(left.as_view())
+                .unwrap(),
+            matcher
+                .parse::<LibraryRep, AbstractIndex>(right.as_view())
+                .unwrap(),
+        ];
+        for input in [direct, chained] {
+            let structure = OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_atom(
+                input.as_view(),
+                &mut matcher,
+            )
+            .unwrap();
+            assert_eq!(
+                structure
+                    .layout()
+                    .canonical_to_logical(&structure.canonical().structure),
+                expected
+            );
+            let named = ShadowedStructure::<AbstractIndex>::structure_from_atom(
+                input.as_view(),
+                &mut matcher,
+            )
+            .unwrap();
+            assert_eq!(
+                named
+                    .layout()
+                    .canonical_to_logical(&named.canonical().external_structure()),
+                expected
+            );
+            assert_eq!(
+                structure.canonical(),
+                expanded_graph_structure(&input).canonical()
+            );
+        }
+    }
 
     #[test]
     fn lorentz_dimension_changes_only_four_dimensional_minkowski_metadata() {
@@ -841,6 +1006,37 @@ mod tests {
 
         assert!(scalar_with_tensor_arg.is_tensorial(StrictTensorFilter::ContainsReps));
         assert!(!scalar.is_tensorial(StrictTensorFilter::ContainsReps));
+    }
+
+    #[test]
+    fn tensorial_syntax_recognizes_signed_projectors_without_opening_metadata() {
+        let rep = mink4();
+        let a = vector!(projector_syntax_a, rep.to_symbolic([]));
+        let b = vector!(projector_syntax_b, rep.to_symbolic([]));
+        let scalar = Atom::var(symbol!("projector_syntax_scalar"));
+        let opaque = symbol!("projector_syntax_opaque");
+        let metadata = symbol!("projector_syntax_metadata"; Scalar);
+        for head in [*shadowing::SYM, *shadowing::ANTISYM, *shadowing::CYCLIC] {
+            let projector = function!(head, &a, &b);
+            let signed = -&projector;
+            assert!(
+                matches!(projector.as_view(), AtomView::Mul(_))
+                    || matches!(signed.as_view(), AtomView::Mul(_))
+            );
+            for filter in [
+                StrictTensorFilter::Tagged,
+                StrictTensorFilter::TaggedChecked,
+            ] {
+                for expression in [&projector, &signed] {
+                    assert!(expression.is_tensorial(filter), "{expression}");
+                    assert!(!function!(opaque, expression).is_tensorial(filter));
+                    assert!(!function!(metadata, expression).is_tensorial(filter));
+                    assert!(!function!(SPENSO_TAG.pure_scalar, expression).is_tensorial(filter));
+                }
+                assert!(!function!(head, &scalar, Atom::num(2)).is_tensorial(filter));
+                assert!(!FunctionBuilder::new(head).finish().is_tensorial(filter));
+            }
+        }
     }
 
     #[test]
@@ -902,6 +1098,140 @@ mod tests {
     }
 
     #[test]
+    fn direct_slots_reject_unsupported_indices_but_keep_component_metadata() {
+        let rep = mink4();
+        let slot = |index: Atom| rep.to_symbolic([index]);
+        let invalid = slot(function!(symbol!("direct_invalid_index"), 7));
+        let valid = rep.slot::<AbstractIndex, _>(11).to_atom();
+        let head = tensor_symbol!(direct_slot_admission);
+        for arguments in [
+            vec![invalid.clone()],
+            vec![valid.clone(), invalid.clone()],
+            vec![invalid.clone(), valid.clone()],
+        ] {
+            let value = arguments
+                .into_iter()
+                .fold(FunctionBuilder::new(head), |builder, argument| {
+                    builder.add_arg(argument)
+                })
+                .finish();
+            assert!(matches!(
+                value.infer_structure::<OrderedStructure>(),
+                Err(StructureError::SlotError(SlotError::AindError(_)))
+            ));
+            assert!(matches!(
+                value.infer_structure::<ShadowedStructure<AbstractIndex>>(),
+                Err(StructureError::SlotError(SlotError::AindError(_)))
+            ));
+        }
+        let scalar = symbol!("direct_slot_metadata"; Scalar);
+        let metadata = [
+            function!(scalar, invalid),
+            rep.to_symbolic([]),
+            slot(function!(AIND_SYMBOLS.cind, 2)),
+            slot(function!(AIND_SYMBOLS.find, 3)),
+        ];
+        let value = metadata
+            .iter()
+            .fold(
+                FunctionBuilder::new(head).add_arg(&valid),
+                |builder, argument| builder.add_arg(argument),
+            )
+            .finish();
+        let ordered = value.infer_structure::<OrderedStructure>().unwrap();
+        let named = value
+            .infer_structure::<ShadowedStructure<AbstractIndex>>()
+            .unwrap();
+        assert_eq!(ordered.canonical().order(), 1);
+        assert_eq!(
+            named.canonical().external_structure(),
+            ordered.canonical().external_structure()
+        );
+        assert_eq!(
+            named.canonical().additional_args.as_deref(),
+            Some(metadata.as_slice())
+        );
+
+        let index = function!(crate::index_symbol!(direct_named_index), 19, 2);
+        let named_slot = slot(index.clone());
+        let value = function!(head, named_slot);
+        let inferred = value.infer_structure::<OrderedStructure>().unwrap();
+        assert_eq!(
+            inferred.canonical().external_structure()[0]
+                .aind()
+                .to_atom(),
+            index
+        );
+        assert_eq!(
+            value
+                .infer_structure::<ShadowedStructure<AbstractIndex>>()
+                .unwrap()
+                .canonical()
+                .order(),
+            1
+        );
+    }
+
+    #[test]
+    fn direct_slots_use_the_requested_custom_index_grammar() {
+        #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+        struct PayloadIndex(usize);
+        impl std::fmt::Display for PayloadIndex {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "custom({})", self.0)
+            }
+        }
+        impl AbsInd for PayloadIndex {}
+        impl ParseableAind for PayloadIndex {
+            type Error = SlotError;
+            fn from_view(view: AtomView<'_>) -> Result<Self, Self::Error> {
+                if let AtomView::Fun(function) = view
+                    && function.get_symbol() == symbol!("direct_custom_index")
+                    && function.get_nargs() == 1
+                {
+                    return usize::try_from(function.iter().next().unwrap())
+                        .map(Self)
+                        .map_err(|_| SlotError::NotNatural);
+                }
+                Err(SlotError::Composite)
+            }
+            fn to_atom(&self) -> Atom {
+                function!(symbol!("direct_custom_index"), self.0)
+            }
+        }
+        impl DummyAind for PayloadIndex {
+            fn new_dummy() -> Self {
+                Self(usize::MAX)
+            }
+            fn new_dummy_at(i: usize) -> Self {
+                Self(i)
+            }
+            fn is_dummy(&self) -> bool {
+                self.0 == usize::MAX
+            }
+        }
+        let value = function!(
+            tensor_symbol!(custom_slot_admission),
+            mink4().to_symbolic([PayloadIndex(17).to_atom()])
+        );
+        let ordered = value
+            .infer_structure::<OrderedStructure<LibraryRep, PayloadIndex>>()
+            .unwrap();
+        let named = value
+            .infer_structure::<NamedStructure<Symbol, Vec<Atom>, LibraryRep, PayloadIndex>>()
+            .unwrap();
+        assert_eq!(
+            ordered.canonical().external_structure()[0].aind(),
+            PayloadIndex(17)
+        );
+        assert_eq!(
+            named.canonical().external_structure(),
+            ordered.canonical().external_structure()
+        );
+        assert!(value.infer_structure::<OrderedStructure>().is_err());
+    }
+
+    #[test]
     fn tagged_tensor_rejects_malformed_aind_bundle() {
         let malformed_aind = FunctionBuilder::new(AIND_SYMBOLS.aind)
             .add_arg(Atom::num(1))
@@ -911,13 +1241,45 @@ mod tests {
             .finish();
 
         let error = expression
-            .infer_structure::<ShadowedStructure<AbstractIndex>>(StructureInferenceMode::Fast)
+            .infer_structure::<ShadowedStructure<AbstractIndex>>()
             .unwrap_err();
 
         assert!(matches!(
             error,
             StructureError::SlotError(SlotError::Composite)
         ));
+    }
+
+    #[test]
+    fn fast_inference_retains_logical_order_through_bundles_powers_and_products() {
+        let rep = Minkowski {}.new_rep(4);
+        let slots = [rep.slot(31), rep.slot(7), rep.slot(19)];
+        let bundle = FunctionBuilder::new(AIND_SYMBOLS.aind)
+            .add_arg(slots[0].to_atom())
+            .add_arg(slots[1].to_atom())
+            .finish();
+        let leaf = FunctionBuilder::new(tensor_symbol!(logical_inference_leaf))
+            .add_arg(bundle)
+            .add_arg(slots[2].to_atom())
+            .finish();
+        let logical = |atom: &Atom| {
+            let value = atom
+                .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>()
+                .unwrap();
+            value
+                .layout()
+                .canonical_to_logical(&value.canonical().external_structure())
+        };
+        let expected = slots.map(|slot| slot.to_lib()).to_vec();
+        assert_eq!(logical(&leaf), expected);
+        assert_eq!(logical(&leaf.pow(3)), expected);
+        let vector = FunctionBuilder::new(tensor_symbol!(logical_inference_partner))
+            .add_arg(slots[1].to_atom())
+            .finish();
+        assert_eq!(
+            logical(&(leaf * vector)),
+            vec![slots[0].to_lib(), slots[2].to_lib()]
+        );
     }
 
     #[test]
@@ -941,7 +1303,7 @@ mod tests {
     }
 
     #[test]
-    fn chain_fast_and_expanded_inference_agree() {
+    fn chain_inference_matches_expanded_graph() {
         let rep = mink4();
         let external_rep = Lorentz {}.new_rep(4);
         let expr = chain!(
@@ -958,21 +1320,15 @@ mod tests {
         );
 
         let fast = expr
-            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
-                StructureInferenceMode::Fast,
-            )
+            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>()
             .unwrap();
-        let expanded = expr
-            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
-                StructureInferenceMode::Expanded,
-            )
-            .unwrap();
+        let expanded = expanded_graph_structure(&expr);
 
         assert_eq!(fast.canonical().order(), expanded.canonical().order());
     }
 
     #[test]
-    fn chain_with_schoonschipped_term_fast_and_expanded_inference_agree() {
+    fn chain_with_schoonschipped_term_inference_matches_expanded_graph() {
         let rep = mink4();
         let compact_vector = vector!(structure_inference_p, rep.to_symbolic([]));
         let schoonschipped_term = FunctionBuilder::new(tensor_symbol!(structure_factor_f))
@@ -983,21 +1339,15 @@ mod tests {
         let expr = chain!(slot!(rep, i), slot!(rep, j), schoonschipped_term);
 
         let fast = expr
-            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
-                StructureInferenceMode::Fast,
-            )
+            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>()
             .unwrap();
-        let expanded = expr
-            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
-                StructureInferenceMode::Expanded,
-            )
-            .unwrap();
+        let expanded = expanded_graph_structure(&expr);
 
         assert_eq!(fast.canonical().order(), expanded.canonical().order());
     }
 
     #[test]
-    fn trace_fast_and_expanded_inference_agree() {
+    fn trace_inference_matches_expanded_graph() {
         let trace_rep = Lorentz {}.new_rep(4);
         let external_rep = mink4();
         let expr = trace!(
@@ -1017,15 +1367,9 @@ mod tests {
         );
 
         let fast = expr
-            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
-                StructureInferenceMode::Fast,
-            )
+            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>()
             .unwrap();
-        let expanded = expr
-            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
-                StructureInferenceMode::Expanded,
-            )
-            .unwrap();
+        let expanded = expanded_graph_structure(&expr);
 
         assert_eq!(fast.canonical().order(), expanded.canonical().order());
     }
@@ -1054,15 +1398,9 @@ mod tests {
             trace!(&trace_rep, -shadowing::antisym(factors)),
         ] {
             let fast = expression
-                .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
-                    StructureInferenceMode::Fast,
-                )
+                .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>()
                 .unwrap();
-            let expanded = expression
-                .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
-                    StructureInferenceMode::Expanded,
-                )
-                .unwrap();
+            let expanded = expanded_graph_structure(&expression);
             assert_eq!(fast.canonical().order(), 3);
             assert_eq!(fast.canonical(), expanded.canonical());
         }

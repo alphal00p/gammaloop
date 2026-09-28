@@ -1,0 +1,54 @@
+---
+source: src/half_edge/algorithms/transitive_ops.rs
+expression: reduction_result.unwrap_err()
+---
+HasCycles(
+    NotDag {
+        nodes_processed: 3,
+        total_nodes: 10,
+        remaining_nodes: [
+            (
+                NodeIndex(
+                    2,
+                ),
+                1,
+            ),
+            (
+                NodeIndex(
+                    3,
+                ),
+                1,
+            ),
+            (
+                NodeIndex(
+                    4,
+                ),
+                1,
+            ),
+            (
+                NodeIndex(
+                    5,
+                ),
+                2,
+            ),
+            (
+                NodeIndex(
+                    6,
+                ),
+                1,
+            ),
+            (
+                NodeIndex(
+                    7,
+                ),
+                1,
+            ),
+            (
+                NodeIndex(
+                    8,
+                ),
+                1,
+            ),
+        ],
+    },
+)

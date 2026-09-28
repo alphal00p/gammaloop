@@ -2452,18 +2452,33 @@ impl<'a, T: RepName> TryFrom<AtomView<'a>> for Representation<T> {
     type Error = SlotError;
 
     fn try_from(value: AtomView<'a>) -> Result<Self, Self::Error> {
+        Self::parse_with(value, |head, wrapper| match wrapper {
+            Some(wrapper) => T::try_from_symbol(head, wrapper),
+            None => T::try_from_symbol_coerced(head),
+        })
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<T: RepName> Representation<T> {
+    /// Read the existing representation-prefix grammar with a caller-owned
+    /// resolver. Dimension validation and acceptance of trailing arguments stay
+    /// identical for direct conversion and operation-scoped cached recognition.
+    pub(crate) fn parse_with(
+        value: AtomView<'_>,
+        mut resolve: impl FnMut(Symbol, Option<Symbol>) -> Result<T, RepresentationError>,
+    ) -> Result<Self, SlotError> {
         let (rep, mut iter) = if let AtomView::Fun(f) = value {
             let name = f.get_symbol();
 
             let innerf = f.iter().next().ok_or(SlotError::Composite)?;
 
             if let AtomView::Fun(innerf) = innerf {
-                let rep =
-                    T::try_from_symbol(innerf.get_symbol(), name).map_err(SlotError::RepError)?;
+                let rep = resolve(innerf.get_symbol(), Some(name)).map_err(SlotError::RepError)?;
 
                 (rep, innerf.iter())
             } else {
-                let rep = T::try_from_symbol_coerced(name).map_err(SlotError::RepError)?;
+                let rep = resolve(name, None).map_err(SlotError::RepError)?;
                 (rep, f.iter())
             }
         } else {

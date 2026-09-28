@@ -2469,17 +2469,18 @@ mod tests {
     -> color_eyre::Result<()> {
         test_initialise()?;
         let graph: Graph = finalized_runtime_dot!(digraph soft_taylor_cograph {
+            projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0]
-            a -> b [id=1 lmb_id=0]
-            a -> b [id=2]
-            b -> c [id=3 lmb_id=1]
-            c -> d [id=4]
-            d -> a [id=5]
-            d -> outgoing [id=6]
+            incoming -> a [id=0 sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            b -> c [id=3 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            c -> d [id=4 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            d -> a [id=5 source="{ufo_order:1}" sink="{ufo_order:3}"]
+            d -> outgoing [id=6 source="{ufo_order:2}"]
         })?;
         let soft_component = |index: Atom| {
             let owner = Atom::num(4);

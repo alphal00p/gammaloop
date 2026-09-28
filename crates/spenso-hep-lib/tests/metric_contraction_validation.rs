@@ -6,7 +6,7 @@ use std::sync::Once;
 use idenso::{
     epsilon::{EPSILON_SYMBOL, EpsilonSimplifier},
     representations::{Bispinor, ColorFundamental, initialize},
-    shorthands::schoonschip::{Schoonschip, SchoonschipSettings},
+    tensor::{ContractionSettings, SymbolicTensor},
 };
 use spenso::{
     network::{
@@ -227,10 +227,16 @@ impl MetricEvaluation {
     fn assert_rewrite(
         &self,
         expression: Atom,
-        settings: &SchoonschipSettings,
+        settings: &ContractionSettings<'_>,
         must_change: bool,
     ) -> Atom {
-        let simplified = expression.schoonschip_with_settings(settings);
+        let simplified = SymbolicTensor::infer(expression.clone())
+            .unwrap()
+            .contract(*settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         if must_change {
             assert_ne!(
                 expression, simplified,
@@ -239,7 +245,13 @@ impl MetricEvaluation {
         }
         let before = self.assert_same_value(&expression, &simplified);
         assert_eq!(
-            simplified.schoonschip_with_settings(settings),
+            SymbolicTensor::infer(simplified.clone())
+                .unwrap()
+                .contract(*settings)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
             simplified,
             "rewrite must reach a fixed point"
         );
@@ -249,7 +261,7 @@ impl MetricEvaluation {
 
 #[test]
 fn metric_chains_and_traces_preserve_exact_components() {
-    let settings = SchoonschipSettings::default().without_rank1_tensors();
+    let settings = ContractionSettings::default().without_rank_one_tensors();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, nu, rho, _] = MetricEvaluation::slots();
@@ -300,8 +312,8 @@ fn long_product_contractions_preserve_independent_sum_scopes() {
                 .map(|index| spenso::g!(&slots[index], &slots[(index + 1) % length]))
                 .product();
             for settings in [
-                SchoonschipSettings::default().without_rank1_tensors(),
-                SchoonschipSettings::default(),
+                ContractionSettings::default().without_rank_one_tensors(),
+                ContractionSettings::default(),
             ] {
                 let value = evaluation.assert_rewrite(expression.clone(), &settings, true);
                 assert!(
@@ -320,7 +332,7 @@ fn long_product_contractions_preserve_independent_sum_scopes() {
 
 #[test]
 fn metric_substitution_preserves_antisymmetric_orientation_and_scalar_parameters() {
-    let settings = SchoonschipSettings::default().without_rank1_tensors();
+    let settings = ContractionSettings::default().without_rank_one_tensors();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, nu, rho, sigma] = MetricEvaluation::slots();
@@ -342,7 +354,13 @@ fn metric_substitution_preserves_antisymmetric_orientation_and_scalar_parameters
                 // Close the free slots only after rewriting, so the metric must
                 // act on the antisymmetric tensor rather than a spectator vector.
                 let expression = metrics * function!(evaluation.antisymmetric, source, &nu);
-                let simplified = expression.schoonschip_with_settings(&settings);
+                let simplified = SymbolicTensor::infer(expression.clone())
+                    .unwrap()
+                    .contract(settings)
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression();
                 assert_ne!(expression, simplified);
                 let spectator = evaluation.vector(0, target) * evaluation.vector(1, &nu);
                 let before = evaluation.evaluate(&(&expression * &spectator));
@@ -358,7 +376,13 @@ fn metric_substitution_preserves_antisymmetric_orientation_and_scalar_parameters
             }
         }
         let expression = spenso::g!(&mu, &nu) * function!(evaluation.labelled, symbol!("mu"), &mu);
-        let simplified = expression.schoonschip_with_settings(&settings);
+        let simplified = SymbolicTensor::infer(expression.clone())
+            .unwrap()
+            .contract(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         assert_ne!(expression, simplified);
         let spectator = evaluation.vector(1, &nu);
         assert_eq!(
@@ -371,7 +395,7 @@ fn metric_substitution_preserves_antisymmetric_orientation_and_scalar_parameters
 
 #[test]
 fn metric_rewrites_preserve_sum_and_power_scopes() {
-    let settings = SchoonschipSettings::default().without_rank1_tensors();
+    let settings = ContractionSettings::default().without_rank_one_tensors();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, nu, rho, _] = MetricEvaluation::slots();
@@ -413,8 +437,13 @@ fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
         // Close the output only after rewriting. Otherwise the source metric
         // could consume the closing vector and never exercise the sum partner.
         let metric_input = spenso::g!(&mu, &nu) * &sum * scalar.pow(2);
-        let metric_result = metric_input
-            .schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors());
+        let metric_result = SymbolicTensor::infer(metric_input.clone())
+            .unwrap()
+            .contract(ContractionSettings::default().without_rank_one_tensors())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         assert_ne!(metric_input, metric_result);
         let spectator = evaluation.vector(2, &nu);
         let value = evaluation.assert_same_value(
@@ -426,13 +455,19 @@ fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
             evaluation.vector(2, &mu) * &sum,
             spenso::g!(&mu, evaluation.compact(2)) * &sum,
         ] {
-            let _ = evaluation.assert_rewrite(expression, &SchoonschipSettings::default(), true);
+            let _ = evaluation.assert_rewrite(expression, &ContractionSettings::default(), true);
         }
 
         let antisymmetric_sum =
             function!(evaluation.antisymmetric, &mu, &rho) + spenso::g!(&mu, &rho) * 3;
         let expression = spenso::g!(&mu, &sigma) * antisymmetric_sum;
-        let simplified = expression.schoonschip();
+        let simplified = SymbolicTensor::infer(expression.clone())
+            .unwrap()
+            .contract(ContractionSettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         assert_ne!(expression, simplified);
         let closing = evaluation.vector(0, &sigma) * evaluation.vector(3, &rho);
         let _ = evaluation.assert_same_value(&(&expression * &closing), &(&simplified * &closing));
@@ -446,7 +481,13 @@ fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
         ] {
             let sum = evaluation.vector(0, &source) + evaluation.vector(1, &source) * 2;
             let expression = metric * sum;
-            let simplified = expression.schoonschip();
+            let simplified = SymbolicTensor::infer(expression.clone())
+                .unwrap()
+                .contract(ContractionSettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
             assert_ne!(expression, simplified);
             let closing = evaluation.vector(2, &closing_slot);
             let _ =
@@ -457,7 +498,7 @@ fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
 
 #[test]
 fn compact_vectors_and_chain_like_metric_endpoints_preserve_exact_components() {
-    let settings = SchoonschipSettings::default().with_chain_like_functions();
+    let settings = ContractionSettings::default();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, nu, _, _] = MetricEvaluation::slots();
@@ -493,7 +534,7 @@ fn dual_metric_loops_preserve_exact_components() {
     let cof = ColorFundamental {}.new_rep(3);
     let [i, j, k] =
         ["color_i", "color_j", "color_k"].map(|name| cof.slot::<AbstractIndex, _>(symbol!(name)));
-    let settings = SchoonschipSettings::default().without_rank1_tensors();
+    let settings = ContractionSettings::default().without_rank_one_tensors();
     for (expression, must_change) in [
         (spenso::g!(i, i.dual()), false),
         (
@@ -578,7 +619,18 @@ fn constructed_metric_traces_are_scalar_before_taking_powers() {
         )
         .unwrap();
         assert_eq!(constructed, Atom::num(expected), "source: {source}");
-        assert_eq!(constructed.normalize_dots(), constructed);
+        assert_eq!(
+            SymbolicTensor::infer(constructed.clone())
+                .unwrap()
+                .contract(ContractionSettings::default().without_rank_one_tensors())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .to_dots()
+                .unwrap()
+                .into_expression(),
+            constructed
+        );
         assert_eq!(
             evaluation.assert_same_value(&oracle, &constructed),
             Atom::num(expected)
@@ -604,7 +656,18 @@ fn constructed_compact_metric_agrees_with_explicit_component_contraction() {
             )
             .unwrap();
             assert_eq!(constructed, evaluation.vector(0, &mu) * coefficient);
-            assert_eq!(constructed.normalize_dots(), constructed);
+            assert_eq!(
+                SymbolicTensor::infer(constructed.clone())
+                    .unwrap()
+                    .contract(ContractionSettings::default().without_rank_one_tensors())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .to_dots()
+                    .unwrap()
+                    .into_expression(),
+                constructed
+            );
             let explicit = function!(evaluation.metric_alias, &mu, &nu)
                 * evaluation.vector(0, &nu)
                 * evaluation.vector(1, &mu)
@@ -619,7 +682,7 @@ fn constructed_compact_metric_agrees_with_explicit_component_contraction() {
 
 #[test]
 fn compact_metric_and_tagged_vector_substitutions_agree() {
-    let settings = SchoonschipSettings::default();
+    let settings = ContractionSettings::default();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, nu, _, _] = MetricEvaluation::slots();
@@ -634,7 +697,13 @@ fn compact_metric_and_tagged_vector_substitutions_agree() {
             evaluation.vector(0, &mu),
         ] {
             let expression = source * &tensor;
-            let simplified = expression.schoonschip_with_settings(&settings);
+            let simplified = SymbolicTensor::infer(expression.clone())
+                .unwrap()
+                .contract(settings)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
             assert_ne!(expression, simplified);
             assert!(!simplified.has_repeated_explicit_indices());
             assert_eq!(
@@ -645,9 +714,13 @@ fn compact_metric_and_tagged_vector_substitutions_agree() {
         }
         let explicit = evaluation.vector(0, &mu) * &tensor;
         assert_eq!(
-            explicit.schoonschip_with_settings(
-                &SchoonschipSettings::default().without_rank1_tensors(),
-            ),
+            SymbolicTensor::infer(explicit.clone())
+                .unwrap()
+                .contract(ContractionSettings::default().without_rank_one_tensors())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
             explicit,
             "disabling rank-one substitutions must preserve the explicit vector"
         );
@@ -669,7 +742,13 @@ fn tagged_vectors_and_compact_metrics_preserve_epsilon_orientation() {
             // Close the other slots after substitution, keeping its target
             // and the orientation of the epsilon unambiguous.
             let expression = source * &tensor;
-            let simplified = expression.schoonschip();
+            let simplified = SymbolicTensor::infer(expression.clone())
+                .unwrap()
+                .contract(ContractionSettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
             assert_ne!(expression, simplified);
             assert!(!simplified.has_repeated_explicit_indices());
             let value = evaluation
@@ -681,7 +760,7 @@ fn tagged_vectors_and_compact_metrics_preserve_epsilon_orientation() {
 
 #[test]
 fn tagged_vectors_contract_inside_ordered_chains_and_trace_projectors() {
-    let settings = SchoonschipSettings::default().with_chain_like_functions();
+    let settings = ContractionSettings::default();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, _, _, _] = MetricEvaluation::slots();
@@ -712,7 +791,7 @@ fn tagged_vectors_contract_inside_ordered_chains_and_trace_projectors() {
 fn tagged_vector_dots_preserve_dual_slot_orientation() {
     // Both old and new cleanup turn V(cof(i))*W(dind(cof(i))) into
     // g(V(cof),W(cof)); the compact parser requires opposite orientations.
-    let settings = SchoonschipSettings::default();
+    let settings = ContractionSettings::default();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let cof = ColorFundamental {}.new_rep(3);

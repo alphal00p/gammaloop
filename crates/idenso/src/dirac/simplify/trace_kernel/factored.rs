@@ -190,6 +190,7 @@ impl Compiler {
 
 impl FactoredTrace {
     /// Build a runtime recipe without the square-free positional compiler.
+    #[cfg(test)]
     pub(super) fn unit_recipe() -> Self {
         Self {
             nodes: vec![Node::Constant(1)],
@@ -197,6 +198,7 @@ impl FactoredTrace {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn push_product(
         &mut self,
         factors: Vec<usize>,
@@ -216,6 +218,7 @@ impl FactoredTrace {
         id
     }
 
+    #[cfg(test)]
     pub(super) fn push_sum(&mut self, children: Vec<usize>) -> usize {
         if children.len() == 1 {
             return children[0];
@@ -226,6 +229,7 @@ impl FactoredTrace {
     }
 
     /// Count rows without expanding the DAG; overflow is local to each subrecipe.
+    #[cfg(test)]
     pub(super) fn recipe_leaf_count(&self, root: usize) -> Option<usize> {
         let mut counts = Vec::with_capacity(self.nodes.len());
         for node in &self.nodes[..=root] {
@@ -250,6 +254,7 @@ impl FactoredTrace {
 
     /// Visit each final monomial with one reusable factor stack. Repeated IDs
     /// are retained, and exact coefficients multiply in the arbitrary-size domain.
+    #[cfg(test)]
     pub(super) fn visit_recipe_leaves(
         &self,
         root: usize,
@@ -324,7 +329,13 @@ impl FactoredTrace {
         compiler.finish(root)
     }
 
-    pub(super) fn evaluate(&self, root: usize, factors: &[Atom], unit: AtomView<'_>) -> Atom {
+    pub(super) fn evaluate(
+        &self,
+        root: usize,
+        factors: &[Atom],
+        unit: AtomView<'_>,
+        retain: &mut impl FnMut(Atom) -> Atom,
+    ) -> Atom {
         let mut values: Vec<Atom> = Vec::with_capacity(root + 1);
         for node in &self.nodes[..=root] {
             let value = match node {
@@ -345,7 +356,7 @@ impl FactoredTrace {
                     Atom::add_many(children.iter().map(|&child| values[child].as_view()))
                 }
             };
-            values.push(value);
+            values.push(retain(value));
         }
         Atom::mul_many([unit, values[root].as_view()])
     }
@@ -441,7 +452,7 @@ mod tests {
                         )
                     }));
                 assert_eq!(
-                    factored.evaluate(factored.root, &factors, unit.as_view()),
+                    factored.evaluate(factored.root, &factors, unit.as_view(), &mut |value| value),
                     expected
                 );
             }

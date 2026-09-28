@@ -1,19 +1,24 @@
-use std::sync::LazyLock;
+#[cfg(test)]
+use crate::shorthands::schoonschip::Schoonschip;
+use std::{cell::RefCell, sync::LazyLock};
 
 use spenso::{
     chain, g,
     network::tags::SPENSO_TAG as T,
     rep_,
-    shadowing::{self, IntoAtom},
+    shadowing::{self, IntoAtom, TensorCollectFilter},
     structure::{
         abstract_index::AbstractIndex,
+        partial::PartialStructure,
         representation::{LibraryRep, Minkowski, RepName},
         slot::{DummyAind, ParseableAind, SlotMatch, SlotMatcher},
     },
     trace,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
+    atom::{
+        Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol, representation::FunView,
+    },
     coefficient::CoefficientView,
     id::{Context, Replacement},
     utils::Settable,
@@ -22,10 +27,14 @@ use symbolica_utils::PatternReplacement;
 
 use crate::{
     W_,
-    dirac::GammaSimplifier,
-    epsilon::{EpsilonSimplifier, epsilon4},
+    epsilon::epsilon4,
     representations::Bispinor,
-    shorthands::schoonschip::{Schoonschip, SchoonschipSettings, SimplificationCandidates},
+    shorthands::{
+        bracket::BracketNormalizer,
+        chain::Chain,
+        schoonschip::{SchoonschipSettings, SchoonschipWithSettings},
+    },
+    tensor::{SymbolicTensor, aliases::Definition, inference::TensorInferenceError},
 };
 
 use super::{AGS, id_atom};
@@ -84,16 +93,29 @@ pub enum GammaChainOrdering {
     Canonical,
 }
 
+/// Select the algebraic output while retaining the shared tensor alias registry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GammaOutput {
+    /// Apply Clifford identities and the configured trace evaluation.
+    #[default]
+    Reduced,
+    /// Collect spinor words without reducing their gamma algebra.
+    Chains,
+}
+
 /// Settings for the chain-based Dirac simplifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GammaSimplifySettings {
+    /// Select reduced gamma algebra or collected spinor chains.
+    pub output: GammaOutput,
+    /// Rewrite conjugated Dirac matrices into gamma-zero sandwiches first.
+    pub conjugate: bool,
+    /// Apply gamma-zero factoring and repeated gamma-zero identities first.
+    pub gamma0: bool,
     /// Ordering strategy for open chains.
     pub chain_ordering: GammaChainOrdering,
     /// Whether closed chains should be evaluated as traces.
     pub evaluate_traces: bool,
-    /// Fully expand each evaluated trace body, preserving surrounding factors.
-    /// Has no effect when `evaluate_traces` is false.
-    pub expand_traces: bool,
     /// Whether three 4D gammas may be expanded into the gamma5-epsilon basis.
     pub expand_three_gamma_epsilon: bool,
 }
@@ -101,9 +123,11 @@ pub struct GammaSimplifySettings {
 impl Default for GammaSimplifySettings {
     fn default() -> Self {
         Self {
+            output: GammaOutput::Reduced,
+            conjugate: false,
+            gamma0: false,
             chain_ordering: GammaChainOrdering::RepeatedPairs,
             evaluate_traces: true,
-            expand_traces: false,
             expand_three_gamma_epsilon: false,
         }
     }
@@ -129,12 +153,6 @@ impl GammaSimplifySettings {
         self
     }
 
-    /// Request a fully expanded result for each evaluated trace body.
-    pub fn with_expanded_traces(mut self) -> Self {
-        self.expand_traces = true;
-        self
-    }
-
     /// Enables the four-dimensional identity that rewrites three gammas into
     /// metric terms plus a gamma5-epsilon term.
     pub fn with_gamma5_epsilon_expansion(mut self) -> Self {
@@ -142,32 +160,27 @@ impl GammaSimplifySettings {
         self
     }
 
-    fn rewrite_expression(&self, expr: Atom) -> Atom {
-        // Empty chains and traces still have identities, even without gamma
-        // factors. Only the absence of both eligible heads makes this a no-op.
-        let mut candidate = false;
-        expr.visitor(&mut |node| {
-            if candidate {
-                return false;
-            }
-            if let AtomView::Fun(function) = node {
-                let head = function.get_symbol();
-                candidate = head == T.chain || (self.evaluate_traces && head == T.trace);
-            }
-            !candidate
-        });
-        if !candidate {
-            return expr;
-        }
-        expr.replace_map(|a, b, c| self.rewrite_node(a, b, c))
+    fn rewrite_expression(&self, expr: Atom, output: trace_kernel::TraceOutput<'_>) -> Atom {
+        // The shared scheduler or the full raw pass already observed an
+        // eligible domain. Do not repeat its head scan on the unchanged input.
+        expr.replace_map(|a, b, c| self.rewrite_node(a, b, c, output))
     }
 
-    fn rewrite_node(&self, arg: AtomView, _context: &Context, out: &mut Settable<'_, Atom>) {
+    fn rewrite_node(
+        &self,
+        arg: AtomView,
+        _context: &Context,
+        out: &mut Settable<'_, Atom>,
+        output: trace_kernel::TraceOutput<'_>,
+    ) {
         let AtomView::Fun(f) = arg else {
             return;
         };
 
-        let simplifier = DiracSimplifier::new(self);
+        let simplifier = DiracSimplifier {
+            settings: self,
+            output,
+        };
         if f.get_symbol() == T.chain {
             if let Some(rewritten) = simplifier.simplify_chain_node(f) {
                 **out = rewritten;
@@ -176,16 +189,7 @@ impl GammaSimplifySettings {
             && f.get_symbol() == T.trace
             && let Some(rewritten) = simplifier.simplify_trace_node(f)
         {
-            // Complete the original trace body, including coefficient factors,
-            // before expanding it. Nested callback-created traces retain the
-            // same expansion setting; surrounding spectators stay outside.
-            **out = if self.expand_traces && rewritten.as_view() != arg {
-                simplifier
-                    .simplify_complete::<false>(rewritten.as_view())
-                    .expand()
-            } else {
-                rewritten
-            };
+            **out = rewritten;
         }
     }
 }
@@ -437,160 +441,124 @@ struct TerminalTrace<'a> {
     indices: Vec<AtomView<'a>>,
     axial: bool,
     repeated: usize,
-    compact_count: usize,
     four_dimensional: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct DiracSimplifier<'settings> {
     settings: &'settings GammaSimplifySettings,
+    output: trace_kernel::TraceOutput<'settings>,
+}
+
+impl SymbolicTensor<PartialStructure> {
+    pub(crate) fn simplify_gamma_parts(
+        &self,
+        registry: &[Definition],
+        settings: GammaSimplifySettings,
+    ) -> Result<(Self, Vec<Definition>), TensorInferenceError> {
+        let representation = Bispinor {}.into();
+        let standalone_trace = matches!(self.expression.as_view(), AtomView::Fun(function)
+            if function.get_symbol() == T.trace);
+        self.collect_with_map(
+            None,
+            registry,
+            |atom| TensorCollectFilter::Reps([representation]).matches(atom),
+            |selected, _registry, complete| {
+                let definitions = RefCell::new(trace_kernel::TraceDefinitions::default());
+                let mut scalar_callback = false;
+                let mut component_callback = false;
+                selected.expression.visitor(&mut |node| {
+                    if let AtomView::Fun(function) = node {
+                        let symbol = function.get_symbol();
+                        let callback = symbol.get_normalization_function().is_some()
+                            || symbol.get_evaluation_info().is_some();
+                        scalar_callback |= symbol.is_scalar() && callback;
+                        component_callback |= symbol.has_tag(&T.rank1) && callback;
+                    }
+                    true
+                });
+                let contextual_callback = !standalone_trace && (scalar_callback || component_callback);
+                if contextual_callback && !complete {
+                    return Ok((selected, Vec::new()));
+                }
+                // A scalar normalizer observes the actual child result, as in
+                // the former local Factored rewrite. Literal aliases cannot be
+                // substituted for that callback input. Ordinary cyclic trace
+                // wrappers retain the aliased emission path.
+                let output = if scalar_callback || contextual_callback {
+                    trace_kernel::TraceOutput::Factored
+                } else {
+                    trace_kernel::TraceOutput::Aliased(&definitions)
+                };
+                let prepared =
+                    DiracSimplifier::new(&settings).prepare(selected.expression.as_view());
+                let expression = BracketNormalizer::normalize(prepared.as_view())
+                    .chainify(representation)
+                    .join_chains(representation);
+                let expression = BracketNormalizer::normalize(expression.as_view());
+                // Finish joining the selected spinor factors before Clifford
+                // reduction can turn an open prefix into a sum of chains. Such
+                // a sum can hide the cycle closed by a later selected factor.
+                let expression = if settings.output == GammaOutput::Chains || !complete {
+                    expression
+                } else if contextual_callback {
+                    // Component normalizers can temporarily remove one port
+                    // before the next local trace identity removes its partner.
+                    // Finish this original selected atom context before typed
+                    // publication. The shared scheduler remains the only owner
+                    // of contractions and cross-domain fixed points.
+                    let limit = crate::tensor::simplification::SimplifySettings::default().max_passes;
+                    let mut current = expression;
+                    let mut finished = false;
+                    for _ in 0..limit {
+                        let next = settings.rewrite_expression(current.clone(), output);
+                        if next == current {
+                            finished = true;
+                            break;
+                        }
+                        current = next;
+                    }
+                    if !finished {
+                        return Err(TensorInferenceError::Invalid(format!(
+                            "callback-sensitive gamma kernel did not stabilize within {limit} passes"
+                        )));
+                    }
+                    current
+                } else {
+                    let simplifier = DiracSimplifier { settings: &settings, output };
+                    let terminal = settings.evaluate_traces.then(|| {
+                        if standalone_trace {
+                            simplifier.evaluate_terminal_trace::<false>(expression.as_view())
+                        } else {
+                            simplifier.evaluate_terminal_trace::<true>(expression.as_view())
+                        }
+                    }).flatten();
+                    terminal.unwrap_or_else(|| settings.rewrite_expression(expression, output))
+                };
+                let definitions = definitions.into_inner().into_definitions()?;
+                Ok((selected.with_rewritten_expression(expression)?, definitions))
+            },
+        )
+    }
 }
 
 impl<'settings> DiracSimplifier<'settings> {
     pub(crate) fn new(settings: &'settings GammaSimplifySettings) -> Self {
-        Self { settings }
+        Self {
+            settings,
+            output: trace_kernel::TraceOutput::Factored,
+        }
     }
 
-    pub(crate) fn simplify(self, expr: AtomView) -> Atom {
-        self.simplify_complete::<true>(expr)
-    }
-
-    // Local trace-body completion must not grant terminal admission to a
-    // subtrace whose explicit slots can still meet its surrounding factors.
-    fn simplify_complete<const TERMINAL_CONTEXT: bool>(self, expr: AtomView<'_>) -> Atom {
-        if TERMINAL_CONTEXT
-            && self.settings.evaluate_traces
-            && let Some(result) = if self.settings.expand_traces {
-                // Exact callback-free words already satisfy terminal closure,
-                // including mixed free slots and compact vector components.
-                self.evaluate_terminal_trace::<true>(expr)
-                    .or_else(|| self.evaluate_terminal_trace::<false>(expr))
-            } else {
-                self.evaluate_terminal_trace::<false>(expr)
-            }
-        {
-            return result;
+    fn prepare<'a>(self, expr: AtomView<'a>) -> AtomOrView<'a> {
+        let mut result = AtomOrView::View(expr);
+        if self.settings.conjugate {
+            result = Self::conjugate_matrices::<AbstractIndex>(result.as_view()).into();
         }
-        let mut expr = expr.to_owned();
-        // A trace can emit metrics connected to surviving words. Contract those
-        // before each rewrite, so later iterations expose their repeated indices.
-        let metric_settings = SchoonschipSettings::default().with_chain_like_functions();
-        let bispinor: LibraryRep = Bispinor {}.into();
-        let heads = [
-            bispinor.symbol(),
-            T.chain,
-            T.bracket,
-            T.trace,
-            *crate::epsilon::EPSILON_SYMBOL,
-        ];
-        let [bispinor, chain, bracket, trace, epsilon_head] = heads.map(|head| head.get_id());
-        let mut observed = Some(SimplificationCandidates::scan(
-            expr.as_view(),
-            heads,
-            || true,
-        ));
-        if TERMINAL_CONTEXT
-            && self.settings.evaluate_traces
-            && observed
-                .as_ref()
-                .is_some_and(|candidates| candidates.symbols[3])
-            && let Some(trace) = Self::scalar_trace_factor(expr.as_view(), trace)
-            && let Some(result) = self.evaluate_terminal_trace::<true>(trace)
-        {
-            // The terminal kernel emits each free explicit slot once per
-            // term. Canonical vector components have no callbacks, and the exact
-            // function-free spectators cannot introduce tensor cleanup work.
-            let AtomView::Mul(product) = expr.as_view() else {
-                unreachable!("scalar_trace_factor requires a product");
-            };
-            return Atom::mul_many(product.iter().map(|factor| {
-                if factor == trace {
-                    result.as_view()
-                } else {
-                    factor
-                }
-            }));
+        if self.settings.gamma0 {
+            result = Self::factor_gamma_zero(result.as_view()).into();
         }
-
-        loop {
-            // Metric contraction can close a chain or connect separate chains.
-            // Include their collection in the fixed point of the complete pass.
-            // Close metric-linked chains before rewriting, including inert traces.
-            let candidates = observed
-                .take()
-                .unwrap_or_else(|| SimplificationCandidates::scan(expr.as_view(), heads, || true));
-            let normalized = if candidates.normalized() {
-                expr.clone()
-            } else {
-                expr.schoonschip_with_settings(&metric_settings)
-            };
-            // Share the absence check across the remaining passes. Large trace
-            // results need no chain collection or Dirac rewrite, and ordinary
-            // generic-dimensional traces contain no epsilon either.
-            let (mut collect, mut rewrite, mut epsilon) = (false, false, false);
-            if candidates.complete && normalized == expr {
-                let [has_bispinor, has_chain, has_bracket, has_trace, has_epsilon] =
-                    candidates.symbols;
-                collect = has_bispinor || has_chain || has_bracket;
-                rewrite = has_chain || (self.settings.evaluate_traces && has_trace);
-                epsilon = has_epsilon;
-            } else {
-                normalized.visitor(&mut |node| {
-                    let head = match node {
-                        AtomView::Fun(function) => function.get_symbol_id(),
-                        AtomView::Var(variable) => variable.get_symbol_id(),
-                        _ => return true,
-                    };
-                    collect |= head == bispinor || head == chain || head == bracket;
-                    rewrite |= head == chain || (self.settings.evaluate_traces && head == trace);
-                    epsilon |= head == epsilon_head;
-                    !(collect && rewrite && epsilon)
-                });
-            }
-            let mut next = if collect {
-                normalized.collect_gamma_chains()
-            } else {
-                normalized.clone()
-            };
-            // A preceding pass can introduce work absent from the initial scan:
-            // collection closes traces, and a trace rewrite can emit epsilons.
-            if rewrite || next != normalized {
-                next = self.settings.rewrite_expression(next);
-            }
-            // Inspect the whole rebuilt expression: unchanged outer factors
-            // may now contract with the trace output or callback result.
-            let rewritten = next != normalized;
-            if rewritten {
-                let complete = SimplificationCandidates::scan(next.as_view(), heads, || true);
-                if complete.finished() {
-                    return next;
-                }
-                // Carry this scan only across exactly unchanged cleanup.
-                observed = Some(complete);
-            }
-            if epsilon || rewritten {
-                let updated = next.simplify_epsilon();
-                if updated != next {
-                    observed = None;
-                }
-                next = updated;
-            }
-            // Schoonschip already normalized dots. Repeat that walk only when a
-            // later operation changed its result.
-            if next != normalized {
-                let updated = next.normalize_dots();
-                if updated != next {
-                    observed = None;
-                }
-                next = updated;
-            }
-
-            if next == expr {
-                return next;
-            }
-
-            expr = next;
-        }
+        result
     }
 
     // Only exact rational coefficients may be regrouped by the scalar-context
@@ -641,7 +609,7 @@ impl<'settings> DiracSimplifier<'settings> {
     ) -> Option<(Option<AtomView<'_>>, Vec<AtomView<'_>>)> {
         // Retain the existing rejection of nested trace metadata even when the
         // requested algebra operation leaves its result factored.
-        let settings = GammaSimplifySettings::default().with_expanded_traces();
+        let settings = GammaSimplifySettings::default();
         let simplifier = DiracSimplifier::new(&settings);
         let trace = match expr {
             AtomView::Fun(_) => expr,
@@ -651,6 +619,11 @@ impl<'settings> DiracSimplifier<'settings> {
             _ => return None,
         };
         let word = simplifier.parse_terminal_trace::<false>(trace)?;
+        // General trace evaluation also admits formal spin dimensions. That
+        // admission does not establish this stronger source-only interface proof.
+        if !has_four_dimensional_trace_rep(word.representation) {
+            return None;
+        }
         let AtomView::Fun(function) = trace else {
             unreachable!("terminal traces are functions");
         };
@@ -672,7 +645,7 @@ impl<'settings> DiracSimplifier<'settings> {
             return None;
         };
         let (rep, factors) = shadowing::trace_parts(f)?;
-        if !SCALAR_CONTEXT && self.settings.expand_traces {
+        if !SCALAR_CONTEXT {
             // Scalar parameters and representation metadata may contain nested
             // traces. The strict scalar-context admission already rejects them.
             for argument in f.iter() {
@@ -718,7 +691,6 @@ impl<'settings> DiracSimplifier<'settings> {
         let indices = Self::gamma_mink_index_sequence_for(rule, &factors)?;
         let mut slots = SlotMatcher::default();
         let mut repeated = 0;
-        let mut compact_count = 0;
         for (position, &index) in indices.iter().enumerate() {
             if is_minkowski_slot(index) {
                 let SlotMatch::Explicit(slot) = slots.classify(index) else {
@@ -739,7 +711,6 @@ impl<'settings> DiracSimplifier<'settings> {
                 }
                 repeated += occurrences;
             } else {
-                compact_count += 1;
                 let AtomView::Fun(vector) = index else {
                     return None;
                 };
@@ -772,7 +743,6 @@ impl<'settings> DiracSimplifier<'settings> {
             indices,
             axial,
             repeated,
-            compact_count,
             four_dimensional: has_four_dimensional_trace_rep(rep)
                 && factors
                     .iter()
@@ -787,7 +757,7 @@ impl<'settings> DiracSimplifier<'settings> {
     /// with exact leaf metadata. Free slots occur once per term; wildcard
     /// metadata may retain inert closed diagonals. Exact scalar spectators cannot
     /// introduce further tensor cleanup.
-    fn evaluate_terminal_trace<const SCALAR_CONTEXT: bool>(
+    pub(crate) fn evaluate_terminal_trace<const SCALAR_CONTEXT: bool>(
         self,
         expr: AtomView<'_>,
     ) -> Option<Atom> {
@@ -796,16 +766,9 @@ impl<'settings> DiracSimplifier<'settings> {
             indices,
             axial,
             repeated,
-            compact_count,
             four_dimensional,
         } = self.parse_terminal_trace::<SCALAR_CONTEXT>(expr)?;
-        // The contextual full pass emits expanded axial traces. Keep that
-        // representation while skipping cleanup of the already terminal word.
-        let output = if self.settings.expand_traces || (SCALAR_CONTEXT && axial) {
-            trace_kernel::TraceOutput::Expanded
-        } else {
-            trace_kernel::TraceOutput::Factored
-        };
+        let output = self.output;
         if indices.len() % 2 == 1 || (axial && indices.len() < 4) {
             return Some(Atom::Zero);
         }
@@ -818,29 +781,13 @@ impl<'settings> DiracSimplifier<'settings> {
             trace_kernel::evaluate_generic(
                 &indices,
                 trace_unit.as_view(),
-                // Distinct explicit arguments need no factored reductions.
-                // Expanded emission uses the canonical admission contract.
-                self.settings.expand_traces
-                    || !(SCALAR_CONTEXT
-                        && repeated == 0
-                        && indices.iter().all(|&index| is_minkowski_slot(index))),
+                !(SCALAR_CONTEXT
+                    && repeated == 0
+                    && indices.iter().all(|&index| is_minkowski_slot(index))),
                 output,
             )
         };
-        let free_explicit = indices.len() - compact_count - 2 * repeated;
-        Some(
-            if !SCALAR_CONTEXT
-                && self.settings.expand_traces
-                && compact_count > 0
-                && free_explicit > 0
-            {
-                // Broad standalone admission permits component callbacks, which
-                // can create sums or nested traces. Strict context excludes them.
-                self.simplify_complete::<false>(result.as_view()).expand()
-            } else {
-                result
-            },
-        )
+        Some(result)
     }
 
     fn simplify_chain_node(self, f: FunView) -> Option<Atom> {
@@ -1378,9 +1325,11 @@ impl DiracSimplifier<'_> {
         nu: AtomView<'_>,
         factors: Vec<Atom>,
     ) -> Atom {
-        (g!(mu, nu) * word.build(factors)).schoonschip_with_settings(
-            &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
-        )
+        let metric_term = g!(mu, nu) * word.build(factors);
+        SchoonschipWithSettings {
+            settings: &SchoonschipSettings::default().with_chain_like_functions(),
+        }
+        .run(metric_term.as_view(), &mut Vec::new())
     }
 
     fn shortest_repeated_gamma_pair(factors: &[DiracFactor<'_>]) -> Option<(usize, usize)> {
@@ -1612,6 +1561,41 @@ impl DiracSimplifier<'_> {
             return Self::simplify_trace_terminal(f.as_view());
         }
 
+        // Tr(Aᵀ ... Zᵀ) = Tr(Z ... A). Normalize only uniformly reversed
+        // gamma/gamma5 words here; mixed words and open chains retain their
+        // existing opaque treatment. Normalize the local factor
+        // views, so surrounding scalar callbacks see the evaluated result in
+        // this same pass rather than an intermediate forward trace.
+        let transposed =
+            (matches!(rep, AtomView::Fun(spin) if spin.get_symbol() == *BISPINOR_SYMBOL)
+                && factors.iter().all(|factor| {
+                    matches!(factor, AtomView::Fun(word)
+                    if ((word.get_symbol() == AGS.gamma && word.get_nargs() == 3)
+                        || (word.get_symbol() == AGS.gamma5 && word.get_nargs() == 2))
+                        && has_forward_chain_endpoints(
+                            word.iter().nth(1).unwrap(), word.iter().next().unwrap()))
+                }))
+            .then(|| {
+                factors
+                    .iter()
+                    .rev()
+                    .map(|factor| {
+                        let AtomView::Fun(word) = factor else {
+                            unreachable!()
+                        };
+                        if word.get_symbol() == AGS.gamma {
+                            gamma_factor(word.iter().nth(2).unwrap())
+                        } else {
+                            gamma5_factor()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            });
+        let factors = transposed
+            .as_ref()
+            .map(|word| word.iter().map(Atom::as_view).collect())
+            .unwrap_or(factors);
+
         let mut factor_kinds = DiracFactorKinds::default();
         let factors = factors
             .iter()
@@ -1662,7 +1646,7 @@ impl DiracSimplifier<'_> {
         }
 
         if factor_kinds.has_gamma5
-            && let Some(rewritten) = Self::simplify_gamma5_trace_node(rep, &factors)
+            && let Some(rewritten) = self.simplify_gamma5_trace_node(rep, &factors)
         {
             return Some(rewritten);
         }
@@ -1688,11 +1672,7 @@ impl DiracSimplifier<'_> {
         let four_dimensional = has_four_dimensional_trace_rep(rep)
             && Self::gamma_mink_index_sequence_for(FOUR_DIM_CHISHOLM, &factors).is_some();
         if four_dimensional
-            && let Some(result) = trace_kernel::evaluate(
-                &trace_mink_indices,
-                false,
-                trace_kernel::TraceOutput::Expanded,
-            )
+            && let Some(result) = trace_kernel::evaluate(&trace_mink_indices, false, self.output)
         {
             return Some(result);
         }
@@ -1704,7 +1684,7 @@ impl DiracSimplifier<'_> {
                 &trace_mink_indices,
                 trace_unit.as_view(),
                 false,
-                trace_kernel::TraceOutput::Factored,
+                self.output,
             ));
         }
 
@@ -1826,7 +1806,11 @@ impl DiracSimplifier<'_> {
         None
     }
 
-    fn simplify_gamma5_trace_node(rep: AtomView<'_>, factors: &[DiracFactor<'_>]) -> Option<Atom> {
+    fn simplify_gamma5_trace_node(
+        self,
+        rep: AtomView<'_>,
+        factors: &[DiracFactor<'_>],
+    ) -> Option<Atom> {
         if !has_four_dimensional_trace_rep(rep) {
             return None;
         }
@@ -1839,12 +1823,13 @@ impl DiracSimplifier<'_> {
 
         match gamma5_positions.len() {
             0 => None,
-            1 => Self::simplify_single_gamma5_trace(rep, factors, gamma5_positions[0]),
+            1 => self.simplify_single_gamma5_trace(rep, factors, gamma5_positions[0]),
             _ => Self::reduce_gamma5_trace_pair(rep, factors, gamma5_positions[0]),
         }
     }
 
     fn simplify_single_gamma5_trace(
+        self,
         rep: AtomView<'_>,
         factors: &[DiracFactor<'_>],
         gamma5_position: usize,
@@ -1869,9 +1854,7 @@ impl DiracSimplifier<'_> {
         {
             return Some(reduced);
         }
-        if let Some(result) =
-            trace_kernel::evaluate(&mink_indices, true, trace_kernel::TraceOutput::Expanded)
-        {
+        if let Some(result) = trace_kernel::evaluate(&mink_indices, true, self.output) {
             return Some(result);
         }
 
@@ -1962,6 +1945,442 @@ mod tests {
     mod contracted_trace;
 
     #[test]
+    fn uniformly_reversed_gamma_traces_evaluate_in_the_same_pass() {
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        let reverse_gamma = |argument: &Atom| {
+            FunctionBuilder::new(AGS.gamma)
+                .add_arg(Atom::var(T.chain_out))
+                .add_arg(Atom::var(T.chain_in))
+                .add_arg(argument)
+                .finish()
+        };
+        for representation in [&reps.mink4, &reps.mink_d] {
+            let slots = [97101, 97102, 97103, 97104]
+                .map(|index| representation.to_symbolic([Atom::num(index)]));
+            let compact = representation.to_symbolic([]);
+            let p = momenta(&compact);
+            for arguments in [
+                slots.to_vec(),
+                p[..4].to_vec(),
+                vec![
+                    slots[0].clone(),
+                    p[0].clone(),
+                    slots[1].clone(),
+                    p[1].clone(),
+                ],
+            ] {
+                for length in [2, 3, 4] {
+                    let arguments = &arguments[..length];
+                    let input = trace!(&spin; arguments.iter().map(reverse_gamma));
+                    let forward = trace!(&spin; arguments.iter().rev().map(gamma_factor));
+                    let settings = GammaSimplifySettings::default();
+                    let expected =
+                        settings.rewrite_expression(forward, trace_kernel::TraceOutput::Factored);
+                    assert_eq!(
+                        settings
+                            .rewrite_expression(input.clone(), trace_kernel::TraceOutput::Factored),
+                        expected
+                    );
+                    if length == 3 {
+                        assert!(expected.is_zero());
+                    }
+                    let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
+                    let result = source.simplify_gamma(settings).unwrap();
+                    assert_eq!(result.root().structure, source.structure);
+                    assert_eq!(result.resolved().unwrap().into_expression(), expected);
+                    assert_eq!(
+                        result
+                            .simplify_gamma(settings)
+                            .unwrap()
+                            .resolved()
+                            .unwrap()
+                            .into_expression(),
+                        expected
+                    );
+                }
+            }
+        }
+        let a = reps.mink4.to_symbolic([Atom::num(97105)]);
+        let b = reps.mink4.to_symbolic([Atom::num(97106)]);
+        let input = trace!(&spin; [&a, &b].map(reverse_gamma));
+        assert_eq!(
+            GammaSimplifySettings::default()
+                .rewrite_expression(input, trace_kernel::TraceOutput::Factored),
+            Atom::num(4) * g!(&a, &b)
+        );
+    }
+
+    #[test]
+    fn reversed_gamma_trace_normalization_keeps_mixed_words_and_open_chains_opaque() {
+        let reps = test_initialize();
+        let a = reps.mink4.to_symbolic([Atom::num(97201)]);
+        let b = reps.mink4.to_symbolic([Atom::num(97202)]);
+        let reverse_gamma = |argument: &Atom| {
+            FunctionBuilder::new(AGS.gamma)
+                .add_arg(Atom::var(T.chain_out))
+                .add_arg(Atom::var(T.chain_in))
+                .add_arg(argument)
+                .finish()
+        };
+        let mixed = trace!(reps.bis4.to_symbolic([]); [reverse_gamma(&a), gamma_factor(&b)]);
+        let start = reps.bis4.to_symbolic([Atom::num(97203)]);
+        let end = reps.bis4.to_symbolic([Atom::num(97204)]);
+        let open = chain!(&start, &end; [&a, &b].map(reverse_gamma));
+        for input in [mixed, open] {
+            assert_eq!(
+                GammaSimplifySettings::default()
+                    .rewrite_expression(input.clone(), trace_kernel::TraceOutput::Factored),
+                input
+            );
+        }
+    }
+
+    #[test]
+    fn reversed_gamma_trace_callbacks_observe_only_the_same_pass_result() {
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        let [a, b, c, d] =
+            [97301, 97302, 97303, 97304].map(|index| reps.mink4.to_symbolic([Atom::num(index)]));
+        let reversed = trace!(&spin; [&a, &b].map(|argument| {
+            FunctionBuilder::new(AGS.gamma)
+                .add_arg(Atom::var(T.chain_out))
+                .add_arg(Atom::var(T.chain_in))
+                .add_arg(argument)
+                .finish()
+        }));
+        let forward = trace!(&spin; [&b, &a].map(gamma_factor));
+        let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let recorded = std::sync::Arc::clone(&calls);
+        let callback = symbolica::symbol!("idenso::reversed_trace_scalar_callback"; Scalar;
+            norm = move |node, output| {
+                recorded.lock().unwrap().push(node.to_owned());
+                if !node.contains_symbol(T.trace) { **output = Atom::num(7); }
+            }
+        );
+        let mut results = Vec::new();
+        for inner in [forward, reversed] {
+            let input =
+                symbolica::function!(callback, inner) * trace!(&spin; [&c, &d].map(gamma_factor));
+            let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
+            calls.lock().unwrap().clear();
+            let output = source
+                .simplify_gamma(GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
+            results.push((output, std::mem::take(&mut *calls.lock().unwrap())));
+        }
+        assert_eq!(results[0], results[1]);
+        assert_eq!(results[0].0, Atom::num(28) * g!(&c, &d));
+        assert_eq!(results[0].1.len(), 1);
+        assert!(!results[0].1[0].contains_symbol(T.trace));
+    }
+
+    #[test]
+    fn reversed_gamma_trace_keeps_component_callback_results_and_order() {
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let recorded = std::sync::Arc::clone(&calls);
+        let vector = spenso::vector_symbol!(
+            "idenso::reversed_trace_component_callback",
+            norm = move |value, output| {
+                if let AtomView::Fun(vector) = value
+                    && let Some(AtomView::Fun(slot)) = vector.iter().last()
+                    && slot.get_symbol() == *MINKOWSKI_SYMBOL
+                    && slot.get_nargs() == 2
+                {
+                    recorded.lock().unwrap().push(value.to_owned());
+                    **output = Atom::num(1);
+                }
+            }
+        );
+        let compact = reps.mink_d.to_symbolic([]);
+        let p = symbolica::function!(vector, Atom::num(1), &compact);
+        let q = symbolica::function!(vector, Atom::num(2), &compact);
+        let a = reps.mink_d.to_symbolic([Atom::num(97401)]);
+        let arguments = [&a, &p, &a, &q];
+        let forward = trace!(&spin; arguments.iter().rev().map(|argument| gamma_factor(*argument)));
+        let reversed = trace!(&spin; arguments.map(|argument| {
+            FunctionBuilder::new(AGS.gamma)
+                .add_arg(Atom::var(T.chain_out))
+                .add_arg(Atom::var(T.chain_in))
+                .add_arg(argument)
+                .finish()
+        }));
+        let spectator = symbolica::parse_lit!((reversed_trace_x + reversed_trace_y) ^ 8);
+        let mut results = Vec::new();
+        for input in [forward, reversed] {
+            let source = SymbolicTensor::<PartialStructure>::infer(&spectator * input).unwrap();
+            calls.lock().unwrap().clear();
+            let result = source
+                .simplify_gamma(GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
+            results.push((result, std::mem::take(&mut *calls.lock().unwrap())));
+        }
+        assert_eq!(results[0], results[1]);
+        assert!(!results[0].1.is_empty());
+        let dimension = mink_slot_dimension(a.as_view()).unwrap();
+        assert_eq!(
+            results[0].0,
+            spectator * (Atom::num(8) - Atom::num(4) * dimension * g!(&p, &q))
+        );
+    }
+
+    #[test]
+    fn uniformly_reversed_axial_traces_preserve_epsilon_and_pair_signs() {
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        let slots =
+            [97501, 97502, 97503, 97504].map(|index| reps.mink4.to_symbolic([Atom::num(index)]));
+        let reverse = |factor: &Atom| {
+            let AtomView::Fun(word) = factor.as_view() else {
+                unreachable!()
+            };
+            let mut result = FunctionBuilder::new(word.get_symbol())
+                .add_arg(Atom::var(T.chain_out))
+                .add_arg(Atom::var(T.chain_in));
+            for argument in word.iter().skip(2) {
+                result = result.add_arg(argument);
+            }
+            result.finish()
+        };
+        let settings = GammaSimplifySettings::default();
+        let compact = momenta(&reps.mink4.to_symbolic([]));
+        for arguments in [slots.to_vec(), compact[..4].to_vec()] {
+            for length in [2, 3, 4] {
+                for position in 0..=length {
+                    for paired in [false, true] {
+                        let mut word = arguments[..length]
+                            .iter()
+                            .map(gamma_factor)
+                            .collect::<Vec<_>>();
+                        word.insert(position, gamma5_factor());
+                        if paired {
+                            word.push(gamma5_factor());
+                        }
+                        let input = trace!(&spin; word.iter().map(reverse));
+                        let forward = trace!(&spin; word.iter().rev());
+                        assert_eq!(
+                            settings.rewrite_expression(
+                                input.clone(),
+                                trace_kernel::TraceOutput::Factored
+                            ),
+                            settings.rewrite_expression(
+                                forward.clone(),
+                                trace_kernel::TraceOutput::Factored
+                            )
+                        );
+                        let expected = SymbolicTensor::<PartialStructure>::infer(forward)
+                            .unwrap()
+                            .simplify_gamma(settings)
+                            .unwrap()
+                            .resolved()
+                            .unwrap()
+                            .into_expression();
+                        let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
+                        let output = source.simplify_gamma(settings).unwrap();
+                        assert_eq!(output.root().structure, source.structure);
+                        assert_eq!(output.resolved().unwrap().into_expression(), expected);
+                        assert_eq!(
+                            output
+                                .simplify_gamma(settings)
+                                .unwrap()
+                                .resolved()
+                                .unwrap()
+                                .into_expression(),
+                            expected
+                        );
+                        if length == 3 || (!paired && length == 2) {
+                            assert!(expected.is_zero());
+                        }
+                        if !paired && length == 4 && arguments == slots {
+                            let epsilon = FunctionBuilder::new(*crate::epsilon::EPSILON_SYMBOL)
+                                .add_arg(&slots[0])
+                                .add_arg(&slots[1])
+                                .add_arg(&slots[2])
+                                .add_arg(&slots[3])
+                                .finish();
+                            assert_eq!(
+                                expected,
+                                Atom::num(if position % 2 == 0 { 4 } else { -4 }) * epsilon
+                            );
+                        }
+                        if paired && length == 2 {
+                            assert_eq!(
+                                expected,
+                                Atom::num(if position % 2 == 0 { 4 } else { -4 })
+                                    * g!(&arguments[0], &arguments[1])
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        // The existing gamma5 owner is four-dimensional, even after orientation normalization.
+        let d = reps.mink_d.to_symbolic([Atom::num(97510)]);
+        let generic = trace!(&spin; [gamma5_factor(), gamma_factor(&d)].iter().map(reverse));
+        assert_eq!(
+            settings.rewrite_expression(generic.clone(), trace_kernel::TraceOutput::Factored),
+            generic
+        );
+        let mixed = trace!(&spin; [reverse(&gamma5_factor()), gamma_factor(&slots[0])]);
+        let open = chain!(reps.bis4.to_symbolic([Atom::num(97511)]), reps.bis4.to_symbolic([Atom::num(97512)]); [gamma5_factor(), gamma_factor(&slots[0])].iter().map(reverse));
+        for input in [mixed, open] {
+            assert_eq!(
+                settings.rewrite_expression(input.clone(), trace_kernel::TraceOutput::Factored),
+                input
+            );
+        }
+    }
+
+    #[test]
+    fn reversed_axial_trace_callbacks_observe_only_the_evaluated_result() {
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        let arguments =
+            [97601, 97602, 97603].map(|index| reps.mink4.to_symbolic([Atom::num(index)]));
+        let reversed_factors = arguments
+            .iter()
+            .map(|argument| {
+                FunctionBuilder::new(AGS.gamma)
+                    .add_arg(Atom::var(T.chain_out))
+                    .add_arg(Atom::var(T.chain_in))
+                    .add_arg(argument)
+                    .finish()
+            })
+            .chain(std::iter::once(
+                FunctionBuilder::new(AGS.gamma5)
+                    .add_arg(Atom::var(T.chain_out))
+                    .add_arg(Atom::var(T.chain_in))
+                    .finish(),
+            ))
+            .collect::<Vec<_>>();
+        let reverse = trace!(&spin; &reversed_factors);
+        let forward = trace!(&spin; std::iter::once(gamma5_factor()).chain(arguments.iter().rev().map(gamma_factor)));
+        let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let recorded = std::sync::Arc::clone(&calls);
+        let callback = symbolica::symbol!("idenso::reversed_axial_trace_scalar_callback"; Scalar;
+            norm = move |node, output| {
+                recorded.lock().unwrap().push(node.to_owned());
+                if !node.contains_symbol(T.trace) { **output = Atom::num(7); }
+            }
+        );
+        let settings = GammaSimplifySettings::default();
+        let mut results = Vec::new();
+        for inner in [forward, reverse] {
+            let input = symbolica::function!(callback, inner);
+            calls.lock().unwrap().clear();
+            let output = settings.rewrite_expression(input, trace_kernel::TraceOutput::Factored);
+            results.push((output, std::mem::take(&mut *calls.lock().unwrap())));
+        }
+        assert_eq!(results[0], results[1]);
+        assert_eq!(results[0].0, Atom::num(7));
+        assert_eq!(results[0].1.len(), 1);
+        assert!(!results[0].1[0].contains_symbol(T.trace));
+    }
+
+    #[test]
+    fn typed_trace_definitions_keep_free_ports_and_factored_spectators() {
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        let spectator = symbolica::parse_lit!((typed_trace_x + 1) * (typed_trace_y + 1));
+        for (representation, length) in [(&reps.mink_d, 6), (&reps.mink4, 12)] {
+            let slots = (0..length)
+                .map(|index| representation.to_symbolic([Atom::num(93100 + index)]))
+                .collect::<Vec<_>>();
+            let input = &spectator * trace!(&spin; slots.iter().map(|slot| gamma!(slot)));
+            let source = SymbolicTensor::<PartialStructure>::infer(input.clone()).unwrap();
+            let result = source
+                .simplify_gamma(GammaSimplifySettings::default())
+                .unwrap();
+            assert_eq!(result.root().structure, source.structure);
+            assert!(
+                result
+                    .aliases()
+                    .unwrap()
+                    .iter()
+                    .any(|(handle, _)| !handle.is_scalar())
+            );
+            let root = result.root();
+            let AtomView::Mul(product) = root.expression.as_view() else {
+                panic!("trace result must retain the surrounding product");
+            };
+            let AtomView::Mul(spectators) = spectator.as_view() else {
+                unreachable!();
+            };
+            for spectator in spectators.iter() {
+                assert!(product.iter().any(|factor| factor == spectator));
+            }
+            assert!(
+                (result.expanded().unwrap().expression
+                    - GammaSimplifySettings::default()
+                        .rewrite_expression(input.clone(), trace_kernel::TraceOutput::Expanded))
+                .expand()
+                .is_zero()
+            );
+        }
+    }
+
+    #[test]
+    fn typed_odd_trace_retains_its_zero_interface() {
+        let reps = test_initialize();
+        let input = trace!(reps.bis4.to_symbolic([]); (0..3).map(|index|
+            gamma!(reps.mink_d.to_symbolic([Atom::num(93200 + index)]))));
+        let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
+        let result = source
+            .simplify_gamma(GammaSimplifySettings::default())
+            .unwrap();
+        assert!(result.root().expression.is_zero());
+        assert_eq!(result.root().structure, source.structure);
+    }
+
+    #[test]
+    fn production_odd_trace_closes_before_clifford_reduction() {
+        test_initialize();
+        T.rank_one_tensor_symbol("gammalooprs::Q");
+        // One existing top-level summand of the captured GL16 aa -> aa
+        // numerator: nine gamma matrices form one closed spinor cycle.
+        let input = Atom::parse(
+            include_str!("../../tests/fixtures/aa_aa_2l_gl16_odd_trace_term.sym"),
+            "spenso",
+            symbolica::parser::ParseSettings::symbolica(),
+        )
+        .unwrap();
+        let spectator = symbolica::parse_lit!((gamma_completion_x + gamma_completion_y) ^ 30);
+        let source = SymbolicTensor::infer(&spectator * input).unwrap();
+        let settings = GammaSimplifySettings::default();
+        let chains = source
+            .simplify_gamma(GammaSimplifySettings {
+                output: GammaOutput::Chains,
+                ..settings
+            })
+            .unwrap();
+        assert!(
+            matches!(chains.root().expression.as_view(), AtomView::Mul(product)
+            if product.iter().any(|factor| factor == spectator.as_view()))
+        );
+        let expected = chains.simplify_gamma(settings).unwrap();
+        assert!(expected.resolved().unwrap().expression.is_zero());
+        let result = source.simplify_gamma(settings).unwrap();
+        assert!(result.resolved().unwrap().expression.is_zero());
+        assert_eq!(result.root().structure, source.structure);
+        assert_eq!(result.resolved().unwrap(), expected.resolved().unwrap());
+        let completed = result
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .contract(Default::default())
+            .unwrap();
+        assert!(completed.resolved().unwrap().expression.is_zero());
+        assert_eq!(completed.root().structure, source.structure);
+    }
+
+    #[test]
     fn exact_scalar_trace_products_preserve_the_terminal_result() {
         let r = test_initialize();
         let spin = r.bis4.to_symbolic([]);
@@ -1974,15 +2393,52 @@ mod tests {
             .map(|argument| gamma!(argument)));
         let spectator = symbolica::parse_lit!((x + y) ^ 8);
         let decorated = &spectator * &input;
-        let expected = (&spectator * input.simplify_gamma()).simplify_gamma();
-        let output = decorated.simplify_gamma();
+        let expected = crate::tensor::SymbolicTensor::infer(
+            (&spectator
+                * crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression())
+            .as_atom_view()
+            .to_owned(),
+        )
+        .unwrap()
+        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
+        let output = crate::tensor::SymbolicTensor::infer((decorated).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         assert_eq!(output, expected);
         assert!(matches!(output.as_view(), AtomView::Mul(product)
             if product.iter().any(|factor| factor == spectator.as_view())));
-        assert_eq!(output.simplify_gamma(), output);
         assert_eq!(
-            decorated
-                .simplify_gamma_with(GammaSimplifySettings::default().without_trace_evaluation()),
+            crate::tensor::SymbolicTensor::infer((output).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            output
+        );
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((decorated).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(GammaSimplifySettings::default().without_trace_evaluation())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
             decorated
         );
     }
@@ -2039,15 +2495,34 @@ mod tests {
             let admitted = DiracSimplifier::new(&GammaSimplifySettings::default())
                 .evaluate_terminal_trace::<true>(input.as_view())
                 .unwrap_or_else(|| panic!("{name}: expected scalar-context admission"));
-            let standalone = input.simplify_gamma();
+            let settings = GammaSimplifySettings::default();
+            let standalone = DiracSimplifier::new(&settings)
+                .evaluate_terminal_trace::<false>(input.as_view())
+                .unwrap();
             assert_eq!(admitted, standalone, "{name}: terminal result");
             let raw = &spectator * &standalone;
-            // Wildcards may keep a diagonal metric unevaluated. Its eliminated
-            // dummy has no partner, so even that raw output needs no cleanup.
-            assert_eq!(raw.simplify_gamma(), raw, "{name}: full cleanup");
-            let contextual = (&spectator * &input).simplify_gamma();
+            assert_eq!(
+                settings.rewrite_expression(raw.clone(), trace_kernel::TraceOutput::Factored),
+                raw,
+                "{name}: local cleanup"
+            );
+            let decorated = &spectator * &input;
+            let trace = DiracSimplifier::scalar_trace_factor(decorated.as_view(), T.trace.get_id())
+                .expect("exact scalar spectators retain the terminal word");
+            let contextual = &spectator
+                * DiracSimplifier::new(&settings)
+                    .evaluate_terminal_trace::<true>(trace)
+                    .unwrap();
             assert_eq!(contextual, raw, "{name}: contextual result");
-            assert_eq!(contextual.simplify_gamma(), contextual, "{name}: rerun");
+            assert_eq!(
+                settings
+                    .rewrite_expression(contextual.clone(), trace_kernel::TraceOutput::Factored),
+                contextual,
+                "{name}: rerun"
+            );
+            // Bare tagged tensor heads are raw scalar variables in this kernel
+            // fixture, but deliberately fail the shared typed admission boundary.
+            assert!(SymbolicTensor::<PartialStructure>::infer(decorated).is_err());
             assert!(
                 matches!(contextual.as_view(), AtomView::Mul(product)
                 if product.iter().any(|factor| factor == spectator.as_view())),
@@ -2080,10 +2555,37 @@ mod tests {
         let dimension = mink_slot_dimension(a.as_view()).unwrap();
         // Component callbacks are applied by the existing full trace route.
         let expected = &spectator * (Atom::num(8) - Atom::num(4) * dimension * g!(&p, &q));
-        let output = (&spectator * &input).simplify_gamma();
+        let output =
+            crate::tensor::SymbolicTensor::infer((&spectator * &input).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
         assert_eq!(output, expected);
-        assert_eq!(output.simplify_gamma(), output);
-        assert!(((&output / &spectator) - input.simplify_gamma()).expand() != Atom::Zero);
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((output).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            output
+        );
+        assert!(
+            ((&output / &spectator)
+                - crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression())
+            .expand()
+                != Atom::Zero
+        );
     }
 
     #[test]
@@ -2095,6 +2597,13 @@ mod tests {
         let four = Atom::num(4);
         let spectator = symbolica::parse_lit!((x + y) ^ 8);
         let inert = symbolica::function!(symbolica::symbol!("scalar_context_inert"), Atom::num(0));
+        // Rounded representation metadata belongs to this local algebra
+        // regression, not typed admission. Compare the same trace-node pass
+        // with and without an inert spectator, then compare the next pass too.
+        let settings = GammaSimplifySettings::default();
+        let rewrite = |expression| {
+            settings.rewrite_expression(expression, trace_kernel::TraceOutput::Factored)
+        };
         let word = |dimension: &Atom, unit: &Atom| {
             let compact = symbolica::function!(*MINKOWSKI_SYMBOL, dimension);
             let p = momenta(&compact);
@@ -2143,17 +2652,108 @@ mod tests {
             ("dimension", &spectator * word(&rounded, &four)),
             ("spectator", &rounded * &spectator * word(&d, &four)),
         ] {
-            // An inert function keeps the established full-route ordering.
-            // Compare exact floating coefficients on both calls, without a tolerance.
-            let reference = (&inert * &input).simplify_gamma() / &inert;
-            let output = input.simplify_gamma();
+            // Compare exact floating coefficients after the same local pass,
+            // with and without a surrounding inert function, without a tolerance.
+            let reference = rewrite(&inert * &input) / &inert;
+            let output = rewrite(input);
             assert_eq!(output, reference, "{name}: first call");
-            assert_eq!(
-                output.simplify_gamma(),
-                reference.simplify_gamma(),
-                "{name}: rerun"
+            assert_eq!(rewrite(output), rewrite(reference), "{name}: rerun");
+        }
+    }
+
+    #[test]
+    fn scalar_callback_observes_factored_trace_results_in_the_shared_pipeline() {
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        let [a, b, c, d] =
+            [95101, 95102, 95103, 95104].map(|index| reps.mink4.to_symbolic([Atom::num(index)]));
+        let inner = trace!(&spin, gamma!(&a), gamma!(&b));
+        let outer = trace!(&spin, gamma!(&c), gamma!(&d));
+        let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let recorded = std::sync::Arc::clone(&calls);
+        let callback = symbolica::symbol!("shared_gamma_scalar_trace_callback"; Scalar;
+            norm = move |node, output| {
+                recorded.lock().unwrap().push(node.to_owned());
+                if !node.contains_symbol(T.trace) {
+                    **output = Atom::num(7);
+                }
+            }
+        );
+        let input = symbolica::function!(callback, &inner) * &outer;
+        let source = SymbolicTensor::<PartialStructure>::infer(input.clone()).unwrap();
+        let settings = GammaSimplifySettings::default();
+        calls.lock().unwrap().clear();
+        // This is the original local kernel output mode, not a second call
+        // through the new aliased scheduler.
+        let expected = settings.rewrite_expression(input, trace_kernel::TraceOutput::Factored);
+        let expected_calls = std::mem::take(&mut *calls.lock().unwrap());
+        assert_eq!(expected, Atom::num(28) * g!(&c, &d));
+        assert_eq!(expected_calls.len(), 1);
+        let AtomView::Fun(observed) = expected_calls[0].as_view() else {
+            panic!()
+        };
+        assert_eq!(
+            observed.iter().next().unwrap(),
+            (Atom::num(4) * g!(&a, &b)).as_view()
+        );
+        let actual = source
+            .simplify_gamma(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
+        assert_eq!(actual, expected);
+        assert_eq!(*calls.lock().unwrap(), expected_calls);
+    }
+
+    #[test]
+    fn contextual_callback_kernel_reports_nonstabilization_at_shared_default_bound() {
+        use std::sync::{
+            Arc, OnceLock,
+            atomic::{AtomicUsize, Ordering},
+        };
+        let r = test_initialize();
+        let word = trace!(
+            r.bis4.to_symbolic([]),
+            gamma!(slot!(r.mink4, 95301)),
+            gamma!(slot!(r.mink4, 95301))
+        );
+        let heads = Arc::new(OnceLock::<[Symbol; 2]>::new());
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut symbols = Vec::new();
+        for (position, name) in ["gamma_callback_cycle_left", "gamma_callback_cycle_right"]
+            .into_iter()
+            .enumerate()
+        {
+            let heads = Arc::clone(&heads);
+            let calls = Arc::clone(&calls);
+            let word = word.clone();
+            symbols.push(
+                symbolica::symbol!(name; Scalar; norm = move |node, output| {
+                    if !node.contains_symbol(T.trace) {
+                        calls.fetch_add(1, Ordering::Relaxed);
+                        **output = symbolica::function!(heads.get().unwrap()[1 - position], &word);
+                    }
+                }),
             );
         }
+        heads.set([symbols[0], symbols[1]]).unwrap();
+        let source =
+            SymbolicTensor::<PartialStructure>::infer(symbolica::function!(symbols[0], word))
+                .unwrap();
+        calls.store(0, Ordering::Relaxed);
+        let error = source
+            .simplify_gamma(GammaSimplifySettings::default())
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("callback-sensitive gamma kernel did not stabilize")
+        );
+        assert_eq!(
+            calls.load(Ordering::Relaxed),
+            crate::tensor::simplification::SimplifySettings::default().max_passes
+        );
     }
 
     #[test]
@@ -2209,13 +2809,41 @@ mod tests {
         let expected = &spectator
             * 4
             * g!(
-                inner.simplify_gamma(),
+                crate::tensor::SymbolicTensor::infer((inner).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
                 symbolica::function!(other, &compact)
             );
-        let output = input.simplify_gamma();
+        // Retain the original raw primitive oracle: one gamma rewrite emits
+        // the nested vector, dot cleanup invokes its compact callback, and a
+        // second gamma rewrite evaluates the newly introduced trace.
+        let settings = GammaSimplifySettings::default();
+        let output_kind = trace_kernel::TraceOutput::Factored;
+        let rewritten = settings.rewrite_expression(input.clone(), output_kind);
+        let cleaned = rewritten.normalize_dots();
+        assert!(cleaned.contains_symbol(T.trace));
+        let output = settings.rewrite_expression(cleaned, output_kind);
         assert!(!output.contains_symbol(T.trace));
         assert_eq!(output, expected);
-        assert_eq!(output.simplify_gamma(), output);
+        assert_eq!(
+            settings.rewrite_expression(output.normalize_dots(), output_kind),
+            output
+        );
+
+        // This raw callback fixture loses mu and introduces rho and sigma in
+        // its place. Its final metric operand is a rank-two metric expression,
+        // not a slot or compact vector. The typed owner must reject that change.
+        use spenso::structure::partial::PartialStructureExt;
+        let source = crate::tensor::SymbolicTensor::infer(input).unwrap();
+        assert_eq!(source.structure.logical_slots().len(), 1);
+        let inner = crate::tensor::SymbolicTensor::infer(inner).unwrap();
+        assert_eq!(inner.structure.logical_slots().len(), 2);
+        assert!(crate::tensor::SymbolicTensor::infer(output).is_err());
+        assert!(source.simplify_gamma(settings).is_err());
     }
 
     #[test]
@@ -2226,14 +2854,15 @@ mod tests {
         let end = slot!(r.bis4, b).into_atom();
         let coefficient = symbolica::parse_lit!((x + y) ^ 8);
         let settings = GammaSimplifySettings::default();
+        let output = trace_kernel::TraceOutput::Factored;
         assert_eq!(
-            settings.rewrite_expression(&coefficient * &trace),
+            settings.rewrite_expression(&coefficient * &trace, output),
             &coefficient * Atom::num(4)
         );
         assert_eq!(
             settings
                 .without_trace_evaluation()
-                .rewrite_expression(&coefficient * &trace),
+                .rewrite_expression(&coefficient * &trace, output),
             &coefficient * trace
         );
         for chain in [
@@ -2241,12 +2870,18 @@ mod tests {
             chain!(&start, &end, gamma5!(), gamma5!()),
         ] {
             assert_eq!(
-                settings.rewrite_expression(settings.rewrite_expression(&coefficient * chain)),
+                settings.rewrite_expression(
+                    settings.rewrite_expression(&coefficient * chain, output),
+                    output
+                ),
                 &coefficient * id_atom(start.as_view(), end.as_view())
             );
         }
         let terminal = &coefficient * g!(slot!(r.mink4, mu), slot!(r.mink4, nu));
-        assert_eq!(settings.rewrite_expression(terminal.clone()), terminal);
+        assert_eq!(
+            settings.rewrite_expression(terminal.clone(), output),
+            terminal
+        );
     }
 
     #[test]
@@ -2278,16 +2913,41 @@ mod tests {
                         .evaluate_terminal_trace::<false>(fallback.as_view())
                         .is_none()
                 );
-                assert_eq!(
-                    fallback.simplify_gamma(),
-                    &spectator * shortcut.expand(),
+                let complete = crate::tensor::SymbolicTensor::infer(fallback)
+                    .unwrap()
+                    .simplify_gamma(GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression();
+                // Alias definitions and the direct recurrence may group the
+                // same standalone Clifford polynomial differently. Keep the
+                // scalar spectator factored, and compare the trace exactly.
+                assert!(
+                    complete.is_zero()
+                        || matches!(complete.as_view(), AtomView::Mul(product)
+                    if product.iter().any(|factor| factor == spectator.as_view()))
+                );
+                assert!(
+                    (&complete / &spectator - &shortcut).expand().is_zero(),
                     "length {length}, gamma5 position {position}"
                 );
-                assert_eq!(input.simplify_gamma(), shortcut);
+                let standalone = crate::tensor::SymbolicTensor::infer(input.clone())
+                    .unwrap()
+                    .simplify_gamma(GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression();
+                assert!((standalone - &shortcut).expand().is_zero());
                 assert_eq!(
-                    input.simplify_gamma_with(
-                        GammaSimplifySettings::default().without_trace_evaluation()
-                    ),
+                    crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                        .unwrap()
+                        .simplify_gamma(GammaSimplifySettings::default().without_trace_evaluation())
+                        .unwrap()
+                        .resolved()
+                        .unwrap()
+                        .into_expression(),
                     input
                 );
             }
@@ -2321,30 +2981,57 @@ mod tests {
                     .collect::<Vec<_>>();
                 factors.insert(position, gamma5!());
                 let trace = trace!(&spin; factors);
-                for settings in [
-                    GammaSimplifySettings::default(),
-                    GammaSimplifySettings::default().with_expanded_traces(),
-                ] {
+                {
+                    let settings = GammaSimplifySettings::default();
                     let admitted = DiracSimplifier::new(&settings)
                         .evaluate_terminal_trace::<true>(trace.as_view())
                         .expect("a free axial word with symbolic slots is terminal");
                     // A function spectator forces the established full pass.
                     // Exact coefficients can then be applied without regrouping
                     // approximate arithmetic or invoking normalization callbacks.
-                    let reference = (&inert * &trace).simplify_gamma_with(settings) / &inert;
-                    assert_eq!(
-                        admitted, reference,
+                    let reference = crate::tensor::SymbolicTensor::infer(
+                        (&inert * &trace).as_atom_view().to_owned(),
+                    )
+                    .unwrap()
+                    .simplify_gamma(settings)
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression()
+                        / &inert;
+                    // Compare the same Clifford polynomial independently of
+                    // how the alias path groups its metric/epsilon factors.
+                    assert!(
+                        (&admitted - &reference).expand().is_zero(),
                         "length {length}, gamma5 position {position}"
                     );
                     for spectator in &spectators {
                         let decorated = spectator * &trace;
-                        let result = decorated.simplify_gamma_with(settings);
-                        assert_eq!(
-                            result,
-                            spectator * &reference,
+                        let result = crate::tensor::SymbolicTensor::infer(
+                            (decorated).as_atom_view().to_owned(),
+                        )
+                        .unwrap()
+                        .simplify_gamma(settings)
+                        .unwrap()
+                        .resolved()
+                        .unwrap()
+                        .into_expression();
+                        assert!(
+                            (&result / spectator - &reference).expand().is_zero(),
                             "length {length}, gamma5 position {position}, spectator {spectator}"
                         );
-                        assert_eq!(result.simplify_gamma_with(settings), result);
+                        assert_eq!(
+                            crate::tensor::SymbolicTensor::infer(
+                                (result).as_atom_view().to_owned()
+                            )
+                            .unwrap()
+                            .simplify_gamma(settings)
+                            .unwrap()
+                            .resolved()
+                            .unwrap()
+                            .into_expression(),
+                            result
+                        );
                     }
                 }
             }
@@ -2403,13 +3090,26 @@ mod tests {
             DiracSimplifier::scalar_trace_factor(rounded_input.as_view(), T.trace.get_id())
                 .is_none()
         );
-        for settings in [
-            GammaSimplifySettings::default(),
-            GammaSimplifySettings::default().with_expanded_traces(),
-        ] {
+        {
+            let settings = GammaSimplifySettings::default();
             assert_eq!(
-                rounded_input.simplify_gamma_with(settings),
-                (&inert * &rounded_input).simplify_gamma_with(settings) / &inert
+                crate::tensor::SymbolicTensor::infer((rounded_input).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(settings)
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
+                crate::tensor::SymbolicTensor::infer(
+                    (&inert * &rounded_input).as_atom_view().to_owned()
+                )
+                .unwrap()
+                .simplify_gamma(settings)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+                    / &inert
             );
         }
 
@@ -2428,15 +3128,27 @@ mod tests {
         );
         let input = spectator * &trace;
         assert!(DiracSimplifier::scalar_trace_factor(input.as_view(), T.trace.get_id()).is_none());
-        for settings in [
-            GammaSimplifySettings::default(),
-            GammaSimplifySettings::default().with_expanded_traces(),
-        ] {
+        {
+            let settings = GammaSimplifySettings::default();
             calls.lock().unwrap().clear();
-            let reference = (&inert * &input).simplify_gamma_with(settings) / &inert;
+            let reference =
+                crate::tensor::SymbolicTensor::infer((&inert * &input).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(settings)
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression()
+                    / &inert;
             let expected_calls = std::mem::take(&mut *calls.lock().unwrap());
             assert!(!expected_calls.is_empty());
-            let result = input.simplify_gamma_with(settings);
+            let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(settings)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
             assert_eq!(result, reference);
             assert_eq!(*calls.lock().unwrap(), expected_calls);
         }
@@ -2480,7 +3192,13 @@ mod tests {
             let input = trace!(&spin; slots.iter().map(|slot| gamma!(slot)));
             let unit = bispinor_dimension(spin.as_view()).unwrap();
             let expected = pairing.as_view() * unit;
-            let result = input.simplify_gamma();
+            let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
             assert!((&result - expected).expand().is_zero());
             assert_eq!(
                 DiracSimplifier::new(&GammaSimplifySettings::default())
@@ -2488,11 +3206,28 @@ mod tests {
                 Some(result.clone())
             );
             assert_eq!(
-                (&spectator * input).simplify_gamma(),
+                crate::tensor::SymbolicTensor::infer(
+                    (&spectator * input).as_atom_view().to_owned()
+                )
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
                 &spectator * &result,
                 "the outer scalar numerator remains factored"
             );
-            assert_eq!(result.simplify_gamma(), result);
+            assert_eq!(
+                crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
+                result
+            );
         }
     }
 
@@ -2511,14 +3246,38 @@ mod tests {
                     .evaluate_terminal_trace::<false>(input.as_view())
                     .is_none()
             );
-            assert_eq!(input.simplify_gamma(), input);
+            assert_eq!(
+                crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
+                input
+            );
         }
         let odd = trace!(&spin;
             (0..5).map(|index| gamma!(r.mink_d.pattern(Atom::num(index))))
         );
-        assert_eq!(odd.simplify_gamma(), Atom::Zero);
         assert_eq!(
-            odd.simplify_gamma_with(GammaSimplifySettings::default().without_trace_evaluation()),
+            crate::tensor::SymbolicTensor::infer((odd).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            Atom::Zero
+        );
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((odd).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(GammaSimplifySettings::default().without_trace_evaluation())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
             odd
         );
         let symbolic_spin = trace!(r.bis_d.to_symbolic([]);
@@ -2526,7 +3285,18 @@ mod tests {
         );
         // The 4D kernel fixes Tr(1)=4. A symbolic spin dimension must instead
         // multiply the dimension-generic pairing formula.
-        assert_eq!(symbolic_spin.simplify_gamma().expand().nterms(), 945);
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((symbolic_spin).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+                .expand()
+                .nterms(),
+            945
+        );
     }
 
     #[test]
@@ -2539,9 +3309,22 @@ mod tests {
             .map(|index| r.mink_d.pattern(Atom::num(index)))
             .collect();
         let input = g!(&slots[0], &slots[1]) * trace!(&spin; slots.iter().map(|slot| gamma!(slot)));
-        let result = input.simplify_gamma();
+        let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         let tail = trace!(&spin; slots[2..].iter().map(|slot| gamma!(slot)));
-        let expected = tail.simplify_gamma() * mink_slot_dimension(slots[0].as_view()).unwrap();
+        let expected = crate::tensor::SymbolicTensor::infer((tail).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+            * mink_slot_dimension(slots[0].as_view()).unwrap();
         assert!((&result - expected).expand().is_zero());
         assert!(!result.has_repeated_explicit_indices());
 
@@ -2553,7 +3336,13 @@ mod tests {
         let expected: Atom = 4
             * (g!(&p, &q) * g!(&slots[2], &slots[3]) - g!(&p, &slots[2]) * g!(&q, &slots[3])
                 + g!(&p, &slots[3]) * g!(&q, &slots[2]));
-        let result = input.simplify_gamma();
+        let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         assert!((&result - expected).expand().is_zero());
         assert!(!result.has_repeated_explicit_indices());
     }
@@ -2572,7 +3361,16 @@ mod tests {
                 let paired = trace!(&spin;
                     [&p, &p].into_iter().chain(std::iter::repeat_n(&q, 12)).map(|p| gamma!(p))
                 );
-                assert_eq!(paired.simplify_gamma(), unit.to_owned() * &pp * qq.pow(6));
+                assert_eq!(
+                    crate::tensor::SymbolicTensor::infer((paired).as_atom_view().to_owned())
+                        .unwrap()
+                        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                        .unwrap()
+                        .resolved()
+                        .unwrap()
+                        .into_expression(),
+                    unit.to_owned() * &pp * qq.pow(6)
+                );
 
                 // For A=p/ q/, A²-2(p.q)A+p²q²=0. This independent scalar
                 // recurrence certifies all seven alternating pairs exactly.
@@ -2582,9 +3380,25 @@ mod tests {
                     let input = trace!(&spin;
                         (0..2 * pairs).map(|i| gamma!(if i % 2 == 0 { &p } else { &q }))
                     );
-                    let result = input.simplify_gamma();
+                    let result =
+                        crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                            .unwrap()
+                            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                            .unwrap()
+                            .resolved()
+                            .unwrap()
+                            .into_expression();
                     assert!((&result - &expected).expand().is_zero());
-                    assert_eq!(result.simplify_gamma(), result);
+                    assert_eq!(
+                        crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
+                            .unwrap()
+                            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                            .unwrap()
+                            .resolved()
+                            .unwrap()
+                            .into_expression(),
+                        result
+                    );
                     assert!(
                         DiracSimplifier::new(&GammaSimplifySettings::default())
                             .evaluate_terminal_trace::<false>(input.as_view())
@@ -2608,9 +3422,27 @@ mod tests {
         let p = vector(&[Atom::num(1), rep.clone()]);
         let q = vector(&[Atom::num(2), rep.clone()]);
         let input = trace!(&spin, gamma!(&p), gamma!(&q));
-        assert_eq!(input.simplify_gamma(), Atom::num(4) * g!(&p, &q));
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            Atom::num(4) * g!(&p, &q)
+        );
         let odd = trace!(&spin, gamma!(&p), gamma!(&q), gamma!(&p));
-        assert!(odd.simplify_gamma().is_zero());
+        assert!(
+            crate::tensor::SymbolicTensor::infer((odd).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+                .is_zero()
+        );
 
         let unknown = FunctionBuilder::new(symbolica::symbol!("compact_trace_unknown"))
             .add_arg(&rep)
@@ -2642,7 +3474,13 @@ mod tests {
                 .is_none()
         );
         assert_eq!(
-            input.simplify_gamma_with(GammaSimplifySettings::default().without_trace_evaluation()),
+            crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(GammaSimplifySettings::default().without_trace_evaluation())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
             input
         );
     }
@@ -2684,9 +3522,22 @@ mod tests {
         // Rotation and the actual selector must agree on the one-word route.
         let input = trace!(&spin; factors.iter());
         assert!(
-            (input.simplify_gamma() - expected_first.simplify_gamma())
-                .expand()
-                .is_zero()
+            (crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+                - crate::tensor::SymbolicTensor::infer((expected_first).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression())
+            .expand()
+            .is_zero()
         );
         // Open chains retain their existing shortest-pair ordering.
         let (start, end) = (slot!(r.bis4, i).into_atom(), slot!(r.bis4, j).into_atom());
@@ -2725,7 +3576,16 @@ mod tests {
                             .evaluate_terminal_trace::<false>(input.as_view())
                             .expect("the summed pair reduces without emitting tensor metrics");
                         assert_eq!(result, expected, "dimension {dimension}, rotation {start}");
-                        assert_eq!(input.simplify_gamma(), result);
+                        assert_eq!(
+                            crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                                .unwrap()
+                                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                                .unwrap()
+                                .resolved()
+                                .unwrap()
+                                .into_expression(),
+                            result
+                        );
                     }
                 }
             }
@@ -2791,10 +3651,26 @@ mod tests {
         let dimension = mink_slot_dimension(slots[0].as_view()).unwrap();
         let unit = bispinor_dimension(spin.as_view()).unwrap();
         let input = trace!(&spin; [0, 1, 2, 0, 3, 4].map(|i| gamma!(&slots[i])));
-        let reduced = trace!(&spin; slots[1..].iter().map(|index| gamma!(index))).simplify_gamma();
+        let reduced = crate::tensor::SymbolicTensor::infer(
+            (trace!(&spin; slots[1..].iter().map(|index| gamma!(index))))
+                .as_atom_view()
+                .to_owned(),
+        )
+        .unwrap()
+        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
         let expected = Atom::num(4) * unit * g!(&slots[1], &slots[2]) * g!(&slots[3], &slots[4])
             + (dimension.to_owned() - Atom::num(4)) * reduced;
-        let result = input.simplify_gamma();
+        let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         assert!((&result - &expected).expand().is_zero());
         result.visitor(&mut |node| {
             assert_ne!(node, slots[0].as_view(), "the summed index must be absent");
@@ -2807,7 +3683,13 @@ mod tests {
                 .evaluate_terminal_trace::<false>(decorated.as_view())
                 .is_none()
         );
-        let complete = decorated.simplify_gamma();
+        let complete = crate::tensor::SymbolicTensor::infer((decorated).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         // Remove only the spectator for the standalone polynomial certificate;
         // the compound scalar numerator itself remains unexpanded.
         let body = complete
@@ -2951,9 +3833,35 @@ mod tests {
             ].map(|index| gamma!(index)));
         let contracted = input
             .schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());
-        let result = input.simplify_gamma();
-        assert!((&result - contracted.simplify_gamma()).expand().is_zero());
-        assert_eq!(result.simplify_gamma(), result);
+        let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
+        assert!(
+            (&result
+                - crate::tensor::SymbolicTensor::infer((contracted).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression())
+            .expand()
+            .is_zero()
+        );
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            result
+        );
     }
 
     #[test]
@@ -2969,12 +3877,30 @@ mod tests {
             let input = g!(&a, &b) * trace!(&spin; [gamma!(&b), gamma!(&c)]);
             let expected = trace!(&spin; [gamma!(&a), gamma!(&c)]);
             let settings = GammaSimplifySettings::default().without_trace_evaluation();
-            assert_eq!(input.simplify_gamma_with(settings), expected);
+            assert_eq!(
+                crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(settings)
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
+                expected
+            );
 
             let (start, end) = (slot!(r.bis4, i).into_atom(), slot!(r.bis4, j).into_atom());
             let input = g!(&a, &b) * chain!(&start, &end; [gamma!(&b), gamma!(&c)]);
             let expected = chain!(&start, &end; [gamma!(&a), gamma!(&c)]);
-            assert_eq!(input.simplify_gamma(), expected);
+            assert_eq!(
+                crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
+                expected
+            );
         }
     }
 
@@ -2992,9 +3918,24 @@ mod tests {
             [&a, &b, &c, &a, &b, &d].map(|index| gamma!(index))
         );
         let expected = 4 * chain!(&start, &end; [gamma!(&c), gamma!(&d)]);
-        let result = input.simplify_gamma();
+        let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         assert_eq!(result, expected);
-        assert_eq!(result.simplify_gamma(), result);
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            result
+        );
     }
 
     #[test]
@@ -3011,9 +3952,24 @@ mod tests {
             let input = trace!(&spin; [gamma!(&a), gamma!(&b)])
                 * chain!(&start, &end; [gamma!(&a), gamma!(&c)]);
             let expected = 4 * chain!(&start, &end; [gamma!(&b), gamma!(&c)]);
-            let result = input.simplify_gamma();
+            let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
             assert_eq!(result, expected);
-            assert_eq!(result.simplify_gamma(), result);
+            assert_eq!(
+                crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
+                result
+            );
         }
     }
 

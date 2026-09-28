@@ -5,13 +5,13 @@
 
 Idenso is the symbolic identity and simplification layer for tensors encoded in the form that
 Spenso can parse from Symbolica expressions. It provides representation symbols, index
-tooling, reversible “cooking” of subexpressions, selective expansion, and identities for Dirac,
+tooling, reversible “cooking” of subexpressions, selected-sector collection, and identities for Dirac,
 metric, epsilon, and color algebra.
 
 #callout("Symbolic, not component expansion", [
-  Idenso rewrites abstract tensor expressions. Functions such as `expand_mink` distribute
-  factorized terms that carry selected index families; they do not turn every tensor into a
-  dense array of components. Concrete tensor storage and network execution belong to
+  Idenso rewrites abstract tensor expressions. Typed `collect` selects representation families
+  while preserving unrelated factors and aliases; it does not turn tensors into dense arrays
+  of components. Concrete tensor storage and network execution belong to
   #product-link("spenso", label: "Spenso").
 ])
 
@@ -23,7 +23,7 @@ metric, epsilon, and color algebra.
   #link("quickstart/rust/")[Rust guide].
 - To verify the rewrite as a controlled, observable pass, follow the
   #link("tutorial/")[controlled identity tutorial] and the
-  #link("reference/python/spynso3/TensorExpression/#exports-tensorexpression-simplify-metrics-method")[Python method reference].
+  #link("reference/python/spynso3/TensorExpression/#exports-tensorexpression-contract-method")[Python method reference].
 - To isolate dummy-index namespaces or cook a large expression, use the
   #link("guides/algebra/")[algebra guide] with the exact
   #link("reference/rust/idenso/trait.IndexTooling.html")[`IndexTooling`] and
@@ -39,11 +39,12 @@ phase explicit:
 - initialize the standard representations and tensor symbols;
 - inspect dangling indices and normalize or wrap dummy-index namespaces when combining
   expressions;
-- expand only the sectors needed by the next identity pass;
-- simplify gamma, metric, or color structures as appropriate;
+- select the sectors needed by the next identity pass with typed `collect`;
+- contract indices and simplify gamma or color structures as appropriate;
 - canonicalize and compare results using the conventions of the consuming calculation.
 
-Expansion can grow an expression quickly, so perform it as late and selectively as possible.
+Contraction and simplification retain factored alias definitions. Resolve aliases when needed,
+and request `expand` explicitly only when the complete polynomial is required.
 Wrapping indices is especially important before multiplying independently constructed
 expressions: equal printed index names can otherwise acquire an unintended contraction.
 

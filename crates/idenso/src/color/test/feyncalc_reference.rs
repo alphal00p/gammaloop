@@ -88,13 +88,35 @@ fn sun_simplify_sunn_to_cacf_rewrites_structure_square_dimension() {
         ) ^ 2,
         default_namespace = "spenso"
     );
+    let dimension_value = parse_lit!(Nc ^ 2 - 1, default_namespace = "spenso");
+    let dimension = Atom::var(symbol!(
+        "sun_simplify_sunn_to_cacf_rewrites_structure_square_dimension_dimension"
+    ));
+    let admitted = expr
+        .replace(dimension_value.to_pattern())
+        .with(dimension.to_pattern());
+    assert_eq!(
+        admitted
+            .replace(dimension.to_pattern())
+            .with(dimension_value.to_pattern()),
+        expr
+    );
     let (fundamental_rep, adjoint_rep) = su_n_representations();
 
-    let rewritten = expr.simplify_color().to_color_casimir_with(
-        fundamental_rep.as_view(),
-        adjoint_rep.as_view(),
-        ColorCasimirSettings::default().with_fundamental_index_normalization(),
-    );
+    let rewritten = crate::tensor::SymbolicTensor::infer(admitted)
+        .unwrap()
+        .simplify_color(crate::color::ColorSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression()
+        .replace(dimension.to_pattern())
+        .with(dimension_value.to_pattern())
+        .to_color_casimir_with(
+            fundamental_rep.as_view(),
+            adjoint_rep.as_view(),
+            ColorCasimirSettings::default().with_fundamental_index_normalization(),
+        );
     let expected = Atom::num(2)
         * color_cas!(2, adjoint_rep.clone()).pow(Atom::num(2))
         * color_cas!(2, fundamental_rep);
@@ -107,7 +129,7 @@ fn sun_simplify_id2_open_chain_separated_casimir() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, a, b, a);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))+cas(2,cof(Nc))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))+cas(2,cof(Nc))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))");
 }
 
 #[test]
@@ -116,7 +138,7 @@ fn sun_simplify_id3_structure_loop_to_adjoint_delta() {
     let r = TestReps::new();
     let expr = f!(r, a, c, d) * f!(r, b, c, d);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(dA))*g(coad(dA,a),coad(dA,b))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,coad(dA))*g(coad(dA,a),coad(dA,b))");
 }
 
 #[test]
@@ -125,7 +147,7 @@ fn sun_simplify_id4_structure_times_open_chain_contracts() {
     let r = TestReps::new();
     let expr = f!(r, a, b, c) * sun_tf!(r, i, j, b, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))*𝑖/2");
 }
 
 #[test]
@@ -134,7 +156,7 @@ fn sun_simplify_id7_cyclic_structure_times_open_chain_contracts() {
     let r = TestReps::new();
     let expr = f!(r, c, a, b) * sun_tf!(r, i, j, b, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))*𝑖/2");
 }
 
 #[test]
@@ -143,7 +165,7 @@ fn sun_simplify_id13_fundamental_delta_contracts() {
     let r = TestReps::new();
     let expr = sdf!(r, a, b) * sdf!(r, b, d);
 
-    assert_snapshot!(expr.simplify_color().simplify_metrics().to_bare_ordered_string(), @"g(cof(Nc,a),dind(cof(Nc,d)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression()).as_atom_view().to_owned()).unwrap().contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"g(cof(Nc,a),dind(cof(Nc,d)))");
 }
 
 #[test]
@@ -152,7 +174,7 @@ fn sun_simplify_id17_delta_renames_open_chain_endpoint() {
     let r = TestReps::new();
     let expr = sdf!(r, b, a) * sun_tf!(r, a, d, i) * sun_tf!(r, d, c, j);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"chain(cof(Nc,b),dind(cof(Nc,c)),t(coad(dA,i),in,out),t(coad(dA,j),in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(cof(Nc,b),dind(cof(Nc,c)),t(coad(dA,i),in,out),t(coad(dA,j),in,out))");
 }
 
 #[test]
@@ -162,7 +184,7 @@ fn sun_simplify_id18_delta_closes_doubled_two_generator_chain() {
     let line = sun_tf!(r, a, d, i) * sun_tf!(r, d, b, j);
     let expr = sdf!(r, b, a) * (line.clone() + line);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"2*g(coad(dA,i),coad(dA,j))*idx(2,cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"2*g(coad(dA,i),coad(dA,j))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -171,7 +193,7 @@ fn sun_simplify_id21_adjacent_open_chains_join() {
     let r = TestReps::new();
     let expr = sun_tf!(r, a, d, i) * sun_tf!(r, d, c, j);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"chain(cof(Nc,a),dind(cof(Nc,c)),t(coad(dA,i),in,out),t(coad(dA,j),in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(cof(Nc,a),dind(cof(Nc,c)),t(coad(dA,i),in,out),t(coad(dA,j),in,out))");
 }
 
 #[test]
@@ -180,7 +202,7 @@ fn sun_simplify_id27_structure_square_keeps_idenso_dimensions() {
     let r = TestReps::new();
     let expr = f!(r, a, b, c).pow(Atom::num(2));
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(dA))*dA");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,coad(dA))*dA");
 }
 
 #[test]
@@ -189,7 +211,7 @@ fn sun_simplify_id30_three_generator_trace_terminal() {
     let r = TestReps::new();
     let expr = sun_trace!(r, i, j, k);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"f(coad(dA,i),coad(dA,j),coad(dA,k))*idx(2,cof(Nc))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,i),in,out),t(coad(dA,j),in,out),t(coad(dA,k),in,out)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"f(coad(dA,i),coad(dA,j),coad(dA,k))*idx(2,cof(Nc))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,i),in,out),t(coad(dA,j),in,out),t(coad(dA,k),in,out)))");
 }
 
 #[test]
@@ -198,7 +220,7 @@ fn sun_simplify_id41_nested_adjacent_open_chain_casimirs() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, b, a, a, b, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"(cas(2,cof(Nc)))^2*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,c),in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"(cas(2,cof(Nc)))^2*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,c),in,out))");
 }
 
 #[test]
@@ -207,7 +229,7 @@ fn sun_simplify_id44_adjacent_open_chain_casimir() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, a, a);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,cof(Nc))*g(cof(Nc,i),dind(cof(Nc,j)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,cof(Nc))*g(cof(Nc,i),dind(cof(Nc,j)))");
 }
 
 #[test]
@@ -216,7 +238,7 @@ fn sun_simplify_id45_open_chain_separated_casimir() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, a, b, a);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))+cas(2,cof(Nc))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))+cas(2,cof(Nc))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))");
 }
 
 #[test]
@@ -225,7 +247,7 @@ fn sun_simplify_id47_two_adjacent_open_chain_casimirs() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, a1, a1) * sun_tf!(r, k, l, a2, a2);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"(cas(2,cof(Nc)))^2*g(cof(Nc,i),dind(cof(Nc,j)))*g(cof(Nc,k),dind(cof(Nc,l)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"(cas(2,cof(Nc)))^2*g(cof(Nc,i),dind(cof(Nc,j)))*g(cof(Nc,k),dind(cof(Nc,l)))");
 }
 
 #[test]
@@ -234,7 +256,7 @@ fn sun_simplify_id48_iterated_adjacent_open_chain_casimirs() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, b, a, a, b);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"(cas(2,cof(Nc)))^2*g(cof(Nc,i),dind(cof(Nc,j)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"(cas(2,cof(Nc)))^2*g(cof(Nc,i),dind(cof(Nc,j)))");
 }
 
 #[test]
@@ -243,7 +265,7 @@ fn sun_simplify_id52_repeated_trace_pair() {
     let r = TestReps::new();
     let expr = sun_trace!(r, i1, i2, i1, i2);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*dA*idx(2,cof(Nc))+cas(2,cof(Nc))*dA*idx(2,cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*dA*idx(2,cof(Nc))+cas(2,cof(Nc))*dA*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -252,7 +274,7 @@ fn sun_simplify_id55_adjacent_casimir_inside_open_chain() {
     let r = TestReps::new();
     let expr = sun_tf!(r, i, j, b, a, a, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,cof(Nc))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out),t(coad(dA,c),in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,cof(Nc))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out),t(coad(dA,c),in,out))");
 }
 
 #[test]
@@ -261,7 +283,7 @@ fn sun_simplify_id56_explicit_i_times_structure_chain() {
     let r = TestReps::new();
     let expr = Atom::i() * f!(r, b, jj, c) * sun_tf!(r, i, j, jj, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,b),in,out))");
 }
 
 #[test]
@@ -270,7 +292,7 @@ fn sun_simplify_id66_trace_adjacent_pairs() {
     let r = TestReps::new();
     let expr = sun_trace!(r, a, a, b, b);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,cof(Nc))*dA*idx(2,cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,cof(Nc))*dA*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -279,7 +301,7 @@ fn sun_simplify_id75_structure_times_two_generator_open_chain() {
     let r = TestReps::new();
     let expr = f!(r, a, b, c) * sun_tf!(r, i, j, b, c);
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"cas(2,coad(dA))*chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,a),in,out))*𝑖/2");
 }
 
 #[test]
@@ -309,13 +331,36 @@ fn fundamental_fierz_contracts_open_and_closed_color_lines() {
             ColorSimplifySettings::default(),
             ColorSimplifySettings::default().without_trace_evaluation(),
         ] {
-            let actual = expression.simplify_color_with(settings);
+            let actual =
+                crate::tensor::SymbolicTensor::infer((expression).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_color(settings)
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression();
             assert_eq!(
                 actual.expand(),
-                expected.simplify_color_with(settings).expand(),
+                crate::tensor::SymbolicTensor::infer((expected).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_color(settings)
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression()
+                    .expand(),
                 "Fierz identity for {expression} with {settings:?}"
             );
-            assert_eq!(actual.simplify_color_with(settings), actual);
+            assert_eq!(
+                crate::tensor::SymbolicTensor::infer((actual).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_color(settings)
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
+                actual
+            );
         }
     }
 }
@@ -328,20 +373,67 @@ fn fundamental_trace_fierz_respects_settings_and_representations() {
     let disabled = ColorSimplifySettings::default()
         .without_trace_evaluation()
         .without_cross_chain_fierz_expansion();
-    assert_eq!(expression.simplify_color_with(disabled), expression);
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((expression).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(disabled)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        expression
+    );
     let unevaluated = ColorSimplifySettings::default().without_trace_evaluation();
-    for source in [
+    let expression = parse!(
         "chain(cof(3,i),dind(cof(3,j)),t(coad(A,a),in,out))*trace(cof(4),cyclic(t(coad(A,a),in,out),t(coad(A,b),in,out),t(coad(A,c),in,out)))",
+        default_namespace = "spenso"
+    );
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer(expression.clone())
+            .unwrap()
+            .simplify_color(unevaluated)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        expression
+    );
+    // Fundamental generator words cannot inhabit an adjoint trace channel.
+    // Keep the local Fierz non-match oracle without bypassing typed admission.
+    let invalid = parse!(
         "trace(coad(A),cyclic(t(coad(A,a),in,out),t(coad(A,b),in,out),t(coad(A,c),in,out)))*trace(cof(3),cyclic(t(coad(A,a),in,out),t(coad(A,d),in,out),t(coad(A,e),in,out)))",
-    ] {
-        let expression = parse!(source, default_namespace = "spenso");
-        assert_eq!(expression.simplify_color_with(unevaluated), expression);
-    }
+        default_namespace = "spenso"
+    );
+    assert!(matches!(
+        crate::tensor::SymbolicTensor::infer(invalid.clone()),
+        Err(
+            crate::tensor::inference::TensorInferenceError::InvalidBuiltinSignature {
+                factory: "t",
+                ..
+            }
+        )
+    ));
+    assert_eq!(
+        crate::color::simplify::ColorAlgebraSimplifier {
+            settings: unevaluated
+        }
+        .step(invalid.as_view(), true),
+        invalid
+    );
     // A one-generator fundamental trace vanishes, including when the cut
     // produces an empty trace whose value is the fundamental dimension.
     assert!(
-        (sun_tf!(r, i, j, a) * sun_trace!(r, a))
-            .simplify_color_with(unevaluated)
-            .is_zero()
+        crate::tensor::SymbolicTensor::infer(
+            (sun_tf!(r, i, j, a) * sun_trace!(r, a))
+                .as_atom_view()
+                .to_owned()
+        )
+        .unwrap()
+        .simplify_color(unevaluated)
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression()
+        .is_zero()
     );
 }

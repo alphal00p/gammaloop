@@ -35,16 +35,17 @@ g = TensorExpression.g(rep)
 q = TensorName.vector("q")
 
 expression = g(mu, nu) * q(mu)
-reduced = expression.schoonschip_net()
+reduced = expression.contract().to_expression()
 
 assert reduced == q(nu)
 assert len(reduced.list_dangling()) == 1
 print(reduced)
 ```
 
-Typed composition represents the contraction with a `bracket` shorthand. `schoonschip_net()`
-executes that tensor network. Focused rewrites such as `simplify_metrics()` instead operate on
-ordinary indexed products; the #link("guides/algebra/")[algebra guide] uses those to inspect dummy indices.
+Typed composition represents the contraction with a `bracket` shorthand. `contract()`
+uses the shared symbolic contractor for bracketed and ordinary indexed products. It returns
+an `AliasedTensorExpression`; `to_expression()` resolves its literal definitions without
+distributing scalar coefficients. The #link("guides/algebra/")[algebra guide] explains dummy scopes.
 
 Run `python idenso_quickstart.py`. Success means the explicit metric disappears and `q(nu)`
 remains. The structural equality check is stronger than comparing printed text, whose formatting

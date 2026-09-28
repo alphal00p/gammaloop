@@ -1,0 +1,168 @@
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/BNL/states/no_threshold"
+
+[cli_settings.global]
+display_directive = "info,gammalooprs[{#uv}]=debug"
+logfile_directive = "off"
+
+[cli_settings.global.log_style]
+include_fields = true
+full_line_source = true
+
+[cli_settings.global.n_cores]
+feyngen = 1
+generate = 4
+compile = 1
+integrate = 1
+
+[cli_settings.global.generation.evaluator]
+do_algebra = false
+iterative_orientation_optimization = false
+store_atom = false
+compile = false
+summed = false
+summed_function_map = false
+horner_iterations = 0
+cpe_iterations = 0
+
+[cli_settings.global.generation.compile]
+compilation_mode = "symjit"
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+check_esurface_at_generation = true
+skip_thresholds_that_are_cuts = true
+
+[cli_settings.global.generation.uv]
+softct = false
+inner_products = true
+generate_integrated = true
+subtract_uv = true
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = false
+disable_tropical_generation = true
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "none"
+mu_r = 91.188
+m_uv = 91.188
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.integrator]
+n_start = 1000
+n_increase = 0
+n_max = 10000000
+seed = 1337
+
+[default_runtime_settings.integrator.observables_output]
+format = ["hwu", "json"]
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = -1.0
+
+[[command_blocks]]
+name = "load_graph"
+commands = [
+  "import model sm-default.json",
+  "remove processes",
+  """import graphs ./examples/cli/BNL/BNL.dot -p BNL -i default -o""",
+]
+
+[[command_blocks]]
+name = "set_model"
+commands = [
+  "set model MT=300.0",
+  "set model WT=0.0",
+  "set model ymt=300.0",
+  "set model aS=0.118",
+  "set model aEWM1=137.036",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
+]
+
+[[command_blocks]]
+name = "set_kinematics_no_threshold"
+commands = [
+  """set default-runtime string '
+[general]
+mu_r = 300.0
+m_uv = 300.0
+
+[subtraction]
+disable_threshold_subtraction = true
+
+[kinematics]
+e_cm = 300.0
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [ 150.0, 0.0, 0.0, 150.0 ],
+    [ 150.0, 0.0, 0.0, -150.0 ],
+    [ 53.51825383938285, 48.50595583701992, -21.22845370767228, -7.792848999878412 ],
+    [ 52.10277750612693, 32.60751621535558, 35.30275695907613, -20.1287024223294 ],
+    [ 65.95531624240965, -34.11832218221586, -14.79775199306813, -54.47082125375412 ],
+    [ 47.73033742918369, -37.67976738110368, 28.40763499639253, 7.171228285404366 ],
+    [ 80.69331498289687, -9.315382489055963, -27.68418625472827, 75.22114439055757 ],
+]
+helicities = [1, -1, 1, -1, 1, -1, 1]
+'""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_threshold"
+commands = [
+  """set default-runtime string '
+[general]
+mu_r = 1000.0
+m_uv = 1000.0
+
+[subtraction]
+disable_threshold_subtraction = false
+
+[kinematics]
+e_cm = 1000.0
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [ 500.0, 0.0, 0.0, 500.0 ],
+    [ 500.0, 0.0, 0.0, -500.0 ],
+    [ 78.22337260359126, 38.91950322582873, 47.55768659790618, -48.39870592888109 ],
+    [ 98.14848119739173, -12.83259962132507, -82.28070358716674, 51.94549610422768 ],
+    [ 209.0330590144503, -200.2675149055817, 16.95972004460731, -57.44658502025857 ],
+    [ 345.8405394121186, 128.9915847499842, 145.4638237201425, 286.0194499562365 ],
+    [ 268.7545477724482, 45.18902655109381, -127.7005267754893, -232.1196551113246 ],
+]
+helicities = [1, -1, 1, -1, 1, -1, 1]
+'""",
+]

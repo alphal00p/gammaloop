@@ -1,0 +1,6 @@
+---
+source: spenso/src/tests.rs
+expression: f.structure().to_string()
+---
+102 (mink4)
+28  (mink5)

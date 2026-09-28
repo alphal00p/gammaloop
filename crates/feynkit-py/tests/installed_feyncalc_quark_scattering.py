@@ -10,6 +10,8 @@ from symbolica import E, Replacement, S, Symbol
 from symbolica.community import hep
 from symbolica.community.spenso import CookSettings, TensorExpression
 
+index_scope = S("spenso::index_scope")
+
 model = hep.Model.standard_model()
 P = S("gammalooprs::P")
 s, t, u, m, M, gs = S(
@@ -76,7 +78,7 @@ for name, pdgs in [
         {s, t} if name == "qaq" else {t, u} if name == "qq" else {t}
     )
     amplitude = sum(operators, E("0"))
-    operator = TensorExpression(amplitude.expand())
+    operator = TensorExpression(amplitude)
     assert len(operator.structure.slots) == 8
     adjoints = []
     for term in operators:
@@ -85,7 +87,7 @@ for name, pdgs in [
         )
         for real in (s, t, u, m, M, gs):
             adjoint = adjoint.replace(conj(real), real)
-        adjoints.append(TensorExpression(adjoint).wrap_indices(wrapped))
+        adjoints.append(TensorExpression(adjoint).wrap_indices(wrapped).to_expression())
     colors = E("1")
     spins = E("1")
     initial_colors = 1
@@ -96,16 +98,16 @@ for name, pdgs in [
         # Signed particle representations choose quark/antiquark duals.
         # Incoming color ports close in the reverse order from outgoing ports.
         ci, cj = (
-            (wrapped(ports[position]), ports[position])
+            (index_scope(wrapped, ports[position]), ports[position])
             if position < 2
-            else (ports[position], wrapped(ports[position]))
+            else (ports[position], index_scope(wrapped, ports[position]))
         )
         colors *= particle.color_sum(ci, cj, average=position < 2)
         column = (position < 2) == (pdg > 0)
         i, j = (
-            (ports[position], wrapped(ports[position]))
+            (ports[position], index_scope(wrapped, ports[position]))
             if column
-            else (wrapped(ports[position]), ports[position])
+            else (index_scope(wrapped, ports[position]), ports[position])
         )
         spins *= particle.spin_sum(P(position), i, j, average=position < 2)
     evaluated = []
@@ -124,6 +126,7 @@ for name, pdgs in [
             TensorExpression(generic, cook_indices=CookSettings.indices())
             .simplify_color()
             .to_expression()
+            .to_expression()
             .replace(dA, Nc**2 - 1)
         )
         colored = (
@@ -131,11 +134,9 @@ for name, pdgs in [
         )
         scalar = (
             TensorExpression(colored * spins, cook_indices=CookSettings.indices())
-            .expand()
             .simplify_gamma()
-            .expand()
-            .simplify_gamma()
-            .simplify_metrics()
+            .contract()
+            .to_expression()
             .to_dots()
         )
         assert scalar.is_scalar

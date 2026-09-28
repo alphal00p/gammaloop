@@ -4,12 +4,28 @@ Reference: FeynCalc EW/Tree/Mu-ElAnelNmu. The full unitary-gauge squared
 amplitude is retained before the low-energy limit and analytic integrations.
 """
 
+import json
+
 import numpy as np
 from symbolica import E, Replacement, S, Symbol
 from symbolica.community import hep
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.spenso import (
+    CookSettings,
+    GammaSimplifySettings,
+    TensorExpression,
+)
 
 model = hep.Model.standard_model()
+# The built-in model uses Feynman-gauge vector propagators. This reference
+# includes the longitudinal W numerator, so select its unitary-gauge form.
+specification = json.loads(model.to_json())
+for propagator in specification["propagators"]:
+    if propagator["particle"] in ("W-", "W+"):
+        propagator["numerator"] = (
+            "-1𝑖*(UFO::Metric(UFO::idx(1,1),UFO::idx(1,2))"
+            "-UFO::P(UFO::idx(1,1))*UFO::P(UFO::idx(1,2))/UFO::MW^2)"
+        )
+model = hep.Model.from_json(json.dumps(specification))
 muon, electron = model.particle_by_pdg(13), model.particle_by_pdg(11)
 vertices = [
     v
@@ -33,6 +49,7 @@ GF, s, t, z = S(
 M = S("muon_decay::M", is_positive=True)
 mass = S("muon_decay::m", is_positive=True)
 conjugate, wrapped = S("spenso::conj", "muon_decay::adjoint")
+scope = S("spenso::index_scope")
 ports = S("muon_decay::mu", "muon_decay::e", "muon_decay::antinue", "muon_decay::numu")
 wave, rep, index = S("muon_decay::wave_", "muon_decay::rep_", "muon_decay::index_")
 zero, one, pi = E("0"), E("1"), Symbol.PI
@@ -46,38 +63,39 @@ for edge in diagram.external_edges:
     assert len(matches) == 1
     numerator = numerator.replace(dict(matches[0])[index], ports[edge.external_index])
 operator = TensorExpression(
-    (
-        numerator
-        * diagram.overall_factor_expression(evaluate=True)
-        * diagram.numerator_prefactor_expression()
-    ).expand()
+    numerator
+    * diagram.overall_factor_expression(evaluate=True)
+    * diagram.numerator_prefactor_expression()
 )
-adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
+adjoint = (
+    operator.dirac_adjoint()
+    .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+    .to_expression()
+    .to_expression()
+)
 momentum_index = S("muon_decay::momentum_index_")
 adjoint = adjoint.replace(conjugate(P(momentum_index, index)), P(momentum_index, index))
 for real in (charge, sw, mw, mm, me):
     adjoint = adjoint.replace(conjugate(real), real)
-adjoint = TensorExpression(adjoint).wrap_indices(wrapped)
+adjoint = TensorExpression(adjoint).wrap_indices(wrapped).to_expression()
 projector = (
-    muon.spin_sum(P(0), ports[0], wrapped(ports[3]), average=True)
-    * electron.spin_sum(P(1), wrapped(ports[2]), ports[1])
-    * model.particle_by_pdg(-12).spin_sum(P(2), ports[2], wrapped(ports[1]))
-    * model.particle_by_pdg(14).spin_sum(P(3), wrapped(ports[0]), ports[3])
+    muon.spin_sum(P(0), ports[0], scope(wrapped, ports[3]), average=True)
+    * electron.spin_sum(P(1), scope(wrapped, ports[2]), ports[1])
+    * model.particle_by_pdg(-12).spin_sum(P(2), ports[2], scope(wrapped, ports[1]))
+    * model.particle_by_pdg(14).spin_sum(P(3), scope(wrapped, ports[0]), ports[3])
 )
 contracted = (
     TensorExpression(
         operator.to_expression() * adjoint * projector,
         cook_indices=CookSettings.indices(),
     )
-    .expand()
-    .simplify_gamma()
-    .expand()
     .simplify_gamma()
     .simplify_epsilon()
-    .expand()
-    .simplify_metrics()
-    .to_dots()
+    .to_expression()
+    .contract()
 )
+assert contracted.contraction_complete
+contracted = contracted.to_expression().to_dots()
 assert contracted.is_scalar
 # s=(electron+antinue)^2; t=(electron+numu)^2. All four external momenta
 # are future directed, with P0=P1+P2+P3 and both neutrinos massless.

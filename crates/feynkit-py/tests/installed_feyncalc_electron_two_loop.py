@@ -108,9 +108,9 @@ one_numerator *= (
     / (4 * s)
 )
 one_trace = kinematics.apply(
-    TensorExpression(one_numerator.expand())
+    TensorExpression(one_numerator)
     .simplify_gamma()
-    .expand()
+    .to_expression()
     .to_dots()
     .to_expression()
 )
@@ -131,7 +131,7 @@ assert reflection is not None
 assert (
     one_trace + reflection.apply(one_trace) + charge**2 * (2 - d)
 ).together() == zero
-assert abs(complex(oneloop.B0(-1.0, 0.0, 0.0, 1.0)[1]) - 1) < 1e-12
+assert abs(complex(oneloop.b0(-1.0, 0.0, 0.0, 1.0)[1]) - 1) < 1e-12
 # Thus the normalized one-loop kernel has +i*a4*slash(p)/eps and deltaZpsi=-1/eps.
 zpsi_one = -one / eps
 
@@ -209,9 +209,9 @@ for diagram in result.diagrams:
             formal,
         )
     traced = (
-        TensorExpression(uv.expand())
+        TensorExpression(uv)
         .simplify_gamma()
-        .expand()
+        .to_expression()
         .to_dots()
         .to_expression()
     )
@@ -220,7 +220,7 @@ for diagram in result.diagrams:
     )
     scalar *= factor * diagram.numerator_prefactor_expression()
     terms = []
-    for monomial, coefficient in scalar.expand().coefficient_list(*coordinates):
+    for monomial, coefficient in scalar.coefficient_list(*coordinates):
         powers = [
             -int((monomial.derivative(den) * den / monomial).together())
             for den in coordinates

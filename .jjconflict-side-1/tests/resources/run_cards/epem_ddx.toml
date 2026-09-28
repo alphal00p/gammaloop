@@ -1,0 +1,8 @@
+commands = [
+    "import model sm-default",
+   "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{1}}] --numerator-grouping only_detect_zeroes --clear-existing-processes ",
+]
+
+[cli_settings.global]
+logfile_directive = "off,symbolica=off,poly::gcd=off,gammalooprs::graph::parse=debug,gammalooprs::feyngen::diagram_generator=debug"
+display_directive = "off,symbolica=off,poly::gcd=off,gammalooprs::graph::parse=debug,gammalooprs::feyngen::diagram_generator=debug"

@@ -1,0 +1,242 @@
+--- a/src/expand.rs
++++ b/src/expand.rs
+@@ -169,6 +169,110 @@
+                 std::mem::swap(out, &mut t);
+             }
+         }
++    }
++
++    /// Insert one atomic factor, with an optional exact coefficient, into an
++    /// already normalized product. Reject inputs needing factor merging or
++    /// coefficient removal so their existing deferred normalization is retained.
++    fn try_mul_atomic_prefix(
++        &self,
++        rhs: AtomView<'_>,
++        workspace: &Workspace,
++        out: &mut Atom,
++    ) -> bool {
++        let AtomView::Mul(rhs) = rhs else {
++            return false;
++        };
++        if !rhs.is_normalized() {
++            return false;
++        }
++        let (factor, coefficient) = match *self {
++            factor @ (AtomView::Var(_) | AtomView::Fun(_)) => (Some(factor), None),
++            AtomView::Num(coefficient) => (None, Some(coefficient)),
++            AtomView::Mul(prefix) if prefix.get_nargs() == 2 => {
++                // Expansion assembles this prefix before reaching the first
++                // sum. Validate its children without normalizing it eagerly.
++                let mut args = prefix.iter();
++                match (args.next().unwrap(), args.next().unwrap()) {
++                    (
++                        AtomView::Num(coefficient),
++                        factor @ (AtomView::Var(_) | AtomView::Fun(_)),
++                    )
++                    | (
++                        factor @ (AtomView::Var(_) | AtomView::Fun(_)),
++                        AtomView::Num(coefficient),
++                    ) => (Some(factor), Some(coefficient)),
++                    _ => return false,
++                }
++            }
++            _ => return false,
++        };
++        if factor.is_some_and(|factor| factor.needs_normalization()) {
++            return false;
++        }
++        if coefficient.is_some_and(|coefficient| {
++            !matches!(
++                coefficient.get_coeff_view(),
++                CoefficientView::Natural(..) | CoefficientView::Large(..)
++            ) || coefficient.is_zero()
++        }) {
++            return false;
++        }
++        let coefficient = coefficient.filter(|coefficient| !coefficient.is_one());
++        let mut args = rhs.iter();
++        let mut offset = 0;
++        let rhs_coefficient = if rhs.has_coefficient() {
++            let Some(AtomView::Num(coefficient)) = args.next() else {
++                return false;
++            };
++            if !matches!(
++                coefficient.get_coeff_view(),
++                CoefficientView::Natural(..) | CoefficientView::Large(..)
++            ) {
++                return false;
++            }
++            offset += coefficient.as_view().get_data().len();
++            Some(coefficient)
++        } else {
++            None
++        };
++        let mut insertion = None;
++        for existing in args {
++            if !matches!(existing, AtomView::Var(_) | AtomView::Fun(_)) {
++                return false;
++            }
++            if let Some(factor) = factor {
++                match factor.cmp_factors(&existing) {
++                    std::cmp::Ordering::Equal => return false,
++                    std::cmp::Ordering::Less if insertion.is_none() => insertion = Some(offset),
++                    _ => {}
++                }
++            }
++            offset += existing.get_data().len();
++        }
++        // Avoid constructing and multiplying implicit coefficient ones.
++        let scaled = if let (Some(left), Some(right)) = (coefficient, rhs_coefficient) {
++            let scaled = workspace.new_num(left.get_coeff_view() * right.get_coeff_view());
++            if scaled.is_zero() || scaled.is_one() {
++                return false;
++            }
++            Some(scaled)
++        } else {
++            None
++        };
++        let product = out.to_mul();
++        product.set_from_view(&rhs);
++        if let Some(factor) = factor {
++            product.insert_factor(insertion.unwrap_or(offset), factor);
++        }
++        if let Some(scaled) = scaled {
++            product.replace_first(scaled.as_view());
++        } else if let Some(coefficient) = coefficient {
++            product.insert_factor(0, coefficient.as_view());
++            product.set_has_coefficient(true);
++        }
++        product.set_normalized(true);
++        true
+     }
+ 
+     /// Expand an expression, but do not normalize the result.
+@@ -348,6 +452,10 @@
+                         for child in a {
+                             for s in &sum {
+                                 let mut b = workspace.new_atom();
++                                if s.as_view().try_mul_atomic_prefix(child, workspace, &mut b) {
++                                    new_sum.push(b);
++                                    continue;
++                                }
+                                 b.set_from_view(&s.as_view());
+ 
+                                 if let Atom::Mul(m) = b.deref_mut() {
+@@ -374,7 +482,21 @@
+                     } else if sum.is_empty() {
+                         sum.push(new_arg);
+                     } else {
++                        let mut inserted = None;
+                         for summand in &mut sum {
++                            if changed
++                                && matches!(summand.as_view(), AtomView::Mul(m) if m.is_normalized())
++                            {
++                                let inserted = inserted.get_or_insert_with(|| workspace.new_atom());
++                                if new_arg.as_view().try_mul_atomic_prefix(
++                                    summand.as_view(),
++                                    workspace,
++                                    inserted,
++                                ) {
++                                    std::mem::swap(summand, inserted);
++                                    continue;
++                                }
++                            }
+                             if let Atom::Mul(m) = summand.deref_mut() {
+                                 m.extend(new_arg.as_view());
+                             } else {
+--- a/src/atom/representation.rs
++++ b/src/atom/representation.rs
+@@ -1252,6 +1252,25 @@
+ 
+         self.data.extend_from_slice(data_start);
+         update_list_header(&mut self.data, old_end, n_args);
++    }
++
++    /// Insert one factor at a byte offset in the factor payload. The offset must
++    /// lie at a factor boundary; `other` must not be a product. Like `extend`,
++    /// this leaves normalization and the coefficient flag to the caller.
++    pub(crate) fn insert_factor(&mut self, offset: usize, other: AtomView<'_>) {
++        debug_assert!(!matches!(other, AtomView::Mul(_)));
++        let (n_args, _, payload) = read_packed_pair(&self.data[1..]);
++        assert!(offset <= payload.len());
++        let old_end = self.data.len() - payload.len();
++        let position = old_end + offset;
++        let inserted = other.get_data();
++        let old_len = self.data.len();
++        self.data[0] |= NOT_NORMALIZED;
++        self.data.resize(old_len + inserted.len(), 0);
++        self.data
++            .copy_within(position..old_len, position + inserted.len());
++        self.data[position..position + inserted.len()].copy_from_slice(inserted);
++        update_list_header(&mut self.data, old_end, n_args + 1);
+     }
+ 
+     pub(crate) fn replace_first(&mut self, other: AtomView) {
+@@ -2755,6 +2774,67 @@
+     }
+ 
+     #[test]
++    fn insert_factor_across_header_widths() {
++        let x = parse!("x");
++        let y = parse!("y");
++        let coefficient = Atom::num(2);
++        let mut large = Fun::new_into(symbol!("large_inserted_factor"), Vec::new());
++        large.add_args(&vec![x.as_view(); 22000]);
++        for count in [1, 2, 84, 85, 254, 255, 256, 21844, 65534, 65535] {
++            for has_coefficient in [false, true] {
++                let mut factors = Vec::new();
++                if has_coefficient {
++                    factors.push(coefficient.as_view());
++                }
++                factors.extend(vec![x.as_view(); count]);
++                let mut source = Mul::new();
++                for &factor in &factors {
++                    source.extend(factor);
++                }
++                source.set_has_coefficient(has_coefficient);
++                // Cover argument-count boundaries and, independently, payload
++                // growth that widens a packed byte-length header.
++                for inserted in [y.as_view(), large.as_view()] {
++                    for index in [
++                        usize::from(has_coefficient),
++                        factors.len() / 2,
++                        factors.len(),
++                    ] {
++                        let index = index.max(usize::from(has_coefficient));
++                        let offset = factors[..index].iter().map(|a| a.get_data().len()).sum();
++                        let mut product = source.clone();
++                        product.insert_factor(offset, inserted);
++                        let mut expected = factors.clone();
++                        expected.insert(index, inserted);
++                        check_list(product.as_view(), &expected);
++                        let mut fresh = Mul::new();
++                        for &factor in &expected {
++                            fresh.extend(factor);
++                        }
++                        fresh.set_has_coefficient(has_coefficient);
++                        assert_eq!(product.as_view(), fresh.as_view());
++                        assert_eq!(product.to_mul_view().has_coefficient(), has_coefficient);
++                    }
++                }
++                if !has_coefficient {
++                    let mut product = source.clone();
++                    product.insert_factor(0, coefficient.as_view());
++                    product.set_has_coefficient(true);
++                    let mut fresh = Mul::new();
++                    fresh.extend(coefficient.as_view());
++                    fresh.extend(source.as_view());
++                    fresh.set_has_coefficient(true);
++                    assert_eq!(product.as_view(), fresh.as_view());
++                    assert_eq!(
++                        product.to_mul_view().get_coefficient(),
++                        Some(coefficient.as_view())
++                    );
++                }
++            }
++        }
++    }
++
++    #[test]
+     fn replace_first_across_header_widths() {
+         let x = parse!("x");
+         let small = Atom::num(2);

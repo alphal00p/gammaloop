@@ -1,9 +1,6 @@
 use spenso::{
     bracket,
-    network::{
-        parsing::{AtomStructureExt, StructureInferenceMode},
-        tags::SPENSO_TAG,
-    },
+    network::{parsing::AtomStructureExt, tags::SPENSO_TAG},
     structure::{
         OrderedStructure,
         abstract_index::AbstractIndex,
@@ -73,9 +70,7 @@ impl BracketNormalizer {
         }
         // Fast inference returns EmptyStructure for a scalar. Its contracted
         // indices belong to a closed scope and must not join the outer product.
-        payload
-            .infer_structure::<OrderedStructure>(StructureInferenceMode::Fast)
-            .ok()?;
+        payload.infer_structure::<OrderedStructure>().ok()?;
         Some(payload)
     }
 
@@ -122,10 +117,12 @@ impl BracketNormalizer {
                 function
                     .iter()
                     .skip(usize::from(symbol == SPENSO_TAG.trace))
-                    .any(|argument| {
-                        Representation::<LibraryRep>::try_from(argument).is_ok()
-                            && Slot::<LibraryRep, AbstractIndex>::try_from(argument).is_err()
-                    })
+                    .any(
+                        |argument| match Slot::<LibraryRep, AbstractIndex>::try_from(argument) {
+                            Ok(slot) => matches!(slot.aind, AbstractIndex::Open { .. }),
+                            Err(_) => Representation::<LibraryRep>::try_from(argument).is_ok(),
+                        },
+                    )
             }
             AtomView::Mul(product) => product.iter().any(Self::has_implicit_ports),
             AtomView::Add(sum) => sum.iter().any(Self::has_implicit_ports),
@@ -159,15 +156,40 @@ mod tests {
     };
 
     use crate::{
-        color::{ColorSimplifier, ColorSimplifySettings},
-        color_f,
-        dirac::GammaSimplifier,
-        epsilon,
+        color::ColorSimplifySettings,
+        color_f, epsilon,
         epsilon::EpsilonSimplifier,
         gamma, gamma0,
-        shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+        shorthands::schoonschip::{Schoonschip, SchoonschipSettings},
         test_support::test_initialize,
     };
+
+    #[test]
+    fn encoded_open_slots_are_unresolved_but_normal_slots_are_explicit() {
+        use spenso::structure::{
+            abstract_index::AbstractIndex,
+            representation::{LibraryRep, RepName},
+            slot::IsAbstractSlot,
+        };
+        use symbolica::atom::FunctionBuilder;
+
+        test_initialize();
+        let rep = LibraryRep::from(spenso::structure::representation::Minkowski {}).new_rep(4);
+        let head = spenso::tensor_symbol!("bracket_open_slot_predicate");
+        let owner = AbstractIndex::fresh_open_owner();
+        for (index, expected) in [
+            (AbstractIndex::Open { owner, axis: 0 }, true),
+            (AbstractIndex::Normal(931), false),
+        ] {
+            let value = FunctionBuilder::new(head)
+                .add_arg(rep.slot::<AbstractIndex, _>(index).to_atom())
+                .finish();
+            assert_eq!(
+                super::BracketNormalizer::has_implicit_ports(value.as_view()),
+                expected
+            );
+        }
+    }
 
     #[test]
     fn bracket_color_projector_contracts_across_arguments() {
@@ -178,14 +200,40 @@ mod tests {
         let d = slot!(r.coad_da, d);
         let metric = g!(a, b);
         for color in [metric.clone(), color_f!(a, c, d) * color_f!(b, c, d)] {
-            let expected = (&metric * &color).simplify_color();
-            assert_eq!(bracket!(&metric, &color).simplify_color(), expected);
+            let expected =
+                crate::tensor::SymbolicTensor::infer((&metric * &color).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_color(crate::color::ColorSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression();
+            assert_eq!(
+                crate::tensor::SymbolicTensor::infer(
+                    (bracket!(&metric, &color)).as_atom_view().to_owned()
+                )
+                .unwrap()
+                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+                expected
+            );
             let settings = ColorSimplifySettings {
                 simplify_non_color: false,
                 ..Default::default()
             };
             assert_eq!(
-                bracket!(&metric, &color).simplify_color_with(settings),
+                crate::tensor::SymbolicTensor::infer(
+                    (bracket!(&metric, &color)).as_atom_view().to_owned()
+                )
+                .unwrap()
+                .simplify_color(settings)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
                 expected
             );
         }
@@ -200,7 +248,18 @@ mod tests {
         let d = slot!(r.coad_da, d);
         let e = slot!(r.coad_da, e);
         let color = color_f!(a, b, c) * color_f!(c, d, e) * g!(d, e);
-        assert!(bracket!(g!(a, b), color).simplify_color().is_zero());
+        assert!(
+            crate::tensor::SymbolicTensor::infer(
+                (bracket!(g!(a, b), color)).as_atom_view().to_owned()
+            )
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+            .is_zero()
+        );
     }
 
     #[test]
@@ -209,7 +268,16 @@ mod tests {
         let left = gamma!(a, b, slot!(r.mink_d, mu));
         let right = gamma!(b, a, slot!(r.mink_d, nu));
         let expected = Atom::num(4) * g!(slot!(r.mink_d, mu), slot!(r.mink_d, nu));
-        assert_eq!(bracket!(left, right).simplify_gamma(), expected);
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((bracket!(left, right)).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            expected
+        );
     }
 
     #[test]
@@ -218,7 +286,7 @@ mod tests {
         let left = gamma0!(a, b);
         let right = gamma0!(b, c);
         assert_eq!(
-            bracket!(left, right).simplify_gamma0(),
+            crate::dirac::DiracSimplifier::factor_gamma_zero(bracket!(left, right).as_view()),
             g!(slot!(r.bis4, a), slot!(r.bis4, c))
         );
     }
@@ -238,7 +306,11 @@ mod tests {
             g!(mink!(4, c), mink!(4, d))
         );
         let expected = g!(mink!(4, a), mink!(4, d));
-        assert_eq!(expression.simplify_metrics(), expected);
+        assert_eq!(
+            expression
+                .schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors()),
+            expected
+        );
     }
 
     #[test]
@@ -248,7 +320,11 @@ mod tests {
         let right = tensor!(bracket_B, mink!(4, b), mink!(4, c));
         let expression = bracket!(&left, right) * g!(mink!(4, c), mink!(4, d));
         let expected = bracket!(left * tensor!(bracket_B, mink!(4, b), mink!(4, d)));
-        assert_eq!(expression.simplify_metrics(), expected);
+        assert_eq!(
+            expression
+                .schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors()),
+            expected
+        );
     }
 
     #[test]
@@ -257,18 +333,85 @@ mod tests {
         let coefficient = parse_lit!((x + y) ^ 12 * (z + w) ^ 12);
         let metric = g!(mink!(4, a), mink!(4, b));
         let expression = bracket!(&coefficient * &metric, &metric);
-        assert_eq!(expression.simplify_metrics(), Atom::num(4) * coefficient);
+        assert_eq!(
+            expression
+                .schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors()),
+            Atom::num(4) * coefficient
+        );
     }
 
     #[test]
     fn bracket_unnamed_ports_keep_their_order() {
+        use spenso::structure::{
+            abstract_index::AbstractIndex, representation::RepName, slot::IsAbstractSlot,
+        };
+        use std::collections::HashMap;
+        use symbolica::atom::{AtomView, FunctionBuilder};
+
         test_initialize();
         let left = vector!(bracket_z, mink!(4));
         let right = vector!(bracket_a, mink!(4));
-        let expression = bracket!(&left, right);
-        assert_eq!(expression.simplify_metrics(), expression);
-        assert_eq!(expression.simplify_color(), expression);
-        assert!(bracket!(left, Atom::Zero).simplify_metrics().is_zero());
+        let expression = bracket!(&left, &right);
+        assert_eq!(
+            expression
+                .schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors()),
+            expression
+        );
+        let source = crate::tensor::SymbolicTensor::infer(expression).unwrap();
+        let result = source
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap();
+        // The shared constructor can remove the bracket when normal product
+        // order already preserves these two anonymous ports.
+        assert!(matches!(source.expression().as_view(), AtomView::Mul(_)));
+        assert_eq!(result.structure(), source.structure());
+        let AtomView::Fun(left) = left.as_view() else {
+            unreachable!()
+        };
+        let AtomView::Fun(right) = right.as_view() else {
+            unreachable!()
+        };
+        let indices = [74881, 74882].map(AbstractIndex::Normal);
+        let indexed = |head, index| {
+            FunctionBuilder::new(head)
+                .add_arg(
+                    spenso::structure::representation::Minkowski {}
+                        .new_rep(4)
+                        .slot::<AbstractIndex, _>(index)
+                        .to_atom(),
+                )
+                .finish()
+        };
+        let components = [
+            (indexed(left.get_symbol(), indices[0]), 2),
+            (indexed(left.get_symbol(), indices[1]), 3),
+            (indexed(right.get_symbol(), indices[0]), 5),
+            (indexed(right.get_symbol(), indices[1]), 7),
+        ];
+        for (positions, expected_component) in [(indices, 14), ([indices[1], indices[0]], 15)] {
+            let bindings = HashMap::from([(0, positions[0]), (1, positions[1])]);
+            let expected = indexed(left.get_symbol(), positions[0])
+                * indexed(right.get_symbol(), positions[1]);
+            for value in [&source, &result] {
+                let materialized = value.materialize_interface_ports(&bindings).unwrap();
+                assert_eq!(materialized, expected);
+                let component = materialized.replace_map_bottom_up(|node, _, out| {
+                    if let Some((_, number)) =
+                        components.iter().find(|(atom, _)| atom.as_view() == node)
+                    {
+                        **out = Atom::num(*number);
+                    }
+                });
+                assert_eq!(component, Atom::num(expected_component));
+            }
+        }
+        assert!(
+            bracket!(vector!(bracket_z, mink!(4)), Atom::Zero)
+                .schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors())
+                .is_zero()
+        );
     }
 
     #[test]
@@ -277,7 +420,11 @@ mod tests {
         let left = bracket!(vector!(bracket_p, mink!(4, a)) * vector!(bracket_q, mink!(4, a)));
         let right = bracket!(vector!(bracket_r, mink!(4, a)) * vector!(bracket_s, mink!(4, a)));
         let expression = &left * &right;
-        assert_eq!(expression.simplify_metrics(), expression);
+        assert_eq!(
+            expression
+                .schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors()),
+            expression
+        );
         assert_eq!(
             expression.schoonschip(),
             left.schoonschip() * right.schoonschip()
@@ -291,7 +438,12 @@ mod tests {
         let denominator = bracket!(&product);
         for exponent in [-1, -2, 2] {
             let expression = denominator.clone().pow(exponent);
-            assert_eq!(expression.simplify_metrics(), expression);
+            assert_eq!(
+                expression.schoonschip_with_settings(
+                    &SchoonschipSettings::default().without_rank1_tensors()
+                ),
+                expression
+            );
             assert_eq!(
                 expression.schoonschip(),
                 product.schoonschip().pow(exponent)

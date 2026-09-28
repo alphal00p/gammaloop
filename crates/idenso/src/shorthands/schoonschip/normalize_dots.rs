@@ -69,7 +69,7 @@ pub(super) struct DotNormalization {
 }
 
 impl DotNormalizer {
-    pub(super) fn run(view: AtomView<'_>) -> Atom {
+    pub(crate) fn run(view: AtomView<'_>) -> Atom {
         Self::normalize(view).expression
     }
 

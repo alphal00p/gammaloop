@@ -5,12 +5,9 @@ use std::{
     sync::Arc,
 };
 
-use spenso::structure::{
-    partial::{PartialStructure, PartialStructureExt},
-    slot::SlotMatcher,
-};
+use spenso::structure::{partial::PartialStructure, slot::SlotMatcher};
 use symbolica::{
-    atom::{Atom, AtomOrView, AtomView, Symbol},
+    atom::{AliasedAtom, Atom, AtomOrView, AtomView, Symbol},
     id::{
         AtomMatchIterator, Condition, Match, MatchSettings, Pattern, PatternRestriction,
         ReplaceWith, WrappedMatchStack,
@@ -21,6 +18,7 @@ use symbolica::{
 
 use super::{
     SymbolicTensor,
+    aliases::AliasInterfaces,
     composition::{self, ExplicitIndexOccurrences},
     inference::{InterfaceInference, TensorInferenceError},
 };
@@ -43,6 +41,18 @@ pub struct TensorRule<'rhs> {
     rhs_cache_size: usize,
     fixed_head: Option<u32>,
     literal_rhs: Option<Arc<Signature>>,
+}
+
+impl std::fmt::Debug for TensorRule<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Pattern Display reconstructs an Atom; Debug preserves the stored
+        // pattern and never invokes normalization or replacement callbacks.
+        write!(
+            f,
+            "TensorRule({:?} -> {:?}, rhs_cache_size={})",
+            self.pattern, self.rhs, self.rhs_cache_size,
+        )
+    }
 }
 
 impl<'rhs> TensorRule<'rhs> {
@@ -135,59 +145,72 @@ impl<'rhs> TensorRule<'rhs> {
 }
 
 impl SymbolicTensor<PartialStructure> {
-    /// Replace whole tensor leaves underneath sums and products.
+    /// Apply a reusable rule to whole tensor leaves underneath sums and products.
     ///
     /// Tensor arguments and scalar metadata are opaque. Each reduced RHS must
     /// retain the matched leaf's external ports without adding encoded indices
     /// or increasing their multiplicities. Zero retains the typed interface.
     /// Sources and results with unresolved ports, user normalization hooks, or
-    /// unsupported tensor powers require the general checked replacement route.
+    /// unsupported tensor powers are rejected.
     /// Conditions run for every candidate match; RHS callbacks run only on cache
-    /// misses. Set `rhs_cache_size` to zero for callbacks with side effects.
+    /// misses. Set the rule's `rhs_cache_size` to zero for side-effecting callbacks.
     /// As with the other certified algebra operations, `self` must already have
     /// a valid established interface and explicit-index multiplicities.
-    pub fn replace_tensor(
-        &self,
-        pattern: &Pattern,
-        rhs: &ReplaceWith<'_>,
-        conditions: Option<&Condition<PatternRestriction>>,
-        rhs_cache_size: usize,
-    ) -> Result<Self> {
-        self.replace(&TensorRule::new(
-            pattern.clone(),
-            rhs.clone(),
-            conditions.cloned(),
-            rhs_cache_size,
-        )?)
+    pub fn replace(&self, rule: &TensorRule<'_>) -> Result<Self> {
+        self.replace_rules(std::slice::from_ref(rule))
     }
 
-    /// Apply a reusable rule, preserving the source's established interface.
-    pub fn replace(&self, rule: &TensorRule<'_>) -> Result<Self> {
-        let mut proof = InterfaceInference::default();
-        if self.expression.as_view().needs_normalization()
-            || !self.structure.open_positions().is_empty()
-            || !proof.rewrites_preserve_leaf_interfaces(self.expression.as_view())
-        {
+    /// Apply an ordered rule set in one traversal of the original tensor leaves.
+    /// The first matching rule owns a leaf, including identity replacements;
+    /// emitted RHS leaves are not matched again in the same stage. Conditions
+    /// and bounded RHS caches remain local to each rule and this application.
+    pub fn replace_rules(&self, rules: &[TensorRule<'_>]) -> Result<Self> {
+        if rules.is_empty() {
+            return Ok(self.clone());
+        }
+        if !self.rewrites_preserve_interface() {
             return Err(TensorInferenceError::invalid(
                 "tensor-safe replacement requires normalized intrinsic tensor leaves with explicit ports and supported powers",
             ));
         }
         let mut replacement = TensorReplacement {
-            rule,
-            matcher: None,
-            match_stack: WrappedMatchStack::new(&rule.conditions, &rule.settings),
-            rhs_cache: HashMap::new(),
+            rules: rules.iter().map(RuleApplication::new).collect(),
             source_signatures: HashMap::new(),
-            proof,
+            proof: InterfaceInference::default(),
+            rewrite_preserved: true,
             slots: SlotMatcher::default(),
         };
         match replacement.apply(self.expression.as_view())? {
             AtomOrView::View(_) => Ok(self.clone()),
-            expression => Ok(Self::from_normalized_parts(
-                expression.into_owned(),
-                self.structure.clone(),
-            )),
+            expression => {
+                let result =
+                    Self::from_normalized_parts(expression.into_owned(), self.structure.clone());
+                // Per-binding checks and product coalescence established the
+                // result interface. Unsupported but valid powers do not inherit
+                // the stronger leaf-rewrite proof.
+                let _ = result.proofs.validated.set(true);
+                if replacement.rewrite_preserved {
+                    let _ = result.proofs.rewrite.set(true);
+                    let _ = result.proofs.algebra.set(true);
+                }
+                Ok(result)
+            }
         }
+    }
+}
+
+impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
+    /// Apply one ordered rule set to the root and reachable definition bodies.
+    /// Registered uses remain literal leaves; definitions are never resolved.
+    /// Each original domain uses the ordinary replacement owner's local caches.
+    pub fn replace_rules(self: &Arc<Self>, rules: &[TensorRule<'_>]) -> Result<Arc<Self>> {
+        if rules.is_empty() {
+            return Ok(Arc::clone(self));
+        }
+        self.map_domains(|source, _observe| {
+            let next = source.replace_rules(rules)?;
+            Ok((next, Vec::new()))
+        })
     }
 }
 
@@ -202,9 +225,10 @@ impl Signature {
     fn observe(value: AtomView<'_>, slots: &mut SlotMatcher) -> Result<Self> {
         #[cfg(test)]
         tests::SIGNATURE_OBSERVATIONS.with(|count| count.set(count.get() + 1));
+        let (interface, occurrences) = InterfaceInference::replacement_observation(value, slots)?;
         Ok(Self {
-            interface: InterfaceInference::replacement_interface(value)?,
-            occurrences: ExplicitIndexOccurrences::from_atom(value, slots),
+            interface,
+            occurrences,
         })
     }
 
@@ -216,13 +240,29 @@ impl Signature {
 
 type Bindings<'source> = Vec<(Symbol, Match<'source>)>;
 
-struct TensorReplacement<'source, 'rule, 'rhs> {
+struct RuleApplication<'source, 'rule, 'rhs> {
     rule: &'rule TensorRule<'rhs>,
     matcher: Option<AtomMatchIterator<'source, 'rule>>,
     match_stack: WrappedMatchStack<'source, 'rule>,
     rhs_cache: HashMap<Bindings<'source>, (Atom, Arc<Signature>)>,
+}
+
+impl<'source, 'rule, 'rhs> RuleApplication<'source, 'rule, 'rhs> {
+    fn new(rule: &'rule TensorRule<'rhs>) -> Self {
+        Self {
+            rule,
+            matcher: None,
+            match_stack: WrappedMatchStack::new(&rule.conditions, &rule.settings),
+            rhs_cache: HashMap::new(),
+        }
+    }
+}
+
+struct TensorReplacement<'source, 'rule, 'rhs> {
+    rules: Vec<RuleApplication<'source, 'rule, 'rhs>>,
     source_signatures: HashMap<AtomView<'source>, Signature>,
     proof: InterfaceInference,
+    rewrite_preserved: bool,
     slots: SlotMatcher,
 }
 
@@ -265,24 +305,20 @@ impl<'source> TensorReplacement<'source, '_, '_> {
                     _ => false,
                 };
                 if needs_power_check {
+                    self.rewrite_preserved = false;
                     let expected = InterfaceInference::replacement_interface(value)?;
                     SymbolicTensor::validate_encoded_interface(&result, &expected)?;
                     composition::validate_explicit_index_occurrences(&result)?;
                 }
                 Ok(result.into())
             }
-            // The matcher rejects fixed-head mismatches before bindings or
-            // conditions. Avoid classifying these impossible tensor candidates.
             AtomView::Fun(function)
-                if self
-                    .rule
-                    .fixed_head
-                    .is_some_and(|head| head != function.get_symbol_id()) =>
-            {
-                Ok(value.into())
-            }
-            AtomView::Fun(function)
-                if composition::is_tensor_leaf_head(function.get_symbol())
+                if self.rules.iter().any(|application| {
+                    application
+                        .rule
+                        .fixed_head
+                        .is_none_or(|head| head == function.get_symbol_id())
+                }) && composition::is_tensor_leaf_head(function.get_symbol())
                     && !function.get_symbol().is_scalar() =>
             {
                 self.replace_leaf(value)
@@ -294,18 +330,33 @@ impl<'source> TensorReplacement<'source, '_, '_> {
     }
 
     fn replace_leaf(&mut self, value: AtomView<'source>) -> Result<AtomOrView<'source>> {
-        self.match_stack.reset();
-        // Compile only when a leaf reaches matching, preserving the behavior
-        // of unsupported patterns on expressions with no eligible leaves.
-        let matcher = self
-            .matcher
-            .get_or_insert_with(|| AtomMatchIterator::new(&self.rule.pattern));
-        matcher.set_new_target(value, &self.match_stack);
-        let Some(used_flags) = matcher.next(&mut self.match_stack) else {
+        let mut matched = None;
+        for application in &mut self.rules {
+            if let AtomView::Fun(function) = value
+                && application
+                    .rule
+                    .fixed_head
+                    .is_some_and(|head| head != function.get_symbol_id())
+            {
+                continue;
+            }
+            application.match_stack.reset();
+            // Compile lazily, retaining no-match behavior for unsupported
+            // patterns whose stage never reaches an eligible tensor leaf.
+            let matcher = application
+                .matcher
+                .get_or_insert_with(|| AtomMatchIterator::new(&application.rule.pattern));
+            matcher.set_new_target(value, &application.match_stack);
+            if let Some(used_flags) = matcher.next(&mut application.match_stack) {
+                debug_assert!(used_flags.iter().all(|used| *used));
+                matched = Some(application);
+                break;
+            }
+        }
+        let Some(application) = matched else {
             return Ok(value.into());
         };
-        debug_assert!(used_flags.iter().all(|used| *used));
-        let found = self.match_stack.get_match_stack();
+        let found = application.match_stack.get_match_stack();
         // This bounded borrowed-key cache saves repeated source observation;
         // its limit is independent of the user-selected RHS callback cache.
         let cache_source = self.source_signatures.len() < 256;
@@ -323,7 +374,7 @@ impl<'source> TensorReplacement<'source, '_, '_> {
             }
         };
         let key = found.get_matches();
-        if let Some((rhs, signature)) = self.rhs_cache.get(key) {
+        if let Some((rhs, signature)) = application.rhs_cache.get(key) {
             if !source.accepts(signature, rhs.is_zero()) {
                 return Err(TensorInferenceError::invalid(
                     "tensor replacement changes the matched interface or introduces explicit indices",
@@ -335,7 +386,7 @@ impl<'source> TensorReplacement<'source, '_, '_> {
                 rhs.clone().into()
             });
         }
-        let rhs = match &self.rule.rhs {
+        let rhs = match &application.rule.rhs {
             ReplaceWith::Pattern(pattern) => Workspace::get_local().with(|workspace| {
                 let mut result = Atom::new();
                 pattern
@@ -350,16 +401,21 @@ impl<'source> TensorReplacement<'source, '_, '_> {
             })?,
             ReplaceWith::Map(map) => map(found),
         };
-        let signature = if let Some(signature) = &self.rule.literal_rhs {
+        let signature = if let Some(signature) = &application.rule.literal_rhs {
             Arc::clone(signature)
         } else {
             if rhs.as_view().needs_normalization()
-                || !self.proof.rewrites_preserve_leaf_interfaces(rhs.as_view())
+                || !InterfaceInference::normalization_is_intrinsic(rhs.as_view())
             {
                 return Err(TensorInferenceError::invalid(
-                    "tensor replacement RHS requires normalized intrinsic leaves with explicit ports and supported powers",
+                    "tensor replacement RHS requires normalized intrinsic leaves",
                 ));
             }
+            // Normalization can turn equal indexed factors into a power. The
+            // checked signature below validates that power's interface and its
+            // explicit-index bounds; it need not carry the stronger certificate
+            // required to rewrite its leaves again without checking.
+            self.rewrite_preserved &= self.proof.rewrites_preserve_leaf_interfaces(rhs.as_view());
             Arc::new(Signature::observe(rhs.as_view(), &mut self.slots)?)
         };
         if !source.accepts(&signature, rhs.is_zero()) {
@@ -367,8 +423,9 @@ impl<'source> TensorReplacement<'source, '_, '_> {
                 "tensor replacement changes the matched interface or introduces explicit indices",
             ));
         }
-        if self.rhs_cache.len() < self.rule.rhs_cache_size {
-            self.rhs_cache
+        if application.rhs_cache.len() < application.rule.rhs_cache_size {
+            application
+                .rhs_cache
                 .insert(key.to_vec(), (rhs.clone(), signature));
         }
         Ok(if rhs.as_view() == value {
@@ -387,7 +444,7 @@ mod tests {
         structure::{
             abstract_index::AbstractIndex,
             dimension::Dimension,
-            partial::PartialIndex,
+            partial::{PartialIndex, PartialStructureExt},
             representation::{ExtendibleReps, RepName},
             slot::IsAbstractSlot,
         },
@@ -420,6 +477,171 @@ mod tests {
     fn typed(expression: Atom) -> SymbolicTensor<PartialStructure> {
         let raw = SymbolicTensor::<PartialStructure>::infer(expression).unwrap();
         SymbolicTensor::checked_parts(raw.expression, raw.structure).unwrap()
+    }
+
+    #[test]
+    fn aliased_rule_stage_preserves_registry_and_original_domain_schedule() {
+        crate::test_support::test_initialize();
+        let f = spenso::tensor_symbol!("alias_rule_f");
+        let g = spenso::tensor_symbol!("alias_rule_g");
+        let h = spenso::tensor_symbol!("alias_rule_h");
+        let a = slot(81861);
+        let f = leaf(f, std::slice::from_ref(&a));
+        let g = leaf(g, std::slice::from_ref(&a));
+        let h = leaf(h, &[a]);
+        let body = typed(&f + &g);
+        let handle = body.alias_handle().unwrap();
+        let unused = typed(f.clone());
+        let unused_handle = unused.alias_handle().unwrap();
+        let source = Arc::new(
+            typed(&handle.expression + &f)
+                .with_aliases([
+                    (handle.clone(), body),
+                    (unused_handle.clone(), unused.clone()),
+                ])
+                .unwrap(),
+        );
+        let rules = [
+            TensorRule::new(f.to_pattern(), g.clone().into(), None, 0).unwrap(),
+            TensorRule::new(g.to_pattern(), h.clone().into(), None, 0).unwrap(),
+        ];
+        let result = source.replace_rules(&rules).unwrap();
+        assert_eq!(result.root().expression, &handle.expression + &g);
+        assert_eq!(result.resolved().unwrap().expression, 2 * &g + &h);
+        assert!(result.aliases().unwrap().contains(&(unused_handle, unused)));
+        let identity = TensorRule::new(f.to_pattern(), f.into(), None, 0).unwrap();
+        assert!(Arc::ptr_eq(
+            &source,
+            &source.replace_rules(&[identity]).unwrap()
+        ));
+    }
+
+    #[test]
+    fn aliased_rule_callbacks_visit_reachable_bodies_once_and_check_rank_loss() {
+        crate::test_support::test_initialize();
+        let f = spenso::tensor_symbol!("alias_rule_callback_f");
+        let g = spenso::tensor_symbol!("alias_rule_callback_g");
+        let a = slot(81863);
+        let f = leaf(f, std::slice::from_ref(&a));
+        let g = leaf(g, &[a]);
+        let body = typed(f.clone());
+        let handle = body.alias_handle().unwrap();
+        let unused_handle = body.alias_handle().unwrap();
+        let source = Arc::new(
+            typed(&handle.expression + &f)
+                .with_aliases([(handle, body.clone()), (unused_handle, body)])
+                .unwrap(),
+        );
+        let calls = Arc::new(AtomicUsize::new(0));
+        let count = Arc::clone(&calls);
+        let rhs = g.clone();
+        let rule = TensorRule::new(
+            f.to_pattern(),
+            ReplaceWith::Map(Box::new(move |_| {
+                count.fetch_add(1, Ordering::SeqCst);
+                rhs.clone()
+            })),
+            None,
+            0,
+        )
+        .unwrap();
+        let result = source.replace_rules(&[rule]).unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(result.resolved().unwrap().expression, 2 * g);
+        let invalid = TensorRule::new(f.to_pattern(), Atom::one().into(), None, 0).unwrap();
+        let root = source.expression.get_root().clone();
+        let definitions = source.expression.get_aliases().clone();
+        assert!(source.replace_rules(&[invalid]).is_err());
+        assert_eq!(source.expression.get_root(), &root);
+        assert_eq!(source.expression.get_aliases(), &definitions);
+    }
+
+    #[test]
+    fn rule_stage_matches_original_leaves_once_in_declared_priority() {
+        let f = spenso::tensor_symbol!("rule_stage_f");
+        let g = spenso::tensor_symbol!("rule_stage_g");
+        let h = spenso::tensor_symbol!("rule_stage_h");
+        let a = slot(81871);
+        let f = leaf(f, std::slice::from_ref(&a));
+        let g = leaf(g, std::slice::from_ref(&a));
+        let h = leaf(h, &[a]);
+        let rules = [
+            TensorRule::new(f.to_pattern(), g.clone().into(), None, 10).unwrap(),
+            TensorRule::new(g.to_pattern(), h.clone().into(), None, 10).unwrap(),
+        ];
+        let source = typed(&f + &g);
+        let result = source.replace_rules(&rules).unwrap();
+        assert_eq!(result.expression, &g + &h);
+        assert_eq!(result.structure, source.structure);
+        // A matching identity rule still prevents lower-priority application.
+        let rules = [
+            TensorRule::new(f.to_pattern(), f.clone().into(), None, 0).unwrap(),
+            TensorRule::new(f.to_pattern(), h.into(), None, 0).unwrap(),
+        ];
+        assert_eq!(
+            typed(f.clone()).replace_rules(&rules).unwrap().expression,
+            f
+        );
+    }
+
+    #[test]
+    fn rule_stage_conditions_and_callback_caches_are_per_rule() {
+        let f = spenso::tensor_symbol!("rule_stage_callback_f");
+        let g = spenso::tensor_symbol!("rule_stage_callback_g");
+        let h = spenso::tensor_symbol!("rule_stage_callback_h");
+        let wildcard = symbolica::symbol!("rule_stage_callback_arg_");
+        let a = slot(81881);
+        let first = leaf(f, std::slice::from_ref(&a));
+        let second = leaf(g, std::slice::from_ref(&a));
+        let rhs = leaf(h, &[a]);
+        let x = Atom::var(symbolica::symbol!("rule_stage_callback_x"));
+        let y = Atom::var(symbolica::symbol!("rule_stage_callback_y"));
+        let input = typed(&x * (&first + &second) + &y * (&first + &second));
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let rules = [f, g].map(|head| {
+            let calls = Arc::clone(&calls);
+            let rhs = rhs.clone();
+            TensorRule::new(
+                leaf(head, &[Atom::var(wildcard)]).to_pattern(),
+                ReplaceWith::Map(Box::new(move |_| {
+                    calls.lock().unwrap().push(head);
+                    rhs.clone()
+                })),
+                None,
+                1,
+            )
+            .unwrap()
+        });
+        let result = input.replace_rules(&rules).unwrap();
+        assert_eq!(result.expression, 2 * &x * &rhs + 2 * &y * rhs);
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 2);
+        assert!(calls.contains(&f) && calls.contains(&g));
+    }
+
+    #[test]
+    fn tensor_rule_debug_does_not_normalize_patterns_or_call_rhs() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        let head = symbolica::symbol!("rule_debug_callback"; Scalar; norm=move|_,_| {
+            seen.fetch_add(1, Ordering::Relaxed);
+        });
+        let seen = calls.clone();
+        let rule = TensorRule::new(
+            Pattern::Fn(head, vec![Pattern::Literal(Atom::num(3))]),
+            ReplaceWith::Map(Box::new(move |_| {
+                seen.fetch_add(1, Ordering::Relaxed);
+                Atom::Zero
+            })),
+            None,
+            0,
+        )
+        .unwrap();
+        let first = format!("{rule:?}");
+        assert_eq!(first, format!("{rule:?}"));
+        assert!(first.starts_with("TensorRule(Fn("));
+        assert!(first.ends_with(" -> Map, rhs_cache_size=0)"));
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
     }
 
     #[test]
@@ -542,12 +764,14 @@ mod tests {
             );
             let pattern = expression.to_pattern();
             let result = source
-                .replace_tensor(&pattern, &leaf(u, &args).into(), None, 10)
+                .replace(
+                    &TensorRule::new(pattern.clone(), leaf(u, &args).into(), None, 10).unwrap(),
+                )
                 .unwrap();
             assert_eq!(result.expression, leaf(u, &args));
             assert_eq!(result.structure, source.structure);
             let zero = source
-                .replace_tensor(&pattern, &Atom::Zero.into(), None, 10)
+                .replace(&TensorRule::new(pattern.clone(), Atom::Zero.into(), None, 10).unwrap())
                 .unwrap();
             assert!(zero.expression.is_zero());
             assert_eq!(zero.structure, source.structure);
@@ -569,18 +793,21 @@ mod tests {
         let same = &ga + &ha;
         assert_eq!(
             source
-                .replace_tensor(&pattern, &same.clone().into(), None, 0)
+                .replace(&TensorRule::new(pattern.clone(), same.clone().into(), None, 0).unwrap())
                 .unwrap()
                 .expression,
             same
         );
         assert!(
             source
-                .replace_tensor(
-                    &pattern,
-                    &(ga + leaf(h, std::slice::from_ref(&b))).into(),
-                    None,
-                    0
+                .replace(
+                    &TensorRule::new(
+                        pattern.clone(),
+                        (ga + leaf(h, std::slice::from_ref(&b))).into(),
+                        None,
+                        0
+                    )
+                    .unwrap()
                 )
                 .is_err()
         );
@@ -589,17 +816,22 @@ mod tests {
         assert!(scalar.is_scalar());
         assert!(
             scalar
-                .replace_tensor(
-                    &diagonal.to_pattern(),
-                    &(leaf(g, std::slice::from_ref(&b)) * leaf(h, &[b])).into(),
-                    None,
-                    0
+                .replace(
+                    &TensorRule::new(
+                        diagonal.to_pattern(),
+                        (leaf(g, std::slice::from_ref(&b)) * leaf(h, &[b])).into(),
+                        None,
+                        0
+                    )
+                    .unwrap()
                 )
                 .is_err()
         );
         assert_eq!(
             scalar
-                .replace_tensor(&diagonal.to_pattern(), &Atom::one().into(), None, 0)
+                .replace(
+                    &TensorRule::new(diagonal.to_pattern(), Atom::one().into(), None, 0).unwrap()
+                )
                 .unwrap()
                 .expression,
             Atom::one()
@@ -615,7 +847,7 @@ mod tests {
         let ga = leaf(g, &[a]);
         let source = typed(&fa * &ga);
         let result = source
-            .replace_tensor(&fa.to_pattern(), &ga.clone().into(), None, 0)
+            .replace(&TensorRule::new(fa.to_pattern(), ga.clone().into(), None, 0).unwrap())
             .unwrap();
         assert_eq!(result.expression, ga.clone().pow(2));
         assert!(result.is_scalar());
@@ -628,10 +860,43 @@ mod tests {
         }));
         assert!(
             invalid
-                .replace_tensor(&fa.to_pattern(), &rhs, None, 0)
+                .replace(&TensorRule::new(fa.to_pattern(), rhs.clone(), None, 0).unwrap())
                 .is_err()
         );
         assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn tensor_replacement_checks_powered_rhs_without_certifying_leaf_rewrites() {
+        crate::test_support::test_initialize();
+        let head = spenso::tensor_symbol!("rule_powered_rhs_vertex");
+        let q = spenso::tensor_symbol!("rule_powered_rhs_q");
+        let a = slot(81351);
+        let vertex = leaf(head, &[a.clone(), a.clone()]);
+        let qa = leaf(q, std::slice::from_ref(&a));
+        let source = typed(vertex.clone());
+        let square = qa.clone().pow(2);
+        let result = source
+            .replace(&TensorRule::new(vertex.to_pattern(), square.clone().into(), None, 8).unwrap())
+            .unwrap();
+        assert_eq!(result.expression(), &square);
+        assert!(result.is_scalar());
+        assert!(!result.rewrites_preserve_interface());
+        for invalid in [qa.pow(3), leaf(q, &[slot(81352)]).pow(2)] {
+            assert!(
+                source
+                    .replace(
+                        &TensorRule::new(vertex.to_pattern(), invalid.into(), None, 8).unwrap()
+                    )
+                    .is_err()
+            );
+        }
+        let open = leaf(head, &[a]);
+        assert!(
+            typed(open.clone())
+                .replace(&TensorRule::new(open.to_pattern(), square.into(), None, 8).unwrap())
+                .is_err()
+        );
     }
 
     #[test]
@@ -680,7 +945,15 @@ mod tests {
                     ConditionResult::True
                 });
                 let result = source
-                    .replace_tensor(&pattern, &rhs, Some(&condition), cache)
+                    .replace(
+                        &TensorRule::new(
+                            pattern.clone(),
+                            rhs.clone(),
+                            Some(condition.clone()),
+                            cache,
+                        )
+                        .unwrap(),
+                    )
                     .unwrap();
                 assert_eq!(result.expression, source.expression);
                 assert_eq!(result.structure, source.structure);
@@ -738,11 +1011,14 @@ mod tests {
                 };
                 let expression = if certified {
                     source
-                        .replace_tensor(
-                            &pattern,
-                            &ReplaceWith::Map(Box::new(rhs)),
-                            Some(&condition),
-                            cache,
+                        .replace(
+                            &TensorRule::new(
+                                pattern.clone(),
+                                ReplaceWith::Map(Box::new(rhs)),
+                                Some(condition.clone()),
+                                cache,
+                            )
+                            .unwrap(),
                         )
                         .unwrap()
                         .expression
@@ -794,11 +1070,14 @@ mod tests {
         );
         assert_eq!(
             source
-                .replace_tensor(
-                    &pattern,
-                    &ReplaceWith::Pattern((&rhs).into()),
-                    Some(&condition),
-                    10
+                .replace(
+                    &TensorRule::new(
+                        pattern.clone(),
+                        ReplaceWith::Pattern((&rhs).into()),
+                        Some(condition.clone()),
+                        10
+                    )
+                    .unwrap()
                 )
                 .unwrap()
                 .expression,
@@ -834,14 +1113,16 @@ mod tests {
             assert_eq!(expected, ga);
             assert_eq!(
                 source
-                    .replace_tensor(&pattern, &ga.clone().into(), None, 10)
+                    .replace(
+                        &TensorRule::new(pattern.clone(), ga.clone().into(), None, 10).unwrap()
+                    )
                     .unwrap()
                     .expression,
                 expected
             );
             assert_eq!(
                 repeated
-                    .replace_tensor(&pattern, &ga.clone().into(), None, 0)
+                    .replace(&TensorRule::new(pattern.clone(), ga.clone().into(), None, 0).unwrap())
                     .unwrap()
                     .expression,
                 &x * &ga + &y * &ga
@@ -924,11 +1205,14 @@ mod tests {
                 };
                 let result = if certified {
                     source
-                        .replace_tensor(
-                            &pattern,
-                            &ReplaceWith::Map(Box::new(rhs)),
-                            Some(&condition),
-                            cache,
+                        .replace(
+                            &TensorRule::new(
+                                pattern.clone(),
+                                ReplaceWith::Map(Box::new(rhs)),
+                                Some(condition.clone()),
+                                cache,
+                            )
+                            .unwrap(),
                         )
                         .unwrap()
                         .expression
@@ -977,7 +1261,15 @@ mod tests {
         assert_eq!(source.expression.replace(&pattern).with(&rhs), expected);
         assert_eq!(
             source
-                .replace_tensor(&pattern, &ReplaceWith::Pattern((&rhs).into()), None, 0)
+                .replace(
+                    &TensorRule::new(
+                        pattern.clone(),
+                        ReplaceWith::Pattern((&rhs).into()),
+                        None,
+                        0
+                    )
+                    .unwrap()
+                )
                 .unwrap()
                 .expression,
             expected
@@ -1009,14 +1301,16 @@ mod tests {
             .unwrap(),
             SymbolicTensor::new(Atom::Zero, source.structure.clone()),
         ] {
-            let result = source.replace_tensor(&pattern, &rhs, None, 0).unwrap();
+            let result = source
+                .replace(&TensorRule::new(pattern.clone(), rhs.clone(), None, 0).unwrap())
+                .unwrap();
             assert_eq!(result.expression, source.expression);
             assert_eq!(result.structure, source.structure);
         }
         // The existing matcher rejects transformers on the LHS once reached.
         assert!(
             catch_unwind(AssertUnwindSafe(|| {
-                source.replace_tensor(&pattern, &rhs, None, 0)
+                source.replace(&TensorRule::new(pattern.clone(), rhs.clone(), None, 0).unwrap())
             }))
             .is_err()
         );
@@ -1043,7 +1337,11 @@ mod tests {
             seen.fetch_add(1, Ordering::Relaxed);
             rhs_atom.clone()
         }));
-        assert!(source.replace_tensor(&pattern, &rhs, None, 10).is_err());
+        assert!(
+            source
+                .replace(&TensorRule::new(pattern.clone(), rhs.clone(), None, 10).unwrap())
+                .is_err()
+        );
         // Both patterns produce the same bindings, but the second target owns
         // an additional port. Caching the first compatibility result is invalid.
         assert_eq!(calls.load(Ordering::Relaxed), 1);
@@ -1075,7 +1373,11 @@ mod tests {
         .to_pattern();
         assert!(matches!(absent_pattern, Pattern::Fn(_, _)));
         for pattern in [raw.to_pattern(), absent_pattern] {
-            assert!(source.replace_tensor(&pattern, &rhs, None, 0).is_err());
+            assert!(
+                source
+                    .replace(&TensorRule::new(pattern.clone(), rhs.clone(), None, 0).unwrap())
+                    .is_err()
+            );
         }
         assert_eq!(calls.load(Ordering::Relaxed), 0);
         assert_eq!(rhs_calls.load(Ordering::Relaxed), 0);
@@ -1083,13 +1385,17 @@ mod tests {
         let source = typed(ordinary.clone());
         assert!(
             source
-                .replace_tensor(&ordinary.to_pattern(), &Atom::one().into(), None, 0)
+                .replace(
+                    &TensorRule::new(ordinary.to_pattern(), Atom::one().into(), None, 0).unwrap()
+                )
                 .is_err()
         );
         let placeholder = Atom::var(SPENSO_TAG.chain_in);
         assert!(
             source
-                .replace_tensor(&ordinary.to_pattern(), &placeholder.into(), None, 0)
+                .replace(
+                    &TensorRule::new(ordinary.to_pattern(), placeholder.into(), None, 0).unwrap()
+                )
                 .is_err()
         );
     }
@@ -1103,7 +1409,7 @@ mod tests {
         let pattern = source.expression.to_pattern();
         for rhs in [Atom::var(u), Atom::var(u) + Atom::one()] {
             let error = source
-                .replace_tensor(&pattern, &rhs.into(), None, 0)
+                .replace(&TensorRule::new(pattern.clone(), rhs.into(), None, 0).unwrap())
                 .unwrap_err();
             assert!(error.to_string().contains("must be called"), "{error}");
         }
@@ -1121,7 +1427,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             source
-                .replace_tensor(&fa.to_pattern(), &Atom::Zero.into(), None, 0)
+                .replace(&TensorRule::new(fa.to_pattern(), Atom::Zero.into(), None, 0).unwrap())
                 .unwrap()
                 .expression,
             source.expression
@@ -1133,11 +1439,14 @@ mod tests {
         );
         assert!(
             unresolved
-                .replace_tensor(
-                    &unresolved.expression.to_pattern(),
-                    &Atom::Zero.into(),
-                    None,
-                    0
+                .replace(
+                    &TensorRule::new(
+                        unresolved.expression.to_pattern(),
+                        Atom::Zero.into(),
+                        None,
+                        0
+                    )
+                    .unwrap()
                 )
                 .is_err()
         );
@@ -1162,9 +1471,80 @@ mod tests {
             let source = typed(expression.clone());
             let expected = expression.replace(fa.to_pattern()).with(rhs.clone());
             let actual = source
-                .replace_tensor(&fa.to_pattern(), &rhs.clone().into(), None, 0)
+                .replace(&TensorRule::new(fa.to_pattern(), rhs.clone().into(), None, 0).unwrap())
                 .unwrap();
             assert_eq!(actual.expression, expected);
         }
+    }
+
+    #[test]
+    fn carried_rule_proof_survives_identity_and_is_cleared_by_mutable_structure() {
+        use super::super::inference::tests::SCOPE_VALIDATIONS;
+        use spenso::structure::{HasStructure, OrderedStructure, TensorStructure};
+
+        let f = spenso::tensor_symbol!("carried_rule_source");
+        let g = spenso::tensor_symbol!("carried_rule_result");
+        let a = slot(81941);
+        let inferred =
+            SymbolicTensor::<PartialStructure>::infer(leaf(f, std::slice::from_ref(&a))).unwrap();
+        assert_eq!(inferred.proofs.validated.get(), Some(&true));
+        let (expression, structure) = inferred.into_parts();
+        // Detached storage must establish its own facts even when its parts
+        // came from a previously checked value.
+        let source = SymbolicTensor::from_normalized_parts(expression, structure);
+        let rule = TensorRule::new(
+            source.expression.to_pattern(),
+            leaf(g, &[a]).into(),
+            None,
+            0,
+        )
+        .unwrap();
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        assert!(source.rewrites_preserve_interface());
+        let established = SCOPE_VALIDATIONS.with(Cell::get);
+        assert!(established > 0);
+        assert!(source.rewrites_preserve_interface());
+        let same = source
+            .with_checked_expression(source.expression.clone())
+            .unwrap();
+        assert!(same.rewrites_preserve_interface());
+        assert_eq!(SCOPE_VALIDATIONS.with(Cell::get), established);
+
+        let changed = source.replace(&rule).unwrap();
+        assert_eq!(changed.proofs.rewrite.get(), Some(&true));
+        let after_binding_checks = SCOPE_VALIDATIONS.with(Cell::get);
+        assert!(changed.rewrites_preserve_interface());
+        assert_eq!(SCOPE_VALIDATIONS.with(Cell::get), after_binding_checks);
+        // Mutable structural access exists on the ordered network carrier; the
+        // partial-interface carrier exposes only checked transformations.
+        let mut ordered = SymbolicTensor {
+            structure: changed.structure.canonical().clone(),
+            expression: changed.expression,
+            is_metric: changed.is_metric,
+            is_composite: changed.is_composite,
+            proofs: changed.proofs,
+        };
+        let mapped = ordered.clone().map_same_structure(|value| value);
+        assert!(mapped.proofs.rewrite.get().is_none());
+        // Even obtaining mutable access without an edit clears established facts.
+        let _ = ordered.mut_structure();
+        assert!(ordered.proofs.rewrite.get().is_none());
+        assert!(ordered.proofs.validated.get().is_none());
+        assert!(ordered.proofs.algebra.get().is_none());
+        *ordered.mut_structure() = OrderedStructure::new(Vec::new()).into_canonical();
+        let (expression, structure) = ordered.into_parts();
+        let changed = SymbolicTensor::from_normalized_parts(
+            expression,
+            PartialStructure::from_logical_slots(structure.external_structure()),
+        );
+        assert!(!changed.rewrites_preserve_interface());
+        assert!(changed.replace(&rule).is_err());
+
+        let (expression, _) = source.into_parts();
+        let detached = SymbolicTensor::from_normalized_parts(
+            expression,
+            PartialStructure::from_logical_slots([]),
+        );
+        assert!(!detached.rewrites_preserve_interface());
     }
 }

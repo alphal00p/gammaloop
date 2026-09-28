@@ -1,0 +1,12 @@
+digraph triangle_box_triangle {
+v1 -> v7 [pdg=22, mom=p1];
+v10 -> v4 [pdg=22, mom=p2];
+v7 -> v8 [pdg=6];
+v8 -> v9 [pdg=21];
+v8 -> v12 [pdg=6];
+v11 -> v9 [pdg=6];
+v9 -> v10 [pdg=6];
+v10 -> v11 [pdg=6];
+v11 -> v12 [pdg=21];
+v12 -> v7 [pdg=6];
+}

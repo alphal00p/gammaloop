@@ -1,0 +1,15 @@
+---
+source: src/graph/lmb.rs
+expression: "g.dot_lmb(&g.full_filter(), &lmb)"
+---
+digraph {
+  node	 [shape=circle,height=0.1,label=""];
+  overlap = "scale";
+  layout = "neato";
+  start=2;
+  0	 [label=""];
+  1	 [label=""];
+  0:0:s	-> 1:1:s	 [id=0  color="red:blue;0.5" label="0"];
+  0:3:s	-> 1:2:s	 [id=1  color="red:blue;0.5" label="Q(1)"];
+  0:4:s	-> 1:5:s	 [id=2  color="red:blue;0.5" label="-Q(0)-Q(1)"];
+}

@@ -68,7 +68,7 @@ fn hhgghh() {
 fn compare_poly_to_direct(graph: &BareGraph, prefactor: &GlobalPrefactor) -> bool {
     let color_simplified = Numerator::default()
         .from_graph(graph, prefactor)
-        .color_simplify();
+        .color_simplify().unwrap();
 
     let poly = color_simplified
         .clone()
@@ -96,7 +96,7 @@ fn compare_poly_to_direct(graph: &BareGraph, prefactor: &GlobalPrefactor) -> boo
 pub(crate) fn save_expr(graph: &BareGraph, prefactor: &GlobalPrefactor, name: &str) {
     let color_simplified = Numerator::default()
         .from_graph(graph, prefactor)
-        .color_simplify();
+        .color_simplify().unwrap();
     let direct = color_simplified
         .parse()
         .unwrap()
@@ -280,8 +280,8 @@ fn tree_ta_ta_1() {
                 &graph.bare_graph,
                 &test_export_settings.numerator_settings.global_prefactor
             )
-            .color_simplify()
-            .gamma_simplify()
+            .color_simplify().unwrap()
+            .gamma_simplify().unwrap()
             .export()
     );
 }
@@ -302,7 +302,7 @@ pub(crate) fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
 
     let mut num_nogamma = num
         .clone()
-        .color_simplify()
+        .color_simplify().unwrap()
         // .gamma_symplify()
         .parse()
         .unwrap()
@@ -320,8 +320,8 @@ pub(crate) fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
         );
     let mut num_gamma = num
         .clone()
-        .color_simplify()
-        .gamma_simplify()
+        .color_simplify().unwrap()
+        .gamma_simplify().unwrap()
         .parse()
         .unwrap()
         .contract::<Rational>(ContractionSettings::<Rational>::Normal)
@@ -611,7 +611,7 @@ fn tree_h_ttxaah_0() {
     };
 
     num.from_global(expr, &prefactor)
-        .color_simplify()
+        .color_simplify().unwrap()
         // .color_project()
         // .gamma_symplify()
         .parse()
@@ -623,7 +623,7 @@ fn tree_h_ttxaah_0() {
 
 #[test]
 fn color() {
-    insta::assert_snapshot!("Single color string",Numerator::default().from_global(parse!("f(coad(8,1),coad(8,11),coad(8,21))*f(coad(8,21),coad(8,2),coad(8,12))*f(coad(8,3),coad(8,12),coad(8,22))*f(coad(8,22),coad(8,4),coad(8,13))*f(coad(8,5),coad(8,13),coad(8,23))*f(coad(8,23),coad(8,6),coad(8,14))*f(coad(8,7),coad(8,14),coad(8,24))*f(coad(8,24),coad(8,8),coad(8,11))*f(coad(8,1),coad(8,2),coad(8,3))*f(coad(8,4),coad(8,5),coad(8,6))*id(coad(8,7),coad(8,8))"), &GlobalPrefactor::default()).color_simplify().export());
+    insta::assert_snapshot!("Single color string",Numerator::default().from_global(parse!("f(coad(8,1),coad(8,11),coad(8,21))*f(coad(8,21),coad(8,2),coad(8,12))*f(coad(8,3),coad(8,12),coad(8,22))*f(coad(8,22),coad(8,4),coad(8,13))*f(coad(8,5),coad(8,13),coad(8,23))*f(coad(8,23),coad(8,6),coad(8,14))*f(coad(8,7),coad(8,14),coad(8,24))*f(coad(8,24),coad(8,8),coad(8,11))*f(coad(8,1),coad(8,2),coad(8,3))*f(coad(8,4),coad(8,5),coad(8,6))*id(coad(8,7),coad(8,8))"), &GlobalPrefactor::default()).color_simplify().unwrap().export());
 }
 
 #[test]
@@ -792,7 +792,7 @@ fn one_loop_lbl() {
 
     println!(
         "canonized with color:{:+}",
-        feyn.color_simplify()
+        feyn.color_simplify().unwrap()
             .canonize_lorentz()
             .unwrap()
             .get_single_atom()
@@ -885,7 +885,7 @@ fn one_loop_lbl_concretize() {
 
     let feyn = Numerator::default()
         .from_graph(&graph.bare_graph, &GlobalPrefactor::default())
-        .color_simplify()
+        .color_simplify().unwrap()
         .parse();
 
     // let reps = feyn.random_concretize_reps(None, true);
@@ -951,10 +951,10 @@ fn dumb_four_gluon() {
     // println!("{}", num.state.color);
     // println!("{}", num.state.colorless);
 
-    let colorsimp = num.color_simplify();
+    let colorsimp = num.color_simplify().unwrap();
     // println!("{}", colorsimp.state.color);
 
-    let gamma = colorsimp.clone().gamma_simplify();
+    let gamma = colorsimp.clone().gamma_simplify().unwrap();
     // println!("{}", gamma.state.colorless);
 
     let gammasingle = gamma.get_single_atom().unwrap();

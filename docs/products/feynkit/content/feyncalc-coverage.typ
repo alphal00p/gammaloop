@@ -1677,7 +1677,7 @@ Particles and vertices are selected by model names.
 
 Shared particle spin and color sums close the Dirac adjoint. Spenso and Idenso
 perform the color and Dirac algebra. Collecting Lorentz structures with
-`TensorExpression.expand_mink` keeps scalar coefficients factored while the
+`TensorExpression.collect` with a Minkowski representation filter keeps scalar coefficients factored while the
 physical projectors are contracted. Null and timelike gluon reference momenta
 give the same exact massive SU(N) expression.
 

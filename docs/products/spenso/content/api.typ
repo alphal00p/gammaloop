@@ -62,8 +62,9 @@ building the Rust crate alone does not inject the module into another Symbolica 
 
 The same module exports Idenso's algebra settings and exceptions. Its simplification
 operations are `TensorExpression` methods, so symbolic pipelines can chain
-`expression.simplify_gamma().simplify_color().simplify_metrics()` while retaining the
-tensor interface.
+`expression.simplify_gamma().simplify_color().contract()` while retaining the
+tensor interface and literal aliases. Resolve the result with `to_expression()`;
+`expand()` explicitly requests polynomial materialization.
 
 `Tensor`, `TensorNetwork`, and `TensorExpression` expose an immutable
 `TensorStructure` through the `.structure` property. It records an optional

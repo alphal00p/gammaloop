@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
-use pyo3::PyResult;
 use pyo3::exceptions::PyRuntimeError;
+use pyo3::PyResult;
 
 use crate::PreparedRender;
 
@@ -176,11 +176,9 @@ mod tests {
             .descendants()
             .find(|node| node.has_tag_name("a"))
             .unwrap();
-        assert!(
-            target
-                .attributes()
-                .all(|attribute| attribute.name() != "href")
-        );
+        assert!(target
+            .attributes()
+            .all(|attribute| attribute.name() != "href"));
         assert_eq!(target.attribute("data-linnet-kind"), Some("edge"));
     }
 }

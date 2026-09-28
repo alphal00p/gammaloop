@@ -4,14 +4,27 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-MuAmu
 This tests the squared current contraction, not diagram generation or phase space.
 """
 
+import importlib
+import sys
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community import feynkit as fk
-from symbolica.community.spenso import Representation, TensorExpression, chain
+from symbolica.community.spenso import (
+    Representation,
+    TensorExpression,
+    TensorName,
+    chain,
+)
+
+fk = importlib.import_module(
+    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
+)
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
-p1, p2, k1, k2, s, t, u, e = S("p1", "p2", "k1", "k2", "s", "t", "u", "e")
+p1, p2, k1, k2 = (
+    TensorName.vector(name).to_expression() for name in ("p1", "p2", "k1", "k2")
+)
+s, t, u, e = S("s", "t", "u", "e")
 me, mm = S("UFO::Me", "UFO::MM")
 gamma, bis, mink = S("spenso::gamma", "spenso::bis", "spenso::mink")
 mu, nu = S("mu", "nu")
@@ -33,12 +46,13 @@ kin = fk.Kinematics.mandelstam(
     [p1, p2, k1, k2], [me**2, me**2, mm**2, mm**2], [s, t, u]
 )
 contracted = (
-    TensorExpression(
+    (
         TensorExpression(incoming).simplify_gamma().to_expression()
         * TensorExpression(outgoing).simplify_gamma().to_expression()
     )
-    .expand()
+    .contract()
     .to_dots()
+    .to_expression()
     .to_expression()
 )
 squared = kin.apply(contracted) * e**4 / s**2
@@ -78,8 +92,10 @@ right_current = chain(
     TensorExpression.projp(4)("middle", b),
 ).to_expression()
 projected = (incoming * outgoing).replace(pattern, right_current)
-traces = TensorExpression(projected.expand()).simplify_gamma().expand()
-contracted = traces.simplify_epsilon().expand().to_dots().to_expression()
+traces = TensorExpression(projected).simplify_gamma()
+contracted = (
+    traces.simplify_epsilon().contract().to_dots().to_expression().to_expression()
+)
 # Undo the two initial spin averages: each projected state is specified.
 polarized = 4 * kin.apply(contracted) * e**4 / s**2
 assert (polarized - 4 * e**4 * (me**2 + mm**2 - u) ** 2 / s**2).together() == E("0")

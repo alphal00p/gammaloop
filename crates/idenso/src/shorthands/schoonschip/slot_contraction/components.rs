@@ -1,6 +1,7 @@
 //! Collect metric/vector components before materializing their products.
 
 mod factorized;
+pub(crate) use factorized::{ContractionStatus, FactorizedContraction};
 
 use super::{Endpoint, SlotContraction};
 use crate::{
@@ -8,7 +9,9 @@ use crate::{
     tensor::{SymbolicTensor, inference::InterfaceInference},
 };
 use ahash::AHashMap;
+use spenso::shadowing::{TermLeaf, TermTape};
 use spenso::structure::{
+    abstract_index::AbstractIndex,
     partial::{PartialStructure, PartialStructureExt},
     representation::{LibraryRep, RepName},
     slot::{SlotMatch, SlotMatcher},
@@ -25,27 +28,29 @@ use symbolica::{
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Argument<'a> {
     Original(AtomView<'a>),
-    Vector(usize, Symbol),
+    Vector(usize, usize),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum TensorSource {
+enum TensorSource<'a> {
     Function(Symbol),
+    Literal(AtomView<'a>),
     Factor(usize),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum Variable<'a> {
     Scalar(AtomView<'a>),
-    Dot(usize, [Symbol; 2]),
-    Vector(Symbol, AtomView<'a>),
+    Subtree(usize),
+    Dot(usize, [usize; 2]),
+    Vector(usize, AtomView<'a>),
     Metric([AtomView<'a>; 2]),
-    Tensor(TensorSource, Vec<Argument<'a>>),
+    Tensor(TensorSource<'a>, Vec<Argument<'a>>),
 }
 
 #[derive(Clone, Copy)]
 enum Terminal<'a> {
-    Vector(Symbol),
+    Vector(usize),
     Free(AtomView<'a>),
     Tensor(usize, usize),
 }
@@ -62,7 +67,7 @@ struct Node<'a> {
 // Only a key for the existing tensor plan: exact non-internal arguments and
 // (argument position, space) for internal ports. No new tensor semantics.
 type TensorKey<'a> = (
-    TensorSource,
+    TensorSource<'a>,
     Vec<(usize, Argument<'a>)>,
     Vec<(usize, usize)>,
 );
@@ -74,30 +79,37 @@ struct MonomialKey {
     connections: Vec<(usize, [(usize, usize); 2])>,
 }
 
-// A bounded syntax tape for virtual expansion. Leaves refer to borrowed source
-// factors; tensor recognition and contraction remain in the existing planner.
-#[derive(Clone, Copy)]
-enum InputFactor {
-    Atom(usize),
-    Number(usize),
-    Add(usize, usize),
-    Mul(usize, usize),
-    Pow(usize, u16),
+// Leaves identify borrowed payloads or an opaque subtree of the existing graph.
+// Only explicit expansion admits Atom arithmetic directly.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum InputLeaf<'a> {
+    Atom(AtomView<'a>),
+    // A completed graph scope with an established empty boundary. Its literal
+    // value, rather than its occurrence ID, identifies an opaque coefficient.
+    Scalar(AtomView<'a>),
+    Subtree(usize),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Intake {
-    ExpandedContraction,
-    FactoredContraction,
+    Contraction,
     ScalarExpansion,
+    #[cfg(test)]
+    ExpandedContraction,
+    #[cfg(test)]
+    FactoredContraction,
 }
 
 // Scratch storage for this one coefficient-list emission, not a tensor interface.
 struct ComponentSum<'a, 'b> {
     contractor: &'b SlotContraction,
     intake: Intake,
+    rank_one: bool,
     slots: &'b mut SlotMatcher,
     heads: AHashMap<Symbol, bool>,
+    vectors: Vec<FunView<'a>>,
+    vector_sources: AHashMap<AtomView<'a>, usize>,
+    vector_positions: AHashMap<(Symbol, Vec<AtomView<'a>>), usize>,
     spaces: Vec<(LibraryRep, AtomView<'a>)>,
     // Resolved syntax survives term resets; incidence counts and node IDs do not.
     endpoints: AHashMap<AtomView<'a>, (usize, AtomView<'a>)>,
@@ -111,8 +123,11 @@ struct ComponentSum<'a, 'b> {
     contracted: bool,
     inference: InterfaceInference,
     tensor_ports: AHashMap<AtomView<'a>, Vec<(usize, AtomView<'a>)>>,
-    tensors: Vec<(TensorSource, Vec<Argument<'a>>)>,
-    opaque_factors: Vec<(AtomView<'a>, Vec<AtomView<'a>>, PartialStructure)>,
+    tensors: Vec<(TensorSource<'a>, Vec<Argument<'a>>)>,
+    literal_relabellings: std::cell::RefCell<Vec<(Atom, Atom)>>,
+    opaque_factors: Vec<(usize, Vec<AtomView<'a>>, PartialStructure)>,
+    factor_roots: Vec<Option<usize>>,
+    factor_emission: Option<&'b dyn Fn(usize) -> Option<Atom>>,
     overrides: Vec<(AtomView<'a>, Argument<'a>)>,
     metrics: usize,
     alpha_tensors: AHashMap<TensorKey<'a>, usize>,
@@ -120,38 +135,59 @@ struct ComponentSum<'a, 'b> {
     alpha_bytes: usize,
     coefficients: Vec<Rational>,
     monomials: Vec<Vec<(usize, u16)>>,
-    input_nodes: Vec<InputFactor>,
-    input_children: Vec<usize>,
-    input_leaves: AHashMap<AtomView<'a>, usize>,
-    input_atoms: Vec<AtomView<'a>>,
-    input_numbers: Vec<Rational>,
-    input_powers: Vec<u16>,
-    input_active: Vec<usize>,
-    input_numeric_depth: usize,
-    input_terms: AHashMap<Vec<(usize, u16)>, (usize, Rational)>,
-    input_bytes: usize,
+    input: TermTape<InputLeaf<'a>>,
     scalar_spectators: AHashMap<AtomView<'a>, bool>,
-    distributed: bool,
-    preserve_scalar_factors: bool,
 }
 
 impl SlotContraction {
-    pub(super) fn collect_component_sum(
+    pub(super) fn materialize_scalar_sum(
+        &self,
+        value: AtomView<'_>,
+        slots: &mut SlotMatcher,
+    ) -> Option<Atom> {
+        if !matches!(value, AtomView::Add(_))
+            || value.needs_normalization()
+            || self.metric.get_evaluation_info().is_some()
+        {
+            return None;
+        }
+        let mut state = ComponentSum::new(self, Intake::ScalarExpansion, slots);
+        let (node, _) = state.compile_input(value, 0)?;
+        state
+            .input
+            .distribute(&mut vec![(node, 1)], &Rational::one(), 0)?;
+        let terms = state.input.take_terms();
+        state.coefficients.reserve(terms.len());
+        state.monomials.reserve(terms.len());
+        for (factors, coefficient) in terms {
+            state.factors.clear();
+            for (factor, exponent) in factors {
+                // Compile-time admission proved every literal scalar. This
+                // explicit expansion neither contracts nor rebuilds functions.
+                let InputLeaf::Atom(value) = state.input.leaves()[factor] else {
+                    return None;
+                };
+                state.variable(Variable::Scalar(value), exponent);
+            }
+            state.coefficients.push(coefficient);
+            state.monomials.push(state.factors.clone());
+        }
+        state.emit_polynomial()
+    }
+
+    /// Explicit test oracle for the flat reducer. No production contraction
+    /// dispatch reaches polynomial emission; the factorized engine owns that.
+    #[cfg(test)]
+    fn materialize_test_sum(
         &self,
         value: AtomView<'_>,
         slots: &mut SlotMatcher,
         intake: Intake,
     ) -> Option<Atom> {
-        #[cfg(test)]
-        super::COLLECTION_COUNTS.with(|counts| {
-            let (expanded, factored) = counts.get();
-            counts.set((
-                expanded + usize::from(intake == Intake::ExpandedContraction),
-                factored + usize::from(intake == Intake::FactoredContraction),
-            ));
-        });
+        if intake == Intake::ScalarExpansion {
+            return self.materialize_scalar_sum(value, slots);
+        }
         let expand_sums = intake != Intake::ExpandedContraction;
-        let scalar_expansion = intake == Intake::ScalarExpansion;
         if !matches!(value, AtomView::Add(_)) && intake != Intake::FactoredContraction {
             return None;
         }
@@ -180,20 +216,16 @@ impl SlotContraction {
             let mut compiled = Vec::with_capacity(pending.len());
             for (factor, exponent) in pending {
                 let (node, next) = state.compile_input(factor, 0)?;
-                count = ComponentSum::product_size(count, next)?;
+                count = TermTape::<InputLeaf<'_>>::product_size(count, next)?;
                 compiled.push((node, exponent));
             }
-            state.distribute(&mut compiled, &Rational::one(), 0)?;
+            state.input.distribute(&mut compiled, &Rational::one(), 0)?;
             // Match expansion's exact collection before checking graph degree
             // or opaque powers. Cancelled terms cannot create incidences.
-            let mut terms: Vec<_> = std::mem::take(&mut state.input_terms)
-                .into_iter()
-                .filter(|(_, (_, coefficient))| !coefficient.is_zero())
-                .collect();
-            terms.sort_unstable_by_key(|(_, (order, _))| *order);
+            let terms = state.input.take_terms();
             state.coefficients.reserve(terms.len());
             state.monomials.reserve(terms.len());
-            for (factors, (_, coefficient)) in terms {
+            for (factors, coefficient) in terms {
                 state.nodes.clear();
                 state.occurrences.clear();
                 state.factors.clear();
@@ -201,17 +233,12 @@ impl SlotContraction {
                 state.metrics = 0;
                 state.coefficient = coefficient;
                 for (factor, exponent) in factors {
-                    if scalar_expansion {
-                        // Admission has already proved this literal leaf scalar.
-                        // Algebra must neither contract nor rebuild compact dots.
-                        state.variable(Variable::Scalar(state.input_atoms[factor]), exponent);
-                    } else {
-                        state.factor(state.input_atoms[factor], exponent)?;
-                    }
+                    let InputLeaf::Atom(value) = state.input.leaves()[factor] else {
+                        return None;
+                    };
+                    state.factor(value, exponent)?;
                 }
-                if !scalar_expansion {
-                    state.reduce_components()?;
-                }
+                state.reduce_components()?;
                 state.coefficients.push(state.coefficient.clone());
                 state.monomials.push(state.factors.clone());
             }
@@ -240,64 +267,7 @@ impl SlotContraction {
                 state.monomials.push(state.factors.clone());
             }
         }
-        if !state.contracted && !state.distributed {
-            return None;
-        }
-        if state.coefficients.is_empty() {
-            return Some(Atom::Zero);
-        }
-        if expand_sums {
-            // Canonical variable aliases are resolved by the existing emitter.
-            // A conservative total degree bound proves that even a complete
-            // alias collision cannot overflow after materialization starts.
-            for factors in &state.monomials {
-                factors
-                    .iter()
-                    .try_fold(0u16, |degree, (_, exponent)| degree.checked_add(*exponent))?;
-            }
-        }
-        // Dense polynomial exponents suit the few scalar variables in a ladder,
-        // but not high-entropy sums with a new variable in every monomial.
-        const MAX_EXPONENT_BYTES: usize = 64 * 1024 * 1024;
-        if state
-            .coefficients
-            .len()
-            .checked_mul(state.variables.len())?
-            .checked_mul(std::mem::size_of::<u16>())?
-            > MAX_EXPONENT_BYTES
-        {
-            return None;
-        }
-        // Admission has finished: no callback-bearing or unsupported factor can
-        // reach a builder. Canonical Atom equality also merges any variable alias.
-        let mut atoms = AHashMap::new();
-        let mut variables: Vec<PolyVariable> = Vec::new();
-        let mut remap = Vec::with_capacity(state.variables.len());
-        for variable in &state.variables {
-            let atom = state.emit_variable(variable)?;
-            let next = variables.len();
-            let position = *atoms.entry(atom.clone()).or_insert_with(|| {
-                variables.push(atom.try_into().unwrap());
-                next
-            });
-            remap.push(position);
-        }
-        let count = variables.len();
-        let size = state.coefficients.len().checked_mul(count)?;
-        let mut exponents = vec![0u16; size];
-        for (term, factors) in state.monomials.iter().enumerate() {
-            for &(factor, exponent) in factors {
-                let entry = &mut exponents[term * count + remap[factor]];
-                *entry = entry.checked_add(exponent)?;
-            }
-        }
-        let result = MultivariatePolynomial::<_, u16>::from_coefficient_list(
-            state.coefficients,
-            exponents,
-            variables.into(),
-            &Q,
-        )
-        .to_expression();
+        let result = state.emit_polynomial()?;
         if spectators.is_empty() {
             Some(result)
         } else {
@@ -312,12 +282,77 @@ impl SlotContraction {
 }
 
 impl<'a, 'b> ComponentSum<'a, 'b> {
+    fn emit_polynomial(self) -> Option<Atom> {
+        if !self.contracted && !self.input.distributed() {
+            return None;
+        }
+        if self.coefficients.is_empty() {
+            return Some(Atom::Zero);
+        }
+        // Canonical variable aliases are resolved by the existing emitter.
+        // A conservative degree bound proves even a complete alias collision
+        // cannot overflow after materialization starts.
+        for factors in &self.monomials {
+            factors
+                .iter()
+                .try_fold(0u16, |degree, (_, exponent)| degree.checked_add(*exponent))?;
+        }
+        // Dense polynomial exponents suit the few scalar variables in a ladder,
+        // but not high-entropy sums with a new variable in every monomial.
+        const MAX_EXPONENT_BYTES: usize = 64 * 1024 * 1024;
+        if self
+            .coefficients
+            .len()
+            .checked_mul(self.variables.len())?
+            .checked_mul(std::mem::size_of::<u16>())?
+            > MAX_EXPONENT_BYTES
+        {
+            return None;
+        }
+        // Admission has finished: no callback-bearing or unsupported factor can
+        // reach a builder. Canonical Atom equality also merges any variable alias.
+        let mut atoms = AHashMap::new();
+        let mut variables: Vec<PolyVariable> = Vec::new();
+        let mut remap = Vec::with_capacity(self.variables.len());
+        for variable in &self.variables {
+            let atom = self.emit_variable(variable)?;
+            let next = variables.len();
+            let position = *atoms.entry(atom.clone()).or_insert_with(|| {
+                variables.push(atom.try_into().unwrap());
+                next
+            });
+            remap.push(position);
+        }
+        let count = variables.len();
+        let size = self.coefficients.len().checked_mul(count)?;
+        let mut exponents = vec![0u16; size];
+        for (term, factors) in self.monomials.iter().enumerate() {
+            for &(factor, exponent) in factors {
+                let entry = &mut exponents[term * count + remap[factor]];
+                *entry = entry.checked_add(exponent)?;
+            }
+        }
+        Some(
+            MultivariatePolynomial::<_, u16>::from_coefficient_list(
+                self.coefficients,
+                exponents,
+                variables.into(),
+                &Q,
+            )
+            .to_expression(),
+        )
+    }
+
     fn new(contractor: &'b SlotContraction, intake: Intake, slots: &'b mut SlotMatcher) -> Self {
         Self {
             contractor,
             intake,
+            rank_one: true,
             slots,
             heads: AHashMap::new(),
+            vectors: Vec::new(),
+            vector_sources: AHashMap::new(),
+            vector_positions: AHashMap::new(),
             spaces: Vec::new(),
             endpoints: AHashMap::new(),
             compact_spaces: AHashMap::new(),
@@ -331,7 +366,10 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             inference: InterfaceInference::default(),
             tensor_ports: AHashMap::new(),
             tensors: Vec::new(),
+            literal_relabellings: Default::default(),
             opaque_factors: Vec::new(),
+            factor_roots: Vec::new(),
+            factor_emission: None,
             overrides: Vec::new(),
             metrics: 0,
             alpha_tensors: AHashMap::new(),
@@ -339,26 +377,18 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             alpha_bytes: 0,
             coefficients: Vec::new(),
             monomials: Vec::new(),
-            input_nodes: Vec::new(),
-            input_children: Vec::new(),
-            input_leaves: AHashMap::new(),
-            input_atoms: Vec::new(),
-            input_numbers: Vec::new(),
-            input_powers: Vec::new(),
-            input_active: Vec::new(),
-            input_numeric_depth: 0,
-            input_terms: AHashMap::new(),
-            input_bytes: 0,
+            input: TermTape::default(),
             scalar_spectators: AHashMap::new(),
-            distributed: false,
-            preserve_scalar_factors: false,
         }
     }
 
     fn emit_variable(&self, variable: &Variable<'a>) -> Option<Atom> {
         Some(match variable {
             Variable::Scalar(value) => (*value).to_owned(),
-            Variable::Vector(head, slot) => FunctionBuilder::new(*head).add_arg(*slot).finish(),
+            Variable::Subtree(position) => {
+                (self.factor_emission?)(self.opaque_factors[*position].0)?
+            }
+            Variable::Vector(vector, slot) => self.emit_vector(*vector, *slot),
             Variable::Metric([first, second]) => FunctionBuilder::new(self.contractor.metric)
                 .add_arg(*first)
                 .add_arg(*second)
@@ -366,26 +396,42 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             Variable::Dot(space, [first, second]) => {
                 let (representation, dimension) = self.spaces[*space];
                 let compact = representation.to_symbolic([dimension]);
-                let first = FunctionBuilder::new(*first).add_arg(&compact).finish();
-                let second = FunctionBuilder::new(*second).add_arg(&compact).finish();
+                let first = self.emit_vector(*first, compact.as_view());
+                let second = self.emit_vector(*second, compact.as_view());
                 FunctionBuilder::new(self.contractor.metric)
                     .add_arg(first)
                     .add_arg(second)
                     .finish()
             }
-            Variable::Tensor(TensorSource::Function(head), arguments) => {
-                let mut function = FunctionBuilder::new(*head);
+            Variable::Tensor(
+                source @ (TensorSource::Function(_) | TensorSource::Literal(_)),
+                arguments,
+            ) => {
+                let head = match source {
+                    TensorSource::Function(head) => *head,
+                    TensorSource::Literal(AtomView::Fun(function)) => function.get_symbol(),
+                    _ => unreachable!("literal tensor source is a function"),
+                };
+                let mut function = FunctionBuilder::new(head);
                 for argument in arguments {
                     function = match *argument {
                         Argument::Original(value) => function.add_arg(value),
                         Argument::Vector(space, head) => {
                             let (representation, dimension) = self.spaces[space];
                             let compact = representation.to_symbolic([dimension]);
-                            function.add_arg(FunctionBuilder::new(head).add_arg(compact).finish())
+                            function.add_arg(self.emit_vector(head, compact.as_view()))
                         }
                     };
                 }
-                function.finish()
+                let result = function.finish();
+                if let TensorSource::Literal(source) = source
+                    && *source != result.as_view()
+                {
+                    self.literal_relabellings
+                        .borrow_mut()
+                        .push((source.to_owned(), result.clone()));
+                }
+                result
             }
             Variable::Tensor(TensorSource::Factor(position), arguments) => {
                 return self.emit_factor(*position, arguments);
@@ -396,42 +442,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
     // Count borrowed factor occurrences, not expanded Atom bytes. Both the
     // Cartesian work and the existing coefficient/exponent storage are bounded.
     const MAX_GENERATED_TERMS: usize = 1_000_000;
-    const MAX_GENERATED_FACTOR_BYTES: usize = 64 * 1024 * 1024;
     const MAX_EXPANSION_DEPTH: usize = 256;
-
-    fn bounded_size(terms: usize, factors: usize) -> Option<(usize, usize)> {
-        (terms <= Self::MAX_GENERATED_TERMS
-            && factors.checked_mul(std::mem::size_of::<(AtomView<'a>, u16)>())?
-                <= Self::MAX_GENERATED_FACTOR_BYTES)
-            .then_some((terms, factors))
-    }
-
-    fn product_size(left: (usize, usize), right: (usize, usize)) -> Option<(usize, usize)> {
-        Self::bounded_size(
-            left.0.checked_mul(right.0)?,
-            left.1
-                .checked_mul(right.0)?
-                .checked_add(right.1.checked_mul(left.0)?)?,
-        )
-    }
-
-    // Bound the extra syntax/key storage separately from generated work and
-    // dense exponents. This estimates owned containers, not Rational limb sizes.
-    fn reserve_input(&mut self, bytes: usize) -> Option<()> {
-        let total = self.input_bytes.checked_add(bytes)?;
-        if total > Self::MAX_GENERATED_FACTOR_BYTES {
-            return None;
-        }
-        self.input_bytes = total;
-        Some(())
-    }
-
-    fn input_node(&mut self, factor: InputFactor) -> Option<usize> {
-        self.reserve_input(4 * std::mem::size_of::<InputFactor>())?;
-        let position = self.input_nodes.len();
-        self.input_nodes.push(factor);
-        Some(position)
-    }
 
     fn compile_group(
         &mut self,
@@ -439,31 +450,10 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         sum: bool,
         depth: usize,
     ) -> Option<(usize, (usize, usize))> {
-        self.reserve_input(
-            children
-                .len()
-                .checked_mul(2 * std::mem::size_of::<usize>())?,
-        )?;
-        let mut nodes = Vec::with_capacity(children.len());
-        let mut size: (usize, usize) = if sum { (0, 0) } else { (1, 0) };
-        for child in children {
-            let (node, next) = self.compile_input(child, depth + 1)?;
-            size = if sum {
-                Self::bounded_size(size.0.checked_add(next.0)?, size.1.checked_add(next.1)?)?
-            } else {
-                Self::product_size(size, next)?
-            };
-            nodes.push(node);
-        }
-        let start = self.input_children.len();
-        self.input_children.extend(nodes);
-        let end = self.input_children.len();
-        let node = self.input_node(if sum {
-            InputFactor::Add(start, end)
-        } else {
-            InputFactor::Mul(start, end)
-        })?;
-        Some((node, size))
+        let children = children
+            .map(|child| self.compile_input(child, depth + 1))
+            .collect::<Option<Vec<_>>>()?;
+        self.input.group(children.into_iter(), sum)
     }
 
     fn compile_input(
@@ -474,23 +464,6 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         if depth > Self::MAX_EXPANSION_DEPTH || value.needs_normalization() {
             return None;
         }
-        if self.preserve_scalar_factors
-            && matches!(
-                value,
-                AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
-            )
-            && self.scalar_spectator(value)
-        {
-            if let Some(&node) = self.input_leaves.get(&value) {
-                return Some((node, (1, 1)));
-            }
-            let position = self.input_atoms.len();
-            self.input_atoms.push(value);
-            self.input_powers.push(0);
-            let node = self.input_node(InputFactor::Atom(position))?;
-            self.input_leaves.insert(value, node);
-            return Some((node, (1, 1)));
-        }
         match value {
             AtomView::Add(sum) => self.compile_group(sum.iter(), true, depth),
             AtomView::Mul(product) => self.compile_group(product.iter(), false, depth),
@@ -500,28 +473,13 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                 if exponent == 0 {
                     return None;
                 }
-                let (base, mut factor) = self.compile_input(base, depth + 1)?;
-                let mut remaining = exponent;
-                let mut size = (1, 0);
-                while remaining != 0 {
-                    if remaining % 2 == 1 {
-                        size = Self::product_size(size, factor)?;
-                    }
-                    remaining /= 2;
-                    if remaining != 0 {
-                        factor = Self::product_size(factor, factor)?;
-                    }
-                }
-                Some((self.input_node(InputFactor::Pow(base, exponent))?, size))
+                let base = self.compile_input(base, depth + 1)?;
+                self.input.power(base, exponent)
             }
             _ => {
-                if let Some(&node) = self.input_leaves.get(&value) {
+                if let Some(node) = self.input.known_leaf(&InputLeaf::Atom(value)) {
                     return Some((node, (1, 1)));
                 }
-                self.reserve_input(
-                    4 * std::mem::size_of::<(AtomView<'a>, usize)>()
-                        + std::mem::size_of::<(AtomView<'a>, Rational, u16, usize)>(),
-                )?;
                 if self.intake == Intake::ScalarExpansion {
                     match value {
                         AtomView::Num(_) => {}
@@ -550,20 +508,12 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                 }
                 // Cache only certified original leaves. Compilation finishes
                 // before distribution, so cancellation cannot hide a callback.
-                let factor = if let AtomView::Num(_) = value {
-                    let coefficient = Rational::try_from(value).ok()?;
-                    let position = self.input_numbers.len();
-                    self.input_numbers.push(coefficient);
-                    InputFactor::Number(position)
+                if let AtomView::Num(_) = value {
+                    self.input
+                        .number(InputLeaf::Atom(value), Rational::try_from(value).ok()?)
                 } else {
-                    let position = self.input_atoms.len();
-                    self.input_atoms.push(value);
-                    self.input_powers.push(0);
-                    InputFactor::Atom(position)
-                };
-                let node = self.input_node(factor)?;
-                self.input_leaves.insert(value, node);
-                Some((node, (1, 1)))
+                    self.input.leaf(InputLeaf::Atom(value))
+                }
             }
         }
     }
@@ -608,93 +558,6 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             self.scalar_spectators.insert(value, scalar);
         }
         scalar
-    }
-
-    fn distribute(
-        &mut self,
-        pending: &mut Vec<(usize, u16)>,
-        coefficient: &Rational,
-        depth: usize,
-    ) -> Option<()> {
-        if depth > Self::MAX_EXPANSION_DEPTH {
-            return None;
-        }
-        let Some((node, exponent)) = pending.pop() else {
-            let mut key: Vec<_> = self
-                .input_active
-                .iter()
-                .map(|&factor| (factor, self.input_powers[factor]))
-                .collect();
-            key.sort_unstable_by_key(|&(factor, _)| factor);
-            if let Some((_, existing)) = self.input_terms.get_mut(key.as_slice()) {
-                *existing += coefficient;
-            } else {
-                self.reserve_input(
-                    key.capacity()
-                        .checked_mul(std::mem::size_of::<(usize, u16)>())?
-                        .checked_add(
-                            4 * std::mem::size_of::<(Vec<(usize, u16)>, (usize, Rational))>(),
-                        )?,
-                )?;
-                let order = self.input_terms.len();
-                self.input_terms.insert(key, (order, coefficient.clone()));
-            }
-            return Some(());
-        };
-        let length = pending.len();
-        match self.input_nodes[node] {
-            InputFactor::Add(start, end) => {
-                // Common root spectators stay factored. Branch-local scalar
-                // coefficients are distributed with this indexed core.
-                self.distributed |= !pending.is_empty()
-                    || !self.input_active.is_empty()
-                    || self.input_numeric_depth != 0
-                    || exponent > 1;
-                if exponent > 1 {
-                    pending.push((node, exponent - 1));
-                }
-                for position in start..end {
-                    pending.push((self.input_children[position], 1));
-                    self.distribute(pending, coefficient, depth + 1)?;
-                    pending.pop();
-                }
-                pending.truncate(length);
-            }
-            InputFactor::Mul(start, end) => {
-                for position in start..end {
-                    pending.push((self.input_children[position], exponent));
-                }
-                self.distribute(pending, coefficient, depth + 1)?;
-                pending.truncate(length);
-            }
-            InputFactor::Pow(base, power) => {
-                pending.push((base, power.checked_mul(exponent)?));
-                self.distribute(pending, coefficient, depth + 1)?;
-                pending.pop();
-            }
-            InputFactor::Number(position) => {
-                let mut next = coefficient.clone();
-                next *= Q.pow(&self.input_numbers[position], u64::from(exponent));
-                self.input_numeric_depth += 1;
-                let result = self.distribute(pending, &next, depth + 1);
-                self.input_numeric_depth -= 1;
-                result?;
-            }
-            InputFactor::Atom(factor) => {
-                let previous = self.input_powers[factor];
-                self.input_powers[factor] = previous.checked_add(exponent)?;
-                if previous == 0 {
-                    self.input_active.push(factor);
-                }
-                self.distribute(pending, coefficient, depth + 1)?;
-                self.input_powers[factor] = previous;
-                if previous == 0 {
-                    self.input_active.pop();
-                }
-            }
-        }
-        pending.push((node, exponent));
-        Some(())
     }
 
     // Bound both stored keys and transient signature work independently of the
@@ -778,7 +641,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                 // the same Atom and must have the same signature.
                 if let Argument::Original(AtomView::Fun(function)) = argument
                     && let Some(head) = self.vector(function)
-                    && let Some(space) = self.compact_space(function.iter().next().unwrap())
+                    && let Some(space) = self.compact_space(function.iter().last().unwrap())
                 {
                     argument = Argument::Vector(space, head);
                 }
@@ -852,16 +715,64 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         })
     }
 
-    fn vector(&mut self, function: FunView<'a>) -> Option<Symbol> {
-        // Preserve the contractor's slot/representation opacity boundary even
-        // when a declaration carries conflicting tensor tags.
+    fn vector(&mut self, function: FunView<'a>) -> Option<usize> {
+        if let Some(&vector) = self.vector_sources.get(&function.as_view()) {
+            return Some(vector);
+        }
+        // The shared matcher keeps representation-shaped metadata opaque. The
+        // full function template, excluding its final port, identifies a vector;
+        // momentum labels such as p(1, slot) must survive state merging.
         self.slots.vector_argument(function)?;
         let head = function.get_symbol();
-        (function.get_nargs() == 1
-            && !head.is_scalar()
-            && head.has_tag(&self.contractor.tags.rank1)
-            && self.plain(head))
-        .then_some(head)
+        if head.is_scalar()
+            || !head.has_tag(&self.contractor.tags.rank1)
+            || !self.plain(head)
+            || (self.intake != Intake::Contraction && function.get_nargs() != 1)
+        {
+            return None;
+        }
+        let metadata = function
+            .iter()
+            .take(function.get_nargs() - 1)
+            .collect::<Vec<_>>();
+        for &argument in &metadata {
+            let observed = SimplificationCandidates::scan(argument, [], || true);
+            if !observed.complete || !observed.intrinsic || !observed.normalized() {
+                return None;
+            }
+        }
+        let key = (head, metadata);
+        let vector = if let Some(&vector) = self.vector_positions.get(&key) {
+            vector
+        } else {
+            self.input.reserve_bytes(
+                key.1
+                    .capacity()
+                    .checked_mul(std::mem::size_of::<AtomView<'a>>())?
+                    .checked_add(4 * std::mem::size_of::<(Symbol, Vec<AtomView<'a>>, usize)>())?,
+            )?;
+            let vector = self.vectors.len();
+            self.vectors.push(function);
+            self.vector_positions.insert(key, vector);
+            vector
+        };
+        self.input
+            .reserve_bytes(4 * std::mem::size_of::<(AtomView<'a>, usize)>())?;
+        self.vector_sources.insert(function.as_view(), vector);
+        Some(vector)
+    }
+
+    fn emit_vector(&self, vector: usize, port: AtomView<'_>) -> Atom {
+        let source = self.vectors[vector];
+        source
+            .iter()
+            .take(source.get_nargs() - 1)
+            .fold(
+                FunctionBuilder::new(source.get_symbol()),
+                |builder, argument| builder.add_arg(argument),
+            )
+            .add_arg(port)
+            .finish()
     }
 
     fn atomic(value: AtomView<'_>) -> bool {
@@ -913,7 +824,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         Some(space)
     }
 
-    fn compact_dot(&mut self, function: FunView<'a>) -> Option<(usize, Symbol, Symbol)> {
+    fn compact_dot(&mut self, function: FunView<'a>) -> Option<(usize, usize, usize)> {
         if function.get_symbol() != self.contractor.metric || function.get_nargs() != 2 {
             return None;
         }
@@ -924,8 +835,8 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         };
         let first_head = self.vector(first)?;
         let second_head = self.vector(second)?;
-        let space = self.compact_space(first.iter().next()?)?;
-        (space == self.compact_space(second.iter().next()?)?).then_some((
+        let space = self.compact_space(first.iter().last()?)?;
+        (space == self.compact_space(second.iter().last()?)?).then_some((
             space,
             first_head,
             second_head,
@@ -938,7 +849,27 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         }
         let endpoint = Endpoint::parse(value, self.slots)?;
         if !Self::atomic(endpoint.index) {
-            return None;
+            // Named and scoped indices are explicit identities admitted by the
+            // shared slot grammar, not tensor payloads to distribute or rewrite.
+            let index = self
+                .slots
+                .parse::<LibraryRep, AbstractIndex>(value)
+                .ok()?
+                .aind;
+            let mut base = index;
+            while let AbstractIndex::Scoped(scope) = base {
+                base = scope.index();
+            }
+            if matches!(base, AbstractIndex::Open { .. })
+                || !matches!(index, AbstractIndex::Named(..) | AbstractIndex::Scoped(..))
+                || endpoint
+                    .index
+                    .get_all_symbols(true)
+                    .iter()
+                    .any(|symbol| symbol.get_wildcard_level() != 0)
+            {
+                return None;
+            }
         }
         let space = self.space(value, endpoint.representation, endpoint.dimension)?;
         let resolved = (space, endpoint.index);
@@ -992,8 +923,8 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         self.factors.push((position, exponent));
     }
 
-    fn dot(&mut self, space: usize, first: Symbol, second: Symbol, exponent: u16) {
-        let heads = if first.get_id() <= second.get_id() {
+    fn dot(&mut self, space: usize, first: usize, second: usize, exponent: u16) {
+        let heads = if first <= second {
             [first, second]
         } else {
             [second, first]
@@ -1004,7 +935,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
     fn tensor(&mut self, function: FunView<'a>) -> Option<()> {
         let head = function.get_symbol();
         if !head.has_tag(&self.contractor.tags.tensor)
-            || head.has_tag(&self.contractor.tags.rank1)
+            || (self.rank_one && head.has_tag(&self.contractor.tags.rank1))
             || head.is_scalar()
             || !self.plain(head)
             || !matches!(self.slots.classify(function.as_view()), SlotMatch::Other)
@@ -1020,13 +951,20 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             }
             let mut ports = Vec::new();
             for (position, argument) in function.iter().enumerate() {
+                // Metric-only vectors use the same explicit tensor terminal as
+                // other tensors. Their preceding arguments are opaque metadata,
+                // as established by vector admission; only the final port participates.
+                if head.has_tag(&self.contractor.tags.rank1) && position + 1 != function.get_nargs()
+                {
+                    continue;
+                }
                 if matches!(self.slots.classify(argument), SlotMatch::Explicit(_)) {
                     self.resolve_endpoint(argument)?;
                     ports.push((position, argument));
                 } else if let AtomView::Fun(vector) = argument
                     && self.vector(vector).is_some()
                 {
-                    self.compact_space(vector.iter().next().unwrap())?;
+                    self.compact_space(vector.iter().last().unwrap())?;
                 } else {
                     // Scalar metadata stays opaque to the port graph, but the
                     // ordinary contractor would still visit hidden products.
@@ -1041,7 +979,13 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         };
         let tensor = self.tensors.len();
         self.tensors.push((
-            TensorSource::Function(head),
+            if head == spenso::tensor_symbol!("idenso::tensor_alias") {
+                // Different literal definitions may share an owner/head. Keep
+                // the exact registered use in the key and its rewrite record.
+                TensorSource::Literal(value)
+            } else {
+                TensorSource::Function(head)
+            },
             function.iter().map(|arg| self.argument(arg)).collect(),
         ));
         for (position, slot) in ports {
@@ -1088,12 +1032,12 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                 }
             }
             AtomView::Fun(function) => {
-                let Some(head) = self.vector(function) else {
+                let Some(head) = self.vector(function).filter(|_| self.rank_one) else {
                     return (exponent == 1)
                         .then_some(())
                         .and_then(|()| self.tensor(function));
                 };
-                let argument = self.argument(function.iter().next().unwrap());
+                let argument = self.argument(function.iter().last().unwrap());
                 let Argument::Original(argument) = argument else {
                     let Argument::Vector(space, other) = argument else {
                         unreachable!()
@@ -1252,16 +1196,177 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
 mod tests {
     use super::*;
     use crate::shorthands::schoonschip::Schoonschip;
-    use spenso::{
-        network::{library::symbolic::ETS, tags::SPENSO_TAG},
-        shadowing,
-    };
+    use spenso::network::tags::SPENSO_TAG;
     use std::sync::{Arc, Mutex};
     use symbolica::parser::ParseSettings;
 
     fn parse(value: &str) -> Atom {
         Atom::parse(value, "closed_component_test", ParseSettings::symbolica()).unwrap()
     }
+    #[test]
+    fn metric_only_disconnected_components_keep_separate_dummy_representatives() {
+        setup();
+        let source = parse(
+            "p(spenso::mink(D,mu))*q(spenso::mink(D,mu))*p(spenso::mink(D,nu))*q(spenso::mink(D,nu))",
+        );
+        let metric_source = parse(
+            "spenso::g(spenso::mink(D,mu),spenso::mink(D,a))*p(spenso::mink(D,a))*q(spenso::mink(D,mu))*spenso::g(spenso::mink(D,nu),spenso::mink(D,b))*p(spenso::mink(D,b))*q(spenso::mink(D,nu))",
+        );
+        let spectator = parse("(x+y)^30");
+        let dot_squared = parse("spenso::dot(p(spenso::mink(D)),q(spenso::mink(D)))^2");
+        for (position, input) in [source, metric_source].into_iter().enumerate() {
+            for power in [1, 2, -1] {
+                // A scalar sum keeps its internal pair scope under Atom powers.
+                // A raw product power would first distribute into vector powers.
+                let base = if power == 1 {
+                    input.clone()
+                } else {
+                    &input + Atom::one()
+                };
+                let expected = if power == 1 {
+                    dot_squared.clone()
+                } else {
+                    &dot_squared + Atom::one()
+                };
+                let expression = &spectator * base.pow(power);
+                let restricted = SymbolicTensor::infer(expression.clone())
+                    .unwrap()
+                    .contract(
+                        crate::tensor::ContractionSettings::default().without_rank_one_tensors(),
+                    )
+                    .unwrap()
+                    .resolved()
+                    .unwrap();
+                if position == 0 {
+                    assert_eq!(restricted.expression(), &expression);
+                }
+                assert!(restricted.expression().contains(&spectator));
+                let complete = restricted
+                    .contract(Default::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .to_dots()
+                    .unwrap();
+                assert_eq!(complete.expression(), &(&spectator * expected.pow(power)));
+            }
+        }
+    }
+
+    #[test]
+    fn factorized_contraction_preserves_named_and_scoped_index_identity() {
+        let contractor = setup();
+        let head = symbolica::symbol!(
+            "closed_component_test::port",
+            tags = [SPENSO_TAG.index.clone()]
+        );
+        let first = AbstractIndex::Named(head.into(), 90, 0);
+        let second = AbstractIndex::Named(head.into(), 91, 0);
+        let scope = symbolica::symbol!("closed_component_test::bra");
+        let source = input(
+            "(p(mink(4,a))*q(mink(4,b))+q(mink(4,a))*p(mink(4,b)))
+             *(r(mink(4,a))*s(mink(4,b))+s(mink(4,a))*r(mink(4,b)))",
+        );
+        let expected = input(
+            "2*g(p(mink(4)),r(mink(4)))*g(q(mink(4)),s(mink(4)))
+             +2*g(p(mink(4)),s(mink(4)))*g(q(mink(4)),r(mink(4)))",
+        );
+        for (a, b) in [
+            (first, second),
+            (first.scoped(scope), second.scoped(scope)),
+            (first, first.scoped(scope)),
+        ] {
+            use spenso::structure::slot::ParseableAind;
+            let source = source
+                .replace(input("a"))
+                .with(a.to_atom())
+                .replace(input("b"))
+                .with(b.to_atom());
+            let result = contractor
+                .contract_factorized(source.as_view(), None, true)
+                .expect("registered explicit indices admit the same factorized frontier");
+            assert!(result.status == ContractionStatus::Complete);
+            let mut resolved = symbolica::atom::AliasedAtom::from(result.root);
+            for (handle, body) in result.aliases {
+                resolved.register_alias(handle, body);
+            }
+            assert_eq!(resolved.into_inner(), expected);
+            let result = SymbolicTensor::infer(source)
+                .unwrap()
+                .contract(Default::default())
+                .unwrap();
+            assert!(result.contraction_complete());
+            assert_eq!(result.resolved().unwrap().expression(), &expected);
+        }
+    }
+
+    #[test]
+    fn factorized_named_index_admission_retains_wildcard_refusal() {
+        let contractor = setup();
+        let head = symbolica::symbol!(
+            "closed_component_test::wild_port_",
+            tags = [SPENSO_TAG.index.clone()]
+        );
+        let index = symbolica::function!(head, Atom::num(90), Atom::num(0));
+        let a = input("a");
+        let source =
+            input("(p(mink(4,a))+q(mink(4,a)))*r(mink(4,a))").replace_map(|value, _, output| {
+                if value == a.as_view() {
+                    **output = index.clone();
+                }
+            });
+        assert!(
+            contractor
+                .contract_factorized(source.as_view(), None, true)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn factorized_named_index_admission_retains_open_and_dimension_refusal() {
+        use spenso::structure::slot::ParseableAind;
+        let contractor = setup();
+        let scope = symbolica::symbol!("closed_component_test::guard_scope");
+        let open = AbstractIndex::Open {
+            owner: 98300,
+            axis: 0,
+        };
+        for index in [open, open.scoped(scope)] {
+            let a = input("a");
+            let index = index.to_atom();
+            let source = input("(p(mink(4,a))+q(mink(4,a)))*r(mink(4,a))").replace_map(
+                |value, _, output| {
+                    if value == a.as_view() {
+                        **output = index.clone();
+                    }
+                },
+            );
+            assert!(
+                contractor
+                    .contract_factorized(source.as_view(), None, true)
+                    .is_none()
+            );
+        }
+        let head = symbolica::symbol!(
+            "closed_component_test::dimension_port",
+            tags = [SPENSO_TAG.index.clone()]
+        );
+        let a = input("a");
+        let index = AbstractIndex::Named(head.into(), 98301, 0).to_atom();
+        let source = input("(p(mink(D+1,a))+q(mink(D+1,a)))*r(mink(D+1,a))").replace_map(
+            |value, _, output| {
+                if value == a.as_view() {
+                    **output = index.clone();
+                }
+            },
+        );
+        assert!(
+            contractor
+                .contract_factorized(source.as_view(), None, true)
+                .is_none()
+        );
+    }
+
     pub(super) fn setup() -> SlotContraction {
         crate::representations::initialize();
         for head in ["p", "q", "r", "s"] {
@@ -1271,11 +1376,7 @@ mod tests {
             SPENSO_TAG.tensor_symbol(&format!("closed_component_test::{head}"));
         }
         let _ = symbolica::symbol!("closed_component_test::routing"; Scalar);
-        SlotContraction {
-            metric: ETS.metric,
-            tags: &SPENSO_TAG,
-            projectors: [*shadowing::CYCLIC, *shadowing::SYM],
-        }
+        SlotContraction::new()
     }
     pub(super) fn input(value: &str) -> Atom {
         let mut qualified = value.to_owned();
@@ -1350,7 +1451,7 @@ mod tests {
             ),
         ] {
             let source = input(source);
-            let current = contractor.collect_component_sum(
+            let current = contractor.materialize_test_sum(
                 source.as_view(),
                 &mut SlotMatcher::default(),
                 intake,
@@ -1368,7 +1469,7 @@ mod tests {
                         let expected = source.expand().schoonschip();
                         assert_eq!(result.expand(), expected.expand(), "{source}");
                     }
-                    Intake::ExpandedContraction => unreachable!(),
+                    Intake::ExpandedContraction | Intake::Contraction => unreachable!(),
                 }
             }
         }
@@ -1411,7 +1512,7 @@ mod tests {
                 calls.lock().unwrap().clear();
                 assert!(
                     contractor
-                        .collect_component_sum(
+                        .materialize_test_sum(
                             source.as_view(),
                             &mut SlotMatcher::default(),
                             intake,
@@ -1453,7 +1554,7 @@ mod tests {
         calls.lock().unwrap().clear();
         assert!(
             contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::FactoredContraction,
@@ -1461,10 +1562,7 @@ mod tests {
                 .is_none()
         );
         assert!(calls.lock().unwrap().is_empty());
-        let rewritten = source.schoonschip_with_settings(
-            &crate::shorthands::schoonschip::SchoonschipSettings::default()
-                .with_expanded_contracted_sums(),
-        );
+        let rewritten = source.schoonschip();
         assert_eq!(rewritten, Atom::one());
         assert!(!calls.lock().unwrap().is_empty());
         assert!(typed.with_rewritten_expression(rewritten).is_err());
@@ -1486,7 +1584,7 @@ mod tests {
             assert!(matches!(source.as_view(), AtomView::Add(_)), "{source}");
             assert!(!source.is_expanded::<Atom>(None), "{source}");
             let result = contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ScalarExpansion,
@@ -1516,7 +1614,7 @@ mod tests {
             let source = input(source);
             assert!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         source.as_view(),
                         &mut SlotMatcher::default(),
                         Intake::ScalarExpansion,
@@ -1541,7 +1639,7 @@ mod tests {
         calls.lock().unwrap().clear();
         assert!(
             contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ScalarExpansion,
@@ -1568,7 +1666,7 @@ mod tests {
             let source = input(source);
             assert!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         source.as_view(),
                         &mut SlotMatcher::default(),
                         Intake::ScalarExpansion,
@@ -1588,7 +1686,7 @@ mod tests {
         let rounded = Atom::num(0.25f64) * input("x+y") + Atom::num(1);
         assert!(
             contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     rounded.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ScalarExpansion,
@@ -1646,7 +1744,7 @@ mod tests {
         ] {
             let source = input(source);
             let result = contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction,
@@ -1673,7 +1771,7 @@ mod tests {
         ] {
             let source = input(source);
             let result = contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction,
@@ -1698,7 +1796,7 @@ mod tests {
             ));
             assert!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         source.as_view(),
                         &mut SlotMatcher::default(),
                         Intake::ExpandedContraction
@@ -1729,7 +1827,7 @@ mod tests {
             let source = input(source);
             assert!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         source.as_view(),
                         &mut SlotMatcher::default(),
                         Intake::ExpandedContraction
@@ -1754,7 +1852,7 @@ mod tests {
             + Atom::num(1);
         assert!(
             contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     conflicting.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction
@@ -1764,7 +1862,7 @@ mod tests {
         let rounded = Atom::num(0.25f64) * input("p(mink(4,a))*q(mink(4,a))") + Atom::num(1);
         assert!(
             contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     rounded.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction
@@ -1809,7 +1907,7 @@ mod tests {
         ] {
             let source = input(source);
             let result = contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction,
@@ -1828,7 +1926,7 @@ mod tests {
             let source = input(source);
             assert!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         source.as_view(),
                         &mut SlotMatcher::default(),
                         Intake::ExpandedContraction
@@ -1899,7 +1997,7 @@ mod tests {
             let source = input(source);
             let expected = input(expected);
             let result = contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction,
@@ -1942,7 +2040,7 @@ mod tests {
         ] {
             let source = input(source);
             let result = contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction,
@@ -1964,7 +2062,7 @@ mod tests {
             let source = input(source);
             assert!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         source.as_view(),
                         &mut SlotMatcher::default(),
                         Intake::ExpandedContraction
@@ -1991,7 +2089,7 @@ mod tests {
                 typed.structure.logical_slots().into_iter().rev(),
             );
             let result = contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction,
@@ -2023,7 +2121,7 @@ mod tests {
         calls.lock().unwrap().clear();
         assert!(
             contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction
@@ -2084,7 +2182,7 @@ mod tests {
         ] {
             let source = input(source);
             let result = contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction,
@@ -2096,7 +2194,7 @@ mod tests {
         for source in ["1+t(mink(4,a))*u(mink(4,a))", "1+t(mink(4,a),mink(4,a))"] {
             assert!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         input(source).as_view(),
                         &mut SlotMatcher::default(),
                         Intake::ExpandedContraction
@@ -2108,7 +2206,7 @@ mod tests {
     }
 
     #[test]
-    fn component_sum_opaque_metric_paths_match_ordered_substitution() {
+    fn component_sum_opaque_metric_paths_are_alpha_equivalent_to_ordered_substitution() {
         use itertools::Itertools;
 
         let contractor = setup();
@@ -2133,21 +2231,33 @@ mod tests {
                             factors.push(input(&format!("g(mink(4,j{i}),mink(4,k{i}))")));
                         }
                         let product = Atom::mul_many(factors);
-                        // A root product bypasses ComponentSum and exercises
-                        // the unchanged ordered contractor, including its
-                        // whole-product three-metric shortcut threshold.
-                        let expected = SlotContraction::run(product.as_view(), false, true, true)
-                            .normalize_dots()
-                            + Atom::num(1);
+                        // The flat and ordered reducers may retain different
+                        // original dummy representatives. Compare their exact
+                        // alpha key, including all free ports and metadata.
+                        let expected =
+                            SlotContraction::run(product.as_view(), false, true, &mut Vec::new())
+                                .normalize_dots()
+                                + Atom::num(1);
                         let source = product + Atom::num(1);
                         let result = contractor
-                            .collect_component_sum(
+                            .materialize_test_sum(
                                 source.as_view(),
                                 &mut SlotMatcher::default(),
                                 Intake::ExpandedContraction,
                             )
                             .expect("plain metric path admitted");
-                        assert_eq!(result, expected, "{source}");
+                        let difference = (&result - &expected).expand();
+                        assert!(
+                            difference.is_zero()
+                                || contractor
+                                    .materialize_test_sum(
+                                        difference.as_view(),
+                                        &mut SlotMatcher::default(),
+                                        Intake::ExpandedContraction,
+                                    )
+                                    .is_some_and(|value| value.is_zero()),
+                            "{source}: {result} !=alpha {expected}"
+                        );
                     }
                 }
             }
@@ -2175,7 +2285,7 @@ mod tests {
             let source = input(source);
             assert!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         source.as_view(),
                         &mut SlotMatcher::default(),
                         Intake::ExpandedContraction
@@ -2205,7 +2315,7 @@ mod tests {
         calls.lock().unwrap().clear();
         assert!(
             contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction
@@ -2237,7 +2347,7 @@ mod tests {
                 tensor.structure.logical_slots().into_iter().rev(),
             );
             let expression = contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction,
@@ -2275,7 +2385,7 @@ mod tests {
             let source = input(source);
             assert_ne!(source, Atom::num(0));
             assert_eq!(
-                contractor.collect_component_sum(
+                contractor.materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction
@@ -2283,16 +2393,22 @@ mod tests {
                 Some(Atom::num(0)),
                 "{source}"
             );
-            assert_eq!(source.schoonschip(), Atom::num(0));
+            assert_eq!(
+                crate::test_support::contracted_atom(source.as_view()).unwrap(),
+                Atom::num(0)
+            );
         }
         let source = input("t(mink(4,a))*u(mink(4,a))+t(mink(4,b))*u(mink(4,b))");
-        let result = source.schoonschip();
+        let result = crate::test_support::contracted_atom(source.as_view()).unwrap();
         assert!(
             result == input("2*t(mink(4,a))*u(mink(4,a))")
                 || result == input("2*t(mink(4,b))*u(mink(4,b))"),
             "reuse one whole original representative, never a fresh label"
         );
-        assert_eq!(result.schoonschip(), result);
+        assert_eq!(
+            crate::test_support::contracted_atom(result.as_view()).unwrap(),
+            result
+        );
     }
 
     #[test]
@@ -2316,7 +2432,7 @@ mod tests {
             let source = input(source);
             assert!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         source.as_view(),
                         &mut SlotMatcher::default(),
                         Intake::ExpandedContraction
@@ -2338,7 +2454,7 @@ mod tests {
         ] {
             let source = input(source);
             assert_eq!(
-                contractor.collect_component_sum(
+                contractor.materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction
@@ -2346,22 +2462,36 @@ mod tests {
                 Some(Atom::num(0)),
                 "{source}"
             );
-            assert_eq!(source.schoonschip(), Atom::num(0));
+            assert_eq!(
+                crate::test_support::contracted_atom(source.normalize_dots().as_view()).unwrap(),
+                Atom::num(0)
+            );
         }
+        let scalar_power = input(
+            "(x+g(p(mink(4)),q(mink(4))))^3*t(mink(4,a))*u(mink(4,a))-(x+g(q(mink(4)),p(mink(4))))^3*t(mink(4,b))*u(mink(4,b))",
+        );
+        assert_eq!(
+            crate::test_support::contracted_atom(scalar_power.as_view()).unwrap(),
+            Atom::Zero
+        );
         // Derived equal factors still form their old power. Repeated identical
         // tensor identities deliberately do not get an alpha representative.
         let product = input("g(mink(4,a),mink(4,b))*t(mink(4,a))*t(mink(4,b))");
-        let expected = SlotContraction::run(product.as_view(), false, true, true).normalize_dots()
+        let expected = SlotContraction::run(product.as_view(), false, true, &mut Vec::new())
+            .normalize_dots()
             + Atom::num(1);
         let source = product + Atom::num(1);
-        assert_eq!(source.schoonschip(), expected);
+        assert_eq!(
+            crate::test_support::contracted_atom(source.normalize_dots().as_view()).unwrap(),
+            expected
+        );
         for source in [
             "t(mink(4,a))^2+t(mink(4,b))^2",
             "g(mink(4,a),mink(4,b))^-2*t(mink(4,a))*u(mink(4,b))+1",
         ] {
             assert!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         input(source).as_view(),
                         &mut SlotMatcher::default(),
                         Intake::ExpandedContraction
@@ -2390,8 +2520,10 @@ mod tests {
         };
         let first = input(&format!("g(mink(4,mu5),mink(4,mu6))*{}", vertex("mu5")));
         let second = input(&format!("g(mink(4,mu6),mink(4,mu11))*{}", vertex("mu11")));
-        let old_first = SlotContraction::run(first.as_view(), false, true, true).normalize_dots();
-        let old_second = SlotContraction::run(second.as_view(), false, true, true).normalize_dots();
+        let old_first =
+            SlotContraction::run(first.as_view(), false, true, &mut Vec::new()).normalize_dots();
+        let old_second =
+            SlotContraction::run(second.as_view(), false, true, &mut Vec::new()).normalize_dots();
         assert_ne!(
             old_first, old_second,
             "legacy results intentionally retain different dummy labels"
@@ -2403,7 +2535,7 @@ mod tests {
             tensor.structure.logical_slots().into_iter().rev(),
         );
         let expression = contractor
-            .collect_component_sum(
+            .materialize_test_sum(
                 source.as_view(),
                 &mut SlotMatcher::default(),
                 Intake::ExpandedContraction,
@@ -2412,11 +2544,14 @@ mod tests {
         assert_eq!(expression, Atom::num(0));
         let result = tensor.with_rewritten_expression(expression).unwrap();
         assert_eq!(result.structure, tensor.structure);
-        assert_eq!(source.schoonschip(), Atom::num(0));
+        assert_eq!(
+            crate::test_support::contracted_atom(source.as_view()).unwrap(),
+            Atom::num(0)
+        );
     }
 
     #[test]
-    fn component_sum_alpha_budget_declines_whole_sum_and_finishes_fallback() {
+    fn component_sum_alpha_budget_retains_the_bounded_frontier_and_exact_reference() {
         use crate::shorthands::schoonschip::SchoonschipSettings;
 
         let contractor = setup();
@@ -2440,7 +2575,7 @@ mod tests {
         let source = Atom::add_many(&terms);
         assert!(
             contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction
@@ -2452,7 +2587,8 @@ mod tests {
             terms
                 .iter()
                 .map(|term| {
-                    SlotContraction::run(term.as_view(), false, false, true).normalize_dots()
+                    SlotContraction::run(term.as_view(), false, false, &mut Vec::new())
+                        .normalize_dots()
                 })
                 .collect::<Vec<_>>(),
         );
@@ -2462,8 +2598,30 @@ mod tests {
         );
         assert_ne!(fallback, source);
         assert_ne!(fallback, Atom::num(0));
-        assert_eq!(source.schoonschip(), Atom::num(0));
-        assert_eq!(source.schoonschip().schoonschip(), Atom::num(0));
+        // The public bounded frontier retains the exact source rather than
+        // restarting the declined work through an unbounded fallback.
+        let value = SymbolicTensor::infer(source.clone()).unwrap();
+        let pending = Arc::new(value.contract(Default::default()).unwrap());
+        assert!(!pending.contraction_complete());
+        assert_eq!(pending.resolved().unwrap().expression, source);
+        let again = pending.contract(Default::default()).unwrap();
+        assert!(!again.contraction_complete());
+        assert_eq!(again.resolved().unwrap(), pending.resolved().unwrap());
+        // Keep the exact zero oracle on the existing explicit per-term
+        // reference computed above; its mathematical expectation is unchanged.
+        assert_eq!(
+            crate::test_support::contracted_atom(fallback.as_view()).unwrap(),
+            Atom::num(0)
+        );
+        assert_eq!(
+            crate::test_support::contracted_atom(
+                crate::test_support::contracted_atom(fallback.as_view())
+                    .unwrap()
+                    .as_view()
+            )
+            .unwrap(),
+            Atom::num(0)
+        );
         assert_eq!(
             source
                 .schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors()),
@@ -2480,7 +2638,7 @@ mod tests {
         );
         assert!(
             contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::ExpandedContraction
@@ -2494,7 +2652,7 @@ mod tests {
         let after_contraction = Atom::add_many(
             terms
                 .iter()
-                .map(|term| SlotContraction::run(term, false, true, true))
+                .map(|term| SlotContraction::run(term, false, true, &mut Vec::new()))
                 .collect::<Vec<_>>(),
         );
         let after_dots = after_contraction.normalize_dots();
@@ -2508,15 +2666,26 @@ mod tests {
             "literal dummy labels still differ"
         );
         assert_eq!(
-            contractor.collect_component_sum(
+            contractor.materialize_test_sum(
                 after_dots.as_view(),
                 &mut SlotMatcher::default(),
                 Intake::ExpandedContraction
             ),
             Some(Atom::num(0))
         );
-        assert_eq!(source.schoonschip(), Atom::num(0));
-        assert_eq!(source.schoonschip().schoonschip(), Atom::num(0));
+        assert_eq!(
+            crate::test_support::contracted_atom(source.as_view()).unwrap(),
+            Atom::num(0)
+        );
+        assert_eq!(
+            crate::test_support::contracted_atom(
+                crate::test_support::contracted_atom(source.as_view())
+                    .unwrap()
+                    .as_view()
+            )
+            .unwrap(),
+            Atom::num(0)
+        );
     }
 
     #[test]
@@ -2534,7 +2703,7 @@ mod tests {
             let source = input(source);
             let expected = source.expand().schoonschip();
             let actual = contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::FactoredContraction,
@@ -2559,7 +2728,7 @@ mod tests {
             let spectator = input(spectator);
             let source = &spectator * &core;
             let actual = contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::FactoredContraction,
@@ -2590,7 +2759,7 @@ mod tests {
             let source = input(source);
             assert_eq!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         source.as_view(),
                         &mut SlotMatcher::default(),
                         Intake::FactoredContraction
@@ -2624,7 +2793,7 @@ mod tests {
         calls.store(0, Ordering::Relaxed);
         assert!(
             contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::FactoredContraction
@@ -2645,7 +2814,7 @@ mod tests {
             let source = input(source);
             assert!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         source.as_view(),
                         &mut SlotMatcher::default(),
                         Intake::FactoredContraction
@@ -2667,7 +2836,7 @@ mod tests {
             let expected = input("g(p(mink(4)),q(mink(4)))");
             assert_eq!(source.expand().schoonschip(), expected);
             assert_eq!(
-                contractor.collect_component_sum(
+                contractor.materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::FactoredContraction
@@ -2682,7 +2851,7 @@ mod tests {
         ] {
             assert!(
                 contractor
-                    .collect_component_sum(
+                    .materialize_test_sum(
                         input(source).as_view(),
                         &mut SlotMatcher::default(),
                         Intake::FactoredContraction
@@ -2701,7 +2870,7 @@ mod tests {
         assert_ne!(source, Atom::num(0), "the source still needs distribution");
         assert_eq!(source.expand(), Atom::num(0));
         assert_eq!(
-            contractor.collect_component_sum(
+            contractor.materialize_test_sum(
                 source.as_view(),
                 &mut SlotMatcher::default(),
                 Intake::FactoredContraction
@@ -2709,10 +2878,9 @@ mod tests {
             Some(Atom::num(0)),
         );
         assert_eq!(
-            source.schoonschip_with_settings(
-                &crate::shorthands::schoonschip::SchoonschipSettings::default()
-                    .with_expanded_contracted_sums()
-            ),
+            crate::test_support::contracted_atom(source.as_view())
+                .unwrap()
+                .expand(),
             Atom::num(0),
         );
 
@@ -2731,12 +2899,11 @@ mod tests {
             typed.structure.logical_slots(),
             expected.structure.logical_slots()
         );
-        let expression = typed.expression.schoonschip_with_settings(
-            &crate::shorthands::schoonschip::SchoonschipSettings::default()
-                .with_expanded_contracted_sums(),
-        );
-        assert_eq!(expression, Atom::Zero);
-        let result = typed.with_rewritten_expression(expression).unwrap();
+        let result = typed
+            .contract(Default::default())
+            .unwrap()
+            .expanded()
+            .unwrap();
         assert_eq!(result.expression, Atom::Zero);
         assert_eq!(result.structure, typed.structure);
         assert_eq!(typed.expression, source);
@@ -2752,7 +2919,7 @@ mod tests {
         ] {
             let source = input(source);
             let actual = contractor
-                .collect_component_sum(
+                .materialize_test_sum(
                     source.as_view(),
                     &mut SlotMatcher::default(),
                     Intake::FactoredContraction,

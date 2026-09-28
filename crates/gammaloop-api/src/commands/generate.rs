@@ -21,12 +21,12 @@ use serde::{Deserialize, Serialize};
 use symbolica::parse;
 use tabled::{
     builder::Builder,
-    settings::{Style, style::HorizontalLine, themes::Theme},
+    settings::{style::HorizontalLine, themes::Theme, Style},
 };
 use thiserror::Error;
 use walkdir::WalkDir;
 
-use eyre::{Context, eyre};
+use eyre::{eyre, Context};
 use feynkit_generator::{
     FilterScope, GenerationFilter, GenerationOptions, GenerationType, GraphGroupingOptions,
     NumeratorGrouping, ParticleSelector, Process as GenerationProcess, SelfEnergyFilterOptions,
@@ -36,8 +36,8 @@ use feynkit_graph::EdgeId;
 use gammalooprs::model::Model;
 use gammalooprs::processes::amplitude::Amplitude;
 use gammalooprs::processes::{
-    CrossSection, GeneratedGraphReport, GraphGenerationStats, Process, ProcessDefinition,
-    ProcessList, merge_generated_graph_reports,
+    merge_generated_graph_reports, CrossSection, GeneratedGraphReport, GraphGenerationStats,
+    Process, ProcessDefinition, ProcessList,
 };
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 
@@ -2232,7 +2232,11 @@ fn parse_loop_momentum_bases(s: &str) -> Option<HashMap<String, Vec<String>>> {
             // single name without '=' is allowed but ignored
         }
     }
-    if out.is_empty() { None } else { Some(out) }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 // =================== Tests ===================
@@ -2240,7 +2244,7 @@ fn parse_loop_momentum_bases(s: &str) -> Option<HashMap<String, Vec<String>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Repl, commands::Commands};
+    use crate::{commands::Commands, Repl};
     use clap::Parser;
     use gammalooprs::initialisation::test_initialise;
     use gammalooprs::utils::load_generic_model;
@@ -2505,12 +2509,9 @@ mod tests {
                     .generation_options
                     .filters(FilterScope::Graph)
             };
-            assert!(
-                filters.iter().any(|filter| matches!(
-                    filter,
-                    GenerationFilter::FermionLoopCountRange((1, 2))
-                ))
-            );
+            assert!(filters
+                .iter()
+                .any(|filter| matches!(filter, GenerationFilter::FermionLoopCountRange((1, 2)))));
         }
     }
 
@@ -2522,20 +2523,19 @@ mod tests {
 
         let spec = parse_spec_with_model(&args, GenerationType::Amplitude, model).unwrap();
 
-        assert!(
-            spec.process_definition
-                .generation_options
-                .filters(FilterScope::Graph)
-                .iter()
-                .any(|filter| matches!(
-                    filter,
-                    GenerationFilter::VertexAllow(vertices)
-                        if vertices == &vec![
-                            VertexSelector::Name("V_6".to_owned()),
-                            VertexSelector::Name("V_9".to_owned()),
-                        ]
-                ))
-        );
+        assert!(spec
+            .process_definition
+            .generation_options
+            .filters(FilterScope::Graph)
+            .iter()
+            .any(|filter| matches!(
+                filter,
+                GenerationFilter::VertexAllow(vertices)
+                    if vertices == &vec![
+                        VertexSelector::Name("V_6".to_owned()),
+                        VertexSelector::Name("V_9".to_owned()),
+                    ]
+            )));
     }
 
     #[test]
@@ -2677,27 +2677,21 @@ mod tests {
             .filters(FilterScope::Graph);
 
         // Smart defaults for vacuum-like graphs
-        assert!(
-            xs_filters
-                .iter()
-                .any(|f| matches!(f, GenerationFilter::MaxNumberOfBridges(0)))
-        );
+        assert!(xs_filters
+            .iter()
+            .any(|f| matches!(f, GenerationFilter::MaxNumberOfBridges(0))));
         assert!(xs_filters.iter().any(|f| matches!(
             f,
             GenerationFilter::FactorizedLoopTopologiesCountRange((1, 1))
         )));
 
         // Default cut ranges present
-        assert!(
-            xs_filters
-                .iter()
-                .any(|f| matches!(f, GenerationFilter::BlobRange(r) if r.clone()==(1..=1)))
-        );
-        assert!(
-            xs_filters
-                .iter()
-                .any(|f| matches!(f, GenerationFilter::SpectatorRange(r) if r.clone()==(0..=0)))
-        );
+        assert!(xs_filters
+            .iter()
+            .any(|f| matches!(f, GenerationFilter::BlobRange(r) if r.clone()==(1..=1))));
+        assert!(xs_filters
+            .iter()
+            .any(|f| matches!(f, GenerationFilter::SpectatorRange(r) if r.clone()==(0..=0))));
     }
 
     #[test]

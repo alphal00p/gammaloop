@@ -1,0 +1,5 @@
+---
+source: src/numerator/tests.rs
+expression: g_simp.to_canonical_string()
+---
+2*gamma_chain(mink(4,2),mink(4,3),bis(4,1),bis(4,5))+2*gamma_chain(mink(4,3),mink(4,2),bis(4,1),bis(4,5))

@@ -1216,7 +1216,7 @@ impl FinalizedCut {
                     Some(if orientation == Orientation::Reversed {
                         edge_data.data.particle()?.antiparticle(model)
                     } else {
-                        edge_data.data.particle()?.clone()
+                        edge_data.data.particle()?
                     })
                 })
                 .collect_vec();

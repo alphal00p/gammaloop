@@ -17,7 +17,13 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
-use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
+use idenso::{
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    representations::{ColorAdjoint, ColorFundamental, ColorSextet},
+    tensor::SymbolicTensor,
+};
+use spenso::shadowing::TensorCollectFilter;
 use spenso::shadowing::symbolica_utils::LogPrint;
 
 use symbolica::atom::{Atom, AtomCore};
@@ -363,10 +369,14 @@ impl Forest {
                 dod = n.data.spinney.dod,
                 "Dumped pole part color simplification input"
             );
-            let atom = atom.simplify_color().expand_num().to_dots();
-            // .replace(GS.dim)
-            // .max_level(0)
-            // .with(4); //.with(Atom::var(GS.dim_epsilon) * (-2) + 4);
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
+                .simplify_color(ColorSimplifySettings::default())?
+                .to_dots()?
+                .resolved()?;
+            let atom = cooking.uncook(reduced.expression().as_view());
 
             debug_tags!(#generation, #uv, #graph, #term;
                 forest_term=%
@@ -400,7 +410,20 @@ impl Forest {
             let terms = n
                 .data
                 .final_integrand(graph)?
-                .map_expressions(|integrand| Ok(integrand.clone().collect_color()))?;
+                .map_expressions(|integrand| {
+                    let color = TensorCollectFilter::Reps([
+                        ColorAdjoint {}.into(),
+                        ColorFundamental {}.into(),
+                        ColorSextet {}.into(),
+                    ]);
+                    let cooking = CookSettings::indices()
+                        .with_mode(CookMode::ReversibleEncoding)
+                        .with_representation_payloads(true, true);
+                    let collected = SymbolicTensor::infer(cooking.try_cook(integrand.as_view())?)?
+                        .collect(color)?
+                        .resolved()?;
+                    Ok(cooking.uncook(collected.expression().as_view()))
+                })?;
             sum = Some(match sum {
                 Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
                     format!(

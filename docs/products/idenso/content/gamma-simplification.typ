@@ -7,22 +7,10 @@ Explore the current Dirac simplifier through executable identities, configurable
 ordering, and examples of expressions that deliberately remain explicit. Each identity
 card checks its expected result and verifies that a second pass leaves it unchanged.
 
-#context if target() == "html" {
-  html.elem("div", attrs: (
-    class: "live-notebook",
-    "data-notebook": "gamma_simplification",
-    "aria-label": "Idenso gamma simplification notebook",
-  ))[
-    #html.elem("p", attrs: (class: "live-notebook-fallback"))[
-      This notebook requires JavaScript and the documentation build's notebook assets.
-      Open the #source-link("examples/notebooks/gamma_simplification.py", label: "Marimo source")
-      to run it locally.
-    ]
-  ]
-} else {
-  [Open the #source-link("examples/notebooks/gamma_simplification.py", label: "Marimo source")
-  to run the interactive notebook.]
-}
+The canonical notebook and its local Python, FORM and data assets live in
+#link("https://github.com/symbolica-dev/symbolica-community/tree/main/examples/hep")[Symbolica community's HEP examples].
+Open the #link("https://github.com/alphal00p/symbolica-community/blob/3da847a9c8f9453ead70c2328860cf5e68a74298/examples/hep/gamma_simplification.py")[Marimo source]
+to run it locally. The FeynKit checkout retains the benchmark harness and historical records.
 
 == Capabilities and conventions
 
@@ -38,18 +26,29 @@ strictly four-dimensional: the simplifier does not choose a dimensional-regulari
 prescription. Mixed dimensions and unsupported transposed words can remain unevaluated.
 The notebook checks these boundaries as well as successful reductions.
 
-`GammaSimplifySettings(expand_traces=True)` requests expanded evaluated trace
-bodies in Python; Rust uses `with_expanded_traces()`. The default remains factored.
-Surrounding scalar factors and independent trace boundaries are preserved, so
-`S * trace` becomes `S * expanded_body` without distributing S. Disabling trace
-evaluation also disables trace expansion. The ordinary-trace example checks the
-result by expanding only the standalone body and then verifies an unchanged rerun.
+`simplify_gamma()` returns an `AliasedTensorExpression`: both ordinary and axial
+trace identities retain factored definitions. `to_expression()` resolves the
+literal aliases, while `expand()` explicitly materializes the full polynomial.
+Rust uses the same shared result through `resolved()` and `expanded()`.
+Trace evaluation and chain output are settings of the gamma pass; expansion is
+an operation on its result. Scalar spectators and independent trace boundaries
+remain factorized during simplification. The current production implementation
+uses the common alias materializer; the older trace-specific sparse emitter is
+retained only as a test oracle.
 
 See #product-link("idenso", page: "reference/form-color-dirac/", label: "Shipped color and Dirac rules")
 for the conventions and #product-link("idenso", page: "guides/showcase/", label: "the tensor display showcase")
 for additional notation controls.
 
-== Schoonschip performance and FORM comparison
+== Historical Schoonschip performance and FORM comparison
+
+The measurements and implementation notes below record the revisions named in
+each cohort. Their former API spellings and expansion strategies describe those
+executables; they are not instructions for the current tensor API. In particular,
+`expand_traces`, `expand_contracted_sums`, and `replace_tensor` are historical.
+The current notebook uses explicit aliased-result materialization and certified
+`TensorRule` replacement. Final consolidation measurements are recorded only
+after the combined implementation passes its functional gates.
 
 The notebook also includes a massless three-loop propagator with a fermionic
 outer ring, followed by four-loop fermionic and gluonic ladders. The new cases
@@ -169,7 +168,7 @@ results do not establish full FORM parity.
 
 The performance section follows equivalent paired and alternating slash traces through
 three routes: evaluate a free-index trace then contract momenta; contract the indexed
-input with `schoonschip_net()` before taking the trace; or start from the compact slash
+input with `contract()` before taking the trace; or start from the compact slash
 expression. Each route must match an independent scalar identity. The displayed speedup
 compares the first two complete pipelines, including early conversion cost. The compact
 input timing is reported separately. Changing the display layout alone does not change
@@ -5541,13 +5540,14 @@ community extension.
 
 // docs-example: syntax
 ```sh
-just notebook gamma_simplification /path/to/python
+/path/to/python -m marimo edit examples/hep/gamma_simplification.py
 ```
 
-Put `form` on `PATH`, or select its executable explicitly for native comparisons:
+Run the command above from a Symbolica community source checkout. Put `form` on
+`PATH`, or select its executable explicitly for native comparisons:
 
 // docs-example: syntax
 ```sh
-FORM_EXECUTABLE=/path/to/form just notebook gamma_simplification /path/to/python
+FORM_EXECUTABLE=/path/to/form /path/to/python -m marimo edit examples/hep/gamma_simplification.py
 ```
 ]

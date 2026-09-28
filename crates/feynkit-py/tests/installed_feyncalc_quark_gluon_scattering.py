@@ -9,7 +9,13 @@ The extra angular-cut rates retain the quark mass and use native phase space.
 import numpy as np
 from symbolica import E, S, Symbol
 from symbolica.community import hep
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.spenso import (
+    CookSettings,
+    GammaSimplifySettings,
+    TensorExpression,
+)
+
+index_scope = S("spenso::index_scope")
 
 model = hep.Model.standard_model()
 quark = model.particle("b")
@@ -73,13 +79,18 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
         d in denominators
         for d in ((t, s - mass**2, u - mass**2) if count == 3 else (t,))
     )
-    operator = TensorExpression(amplitude.expand())
+    operator = TensorExpression(amplitude)
     assert len(operator.structure.slots) == (8 if count == 3 else 6)
-    adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
+    adjoint = (
+        operator.dirac_adjoint()
+        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .to_expression()
+        .to_expression()
+    )
     adjoint = adjoint.replace(conjugate(P(a, b)), P(a, b))
     for real in (mass, gs, s, t, u):
         adjoint = adjoint.replace(conjugate(real), real)
-    adjoint = TensorExpression(adjoint).wrap_indices(adjoint_index)
+    adjoint = TensorExpression(adjoint).wrap_indices(adjoint_index).to_expression()
 
     # Match the shared completeness tensor against the dual of each external slot.
     # Matching selects color slots and determines the quark/antiquark orientation.
@@ -97,7 +108,9 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
                 continue
             closure = metric(
                 slot.dual().to_expression(),
-                original.replace(ports[position], adjoint_index(ports[position])),
+                original.replace(
+                    ports[position], index_scope(adjoint_index, ports[position])
+                ),
             )
             match = next(
                 closure.match(particle.color_sum(left, right), max_level=0), None
@@ -128,6 +141,7 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
         TensorExpression(generic, cook_indices=CookSettings.indices())
         .simplify_color()
         .to_expression()
+        .to_expression()
         .replace(dA, Nc**2 - 1)
     )
     colored = TensorExpression(colored).to_cof_dimension_invariants()
@@ -135,25 +149,18 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     # Dirac adjunction exchanges the two endpoints of the open fermion chain.
     # Reduce the fermion trace before introducing the physical gluon projectors.
     spin_projector = quark.spin_sum(
-        P(0), ports[0], adjoint_index(ports[2]), average=True
-    ) * quark.spin_sum(P(2), adjoint_index(ports[0]), ports[2])
+        P(0), ports[0], index_scope(adjoint_index, ports[2]), average=True
+    ) * quark.spin_sum(P(2), index_scope(adjoint_index, ports[0]), ports[2])
     print("spin", boson, flush=True)
     spin_summed = (
         TensorExpression(
             colored.to_expression() * spin_projector,
             cook_indices=CookSettings.indices(),
         )
-        .expand()
         .simplify_gamma()
-        .expand()
-        .simplify_gamma()
+        .to_expression()
     )
-    reduced = kinematics.apply(spin_summed.expand().simplify_metrics().to_dots())
-    pieces = [
-        (structure, coefficient.together())
-        for structure, coefficient in reduced.expand_mink()
-    ]
-    print("Lorentz structures", boson, len(pieces), flush=True)
+    reduced = kinematics.apply(spin_summed.contract().to_expression().to_dots())
     for mode in ("covariant", "null", "timelike") if count == 3 else ("ghost",):
         polarizations = E("1")
         if count == 3:
@@ -161,7 +168,7 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
                 polarizations *= model.particle("g").spin_sum(
                     P(position),
                     ports[position],
-                    adjoint_index(ports[position]),
+                    index_scope(adjoint_index, ports[position]),
                     reference=None
                     if mode == "covariant"
                     else P(4 - position)
@@ -169,21 +176,23 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
                     else P(0),
                     covariant=mode == "covariant",
                 )
-        # Keep scalar coefficients factored while contracting the Lorentz parts.
-        # This avoids repeatedly importing expanded scalar polynomials as tensors.
-        contracted = []
-        for structure, coefficient in pieces:
-            scalar = (
-                TensorExpression(
-                    (structure * polarizations).expand(),
-                    cook_indices=CookSettings.indices(),
-                )
-                .simplify_metrics()
-                .to_dots()
+        # Contract the full factorized tensor; the shared engine retains its
+        # scalar coefficients without splitting them into a second representation.
+        scalar = (
+            TensorExpression(
+                reduced.to_expression() * polarizations,
+                cook_indices=CookSettings.indices(),
             )
-            assert scalar.is_scalar
-            contracted.append(coefficient * kinematics.apply(scalar.to_expression()))
-        squared = sum(contracted, E("0")).replace(t, 2 * mass**2 - s - u).together()
+            .contract()
+            .to_expression()
+            .to_dots()
+        )
+        assert scalar.is_scalar
+        squared = (
+            kinematics.apply(scalar.to_expression())
+            .replace(t, 2 * mass**2 - s - u)
+            .together()
+        )
         results[boson, mode] = squared
         print("Finished", boson, mode, flush=True)
 

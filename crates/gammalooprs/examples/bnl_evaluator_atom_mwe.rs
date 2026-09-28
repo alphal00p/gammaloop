@@ -26,7 +26,7 @@ use spenso::network::{
     library::{DummyLibrary, function_lib::Wrap},
     parsing::{
         ParseSettings as NetworkParseSettings, SchoonschipExpansionMode, ShorthandParsing,
-        StrictTensorFilter, StructureInferenceMode,
+        StrictTensorFilter,
     },
     store::NetworkStore,
 };
@@ -952,13 +952,11 @@ fn parse_symbolic_network(config: &Config, selected: &Atom) -> Result<SymbolicNe
             chain: true,
         }
     } else {
-        ShorthandParsing::Opaque {
-            inference: StructureInferenceMode::Fast,
-        }
+        ShorthandParsing::Opaque
     };
     let lib = DummyLibrary::<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>::new();
 
-    SymbolicNet::<Aind>::try_from_view::<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>, _>(
+    SymbolicNet::<Aind>::try_from_view::<OrderedStructure<LibraryRep, Aind>, _>(
         selected.as_view(),
         &lib,
         &NetworkParseSettings {
@@ -1157,7 +1155,7 @@ fn run_symbolic_then_concrete(
     let symbolic_root = match symbolic_result.wrap_err("failed to read symbolic tensor result")? {
         ExecutionResult::One => Atom::num(1),
         ExecutionResult::Zero => Atom::Zero,
-        ExecutionResult::Val(tensor) => tensor.expression.clone(),
+        ExecutionResult::Val(tensor) => tensor.expression().clone(),
     };
     let symbolic_aliased = match &symbolic_aliases {
         Some(aliases) => symbolic_net.aliased_atom(aliases, symbolic_root),
@@ -1702,7 +1700,7 @@ fn run_symbolic_net(config: &Config, selected: &Atom, summary: &mut SummaryTable
     let root = match result.wrap_err("failed to read symbolic tensor result")? {
         ExecutionResult::One => Atom::num(1),
         ExecutionResult::Zero => Atom::Zero,
-        ExecutionResult::Val(tensor) => tensor.expression.clone(),
+        ExecutionResult::Val(tensor) => tensor.expression().clone(),
     };
     let aliased = match &scalar_aliases {
         Some(aliases) => net.aliased_atom(aliases, root),

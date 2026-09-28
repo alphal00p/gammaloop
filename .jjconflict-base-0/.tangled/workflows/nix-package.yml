@@ -1,0 +1,40 @@
+# Separate package pipeline to mirror the non-blocking package job in GitHub CI.
+# Required pipeline secrets:
+# - SYMBOLICA_LICENSE
+
+when:
+  - event: ["push", "manual"]
+    branch: ["main"]
+  - event: ["pull_request"]
+    branch: ["main"]
+
+engine: "nixery"
+
+clone:
+  depth: 1
+  submodules: false
+
+dependencies:
+  nixpkgs:
+    - bash
+    - cacert
+    - coreutils
+    - findutils
+    - gawk
+    - git
+    - gnugrep
+    - gnused
+    - nix
+
+environment:
+  CARGO_TERM_COLOR: "always"
+  RUST_BACKTRACE: "1"
+
+steps:
+  - name: "Build Linux Nix package"
+    command: |
+      # Tangled runs these Nix builds without sandboxing, and stdenv expects the
+      # fallback HOME path to be absent in that mode.
+      rm -rf /homeless-shelter
+
+      nix build .#default --print-build-logs

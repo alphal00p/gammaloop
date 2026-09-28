@@ -17,8 +17,8 @@ symbolica-typst-plugin = { version = "0.1.0", default-features = false, features
 # Consuming workspaces choose these sources through their own root patches.
 [patch.crates-io]
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "939c4de8b8da5546101b937a425eda443f409e8a" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "939c4de8b8da5546101b937a425eda443f409e8a" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "6a96c9d77b217ea394770524c119e0613d4d9ef5" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "6a96c9d77b217ea394770524c119e0613d4d9ef5" }
 
 [profile.release]
 codegen-units = 1

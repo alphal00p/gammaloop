@@ -1,0 +1,5 @@
+---
+source: spenso/src/tests.rs
+expression: structb.to_string()
+---
+28  (mink5)

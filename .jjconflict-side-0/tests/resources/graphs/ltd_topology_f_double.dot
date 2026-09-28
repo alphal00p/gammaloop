@@ -1,0 +1,39 @@
+digraph ltd_topology_f_0 {
+graph [
+    overall_factor=1;
+    multiplicity_factor=1;
+]
+edge [
+    pdg=1000
+]
+ext [style=invis]
+ext -> v3 [name=p1, mom=p1];
+v4 -> ext [name=p2, mom=p2];
+v3 -> v5 [name=q1];
+v5 -> v4 [name=q2];
+v4 -> v6 [name=q3, lmb_index=0];
+v6 -> v3 [name=q4];
+v5 -> v7 [name=q5];
+v4 -> v7 [name=q6, lmb_index=1];
+v6 -> v7 [name=q7, lmb_index=2];
+}
+
+digraph ltd_topology_f_1 {
+graph [
+    overall_factor=-1;
+    multiplicity_factor=1;
+]
+edge [
+    pdg=1000
+]
+ext [style=invis]
+ext -> v3 [name=p1, mom=p1];
+v4 -> ext [name=p2, mom=p2];
+v3 -> v5 [name=q1];
+v5 -> v4 [name=q2];
+v4 -> v6 [name=q3, lmb_index=0];
+v6 -> v3 [name=q4];
+v5 -> v7 [name=q5];
+v4 -> v7 [name=q6, lmb_index=1];
+v6 -> v7 [name=q7, lmb_index=2];
+}

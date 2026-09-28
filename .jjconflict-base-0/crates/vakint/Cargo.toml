@@ -1,0 +1,48 @@
+[package]
+name = "vakint"
+version = "0.1.2"
+edition = "2024"
+description = "Computation of single-scale vacuum integrals for High-Energy Physics"
+readme = "README.md"
+homepage = "https://alphal00p.github.io/"
+repository = "https://github.com/alphal00p/vakint"
+license = "MIT"
+keywords = ["QFT", "integral", "physics", "vaccuum"]
+categories = ["science"]
+
+[dependencies]
+pyo3 = { workspace = true, features = ["anyhow"], optional = true }
+pyo3-stub-gen = { workspace = true, default-features = false, optional = true }
+
+ahash = "0.8.12"
+arrayvec = "0.7.4"
+colored = { workspace = true }
+eyre = { workspace = true }
+feynkit-tensor = { workspace = true }
+log = "0.4.29"
+regex = "1.12.2"
+rug = "1.28.0"
+spenso = { workspace = true }
+string-template-plus = "0.4.3"
+thiserror = { workspace = true }
+version-compare = "0.2.1"
+
+[dependencies.phf]
+version = "0.13.1"
+features = ["macros"]
+
+[dependencies.symbolica]
+workspace = true
+default-features = false
+features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
+
+[dev-dependencies]
+test-log = "0.2.19"
+
+[features]
+python_stubgen = [
+  "dep:pyo3-stub-gen",
+  "symbolica/python_export",
+  "symbolica/python_stubgen",
+]
+symbolica_community_module = ["dep:pyo3", "symbolica/python_export"]

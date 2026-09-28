@@ -3,11 +3,12 @@ use std::sync::LazyLock;
 use itertools::Itertools;
 use spenso::{
     chain,
-    network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
+    network::{library::symbolic::ETS, parsing::ParseSettings, tags::SPENSO_TAG as T},
     rep_,
-    shadowing::{self, Collectable, ProjectorExpander, TensorCollectExt, TensorCollectFilter},
+    shadowing::{self, ProjectorExpander, TensorCollectFilter},
     structure::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
+        partial::PartialStructure,
         representation::RepName,
     },
     trace, trace_sym,
@@ -24,13 +25,11 @@ use symbolica_utils::PatternReplacement;
 use crate::{
     W_, color_f, color_t,
     representations::{ColorAdjoint, ColorFundamental, ColorSextet},
-    shorthands::{
-        bracket::BracketNormalizer,
-        chain::Chain,
-        metric::MetricSimplifier,
-        schoonschip::{Schoonschip, SchoonschipSettings},
+    shorthands::chain::Chain,
+    tensor::{
+        SymbolicNetExt, SymbolicNetParse, SymbolicTensor, aliases::Definition,
+        inference::TensorInferenceError,
     },
-    tensor::remove_antisymmetric_zero_terms,
 };
 
 use super::{CS, ColorSimplifier, ColorSimplifySettings};
@@ -47,131 +46,78 @@ pub(crate) struct ColorAlgebraSimplifier {
     pub settings: ColorSimplifySettings,
 }
 
-impl ColorAlgebraSimplifier {
-    pub(crate) fn run(&self, expression: AtomView<'_>) -> Atom {
-        let mut current = BracketNormalizer::normalize(expression);
-        if self.settings.simplify_non_color {
-            current = current.simplify_metrics();
-        }
-        if self.settings.substitute_cof_dimension_invariants {
-            current = current.to_cof_dimension_invariants();
-        }
-        // Retain generic chain/trace normalization: the existing rules also
-        // normalize closed or identity chains in other representations. Reduce
-        // those nodes without collecting their surrounding non-color sums.
-        let normalize_generic = |mut current: Atom| loop {
-            let next = current
-                .replace_map(|atom, _context, out| {
-                    let AtomView::Fun(fun) = atom else { return };
-                    if (fun.get_symbol() == T.chain || shadowing::trace_parts(fun).is_some())
-                        && !atom_contains_color_node(atom)
-                    {
-                        **out = self.reduce_payload(atom);
-                    }
-                })
-                .simplify_metrics();
-            if next == current {
-                break next;
-            }
-            current = next;
-        };
-        if self.settings.simplify_non_color {
-            current = normalize_generic(current);
-        }
-        // Isolate complete color networks once. Fixed-point chain rewrites must
-        // not repeatedly traverse the factorized momentum coefficients that
-        // accompany each collected color payload.
-        let simplified = current
-            .collect_with_map(
-                |atom| matches!(atom, AtomView::Fun(_) if atom_contains_color_node(atom)),
-            )
-            .map_collects(|factor, _context, out| {
-                let AtomView::Fun(collected) = factor else {
-                    return;
-                };
-                if let Some(color) = collected.iter().next() {
-                    **out = self.reduce_payload(color);
-                }
-            })
-            .unwrap_collect();
-        // Mixed tensors can expose metric contractions with factors outside
-        // the color network, so retain the optional global normalization boundary.
-        // A resulting metric can close another generic chain; iterate those
-        // local rewrites without collecting its surrounding momentum factors.
-        let simplified = if self.settings.simplify_non_color {
-            normalize_generic(simplified)
-        } else {
-            simplified
-        };
-        let simplified = BracketNormalizer::normalize(simplified.as_view());
-        if self.settings.substitute_cof_dimension_invariants {
-            simplified.to_cof_dimension_invariants()
-        } else {
-            simplified
-        }
-    }
-
-    fn reduce_payload(&self, expression: AtomView<'_>) -> Atom {
-        // Contract metrics before trace terminals turn ordered generators into
-        // symmetric invariants. The same rules also handle already-collected traces.
-        let metrics = SchoonschipSettings::default()
-            .without_rank1_tensors()
-            .with_chain_like_functions();
-        let mut current = expression.to_owned();
-        loop {
-            let contracted = current.schoonschip_with_settings(&metrics);
-            let collected = self.collect_lines(contracted.as_view());
-            let rewritten = self.rewrite_terms(collected.as_view());
-            // Resolve scalar invariants before their representation labels trigger
-            // tensor collection over the accompanying factorized numerator. Include
-            // invariants produced by this pass, as well as those already present.
-            let rewritten = if self.settings.substitute_cof_dimension_invariants {
-                rewritten.to_cof_dimension_invariants()
-            } else {
-                rewritten
-            };
-            let next = rewritten
-                .collect_color()
-                .schoonschip_with_settings(&metrics);
-            if next == current {
-                // Every antisymmetric color tensor carries adjoint slots, so this
-                // isolates its complete network without expanding other sectors.
-                let mut pruned = false;
-                let canonicalized =
-                    next.collect_rep_with_map(ColorAdjoint {}.into(), |factor, _context, out| {
-                        let AtomView::Fun(collected) = factor else {
-                            return;
-                        };
-                        let Some(color) = collected.iter().next() else {
-                            return;
-                        };
-                        let reduced = remove_antisymmetric_zero_terms::<AbstractIndex>(color);
-                        pruned |= reduced.as_view() != color;
-                        **out = reduced;
-                    });
-                if pruned {
-                    current = canonicalized;
-                    continue;
-                }
-                let simplified =
-                    restore_explicit_su_n_generator_chains(canonicalized).simplify_metrics();
-                return if self.settings.substitute_cof_dimension_invariants {
-                    simplified.to_cof_dimension_invariants()
+impl SymbolicTensor<PartialStructure> {
+    pub(crate) fn simplify_color_parts(
+        &self,
+        registry: &[Definition],
+        settings: ColorSimplifySettings,
+    ) -> Result<(Self, Vec<Definition>), TensorInferenceError> {
+        let simplifier = ColorAlgebraSimplifier { settings };
+        self.collect_with_map(
+            None,
+            registry,
+            atom_contains_color_node,
+            |selected, registry, complete| {
+                let expression = simplifier.step(selected.expression.as_view(), complete);
+                let mut network = expression
+                    .as_view()
+                    .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                    .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?;
+                let expression = if network.remove_antisymmetric_zero_terms() {
+                    network
+                        .simple_execute::<()>()
+                        .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?
                 } else {
-                    simplified
+                    expression
                 };
-            }
-            current = next;
+                let expression = restore_explicit_su_n_generator_chains(expression);
+                let rewritten = selected.with_rewritten_expression(expression)?;
+                if settings.simplify_non_color {
+                    // The shared scheduler contracts the complete changed domain.
+                    Ok((rewritten, Vec::new()))
+                } else {
+                    // Internal colour metrics still close, while the collector keeps
+                    // foreign coefficients outside this selected monomial. Carry any
+                    // generated aliases instead of resolving their bodies here.
+                    let contracted = rewritten.contract_parts(Default::default())?;
+                    let mut registry = registry
+                        .iter()
+                        .cloned()
+                        .map(|pair| (pair.0.expression.clone(), pair))
+                        .collect();
+                    SymbolicTensor::<
+                        crate::tensor::aliases::AliasInterfaces,
+                        symbolica::atom::AliasedAtom,
+                    >::retain_contracted_definitions(
+                        &contracted, &mut registry
+                    )?;
+                    Ok((contracted.root, registry.into_values().collect()))
+                }
+            },
+        )
+    }
+}
+
+impl ColorAlgebraSimplifier {
+    /// Apply the local colour identities. Contraction and cross-domain
+    /// scheduling belong to the shared tensor owner.
+    pub(crate) fn step(&self, expression: AtomView<'_>, complete: bool) -> Atom {
+        let collected = self.collect_lines(expression);
+        let rewritten = self.rewrite_terms(collected.as_view(), complete);
+        if self.settings.substitute_cof_dimension_invariants {
+            rewritten.to_cof_dimension_invariants()
+        } else {
+            rewritten
         }
     }
 
-    fn rewrite_terms(&self, expr: AtomView<'_>) -> Atom {
+    fn rewrite_terms(&self, expr: AtomView<'_>, complete: bool) -> Atom {
         // Terminal trace rules can create sums; product rules such as f*f -> CA*g
         // then need to run on each generated term instead of on the whole Add.
         if let AtomView::Add(add) = expr {
             let terms = add
                 .iter()
-                .map(|term| self.rewrite_terms(term))
+                .map(|term| self.rewrite_terms(term, complete))
                 .collect::<Vec<_>>();
             if !expr.needs_normalization()
                 && terms
@@ -184,7 +130,7 @@ impl ColorAlgebraSimplifier {
             return Self::sum_rewritten_terms(terms);
         }
 
-        if let Some(rewritten) = self.rewrite_node(expr) {
+        if let Some(rewritten) = self.rewrite_node(expr, complete) {
             return rewritten;
         }
 
@@ -194,7 +140,7 @@ impl ColorAlgebraSimplifier {
             // The root already declined above. Descendants still run in the
             // existing top-down order, stopping below each successful rewrite.
             if context.parent_type.is_some()
-                && let Some(rewritten) = self.rewrite_node(arg)
+                && let Some(rewritten) = self.rewrite_node(arg, complete)
             {
                 **out = rewritten;
             }
@@ -228,9 +174,8 @@ impl ColorAlgebraSimplifier {
         let rep = ColorFundamental {}.into();
         expr.to_owned()
             .chainify(rep)
-            .collect_chains(ColorFundamental {}.into())
+            .join_chains(ColorFundamental {}.into())
             .replace_map(&Self::close_trace_chain)
-            .replace_map(&Self::collapse_identity_chain)
     }
 
     fn close_trace_chain(arg: AtomView, _context: &Context, out: &mut Settable<'_, Atom>) {
@@ -250,25 +195,13 @@ impl ColorAlgebraSimplifier {
         **out = trace!(ColorFundamental {}.to_symbolic([dimension]); factors);
     }
 
-    fn collapse_identity_chain(arg: AtomView, _context: &Context, out: &mut Settable<'_, Atom>) {
-        let Some((start, end, factors)) = chain_parts(arg) else {
-            return;
-        };
-        if factors
-            .iter()
-            .all(|factor| is_chain_identity_factor(factor.as_view()))
-        {
-            **out = color_metric(start, end);
-        }
-    }
-
-    fn rewrite_node(&self, arg: AtomView<'_>) -> Option<Atom> {
-        self.simplify_product(arg)
+    fn rewrite_node(&self, arg: AtomView<'_>, complete: bool) -> Option<Atom> {
+        self.simplify_product(arg, complete)
             .or_else(|| Self::simplify_chain_node(arg))
             .or_else(|| {
                 self.settings
                     .evaluate_traces
-                    .then(|| Self::simplify_trace_node(arg))
+                    .then(|| Self::simplify_trace_node(arg, complete))
                     .flatten()
             })
             .or_else(|| self.simplify_power(arg))
@@ -327,7 +260,7 @@ impl ColorAlgebraSimplifier {
         None
     }
 
-    fn simplify_trace_node(trace: AtomView) -> Option<Atom> {
+    fn simplify_trace_node(trace: AtomView, complete: bool) -> Option<Atom> {
         let (rep, factors) = trace_parts(trace)?;
 
         if factors.is_empty()
@@ -380,6 +313,13 @@ impl ColorAlgebraSimplifier {
             && let Some(rewritten) = Self::simplify_separated_trace_casimir(&rep, &factors)
         {
             return Some(rewritten);
+        }
+
+        // Later selected factors can still contract with this ordered trace.
+        // Keep its terminal decomposition until the frontier is complete;
+        // identity, Casimir and product rewrites remain available on prefixes.
+        if !complete {
+            return None;
         }
 
         let generators = factors
@@ -587,7 +527,7 @@ impl ColorAlgebraSimplifier {
         )
     }
 
-    fn simplify_product(&self, product: AtomView) -> Option<Atom> {
+    fn simplify_product(&self, product: AtomView, complete: bool) -> Option<Atom> {
         let product = ProductView::parse(product);
         if product.len() < 2 {
             return None;
@@ -613,7 +553,7 @@ impl ColorAlgebraSimplifier {
                     .then(|| Self::simplify_cross_chain_fierz_product(&product))
                     .flatten()
             })
-            .or_else(|| self.simplify_embedded_color_node(&product))
+            .or_else(|| self.simplify_embedded_color_node(&product, complete))
     }
 
     fn join_color_chain_product(product: &ProductView) -> Option<Atom> {
@@ -654,13 +594,13 @@ impl ColorAlgebraSimplifier {
         None
     }
 
-    fn simplify_embedded_color_node(&self, product: &ProductView) -> Option<Atom> {
+    fn simplify_embedded_color_node(&self, product: &ProductView, complete: bool) -> Option<Atom> {
         for (index, factor) in product.factors.iter().enumerate() {
             let rewritten = Self::simplify_chain_node(factor.atom)
                 .or_else(|| {
                     self.settings
                         .evaluate_traces
-                        .then(|| Self::simplify_trace_node(factor.atom))
+                        .then(|| Self::simplify_trace_node(factor.atom, complete))
                         .flatten()
                 })
                 .or_else(|| self.simplify_power(factor.atom));
@@ -1950,7 +1890,7 @@ fn positive_integer(expr: AtomView) -> Option<i64> {
 mod reconstruction_tests {
     use super::*;
     use std::sync::{Arc, Mutex};
-    use symbolica::{domains::float::Float, parse_lit, symbol};
+    use symbolica::{domains::float::Float, parse, parse_lit, symbol};
 
     // Preserve the prior reconstruction schedule as an independent oracle for
     // rounding and user normalizers, which exact polynomial equality cannot test.
@@ -1960,14 +1900,40 @@ mod reconstruction_tests {
                 result + prefix_rewrite(simplifier, term)
             });
         }
-        if let Some(result) = simplifier.rewrite_node(expression) {
+        if let Some(result) = simplifier.rewrite_node(expression, true) {
             return result;
         }
         expression.to_owned().replace_map(|node, _context, out| {
-            if let Some(result) = simplifier.rewrite_node(node) {
+            if let Some(result) = simplifier.rewrite_node(node, true) {
                 **out = result;
             }
         })
+    }
+
+    #[test]
+    fn incomplete_frontiers_keep_traces_for_product_rules() {
+        crate::test_support::test_initialize();
+        let simplifier = ColorAlgebraSimplifier {
+            settings: ColorSimplifySettings::default(),
+        };
+        let left = parse!(
+            "trace(cof(Nc), cyclic(t(coad(A,b),in,out), t(coad(A,a),in,out), t(coad(A,c),in,out)))",
+            default_namespace = "spenso"
+        );
+        let right = parse!(
+            "trace(cof(Nc), cyclic(t(coad(A,d),in,out), t(coad(A,a),in,out), t(coad(A,e),in,out)))",
+            default_namespace = "spenso"
+        );
+        assert_eq!(simplifier.step(left.as_view(), false), left);
+        let terminal = simplifier.step(left.as_view(), true);
+        assert_ne!(terminal, left);
+        assert_eq!(simplifier.step(terminal.as_view(), true), terminal);
+
+        let product = &left * &right;
+        let prefix = simplifier.step(product.as_view(), false);
+        assert_ne!(prefix, product);
+        // Fierz is a product identity and must not be disabled with the terminal.
+        assert_eq!(prefix, simplifier.step(product.as_view(), true));
     }
 
     #[test]
@@ -1990,11 +1956,11 @@ mod reconstruction_tests {
         let transcript = calls.lock().unwrap().clone();
         assert!(!transcript.is_empty());
         calls.lock().unwrap().clear();
-        let actual = simplifier.rewrite_terms(input.as_view());
+        let actual = simplifier.rewrite_terms(input.as_view(), true);
         assert_eq!(actual, expected);
         assert_eq!(*calls.lock().unwrap(), transcript);
         calls.lock().unwrap().clear();
-        assert_eq!(simplifier.rewrite_terms(actual.as_view()), actual);
+        assert_eq!(simplifier.rewrite_terms(actual.as_view(), true), actual);
         assert!(calls.lock().unwrap().is_empty());
         assert_eq!(
             actual,
@@ -2011,7 +1977,7 @@ mod reconstruction_tests {
         let mut input = Atom::new();
         input.to_add();
         assert!(input.as_view().needs_normalization());
-        assert_eq!(simplifier.rewrite_terms(input.as_view()), Atom::Zero);
+        assert_eq!(simplifier.rewrite_terms(input.as_view(), true), Atom::Zero);
     }
 
     #[test]

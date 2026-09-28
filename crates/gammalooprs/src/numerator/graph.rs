@@ -278,7 +278,11 @@ fn oriented_pdg(pdg: i64, orientation: Orientation) -> isize {
 mod test {
 
     // use env_logger::WriteStyle;
-    use idenso::{dirac::GammaSimplifier, tensor::SymbolicNetParse};
+    use idenso::{
+        CookMode, CookSettings,
+        dirac::GammaSimplifySettings,
+        tensor::{SymbolicNetParse, SymbolicTensor},
+    };
 
     use spenso::network::parsing::ParseSettings;
     use symbolica::parse_lit;
@@ -290,8 +294,8 @@ mod test {
         test_initialise().unwrap();
         let expr = parse_lit!(
             -GC_1 * GC_11
-                ^ 2 * Q(4, mink(dim, gammalooprs::edge(4, 1)))
-                    * Q(5, mink(dim, gammalooprs::edge(5, 1)))
+                ^ 2 * gammalooprs::Q(4, mink(dim, gammalooprs::edge(4, 1)))
+                    * gammalooprs::Q(5, mink(dim, gammalooprs::edge(5, 1)))
                     * g(
                         mink(dim, gammalooprs::hedge(16)),
                         mink(dim, gammalooprs::hedge(17))
@@ -312,27 +316,27 @@ mod test {
                         dind(cof(3, gammalooprs::hedge(6))),
                         cof(3, gammalooprs::hedge(7))
                     )
-                    * gamma(
+                    * spenso::gamma(
                         bis(4, gammalooprs::hedge(4)),
                         bis(4, gammalooprs::hedge(6)),
                         mink(dim, gammalooprs::hedge(8))
                     )
-                    * gamma(
+                    * spenso::gamma(
                         bis(4, gammalooprs::hedge(7)),
                         bis(4, gammalooprs::hedge(13)),
                         mink(dim, gammalooprs::hedge(17))
                     )
-                    * gamma(
+                    * spenso::gamma(
                         bis(4, gammalooprs::hedge(11)),
                         bis(4, gammalooprs::hedge(5)),
                         mink(dim, gammalooprs::hedge(16))
                     )
-                    * gamma(
+                    * spenso::gamma(
                         bis(4, gammalooprs::hedge(5)),
                         bis(4, gammalooprs::hedge(4)),
                         mink(dim, gammalooprs::edge(4, 1))
                     )
-                    * gamma(
+                    * spenso::gamma(
                         bis(4, gammalooprs::hedge(6)),
                         bis(4, gammalooprs::hedge(7)),
                         mink(dim, gammalooprs::edge(5, 1))
@@ -355,6 +359,12 @@ mod test {
             .unwrap();
         println!("{}", net.dot_pretty());
 
-        let _ = expr.simplify_gamma();
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let source = SymbolicTensor::infer(cooking.try_cook(expr.as_view()).unwrap()).unwrap();
+        let _ = source
+            .simplify_gamma(GammaSimplifySettings::default())
+            .unwrap();
     }
 }

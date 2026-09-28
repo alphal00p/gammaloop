@@ -8,7 +8,13 @@ import math
 
 from symbolica import E, Replacement, S, Symbol
 from symbolica.community import hep
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.spenso import (
+    CookSettings,
+    GammaSimplifySettings,
+    TensorExpression,
+)
+
+index_scope = S("spenso::index_scope")
 
 model = hep.Model.standard_model()
 P = S("gammalooprs::P")
@@ -71,12 +77,17 @@ for label, pdgs, masses, ckm_name in [
             numerator
             * diagram.overall_factor_expression(evaluate=True)
             * diagram.numerator_prefactor_expression()
-        ).expand()
+        )
     )
-    adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
+    adjoint = (
+        operator.dirac_adjoint()
+        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .to_expression()
+        .to_expression()
+    )
     for real in (charge, sw, mw, me, mc, mb, mt, Vr, Vi):
         adjoint = adjoint.replace(conjugate(real), real)
-    adjoint = TensorExpression(adjoint).wrap_indices(wrapped)
+    adjoint = TensorExpression(adjoint).wrap_indices(wrapped).to_expression()
 
     is_top = abs(pdgs[0]) == 6
     vector_position = 2 if is_top else 0
@@ -89,20 +100,20 @@ for label, pdgs, masses, ckm_name in [
     spin_projector = (
         particles[left_position].spin_sum(
             P(left_position),
-            wrapped(ports[right_position]),
+            index_scope(wrapped, ports[right_position]),
             ports[left_position],
             average=left_position == 0,
         )
         * particles[right_position].spin_sum(
             P(right_position),
             ports[right_position],
-            wrapped(ports[left_position]),
+            index_scope(wrapped, ports[left_position]),
             average=right_position == 0,
         )
         * particles[vector_position].spin_sum(
             P(vector_position),
             ports[vector_position],
-            wrapped(ports[vector_position]),
+            index_scope(wrapped, ports[vector_position]),
             average=vector_position == 0,
         )
     )
@@ -163,7 +174,9 @@ for label, pdgs, masses, ckm_name in [
                     continue
                 closure = metric(
                     slot.dual().to_expression(),
-                    original.replace(ports[position], wrapped(ports[position])),
+                    original.replace(
+                        ports[position], index_scope(wrapped, ports[position])
+                    ),
                 )
                 match = next(
                     closure.match(particle.color_sum(left, right), max_level=0), None
@@ -181,12 +194,10 @@ for label, pdgs, masses, ckm_name in [
                 operator.to_expression() * adjoint * spin_projector * color_projector,
                 cook_indices=CookSettings.indices(),
             )
-            .expand()
-            .simplify_gamma()
-            .expand()
             .simplify_gamma()
             .simplify_color()
-            .simplify_metrics()
+            .contract()
+            .to_expression()
             .to_dots()
         )
         assert contracted.is_scalar

@@ -863,16 +863,12 @@
     cook-function: expression => plugin-module.cook_function(_payload(engine, expression)),
     cook-indices: expression => plugin-module.cook_indices(_payload(engine, expression)),
     dirac-adjoint: expression => plugin-module.dirac_adjoint(_payload(engine, expression)),
-    expand-bis: expression => plugin-module.expand_bis(_payload(engine, expression)),
-    expand-color: expression => plugin-module.expand_color(_payload(engine, expression)),
-    expand-metrics: expression => plugin-module.expand_metrics(_payload(engine, expression)),
-    expand-mink: expression => plugin-module.expand_mink(_payload(engine, expression)),
-    expand-mink-bis: expression => plugin-module.expand_mink_bis(_payload(engine, expression)),
     list-dangling: expression => cbor(plugin-module.list_dangling(_payload(engine, expression))),
     simplify-color: expression => plugin-module.simplify_color(_payload(engine, expression)),
     simplify-gamma: expression => plugin-module.simplify_gamma(_payload(engine, expression)),
-    simplify-metrics: expression => plugin-module.simplify_metrics(_payload(engine, expression)),
+    contract: expression => plugin-module.contract(_payload(engine, expression)),
     to-dots: expression => plugin-module.to_dots(_payload(engine, expression)),
+    undo-dots: expression => plugin-module.undo_dots(_payload(engine, expression)),
     wrap-dummies: (expression, header) => plugin-module.wrap_dummies(
       _payload(engine, expression), _payload(engine, header, label: "header"),
     ),
@@ -1490,31 +1486,6 @@
 /// -> bytes
 #let dirac-adjoint(expression) = (_default-engine().dirac-adjoint)(expression)
 
-/// Selectively expand bispinor structures.
-///
-/// -> bytes
-#let expand-bis(expression) = (_default-engine().expand-bis)(expression)
-
-/// Selectively expand color structures.
-///
-/// -> bytes
-#let expand-color(expression) = (_default-engine().expand-color)(expression)
-
-/// Expand all supported metric structures.
-///
-/// -> bytes
-#let expand-metrics(expression) = (_default-engine().expand-metrics)(expression)
-
-/// Selectively expand Minkowski structures.
-///
-/// -> bytes
-#let expand-mink(expression) = (_default-engine().expand-mink)(expression)
-
-/// Selectively expand combined Minkowski and bispinor structures.
-///
-/// -> bytes
-#let expand-mink-bis(expression) = (_default-engine().expand-mink-bis)(expression)
-
 /// Return the dangling indices as compatible Atom payloads.
 ///
 /// -> array
@@ -1533,12 +1504,17 @@
 /// Contract and simplify metric tensors.
 ///
 /// -> bytes
-#let simplify-metrics(expression) = (_default-engine().simplify-metrics)(expression)
+#let contract(expression) = (_default-engine().contract)(expression)
 
-/// Rewrite supported contractions as dot products.
+/// Render compact metric products as dots; use `contract` for indexed contractions.
 ///
 /// -> bytes
 #let to-dots(expression) = (_default-engine().to-dots)(expression)
+
+/// Open dots into symbolic indexed contractions without expanding the numerator.
+///
+/// -> bytes
+#let undo-dots(expression) = (_default-engine().undo-dots)(expression)
 
 /// Wrap dummy indices under the given header symbol.
 ///

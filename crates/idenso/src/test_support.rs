@@ -82,3 +82,166 @@ impl TestReps {
         let _ = SPENSO_TS.G;
     }
 }
+
+/// Admit a test expression and resolve the shared contraction result without
+/// polynomial expansion. Tests requesting a polynomial call `expand` explicitly.
+pub(crate) fn contracted_atom(
+    expression: symbolica::atom::AtomView<'_>,
+) -> Result<symbolica::atom::Atom, crate::tensor::inference::TensorInferenceError> {
+    use crate::tensor::{SymbolicTensor, inference::InterfaceInference};
+    let interface = InterfaceInference::replacement_interface(expression)?;
+    SymbolicTensor::checked_parts(expression.to_owned(), interface)?
+        .contract(Default::default())?
+        .resolved()
+        .map(SymbolicTensor::into_expression)
+}
+
+/// Compare factored snapshot arithmetic exactly, keeping every tensor function
+/// opaque. Bounds in each independent leaf and the full interpolation grid prove
+/// equality over Q; no numerator is expanded and no tensor identity is assumed.
+pub(crate) fn assert_factored_snapshot_eq(actual: &str, expected: &str) {
+    use symbolica::{
+        atom::{Atom, AtomCore, AtomView},
+        coefficient::CoefficientView,
+        domains::rational::{Q, Rational},
+        parser::{ParseSettings, Token},
+    };
+
+    fn opaque_leaves(token: &mut Token, leaves: &mut Vec<Token>) {
+        match token {
+            Token::ID(_) | Token::Fn(_, _, _) => {
+                let position = leaves
+                    .iter()
+                    .position(|leaf| leaf == token)
+                    .unwrap_or_else(|| {
+                        leaves.push(token.clone());
+                        leaves.len() - 1
+                    });
+                *token = Token::ID(format!("leaf_{position}").into());
+            }
+            Token::Op(_, _, _, arguments) => {
+                for argument in arguments {
+                    opaque_leaves(argument, leaves);
+                }
+            }
+            Token::Number(_, false) => {}
+            _ => panic!("factored snapshot requires rational arithmetic: {token}"),
+        }
+    }
+
+    fn degrees(value: AtomView<'_>, parameters: &[Atom]) -> Vec<usize> {
+        let mut bound = vec![0usize; parameters.len()];
+        match value {
+            AtomView::Num(_) => {
+                Rational::try_from(value).expect("snapshot coefficient must be rational");
+            }
+            AtomView::Var(_) => {
+                let position = parameters
+                    .iter()
+                    .position(|p| p.as_view() == value)
+                    .unwrap();
+                bound[position] = 1;
+            }
+            AtomView::Add(sum) => {
+                for term in sum {
+                    for (degree, next) in bound.iter_mut().zip(degrees(term, parameters)) {
+                        *degree = (*degree).max(next);
+                    }
+                }
+            }
+            AtomView::Mul(product) => {
+                for factor in product {
+                    for (degree, next) in bound.iter_mut().zip(degrees(factor, parameters)) {
+                        *degree = degree.checked_add(next).expect("snapshot degree overflow");
+                    }
+                }
+            }
+            AtomView::Pow(power) => {
+                let AtomView::Num(exponent) = power.get_exp() else {
+                    panic!("snapshot power must have a nonnegative integer exponent");
+                };
+                let CoefficientView::Natural(exponent, 1, 0, 1) = exponent.get_coeff_view() else {
+                    panic!("snapshot power must have a nonnegative integer exponent");
+                };
+                let exponent = usize::try_from(exponent).expect("negative snapshot exponent");
+                bound = degrees(power.get_base(), parameters)
+                    .into_iter()
+                    .map(|degree| {
+                        degree
+                            .checked_mul(exponent)
+                            .expect("snapshot degree overflow")
+                    })
+                    .collect();
+            }
+            _ => unreachable!("function tokens were replaced before atom construction"),
+        }
+        bound
+    }
+
+    // Replace opaque tokens before constructing any Atom, so builtin names and
+    // registered tensor normalizers cannot alter either snapshot reference.
+    let settings = ParseSettings::default().convert_mul_to_atom(false);
+    let mut tokens = [
+        Token::parse(actual, settings.clone()).unwrap(),
+        Token::parse(expected, settings).unwrap(),
+    ];
+    let mut leaves = Vec::new();
+    for token in &mut tokens {
+        opaque_leaves(token, &mut leaves);
+    }
+    let parse =
+        |text: String| Atom::parse(text, "idenso::factored_snapshot", Default::default()).unwrap();
+    let expressions = tokens.map(|token| parse(token.to_string()));
+    let parameters = (0..leaves.len())
+        .map(|position| parse(format!("leaf_{position}")))
+        .collect::<Vec<_>>();
+    let bounds = degrees(expressions[0].as_view(), &parameters)
+        .into_iter()
+        .zip(degrees(expressions[1].as_view(), &parameters))
+        .map(|(a, b)| a.max(b))
+        .collect::<Vec<_>>();
+    let count = bounds
+        .iter()
+        .try_fold(1usize, |count, degree| {
+            count.checked_mul(degree.checked_add(1)?)
+        })
+        .expect("snapshot interpolation grid overflow");
+    assert!(
+        count <= 65_536,
+        "snapshot interpolation grid is too large: {count}"
+    );
+    let mut evaluator = Atom::evaluator_multiple(&expressions, &parameters)
+        .direct_translation(true)
+        .horner_iterations(0)
+        .cpe_iterations(Some(0))
+        .build()
+        .unwrap()
+        .map_to_ring(&Q)
+        .unwrap();
+    for point in 0..count {
+        let mut remaining = point;
+        let values = bounds
+            .iter()
+            .map(|degree| {
+                let coordinate = remaining % (degree + 1);
+                remaining /= degree + 1;
+                Rational::from(coordinate as i64)
+            })
+            .collect::<Vec<_>>();
+        let mut output = [Rational::from(0), Rational::from(0)];
+        evaluator.evaluate_in_ring(&values, &mut output, &Q);
+        assert_eq!(
+            output[0], output[1],
+            "factored snapshots differ at {values:?}\nactual: {actual}\nexpected: {expected}"
+        );
+    }
+}
+
+#[test]
+fn factored_snapshot_equality_keeps_opaque_leaves_and_degree_bounds() {
+    assert_factored_snapshot_eq("(d-2)*d*g(a,b)", "(d^2-2*d)*g(a,b)");
+    assert_factored_snapshot_eq("(f(a)+2*f(b))/2", "f(b)+f(a)/2");
+    assert!(std::panic::catch_unwind(|| assert_factored_snapshot_eq("d^2", "d")).is_err());
+    assert!(std::panic::catch_unwind(|| assert_factored_snapshot_eq("f(a)", "f(b)")).is_err());
+    assert!(std::panic::catch_unwind(|| assert_factored_snapshot_eq("d^(-1)", "d^(-1)")).is_err());
+}

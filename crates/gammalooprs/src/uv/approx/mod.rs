@@ -573,7 +573,10 @@ mod tests {
         },
         uv::UltravioletGraph,
     };
-    use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
+    use idenso::{
+        CookMode, CookSettings,
+        tensor::{ContractionSettings, SymbolicTensor},
+    };
     use linnet::half_edge::subgraph::subset::SubSet;
     use spenso::{
         algebra::{algebraic_traits::IsZero, complex::Complex},
@@ -1430,7 +1433,7 @@ mod tests {
         // Component expansion is confined to these test copies. Production
         // keeps the owned-dot numerator factorized throughout construction.
         let normalize = |expression: Atom| {
-            expression
+            let expression = expression
                 .replace(GS.dim)
                 .with(4)
                 .replace(GS.dim_epsilon)
@@ -1444,9 +1447,23 @@ mod tests {
                 .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
                 .with(W_.d_)
                 .replace(function!(GS.ose, W_.mass_, W_.prop_))
-                .with(W_.prop_)
-                .expand_dots()
-                .expect("test-only component expansion must succeed")
+                .with(W_.prop_);
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let value = SymbolicTensor::infer(
+                cooking
+                    .try_cook(expression.as_view())
+                    .expect("test-only index admission must succeed"),
+            )
+            .expect("test-only tensor admission must succeed")
+            .contract(ContractionSettings::default())
+            .expect("test-only contraction must succeed")
+            .resolved()
+            .expect("test-only aliases must resolve")
+            .expand_dots()
+            .expect("test-only component expansion must succeed");
+            cooking.uncook(value.as_view())
         };
         let expressions = vec![
             normalize(direct_expression),
@@ -1707,7 +1724,7 @@ mod tests {
             // expressions evaluable by one Arb stack. Production keeps all
             // numerator factors intact throughout CFF and UV construction.
             let normalize = |expression: Atom| {
-                expression
+                let expression = expression
                     .replace(global_marker)
                     .with(1)
                     .replace(GS.dim)
@@ -1723,9 +1740,23 @@ mod tests {
                     .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
                     .with(W_.d_)
                     .replace(function!(GS.ose, W_.mass_, W_.prop_))
-                    .with(W_.prop_)
-                    .expand_dots()
-                    .expect("test-only component expansion must succeed")
+                    .with(W_.prop_);
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                let value = SymbolicTensor::infer(
+                    cooking
+                        .try_cook(expression.as_view())
+                        .expect("test-only index admission must succeed"),
+                )
+                .expect("test-only tensor admission must succeed")
+                .contract(ContractionSettings::default())
+                .expect("test-only contraction must succeed")
+                .resolved()
+                .expect("test-only aliases must resolve")
+                .expand_dots()
+                .expect("test-only component expansion must succeed");
+                cooking.uncook(value.as_view())
             };
             let expressions = direct
                 .into_iter()
@@ -2013,10 +2044,17 @@ mod tests {
                     .expect("the scalar child Taylor series exists")
                     .to_atom()
                     .replace(GS.rescale)
-                    .with(Atom::one())
-                    .simplify_metrics()
-                    .to_dots()
-                    .normalize_dots();
+                    .with(Atom::one());
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                let explicit_taylor_sum =
+                    SymbolicTensor::infer(cooking.try_cook(explicit_taylor_sum.as_view())?)?
+                        .contract(ContractionSettings::default())?
+                        .resolved()?
+                        .to_dots()?;
+                let explicit_taylor_sum =
+                    cooking.uncook(explicit_taylor_sum.expression().as_view());
                 let local_atom = child.local(&route_graph)?.atom();
                 assert!(
                     (local_atom.collect_factors() + explicit_taylor_sum.collect_factors())
@@ -2098,13 +2136,15 @@ mod tests {
                 })
             };
             let rescale_expression = |mut expression: Atom| -> Result<Atom> {
-                expression = expression
-                    .replace(GS.dim)
-                    .with(4)
-                    .simplify_metrics()
-                    .to_dots()
-                    .normalize_dots()
+                expression = expression.replace(GS.dim).with(4);
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                let value = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
+                    .contract(ContractionSettings::default())?
+                    .resolved()?
                     .expand_dots()?;
+                expression = cooking.uncook(value.as_view());
                 let rescale = Atom::var(GS.rescale);
                 let compact_minkowski = parse_lit!(spenso::mink(4));
                 let time_direction =
@@ -2331,11 +2371,6 @@ mod tests {
                 expression = expression
                     .replace(GS.dim)
                     .with(4)
-                    // Scalarize the independent test oracle while retaining the same
-                    // factorization as the production numerator and EvaluatorStack input.
-                    .simplify_metrics()
-                    .to_dots()
-                    .normalize_dots()
                     .replace(GS.dim_epsilon)
                     .with(0)
                     .replace(GS.m_uv_expansion)
@@ -2347,8 +2382,16 @@ mod tests {
                     .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
                     .with(W_.d_)
                     .replace(function!(GS.ose, W_.mass_, W_.prop_))
-                    .with(W_.prop_)
+                    .with(W_.prop_);
+                // Realize finite components without distributing the numerator.
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                let value = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
+                    .contract(ContractionSettings::default())?
+                    .resolved()?
                     .expand_dots()?;
+                expression = cooking.uncook(value.as_view());
                 expression = scalarize(expression)?;
                 let t = Atom::var(GS.rescale);
                 let loop_components = (0..3)

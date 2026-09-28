@@ -62,6 +62,7 @@ pub struct AindSymbols {
     pub dind: Symbol,
     pub selfdualind: Symbol,
     pub openind: Symbol,
+    pub scope: Symbol,
     pub cind: Symbol,
     pub find: Symbol,
 }
@@ -229,6 +230,58 @@ mod test {
             AbstractIndex::try_from(atom.as_view()),
             Err(AbstractIndexError::NotIndex(_))
         ));
+    }
+
+    #[test]
+    fn wrapping_indices_preserves_open_axis_markers() {
+        use crate::structure::{
+            representation::{Euclidean, RepName},
+            slot::IsAbstractSlot,
+        };
+        let rep = Euclidean {}.new_rep(2);
+        let owner = AbstractIndex::fresh_open_owner();
+        let open = rep
+            .slot::<AbstractIndex, _>(AbstractIndex::Open { owner, axis: 1 })
+            .to_atom();
+        let explicit = rep
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(74801))
+            .to_atom();
+        let scope = symbol!("scope_tests::auto_axis_scope");
+        let value = function!(
+            crate::tensor_symbol!("scope_tests::mixed_axes"),
+            &open,
+            &explicit
+        );
+        let expected = function!(
+            crate::tensor_symbol!("scope_tests::mixed_axes"),
+            &open,
+            rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(74801).scoped(scope))
+                .to_atom()
+        );
+        let wrapped = AbstractIndex::wrap_expression(value.as_view(), scope);
+        assert_eq!(wrapped, expected);
+        assert_eq!(
+            AbstractIndex::wrap_expression(wrapped.as_view(), scope),
+            wrapped
+        );
+    }
+
+    #[test]
+    fn scoped_index_symbol_uses_initialized_bundle() {
+        // Trigger the registered extension initializer before consulting its
+        // public cached accessor. Symbolica's builtin-name set only covers its
+        // own namespace, so query the registered extension symbol directly.
+        let _ = symbolica::state::State::is_builtin("sin");
+        let registered = Symbol::get_symbol(symbolica::wrap_symbol!("spenso::index_scope"))
+            .expect("the extension initializer registers the scope symbol");
+        let scope_symbol = AbstractIndex::scope_symbol();
+        assert_eq!(scope_symbol, registered);
+        assert_eq!(scope_symbol, AIND_SYMBOLS.scope);
+        assert!(scope_symbol.has_tag(&SPENSO_TAG.index));
+        let index = AbstractIndex::Normal(7).scoped(symbol!("scope_bundle_test"));
+        let atom = index.to_atom();
+        assert_eq!(atom.as_view().get_symbol(), Some(scope_symbol));
+        assert_eq!(AbstractIndex::try_from(atom.as_view()).unwrap(), index);
     }
 
     #[test]
@@ -426,6 +479,7 @@ let args = arg.pos().map(to-eq).join("")
             }
         ),
         openind: symbol!(OPENIND),
+        scope: symbol!("spenso::index_scope", tags = [SPENSO_TAG.index.clone()]),
         selfdualind: symbol!(
             SELFDUALIND,
             norm = |view, out| {
@@ -506,7 +560,7 @@ impl AbstractIndex {
 
     #[cfg(feature = "shadowing")]
     pub fn scope_symbol() -> Symbol {
-        symbol!("spenso::index_scope", tags = [SPENSO_TAG.index.clone()])
+        AIND_SYMBOLS.scope
     }
 
     /// Scope explicit tensor slots, leaving scalar function arguments opaque.
@@ -517,6 +571,11 @@ impl AbstractIndex {
             if value.get_symbol().is_some_and(|symbol| symbol.is_scalar()) {
                 **output = value.to_owned();
             } else if let Ok(mut slot) = LibrarySlot::<Self>::try_from(value) {
+                if matches!(slot.aind, Self::Open { .. }) {
+                    // AUTO markers identify unresolved axes, not explicit names.
+                    **output = value.to_owned();
+                    return;
+                }
                 slot.aind = slot.aind.scoped(scope);
                 **output = slot.to_atom();
             }

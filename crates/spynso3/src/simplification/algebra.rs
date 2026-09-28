@@ -1,9 +1,7 @@
 use idenso::{
     color::{ColorCasimirSettings, ColorSimplifySettings},
-    dirac::{GammaChainOrdering, GammaSimplifySettings},
+    dirac::{GammaChainOrdering, GammaOutput, GammaSimplifySettings},
 };
-#[cfg(not(feature = "python_stubgen"))]
-use pyo3::create_exception;
 use pyo3::{
     Bound, PyResult,
     exceptions::PyValueError,
@@ -11,16 +9,7 @@ use pyo3::{
     types::{PyModule, PyModuleMethods},
 };
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::create_exception;
-#[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
-
-create_exception!(
-    symbolica.community.spenso,
-    GammaConjugationError,
-    PyValueError,
-    "Raised when conjugated gamma matrices cannot be rewritten consistently."
-);
 
 /// Controls how open gamma chains are reordered during simplification.
 ///
@@ -75,19 +64,27 @@ pub(crate) struct PyGammaSimplifySettings {
 }
 
 impl PyGammaSimplifySettings {
+    pub(crate) fn from_rust(inner: GammaSimplifySettings) -> Self {
+        Self { inner }
+    }
+
     /// Construct settings from explicit Rust-side values.
     pub(crate) fn new(
         chain_ordering: PyGammaChainOrdering,
         evaluate_traces: bool,
-        expand_traces: bool,
+        gamma0: bool,
+        conjugate: bool,
         expand_three_gamma_epsilon: bool,
+        output: GammaOutput,
     ) -> Self {
         Self {
             inner: GammaSimplifySettings {
                 chain_ordering: chain_ordering.into(),
                 evaluate_traces,
-                expand_traces,
+                gamma0,
+                conjugate,
                 expand_three_gamma_epsilon,
+                output,
             },
         }
     }
@@ -98,6 +95,7 @@ impl PyGammaSimplifySettings {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyGammaSimplifySettings {
     fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {
@@ -106,40 +104,72 @@ impl PyGammaSimplifySettings {
         crate::display::constructor_repr(
             object.as_any(),
             &[
+                ("output", "output"),
                 ("chain_ordering", "chain_ordering"),
                 ("evaluate_traces", "evaluate_traces"),
-                ("expand_traces", "expand_traces"),
+                ("gamma0", "gamma0"),
+                ("conjugate", "conjugate"),
                 ("expand_three_gamma_epsilon", "expand_three_gamma_epsilon"),
             ],
         )
     }
 
-    /// Configure gamma-chain ordering, trace evaluation and expansion, and the optional 4D identity.
+    /// Configure gamma identities, trace evaluation, and the optional 4D epsilon identity.
+    /// Conjugation runs before gamma0 reduction and ordinary chain identities.
+    /// Expand the returned alias carrier explicitly when a polynomial is needed.
     ///
+    /// `output="chains"` only joins gamma chains, without Clifford reduction or trace evaluation.
+    /// `output="reduced"` applies the configured gamma identities.
     /// `chain_ordering=None` selects `GammaChainOrdering.RepeatedPairs`.
     #[new]
     #[pyo3(
         signature = (
             *,
+            output = "reduced",
             chain_ordering = None,
             evaluate_traces = true,
-            expand_traces = false,
+            gamma0 = false,
+            conjugate = false,
             expand_three_gamma_epsilon = false
         ),
-        text_signature = "(*, chain_ordering=None, evaluate_traces=True, expand_traces=False, expand_three_gamma_epsilon=False)"
+        text_signature = "(*, output='reduced', chain_ordering=None, evaluate_traces=True, gamma0=False, conjugate=False, expand_three_gamma_epsilon=False)"
     )]
     pub(crate) fn py_new(
+        #[gen_stub(override_type(type_repr="typing.Literal['reduced', 'chains']", imports=("typing")))]
+        output: &str,
         chain_ordering: Option<PyGammaChainOrdering>,
         evaluate_traces: bool,
-        expand_traces: bool,
+        gamma0: bool,
+        conjugate: bool,
         expand_three_gamma_epsilon: bool,
-    ) -> Self {
-        Self::new(
+    ) -> PyResult<Self> {
+        let output = match output {
+            "reduced" => GammaOutput::Reduced,
+            "chains" => GammaOutput::Chains,
+            _ => {
+                return Err(PyValueError::new_err(
+                    "output must be 'reduced' or 'chains'",
+                ));
+            }
+        };
+        Ok(Self::new(
             chain_ordering.unwrap_or(PyGammaChainOrdering::RepeatedPairs),
             evaluate_traces,
-            expand_traces,
+            gamma0,
+            conjugate,
             expand_three_gamma_epsilon,
-        )
+            output,
+        ))
+    }
+
+    /// Requested reduced algebra or chain-only output.
+    #[getter]
+    #[gen_stub(override_return_type(type_repr="typing.Literal['reduced', 'chains']", imports=("typing")))]
+    pub(crate) fn output(&self) -> &'static str {
+        match self.inner.output {
+            GammaOutput::Reduced => "reduced",
+            GammaOutput::Chains => "chains",
+        }
     }
 
     /// Use FORM-like repeated-pair ordering and evaluate closed traces.
@@ -170,11 +200,16 @@ impl PyGammaSimplifySettings {
         self.inner.evaluate_traces
     }
 
-    /// Whether each evaluated trace body is expanded, preserving surrounding factors.
-    /// Ignored when `evaluate_traces` is false.
+    /// Whether to reduce gamma0 sandwiches before ordinary gamma identities.
     #[getter]
-    pub(crate) fn expand_traces(&self) -> bool {
-        self.inner.expand_traces
+    pub(crate) fn gamma0(&self) -> bool {
+        self.inner.gamma0
+    }
+
+    /// Whether to rewrite complex-conjugated gamma matrices before gamma0 reduction.
+    #[getter]
+    pub(crate) fn conjugate(&self) -> bool {
+        self.inner.conjugate
     }
 
     /// Whether three four-dimensional gammas expand into a gamma5-epsilon basis.
@@ -198,6 +233,10 @@ pub(crate) struct PyColorSimplifySettings {
 }
 
 impl PyColorSimplifySettings {
+    pub(crate) fn from_rust(inner: ColorSimplifySettings) -> Self {
+        Self { inner }
+    }
+
     pub(crate) fn rust(&self) -> ColorSimplifySettings {
         self.inner
     }
@@ -337,10 +376,6 @@ impl PyColorCasimirSettings {
 }
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add(
-        "GammaConjugationError",
-        module.py().get_type::<GammaConjugationError>(),
-    )?;
     module.add_class::<PyGammaChainOrdering>()?;
     module.add_class::<PyGammaSimplifySettings>()?;
     module.add_class::<PyColorSimplifySettings>()?;
@@ -356,17 +391,28 @@ mod tests {
     #[test]
     fn python_settings_match_rust_defaults() {
         assert_eq!(
-            PyGammaSimplifySettings::new(PyGammaChainOrdering::RepeatedPairs, true, false, false)
-                .rust(),
+            PyGammaSimplifySettings::new(
+                PyGammaChainOrdering::RepeatedPairs,
+                true,
+                false,
+                false,
+                false,
+                GammaOutput::Reduced,
+            )
+            .rust(),
             GammaSimplifySettings::default()
         );
-        let expanded =
-            PyGammaSimplifySettings::new(PyGammaChainOrdering::RepeatedPairs, true, true, false);
-        assert!(expanded.expand_traces());
-        assert_eq!(
-            expanded.rust(),
-            GammaSimplifySettings::default().with_expanded_traces()
+        let conjugated = PyGammaSimplifySettings::new(
+            PyGammaChainOrdering::RepeatedPairs,
+            false,
+            true,
+            true,
+            false,
+            GammaOutput::Reduced,
         );
+        assert!(conjugated.gamma0());
+        assert!(conjugated.conjugate());
+        assert!(!conjugated.evaluate_traces());
         assert_eq!(
             PyColorSimplifySettings::new(true, true, false).rust(),
             ColorSimplifySettings::default()

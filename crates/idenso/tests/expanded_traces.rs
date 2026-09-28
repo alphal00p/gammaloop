@@ -1,5 +1,7 @@
-use idenso::dirac::{AGS, GammaSimplifier, GammaSimplifySettings};
+use idenso::dirac::{AGS, GammaSimplifySettings};
+use idenso::tensor::SymbolicTensor;
 use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::partial::PartialStructure;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
     function, symbol,
@@ -23,13 +25,37 @@ fn trace(arguments: impl IntoIterator<Item = Atom>) -> Atom {
     }))
 }
 fn assert_expanded(input: &Atom, expected: &Atom) {
-    let settings = GammaSimplifySettings::default().with_expanded_traces();
-    let output = input.simplify_gamma_with(settings);
-    assert_eq!(&output, expected);
-    assert_eq!(output.simplify_gamma_with(settings), output);
+    let settings = GammaSimplifySettings::default();
+    let source = SymbolicTensor::<PartialStructure>::infer(input.clone()).unwrap();
+    let output = source.simplify_gamma(settings).unwrap();
     assert_eq!(
-        input.simplify_gamma_with(settings.without_trace_evaluation()),
-        input.simplify_gamma_with(GammaSimplifySettings::default().without_trace_evaluation()),
+        output.expanded().unwrap().into_expression(),
+        expected.expand()
+    );
+    assert_eq!(output.root().structure(), source.structure());
+    let rerun = output.simplify_gamma(settings).unwrap();
+    assert_eq!(
+        rerun.expression().get_root(),
+        output.expression().get_root()
+    );
+    assert_eq!(
+        rerun.expression().get_aliases(),
+        output.expression().get_aliases()
+    );
+    assert_eq!(
+        source
+            .simplify_gamma(settings.without_trace_evaluation())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        idenso::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(settings.without_trace_evaluation())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
     );
 }
 
@@ -46,8 +72,22 @@ fn trace_expansion_preserves_spectators_and_independent_bodies() {
             ["v0", "v1", "v2", "v3", "v4", "v5"]
                 .map(|i| parse(&format!("mink({dimension},expanded_api::{i})"))),
         );
-        let ea = a.simplify_gamma().expand();
-        let eb = b.simplify_gamma().expand();
+        let ea = idenso::tensor::SymbolicTensor::infer((a).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+            .expand();
+        let eb = idenso::tensor::SymbolicTensor::infer((b).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+            .expand();
         assert_expanded(&a, &ea);
         assert_expanded(&(&spectator * &a), &(&spectator * &ea));
         assert_expanded(&(&spectator * &a * &b), &(&spectator * &ea * &eb));
@@ -55,7 +95,7 @@ fn trace_expansion_preserves_spectators_and_independent_bodies() {
 }
 
 #[test]
-fn four_dimensional_component_callbacks_are_expanded() {
+fn four_dimensional_component_callbacks_cannot_erase_free_ports() {
     initialize();
     let vector = spenso::vector_symbol!(
         "expanded_api::sum_callback",
@@ -73,7 +113,12 @@ fn four_dimensional_component_callbacks_are_expanded() {
         parse("mink(4,b)"),
         function!(q, parse("mink(4)")),
     ]);
-    assert_expanded(&input, &input.simplify_gamma().expand());
+    let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
+    assert!(
+        source
+            .simplify_gamma(GammaSimplifySettings::default())
+            .is_err()
+    );
 }
 
 fn inner_trace() -> Atom {
@@ -90,8 +135,14 @@ fn scalar(value: Atom) -> Atom {
 fn nested_traces_in_callbacks_and_metadata_keep_their_own_boundary() {
     initialize();
     let inner = inner_trace();
-    let expanded = inner.simplify_gamma().expand();
-    assert_ne!(expanded, inner.simplify_gamma());
+    let factored = idenso::tensor::SymbolicTensor::infer((inner).as_atom_view().to_owned())
+        .unwrap()
+        .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
+    assert_ne!(factored.expand(), factored);
     let vector = spenso::vector_symbol!(
         "expanded_api::trace_callback",
         norm = |value, out| {
@@ -119,21 +170,33 @@ fn nested_traces_in_callbacks_and_metadata_keep_their_own_boundary() {
     ]);
     let opaque = |value: Atom| {
         spenso::trace!(parse("bis(4)"); [
-            function!(symbol!("expanded_api::OpaqueMatrix"), SPENSO_TAG.chain_in,
-                SPENSO_TAG.chain_out, scalar(value)),
+            function!(spenso::tensor_symbol!("expanded_api::OpaqueMatrix"), scalar(value),
+                SPENSO_TAG.chain_in, SPENSO_TAG.chain_out),
         ])
     };
     let spectator = parse("(expanded_api::s+expanded_api::t)^8");
-    for input in [callback, metadata, unit] {
-        let expected = input
-            .simplify_gamma()
-            .replace(inner.to_pattern())
-            .with(expanded.clone())
-            .expand();
-        assert_expanded(&input, &expected);
-        assert_expanded(&(&spectator * input), &(&spectator * expected));
-    }
-    assert_expanded(&opaque(inner), &opaque(expanded));
+    let source = SymbolicTensor::<PartialStructure>::infer(callback).unwrap();
+    assert!(
+        source
+            .simplify_gamma(GammaSimplifySettings::default())
+            .is_err()
+    );
+    // Representation dimensions have the same strict admission contract as
+    // explicit ports; a compound scalar function is not a dimension symbol.
+    assert!(SymbolicTensor::<PartialStructure>::infer(unit).is_err());
+    let expected = idenso::tensor::SymbolicTensor::infer((metadata).as_atom_view().to_owned())
+        .unwrap()
+        .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression()
+        .replace(inner.to_pattern())
+        .with(factored.clone())
+        .expand();
+    assert_expanded(&metadata, &expected);
+    assert_expanded(&(&spectator * metadata), &(&spectator * expected));
+    assert_expanded(&opaque(inner), &opaque(factored));
 }
 
 #[test]
@@ -158,7 +221,14 @@ fn rewritten_and_collected_traces_expand_the_complete_body() {
             )
         }));
         let input = spenso::trace!(parse("bis(4)"); factors);
-        let expected = input.simplify_gamma().expand();
+        let expected = idenso::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+            .expand();
         assert_expanded(&(&spectator * input), &(&spectator * expected));
     }
     let closed = Atom::mul_many((0..4).map(|i| {
@@ -169,7 +239,14 @@ fn rewritten_and_collected_traces_expand_the_complete_body() {
             parse(&format!("mink(D,expanded_api::v{i})"))
         )
     }));
-    let expected = closed.simplify_gamma().expand();
+    let expected = idenso::tensor::SymbolicTensor::infer((closed).as_atom_view().to_owned())
+        .unwrap()
+        .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression()
+        .expand();
     assert_expanded(&(&spectator * closed), &(&spectator * expected));
 }
 

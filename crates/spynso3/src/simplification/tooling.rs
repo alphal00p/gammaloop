@@ -1,10 +1,6 @@
 use idenso::{
     CookMode as RustCookMode, CookSettings as RustCookSettings,
     CookSourceFilter as RustCookSourceFilter, CookTagFilter as RustCookTagFilter,
-    shorthands::schoonschip::{
-        SchoonschipContractionOrder as RustSchoonschipContractionOrder,
-        SchoonschipSettings as RustSchoonschipSettings,
-    },
 };
 #[cfg(not(feature = "python_stubgen"))]
 use pyo3::create_exception;
@@ -36,12 +32,6 @@ create_exception!(
     DiracAdjointError,
     PyValueError,
     "Raised when a Dirac adjoint cannot be constructed consistently."
-);
-create_exception!(
-    symbolica.community.spenso,
-    DotExpansionError,
-    PyValueError,
-    "Raised when compact dot notation cannot be expanded into a tensor expression."
 );
 create_exception!(
     symbolica.community.spenso,
@@ -182,7 +172,7 @@ impl PyCookSourceFilter {
                 }
                 .__repr__(py)?
             ),
-            RustCookSourceFilter::RepresentationIndexPayload { filter } => format!(
+            RustCookSourceFilter::RepresentationPayload { filter, .. } => format!(
                 "CookSourceFilter.representation_index_payload({})",
                 filter
                     .as_ref()
@@ -219,7 +209,9 @@ impl PyCookSourceFilter {
     #[pyo3(signature = (filter = None))]
     pub(crate) fn representation_index_payload(filter: Option<&PyCookTagFilter>) -> Self {
         Self {
-            inner: RustCookSourceFilter::RepresentationIndexPayload {
+            inner: RustCookSourceFilter::RepresentationPayload {
+                indices: true,
+                dimensions: false,
                 filter: filter.map(PyCookTagFilter::rust),
             },
         }
@@ -382,378 +374,6 @@ impl PyCookSettings {
     }
 }
 
-/// Selects whether a Schoonschip pass runs once or recursively.
-///
-/// Available values are `SinglePass` and `Recursive`.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
-#[pyclass(
-    frozen,
-    name = "SchoonschipMode",
-    from_py_object,
-    eq,
-    eq_int,
-    module = "symbolica.community.spenso"
-)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum PySchoonschipMode {
-    /// Visit each eligible expression at most once.
-    SinglePass,
-    /// Repeat traversal until the configured depth or a fixed point is reached.
-    Recursive,
-}
-
-/// Selects the recursive traversal order for a Schoonschip pass.
-///
-/// Available values are `DepthFirst` and `BreadthFirst`.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
-#[pyclass(
-    frozen,
-    name = "SchoonschipTraversal",
-    from_py_object,
-    eq,
-    eq_int,
-    module = "symbolica.community.spenso"
-)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum PySchoonschipTraversal {
-    /// Fully simplify each branch before advancing to its siblings.
-    DepthFirst,
-    /// Advance all branches one level before descending further.
-    BreadthFirst,
-}
-
-/// Selects the heuristic used to choose the next tensor-network contraction.
-///
-/// Available values are `SmallestDegree`, `LargestDegree`, `MinLargestOperandBytes`,
-/// `MinProductTerms`, `MinProductBytes`, `SmallestDegreeMinLargestOperandBytes`,
-/// `SmallestDegreeMinProductTerms`, and `SmallestDegreeMinProductBytes`.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
-#[pyclass(
-    frozen,
-    name = "SchoonschipContractionOrder",
-    from_py_object,
-    eq,
-    eq_int,
-    module = "symbolica.community.spenso"
-)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum PySchoonschipContractionOrder {
-    /// Contract the pair with the fewest paired tensor slots.
-    SmallestDegree,
-    /// Contract the pair with the most paired tensor slots.
-    LargestDegree,
-    /// Minimize the larger operand's estimated memory footprint.
-    MinLargestOperandBytes,
-    /// Minimize the estimated number of terms in the product.
-    MinProductTerms,
-    /// Minimize the product's estimated memory footprint.
-    MinProductBytes,
-    /// Minimize the paired-slot count first, then the larger operand's estimated bytes.
-    SmallestDegreeMinLargestOperandBytes,
-    /// Minimize the paired-slot count first, then the estimated product term count.
-    SmallestDegreeMinProductTerms,
-    /// Minimize the paired-slot count first, then the estimated product bytes.
-    SmallestDegreeMinProductBytes,
-}
-
-impl From<PySchoonschipContractionOrder> for RustSchoonschipContractionOrder {
-    fn from(value: PySchoonschipContractionOrder) -> Self {
-        match value {
-            PySchoonschipContractionOrder::SmallestDegree => Self::SmallestDegree,
-            PySchoonschipContractionOrder::LargestDegree => Self::LargestDegree,
-            PySchoonschipContractionOrder::MinLargestOperandBytes => Self::MinLargestOperandBytes,
-            PySchoonschipContractionOrder::MinProductTerms => Self::MinProductTerms,
-            PySchoonschipContractionOrder::MinProductBytes => Self::MinProductBytes,
-            PySchoonschipContractionOrder::SmallestDegreeMinLargestOperandBytes => {
-                Self::SmallestDegreeMinLargestOperandBytes
-            }
-            PySchoonschipContractionOrder::SmallestDegreeMinProductTerms => {
-                Self::SmallestDegreeMinProductTerms
-            }
-            PySchoonschipContractionOrder::SmallestDegreeMinProductBytes => {
-                Self::SmallestDegreeMinProductBytes
-            }
-        }
-    }
-}
-
-impl From<RustSchoonschipContractionOrder> for PySchoonschipContractionOrder {
-    fn from(value: RustSchoonschipContractionOrder) -> Self {
-        match value {
-            RustSchoonschipContractionOrder::SmallestDegree => Self::SmallestDegree,
-            RustSchoonschipContractionOrder::LargestDegree => Self::LargestDegree,
-            RustSchoonschipContractionOrder::MinLargestOperandBytes => Self::MinLargestOperandBytes,
-            RustSchoonschipContractionOrder::MinProductTerms => Self::MinProductTerms,
-            RustSchoonschipContractionOrder::MinProductBytes => Self::MinProductBytes,
-            RustSchoonschipContractionOrder::SmallestDegreeMinLargestOperandBytes => {
-                Self::SmallestDegreeMinLargestOperandBytes
-            }
-            RustSchoonschipContractionOrder::SmallestDegreeMinProductTerms => {
-                Self::SmallestDegreeMinProductTerms
-            }
-            RustSchoonschipContractionOrder::SmallestDegreeMinProductBytes => {
-                Self::SmallestDegreeMinProductBytes
-            }
-        }
-    }
-}
-
-/// Immutable configuration for expression and network Schoonschip passes.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(
-    frozen,
-    name = "SchoonschipSettings",
-    from_py_object,
-    module = "symbolica.community.spenso"
-)]
-#[derive(Clone)]
-pub(crate) struct PySchoonschipSettings {
-    depth_limit: Option<usize>,
-    mode: PySchoonschipMode,
-    traversal: PySchoonschipTraversal,
-    expand_contracted_sums: bool,
-    simplify_chain_like_functions: bool,
-    schoonschip_rank1_tensors: bool,
-    contraction_order: PySchoonschipContractionOrder,
-}
-
-impl PySchoonschipSettings {
-    /// Construct settings from explicit Rust-side values.
-    pub(crate) fn new(
-        depth_limit: Option<usize>,
-        mode: PySchoonschipMode,
-        traversal: PySchoonschipTraversal,
-        expand_contracted_sums: bool,
-        simplify_chain_like_functions: bool,
-        schoonschip_rank1_tensors: bool,
-        contraction_order: PySchoonschipContractionOrder,
-    ) -> Self {
-        Self {
-            depth_limit,
-            mode,
-            traversal,
-            expand_contracted_sums,
-            simplify_chain_like_functions,
-            schoonschip_rank1_tensors,
-            contraction_order,
-        }
-    }
-
-    pub(crate) fn rust(&self) -> RustSchoonschipSettings {
-        let mut settings = match (self.mode, self.traversal) {
-            (PySchoonschipMode::SinglePass, _) => {
-                RustSchoonschipSettings::single_pass(self.depth_limit)
-            }
-            (PySchoonschipMode::Recursive, PySchoonschipTraversal::DepthFirst) => {
-                RustSchoonschipSettings::depth_first(self.depth_limit)
-            }
-            (PySchoonschipMode::Recursive, PySchoonschipTraversal::BreadthFirst) => {
-                RustSchoonschipSettings::breadth_first(self.depth_limit)
-            }
-        };
-        if self.expand_contracted_sums {
-            settings = settings.with_expanded_contracted_sums();
-        }
-        if self.simplify_chain_like_functions {
-            settings = settings.with_chain_like_functions();
-        }
-        if self.schoonschip_rank1_tensors {
-            settings = settings.with_rank1_tensors();
-        } else {
-            settings = settings.without_rank1_tensors();
-        }
-        settings.with_contraction_order(self.contraction_order.into())
-    }
-}
-
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[pymethods]
-impl PySchoonschipSettings {
-    fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {
-        let py = self_.py();
-        let object = pyo3::IntoPyObject::into_pyobject(self_, py)?;
-        crate::display::constructor_repr(
-            object.as_any(),
-            &[
-                ("depth_limit", "depth_limit"),
-                ("mode", "mode"),
-                ("traversal", "traversal"),
-                ("expand_contracted_sums", "expand_contracted_sums"),
-                (
-                    "simplify_chain_like_functions",
-                    "simplify_chain_like_functions",
-                ),
-                ("schoonschip_rank1_tensors", "schoonschip_rank1_tensors"),
-                ("contraction_order", "contraction_order"),
-            ],
-        )
-    }
-
-    /// Configure traversal, depth, shorthand expansion, and network-contraction policies.
-    ///
-    /// `depth_limit=None` removes the recursion-depth limit. `traversal` is ignored in
-    /// `SinglePass` mode.
-    /// `mode=None`, `traversal=None`, and `contraction_order=None` select `Recursive`,
-    /// `BreadthFirst`, and `SmallestDegree`, respectively.
-    #[new]
-    #[pyo3(
-        signature = (
-            *,
-            depth_limit = Some(1),
-            mode = None,
-            traversal = None,
-            expand_contracted_sums = false,
-            simplify_chain_like_functions = false,
-            schoonschip_rank1_tensors = true,
-            contraction_order = None
-        ),
-        text_signature = "(*, depth_limit=1, mode=None, traversal=None, expand_contracted_sums=False, simplify_chain_like_functions=False, schoonschip_rank1_tensors=True, contraction_order=None)"
-    )]
-    pub(crate) fn py_new(
-        depth_limit: Option<usize>,
-        mode: Option<PySchoonschipMode>,
-        traversal: Option<PySchoonschipTraversal>,
-        expand_contracted_sums: bool,
-        simplify_chain_like_functions: bool,
-        schoonschip_rank1_tensors: bool,
-        contraction_order: Option<PySchoonschipContractionOrder>,
-    ) -> Self {
-        Self::new(
-            depth_limit,
-            mode.unwrap_or(PySchoonschipMode::Recursive),
-            traversal.unwrap_or(PySchoonschipTraversal::BreadthFirst),
-            expand_contracted_sums,
-            simplify_chain_like_functions,
-            schoonschip_rank1_tensors,
-            contraction_order.unwrap_or(PySchoonschipContractionOrder::SmallestDegree),
-        )
-    }
-
-    /// Apply the default shallow recursive expression pass without rank-one tensors.
-    #[staticmethod]
-    pub(crate) fn partial() -> Self {
-        Self::new(
-            Some(1),
-            PySchoonschipMode::Recursive,
-            PySchoonschipTraversal::BreadthFirst,
-            false,
-            false,
-            false,
-            PySchoonschipContractionOrder::SmallestDegree,
-        )
-    }
-
-    /// Apply one unrestricted-depth pass and include rank-one tensors.
-    #[staticmethod]
-    pub(crate) fn full() -> Self {
-        Self::new(
-            None,
-            PySchoonschipMode::SinglePass,
-            PySchoonschipTraversal::DepthFirst,
-            false,
-            false,
-            true,
-            PySchoonschipContractionOrder::SmallestDegree,
-        )
-    }
-
-    /// Use the settings applied by `schoonschip_net` when no settings are supplied.
-    #[staticmethod]
-    pub(crate) fn default_network() -> Self {
-        Self::partial()
-    }
-
-    /// Recursively simplify each branch before visiting its siblings.
-    #[staticmethod]
-    #[pyo3(signature = (depth_limit = None))]
-    pub(crate) fn depth_first(depth_limit: Option<usize>) -> Self {
-        Self::new(
-            depth_limit,
-            PySchoonschipMode::Recursive,
-            PySchoonschipTraversal::DepthFirst,
-            false,
-            false,
-            true,
-            PySchoonschipContractionOrder::SmallestDegree,
-        )
-    }
-
-    /// Recursively simplify all branches one level at a time.
-    #[staticmethod]
-    #[pyo3(signature = (depth_limit = None))]
-    pub(crate) fn breadth_first(depth_limit: Option<usize>) -> Self {
-        Self::new(
-            depth_limit,
-            PySchoonschipMode::Recursive,
-            PySchoonschipTraversal::BreadthFirst,
-            false,
-            false,
-            false,
-            PySchoonschipContractionOrder::SmallestDegree,
-        )
-    }
-
-    /// Visit each eligible expression once, subject to `depth_limit`.
-    #[staticmethod]
-    #[pyo3(signature = (depth_limit = None))]
-    pub(crate) fn single_pass(depth_limit: Option<usize>) -> Self {
-        Self::new(
-            depth_limit,
-            PySchoonschipMode::SinglePass,
-            PySchoonschipTraversal::DepthFirst,
-            false,
-            false,
-            true,
-            PySchoonschipContractionOrder::SmallestDegree,
-        )
-    }
-
-    /// Maximum parsing or recursion depth, or `None` for no limit.
-    #[getter]
-    pub(crate) fn depth_limit(&self) -> Option<usize> {
-        self.depth_limit
-    }
-
-    /// Whether the pass is single-pass or recursive.
-    #[getter]
-    pub(crate) fn mode(&self) -> PySchoonschipMode {
-        self.mode
-    }
-
-    /// Recursive traversal order, or `None` in single-pass mode.
-    #[getter]
-    pub(crate) fn traversal(&self) -> Option<PySchoonschipTraversal> {
-        match self.mode {
-            PySchoonschipMode::SinglePass => None,
-            PySchoonschipMode::Recursive => Some(self.traversal),
-        }
-    }
-
-    /// Whether contracted sums are expanded before network execution.
-    #[getter]
-    pub(crate) fn expand_contracted_sums(&self) -> bool {
-        self.expand_contracted_sums
-    }
-
-    /// Whether chain-like function payloads are simplified recursively.
-    #[getter]
-    pub(crate) fn simplify_chain_like_functions(&self) -> bool {
-        self.simplify_chain_like_functions
-    }
-
-    /// Whether rank-one tensors participate in the Schoonschip pass.
-    #[getter]
-    pub(crate) fn schoonschip_rank1_tensors(&self) -> bool {
-        self.schoonschip_rank1_tensors
-    }
-
-    /// Heuristic used to choose network contractions.
-    #[getter]
-    pub(crate) fn contraction_order(&self) -> PySchoonschipContractionOrder {
-        self.contraction_order
-    }
-}
-
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add(
         "CanonicalizationError",
@@ -765,10 +385,6 @@ pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.py().get_type::<DiracAdjointError>(),
     )?;
     module.add(
-        "DotExpansionError",
-        module.py().get_type::<DotExpansionError>(),
-    )?;
-    module.add(
         "NetworkToolingError",
         module.py().get_type::<NetworkToolingError>(),
     )?;
@@ -777,10 +393,6 @@ pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyCookTagFilter>()?;
     module.add_class::<PyCookSourceFilter>()?;
     module.add_class::<PyCookSettings>()?;
-    module.add_class::<PySchoonschipMode>()?;
-    module.add_class::<PySchoonschipTraversal>()?;
-    module.add_class::<PySchoonschipContractionOrder>()?;
-    module.add_class::<PySchoonschipSettings>()?;
 
     Ok(())
 }
@@ -789,50 +401,11 @@ pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 mod tests {
     use super::*;
 
-    fn assert_schoonschip_settings_eq(
-        left: RustSchoonschipSettings,
-        right: RustSchoonschipSettings,
-    ) {
-        assert_eq!(left.depth_limit, right.depth_limit);
-        assert!(left.mode == right.mode);
-        assert_eq!(left.expand_contracted_sums, right.expand_contracted_sums);
-        assert_eq!(
-            left.simplify_chain_like_functions,
-            right.simplify_chain_like_functions
-        );
-        assert_eq!(
-            left.schoonschip_rank1_tensors,
-            right.schoonschip_rank1_tensors
-        );
-        assert_eq!(left.contraction_order, right.contraction_order);
-    }
-
     #[test]
-    fn python_settings_match_rust_defaults_and_presets() {
+    fn python_cook_settings_match_rust_defaults() {
         assert_eq!(
             PyCookSettings::new(PyCookMode::FlattenedSymbol, None, None, false).rust(),
             RustCookSettings::default()
-        );
-        assert_schoonschip_settings_eq(
-            PySchoonschipSettings::new(
-                Some(1),
-                PySchoonschipMode::Recursive,
-                PySchoonschipTraversal::BreadthFirst,
-                false,
-                false,
-                true,
-                PySchoonschipContractionOrder::SmallestDegree,
-            )
-            .rust(),
-            RustSchoonschipSettings::default(),
-        );
-        assert_schoonschip_settings_eq(
-            PySchoonschipSettings::default_network().rust(),
-            RustSchoonschipSettings::default_network(),
-        );
-        assert_schoonschip_settings_eq(
-            PySchoonschipSettings::full().rust(),
-            RustSchoonschipSettings::full(),
         );
     }
 

@@ -1,0 +1,26 @@
+[package]
+name = "symbolica-atom-access-mres"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+symbolica = { version = "=3.0.0", default-features = false, features = ["integer-gmp", "float-mpfr"] }
+
+[profile.release]
+opt-level = 2
+lto = false
+
+[[bin]]
+name = "header"
+path = "header.rs"
+
+[[bin]]
+name = "iterator"
+path = "iterator.rs"
+
+[[bin]]
+name = "last_argument"
+path = "last_argument.rs"

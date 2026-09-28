@@ -6,7 +6,7 @@ fn contracted_sixteen_trace_matches_clifford_components_and_dimension_specializa
     use spenso::network::library::symbolic::ETS;
 
     let r = test_initialize();
-    let settings = GammaSimplifySettings::default().with_expanded_traces();
+    let settings = GammaSimplifySettings::default();
     let mut outputs = Vec::new();
     for mink in [&r.mink4, &r.mink_d] {
         let p = momenta(&mink.to_symbolic([]));
@@ -16,9 +16,24 @@ fn contracted_sixteen_trace_matches_clifford_components_and_dimension_specializa
             a, &p[0], b, &p[1], c, &p[2], d, &p[3],
             a, &p[4], d, &p[5], c, &p[6], b, &p[7],
         ].map(|argument| gamma!(argument)));
-        let result = input.simplify_gamma_with(settings);
+        let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         assert_ne!(result, input);
-        assert_eq!(result.simplify_gamma_with(settings), result);
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(settings)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            result
+        );
         result.visitor(&mut |node| {
             assert!(!slots.iter().any(|slot| slot.as_view() == node));
             true
@@ -32,7 +47,7 @@ fn contracted_sixteen_trace_matches_clifford_components_and_dimension_specializa
         .replace(dimension.to_pattern())
         .with(Atom::num(4).to_pattern())
         .expand();
-    assert_eq!(specialized, outputs[0]);
+    assert_eq!(specialized, outputs[0].expand());
 
     // Reuse the independent blade-product oracle, specializing every metric
     // to a Euclidean orthonormal 4D basis. No trace recurrence is used here.
@@ -122,16 +137,22 @@ fn contracted_sixteen_mixed_components_keep_normalizer_semantics() {
         * g!(&p, &p).pow(5).as_view()
         * (Atom::num(8) - Atom::num(4) * g!(&b, &c) * g!(&p, &q)))
     .expand();
-    let settings = GammaSimplifySettings::default().with_expanded_traces();
-    let result = input.simplify_gamma_with(settings);
-    assert_eq!(result, expected);
-    assert_eq!(result.simplify_gamma_with(settings), result);
+    let settings = GammaSimplifySettings::default();
+    let source = SymbolicTensor::<PartialStructure>::infer(input.clone()).unwrap();
+    let result = DiracSimplifier::new(&settings)
+        .evaluate_terminal_trace::<false>(input.as_view())
+        .unwrap();
+    assert_eq!(result.expand(), expected.expand());
+    // The callback deliberately mixes a scalar with surviving b,c ports.
+    // Keep its raw kernel oracle while rejecting the changed typed interface.
+    assert!(source.simplify_gamma(settings).is_err());
+    assert!(source.with_rewritten_expression(result).is_err());
 }
 
 #[test]
 fn contracted_sixteen_unsupported_coefficients_keep_atom_fallback() {
     test_initialize();
-    let settings = GammaSimplifySettings::default().with_expanded_traces();
+    let settings = GammaSimplifySettings::default();
     for (dimension, unit) in [
         (
             Atom::num(4),
@@ -152,14 +173,25 @@ fn contracted_sixteen_unsupported_coefficients_keep_atom_fallback() {
             [&a, &a].into_iter().chain(std::iter::repeat_n(p, 14))
                 .map(|argument| gamma!(argument)));
         let expected = &unit * &dimension * g!(p, p).pow(7);
-        let result = input.simplify_gamma_with(settings);
-        assert_eq!(result, expected);
-        assert_eq!(result.simplify_gamma_with(settings), result);
+        // These raw trace units intentionally exceed typed gamma admission.
+        // Keep the explicit sparse oracle and its Atom-emission fallback covered
+        // through the same local trace evaluator, without a public raw route.
+        let result = DiracSimplifier {
+            settings: &settings,
+            output: trace_kernel::TraceOutput::Expanded,
+        }
+        .evaluate_terminal_trace::<false>(input.as_view())
+        .expect("the local trace owner accepts these coefficient domains");
+        assert_eq!(result.expand(), expected.expand());
+        assert_eq!(
+            settings.rewrite_expression(result.clone(), trace_kernel::TraceOutput::Expanded),
+            result
+        );
     }
 }
 
 #[test]
-fn expanded_sixteen_trace_setting_preserves_open_words_and_metadata() {
+fn sixteen_trace_preserves_open_words_and_metadata() {
     let r = test_initialize();
     let rep = r.mink_d.to_symbolic([]);
     let metadata = symbolica::parse_lit!((contracted_sixteen_x + contracted_sixteen_y) ^ 3);
@@ -176,10 +208,25 @@ fn expanded_sixteen_trace_setting_preserves_open_words_and_metadata() {
     let end = slot!(r.bis4, contracted_sixteen_end).into_atom();
     let open = chain!(&start, &end; vectors.iter().map(|p| gamma!(p)));
     let closed = trace!(r.bis4.to_symbolic([]); vectors.iter().map(|p| gamma!(p)));
-    let settings = GammaSimplifySettings::default().with_expanded_traces();
-    assert_eq!(open.simplify_gamma_with(settings), open);
+    let settings = GammaSimplifySettings::default();
     assert_eq!(
-        closed.simplify_gamma_with(settings.without_trace_evaluation()),
+        crate::tensor::SymbolicTensor::infer((open).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        open
+    );
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((closed).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(settings.without_trace_evaluation())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
         closed
     );
 }
