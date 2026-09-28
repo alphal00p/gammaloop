@@ -6,7 +6,7 @@ use std::{
 };
 
 use color_eyre::{Result, eyre::eyre};
-use gammaloop_integration_tests::new_test_artifact_dir;
+use gammaloop_integration_tests::{new_test_artifact_dir, workspace_root};
 use serde_json::Value as JsonValue;
 use serial_test::serial;
 
@@ -753,5 +753,284 @@ payload = {{
             "Momentum-space evaluation expects flattened (px, py, pz) triplets, so the coordinate count must be a multiple of 3; got 4."
         ));
 
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn python_residue_map_preserves_native_affine_maps_and_saved_selection() -> Result<()> {
+    let graph = workspace_root().join("tests/resources/graphs/scalar_box.dot");
+    let commands = vec![
+        "import model scalars-default.json".to_string(),
+        "set global kv global.display_directive=warn global.generation.three_dimensional_representations='[\"ltd\",\"cff\"]' global.generation.uv.local_uv_cts_from_expanded_4d_integrands=true global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.evaluator.compile=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.tropical_subgraph_table.disable_tropical_generation=true".to_string(),
+        r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[5.0,0.0,0.0,5.0],[5.0,0.0,0.0,-5.0],[5.0,3.0,0.0,4.0],"dependent"],"helicities":[0,0,0,0]}}' subtraction.disable_threshold_subtraction=true"#.to_string(),
+        format!("import graphs '{}' -p residue_box -i scalar", graph.display()),
+    ];
+    let payload = run_python_case(
+        "python_residue_map_affine_snapshot",
+        &commands,
+        r#"
+from fractions import Fraction
+
+assert not hasattr(api, "get_orientations")
+try:
+    api.get_residue_map("scalar_box")
+except ValueError:
+    pass
+else:
+    raise AssertionError("an imported graph has no generated residue map")
+api.run("generate existing -p residue_box -i scalar")
+info = api.get_integrand_info()
+assert info.kind == "amplitude"
+assert info.generated_representations == ["ltd", "cff"]
+graphs = [graph for group in info.graph_groups for graph in group.graphs]
+assert len(graphs) == 1 and graphs[0].name == "scalar_box"
+native_counts = dict(graphs[0].native_residue_counts)
+
+def contents(snapshot):
+    # Keep exact Python objects in this comparison; JSON is only the final
+    # subprocess summary, never the residue-map transport or persistence oracle.
+    entries = {}
+    for key, residues in snapshot.entries.items():
+        assert type(key).__name__ == "ResidueMapKey"
+        assert isinstance(key.directions, tuple)
+        assert all(type(direction) is int and direction in (-1, 0, 1)
+                   for direction in key.directions)
+        assert isinstance(key.loop_energy_map, tuple)
+        assert isinstance(key.edge_energy_map, tuple)
+        assert key.canonical_string
+        for energy in key.loop_energy_map + key.edge_energy_map:
+            assert type(energy).__name__ == "LinearEnergyExpression"
+            assert isinstance(energy.internal_terms, tuple)
+            assert isinstance(energy.external_terms, tuple)
+            assert isinstance(energy.uniform_scale_coeff, Fraction)
+            assert isinstance(energy.constant, Fraction)
+            for edge, coefficient in energy.internal_terms + energy.external_terms:
+                assert type(edge) is int
+                assert isinstance(coefficient, Fraction)
+            assert energy.canonical_string
+        assert isinstance(residues, list) and residues
+        records = []
+        for residue in residues:
+            assert type(residue).__name__ == "Residue"
+            assert type(residue.native_id) is int
+            assert residue.label is None or isinstance(residue.label, str)
+            assert residue.numerator_map_index is None or type(residue.numerator_map_index) is int
+            variants = []
+            for variant in residue.variants:
+                assert type(variant).__name__ == "ResidueVariant"
+                assert isinstance(variant.prefactor, Fraction)
+                tree = variant.denominator
+                assert tree["root"] == 0
+                nodes = {node["node_id"]: node for node in tree["nodes"]}
+                assert len(nodes) == len(tree["nodes"]) and nodes
+                assert nodes[0]["parent"] is None
+                for node in nodes.values():
+                    surface = node["surface"]
+                    assert isinstance(surface, tuple)
+                    assert surface[0] in ("esurface", "hsurface", "linear", "unit", "infinite")
+                    if surface[0] in ("unit", "infinite"):
+                        assert surface[1] is None
+                    else:
+                        assert surface in snapshot.surfaces
+                    for child in node["children"]:
+                        assert nodes[child]["parent"] == node["node_id"]
+                variants.append((variant.origin, variant.prefactor, variant.half_edges,
+                                 variant.denominator_edges, variant.denominator_surface_signs,
+                                 variant.denominator_edge_support_signs, variant.uniform_scale_power,
+                                 variant.numerator_surfaces, tree))
+            assert variants
+            records.append((residue.native_id, residue.label, residue.numerator_map_index, variants))
+        entries[key] = records
+    assert entries
+    surfaces = snapshot.surfaces
+    for reference, surface in surfaces.items():
+        if reference[0] in ("esurface", "hsurface"):
+            assert surface["kind"] == reference[0]
+            assert isinstance(surface["external_shift"], tuple)
+            assert all(type(edge) is int and isinstance(coefficient, Fraction)
+                       for edge, coefficient in surface["external_shift"])
+            energy_fields = ("energies",) if reference[0] == "esurface" else ("positive_energies", "negative_energies")
+            assert all(type(edge) is int for field in energy_fields for edge in surface[field])
+            assert "vertex_set" in surface
+        elif reference[0] == "linear":
+            assert surface["kind"] in ("esurface", "hsurface")
+            assert surface["origin"] in ("physical", "helper")
+            assert type(surface["numerator_only"]) is bool
+            assert type(surface["expression"]).__name__ == "LinearEnergyExpression"
+    assert snapshot.energy_factor_ownership in ("global_source_product", "variant_local")
+    for component in snapshot.energy_factor_components:
+        assert component["ownership"] in ("global_source_product", "variant_local")
+        assert all(type(edge) is int for edge in component["internal_edge_ids"])
+        assert component["denominator_only_global_prefactor_sign"] in (-1, 1)
+        assert component["core_global_prefactor_sign"] in (-1, 1)
+    assert snapshot.denominator_only_global_prefactor_sign in (-1, 1)
+    assert snapshot.core_global_prefactor_sign in (-1, 1)
+    assert snapshot.residual_denominators == []
+    return (entries, surfaces, snapshot.residual_denominators,
+            snapshot.energy_factor_ownership, snapshot.energy_factor_components,
+            snapshot.denominator_only_global_prefactor_sign, snapshot.core_global_prefactor_sign)
+
+snapshots = {
+    mode: api.get_residue_map("scalar_box", process_id=info.process_id,
+                              integrand_name="scalar", three_dimensional_representation=mode)
+    for mode in ("ltd", "cff")
+}
+before = {mode: contents(snapshot) for mode, snapshot in snapshots.items()}
+for mode, snapshot in snapshots.items():
+    assert snapshot.graph_name == "scalar_box" and snapshot.representation == mode
+    assert sum(len(rows) for rows in snapshot.entries.values()) == native_counts[mode]
+    assert isinstance(snapshot.entries, dict) and isinstance(snapshot.surfaces, dict)
+assert native_counts["ltd"] == 4
+assert contents(api.get_residue_map("scalar_box")) == before["ltd"]
+assert any(energy.internal_terms and energy.external_terms
+           for key in snapshots["ltd"].entries
+           for energy in key.edge_energy_map)
+
+key = next(iter(snapshots["ltd"].entries))
+original_hash = hash(key)
+for obj, field, value in ((key, "directions", ()),
+                          (key.edge_energy_map[0], "constant", Fraction(99))):
+    try:
+        setattr(obj, field, value)
+    except AttributeError:
+        pass
+    else:
+        raise AssertionError(f"{type(obj).__name__}.{field} must be immutable")
+assert hash(key) == original_hash
+assert {key: "native"}[next(k for k in api.get_residue_map("scalar_box").entries if k == key)] == "native"
+
+for kwargs in ({"graph_name": "missing_graph"},
+               {"graph_name": "scalar_box", "three_dimensional_representation": "unknown"}):
+    try:
+        api.get_residue_map(**kwargs)
+    except ValueError as exc:
+        assert str(exc)
+    else:
+        raise AssertionError(f"invalid residue-map selection was accepted: {kwargs}")
+
+# Future generation settings must not select a representation in a saved payload.
+api.run("set global kv global.generation.three_dimensional_representations='[\"cff\"]' global.generation.explicit_orientation_sum_only=true")
+assert contents(api.get_residue_map("scalar_box")) == before["ltd"]
+api.run("save state -o")
+loaded = gammaloop.GammaLoopAPI(state_folder=STATE_DIR, read_only_state=True)
+assert loaded.get_integrand_info().generated_representations == ["ltd", "cff"]
+for mode in ("ltd", "cff"):
+    restored = loaded.get_residue_map("scalar_box", three_dimensional_representation=mode)
+    assert contents(restored) == before[mode]
+    assert set(restored.entries) == set(snapshots[mode].entries)
+assert contents(loaded.get_residue_map("scalar_box")) == before["ltd"]
+
+# Python containers are detached too: mutating them cannot erase native rows.
+detached = loaded.get_residue_map("scalar_box")
+detached_key = next(iter(detached.entries))
+detached.entries[detached_key].clear()
+detached.entries.clear()
+assert contents(loaded.get_residue_map("scalar_box")) == before["ltd"]
+del loaded
+
+# Rebuild only CFF to exercise unavailable-mode errors and snapshot ownership.
+api.run("generate existing -p residue_box -i scalar")
+assert api.get_residue_map("scalar_box").representation == "cff"
+try:
+    api.get_residue_map("scalar_box", three_dimensional_representation="ltd")
+except ValueError as exc:
+    assert "ltd" in str(exc).lower()
+else:
+    raise AssertionError("an unavailable representation was silently substituted")
+assert contents(snapshots["ltd"]) == before["ltd"]
+assert contents(snapshots["cff"]) == before["cff"]
+payload = {"native_counts": native_counts, "saved_order": info.generated_representations}
+"#,
+    )?;
+    assert_eq!(payload["native_counts"]["ltd"], 4);
+    assert!(payload["native_counts"]["cff"].as_u64().unwrap() > 0);
+    assert_eq!(payload["saved_order"], serde_json::json!(["ltd", "cff"]));
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn python_residue_map_keeps_raised_cross_section_denominator_structure() -> Result<()> {
+    let root = workspace_root();
+    let commands = vec![
+        format!(
+            "import model '{}'",
+            root.join("assets/models/json/scalars/scalars_2p_3p.json")
+                .display()
+        ),
+        "set global kv global.display_directive=warn global.generation.three_dimensional_representations='[\"cff\",\"ltd\"]' global.generation.uv.local_uv_cts_from_expanded_4d_integrands=true global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.evaluator.compile=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.tropical_subgraph_table.disable_tropical_generation=true".to_string(),
+        r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[4.0,0.0,0.0,0.0]],"helicities":[0]}}' subtraction.disable_threshold_subtraction=true"#.to_string(),
+        format!(
+            "import graphs '{}' -p residue_dotted -i scalar",
+            root.join("tests/resources/graphs/dotted_bubble.dot").display()
+        ),
+        "generate existing -p residue_dotted -i scalar".to_string(),
+    ];
+    let payload = run_python_case(
+        "python_residue_map_raised_cross_section",
+        &commands,
+        r#"
+from fractions import Fraction
+
+info = api.get_integrand_info()
+assert info.kind == "cross section"
+assert info.generated_representations == ["cff", "ltd"]
+assert api.get_residue_map("dotted_bubble").representation == "cff"
+graphs = [graph for group in info.graph_groups for graph in group.graphs]
+assert len(graphs) == 1 and graphs[0].name == "dotted_bubble"
+counts = dict(graphs[0].native_residue_counts)
+maps = {mode: api.get_residue_map("dotted_bubble", three_dimensional_representation=mode)
+        for mode in ("cff", "ltd")}
+max_poles = {}
+repeated_energy_factors = False
+for mode, snapshot in maps.items():
+    assert snapshot.graph_name == "dotted_bubble" and snapshot.representation == mode
+    assert isinstance(snapshot.entries, dict) and snapshot.entries
+    assert sum(len(rows) for rows in snapshot.entries.values()) == counts[mode]
+    native_ids = [row.native_id for rows in snapshot.entries.values() for row in rows]
+    assert len(set(native_ids)) == len(native_ids)
+    maximum = 0
+    for key, residues in snapshot.entries.items():
+        assert len(key.directions) == len(key.edge_energy_map)
+        if mode == "ltd":
+            assert key.loop_energy_map
+        for residue in residues:
+            for variant in residue.variants:
+                assert isinstance(variant.prefactor, Fraction)
+                assert variant.denominator_edges
+                assert all(type(edge) is int for edge in variant.denominator_edges)
+                assert all(type(sign) is int and sign in (-1, 1)
+                           for sign in variant.denominator_surface_signs.values())
+                repeated_energy_factors |= len(set(variant.half_edges)) < len(variant.half_edges)
+                tree = variant.denominator
+                nodes = {node["node_id"]: node for node in tree["nodes"]}
+                pending = [(tree["root"], 0)]
+                while pending:
+                    node_id, poles = pending.pop()
+                    node = nodes[node_id]
+                    surface = node["surface"]
+                    if surface[0] not in ("unit", "infinite"):
+                        assert surface in snapshot.surfaces
+                        poles += 1
+                    if not node["children"]:
+                        maximum = max(maximum, poles)
+                    pending.extend((child, poles) for child in node["children"])
+    max_poles[mode] = maximum
+
+# The serial pair in this one-loop graph produces a raised pole. A flattened
+# set of surfaces or half edges would erase its multiplicity.
+assert max_poles["cff"] >= 2
+assert repeated_energy_factors
+assert any(energy.internal_terms for key in maps["ltd"].entries for energy in key.loop_energy_map)
+assert any(energy.external_terms for key in maps["ltd"].entries for energy in key.edge_energy_map)
+payload = {"native_counts": counts, "max_denominator_poles": max_poles,
+           "repeated_energy_factors": repeated_energy_factors}
+"#,
+    )?;
+    assert!(payload["native_counts"]["cff"].as_u64().unwrap() > 0);
+    assert!(payload["native_counts"]["ltd"].as_u64().unwrap() > 0);
+    assert!(payload["max_denominator_poles"]["cff"].as_u64().unwrap() >= 2);
+    assert_eq!(payload["repeated_energy_factors"].as_bool(), Some(true));
     Ok(())
 }

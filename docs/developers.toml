@@ -160,7 +160,17 @@ anchor = "struct GammaLoopAPI {"
 # stability choices and diagnostics in configuration, Python and the manual.
 # No architecture impact 2026-09-28: Python docstrings now clarify ordered
 # stability attempts and native orientation data; binding behavior is unchanged.
-digest = "a349e4f6a61755fbdddf52b384cf4ac3fca20e4b"
+# Reviewed 2026-09-28: get_residue_map replaces get_orientations with detached
+# native maps, exact Python coefficients and explicit generated-mode selection.
+digest = "ffad5b0fb7370b4e479187f4e7cd764f83540d34"
+
+[[section.note.scope]]
+path = "crates/gammaloop-api/src/python/residue_map.rs"
+symbol = "gammaloop_api::python::residue_map::PyResidueMap"
+anchor = "pub struct PyResidueMap {"
+# Reviewed 2026-09-28: native residue identity, exact affine maps, scalar variants
+# and detached surface/convention metadata are documented in the Python API guide.
+digest = "b8b2a32795b6e8df29a49f67a2fc199383a48014"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
