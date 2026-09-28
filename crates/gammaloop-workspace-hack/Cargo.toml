@@ -34,7 +34,6 @@ num-bigint = { version = "0.4" }
 num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
 rand = { version = "0.8", features = ["small_rng"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
@@ -76,7 +75,6 @@ num-bigint = { version = "0.4" }
 num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
 rand = { version = "0.8", features = ["small_rng"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
@@ -136,7 +134,7 @@ version = "0.3"
 features = ["std"]
 
 # Preserve native feature unification without hard-coding the resolved Git
-# source: the top-level consuming workspace owns the Symbolica patch.
+# source: the consuming workspace owns the Symbolica and Numerica patches.
 [dependencies.symbolica]
 workspace = true
 features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"]
@@ -144,3 +142,11 @@ features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "s
 [build-dependencies.symbolica]
 workspace = true
 features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"]
+
+[dependencies.numerica]
+workspace = true
+features = ["bincode", "float-mpfr", "integer-gmp", "serde"]
+
+[build-dependencies.numerica]
+workspace = true
+features = ["bincode", "float-mpfr", "integer-gmp", "serde"]

@@ -31,7 +31,8 @@ FeynKit, Spenso, and the native Typst payload transitively:
 // docs-example: syntax
 ```toml
 [patch.crates-io]
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "a19c760dd567c239f30d87e4e924ca2f8b8457ab" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "939c4de8b8da5546101b937a425eda443f409e8a" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "939c4de8b8da5546101b937a425eda443f409e8a" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
 ```
 

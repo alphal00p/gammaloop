@@ -741,6 +741,10 @@ impl<const N: u32> RefOne for VarFloat<N> {
 }
 
 impl<const N: u32> SymFloatLike for VarFloat<N> {
+    // The type parameter fixes the working precision.
+    #[inline]
+    fn set_precision(&mut self, _precision: u32) {}
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.float.assign(&other.float);
@@ -962,6 +966,11 @@ impl RefOne for QuadFloat {
 }
 
 impl SymFloatLike for QuadFloat {
+    #[inline]
+    fn set_precision(&mut self, precision: u32) {
+        self.0.set_precision(precision);
+    }
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.0.set_from(&other.0);
@@ -2029,6 +2038,11 @@ impl<T: FloatLike> std::fmt::LowerExp for F<T> {
 }
 
 impl<T: FloatLike> SymFloatLike for F<T> {
+    #[inline]
+    fn set_precision(&mut self, precision: u32) {
+        self.0.set_precision(precision);
+    }
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.0.set_from(&other.0);
