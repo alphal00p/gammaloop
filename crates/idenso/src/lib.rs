@@ -39,7 +39,7 @@ use crate::{
     rep_symbols::RS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, SpinFundamental},
     shorthands::metric::{MS, MetricSimplifier},
-    tensor::{SymbolicNetExt, SymbolicNetParse, remove_antisymmetric_zero_terms},
+    tensor::{SymbolicNetExt, SymbolicNetParse},
 };
 
 initialize!(|| {
@@ -375,19 +375,23 @@ impl IndexTooling for AtomView<'_> {
         &self,
         mut new_dummy: impl FnMut(usize) -> Aind,
     ) -> Result<Atom, CanonicalizationError> {
-        let filtered = remove_antisymmetric_zero_terms::<Aind>(*self);
-        let mut net = filtered
-            .as_view()
+        // Admit the complete source before algebraic zero pruning. Callers
+        // using structured index payloads must cook_indices at this boundary,
+        // consistently for both vanishing and surviving expressions.
+        let mut net = self
             .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
             .map_err(|error| NetworkToolingError::Parse {
                 reason: error.to_string(),
             })?;
 
-        // println!("{}", net.dot_pretty());
+        net.remove_antisymmetric_zero_terms();
 
         let mut redual_reps = vec![];
 
         for t in net.store.tensors.iter_mut() {
+            if t.expression.is_zero() {
+                continue;
+            }
             let mut reps = vec![];
 
             let name = t.name().ok_or_else(|| CanonicalizationError::Prepare {
@@ -416,6 +420,7 @@ impl IndexTooling for AtomView<'_> {
                 let rep = Replacement::new(pat.finish().to_pattern(), rhs.finish());
                 // println!("{}", rep);
                 redual_reps.push(rep);
+                t.invalidate_proofs();
                 t.expression = t.expression.replace_multiple(&reps);
             }
         }

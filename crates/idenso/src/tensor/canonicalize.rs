@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use linnet::half_edge::{
     NodeIndex,
     involution::{Hedge, HedgePair},
+    subgraph::{ModifySubSet, SuBitGraph},
     tree::SimpleTraversalTree,
 };
 use linnet::permutation::Permutation;
@@ -18,22 +19,20 @@ use linnet::tree::child_pointer::ParentChildStore;
 use spenso::{
     network::{
         graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
-        parsing::ParseSettings,
+        store::NetworkStoreAccess,
     },
     structure::{
         HasName, OrderedStructure, TensorStructure,
         representation::{LibraryRep, LibrarySlot, RepName, Representation},
-        slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
+        slot::{AbsInd, DualSlotTo, IsAbstractSlot, ParseableAind},
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
+    atom::{Atom, AtomView, Symbol},
     graph::{Graph, HiddenData},
 };
 
-use crate::Cookable;
-
-use super::{SymbolicNet, SymbolicNetParse, SymbolicTensor};
+use super::{SymbolicNet, SymbolicTensor};
 
 const CYCLE_SYMMETRY_MARKER: usize = usize::MAX - 2;
 
@@ -69,56 +68,277 @@ struct SlotCopies<Aind> {
 
 type SlotsByHedge<Aind> = BTreeMap<Hedge, SlotCopies<Aind>>;
 
-/// Remove Spenso tensor monomials that are fixed by a negative automorphism.
+/// Prune signed zeros on the already parsed network, without distributing sums.
 ///
-/// Recurse through sums, products and positive powers without distributing
-/// them. Sums inside functions stay opaque. If parsing fails or no term
-/// vanishes, the original expression and its factorization are preserved.
-pub(crate) fn remove_antisymmetric_zero_terms<Aind: AbsInd + DummyAind + ParseableAind>(
-    expression: AtomView<'_>,
-) -> Atom {
-    // Structured index payloads such as `hedge(1)` are not abstract indices
-    // themselves. Cook a probe for parsing, but retain the original expression.
-    let cooked = expression.cook_indices();
-    let Ok(network) = cooked
-        .as_view()
-        .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
-    else {
-        return expression.to_owned();
-    };
-    if !contains_antisymmetric_tensor(&network) {
-        return expression.to_owned();
+/// Each mutation removes an operation/subtree, or replaces a nonzero tensor by
+/// zero. Rebuild only the graph traversal after compacting node/hedge storage;
+/// tensor syntax and interfaces are never parsed again. Nonlinear functions
+/// and nonpositive powers retain their opaque boundary.
+pub(super) fn remove_antisymmetric_zero_terms<Aind: AbsInd + ParseableAind>(
+    network: &mut SymbolicNet<Aind>,
+) -> bool {
+    if !contains_antisymmetric_tensor(network) {
+        return false;
     }
-
-    let candidate = match expression {
-        AtomView::Add(add) => add
-            .iter()
-            .map(remove_antisymmetric_zero_terms::<Aind>)
-            .sum(),
-        AtomView::Mul(product) => product
-            .iter()
-            .map(remove_antisymmetric_zero_terms::<Aind>)
-            .fold(Atom::one(), |product, factor| product * factor),
-        AtomView::Pow(power) => {
-            let (base, exponent) = power.get_base_exp();
-            if i64::try_from(exponent).is_ok_and(|power| power > 0) {
-                remove_antisymmetric_zero_terms::<Aind>(base).pow(exponent)
-            } else {
-                expression.to_owned()
-            }
+    let mut changed = false;
+    loop {
+        let tree: SimpleTraversalTree<ParentChildStore<()>> = network.graph.expr_tree().cast();
+        let root = network.graph.graph.node_id(network.graph.head());
+        if !prune_one(network, &tree, root) {
+            return changed;
         }
-        _ => expression.to_owned(),
-    };
-    let vanishes = if candidate.as_view() == expression {
-        has_odd_automorphism(&network)
-    } else {
-        candidate
-            .cook_indices()
-            .as_view()
-            .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
-            .is_ok_and(|network| has_odd_automorphism(&network))
-    };
-    if vanishes { Atom::zero() } else { candidate }
+        changed = true;
+    }
+}
+
+fn is_zero<Aind: AbsInd>(network: &SymbolicNet<Aind>, node: NodeIndex) -> bool {
+    match &network.graph.graph[node] {
+        NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+            network.store.tensors[*index].expression.is_zero()
+        }
+        NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => network.store.scalar_ref(*index).is_zero(),
+        _ => false,
+    }
+}
+
+fn prune_one<Aind: AbsInd + ParseableAind>(
+    network: &mut SymbolicNet<Aind>,
+    tree: &SimpleTraversalTree<ParentChildStore<()>>,
+    node: NodeIndex,
+) -> bool {
+    if matches!(
+        network.graph.graph[node],
+        NetworkNode::Op(NetworkOp::Function(_) | NetworkOp::Power(..=0))
+    ) || is_zero(network, node)
+    {
+        return false;
+    }
+    let children = tree
+        .iter_children(node, network.graph.graph.as_ref())
+        .collect::<Vec<_>>();
+    for child in &children {
+        if prune_one(network, tree, *child) {
+            return true;
+        }
+    }
+    let zeros = children
+        .iter()
+        .filter(|child| is_zero(network, **child))
+        .count();
+    match network.graph.graph[node] {
+        NetworkNode::Op(NetworkOp::Sum) if zeros != 0 => {
+            if zeros == children.len() {
+                replace_with_zero(network, tree, node);
+            } else {
+                // A zero child has already become a leaf. Remove both halves
+                // of its head and Sum-input slots, leaving the Sum output and
+                // every surviving arm's incidence unchanged.
+                let mut removed: SuBitGraph = network.graph.graph.empty_subgraph();
+                for child in children.iter().filter(|child| is_zero(network, **child)) {
+                    for hedge in network.graph.graph.iter_crown(*child) {
+                        removed.add(hedge);
+                        removed.add(network.graph.graph.inv(hedge));
+                    }
+                }
+                network.graph.delete(&removed);
+            }
+            return true;
+        }
+        NetworkNode::Op(NetworkOp::Sum) if children.len() == 1 => {
+            return remove_singleton_sum(network, tree, node, children[0]);
+        }
+        NetworkNode::Op(NetworkOp::Product | NetworkOp::Neg | NetworkOp::Power(1..))
+            if zeros != 0 =>
+        {
+            replace_with_zero(network, tree, node);
+            return true;
+        }
+        _ => {}
+    }
+    if has_odd_automorphism(network, tree, node) {
+        replace_with_zero(network, tree, node);
+        return true;
+    }
+    false
+}
+
+fn replace_with_zero<Aind: AbsInd>(
+    network: &mut SymbolicNet<Aind>,
+    tree: &SimpleTraversalTree<ParentChildStore<()>>,
+    root: NodeIndex,
+) {
+    let nodes = tree
+        .iter_preorder_tree_nodes(network.graph.graph.as_ref(), root)
+        .collect::<Vec<_>>();
+    let inside = nodes
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut boundary = Vec::new();
+    for node in &nodes {
+        for hedge in network.graph.graph.iter_crown(*node) {
+            let NetworkEdge::Slot(edge_slot) = network.graph.graph[[&hedge]] else {
+                continue;
+            };
+            let other = network.graph.graph.inv(hedge);
+            if other != hedge && inside.contains(&network.graph.graph.node_id(other)) {
+                continue;
+            }
+            // Sewing a dual pair can retain the opposite endpoint's descriptor.
+            // Recover this endpoint from its already established storage axis.
+            let slot = match &network.graph.graph[*node] {
+                NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => network.store.tensors[*index]
+                    .structure
+                    .external_structure_iter()
+                    .nth(usize::from(network.graph.slot_order[hedge.0]))
+                    .expect("a parsed tensor endpoint has a storage axis"),
+                NetworkNode::Op(NetworkOp::Sum) => {
+                    // A Sum output forwards each arm's identical interface.
+                    // Its input seam still carries that descriptor even when
+                    // an outer product retained the dual output descriptor.
+                    network
+                        .graph
+                        .graph
+                        .iter_crown(*node)
+                        .find_map(|input| {
+                            let NetworkEdge::Slot(slot) = network.graph.graph[[&input]] else {
+                                return None;
+                            };
+                            let other = network.graph.graph.inv(input);
+                            (other != input
+                                && inside.contains(&network.graph.graph.node_id(other))
+                                && (slot == edge_slot || slot.matches(&edge_slot)))
+                            .then_some(slot)
+                        })
+                        .expect("a parsed Sum output has a matching input port")
+                }
+                _ => edge_slot,
+            };
+            boundary.push((hedge, slot));
+        }
+    }
+    let layout = OrderedStructure::new(boundary.iter().map(|(_, slot)| *slot).collect());
+    let slots = layout.canonical().external_structure();
+    for (position, slot) in slots.iter().enumerate() {
+        let found = boundary
+            .iter()
+            .position(|(_, current)| current == slot)
+            .expect("the canonical zero interface permutes its boundary ports");
+        let (hedge, _) = boundary.remove(found);
+        network.graph.slot_order[hedge.0] =
+            u8::try_from(position).expect("parsed slot position fits u8");
+    }
+    let index = network.store.tensors.len();
+    network.graph.identify_nodes_without_self_edges(
+        &nodes,
+        NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)),
+    );
+    // Identification intentionally preserves pre-existing self loops. A zero
+    // replacement has already consumed those internal contractions, so remove
+    // their paired ports too. Recover its occurrence after node compaction.
+    let node = network
+        .graph
+        .graph
+        .iter_nodes()
+        .find_map(|(node, _, data)| {
+            matches!(data, NetworkNode::Leaf(NetworkLeaf::LocalTensor(found)) if *found == index)
+                .then_some(node)
+        })
+        .expect("the replacement occurrence survives graph compaction");
+    let mut internal: SuBitGraph = network.graph.graph.empty_subgraph();
+    for hedge in network.graph.graph.iter_crown(node) {
+        let other = network.graph.graph.inv(hedge);
+        if other != hedge && network.graph.graph.node_id(other) == node {
+            internal.add(hedge);
+        }
+    }
+    network.graph.delete(&internal);
+    // Keep the proven boundary until the existing execution owner consumes it;
+    // deleting an open zero's ports here would corrupt the enclosing Sum.
+    network.store.tensors.push(SymbolicTensor {
+        proofs: Default::default(),
+        expression: Atom::zero(),
+        structure: layout.into_canonical(),
+        is_metric: false,
+        is_composite: true,
+    });
+}
+
+fn remove_singleton_sum<Aind: AbsInd>(
+    network: &mut SymbolicNet<Aind>,
+    tree: &SimpleTraversalTree<ParentChildStore<()>>,
+    node: NodeIndex,
+    child: NodeIndex,
+) -> bool {
+    let descendants = tree
+        .iter_preorder_tree_nodes(network.graph.graph.as_ref(), child)
+        .collect::<std::collections::BTreeSet<_>>();
+    let crown = network.graph.graph.iter_crown(node).collect::<Vec<_>>();
+    let mut seams = Vec::new();
+    for input in &crown {
+        let inside = network.graph.graph.inv(*input);
+        if inside == *input || !descendants.contains(&network.graph.graph.node_id(inside)) {
+            continue;
+        }
+        let input_data = network.graph.graph[[input]];
+        let Some(output) = crown.iter().copied().find(|output| {
+            let outside = network.graph.graph.inv(*output);
+            let same_port = match (network.graph.graph[[output]], input_data) {
+                (NetworkEdge::Head, NetworkEdge::Head) => true,
+                (NetworkEdge::Slot(output), NetworkEdge::Slot(input)) => {
+                    output == input || output.matches(&input)
+                }
+                _ => false,
+            };
+            same_port
+                && (outside == *output
+                    || !descendants.contains(&network.graph.graph.node_id(outside)))
+        }) else {
+            return false;
+        };
+        seams.push((output, *input));
+    }
+    if seams.len() * 2 != crown.len() {
+        return false;
+    }
+    // Bypass the existing Sum seams, retaining the outside edge's descriptor
+    // and orientation. No tensor storage axis or source logical witness moves.
+    for (output, input) in seams {
+        let outside = network.graph.graph.inv(output);
+        let inside = network.graph.graph.inv(input);
+        let input_data = network
+            .graph
+            .graph
+            .get_edge_data_full(input)
+            .map(|data| *data);
+        network
+            .graph
+            .graph
+            .split_edge(input, input_data)
+            .expect("Sum input is paired");
+        if outside != output {
+            let output_data = network
+                .graph
+                .graph
+                .get_edge_data_full(output)
+                .map(|data| *data);
+            network
+                .graph
+                .graph
+                .split_edge(output, output_data)
+                .expect("Sum output is paired");
+            network
+                .graph
+                .graph
+                .connect_identities(outside, inside, |flow, data, _, _| (flow, data));
+        }
+    }
+    let mut removed: SuBitGraph = network.graph.graph.empty_subgraph();
+    for hedge in crown {
+        removed.add(hedge);
+    }
+    network.graph.delete(&removed);
+    true
 }
 
 fn contains_antisymmetric_tensor<Aind: AbsInd>(network: &SymbolicNet<Aind>) -> bool {
@@ -132,14 +352,20 @@ fn contains_antisymmetric_tensor<Aind: AbsInd>(network: &SymbolicNet<Aind>) -> b
     })
 }
 
-fn has_odd_automorphism<Aind: AbsInd + ParseableAind>(network: &SymbolicNet<Aind>) -> bool {
-    if !contains_antisymmetric_tensor(network) {
-        return false;
-    }
-
-    let Some(graph) = project_network(network) else {
+fn has_odd_automorphism<Aind: AbsInd + ParseableAind>(
+    network: &SymbolicNet<Aind>,
+    tree: &SimpleTraversalTree<ParentChildStore<()>>,
+    root: NodeIndex,
+) -> bool {
+    let Some(graph) = project_network(network, tree, root) else {
         return false;
     };
+    if !graph.nodes().iter().any(|node| {
+        matches!(&node.data,
+        TensorGraphNode::Tensor(color) if color.head.is_antisymmetric())
+    }) {
+        return false;
+    }
     // An odd stabilizer generator proves that the monomial equals its negative.
     let canonical = graph.canonize();
     canonical
@@ -150,12 +376,12 @@ fn has_odd_automorphism<Aind: AbsInd + ParseableAind>(network: &SymbolicNet<Aind
 
 fn project_network<Aind: AbsInd + ParseableAind>(
     network: &SymbolicNet<Aind>,
+    tree: &SimpleTraversalTree<ParentChildStore<()>>,
+    root: NodeIndex,
 ) -> Option<TensorGraph<Aind>> {
-    let tree: SimpleTraversalTree<ParentChildStore<()>> = network.graph.expr_tree().cast();
-    let root = network.graph.graph.node_id(network.graph.head());
     let mut graph = Graph::new();
     let mut slot_copies = BTreeMap::new();
-    project_expression(network, &tree, root, &mut graph, &mut slot_copies)?;
+    project_expression(network, tree, root, &mut graph, &mut slot_copies)?;
     connect_slots(network, &mut graph, &slot_copies)?;
     Some(graph)
 }

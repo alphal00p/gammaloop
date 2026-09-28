@@ -4,7 +4,8 @@ use spenso::{
     network::{
         library::symbolic::ETS,
         parsing::{
-            AtomStructureExt, ChainNestingError, StrictTensorFilter, StructureInferenceMode,
+            AtomStructureExt, ChainNestingError, ParseState, StrictTensorFilter,
+            StructureInferenceMode,
         },
         tags::{SPENSO_TAG, SpensoTags},
     },
@@ -14,7 +15,7 @@ use spenso::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         partial::{PartialIndex, PartialSlot, PartialStructure, PartialStructureExt},
         representation::{LibraryRep, RepName, Representation},
-        slot::{DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotMatch, SlotMatcher},
+        slot::{IsAbstractSlot, Slot, SlotMatch, SlotMatcher},
     },
 };
 use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
@@ -43,6 +44,7 @@ impl SymbolicTensor<PartialStructure> {
             matches!(atom.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
         let is_composite = !matches!(atom.as_view(), AtomView::Fun(_));
         Self {
+            proofs: Default::default(),
             expression: atom,
             structure: interface.canonicalize_open_ports(),
             is_metric,
@@ -119,7 +121,7 @@ impl SymbolicTensor<PartialStructure> {
 
     /// Borrow unchanged branches: only bracket removal requires renormalizing
     /// their arithmetic parents.
-    fn normalize_products(value: AtomView<'_>) -> AtomOrView<'_> {
+    pub(super) fn normalize_products(value: AtomView<'_>) -> AtomOrView<'_> {
         match value {
             AtomView::Add(sum) => {
                 let terms: Vec<_> = sum.iter().map(Self::normalize_products).collect();
@@ -460,47 +462,26 @@ fn shared_index(
     }
 }
 
-/// Allocate a dummy whose serialized index symbol is absent from the supplied
-/// atoms and interfaces.
-///
-/// `AbstractIndex::Dummy(n)` is stored in Symbolica atoms as the symbol `d_n`,
-/// which parses back as an `AbstractIndex::Symbol`. Comparing the round-tripped
-/// value prevents a generated contraction index from aliasing a user-supplied
-/// explicit `d_n` index.
-pub fn fresh_dummy_index<'a>(
-    atoms: impl IntoIterator<Item = &'a Atom>,
-    interfaces: impl IntoIterator<Item = &'a PartialStructure>,
-) -> AbstractIndex {
-    let mut occupied = HashSet::new();
-    for atom in atoms {
-        let _ = atom.replace_map(|value, _, _| {
-            if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(value) {
-                occupied.insert(slot.aind());
+impl SymbolicTensor<PartialStructure> {
+    /// Reserve all written and established interface indices once before a
+    /// sequence of allocations. The parser owns serialized collision handling.
+    pub fn reserved_dummies<'a>(
+        values: impl IntoIterator<Item = &'a Self>,
+    ) -> ParseState<AbstractIndex> {
+        let state = ParseState::default();
+        for value in values {
+            state.reserve_indices(value.expression.as_view());
+            for slot in value.structure.logical_slots() {
+                if let PartialIndex::Explicit(index) = slot.aind {
+                    state.reserve_index(index);
+                }
             }
-        });
-    }
-    for interface in interfaces {
-        occupied.extend(interface.logical_slots().into_iter().filter_map(|slot| {
-            if let PartialIndex::Explicit(index) = slot.aind {
-                let atom = index.to_atom();
-                AbstractIndex::try_from(atom.as_view()).ok()
-            } else {
-                None
-            }
-        }));
-    }
-
-    loop {
-        let atom = AbstractIndex::new_dummy().to_atom();
-        let marker = AbstractIndex::try_from(atom.as_view())
-            .expect("fresh dummy atoms must remain valid abstract indices");
-        if !occupied.contains(&marker) {
-            return marker;
         }
+        state
     }
 }
 
-fn is_composite_head(symbol: Symbol, tags: &SpensoTags) -> bool {
+pub(super) fn is_composite_head(symbol: Symbol, tags: &SpensoTags) -> bool {
     symbol == tags.bracket
         || symbol == tags.chain
         || symbol == tags.trace
@@ -524,17 +505,14 @@ fn direct_structural_port(value: AtomView<'_>) -> bool {
 
 /// Maximum explicit multiplicities in any additive branch, capped at three.
 /// Opposite orientations share a key; representation dimensions remain distinct.
-#[derive(Default)]
-pub(super) struct ExplicitIndexOccurrences(HashMap<Slot<LibraryRep, AbstractIndex>, usize>);
+#[derive(Clone, Default)]
+pub(super) struct ExplicitIndexOccurrences(
+    pub(super) HashMap<Slot<LibraryRep, AbstractIndex>, usize>,
+);
 
 impl ExplicitIndexOccurrences {
-    const CACHE_ENTRIES: usize = 256;
-    const CACHE_KEY_BYTES: usize = 256;
-
     pub(super) fn from_atom(value: AtomView<'_>, slots: &mut SlotMatcher) -> Self {
-        let mut occurrences = Self::default();
-        occurrences.collect(value, slots, &mut HashMap::new());
-        occurrences
+        InterfaceInference::index_occurrences(value, slots, &mut HashMap::new())
     }
 
     /// A replacement may remove internal pairs, but cannot introduce a new
@@ -552,112 +530,27 @@ impl ExplicitIndexOccurrences {
             .unwrap_or_default()
     }
 
-    fn add(&mut self, slot: Slot<LibraryRep, AbstractIndex>, count: usize) {
+    pub(super) fn add(&mut self, slot: Slot<LibraryRep, AbstractIndex>, count: usize) {
         let occurrences = self.0.entry(slot).or_default();
         *occurrences = occurrences.saturating_add(count).min(3);
     }
 
-    fn collect_alternatives<'a>(
-        &mut self,
-        alternatives: impl IntoIterator<Item = AtomView<'a>>,
-        slots: &mut SlotMatcher,
-        cache: &mut HashMap<Vec<u8>, Self>,
-    ) {
-        let mut maximum = Self::default();
-        let mut branch = Self::default();
-        for value in alternatives {
-            branch.collect(value, slots, cache);
-            for (slot, count) in branch.0.drain() {
-                let occurrences = maximum.0.entry(slot).or_default();
-                *occurrences = (*occurrences).max(count);
-            }
-        }
-        for (slot, count) in maximum.0 {
+    pub(super) fn append(&mut self, other: Self) {
+        for (slot, count) in other.0 {
             self.add(slot, count);
         }
     }
 
-    fn collect(
-        &mut self,
-        value: AtomView<'_>,
-        slots: &mut SlotMatcher,
-        cache: &mut HashMap<Vec<u8>, Self>,
-    ) {
-        let reusable = matches!(value, AtomView::Fun(_))
-            && !value.needs_normalization()
-            && value.get_byte_size() <= Self::CACHE_KEY_BYTES;
-        if reusable {
-            if let Some(summary) = cache.get(value.get_data()) {
-                for (&slot, &count) in &summary.0 {
-                    self.add(slot, count);
-                }
-                return;
-            }
-            if cache.len() < Self::CACHE_ENTRIES {
-                let mut summary = Self::default();
-                summary.collect_uncached(value, slots, cache);
-                for (&slot, &count) in &summary.0 {
-                    self.add(slot, count);
-                }
-                // Counts depend only on immutable syntax, not the surrounding
-                // product. Cache empty summaries too, notably compact dots.
-                if cache.len() < Self::CACHE_ENTRIES {
-                    cache.insert(value.get_data().to_vec(), summary);
-                }
-                return;
+    pub(super) fn validate(self) -> Result<(), TensorCompositionError> {
+        for (slot, occurrences) in self.0 {
+            if occurrences > 2 {
+                return Err(TensorCompositionError::InvalidExplicitMultiplicity {
+                    index: slot.aind(),
+                    occurrences,
+                });
             }
         }
-        self.collect_uncached(value, slots, cache);
-    }
-
-    fn collect_uncached(
-        &mut self,
-        value: AtomView<'_>,
-        slots: &mut SlotMatcher,
-        cache: &mut HashMap<Vec<u8>, Self>,
-    ) {
-        #[cfg(test)]
-        if matches!(value, AtomView::Fun(_)) {
-            tests::OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(count.get() + 1));
-        }
-        if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(value) {
-            self.add(slot.rep().base().slot(slot.aind()), 1);
-            return;
-        }
-
-        match value {
-            AtomView::Add(sum) => self.collect_alternatives(sum.iter(), slots, cache),
-            AtomView::Mul(product) => {
-                for factor in product.iter() {
-                    self.collect(factor, slots, cache);
-                }
-            }
-            AtomView::Pow(power) => {
-                let (base, exponent) = power.get_base_exp();
-                self.collect_alternatives([base, exponent], slots, cache);
-            }
-            AtomView::Fun(function)
-                if function.get_symbol().has_tag(&SPENSO_TAG.tensor)
-                    || is_composite_head(function.get_symbol(), &SPENSO_TAG) =>
-            {
-                for argument in function.iter() {
-                    let structured = slots.parse::<LibraryRep, AbstractIndex>(argument).is_ok()
-                        || Representation::<LibraryRep>::try_from(argument).is_ok()
-                        || argument.is_tensorial(StrictTensorFilter::Tagged)
-                        || matches!(
-                            argument,
-                            AtomView::Fun(nested)
-                                if nested.get_symbol() == *shadowing::SYM
-                                    || nested.get_symbol() == *shadowing::ANTISYM
-                                    || nested.get_symbol() == *shadowing::CYCLIC
-                        );
-                    if structured {
-                        self.collect(argument, slots, cache);
-                    }
-                }
-            }
-            _ => {}
-        }
+        Ok(())
     }
 }
 
@@ -670,15 +563,7 @@ impl ExplicitIndexOccurrences {
 pub fn validate_explicit_index_occurrences(atom: &Atom) -> Result<(), TensorCompositionError> {
     let occurrences =
         ExplicitIndexOccurrences::from_atom(atom.as_view(), &mut SlotMatcher::default());
-    for (slot, occurrences) in occurrences.0 {
-        if occurrences > 2 {
-            return Err(TensorCompositionError::InvalidExplicitMultiplicity {
-                index: slot.aind(),
-                occurrences,
-            });
-        }
-    }
-    Ok(())
+    occurrences.validate()
 }
 
 #[derive(Clone)]
@@ -722,7 +607,7 @@ impl PortRewriteState {
     }
 }
 
-fn matching_interface_position(
+pub(crate) fn matching_interface_position(
     value: AtomView<'_>,
     slots: &[PartialSlot],
     claimed: &[bool],
@@ -886,6 +771,7 @@ fn rewrite_ports<'a>(
     slots: &[PartialSlot],
     replacements: &HashMap<usize, Atom>,
     state: &mut PortRewriteState,
+    on_leaf: &mut impl FnMut(AtomView<'_>, &Atom),
 ) -> AtomOrView<'a> {
     match value {
         AtomView::Add(add) => {
@@ -895,7 +781,7 @@ fn rewrite_ports<'a>(
             let mut terms = state.bulk_arithmetic.then(Vec::new);
             for (position, term) in add.iter().enumerate() {
                 let mut local = initial.clone();
-                let term = rewrite_ports(term, slots, replacements, &mut local);
+                let term = rewrite_ports(term, slots, replacements, &mut local, on_leaf);
                 if let Some(common) = &mut common {
                     for (common, local) in common.claimed.iter_mut().zip(&local.claimed) {
                         *common &= local;
@@ -950,7 +836,7 @@ fn rewrite_ports<'a>(
                                 || fun.get_symbol() == *shadowing::CYCLIC
                     );
                 let factor = if tensorial {
-                    rewrite_ports(factor, slots, replacements, state)
+                    rewrite_ports(factor, slots, replacements, state, on_leaf)
                 } else {
                     factor.into()
                 };
@@ -987,7 +873,7 @@ fn rewrite_ports<'a>(
         }
         AtomView::Pow(pow) => {
             let (base, exponent) = pow.get_base_exp();
-            let base = rewrite_ports(base, slots, replacements, state);
+            let base = rewrite_ports(base, slots, replacements, state, on_leaf);
             if !value.needs_normalization() && matches!(base, AtomOrView::View(_)) {
                 value.into()
             } else {
@@ -1001,7 +887,7 @@ fn rewrite_ports<'a>(
                 rewritten.push(rep.into());
             }
             for arg in args {
-                rewritten.push(rewrite_ports(arg, slots, replacements, state));
+                rewritten.push(rewrite_ports(arg, slots, replacements, state, on_leaf));
             }
             if !value.needs_normalization()
                 && fun.get_symbol().get_normalization_function().is_none()
@@ -1062,7 +948,7 @@ fn rewrite_ports<'a>(
                 {
                     arg.into()
                 } else {
-                    rewrite_ports(arg, slots, replacements, state)
+                    rewrite_ports(arg, slots, replacements, state, on_leaf)
                 };
                 rewritten.push(replacement);
             }
@@ -1091,25 +977,32 @@ fn rewrite_ports<'a>(
             } else {
                 // Rebuilding callback-bearing heads remains observable even
                 // when their arguments, or the callback result, are unchanged.
-                FunctionBuilder::new(fun.get_symbol())
+                let result = FunctionBuilder::new(fun.get_symbol())
                     .add_args(rewritten)
-                    .finish()
-                    .into()
+                    .finish();
+                if tensor_leaf && result.as_view() != value {
+                    on_leaf(value, &result);
+                }
+                result.into()
             }
         }
         _ => value.into(),
     }
 }
 
-fn rewrite_interface_ports(
+pub(crate) fn rewrite_interface_ports(
     value: &SymbolicTensor<PartialStructure>,
     replacements: &HashMap<usize, Atom>,
+    on_leaf: &mut impl FnMut(AtomView<'_>, &Atom),
 ) -> Result<Atom, TensorCompositionError> {
     if value.expression.as_view().is_zero() {
         return Ok(Atom::Zero);
     }
 
     let slots = value.structure.logical_slots();
+    for &position in replacements.keys() {
+        validate_position(&slots, position)?;
+    }
     let mut state = PortRewriteState::new(slots.len());
     // Identity rewrites still walk every summand, but need no regrouping proof.
     state.bulk_arithmetic = replacements
@@ -1119,8 +1012,14 @@ fn rewrite_interface_ports(
         && replacements
             .values()
             .all(|replacement| PortRewriteState::exact_arithmetic(replacement.as_view()));
-    let atom =
-        rewrite_ports(value.expression.as_view(), &slots, replacements, &mut state).into_owned();
+    let atom = rewrite_ports(
+        value.expression.as_view(),
+        &slots,
+        replacements,
+        &mut state,
+        on_leaf,
+    )
+    .into_owned();
     if let Some(position) = replacements
         .keys()
         .copied()
@@ -1254,7 +1153,7 @@ fn channel_factor(
         (channel.input, Atom::var(SPENSO_TAG.chain_in)),
         (channel.output, Atom::var(SPENSO_TAG.chain_out)),
     ]);
-    rewrite_interface_ports(value, &replacements)
+    rewrite_interface_ports(value, &replacements, &mut |_, _| {})
 }
 
 #[derive(Clone, Debug)]
@@ -1265,7 +1164,187 @@ pub enum ProductPlan {
     Compose(MatrixChannel, MatrixChannel),
 }
 
+impl ProductPlan {
+    /// Allocate all graph-port assignments for this already-selected product.
+    /// Semantic interfaces choose pairings; materialized views use the same
+    /// original logical positions and never infer pairings from fresh labels.
+    #[allow(clippy::type_complexity)]
+    pub fn alignment_indices(
+        &self,
+        left: &SymbolicTensor<PartialStructure>,
+        right: &SymbolicTensor<PartialStructure>,
+    ) -> Result<
+        (HashMap<usize, AbstractIndex>, HashMap<usize, AbstractIndex>),
+        TensorCompositionError,
+    > {
+        match self {
+            Self::Scalar | Self::Outer => left.aligned_indices(right, &[]),
+            Self::Contract(pairs) => left.aligned_indices(right, pairs),
+            Self::Compose(left_channel, right_channel) => left.aligned_indices(
+                right,
+                &[PortPair {
+                    left: left_channel.output,
+                    right: right_channel.input,
+                }],
+            ),
+        }
+    }
+
+    /// Apply a chosen positional composition to semantic or materialized ports.
+    /// Relabeling an operand does not require choosing its pairings again.
+    pub fn apply(
+        &self,
+        left: &SymbolicTensor<PartialStructure>,
+        right: &SymbolicTensor<PartialStructure>,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
+        match self {
+            Self::Scalar => {
+                let interface = if left.is_scalar() {
+                    right.structure.clone()
+                } else if right.is_scalar() {
+                    left.structure.clone()
+                } else {
+                    return Err(TensorCompositionError::InvalidResultInterface(
+                        "scalar multiplication requires a scalar operand".into(),
+                    ));
+                };
+                let atom = left.expression.as_ref() * right.expression.as_ref();
+                validate_explicit_index_occurrences(&atom)?;
+                SymbolicTensor::new(atom, interface).validate_rewrite(&[left, right])
+            }
+            Self::Outer => left.outer(right),
+            Self::Contract(pairs) => left.contract_ports(right, pairs),
+            Self::Compose(left_channel, right_channel) => {
+                left.compose(right, *left_channel, *right_channel)
+            }
+        }
+    }
+}
+
 impl SymbolicTensor<PartialStructure> {
+    /// Assign graph identities to unresolved ports and apply all explicit
+    /// assignments simultaneously in the original logical interface.
+    pub fn graph_port_indices(
+        &self,
+        replacements: &HashMap<usize, AbstractIndex>,
+    ) -> Result<HashMap<usize, AbstractIndex>, TensorCompositionError> {
+        let slots = self.structure.logical_slots();
+        let owner = AbstractIndex::fresh_open_owner();
+        let mut indices = self
+            .structure
+            .open_positions()
+            .into_iter()
+            .enumerate()
+            .map(|(axis, position)| (position, AbstractIndex::Open { owner, axis }))
+            .collect::<HashMap<_, _>>();
+        for (&position, &index) in replacements {
+            validate_position(&slots, position)?;
+            indices.insert(position, index);
+        }
+        Ok(indices)
+    }
+
+    /// Plan every index assignment before either operand is rewritten.
+    /// Reserve both complete sources and all existing interface labels once,
+    /// including names which occur only in a later pair or opaque metadata.
+    #[allow(clippy::type_complexity)]
+    pub fn aligned_indices(
+        &self,
+        right: &Self,
+        pairs: &[PortPair],
+    ) -> Result<
+        (HashMap<usize, AbstractIndex>, HashMap<usize, AbstractIndex>),
+        TensorCompositionError,
+    > {
+        let left_slots = self.structure.logical_slots();
+        let right_slots = right.structure.logical_slots();
+        let targets = pairs
+            .iter()
+            .map(|&pair| {
+                let left = validate_position(&left_slots, pair.left)?;
+                let right = validate_position(&right_slots, pair.right)?;
+                shared_index(left, right, pair).map(|index| (pair, index))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut left = self.graph_port_indices(&HashMap::new())?;
+        let mut right_indices = right.graph_port_indices(&HashMap::new())?;
+        let dummies = std::cell::OnceCell::new();
+        for (pair, target) in targets {
+            let target = target.unwrap_or_else(|| {
+                dummies
+                    .get_or_init(|| Self::reserved_dummies([self, right]))
+                    .fresh_index()
+            });
+            left.insert(pair.left, target);
+            right_indices.insert(pair.right, target);
+        }
+        Ok((left, right_indices))
+    }
+
+    /// Restrict semantic and materialized interfaces to the same surviving
+    /// graph ports, preserving their shared original logical positions.
+    pub fn retain_materialized_ports(
+        self,
+        materialized: Self,
+        external: &[spenso::structure::representation::LibrarySlot<AbstractIndex>],
+    ) -> Result<(Self, Self), TensorCompositionError> {
+        let semantic_slots = self.structure.logical_slots();
+        let materialized_slots = materialized.structure.logical_slots();
+        if semantic_slots.len() != materialized_slots.len() {
+            return Err(TensorCompositionError::InvalidResultInterface(
+                "semantic and materialized interfaces have different ranks".into(),
+            ));
+        }
+        let mut dangling = external.to_vec();
+        let mut retained = Vec::new();
+        for (position, slot) in materialized_slots.iter().enumerate() {
+            let PartialIndex::Explicit(index) = slot.aind else {
+                return Err(TensorCompositionError::InvalidResultInterface(
+                    "materialized interface contains an unresolved port".into(),
+                ));
+            };
+            let slot = slot.rep().slot(index).to_lib();
+            if let Some(found) = dangling.iter().position(|candidate| *candidate == slot) {
+                dangling.swap_remove(found);
+                retained.push(position);
+            }
+        }
+        if !dangling.is_empty() {
+            return Err(TensorCompositionError::InvalidResultInterface(format!(
+                "graph ports are absent from the materialized interface: {dangling:?}"
+            )));
+        }
+        let semantic = Self::new(
+            self.expression,
+            PartialStructure::from_logical_slots(
+                retained.iter().map(|&position| semantic_slots[position]),
+            ),
+        )
+        .normalize_closed_root_chain()?;
+        let materialized = Self::new(
+            materialized.expression,
+            PartialStructure::from_logical_slots(
+                retained
+                    .iter()
+                    .map(|&position| materialized_slots[position]),
+            ),
+        )
+        .normalize_closed_root_chain()?;
+        Ok((semantic, materialized))
+    }
+
+    pub fn trace_indices(
+        &self,
+        channel: MatrixChannel,
+    ) -> Result<HashMap<usize, AbstractIndex>, TensorCompositionError> {
+        let pair = PortPair {
+            left: channel.input,
+            right: channel.output,
+        };
+        let target = self.contraction_index(self, pair)?;
+        self.graph_port_indices(&HashMap::from([(pair.left, target), (pair.right, target)]))
+    }
+
     fn validate_rewrite(self, sources: &[&Self]) -> Result<Self, TensorCompositionError> {
         if sources.iter().any(|source| {
             !InterfaceInference::normalization_is_intrinsic(source.expression.as_view())
@@ -1297,6 +1376,7 @@ impl SymbolicTensor<PartialStructure> {
             });
         }
         // Give unresolved occurrences identities before changing positional order.
+        let dummies = std::cell::OnceCell::new();
         let replacements = self
             .structure
             .open_positions()
@@ -1304,18 +1384,22 @@ impl SymbolicTensor<PartialStructure> {
             .map(|position| {
                 (
                     position,
-                    fresh_dummy_index([&self.expression], [&self.structure]),
+                    dummies
+                        .get_or_init(|| Self::reserved_dummies([self]))
+                        .fresh_index(),
                 )
             })
             .collect();
         let mut value = self.reindex_interface_ports(&replacements)?;
         let slots = value.structure.logical_slots();
+        value.invalidate_proofs();
         value.structure =
             PartialStructure::from_logical_slots(axes.iter().map(|&axis| slots[axis]));
         Ok(value)
     }
 
     pub fn materialized(&self) -> Result<Self, TensorCompositionError> {
+        let dummies = std::cell::OnceCell::new();
         let replacements = self
             .structure
             .open_positions()
@@ -1323,7 +1407,9 @@ impl SymbolicTensor<PartialStructure> {
             .map(|position| {
                 (
                     position,
-                    fresh_dummy_index([&self.expression], [&self.structure]),
+                    dummies
+                        .get_or_init(|| Self::reserved_dummies([self]))
+                        .fresh_index(),
                 )
             })
             .collect::<HashMap<_, _>>();
@@ -1396,7 +1482,7 @@ impl SymbolicTensor<PartialStructure> {
                 Ok((position, atom))
             })
             .collect::<Result<HashMap<_, _>, TensorCompositionError>>()?;
-        let atom = rewrite_interface_ports(self, &replacements)?;
+        let atom = rewrite_interface_ports(self, &replacements, &mut |_, _| {})?;
         validate_explicit_index_occurrences(&atom)?;
         Ok(atom)
     }
@@ -1422,7 +1508,7 @@ impl SymbolicTensor<PartialStructure> {
                 ))
             })
             .collect::<Result<HashMap<_, _>, TensorCompositionError>>()?;
-        let atom = rewrite_interface_ports(self, &replacements)?;
+        let atom = rewrite_interface_ports(self, &replacements, &mut |_, _| {})?;
         validate_explicit_index_occurrences(&atom)?;
         SymbolicTensor::new(atom, PartialStructure::from_logical_slots(logical))
             .validate_rewrite(&[self])
@@ -1576,14 +1662,14 @@ impl SymbolicTensor<PartialStructure> {
         if self.expression.as_view().is_zero() || right.expression.as_view().is_zero() {
             return Ok(SymbolicTensor::new(Atom::Zero, interface));
         }
+        let dummies = std::cell::OnceCell::new();
         let mut left_indices = HashMap::new();
         let mut right_indices = HashMap::new();
         for (pair, shared) in indices {
             let index = shared.unwrap_or_else(|| {
-                fresh_dummy_index(
-                    [&self.expression, &right.expression],
-                    [&self.structure, &right.structure],
-                )
+                dummies
+                    .get_or_init(|| Self::reserved_dummies([self, right]))
+                    .fresh_index()
             });
             left_indices.insert(pair.left, index);
             right_indices.insert(pair.right, index);
@@ -1596,10 +1682,12 @@ impl SymbolicTensor<PartialStructure> {
             let compact_left = rewrite_interface_ports(
                 self,
                 &HashMap::from([(0, left_slots[0].rep().to_symbolic([]))]),
+                &mut |_, _| {},
             )?;
             let compact_right = rewrite_interface_ports(
                 right,
                 &HashMap::from([(0, right_slots[0].rep().to_symbolic([]))]),
+                &mut |_, _| {},
             )?;
             FunctionBuilder::new(SPENSO_TAG.dot)
                 .add_arg(compact_left)
@@ -1935,23 +2023,7 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         right: &SymbolicTensor<PartialStructure>,
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
-        match self.product_plan(right)? {
-            ProductPlan::Scalar => {
-                let interface = if self.is_scalar() {
-                    right.structure.clone()
-                } else {
-                    self.structure.clone()
-                };
-                let atom = self.expression.as_ref() * right.expression.as_ref();
-                validate_explicit_index_occurrences(&atom)?;
-                SymbolicTensor::new(atom, interface).validate_rewrite(&[self, right])
-            }
-            ProductPlan::Outer => self.outer(right),
-            ProductPlan::Contract(pairs) => self.contract_ports(right, &pairs),
-            ProductPlan::Compose(left_channel, right_channel) => {
-                self.compose(right, left_channel, right_channel)
-            }
-        }
+        self.product_plan(right)?.apply(self, right)
     }
 
     pub fn trace_ports(
@@ -2002,8 +2074,7 @@ impl SymbolicTensor<PartialStructure> {
         {
             // The root shorthand already owns the global `in`/`out` placeholders.
             // Close a spectator pair in place instead of adding a second consumer.
-            let index =
-                shared.unwrap_or_else(|| fresh_dummy_index([&self.expression], [&self.structure]));
+            let index = shared.unwrap_or_else(|| Self::reserved_dummies([self]).fresh_index());
             let atom = self.materialize_interface_ports(&HashMap::from([
                 (channel.input, index),
                 (channel.output, index),
@@ -2044,12 +2115,11 @@ mod tests {
         dimension::Dimension,
         partial::PartialIndex,
         representation::{ExtendibleReps, Minkowski, RepName},
+        slot::{DummyAind, ParseableAind},
     };
     use symbolica::atom::Symbol;
 
-    thread_local! {
-        pub(super) static OCCURRENCE_FUNCTION_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-    }
+    use super::super::inference::tests::OCCURRENCE_FUNCTION_VISITS;
 
     fn rep() -> Representation<LibraryRep> {
         ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4))
@@ -2291,16 +2361,23 @@ mod tests {
         let replacements = HashMap::from([(0, port_atom(target))]);
         assert!(PortRewriteState::exact_arithmetic(atom.as_view()));
         let mut old = PortRewriteState::new(2);
-        let expected = rewrite_ports(atom.as_view(), &slots, &replacements, &mut old).into_owned();
+        let expected = rewrite_ports(
+            atom.as_view(),
+            &slots,
+            &replacements,
+            &mut old,
+            &mut |_, _| {},
+        )
+        .into_owned();
         let value = SymbolicTensor::new(atom.clone(), PartialStructure::from_logical_slots(slots));
         assert_eq!(
-            rewrite_interface_ports(&value, &replacements).unwrap(),
+            rewrite_interface_ports(&value, &replacements, &mut |_, _| {}).unwrap(),
             expected
         );
         assert_ne!(expected, atom);
         let missing = SymbolicTensor::new(atom + Atom::num(1), value.structure);
         assert!(matches!(
-            rewrite_interface_ports(&missing, &replacements),
+            rewrite_interface_ports(&missing, &replacements, &mut |_, _| {}),
             Err(TensorCompositionError::MissingInterfacePort { position: 0 })
         ));
 
@@ -2314,11 +2391,17 @@ mod tests {
         ] {
             assert!(!PortRewriteState::exact_arithmetic(atom.as_view()));
             let mut old = PortRewriteState::new(2);
-            let expected =
-                rewrite_ports(atom.as_view(), &slots, &replacements, &mut old).into_owned();
+            let expected = rewrite_ports(
+                atom.as_view(),
+                &slots,
+                &replacements,
+                &mut old,
+                &mut |_, _| {},
+            )
+            .into_owned();
             let value = SymbolicTensor::new(atom, PartialStructure::from_logical_slots(slots));
             assert_eq!(
-                rewrite_interface_ports(&value, &replacements).unwrap(),
+                rewrite_interface_ports(&value, &replacements, &mut |_, _| {}).unwrap(),
                 expected
             );
         }
@@ -2501,7 +2584,13 @@ mod tests {
         let replacements = HashMap::from([(0, port_atom(port))]);
         let atom = &a.expression + &b.expression;
         let mut state = PortRewriteState::new(1);
-        let rewritten = rewrite_ports(atom.as_view(), &[port], &replacements, &mut state);
+        let rewritten = rewrite_ports(
+            atom.as_view(),
+            &[port],
+            &replacements,
+            &mut state,
+            &mut |_, _| {},
+        );
         assert!(matches!(rewritten, AtomOrView::View(_)));
         assert_eq!(rewritten.as_view(), atom.as_view());
         assert_eq!(state.claimed, [true]);
@@ -2514,7 +2603,7 @@ mod tests {
         );
         let invalid = SymbolicTensor::new(&a.expression + missing.expression, a.structure);
         assert!(matches!(
-            rewrite_interface_ports(&invalid, &replacements),
+            rewrite_interface_ports(&invalid, &replacements, &mut |_, _| {}),
             Err(TensorCompositionError::MissingInterfacePort { position: 0 })
         ));
     }
@@ -2543,7 +2632,13 @@ mod tests {
         for replacements in [HashMap::new(), HashMap::from([(0, port_atom(port))])] {
             calls.store(0, Ordering::Relaxed);
             let mut state = PortRewriteState::new(1);
-            let rewritten = rewrite_ports(atom.as_view(), &[port], &replacements, &mut state);
+            let rewritten = rewrite_ports(
+                atom.as_view(),
+                &[port],
+                &replacements,
+                &mut state,
+                &mut |_, _| {},
+            );
             assert!(matches!(rewritten, AtomOrView::Atom(_)));
             assert_eq!(rewritten.as_view(), atom.as_view());
             assert_eq!(calls.load(Ordering::Relaxed), 1);
@@ -2560,6 +2655,7 @@ mod tests {
             &[],
             &HashMap::new(),
             &mut PortRewriteState::new(0),
+            &mut |_, _| {},
         );
         assert!(rewritten.as_view().is_zero());
         assert_eq!(calls.load(Ordering::Relaxed), 2);
@@ -2582,7 +2678,13 @@ mod tests {
         let mut state = PortRewriteState::new(2);
         let identity = HashMap::from([(0, port_atom(a)), (1, port_atom(b))]);
         assert!(matches!(
-            rewrite_ports(input.as_view(), &[a, b], &identity, &mut state),
+            rewrite_ports(
+                input.as_view(),
+                &[a, b],
+                &identity,
+                &mut state,
+                &mut |_, _| {}
+            ),
             AtomOrView::View(_)
         ));
         assert_eq!(state.applied, [true, true]);
@@ -2591,6 +2693,7 @@ mod tests {
             &[a, b],
             &HashMap::from([(1, port_atom(a))]),
             &mut PortRewriteState::new(2),
+            &mut |_, _| {},
         )
         .into_owned();
         assert_eq!(trace, Atom::num(4));
@@ -2617,7 +2720,8 @@ mod tests {
                 dot.as_view(),
                 &[],
                 &HashMap::new(),
-                &mut PortRewriteState::new(0)
+                &mut PortRewriteState::new(0),
+                &mut |_, _| {}
             ),
             AtomOrView::View(_)
         ));
@@ -2645,6 +2749,7 @@ mod tests {
                 &[a],
                 &HashMap::new(),
                 &mut PortRewriteState::new(1),
+                &mut |_, _| {},
             );
             assert!(matches!(unchanged, AtomOrView::Atom(_)));
             calls.store(0, Ordering::Relaxed);
@@ -2653,6 +2758,7 @@ mod tests {
                 &[a],
                 &HashMap::from([(0, port_atom(replacement))]),
                 &mut PortRewriteState::new(1),
+                &mut |_, _| {},
             )
             .into_owned();
             assert_eq!(changed, expected);
@@ -2689,6 +2795,7 @@ mod tests {
                 &[],
                 &HashMap::new(),
                 &mut PortRewriteState::new(0),
+                &mut |_, _| {},
             )
             .into_owned();
             assert_eq!(rewritten, expected);
@@ -3672,11 +3779,19 @@ mod tests {
         let mut cache = HashMap::new();
         let mut occurrences = ExplicitIndexOccurrences::default();
         OCCURRENCE_FUNCTION_VISITS.set(0);
-        occurrences.collect(leaf.as_view(), &mut slots, &mut cache);
+        occurrences.append(InterfaceInference::index_occurrences(
+            leaf.as_view(),
+            &mut slots,
+            &mut cache,
+        ));
         let visits = OCCURRENCE_FUNCTION_VISITS.get();
         assert!(visits > 0);
         for expected in [2, 3] {
-            occurrences.collect(leaf.as_view(), &mut slots, &mut cache);
+            occurrences.append(InterfaceInference::index_occurrences(
+                leaf.as_view(),
+                &mut slots,
+                &mut cache,
+            ));
             assert_eq!(occurrences.count(slot), expected);
             assert_eq!(OCCURRENCE_FUNCTION_VISITS.get(), visits);
         }
@@ -3705,11 +3820,19 @@ mod tests {
         let mut cache = HashMap::new();
         let mut occurrences = ExplicitIndexOccurrences::default();
         OCCURRENCE_FUNCTION_VISITS.set(0);
-        occurrences.collect(dot.as_view(), &mut slots, &mut cache);
+        occurrences.append(InterfaceInference::index_occurrences(
+            dot.as_view(),
+            &mut slots,
+            &mut cache,
+        ));
         let visits = OCCURRENCE_FUNCTION_VISITS.get();
         assert!(visits > 0);
         assert!(occurrences.0.is_empty());
-        occurrences.collect(dot.as_view(), &mut slots, &mut cache);
+        occurrences.append(InterfaceInference::index_occurrences(
+            dot.as_view(),
+            &mut slots,
+            &mut cache,
+        ));
         assert_eq!(OCCURRENCE_FUNCTION_VISITS.get(), visits);
         assert!(occurrences.0.is_empty());
 
@@ -3724,7 +3847,11 @@ mod tests {
         });
         for slot in [first, second, first] {
             let leaf = FunctionBuilder::new(head).add_arg(slot.to_atom()).finish();
-            occurrences.collect(leaf.as_view(), &mut slots, &mut cache);
+            occurrences.append(InterfaceInference::index_occurrences(
+                leaf.as_view(),
+                &mut slots,
+                &mut cache,
+            ));
         }
         assert_eq!(occurrences.count(first), 2);
         assert_eq!(occurrences.count(second), 1);

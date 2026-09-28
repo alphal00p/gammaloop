@@ -2,10 +2,10 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
 use idenso::{
-    IndexTooling,
+    CookMode, CookSettings, IndexTooling,
     color::{ColorSimplifier, ColorSimplifySettings},
-    dirac::GammaSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+    dirac::GammaSimplifySettings,
+    tensor::SymbolicTensor,
 };
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
@@ -22,13 +22,14 @@ use spenso::{
     },
     iterators::IteratableTensor,
     network::{
-        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MAX_EAGER_TENSOR_SUM_BYTES, MinIntermediateCost,
-        MinResultRank, MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
+        DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinIntermediateCost, MinResultRank,
+        MinResultRankWith, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
         PAIR_SCORE_RESULT_RANK_ONLY, ScalarAliases, Sequential, SequentialExtract, SequentialRef,
-        SmallestDegree,
-        graph::{NetworkLeaf, NetworkNode, NetworkOp},
-        parsing::{AtomStructureExt, ShadowedStructure, StrictTensorFilter},
-        store::{TensorScalarStore, TensorScalarStoreMapping},
+        SmallestDegree, TensorNetworkError,
+        parsing::{
+            AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShadowedStructure,
+            ShorthandParsing, StrictTensorFilter,
+        },
         tags::SPENSO_TAG,
     },
     shadowing::{
@@ -723,7 +724,7 @@ impl EvaluatorStack {
             atom_index,
             settings,
             tensor_map,
-            |net, scalar_aliases, term_index| {
+            |net, scalar_aliases, registry, term_index| {
                 let root = match net.result_scalar()? {
                     ExecutionResult::One => Atom::num(1),
                     ExecutionResult::Zero => Atom::Zero,
@@ -733,6 +734,8 @@ impl EvaluatorStack {
                 let input_bytes = root.as_view().get_byte_size();
                 let (root, aliases) = net
                     .aliased_atom(scalar_aliases, root)
+                    .try_mul(registry)
+                    .map_err(|handle| eyre!("conflicting scalar alias {handle}"))?
                     .into_inner_with_aliases();
                 let mut handles = aliases.keys().cloned().collect::<Vec<_>>();
                 handles.sort();
@@ -784,12 +787,27 @@ impl EvaluatorStack {
         )
     }
 
+    fn retain_component_scalar_alias(scalar: &Atom) -> bool {
+        // Keep guards visible until they enclose the complete branch, including
+        // neighboring inverses. Dependency-order admission propagates visibility
+        // through retained tensor and scalar definitions.
+        scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
+            && [
+                OrientationID::symbol(),
+                GS.theta,
+                GS.orientation_delta,
+                Symbol::IF,
+            ]
+            .into_iter()
+            .all(|selector| !scalar.contains_symbol(selector))
+    }
+
     fn preprocess_tensor<A: AtomCore>(
         a: &A,
         atom_index: usize,
         settings: &EvaluatorSettings,
         tensor_map: Option<&ParsingTensorMap<'_>>,
-        mut finish: impl FnMut(&ParsingNet, &ScalarAliases, usize) -> Result<AliasedAtom>,
+        mut finish: impl FnMut(&ParsingNet, &ScalarAliases, &AliasedAtom, usize) -> Result<AliasedAtom>,
     ) -> Result<AliasedAtom> {
         let atom_started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
@@ -798,46 +816,28 @@ impl EvaluatorStack {
             do_algebra = settings.do_algebra,
             "Evaluator timing milestone"
         );
-        // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
-        let network_input = if settings.do_algebra {
-            let color_simplified = a.as_atom_view().simplify_color_with(
-                ColorSimplifySettings::default().with_cof_dimension_invariants(),
-            );
-            let gamma_simplified = color_simplified.simplify_gamma();
-            crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
-                stage = "evaluator_stack_parse_atom_after_simplify_gamma",
-                atom_index,
-                log.after_gamma = gamma_simplified,
-                "Evaluator atom after gamma simplification"
-            );
-            let simplified = gamma_simplified.simplify_metrics().to_dots();
-            crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                stage = "evaluator_stack_parse_atom_simplify_done",
-                atom_index,
-                elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                "Evaluator timing milestone"
-            );
-            simplified
+        // The shared carrier owns admission and tensor identities. Physical
+        // component indices are reversibly encoded only for that strict boundary.
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let input = if settings.do_algebra {
+            a.as_atom_view().to_owned()
         } else {
-            crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                stage = "evaluator_stack_parse_atom_simplify_skipped",
-                atom_index,
-                elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                "Evaluator timing milestone"
-            );
             a.as_atom_view().to_cof_dimension_invariants()
+        };
+        let input = SymbolicTensor::infer(cooking.try_cook(input.as_view())?)?;
+        let network_input = if settings.do_algebra {
+            input
+                .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())?
+                .simplify_gamma(GammaSimplifySettings::default())?
+                .contract(None)?
+        } else {
+            Arc::new(input.with_aliases([])?)
         };
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
             stage = "evaluator_stack_parse_atom_normalization_done",
             atom_index,
             elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-            "Normalized evaluator input before independent scalar contractions"
-        );
-        crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
-            stage = "evaluator_stack_parse_atom_before_network_parse",
-            atom_index,
-            log.atom = network_input,
-            "Evaluator atom before network parsing"
+            "Admitted evaluator input with retained tensor definitions"
         );
         let execute = |net: &mut ParsingNet| -> Result<()> {
             macro_rules! execute_min_result_rank {
@@ -923,268 +923,49 @@ impl EvaluatorStack {
             Ok(())
         };
 
-        // Materialize only an original additive tensor factor. Scalar spectators,
-        // powers and functions stay with the original residual product; this
-        // preparation never distributes a graph numerator or changes a strategy.
-        // Only exact Gaussian integers qualify; floating coefficients retain
-        // their original evaluation order in the ordinary network path.
-        let is_gaussian_integer = |atom: AtomView<'_>| {
-            let AtomView::Num(number) = atom else {
-                return false;
-            };
-            matches!(number.get_coeff_view().to_owned(),
-                symbolica::coefficient::Coefficient::Complex(value)
-                    if value.re.is_integer() && value.im.is_integer())
+        let parse_settings = ParseSettings {
+            shorthand_parsing: ShorthandParsing::Expand {
+                schoonschip: SchoonschipExpansionMode {
+                    inner_products: false,
+                    expand_schoonship: true,
+                    expand_inside_chains: true,
+                },
+                trace: true,
+                chain: true,
+            },
+            ..Default::default()
         };
-        let constant_factor =
-            |factor: AtomView<'_>| -> Result<Option<ParamTensor<ShadowedStructure<Aind>>>> {
-                if !matches!(factor, AtomView::Add(_))
-                    || factor.get_byte_size() >= MAX_EAGER_TENSOR_SUM_BYTES
-                    || spenso::network::profile::lazy_tensor_sums()
-                {
-                    return Ok(None);
-                }
-                // Reject scalar parameters and guards before parsing candidate factors.
-                // A tensor's index arguments are interpreted by the existing parser.
-                let mut pending = vec![factor];
-                while let Some(atom) = pending.pop() {
-                    match atom {
-                        AtomView::Add(sum) => pending.extend(sum.iter()),
-                        AtomView::Mul(product) => pending.extend(product.iter()),
-                        AtomView::Num(_) if is_gaussian_integer(atom) => {}
-                        AtomView::Fun(_) if atom.is_tensorial(StrictTensorFilter::Tagged) => {}
-                        _ => return Ok(None),
-                    }
-                }
-                let mut constant = factor.parse_into_net()?;
-                let exposed = constant.graph.dangling_indices();
-                if exposed.is_empty() || exposed.iter().any(|slot| !slot.matches(slot)) {
-                    return Ok(None);
-                }
-                constant.graph.cache_expr_tree_roots();
-                let mut bounds: HashMap<_, (usize, usize)> = HashMap::new();
-                for node in constant
-                    .graph
-                    .cached_expr_preorder_nodes()
-                    .into_iter()
-                    .rev()
-                {
-                    let children = constant.graph.cached_expr_children(node);
-                    let (entries, bytes) = match &constant.graph.graph[node] {
-                        NetworkNode::Op(op @ (NetworkOp::Sum | NetworkOp::Product)) => children
-                            .into_iter()
-                            .fold((1usize, 0usize), |(entries, bytes), child| {
-                                let (child_entries, child_bytes) = bounds[&child];
-                                (
-                                    if matches!(op, NetworkOp::Sum) {
-                                        entries.max(child_entries)
-                                    } else {
-                                        entries.saturating_mul(child_entries)
-                                    },
-                                    bytes.saturating_add(child_bytes),
-                                )
-                            }),
-                        NetworkNode::Leaf(NetworkLeaf::Scalar(scalar)) => {
-                            let scalar = constant.store.get_scalar_ref(*scalar).as_view();
-                            if !is_gaussian_integer(scalar) {
-                                return Ok(None);
-                            }
-                            (1, scalar.get_byte_size() + std::mem::size_of::<Atom>())
-                        }
-                        NetworkNode::Leaf(
-                            leaf @ (NetworkLeaf::LibraryKey { .. } | NetworkLeaf::LocalTensor(_)),
-                        ) => {
-                            // Bound logical capacity before realizing a library leaf, then
-                            // inspect its actual entries rather than its symbol or name.
-                            let entries = constant
-                                .graph
-                                .slots(node)
-                                .into_iter()
-                                .try_fold(1usize, |size, slot| {
-                                    size.checked_mul(usize::try_from(slot.dim()).ok()?)
-                                });
-                            let Some(entries) = entries.filter(|size| {
-                                size.saturating_mul(std::mem::size_of::<Atom>())
-                                    < MAX_EAGER_TENSOR_SUM_BYTES
-                            }) else {
-                                return Ok(None);
-                            };
-                            let tensor = match leaf {
-                                NetworkLeaf::LibraryKey { .. } => constant
-                                    .graph
-                                    .get_lib_data::<ShadowedStructure<Aind>, _, _>(
-                                    TENSORLIB.read().unwrap().deref(),
-                                    node,
-                                )?,
-                                NetworkLeaf::LocalTensor(index) => {
-                                    constant.store.get_tensor(*index).clone()
-                                }
-                                _ => unreachable!(),
-                            };
-                            let mut bytes = std::mem::size_of::<Atom>();
-                            for (_, value) in tensor.iter_flat() {
-                                if !is_gaussian_integer(value) {
-                                    return Ok(None);
-                                }
-                                bytes =
-                                    bytes.max(value.get_byte_size() + std::mem::size_of::<Atom>());
-                            }
-                            (entries, bytes)
-                        }
-                        _ => return Ok(None),
-                    };
-                    // A product's unreduced Cartesian capacity bounds its partial
-                    // contractions; sums preserve the largest child's capacity.
-                    // Sum component sizes conservatively and reuse the eager budget.
-                    if entries.saturating_mul(bytes) >= MAX_EAGER_TENSOR_SUM_BYTES {
-                        return Ok(None);
-                    }
-                    // Components remain symbolic, so integer arithmetic needs no
-                    // floating-point exactness bound.
-                    bounds.insert(node, (entries, bytes));
-                }
-                execute(&mut constant)?;
-                let lib = TENSORLIB.read().unwrap();
-                let ExecutionResult::Val(tensor) = constant.result_tensor(lib.deref())? else {
-                    return Ok(None);
-                };
-                Ok(Some(tensor.into_owned()))
-            };
-
-        // Each existing top-level summand is an independent tensor contraction.
-        // Keeping its network local avoids scanning unrelated terms during
-        // finite component preparation. Products, powers and nested sums retain
-        // their grouping; the resulting expressions are reunited before optimization.
-        let terms = if let AtomView::Add(sum) = network_input.as_view() {
-            sum.iter().collect::<Vec<_>>()
-        } else {
-            vec![network_input.as_view()]
-        };
+        let (mut net, registry) = network_input.to_network(
+            TENSORLIB.read().unwrap().deref(),
+            FUN_LIB.deref(),
+            &parse_settings,
+            Some(&cooking),
+            |net| execute(net).map_err(TensorNetworkError::Other),
+            |tensor| match tensor_map {
+                Some(map) => map(tensor).map_err(TensorNetworkError::Other),
+                None => Ok(tensor),
+            },
+            Self::retain_component_scalar_alias,
+        )?;
+        // All store IDs belong to this one retained-root network. Merge its
+        // scalar aliases with the shared registry before the finishers' single
+        // scoping pass; no original-summand reconstruction is needed.
+        let term_index = 0;
+        let scalar_aliases =
+            net.alias_scalar_refs(|_, scalar| Self::retain_component_scalar_alias(scalar));
+        let closed_sum_boundaries = net.graph.contract_ready_sum_boundaries();
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-            stage = "evaluator_stack_parse_atom_terms_start",
+            stage = "evaluator_stack_parse_atom_tensor_boundaries_done",
             atom_index,
-            term_count = terms.len(),
-            "Contracting independent scalar summands"
+            term_index,
+            closed_sum_boundaries,
+            elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
+            "Prepared finite tensor contractions through retained sums"
         );
-        // Network handles are local indices. Give each summand its own scope
-        // before combining independently contracted networks.
-        let result = terms
-            .into_iter()
-            .enumerate()
-            .map(|(term_index, term)| -> Result<AliasedAtom> {
-                let term_started = std::time::Instant::now();
-                let mut residual = Vec::new();
-                let mut constants = Vec::new();
-                if let AtomView::Mul(product) = term {
-                    for factor in product.iter() {
-                        if let Some(tensor) = constant_factor(factor)? {
-                            constants.push(tensor);
-                        } else {
-                            residual.push(factor);
-                        }
-                    }
-                }
-                let mut net = if constants.is_empty() {
-                    term.parse_into_net()?
-                } else {
-                    let mut net = Atom::mul_many(residual).parse_into_net()?;
-                    for tensor in constants.into_iter().rev() {
-                        net = ParsingNet::from_tensor(tensor) * net;
-                    }
-                    net
-                };
-                if let Some(tensor_map) = tensor_map {
-                    net = net.map_result(Ok, tensor_map)?;
-                }
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_net_done",
-                    atom_index,
-                    term_index,
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-
-                // println!("Net: {}", net.dot_pretty());
-                let scalar_aliases = net.alias_scalar_refs(|_, scalar| {
-                    scalar.as_view().get_byte_size() >= NETWORK_SCALAR_ALIAS_MIN_BYTES
-                        // Keep guards visible until they enclose the complete branch,
-                        // including inverses in neighboring scalar factors. These
-                        // definitions precede generated handles, so selector structure
-                        // cannot be hidden through another registered alias either.
-                        && [OrientationID::symbol(), GS.theta, GS.orientation_delta, Symbol::IF]
-                            .into_iter().all(|selector| !scalar.contains_symbol(selector))
-                });
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_scalar_aliases_done",
-                    atom_index,
-                    term_index,
-                    threshold_bytes = NETWORK_SCALAR_ALIAS_MIN_BYTES,
-                    aliases_created = scalar_aliases.aliases_created(),
-                    aliased_terms = scalar_aliases.aliased_terms(),
-                    aliased_bytes = scalar_aliases.aliased_bytes(),
-                    max_aliased_bytes = scalar_aliases.max_aliased_bytes(),
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                // Prepare only the finite component contraction. Raw symbolic networks
-                // used by Taylor expansion retain their original product/sum grouping.
-                let contraction_preparation_started = std::time::Instant::now();
-                let closed_sum_boundaries = net.graph.contract_ready_sum_boundaries();
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_tensor_boundaries_done",
-                    atom_index,
-                    term_index,
-                    closed_sum_boundaries,
-                    elapsed_ms = contraction_preparation_started.elapsed().as_secs_f64() * 1000.0,
-                    "Prepared finite tensor contractions through pending sums"
-                );
-                crate::debug_tags!(#generation, #compile, #term, #dump;
-                    stage = "evaluator_stack_parse_atom_network_dump",
-                    atom_index,
-                    term_index,
-                    file.atom = %term.to_canonical_string(),
-                    file.network = %net.dot_pretty(),
-                    "Parsed evaluator network dump"
-                );
-
-                let parse_elapsed = term_started.elapsed();
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_parse_elapsed",
-                    atom_index,
-                    term_index,
-                    elapsed_ms = parse_elapsed.as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                let instant = std::time::Instant::now();
-
-                execute(&mut net)?;
-
-                let execute_elapsed = instant.elapsed();
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_execute_elapsed",
-                    atom_index,
-                    term_index,
-                    elapsed_ms = execute_elapsed.as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-                crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
-                    stage = "evaluator_stack_parse_atom_execute_done",
-                    atom_index,
-                    term_index,
-                    elapsed_ms = atom_started.elapsed().as_secs_f64() * 1000.0,
-                    "Evaluator timing milestone"
-                );
-
-                finish(&net, &scalar_aliases, term_index).map_err(|error| {
-                    error.with_note(|| format!("Network looks like: {}", net.dot_pretty()))
-                })
-            })
-            .collect::<Result<Vec<_>>>()
-            .map(|terms| {
-                terms.into_iter().fold(AliasedAtom::default(), |sum, term| {
-                    sum.try_add(&term).unwrap()
-                })
-            });
+        execute(&mut net)?;
+        let result = finish(&net, &scalar_aliases, &registry, term_index).map_err(|error| {
+            error.with_note(|| format!("Network looks like: {}", net.dot_pretty()))
+        });
         crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
             stage = "evaluator_stack_parse_atom_done",
             atom_index,
@@ -1744,7 +1525,7 @@ impl EvaluatorStack {
                 family_index,
                 settings,
                 None,
-                |net, scalar_aliases, term_index| {
+                |net, scalar_aliases, registry, term_index| {
                     let tensor = match net.result_tensor(TENSORLIB.read().unwrap().deref())? {
                         ExecutionResult::One => return Ok(Atom::num(1).into()),
                         ExecutionResult::Zero => return Ok(Atom::Zero.into()),
@@ -1757,6 +1538,8 @@ impl EvaluatorStack {
                     let tags = vec![Atom::num(family_index), Atom::num(term_index)];
                     let (_, aliases) = net
                         .aliased_atom(scalar_aliases, Atom::Zero)
+                        .try_mul(registry)
+                        .map_err(|handle| eyre!("conflicting scalar alias {handle}"))?
                         .into_inner_with_aliases();
                     let mut handles = aliases.keys().cloned().collect::<Vec<_>>();
                     handles.sort();

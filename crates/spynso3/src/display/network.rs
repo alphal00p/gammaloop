@@ -299,17 +299,21 @@ impl SpensoNet {
                 "slot",
                 match edge.data {
                     NetworkEdge::Head => String::new(),
-                    NetworkEdge::Slot(slot) => slot.to_string(),
+                    NetworkEdge::Slot(slot) | NetworkEdge::BoundPort { slot, .. } => {
+                        slot.to_string()
+                    }
                 },
             )?;
             record.set_item(
                 "label-typst",
                 match edge.data {
                     NetworkEdge::Head => None,
-                    NetworkEdge::Slot(slot) => Some(aliases.port_typst(
-                        slot.rep().slot(PartialIndex::Explicit(slot.aind())),
-                        &settings,
-                    )),
+                    NetworkEdge::Slot(slot) | NetworkEdge::BoundPort { slot, .. } => {
+                        Some(aliases.port_typst(
+                            slot.rep().slot(PartialIndex::Explicit(slot.aind())),
+                            &settings,
+                        ))
+                    }
                 },
             )?;
             let mut detail = match edge.data {
@@ -322,6 +326,13 @@ impl SpensoNet {
                     },
                     "Carries an expression result",
                 ),
+                NetworkEdge::BoundPort { slot, value } => {
+                    let mut detail =
+                        NetworkLabel::new("binding", "Bound tensor port", slot.to_string());
+                    detail.atom(store.get_scalar_ref(*value));
+                    detail.property("Slot", slot.to_string());
+                    detail
+                }
                 NetworkEdge::Slot(slot) => {
                     let rep = slot.rep();
                     let mut detail = NetworkLabel::new(

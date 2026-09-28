@@ -25,7 +25,10 @@
 //! then lets this Schoonschip helper expand compact arguments inside each factor.
 
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, MulView, Symbol, representation::FunView},
+    atom::{
+        Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, MulView, Symbol,
+        representation::FunView,
+    },
     id::MatchSettings,
 };
 
@@ -44,9 +47,8 @@ use crate::{
         tags::SPENSO_TAG,
     },
     shadowing,
-    shadowing::Concretize,
     structure::{
-        HasStructure, OrderedStructure, ScalarStructure, TensorShell, TensorStructure,
+        HasStructure, OrderedStructure, ScalarStructure, TensorStructure,
         representation::{LibraryRep, Representation},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotMatcher},
     },
@@ -396,6 +398,7 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
                 &mut matcher,
             )
             .ok()?
+            .canonical()
             .is_scalar()
             {
                 return None;
@@ -589,7 +592,7 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
 }
 
 impl<
-    'a,
+    'src,
     Sc,
     T: HasStructure + TensorStructure,
     K: Clone + Display + Debug,
@@ -597,11 +600,12 @@ impl<
     Aind: AbsInd + DummyAind + ParseableAind,
 > Network<Str, K, Symbol, Aind>
 where
-    Sc: for<'r> TryFrom<AtomView<'r>> + Clone,
-    TensorNetworkError<K, Symbol>: for<'r> From<<Sc as TryFrom<AtomView<'r>>>::Error>,
+    Sc: TryFrom<AtomView<'src>> + TryFrom<Atom> + Clone,
+    TensorNetworkError<K, Symbol>:
+        From<<Sc as TryFrom<AtomView<'src>>>::Error> + From<<Sc as TryFrom<Atom>>::Error>,
 {
     #[allow(clippy::result_large_err)]
-    pub(super) fn is_shorthand_function(value: FunView<'a>) -> bool {
+    pub(super) fn is_shorthand_function(value: FunView<'_>) -> bool {
         let symbol = value.get_symbol();
         symbol == SPENSO_TAG.chain
             || symbol == SPENSO_TAG.trace
@@ -610,19 +614,19 @@ where
     }
 
     #[allow(clippy::result_large_err)]
-    pub(super) fn materialize_shorthand<S, Lib, FunLib>(
-        value: FunView<'a>,
+    pub(super) fn materialize_shorthand<'node, S, Lib, FunLib>(
+        value: FunView<'node>,
         state: ParseState<Aind>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
+        retain: fn(AtomView<'node>) -> AtomOrView<'src>,
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
@@ -642,6 +646,7 @@ where
                 library,
                 function_library,
                 settings,
+                |value| AtomOrView::Atom(value.to_owned()),
             );
         }
 
@@ -678,12 +683,16 @@ where
         };
         let materialized = if effective_schoonschip_mode.any() {
             SchoonschipMaterializer::<Aind>::with_mode(&state, effective_schoonschip_mode)
-                .materialize_shorthand(value.as_view())
+                .materialize_shorthand_root(value.as_view())
+                .map(SchoonschipMaterialization::into_expression)
         } else {
-            value.as_view().to_owned()
+            None
         };
 
-        if materialized == value.as_view().to_owned() {
+        if materialized
+            .as_ref()
+            .is_none_or(|atom| atom.as_view() == value.as_view())
+        {
             // The atom rewriter is at a fixed point; recurse only after an actual rewrite.
             if root_chain_disabled || root_trace_disabled || has_schoonschip_shorthand {
                 return Self::as_inferred_leaf::<S, Lib, FunLib>(
@@ -692,22 +701,25 @@ where
                     library,
                     function_library,
                     settings,
+                    retain,
                 );
             }
-            return Self::parse_regular_function_leaf::<S, Lib>(value, library);
+            return Self::parse_regular_function_leaf::<S, Lib, FunLib>(value, library, retain);
         }
 
+        let materialized = materialized.expect("changed shorthand has an owned expression");
         Self::try_from_view_impl(
             materialized.as_view(),
             state,
             library,
             function_library,
             settings,
+            |value| AtomOrView::Atom(value.to_owned()),
         )
     }
 
     fn materialize_chain_endpoint(
-        value: AtomView<'a>,
+        value: AtomView<'_>,
         label: &str,
         state: &ParseState<Aind>,
         schoonschip_mode: SchoonschipExpansionMode,
@@ -748,7 +760,7 @@ where
 
     #[allow(clippy::result_large_err)]
     fn materialize_chain_shorthand<S, Lib, FunLib>(
-        value: FunView<'a>,
+        value: FunView<'_>,
         state: ParseState<Aind>,
         library: &Lib,
         function_library: &FunLib,
@@ -756,10 +768,9 @@ where
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
@@ -868,7 +879,7 @@ where
 
     #[allow(clippy::result_large_err)]
     fn materialize_trace_shorthand<S, Lib, FunLib>(
-        value: FunView<'a>,
+        value: FunView<'_>,
         state: ParseState<Aind>,
         library: &Lib,
         function_library: &FunLib,
@@ -876,10 +887,9 @@ where
     ) -> Result<Self, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
@@ -901,6 +911,7 @@ where
                 library,
                 function_library,
                 settings,
+                |value| AtomOrView::Atom(value.to_owned()),
             );
         }
 
@@ -973,10 +984,9 @@ where
     ) -> Result<Vec<Self>, TensorNetworkError<K, Symbol>>
     where
         S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
-        TensorShell<S>: Concretize<T>,
         S::Slot: IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
-        T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
@@ -987,14 +997,21 @@ where
                 library,
                 function_library,
                 settings,
+                |value| AtomOrView::Atom(value.to_owned()),
             )?]);
         };
 
         let mut scalars = Vec::new();
         let mut tensors = Vec::new();
         for arg in product.iter() {
-            let network =
-                Self::try_from_view_impl(arg, state.clone(), library, function_library, settings)?;
+            let network = Self::try_from_view_impl(
+                arg,
+                state.clone(),
+                library,
+                function_library,
+                settings,
+                |value| AtomOrView::Atom(value.to_owned()),
+            )?;
             if network.state == NetworkState::PureScalar {
                 scalars.push(network);
             } else {
@@ -1009,6 +1026,7 @@ where
                 library,
                 function_library,
                 settings,
+                |value| AtomOrView::Atom(value.to_owned()),
             )?]);
         }
 

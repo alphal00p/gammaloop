@@ -295,7 +295,7 @@ impl ExactLibraryReference {
             exceptions::PyValueError::new_err("exact tensor library lookup requires a name")
         })?;
         let args = TensorExpression::descriptor_args(expression);
-        Self::new(descriptor.structure, name, args)
+        Self::new(descriptor.into_parts().1, name, args)
     }
 
     fn new(interface: PartialStructure, name: Symbol, args: Vec<Atom>) -> PyResult<Self> {
@@ -389,7 +389,7 @@ fn tensor_reference(
     );
     let value = SymbolicTensor::from_signature(&structure)
         .map_err(|error| exceptions::PyRuntimeError::new_err(error.to_string()))?;
-    TensorExpression::from_known_parts(py, value.expression, interface, Some(name), args)
+    TensorExpression::from_known_parts(py, value.into_expression(), interface, Some(name), args)
 }
 
 /// Make a Python-facing interface directly from a key's canonical storage
@@ -499,7 +499,7 @@ impl SpensorLibrary {
         );
         let mut descriptor = SymbolicTensor::from_signature(&key)
             .map_err(|error| exceptions::PyRuntimeError::new_err(error.to_string()))?;
-        descriptor.structure = reference.interface;
+        *descriptor.mut_structure() = reference.interface;
         // Validate concrete dimensions before invoking dimension-dependent factories.
         let descriptor = TensorDataDescriptor::new(descriptor, reference.name, reference.args)?;
         let tensor = self
@@ -620,7 +620,7 @@ impl SpensorLibrary {
             )
         })?;
         let reference = ExactLibraryReference::new(
-            tensor.descriptor.structure.clone(),
+            tensor.descriptor.structure().clone(),
             name,
             tensor.descriptor_args.clone(),
         )?;
@@ -955,7 +955,10 @@ mod tests {
                 py,
                 ConvertibleToLibraryReference(LibraryReference::Exact(Box::new(reference))),
             )?;
-            assert_ne!(stored.bind(py).borrow().descriptor.expression, Atom::Zero);
+            assert_ne!(
+                stored.bind(py).borrow().descriptor.expression(),
+                &Atom::Zero
+            );
             let expression = stored.bind(py).borrow().expression(py)?;
             let indexed = expression.bind(py).call1(("a", "b", "c"))?;
             assert_eq!(indexed.getattr("rank")?.extract::<usize>()?, 3);
@@ -1014,7 +1017,7 @@ mod tests {
                     .bind(py)
                     .borrow()
                     .descriptor
-                    .structure
+                    .structure()
                     .logical_slots()
                     .into_iter()
                     .map(|slot| slot.rep())
@@ -1031,7 +1034,7 @@ mod tests {
                     .bind(py)
                     .borrow()
                     .descriptor
-                    .structure
+                    .structure()
                     .logical_slots()
                     .into_iter()
                     .map(|slot| slot.rep())
@@ -1106,7 +1109,7 @@ mod tests {
                         let reference =
                             library.__getitem__(py, ConvertibleToLibraryReference(key))?;
                         let reference = reference.bind(py).borrow();
-                        let AtomView::Fun(function) = reference.descriptor.expression.as_view()
+                        let AtomView::Fun(function) = reference.descriptor.expression().as_view()
                         else {
                             panic!("a gamma library reference must remain an atomic tensor")
                         };
@@ -1123,7 +1126,7 @@ mod tests {
                             expected_representations
                         );
                         assert_eq!(
-                            reference.descriptor.structure.logical_slots(),
+                            reference.descriptor.structure().logical_slots(),
                             storage_interface.logical_slots()
                         );
                     }

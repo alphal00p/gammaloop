@@ -996,3 +996,46 @@ fn dual_slot_metrics_remain_tensors_in_products_and_sums() {
         }
     }
 }
+
+#[test]
+fn parser_and_inference_share_serialized_dummy_reservations() {
+    let state = ParseState::<AbstractIndex>::default();
+    let written = AbstractIndex::new_dummy_at(1_000_000);
+    let slot = Minkowski {}
+        .new_slot::<AbstractIndex, _, _>(4, written)
+        .to_atom();
+    state.reserve_indices(slot.as_view());
+    let clone = state.clone();
+    let first = state.next();
+    let second = clone.next();
+    assert_ne!(first.to_atom(), written.to_atom());
+    assert_ne!(second.to_atom(), first.to_atom());
+    let global = state.fresh_index();
+    let another = ParseState::<AbstractIndex>::default().fresh_index();
+    assert_ne!(global.to_atom(), another.to_atom());
+    assert!(clone.reserved_indices.borrow().contains(&global.to_atom()));
+}
+
+#[test]
+fn opaque_leaf_keeps_logical_order_separate_from_component_storage() {
+    let slots = [Minkowski {}.new_slot(4, 31), Minkowski {}.new_slot(4, 7)];
+    let source = FunctionBuilder::new(tensor_symbol!(logical_network_leaf))
+        .add_args(slots.map(|slot| slot.to_atom()))
+        .finish();
+    let network = source
+        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+        .unwrap();
+    let node = network.graph.graph.node_id(network.graph.head());
+    assert_eq!(
+        network.graph.logical_slots(node).unwrap(),
+        slots.map(|slot| slot.to_lib())
+    );
+    assert_ne!(
+        network.graph.slots(node),
+        network.graph.logical_slots(node).unwrap()
+    );
+    assert_eq!(
+        network.graph.logical_slot_order.len(),
+        network.graph.graph.n_hedges()
+    );
+}

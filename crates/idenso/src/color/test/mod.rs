@@ -1775,10 +1775,25 @@ mod failing {
         );
         let amplitude_color_left = amplitude_color.wrap_indices(symbol!("spenso::left"));
 
-        // return;
-        let amplitude_color_right = amplitude_color
+        // Network dimensions are integers or symbols. Previously the compound
+        // adjoint dimension was silently discarded as metadata by the parser.
+        // Admit it explicitly for index tooling, then restore the original algebra.
+        let adjoint_dimension = Atom::var(symbol!("matrix_element_adjoint_dimension"));
+        let dimension_value = parse_lit!(Nc ^ 2 - 1, default_namespace = "spenso");
+        let indexed_color = amplitude_color
+            .replace(dimension_value.clone())
+            .with(adjoint_dimension.clone());
+        assert_eq!(
+            indexed_color
+                .replace(adjoint_dimension.clone())
+                .with(dimension_value.clone()),
+            amplitude_color
+        );
+        let amplitude_color_right = indexed_color
             .dirac_adjoint::<AbstractIndex>(false)
             .unwrap()
+            .replace(adjoint_dimension.clone())
+            .with(dimension_value.clone())
             .wrap_indices(symbol!("spenso::right"));
         println!("left{amplitude_color_left}");
 
@@ -1831,18 +1846,28 @@ mod failing {
 
         println!("Amplitude right:\n{}", amplitude_right.factor());
 
+        // The full amplitude needs the same explicit dimension admission as
+        // its color-only part above. Reuse the checked result for both consumers.
+        let indexed_right = amplitude_right
+            .replace(dimension_value.clone())
+            .with(adjoint_dimension.clone());
+        assert_eq!(
+            indexed_right
+                .replace(adjoint_dimension.clone())
+                .with(dimension_value.clone()),
+            amplitude_right
+        );
+        let amplitude_right_adjoint = indexed_right
+            .dirac_adjoint::<AbstractIndex>(false)
+            .unwrap()
+            .replace(adjoint_dimension)
+            .with(dimension_value);
         println!(
             "Amplitude right conj:\n{}",
-            amplitude_right
-                .dirac_adjoint::<AbstractIndex>(false)
-                .unwrap()
-                .factor()
+            amplitude_right_adjoint.factor()
         );
 
-        let mut amp_squared = amplitude_left
-            * amplitude_right
-                .dirac_adjoint::<AbstractIndex>(false)
-                .unwrap();
+        let mut amp_squared = amplitude_left * amplitude_right_adjoint;
 
         println!("Amplitude squared:\n{}", amp_squared.factor());
 
@@ -1909,15 +1934,32 @@ mod failing {
 
         let (amplitude, tgt) = colored_matrix_element();
 
-        let amplitude_left = amplitude
+        // Keep the supported symbolic-dimension boundary explicit, without
+        // losing the original Nc dependence or omitting adjoint ports.
+        let adjoint_dimension = Atom::var(symbol!("matrix_element_two_adjoint_dimension"));
+        let dimension_value = parse_lit!(Nc ^ 2 - 1, default_namespace = "spenso");
+        let indexed_amplitude = amplitude
+            .replace(dimension_value.clone())
+            .with(adjoint_dimension.clone());
+        assert_eq!(
+            indexed_amplitude
+                .replace(adjoint_dimension.clone())
+                .with(dimension_value.clone()),
+            amplitude
+        );
+        let amplitude_left = indexed_amplitude
             .wrap_dummies::<AbstractIndex>(symbol!("spenso::left"))
-            .unwrap();
+            .unwrap()
+            .replace(adjoint_dimension.clone())
+            .with(dimension_value.clone());
 
         println!("Amplitude left:\n{}", amplitude_left.collect_factors());
 
-        let amplitude_right = amplitude
+        let amplitude_right = indexed_amplitude
             .wrap_dummies::<AbstractIndex>(symbol!("spenso::right"))
-            .unwrap();
+            .unwrap()
+            .replace(adjoint_dimension)
+            .with(dimension_value);
 
         println!("Amplitude right:\n{}", amplitude_right.conj().factor());
 

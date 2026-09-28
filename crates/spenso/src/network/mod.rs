@@ -2182,6 +2182,220 @@ impl<S: TensorScalarStoreMapping, K: Clone, FK: Clone, Aind: AbsInd> TensorScala
     }
 }
 
+impl<T, Sc, K: Clone + Display + Debug, FK: Clone + Display + Debug, Aind: AbsInd>
+    Network<NetworkStore<T, Sc>, K, FK, Aind>
+{
+    /// Map stored occurrences against the graph's current storage ports.
+    /// Untouched aliases reuse one mapped value. A mapper may canonicalize axes;
+    /// its exact surviving slot multiset is checked and the graph records that
+    /// storage permutation without changing its logical-position witness.
+    /// The final callback argument lists source storage positions in logical
+    /// order, or is unavailable after generic component execution.
+    #[allow(clippy::type_complexity, clippy::result_large_err)]
+    pub fn map_occurrences<U, V>(
+        &self,
+        scalar_map: impl FnMut(&Sc) -> Result<U, TensorNetworkError<K, FK>>,
+        mut tensor_map: impl FnMut(
+            &T,
+            &[(usize, LibrarySlot<Aind>, Option<&Sc>)],
+            Option<&[usize]>,
+        ) -> Result<V, TensorNetworkError<K, FK>>,
+    ) -> Result<Network<NetworkStore<V, U>, K, FK, Aind>, TensorNetworkError<K, FK>>
+    where
+        T: HasStructure<Structure: TensorStructure<Slot = LibrarySlot<Aind>>>,
+        V: HasStructure<Structure: TensorStructure<Slot = LibrarySlot<Aind>>>,
+    {
+        let mut nodes = Vec::new();
+        for (node, mut crown, data) in self.graph.graph.iter_nodes() {
+            if !matches!(data, NetworkNode::Leaf(NetworkLeaf::LocalTensor(_)))
+                && crown.any(|hedge| {
+                    matches!(self.graph.graph[[&hedge]], NetworkEdge::BoundPort { .. })
+                })
+            {
+                return Err(TensorNetworkError::Other(eyre!(
+                    "bound ports require a local tensor occurrence before materialization"
+                )));
+            }
+            if matches!(data, NetworkNode::Leaf(_)) {
+                nodes.push(node);
+            }
+        }
+        let mut mapped = self.map_ref(|scalar| scalar, |tensor| tensor);
+        let mut tensors: Vec<V> = Vec::new();
+        let mut untouched: Vec<Option<(Option<Vec<usize>>, usize)>> =
+            vec![None; self.store.tensors.len()];
+        let mut map_tensor = |index: usize,
+                              ports: &[(usize, LibrarySlot<Aind>, Option<&Sc>)],
+                              logical: Option<&[usize]>| {
+            let source = &self.store.tensors[index];
+            let source_slots = source.structure().external_structure();
+            // Storage ordinals retain endpoint representation even when sewing
+            // has merged a dual pair into one shared edge payload.
+            let ports = ports
+                .iter()
+                .map(|(position, slot, bound)| {
+                    let original = source_slots.get(*position).ok_or_else(|| {
+                        TensorNetworkError::Other(eyre!(
+                            "occurrence port is outside its stored tensor"
+                        ))
+                    })?;
+                    if original.rep() != slot.rep() && !original.rep().matches(&slot.rep()) {
+                        return Err(TensorNetworkError::Other(eyre!(
+                            "occurrence changed a port representation"
+                        )));
+                    }
+                    Ok((*position, original.rep().slot(slot.aind()), *bound))
+                })
+                .collect::<Result<Vec<_>, TensorNetworkError<K, FK>>>()?;
+            let expected = ports
+                .iter()
+                .filter_map(|(_, slot, bound)| bound.is_none().then_some(*slot))
+                .collect::<Vec<_>>();
+            let reusable = ports.iter().all(|(_, _, value)| value.is_none())
+                && source
+                    .structure()
+                    .external_structure_iter()
+                    .eq(ports.iter().map(|(_, slot, _)| *slot));
+            if reusable
+                && let Some((previous, mapped)) = &untouched[index]
+                && previous.as_deref() == logical
+            {
+                return Ok((
+                    *mapped,
+                    tensors[*mapped].structure().external_structure(),
+                    expected,
+                ));
+            }
+            let value = tensor_map(source, &ports, logical)?;
+            let slots = value.structure().external_structure();
+            let mut sorted_expected = expected.clone();
+            let mut actual = slots.clone();
+            actual.sort();
+            sorted_expected.sort();
+            if actual != sorted_expected {
+                return Err(TensorNetworkError::Other(eyre!(
+                    "occurrence materialization changed the surviving ports"
+                )));
+            }
+            let mapped = tensors.len();
+            tensors.push(value);
+            if reusable {
+                untouched[index] = Some((logical.map(<[usize]>::to_vec), mapped));
+            }
+            Ok::<_, TensorNetworkError<K, FK>>((mapped, slots, expected))
+        };
+        for node in nodes {
+            let NetworkNode::Leaf(mut leaf) = self.graph.graph[node].clone() else {
+                unreachable!()
+            };
+            let ports = self
+                .graph
+                .port_bindings(node)
+                .into_iter()
+                .map(|(port, slot, value)| {
+                    (
+                        port,
+                        slot,
+                        value.map(|value| self.store.get_scalar_ref(value)),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let logical = self.graph.logical_port_order(node).ok();
+            let mut references = Vec::new();
+            leaf.map_tensor_refs(|index| {
+                references.push(index);
+                index
+            });
+            let mut remapped = Vec::with_capacity(references.len());
+            let mut storage_order = None;
+            let mut source_order = None;
+            for index in references {
+                let (index, slots, source) = map_tensor(index, &ports, logical.as_deref())?;
+                if let Some(expected) = &storage_order
+                    && expected != &slots
+                {
+                    return Err(TensorNetworkError::Other(eyre!(
+                        "sum occurrences produced different storage orders"
+                    )));
+                }
+                if let Some(expected) = &source_order
+                    && expected != &source
+                {
+                    return Err(TensorNetworkError::Other(eyre!(
+                        "sum occurrences have different source storage orders"
+                    )));
+                }
+                source_order = Some(source);
+                storage_order = Some(slots);
+                remapped.push(index);
+            }
+            let mut remapped = remapped.into_iter();
+            leaf.map_tensor_refs(|_| remapped.next().unwrap());
+            if let Some(slots) = storage_order {
+                mapped
+                    .graph
+                    .set_tensor_slot_order(node, &source_order.unwrap(), &slots)?;
+            }
+            mapped.graph.graph[node] = NetworkNode::Leaf(leaf);
+        }
+        if mapped.graph.has_bound_ports() {
+            mapped.graph.clear_bound_ports();
+        }
+        let store = mapped.store.map_result(scalar_map, Ok)?;
+        Ok(Network {
+            state: mapped.graph.state(),
+            graph: mapped.graph,
+            store: NetworkStore {
+                tensors,
+                scalar: store.scalar,
+                scalar_aliases: store.scalar_aliases,
+            },
+        })
+    }
+
+    /// Apply one simultaneous external-port assignment to graph incidence and
+    /// stored component axes. Repeated references to a changed tensor are mapped
+    /// by occurrence; unrelated contractions with equal labels remain untouched.
+    #[allow(clippy::result_large_err)]
+    pub fn reindex_ports(
+        mut self,
+        replacements: &[(LibrarySlot<Aind>, LibrarySlot<Aind>)],
+    ) -> Result<Self, TensorNetworkError<K, FK>>
+    where
+        Sc: Clone,
+        T: Clone
+            + HasStructure<Structure: TensorStructure<Slot = LibrarySlot<Aind>>>
+            + TensorStructure<Slot = LibrarySlot<Aind>, Indexed = T>
+            + ApplyPendingIndexPermutation<Output = T>,
+    {
+        if replacements.iter().all(|(from, to)| from == to) {
+            return Ok(self);
+        }
+        self.graph.relabel_dangling_slots(replacements)?;
+        self.map_occurrences(
+            |scalar| Ok(scalar.clone()),
+            |tensor, ports, _logical| {
+                if ports.iter().any(|(_, _, bound)| bound.is_some()) {
+                    return Err(TensorNetworkError::Other(eyre!(
+                        "materialize bound component ports before reindexing"
+                    )));
+                }
+                if tensor
+                    .external_structure_iter()
+                    .eq(ports.iter().map(|(_, slot, _)| *slot))
+                {
+                    return Ok(tensor.clone());
+                }
+                let indices = ports
+                    .iter()
+                    .map(|(_, slot, _)| slot.aind())
+                    .collect::<Vec<_>>();
+                Ok(tensor.clone().reindex_storage(&indices)?.apply())
+            },
+        )
+    }
+}
+
 impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Default for Network<S, K, FK, Aind> {
     fn default() -> Self {
         Self::one()
@@ -4806,6 +5020,11 @@ where
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         Sc: Clone,
     {
+        if self.graph.has_bound_ports() {
+            return Err(
+                eyre::eyre!("materialize bound tensor ports before component execution").into(),
+            );
+        }
         {
             let _span = profile::span(Timer::MergeOps);
             profile::bump(Counter::MergeOps, 1);
@@ -4832,6 +5051,7 @@ where
             };
             if let Some(leaf) = materialized {
                 self.graph.graph[root] = NetworkNode::Leaf(leaf);
+                self.graph.invalidate_logical_layout(root);
             }
         }
         self.store.retain_graph_tensors(&mut self.graph);
@@ -5060,6 +5280,11 @@ where
         Sc: Clone + Send + Sync,
         Aind: Send + Sync,
     {
+        if self.graph.has_bound_ports() {
+            return Err(
+                eyre::eyre!("materialize bound tensor ports before component execution").into(),
+            );
+        }
         {
             let _span = profile::span(Timer::MergeOps);
             profile::bump(Counter::MergeOps, 1);
@@ -5086,6 +5311,7 @@ where
             };
             if let Some(leaf) = materialized {
                 self.graph.graph[root] = NetworkNode::Leaf(leaf);
+                self.graph.invalidate_logical_layout(root);
             }
         }
         self.store.retain_graph_tensors(&mut self.graph);

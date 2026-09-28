@@ -383,8 +383,8 @@ struct IndexAliases {
 impl IndexAliases {
     fn for_descriptor(descriptor: &SymbolicTensor<PartialStructure>, style: &str) -> Self {
         let mut bundle = FunctionBuilder::new(spenso::structure::abstract_index::AIND_SYMBOLS.aind)
-            .add_arg(&descriptor.expression);
-        for slot in descriptor.structure.logical_slots() {
+            .add_arg(descriptor.expression());
+        for slot in descriptor.structure().logical_slots() {
             bundle = bundle.add_arg(composition::port_atom(slot));
         }
         Self::for_atom(&bundle.finish(), style)
@@ -1147,7 +1147,7 @@ fn format_tensor_interface(
     let aliases = IndexAliases::for_descriptor(&tensor.descriptor, &settings.index_style);
     tensor
         .descriptor
-        .structure
+        .structure()
         .logical_slots()
         .into_iter()
         .map(composition::port_atom)
@@ -1235,7 +1235,7 @@ impl<'a> ConcreteTensorView<'a> {
     ) -> Option<Self> {
         Some(Self {
             tensor,
-            layout: crate::tensor_data_layout(&tensor.descriptor.structure).ok()?,
+            layout: crate::tensor_data_layout(tensor.descriptor.structure()).ok()?,
             mode,
             settings,
         })
@@ -1691,7 +1691,7 @@ fn format_tensor_interface_rows(
     let mut top = Vec::new();
     let mut bottom = Vec::new();
     let aliases = IndexAliases::for_descriptor(&tensor.descriptor, &settings.index_style);
-    for slot in tensor.descriptor.structure.logical_slots() {
+    for slot in tensor.descriptor.structure().logical_slots() {
         let representation = slot.rep_name();
         let row = representation
             .metadata()
@@ -2017,7 +2017,7 @@ pub(crate) fn concrete_tensor_to_html(
     notation_source: Option<&str>,
 ) -> PyResult<String> {
     if settings.tensor_view == "interactive"
-        && !tensor.descriptor.structure.logical_slots().is_empty()
+        && !tensor.descriptor.structure().logical_slots().is_empty()
     {
         return explorer::to_html(py, tensor, settings, notation_source);
     }

@@ -737,6 +737,7 @@ impl<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool>
                     } else {
                         tensor.expression.normalize_dots() == tensor.expression
                     };
+                tensor.invalidate_proofs();
                 tensor.expression = if shortcut {
                     if EXPANDSUMS {
                         tensor.expression.expand_num()
@@ -1101,6 +1102,7 @@ fn finish_contract<
     let trace = trace_finish_contracts();
     if recurse_result {
         let start = trace.then(Instant::now);
+        result.invalidate_proofs();
         result.expression =
             recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&result.expression)?;
         if let Some(start) = start {
@@ -1113,6 +1115,7 @@ fn finish_contract<
         }
     }
     let start = trace.then(Instant::now);
+    result.invalidate_proofs();
     result.expression = result.expression.normalize_dots();
     if validate_result_interface {
         result
@@ -1175,6 +1178,7 @@ fn contract_metric_into_tensor<Aind: AbsInd + ParseableAind>(
     let contracted_tensor_slot = tensor.structure.get_slot(tensor_pos)?;
 
     Some(SymbolicTensor {
+        proofs: Default::default(),
         structure,
         is_composite: tensor.is_composite,
         is_metric: tensor.is_metric,
@@ -1211,6 +1215,7 @@ fn contract_rank_one_into_tensor<Aind: AbsInd + ParseableAind>(
         .with(stripped);
 
     Some(SymbolicTensor {
+        proofs: Default::default(),
         structure,
         is_composite: true,
         is_metric: tensor.is_metric,
@@ -1307,6 +1312,7 @@ impl<
 
             return finish_contract::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(
                 SymbolicTensor {
+                    proofs: Default::default(),
                     structure,
                     is_composite: true,
                     is_metric: false,
@@ -1322,6 +1328,7 @@ impl<
         // their existing recursive callback schedule above.
         if sexpr.as_view().is_zero() || oexpr.as_view().is_zero() {
             return Ok(Self {
+                proofs: Default::default(),
                 structure,
                 is_composite: true,
                 is_metric: false,
@@ -1480,6 +1487,7 @@ impl<
 
         finish_contract::<EXPANDSUMS, RECURSE, DEPTH_FIRST, Aind>(
             Self {
+                proofs: Default::default(),
                 structure,
                 is_composite: true,
                 is_metric: false,
@@ -1708,6 +1716,7 @@ mod tests {
         let expression = FunctionBuilder::new(head).add_arg(&slot).finish();
         let port = LibrarySlot::<WrappedIndex>::try_from(slot.as_view()).unwrap();
         let value = SymbolicTensor {
+            proofs: Default::default(),
             structure: OrderedStructure::new(vec![port]).into_canonical(),
             expression,
             is_composite: false,
@@ -1756,6 +1765,7 @@ mod tests {
             .add_arg(second.to_atom())
             .finish();
         let value = SymbolicTensor {
+            proofs: Default::default(),
             structure: OrderedStructure::new(vec![first, second]).into_canonical(),
             expression,
             is_composite: false,
