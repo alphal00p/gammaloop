@@ -273,7 +273,9 @@ impl<'a> Direct3dApproximation<'a> {
         let FrozenActiveCt {
             active,
             frozen_integrands,
-        } = self.localizer.localize(expr, self.graph, integrated_node)?;
+        } = self
+            .localizer
+            .localize(expr, self.graph, integrated_node, None)?;
         let branches = DirectResidueBranches::from_transient(&active)?;
         Ok((branches, frozen_integrands))
     }

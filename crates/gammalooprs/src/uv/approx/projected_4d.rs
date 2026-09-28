@@ -10,7 +10,7 @@ use eyre::eyre;
 use linnet::half_edge::subgraph::SubSetLike;
 use symbolica::{
     atom::{Atom, AtomCore, Indeterminate},
-    id::Replacement,
+    domains::rational::Rational,
     symbol,
 };
 use three_dimensional_reps::CffGenerationContext;
@@ -26,9 +26,9 @@ use crate::{
     numerator::energy_degree::{EnergyPowerAnalyzer, EnergyPowerCapMap},
     utils::GS,
     uv::{
-        Integrands, UVgenerationSettings,
+        Integrands, ParametricIntegrandRow, ParametricIntegrandTerm, UVgenerationSettings,
         approx::{
-            direct_3d::DirectResidueBranches,
+            direct_3d::{DirectResidueBranches, DirectResidueKey},
             local_3d::Localizer,
             local_4d::{CanonicalUvSector, FourDSector, Local4dCts},
         },
@@ -276,7 +276,11 @@ impl Localizer<'_> {
                 raw_reports,
                 term.numerator.clone(),
                 Vec::<Atom>::new(),
-                vec![(residual_factor, Vec::<Atom>::new())],
+                vec![(
+                    residual_factor,
+                    Vec::<Atom>::new(),
+                    Vec::<DirectResidueKey>::new(),
+                )],
             ));
         }
         // Each component still owns its exact source and occurrence assignment.
@@ -369,30 +373,36 @@ impl Localizer<'_> {
                         )
                     })?;
                 let composition_started = Instant::now();
-                let mut next_rows = BTreeMap::<Vec<Atom>, Atom>::new();
-                for (carrier, arguments) in std::mem::take(rows) {
-                    for (orientation, incoming) in cff_term.orientations.iter().zip(&argument_rows)
+                let mut next_rows = Vec::new();
+                for (carrier, arguments, keys) in std::mem::take(rows) {
+                    for (row_index, (orientation, incoming)) in
+                        cff_term.orientations.iter().zip(&argument_rows).enumerate()
                     {
                         let arguments = arguments
                             .iter()
                             .cloned()
                             .chain(incoming.iter().cloned())
                             .collect();
-                        *next_rows.entry(arguments).or_insert(Atom::Zero) +=
-                            &carrier * &orientation.expression * &production_prefactor;
+                        let weight = &carrier * &orientation.expression * &production_prefactor;
+                        if weight.is_zero() {
+                            continue;
+                        }
+                        let mut source_keys = keys.clone();
+                        source_keys.push(DirectResidueKey::source(
+                            orientation
+                                .production_orientation_id
+                                .unwrap_or(crate::cff::expression::OrientationID(row_index)),
+                            orientation.orientation.edge_energy_map.clone(),
+                        ));
+                        next_rows.push((weight, arguments, source_keys));
                     }
                 }
-                *rows = next_rows
-                    .into_iter()
-                    .filter_map(|(arguments, carrier)| {
-                        (!carrier.is_zero()).then_some((carrier, arguments))
-                    })
-                    .collect();
+                *rows = next_rows;
                 *numerator = mapped;
                 parameters.extend(new_parameters);
-                // Equal complete argument rows share one summed carrier. Other
-                // Taylor families remain separate ordinary bodies; adding them
-                // must not create another numerator copy per residue sample.
+                // Keep the carrier tied to its complete native map tuple until
+                // physical cut selection finishes. Equal argument rows can be
+                // coalesced only by the final evaluator lowering.
                 composition_time += composition_started.elapsed();
             }
             let composition_started = Instant::now();
@@ -428,7 +438,7 @@ impl Localizer<'_> {
                             vec![EnergyPowerCapMap::default(); reports.len()],
                             numerator,
                             parameters,
-                            BTreeMap::<Vec<Atom>, Atom>::new(),
+                            Vec::<(Atom, Vec<Atom>, Vec<DirectResidueKey>)>::new(),
                         )
                     });
                 for (combined, report) in combined_reports.iter_mut().zip(reports) {
@@ -436,30 +446,9 @@ impl Localizer<'_> {
                 }
                 // Merge only exact body/formal equality. Distinct argument
                 // rows, including maps with the same physical host, survive.
-                for (carrier, arguments) in rows {
-                    *combined_rows.entry(arguments).or_insert(Atom::Zero) += carrier;
-                }
+                combined_rows.extend(rows);
             }
-            terms = remaining
-                .into_values()
-                .map(
-                    |(denominators, classes, powers, reports, numerator, parameters, rows)| {
-                        (
-                            denominators,
-                            classes,
-                            powers,
-                            reports,
-                            numerator,
-                            parameters,
-                            rows.into_iter()
-                                .filter_map(|(arguments, carrier)| {
-                                    (!carrier.is_zero()).then_some((carrier, arguments))
-                                })
-                                .collect(),
-                        )
-                    },
-                )
-                .collect();
+            terms = remaining.into_values().collect();
             composition_time += composition_started.elapsed();
             debug_tags!(#generation, #uv, #local, #four_d, #profile;
                 stage = "component_composition",
@@ -483,8 +472,7 @@ impl Localizer<'_> {
         }
 
         let composition_started = Instant::now();
-        let mut active = Atom::Zero;
-        let mut definitions = Vec::new();
+        let mut parametric_terms = Vec::new();
         for (_, _, _, _, numerator, parameters, rows) in terms {
             if rows.is_empty() || numerator.is_zero() {
                 continue;
@@ -515,28 +503,37 @@ impl Localizer<'_> {
                     .map_err(|error| eyre!(error))?,
                 tags: vec![scope],
             });
-            for (carrier, arguments) in rows {
-                let arguments = arguments
-                    .into_iter()
-                    .zip(&used)
-                    .filter_map(|(argument, used)| used.then_some(argument));
-                let call = entry.lhs.replace_multiple(
-                    parameters
-                        .iter()
-                        .zip(arguments)
-                        .map(|(parameter, value)| Replacement::new(parameter.to_pattern(), value)),
-                );
-                active += carrier * call;
-            }
-            definitions.push(entry);
+            let rows = rows
+                .into_iter()
+                .map(|(carrier, arguments, source_keys)| {
+                    let coefficients = arguments
+                        .into_iter()
+                        .zip(&used)
+                        .filter_map(|(argument, used)| used.then_some(argument))
+                        .map(|argument| {
+                            Rational::try_from(argument.as_view()).map_err(|error| eyre!(error))
+                        })
+                        .collect::<Result<_>>()?;
+                    Ok(ParametricIntegrandRow {
+                        coefficients,
+                        carrier,
+                        source_keys,
+                    })
+                })
+                .collect::<Result<_>>()?;
+            parametric_terms.push((
+                CutCFFIndex::new_all_none(),
+                ParametricIntegrandTerm::new(entry, rows)?,
+            ));
         }
         debug_tags!(#generation, #uv, #local, #four_d, #profile;
             stage = "sector_composition",
-            numerator_families = definitions.len(),
+            numerator_families = parametric_terms.len(),
             elapsed_ms = composition_started.elapsed().as_secs_f64() * 1000.0,
             "Composed factorized UV sector coefficient"
         );
-        Integrands::from_iter([(CutCFFIndex::new_all_none(), active)]).with_numerators(definitions)
+        Integrands::from_iter([(CutCFFIndex::new_all_none(), Atom::Zero)])
+            .with_parametric_terms(parametric_terms)
     }
 }
 
@@ -669,7 +666,10 @@ mod tests {
         involution::EdgeIndex,
         subgraph::{InternalSubGraph, SubSetOps},
     };
-    use symbolica::atom::{AtomCore, FunctionBuilder};
+    use symbolica::{
+        atom::{AtomCore, FunctionBuilder},
+        id::Replacement,
+    };
 
     #[test]
     fn ordinary_ltd_taylor_projection_does_not_request_degree_reports() -> Result<()> {
@@ -787,32 +787,37 @@ mod tests {
                 .contains_symbol(symbol!("gammalooprs::uv::numerator_family"))
         );
         assert!(!entry.args.is_empty());
-        let root = projected.iter().next().unwrap().1;
         assert!(
-            !root.contains_symbol(common),
-            "complete graph factors must live only in the shared body"
+            projected
+                .atom(&CutCFFIndex::new_all_none())
+                .unwrap()
+                .is_zero(),
+            "no specialized numerator calls may remain in the scalar lane"
         );
+        let terms = projected.parametric_terms(&CutCFFIndex::new_all_none());
+        assert_eq!(terms.len(), 1);
+        assert!(Arc::ptr_eq(&terms[0].numerator, entry));
         let opaque_numerator = symbol!("projected_parametric_test::mapped_numerator");
-        let replacements = [entry.replacement()];
-        let mut calls = 0;
-        let actual = root.replace_map(|view, _, out| {
-            if let symbolica::atom::AtomView::Fun(call) = view
-                && call.get_symbol() == symbol!("gammalooprs::uv::numerator_family")
-            {
-                calls += 1;
-                assert!(
-                    call.iter()
-                        .skip(entry.tags.len())
-                        .all(|argument| { matches!(argument, symbolica::atom::AtomView::Num(_)) })
-                );
-                **out = symbolica::function!(
-                    opaque_numerator,
-                    view.replace_multiple(&replacements).collect_factors()
-                );
-            }
-        });
+        let parameters = entry
+            .args
+            .iter()
+            .cloned()
+            .map(Atom::from)
+            .collect::<Vec<_>>();
+        let actual = Atom::add_many(terms[0].rows.iter().map(|row| {
+            assert!(!row.carrier.contains_symbol(common));
+            assert!(!row.source_keys.is_empty());
+            let body = entry
+                .rhs
+                .replace_multiple(parameters.iter().zip(&row.coefficients).map(
+                    |(parameter, value)| {
+                        Replacement::new(parameter.to_pattern(), Atom::num(value.clone()))
+                    },
+                ));
+            &row.carrier * symbolica::function!(opaque_numerator, body.collect_factors())
+        }));
         assert!(
-            calls > 1,
+            terms[0].rows.len() > 1,
             "the fixture must share its numerator across distinct residue samples"
         );
         // The fixture's two unit-mass lines have opposite loop momenta,

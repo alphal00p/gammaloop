@@ -7,9 +7,11 @@ use crate::{
     debug_tags,
     graph::Graph,
     integrands::process::param_builder::FnMapEntry,
+    numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
     utils::{GS, W_},
     uv::{
-        Integrands, UVgenerationSettings, UltravioletGraph,
+        Integrands, ParametricIntegrandRow, ParametricIntegrandTerm, UVgenerationSettings,
+        UltravioletGraph,
         approx::{
             ForestNodeLike,
             direct_3d::{Direct3dCts, DirectResidueBranches},
@@ -23,6 +25,7 @@ use crate::{
 use color_eyre::Result;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{
+    IndexTooling,
     color::{ColorSimplifier, ColorSimplifySettings},
     shorthands::metric::MetricSimplifier,
 };
@@ -30,6 +33,7 @@ use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use spenso::network::parsing::{AtomStructureExt, StrictTensorFilter};
 use symbolica::{
     atom::{Atom, AtomCore, AtomType, AtomView, Indeterminate, Symbol},
+    domains::rational::Rational,
     function,
     id::Replacement,
     symbol,
@@ -91,12 +95,16 @@ impl FinalIntegrands {
         let mut axes = None;
         let mut terms = BTreeMap::<_, Vec<Atom>>::new();
         let mut numerators = Vec::new();
+        let mut parametric_terms = Vec::new();
         for source in std::iter::once(self).chain(others) {
             eyre::ensure!(
                 source.representation == representation,
                 "cannot sum final integrands from different representations"
             );
             numerators.extend(source.integrands.numerators);
+            for (index, rows) in source.integrands.parametric_terms {
+                parametric_terms.extend(rows.into_iter().map(|term| (index, term)));
+            }
             for (index, atom) in source.integrands.atoms {
                 let orders = [
                     index.left_threshold_order,
@@ -120,7 +128,9 @@ impl FinalIntegrands {
             .map(|(index, terms)| (index, terms.into_iter().sum()))
             .collect();
         Ok(Self {
-            integrands: integrands.with_numerators(numerators)?,
+            integrands: integrands
+                .with_numerators(numerators)?
+                .with_parametric_terms(parametric_terms)?,
             representation,
         })
     }
@@ -267,6 +277,7 @@ impl FinalIntegrands {
 pub(crate) struct FinalIntegrandBuilder<'a> {
     localizer: Localizer<'a>,
     marker: UvMarker,
+    retain_rows: bool,
 }
 
 impl<'a> FinalIntegrandBuilder<'a> {
@@ -274,6 +285,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
         Self {
             localizer,
             marker: UvMarker::new(settings),
+            retain_rows: settings.local_uv_cts_from_expanded_4d_integrands,
         }
     }
 
@@ -325,6 +337,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 &integrated.physical_finite_counterterm_atom(),
                 graph,
                 current,
+                self.retain_rows.then_some(&resnum),
             )?
             .combine()?;
         let localized_integrated = DirectResidueBranches::from_transient(&localized_integrated)?
@@ -332,14 +345,27 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let localized_local = local_terms
             .branches()?
             .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
-        let final_branches = localized_integrated
-            .zip_add(&localized_local)?
-            .multiply_key_mapped(
+        let final_branches = if self.retain_rows {
+            // The integrated addback already owns its complete generic product.
+            // Only the local term still needs the final cograph numerator.
+            localized_integrated.zip_add(&localized_local.multiply_key_mapped(
                 self.localizer.orientation,
                 graph,
                 &resnum,
                 DirectResidueBranches::numerator_scope(),
-            )?;
+                true,
+            )?)?
+        } else {
+            localized_integrated
+                .zip_add(&localized_local)?
+                .multiply_key_mapped(
+                    self.localizer.orientation,
+                    graph,
+                    &resnum,
+                    DirectResidueBranches::numerator_scope(),
+                    false,
+                )?
+        };
 
         // `DirectResidueBranches` is the sparse, factorization-preserving
         // representation of sum_k sigma(k) I_k while the Taylor forest is
@@ -437,7 +463,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .collect::<Vec<_>>();
         let mut selector_free: Option<Vec<Integrands>> = None;
         for sector in active_sectors {
-            if sector.coefficient.iter().all(|(_, atom)| atom.is_zero()) {
+            if sector.coefficient.is_zero() {
                 // A disabled integrated prefix can deliberately retain a
                 // typed zero sector for later forest replay. Preserve all
                 // allowed cut orders without asking the outer CFF to resolve
@@ -456,54 +482,48 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     "nonzero projected coefficient has no shared numerator family"
                 ));
             }
-            for entry in sector.coefficient.numerators() {
+            for term in sector
+                .coefficient
+                .parametric_terms(&crate::cff::CutCFFIndex::new_all_none())
+            {
+                let entry = &term.numerator;
                 let weight_scope = DirectResidueBranches::numerator_scope().1;
-                let mut weights = BTreeMap::<Atom, Atom>::new();
-                let carrier =
-                    sector
-                        .coefficient
+                let weights = term
+                    .rows
+                    .iter()
+                    .enumerate()
+                    .map(|(index, _)| {
+                        coefficient.call_args([weight_scope.clone(), Atom::num(index)])
+                    })
+                    .collect::<Vec<_>>();
+                let carrier = Atom::add_many(
+                    term.rows
                         .iter()
-                        .try_fold(Atom::Zero, |sum, (index, root)| {
-                            if *index != crate::cff::CutCFFIndex::new_all_none() {
-                                return Err(eyre::eyre!(
-                                    "projected child coefficient has a production cut key"
-                                ));
-                            }
-                            let carrier = root.replace_map(|view, _, output| {
-                                if let AtomView::Fun(call) = view
-                                    && call.get_symbol() == family
-                                {
-                                    if call.get_nargs() > 0
-                                        && call.get(0) == entry.tags[0].as_view()
-                                    {
-                                        let next = weights.len();
-                                        **output = weights
-                                            .entry(view.to_owned())
-                                            .or_insert_with(|| {
-                                                coefficient.call_args([
-                                                    weight_scope.clone(),
-                                                    Atom::num(next),
-                                                ])
-                                            })
-                                            .clone();
-                                    } else {
-                                        **output = Atom::Zero;
-                                    }
-                                }
-                            });
-                            Ok(sum + carrier)
-                        })?;
+                        .zip(&weights)
+                        .map(|(row, weight)| &row.carrier * weight),
+                );
                 if carrier.is_zero() {
                     continue;
                 }
                 // Plan one product while retaining its two ordinary factors.
+                // Private contractions belong to each child/cograph body;
+                // their free slots retain the physical graph interface.
+                let numerator = [&entry.rhs, &resnum]
+                    .into_iter()
+                    .map(|body| {
+                        let interface = body.list_dangling::<Aind>()?.into_iter().collect();
+                        Ok(body.freshen_private_indices(&interface, || {
+                            DirectResidueBranches::numerator_scope().1
+                        }))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
                 // The chosen occurrence-local route is replayed separately on
                 // the body and the small scalar carrier, never on expanded rows.
                 let (mut factors, localized) = localizer
                     .projected_cff_from_soft_momentum_proposals(
                         graph,
                         current.subgraph(),
-                        &[&entry.rhs * &resnum, carrier],
+                        &[Atom::mul_many(numerator), carrier],
                         active_edges.iter().copied(),
                         CffGenerationContext::EmbeddedCffFactor,
                     )?;
@@ -560,43 +580,56 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     localized.iter_keys().zip(rows)
                 {
                     eyre::ensure!(*key == row_key, "prepared outer residue order changed");
-                    let replacements = weights
+                    let mapped_carrier =
+                        key.map_numerator(localizer.orientation, graph, &carrier)?;
+                    let outer_coefficients = outer_arguments
                         .iter()
-                        .map(|(call, weight)| {
-                            let AtomView::Fun(call) = call.as_view() else {
-                                unreachable!()
-                            };
-                            let arguments = call
-                                .iter()
-                                .skip(entry.tags.len())
-                                .map(|argument| argument.to_owned())
-                                .chain(outer_arguments.iter().cloned());
-                            let call = prepared.lhs.replace_multiple(
-                                parameters.iter().zip(arguments).map(|(parameter, value)| {
-                                    Replacement::new(parameter.to_pattern(), value)
+                        .map(|argument| {
+                            Rational::try_from(argument.as_view())
+                                .map_err(|error| eyre::eyre!(error))
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let mut mapped_terms = Vec::new();
+                    for (index, atom) in integrands.iter() {
+                        let mut mapped_rows = Vec::new();
+                        for (row_index, child) in term.rows.iter().enumerate() {
+                            let carrier = mapped_carrier.replace_multiple(
+                                weights.iter().enumerate().map(|(index, weight)| {
+                                    Replacement::new(
+                                        weight.to_pattern(),
+                                        Atom::num(i32::from(index == row_index)),
+                                    )
                                 }),
                             );
-                            Replacement::new(weight.to_pattern(), call)
-                        })
-                        .collect::<Vec<_>>();
-                    let mapped_carrier = key
-                        .map_numerator(localizer.orientation, graph, &carrier)?
-                        .replace_multiple(replacements);
-                    let mapped = integrands
-                        .map(|atom| {
-                            self.marker.prefix(
-                                &full_graph,
-                                current.subgraph(),
-                                &(atom * &mapped_carrier * &sector.frozen_factor),
-                            )
-                        })
-                        .with_numerators(
-                            integrands
-                                .numerators()
-                                .iter()
-                                .cloned()
-                                .chain([Arc::clone(&prepared)]),
-                        )?;
+                            if carrier.is_zero() {
+                                continue;
+                            }
+                            mapped_rows.push(ParametricIntegrandRow {
+                                coefficients: child
+                                    .coefficients
+                                    .iter()
+                                    .chain(&outer_coefficients)
+                                    .cloned()
+                                    .collect(),
+                                carrier: self.marker.prefix(
+                                    &full_graph,
+                                    current.subgraph(),
+                                    &(atom * carrier * &sector.frozen_factor),
+                                ),
+                                source_keys: child
+                                    .source_keys
+                                    .iter()
+                                    .cloned()
+                                    .chain([key.clone()])
+                                    .collect(),
+                            });
+                        }
+                        mapped_terms.push((
+                            *index,
+                            ParametricIntegrandTerm::new(Arc::clone(&prepared), mapped_rows)?,
+                        ));
+                    }
+                    let mapped = integrands.zero_like().with_parametric_terms(mapped_terms)?;
                     selector_free.get_or_insert_with(Vec::new).push(mapped);
                 }
             }
@@ -611,6 +644,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 &integrated.physical_finite_counterterm_atom(),
                 graph,
                 current,
+                Some(&resnum),
             )?
             .combine()?;
         // An empty integrated zero contributes no source map. The typed local
@@ -619,12 +653,6 @@ impl<'a> FinalIntegrandBuilder<'a> {
         if localized_integrated.iter_orientations().next().is_some() {
             let localized_integrated =
                 DirectResidueBranches::from_transient(&localized_integrated)?
-                    .multiply_key_mapped(
-                        self.localizer.orientation,
-                        graph,
-                        &resnum,
-                        DirectResidueBranches::numerator_scope(),
-                    )?
                     .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
             // Both legitimate projected maps have now consumed every still-unmapped
             // numerator factor. Production hosts are mapping metadata only in this
@@ -877,13 +905,16 @@ mod tests {
     fn final_factor_collection_preserves_inactive_singular_branches() -> Result<()> {
         use crate::{
             cff::expression::OrientationID,
+            integrands::evaluation::EvaluationMetaData,
             integrands::process::{
-                evaluators::{EvaluatorStack, GenericEvaluatorFloat},
+                evaluators::{EvaluatorStack, InputParams, SingleOrAllOrientations, SliceMut},
                 param_builder::{ParamBuilder, ParamValuePairs},
             },
             processes::EvaluatorSettings,
+            settings::RuntimeSettings,
             settings::global::CompilationOptimizationLevel,
             utils::F,
+            utils::hyperdual_utils::DualOrNot,
         };
         use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
         use spenso::algebra::complex::Complex;
@@ -921,14 +952,45 @@ mod tests {
                 representation: RepresentationMode::Cff,
             }
             .into_integrands();
-            let finalized = collected.iter().next().unwrap().1;
-            for atom in [&source, finalized] {
-                let (mut stack, _) = EvaluatorStack::new_with_timings(
-                    std::slice::from_ref(atom),
+            let scope = DirectResidueBranches::numerator_scope().1;
+            let entry = Arc::new(FnMapEntry {
+                lhs: function!(symbol!("gammalooprs::uv::numerator_family"), &scope),
+                rhs: numerator.clone(),
+                args: Vec::new(),
+                tags: vec![scope],
+                inlining: Default::default(),
+            });
+            let typed = Integrands::from_iter([(CutCFFIndex::new_all_none(), Atom::Zero)])
+                .with_parametric_terms([(
+                    CutCFFIndex::new_all_none(),
+                    ParametricIntegrandTerm::new(
+                        entry,
+                        vec![
+                            ParametricIntegrandRow {
+                                coefficients: Vec::new(),
+                                carrier: production_ids[0].atom() * 2 * &factor,
+                                source_keys: Vec::new(),
+                            },
+                            ParametricIntegrandRow {
+                                coefficients: Vec::new(),
+                                carrier: production_ids[1].atom() * 3 * &factor,
+                                source_keys: Vec::new(),
+                            },
+                        ],
+                    )?,
+                )])?;
+            for integrands in [
+                Integrands::from_iter([(CutCFFIndex::new_all_none(), source.clone())]),
+                collected.clone(),
+                typed,
+            ] {
+                let index = CutCFFIndex::new_all_none();
+                let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+                    integrands.atom(&index).unwrap(),
                     &builder,
-                    &[],
-                    &orientations,
-                    &production_ids,
+                    integrands.numerators(),
+                    integrands.parametric_terms(&index),
+                    Some((&orientations, &production_ids)),
                     None,
                     &EvaluatorSettings::default(),
                 )?;
@@ -949,12 +1011,34 @@ mod tests {
                             Complex::new_re(F(map_id as f64));
                         values[builder.pairs.additional_params.value_range.start] =
                             Complex::new_re(F(input_x));
-                        assert_eq!(
-                            <f64 as GenericEvaluatorFloat>::get_evaluator_single(
-                                &mut stack.single_parametric
-                            )(&values),
-                            Complex::new_re(F(expected))
-                        );
+                        // Runtime orientation IDs index the catalogue; native
+                        // residue-map keys remain the independent 4/9/17 values.
+                        let orientation_index = production_ids
+                            .iter()
+                            .position(|id| *id == OrientationID(map_id))
+                            .unwrap();
+                        let result = stack.evaluate(
+                            InputParams {
+                                values: SliceMut::Owned(values),
+                                residue_map_id_start: builder
+                                    .pairs
+                                    .residue_map_id
+                                    .value_range
+                                    .start,
+                                orientations_start: builder.pairs.orientations.value_range.start,
+                                multiplicative_offset: 1,
+                            },
+                            SingleOrAllOrientations::Single {
+                                orientation: &orientations[orientation_index],
+                                id: OrientationID(orientation_index),
+                            },
+                            &RuntimeSettings::default(),
+                            &mut EvaluationMetaData::new_empty(),
+                        )?;
+                        let [DualOrNot::NonDual(value)] = result.as_slice() else {
+                            panic!("expected one scalar output")
+                        };
+                        assert_eq!(*value, Complex::new_re(F(expected)));
                     }
                 }
             }
@@ -966,13 +1050,16 @@ mod tests {
     fn final_factor_collection_preserves_closed_tensor_pairs() -> Result<()> {
         use crate::{
             cff::expression::OrientationID,
+            integrands::evaluation::EvaluationMetaData,
             integrands::process::{
-                evaluators::{EvaluatorStack, GenericEvaluatorFloat},
+                evaluators::{EvaluatorStack, InputParams, SingleOrAllOrientations, SliceMut},
                 param_builder::{ParamBuilder, ParamValuePairs},
             },
             processes::EvaluatorSettings,
+            settings::RuntimeSettings,
             settings::global::CompilationOptimizationLevel,
             utils::F,
+            utils::hyperdual_utils::DualOrNot,
         };
         use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
         use spenso::algebra::complex::Complex;
@@ -1016,13 +1103,45 @@ mod tests {
             .collect();
         let parameter_count = builder.pairs.update_ranges();
         builder.values = vec![vec![Complex::new_re(F(0.0)); parameter_count]];
-        for atom in [&source, finalized] {
-            let (mut stack, _) = EvaluatorStack::new_with_timings(
-                std::slice::from_ref(atom),
+        let scope = DirectResidueBranches::numerator_scope().1;
+        let entry = Arc::new(FnMapEntry {
+            lhs: function!(symbol!("gammalooprs::uv::numerator_family"), &scope),
+            rhs: numerator.clone(),
+            args: Vec::new(),
+            tags: vec![scope],
+            inlining: Default::default(),
+        });
+        let typed = Integrands::from_iter([(CutCFFIndex::new_all_none(), Atom::Zero)])
+            .with_parametric_terms([(
+                CutCFFIndex::new_all_none(),
+                ParametricIntegrandTerm::new(
+                    entry,
+                    vec![
+                        ParametricIntegrandRow {
+                            coefficients: Vec::new(),
+                            carrier: first,
+                            source_keys: Vec::new(),
+                        },
+                        ParametricIntegrandRow {
+                            coefficients: Vec::new(),
+                            carrier: second,
+                            source_keys: Vec::new(),
+                        },
+                    ],
+                )?,
+            )])?;
+        for integrands in [
+            Integrands::from_iter([(CutCFFIndex::new_all_none(), source.clone())]),
+            collected.clone(),
+            typed,
+        ] {
+            let index = CutCFFIndex::new_all_none();
+            let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+                integrands.atom(&index).unwrap(),
                 &builder,
-                &[],
-                &orientations,
-                &production_ids,
+                integrands.numerators(),
+                integrands.parametric_terms(&index),
+                Some((&orientations, &production_ids)),
                 None,
                 &EvaluatorSettings::default(),
             )?;
@@ -1050,12 +1169,28 @@ mod tests {
                     {
                         *slot = Complex::new_re(F(value));
                     }
-                    assert_eq!(
-                        <f64 as GenericEvaluatorFloat>::get_evaluator_single(
-                            &mut stack.single_parametric
-                        )(&values),
-                        Complex::new_re(F(expected))
-                    );
+                    let orientation_index = production_ids
+                        .iter()
+                        .position(|id| *id == OrientationID(map_id))
+                        .unwrap();
+                    let result = stack.evaluate(
+                        InputParams {
+                            values: SliceMut::Owned(values),
+                            residue_map_id_start: builder.pairs.residue_map_id.value_range.start,
+                            orientations_start: builder.pairs.orientations.value_range.start,
+                            multiplicative_offset: 1,
+                        },
+                        SingleOrAllOrientations::Single {
+                            orientation: &orientations[orientation_index],
+                            id: OrientationID(orientation_index),
+                        },
+                        &RuntimeSettings::default(),
+                        &mut EvaluationMetaData::new_empty(),
+                    )?;
+                    let [DualOrNot::NonDual(value)] = result.as_slice() else {
+                        panic!("expected one scalar output")
+                    };
+                    assert_eq!(*value, Complex::new_re(F(expected)));
                 }
             }
         }
@@ -1253,6 +1388,44 @@ mod tests {
                 ),
             ])
         );
+        let typed = |index, value: i64| -> Result<FinalIntegrands> {
+            Ok(FinalIntegrands {
+                representation: RepresentationMode::Ltd,
+                integrands: Integrands::from_iter([(index, Atom::Zero)]).with_parametric_terms(
+                    [(
+                        index,
+                        ParametricIntegrandTerm::new(
+                            Arc::clone(&first),
+                            vec![ParametricIntegrandRow {
+                                coefficients: vec![Rational::from(value)],
+                                carrier: Atom::one(),
+                                source_keys: vec![
+                                    crate::uv::approx::direct_3d::DirectResidueKey::production(
+                                        OrientationID(value as usize),
+                                    ),
+                                ],
+                            }],
+                        )?,
+                    )],
+                )?,
+            })
+        };
+        let typed_sum = typed(indices[0], 2)?
+            .zip_add([typed(indices[2], 3)?])?
+            .into_integrands();
+        assert_eq!(
+            typed_sum.cut_indices().copied().collect::<Vec<_>>(),
+            vec![indices[0], indices[2]]
+        );
+        for (index, expected) in [(indices[0], 81), (indices[2], 256)] {
+            assert!(typed_sum.atom(&index).unwrap().is_zero());
+            assert_eq!(typed_sum.parametric_terms(&index).len(), 1);
+            assert_eq!(typed_sum.parametric_terms(&index)[0].rows.len(), 1);
+            assert_eq!(
+                typed_sum.resolved()?.atom(&index),
+                Some(&Atom::num(expected))
+            );
+        }
         let conflict = Arc::new(FnMapEntry {
             rhs: Atom::var(parameter),
             ..first.as_ref().clone()

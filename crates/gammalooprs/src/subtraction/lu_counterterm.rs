@@ -1062,13 +1062,17 @@ impl LUCounterTermEvaluators {
         let mut timings = EvaluatorBuildTimings::default();
         let evaluators = parametric_integrands
             .integrands
-            .iter()
-            .map(|(index, atom)| {
+            .cut_indices()
+            .map(|index| {
                 let dual_shape = shape_from_cut_cff_index(index);
                 let (evaluator, evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
-                    atom,
+                    parametric_integrands
+                        .integrands
+                        .atom(index)
+                        .expect("every integrand cut has a registered scalar lane"),
                     param_builder,
                     parametric_integrands.integrands.numerators(),
+                    parametric_integrands.integrands.parametric_terms(index),
                     (!settings.generation.requires_complete_orientation_sum())
                         .then_some((&orientations.raw, production_orientation_ids)),
                     dual_shape,

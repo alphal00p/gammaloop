@@ -28,6 +28,7 @@ use crate::{
             },
         },
         cross_section::export::export_threshold_multiplier_collection,
+        standalone::StandaloneParametricResidueRows,
     },
     momentum::ThreeMomentum,
     momentum::sample::{LoopMomenta, MomentumSample},
@@ -100,6 +101,20 @@ fn export_evaluator_stack<T: ExportAtomTo>(
 ) -> Result<StandaloneEvaluatorStackArchive<T>> {
     Ok(StandaloneEvaluatorStackArchive {
         explicit_orientation_sum_only: evaluator_stack.explicit_orientation_sum_only,
+        parametric_rows: evaluator_stack
+            .parametric_rows
+            .as_ref()
+            .map(|catalog| -> Result<_> {
+                Ok(StandaloneParametricResidueRows {
+                    parameters: catalog
+                        .parameters
+                        .iter()
+                        .map(T::export_atom_to)
+                        .collect::<Result<Vec<_>>>()?,
+                    rows: catalog.rows.clone(),
+                })
+            })
+            .transpose()?,
         production_orientation_ids: evaluator_stack
             .production_orientation_ids()
             .iter()
@@ -169,6 +184,12 @@ fn standalone_rust_script() -> String {
         &format!(
             "mod retained_dual {{\n{}\n}}\nuse retained_dual::{{RetainedFunctionDefinition, build_dual_evaluator}};",
             include_str!("../retained_dual.rs"),
+        ),
+    ).replace(
+        "use crate::integrands::process::standalone::StandaloneParametricResidueRows;",
+        &format!(
+            "mod standalone {{\n{}\n}}\nuse standalone::StandaloneParametricResidueRows;",
+            include_str!("../standalone.rs"),
         ),
     )
 }

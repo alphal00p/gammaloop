@@ -52,6 +52,7 @@ pub mod gammaloop_sample;
 pub mod ir;
 pub(crate) mod retained_dual;
 pub mod sampling;
+pub(crate) mod standalone;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext,
     settings::RuntimeSettings,

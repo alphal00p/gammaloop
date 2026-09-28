@@ -491,7 +491,8 @@ mod test {
             "{}",
             graph.derived_data.representations
                 [&three_dimensional_reps::generation::RepresentationMode::Cff]
-                .all_mighty_integrand
+                .resolved_integrand()
+                .unwrap()
         );
     }
 

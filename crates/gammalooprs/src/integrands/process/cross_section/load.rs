@@ -22,6 +22,7 @@ use std::{
 };
 
 use crate::integrands::process::retained_dual::{RetainedFunctionDefinition, build_dual_evaluator};
+pub use crate::integrands::process::standalone::StandaloneParametricResidueRows;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
@@ -32,7 +33,7 @@ type RationalExpressionTree = (
     ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
 );
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 14;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 15;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -277,6 +278,7 @@ pub struct StandaloneIndexedGenericEvaluatorArchive<A = Vec<u8>> {
 pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     pub(crate) explicit_orientation_sum_only: bool,
     pub(crate) production_orientation_ids: Vec<usize>,
+    pub(crate) parametric_rows: Option<StandaloneParametricResidueRows<A>>,
     pub(crate) single_parametric: StandaloneGenericEvaluatorArchive<A>,
     pub(crate) iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
@@ -545,14 +547,26 @@ fn build_stack<A: ImportWithMap>(
     label: &str,
 ) -> Result<LoadedStandaloneEvaluatorStack> {
     let parsed_fn_map_entries = parse_fn_map_entries(fn_map_entries, state_map)?;
+    let mut parametric_parameters = params.to_vec();
+    if let Some(catalog) = &stack.parametric_rows {
+        catalog.validate()?;
+        parametric_parameters.extend(
+            catalog
+                .parameters
+                .iter()
+                .map(|parameter| parameter.import_with_map(state_map))
+                .collect::<Result<Vec<_>>>()?,
+        );
+    }
     let timed_build = |payload: StandaloneGenericEvaluatorArchive<A>,
                        iterate: bool,
-                       component: &str|
+                       component: &str,
+                       parameters: &[Atom]|
      -> Result<LoadedGenericEvaluator> {
         let started = Instant::now();
         let evaluator = build_evaluator(
             payload,
-            params,
+            parameters,
             parsed_fn_map_entries.clone(),
             state_map,
             iterate,
@@ -565,24 +579,35 @@ fn build_stack<A: ImportWithMap>(
     };
 
     Ok(LoadedStandaloneEvaluatorStack {
+        parametric_rows: stack
+            .parametric_rows
+            .map(|catalog| StandaloneParametricResidueRows {
+                parameters: parametric_parameters[params.len()..].to_vec(),
+                rows: catalog.rows,
+            }),
         explicit_orientation_sum_only: stack.explicit_orientation_sum_only,
         production_orientation_ids: stack.production_orientation_ids,
         representative_input: stack.representative_input,
         orientation_start: stack.start,
         residue_map_id_start: stack.residue_map_id_start,
         mult_offset: stack.mult_offset,
-        single_parametric: timed_build(stack.single_parametric, false, "single_parametric")?,
+        single_parametric: timed_build(
+            stack.single_parametric,
+            false,
+            "single_parametric",
+            &parametric_parameters,
+        )?,
         iterative: stack
             .iterative
-            .map(|payload| timed_build(payload, true, "iterative"))
+            .map(|payload| timed_build(payload, true, "iterative", params))
             .transpose()?,
         summed_function_map: stack
             .summed_function_map
-            .map(|payload| timed_build(payload, false, "summed_function_map"))
+            .map(|payload| timed_build(payload, false, "summed_function_map", params))
             .transpose()?,
         summed: stack
             .summed
-            .map(|payload| timed_build(payload, false, "summed"))
+            .map(|payload| timed_build(payload, false, "summed", params))
             .transpose()?,
     })
 }
@@ -1162,6 +1187,7 @@ pub struct LoadedStandaloneIteratedCollection<T> {
 }
 
 pub struct LoadedStandaloneEvaluatorStack {
+    pub parametric_rows: Option<StandaloneParametricResidueRows<Atom>>,
     pub explicit_orientation_sum_only: bool,
     pub production_orientation_ids: Vec<usize>,
     pub representative_input: Vec<Complex<f64>>,
@@ -1172,6 +1198,45 @@ pub struct LoadedStandaloneEvaluatorStack {
     pub iterative: Option<LoadedGenericEvaluator>,
     pub summed_function_map: Option<LoadedGenericEvaluator>,
     pub summed: Option<LoadedGenericEvaluator>,
+}
+
+impl LoadedStandaloneEvaluatorStack {
+    /// Evaluate the complete source-row sum at physical inputs. CFF orientation
+    /// selection, where supported, remains encoded in those physical inputs.
+    pub fn evaluate_single_parametric(
+        &mut self,
+        physical_input: &[Complex<f64>],
+    ) -> Result<Vec<Complex<f64>>> {
+        let row_width = self
+            .parametric_rows
+            .as_ref()
+            .map_or(0, |catalog| catalog.parameters.len());
+        let evaluator = &mut self.single_parametric.2;
+        if physical_input.len() + row_width * self.mult_offset != evaluator.get_input_len() {
+            return Err(eyre!(
+                "Physical input length does not match the standalone parametric evaluator"
+            ));
+        }
+        let mut accumulated = vec![Complex::new(0.0, 0.0); self.single_parametric.3.len()];
+        for row in self
+            .parametric_rows
+            .as_ref()
+            .map(|catalog| catalog.rows.as_slice())
+            .unwrap_or(&[Vec::new()])
+        {
+            let mut input = physical_input.to_vec();
+            for coefficient in row {
+                input.push(Complex::new(coefficient.to_f64(), 0.0));
+                input.extend((1..self.mult_offset).map(|_| Complex::new(0.0, 0.0)));
+            }
+            let mut current = vec![Complex::new(0.0, 0.0); accumulated.len()];
+            evaluator.evaluate(&input, &mut current);
+            for (sum, value) in accumulated.iter_mut().zip(current) {
+                *sum += value;
+            }
+        }
+        Ok(accumulated)
+    }
 }
 
 impl StandaloneCrossSectionArchive<(), String> {
@@ -1628,6 +1693,55 @@ mod threshold_multiplier_tests {
                 assert_eq!(output, [Complex::new(9.0, 0.0), Complex::new(6.0, 0.0)]);
             }
         }
+        let mut parametric = payload.clone();
+        parametric.exprs = vec!["ltd_archive_numerator(x+c,m)".to_owned()];
+        parametric.zero_components.push((2, 1));
+        let stack = StandaloneEvaluatorStackArchive {
+            explicit_orientation_sum_only: true,
+            production_orientation_ids: Vec::new(),
+            parametric_rows: Some(StandaloneParametricResidueRows {
+                parameters: vec!["c".to_owned()],
+                rows: vec![vec![Rational::from(1)], vec![Rational::from(3)]],
+            }),
+            single_parametric: parametric,
+            iterative: None,
+            summed_function_map: None,
+            summed: None,
+            representative_input: Vec::new(),
+            start: 0,
+            residue_map_id_start: 0,
+            mult_offset: 2,
+        };
+        let json = serde_json::from_slice::<StandaloneEvaluatorStackArchive<String>>(
+            &serde_json::to_vec(&stack)?,
+        )?;
+        let (binary, _): (StandaloneEvaluatorStackArchive<String>, _) = bincode::decode_from_slice(
+            &bincode::encode_to_vec(&stack, bincode::config::standard())?,
+            bincode::config::standard(),
+        )?;
+        for stack in [json, binary] {
+            let mut loaded = build_stack(
+                stack,
+                &[parse_lit!(x), parse_lit!(m)],
+                &[],
+                &StateMap::default(),
+                "joint_rows",
+                "dual",
+            )?;
+            let input = [3.0, 1.0, 0.0, 0.0].map(|value| Complex::new(value, 0.0));
+            assert_eq!(
+                loaded.evaluate_single_parametric(&input)?,
+                [Complex::new(52.0, 0.0), Complex::new(20.0, 0.0)]
+            );
+            assert!(loaded.evaluate_single_parametric(&input[..3]).is_err());
+            let mut invalid_catalog = loaded.parametric_rows.as_ref().unwrap().clone();
+            invalid_catalog.rows.clear();
+            assert!(invalid_catalog.validate().is_err());
+            invalid_catalog
+                .rows
+                .push(vec![Rational::from(1), Rational::from(2)]);
+            assert!(invalid_catalog.validate().is_err());
+        }
         Ok(())
     }
 
@@ -1837,7 +1951,7 @@ mod threshold_multiplier_tests {
 
     #[test]
     fn threshold_counterterm_metadata_archive_validates_ids_and_component_coverage() {
-        assert_eq!(STANDALONE_EVALUATORS_VERSION, 14);
+        assert_eq!(STANDALONE_EVALUATORS_VERSION, 15);
         let counterterms = vec![identity_counterterm()];
         let registry = identity_registry();
         validate_threshold_counterterm_metadata_archive(&registry, "graph", &counterterms).unwrap();

@@ -1,3 +1,6 @@
+mod parametric_rows;
+pub(crate) use parametric_rows::ParametricResidueRows;
+
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
@@ -88,6 +91,7 @@ use crate::{
         f128,
         hyperdual_utils::{DualOrNot, new_from_values},
     },
+    uv::ParametricIntegrandTerm,
 };
 
 type ParsingTensorMap<'a> = dyn Fn(ParamTensor<ShadowedStructure<Aind>>) -> Result<ParamTensor<ShadowedStructure<Aind>>>
@@ -291,6 +295,8 @@ impl Default for EvaluatorMethod {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct EvaluatorStack {
     pub(crate) explicit_orientation_sum_only: bool,
+    /// Internal coefficient/dispatch rows, independent of physical orientations.
+    pub(crate) parametric_rows: Option<ParametricResidueRows>,
     /// Original generalized-3D-representation map key for each dense runtime
     /// orientation channel. Physical edge directions alone do not identify a
     /// raised-energy/contact residue map.
@@ -344,6 +350,7 @@ impl EvaluatorStack {
     fn new_single_parametric(
         parametric_atoms: Vec<AliasedAtom>,
         param_builder: &ParamBuilder,
+        parametric_rows: Option<&ParametricResidueRows>,
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
@@ -352,24 +359,41 @@ impl EvaluatorStack {
         );
         let opt_settings = settings.optimization_settings();
 
-        GenericEvaluator::new_from_builder(
-            parametric_atoms.into_iter().map(|atom| {
-                let map = |atom| {
-                    GS.collect_orientation_if(Self::parametrize_residue_map_selectors(
-                        atom,
-                        Atom::var(GS.residue_map_id),
-                    ))
-                };
-                let (root, aliases) = atom.into_inner_with_aliases();
-                let mut mapped = AliasedAtom::from(map(root));
-                for (alias, body) in aliases {
-                    mapped.register_alias(alias, map(body));
-                }
-                mapped
-            }),
-            param_builder,
-            dual_shape.clone(),
+        let atoms = parametric_atoms.into_iter().map(|atom| {
+            let map = |atom| {
+                GS.collect_orientation_if(Self::parametrize_residue_map_selectors(
+                    atom,
+                    Atom::var(GS.residue_map_id),
+                ))
+            };
+            let (root, aliases) = atom.into_inner_with_aliases();
+            let mut mapped = AliasedAtom::from(map(root));
+            for (alias, body) in aliases {
+                mapped.register_alias(alias, map(body));
+            }
+            mapped
+        });
+        let mut params = (&param_builder.pairs)
+            .into_iter()
+            .flat_map(|pair| pair.params.clone())
+            .collect::<Vec<_>>();
+        let physical_count = params.len();
+        if let Some(rows) = parametric_rows {
+            params.extend(rows.parameters.iter().cloned());
+        }
+        let dual_config = dual_shape.clone().map(|shape| {
+            let zeros = (physical_count..params.len())
+                .flat_map(|parameter| (1..shape.len()).map(move |component| (parameter, component)))
+                .collect();
+            (shape, zeros)
+        });
+        GenericEvaluator::new_from_raw_params(
+            atoms,
+            &params,
+            &param_builder.fn_map,
+            param_builder.reps.clone(),
             opt_settings.clone(),
+            dual_config,
             settings,
         )
     }
@@ -432,6 +456,7 @@ impl EvaluatorStack {
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
         production_orientation_ids: &[OrientationID],
+        parametric_rows: Option<&ParametricResidueRows>,
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
@@ -464,6 +489,12 @@ impl EvaluatorStack {
                 for (e, _) in first_orientation {
                     lhs = lhs.add_arg(GS.sign(e));
                     args.push(Indeterminate::try_from(GS.sign(e)).unwrap());
+                }
+                if let Some(rows) = parametric_rows {
+                    for parameter in &rows.parameters {
+                        lhs = lhs.add_arg(parameter);
+                        args.push(Indeterminate::try_from(parameter.clone()).unwrap());
+                    }
                 }
                 // Explicit arguments keep alias bodies in scope when the
                 // integrand call is replaced by its body before compilation.
@@ -533,8 +564,20 @@ impl EvaluatorStack {
                 orientations
                     .iter()
                     .zip(production_orientation_ids)
-                    .map(|(orientation, production_id)| {
-                        GS.integrand(i, *production_id, orientation)
+                    .flat_map(|(orientation, production_id)| {
+                        let call = GS.integrand(i, *production_id, orientation);
+                        match parametric_rows {
+                            Some(rows) => rows
+                                .rows
+                                .iter()
+                                .map(|row| {
+                                    FunctionBuilder::from_atom(&call)
+                                        .add_args(row.iter().cloned().map(Atom::num))
+                                        .finish()
+                                })
+                                .collect::<Vec<_>>(),
+                            None => vec![call],
+                        }
                     })
                     .fold(Atom::Zero, |acc, n| acc + n)
             })
@@ -679,10 +722,44 @@ impl EvaluatorStack {
         integrand: &Atom,
         param_builder: &ParamBuilder,
         numerator_definitions: &[Arc<FnMapEntry>],
+        parametric_terms: &[ParametricIntegrandTerm],
         orientation_catalog: Option<(&[EdgeVec<Orientation>], &[OrientationID])>,
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
+        if !parametric_terms.is_empty() {
+            let (atoms, rows) = ParametricResidueRows::lower(integrand, parametric_terms)?;
+            let dummy_orientations = [EdgeVec::from_iter(std::iter::empty::<Orientation>())];
+            let dummy_ids = [OrientationID(0)];
+            let (orientations, ids) =
+                orientation_catalog.unwrap_or((&dummy_orientations, &dummy_ids));
+            let atoms = if orientation_catalog.is_none() {
+                atoms.iter().map(Self::sum_residue_map_selectors).collect()
+            } else {
+                atoms
+            };
+            let definitions = numerator_definitions
+                .iter()
+                .cloned()
+                .chain(
+                    parametric_terms
+                        .iter()
+                        .map(|term| Arc::clone(&term.numerator)),
+                )
+                .collect::<Vec<_>>();
+            let (mut stack, timings) = Self::new_with_rows(
+                &atoms,
+                param_builder,
+                &definitions,
+                orientations,
+                ids,
+                dual_shape,
+                settings,
+                Some(rows),
+            )?;
+            stack.explicit_orientation_sum_only = orientation_catalog.is_none();
+            return Ok((stack, timings));
+        }
         match orientation_catalog {
             Some((orientations, production_orientation_ids)) => Self::new_with_timings(
                 std::slice::from_ref(integrand),
@@ -1346,36 +1423,13 @@ impl EvaluatorStack {
                     // Each occurrence owns private contractions; only its free
                     // ports can connect it to other factors in this template.
                     let interface = interfaces[family].as_ref().unwrap();
-                    let mut private_indices = HashMap::new();
-                    let body = definition.rhs.replace_map(|part, _, output| {
-                        if let Ok(slot) = Slot::<LibraryRep, Aind>::try_from(part) {
-                            if !interface.contains(&part.to_owned()) {
-                                let fresh =
-                                    private_indices.entry(slot.aind()).or_insert_with(|| {
-                                        loop {
-                                            let name = format!(
-                                                "{}_index_{next_index}",
-                                                argument_symbol.get_name()
-                                            );
-                                            next_index += 1;
-                                            if occupied_symbols.insert(name.clone()) {
-                                                break Atom::var(symbol!(&name));
-                                            }
-                                        }
-                                    });
-                                **output = slot.rep().to_symbolic([fresh.clone()]);
-                            } else {
-                                // A dual slot owns its inner representation;
-                                // do not revisit that as a separate base slot.
-                                output.set_from_view(&part);
+                    let body = definition.rhs.freshen_private_indices(interface, || {
+                        loop {
+                            let name = format!("{}_index_{next_index}", argument_symbol.get_name());
+                            next_index += 1;
+                            if occupied_symbols.insert(name.clone()) {
+                                break Atom::var(symbol!(&name));
                             }
-                        } else if let AtomView::Fun(function) = part
-                            && !part.is_tensorial(StrictTensorFilter::Tagged)
-                            && ![*SYM, *ANTISYM, *CYCLIC].contains(&function.get_symbol())
-                        {
-                            // Scalar function payloads are opaque to the
-                            // tensor interface, including parameter aliases.
-                            output.set_from_view(&part);
                         }
                     });
 
@@ -2153,6 +2207,29 @@ impl EvaluatorStack {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
+        Self::new_with_rows(
+            atoms,
+            param_builder,
+            numerator_definitions,
+            orientations,
+            production_orientation_ids,
+            dual_shape,
+            settings,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn new_with_rows<A: AtomCore>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        numerator_definitions: &[Arc<FnMapEntry>],
+        orientations: &[EdgeVec<Orientation>],
+        production_orientation_ids: &[OrientationID],
+        dual_shape: Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+        parametric_rows: Option<ParametricResidueRows>,
+    ) -> Result<(Self, EvaluatorBuildTimings)> {
         if orientations.len() != production_orientation_ids.len() {
             return Err(eyre!(
                 "runtime orientation catalog has {} physical entries but {} exact residue-map IDs",
@@ -2197,6 +2274,10 @@ impl EvaluatorStack {
             settings,
             alias_symbol,
         )?;
+        let parsed_atoms = match &parametric_rows {
+            Some(rows) => vec![rows.join_preprocessed(parsed_atoms)],
+            None => parsed_atoms,
+        };
         let param_builder = &prepared_builder;
         timings.spenso_time += spenso_started.elapsed();
         crate::debug_tags!(#generation, #profile, #compile, #summary;
@@ -2209,11 +2290,35 @@ impl EvaluatorStack {
         );
 
         let symbolica_started = std::time::Instant::now();
+        // Specialization is deliberately below the shared tensor preprocessing
+        // boundary. The two explicit-expression methods consume this derived
+        // view; SingleParametric retains the original generic products.
+        let specialized_atoms = if (settings.iterative_orientation_optimization || settings.summed)
+            && let Some(rows) = &parametric_rows
+        {
+            Some(
+                parsed_atoms
+                    .iter()
+                    .map(|atom| {
+                        rows.rows
+                            .iter()
+                            .enumerate()
+                            .map(|(id, row)| rows.specialize(atom, row, id))
+                            .try_fold(AliasedAtom::default(), |sum, atom| {
+                                sum.try_add(&atom).map_err(|error| eyre!(error))
+                            })
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            )
+        } else {
+            None
+        };
+        let explicit_atoms = specialized_atoms.as_deref().unwrap_or(&parsed_atoms);
         let iterative_started = std::time::Instant::now();
         let iterative = if settings.iterative_orientation_optimization {
             Some(
                 Self::new_iterative(
-                    &parsed_atoms,
+                    explicit_atoms,
                     param_builder,
                     orientations,
                     production_orientation_ids,
@@ -2243,6 +2348,7 @@ impl EvaluatorStack {
                     param_builder,
                     orientations,
                     production_orientation_ids,
+                    parametric_rows.as_ref(),
                     &dual_shape,
                     settings,
                 )
@@ -2265,7 +2371,7 @@ impl EvaluatorStack {
         let summed = if settings.summed {
             Some(
                 Self::new_summed(
-                    &parsed_atoms,
+                    explicit_atoms,
                     param_builder,
                     orientations,
                     production_orientation_ids,
@@ -2290,9 +2396,14 @@ impl EvaluatorStack {
         let single_started = std::time::Instant::now();
         // The optional variants have finished borrowing these scalars. Transfer
         // them to the final evaluator instead of retaining a second full copy.
-        let single_parametric =
-            Self::new_single_parametric(parsed_atoms, param_builder, &dual_shape, settings)
-                .with_context(|| "Failed to create parametric")?;
+        let single_parametric = Self::new_single_parametric(
+            parsed_atoms,
+            param_builder,
+            parametric_rows.as_ref(),
+            &dual_shape,
+            settings,
+        )
+        .with_context(|| "Failed to create parametric")?;
         crate::debug_tags!(#generation, #profile, #compile, #summary;
             stage = "evaluator_stack_new_single_parametric_done",
             orientation_count = orientations.len(),
@@ -2314,6 +2425,7 @@ impl EvaluatorStack {
         Ok((
             EvaluatorStack {
                 explicit_orientation_sum_only: false,
+                parametric_rows,
                 production_orientation_ids: production_orientation_ids.to_vec(),
                 single_parametric,
                 iterative,
@@ -2337,11 +2449,7 @@ impl EvaluatorStack {
         for (orientation_id, e) in orientations.iter() {
             input.set_residue_map_id(self.production_orientation_ids[usize::from(orientation_id)]);
             input.set_orientation_values(e);
-            let output = evaluate_evaluator(
-                &mut self.single_parametric,
-                input.as_slice(),
-                evaluation_metadata,
-            );
+            let output = self.evaluate_single_parametric(input.as_slice(), evaluation_metadata);
             if let Some(result) = &mut result {
                 for (r, v) in result.iter_mut().zip(output) {
                     *r += v;
@@ -2351,6 +2459,17 @@ impl EvaluatorStack {
             }
         }
         result.unwrap()
+    }
+
+    fn evaluate_single_parametric<T: FloatLike>(
+        &mut self,
+        input: &[Complex<F<T>>],
+        metadata: &mut EvaluationMetaData,
+    ) -> Vec<DualOrNot<Complex<F<T>>>> {
+        match &self.parametric_rows {
+            Some(rows) => rows.evaluate(&mut self.single_parametric, input, metadata),
+            None => evaluate_evaluator(&mut self.single_parametric, input, metadata),
+        }
     }
 
     fn evaluate_iterative<'a, T: FloatLike>(
@@ -2459,11 +2578,9 @@ impl EvaluatorStack {
             // internal numerator calls retain their small coefficient rows;
             // no production-orientation loop may broadcast UV child sums.
             return match settings.general.evaluator_method {
-                EvaluatorMethod::SingleParametric => Ok(evaluate_evaluator(
-                    &mut self.single_parametric,
-                    input.as_slice(),
-                    evaluation_metadata,
-                )),
+                EvaluatorMethod::SingleParametric => {
+                    Ok(self.evaluate_single_parametric(input.as_slice(), evaluation_metadata))
+                }
                 EvaluatorMethod::Iterative => self.evaluate_iterative(input, evaluation_metadata),
                 EvaluatorMethod::SummedFunctionMap => {
                     self.evaluate_summed_fnmap(input, evaluation_metadata)
@@ -4249,7 +4366,7 @@ mod tests {
         });
         let root = function!(family, 0, 2 * &x + 3) * function!(family, 0, &x + 2);
         let mut builder = ParamBuilder::new_empty();
-        builder.pairs.additional_params = std::iter::once(x)
+        builder.pairs.additional_params = std::iter::once(x.clone())
             .chain((0..4).flat_map(|i| {
                 [
                     function!(p, function!(AIND_SYMBOLS.cind, i)),
@@ -4258,11 +4375,16 @@ mod tests {
             }))
             .collect();
         builder.pairs.update_ranges();
-        let settings = EvaluatorSettings::default();
+        let settings = EvaluatorSettings {
+            summed_function_map: true,
+            summed: true,
+            iterative_orientation_optimization: true,
+            ..Default::default()
+        };
         let (atoms, prepared) = EvaluatorStack::preprocess_numerator_families(
             &[root],
             &builder,
-            &[definition],
+            &[Arc::clone(&definition)],
             &settings,
             symbol!("evaluator_test::repeated_joint_scalar"),
         )
@@ -4290,6 +4412,105 @@ mod tests {
         // Each body owns its contraction, including slots inside sym.
         // Sharing those indices incorrectly replaces (p.r)^2 by p^2 r^2.
         assert_eq!(actual.values, vec![Complex::new_re(F(1382400.0)); 2]);
+
+        // The typed Cartesian-row product must preserve the same private
+        // contractions before its single generic body reaches preprocessing.
+        let cut = crate::cff::CutCFFIndex::new_all_none();
+        let slope = Atom::from(definition.args[0].clone());
+        let shift = Atom::var(symbol!("evaluator_test::repeated_joint_shift"));
+        let typed_args = vec![
+            definition.args[0].clone(),
+            Indeterminate::try_from(shift.clone()).unwrap(),
+        ];
+        let typed_definition = Arc::new(FnMapEntry {
+            lhs: symbol!("gammalooprs::uv::numerator_family").call_args(
+                definition
+                    .tags
+                    .iter()
+                    .cloned()
+                    .chain(typed_args.iter().cloned().map(Atom::from)),
+            ),
+            rhs: definition
+                .rhs
+                .replace(slope.to_pattern())
+                .with(&slope * &x + shift),
+            args: typed_args,
+            ..definition.as_ref().clone()
+        });
+        let factor = |slope: i64, shift: i64| {
+            crate::uv::Integrands::from_iter([(cut, Atom::Zero)])
+                .with_parametric_terms([(
+                    cut,
+                    ParametricIntegrandTerm::new(
+                        Arc::clone(&typed_definition),
+                        vec![crate::uv::ParametricIntegrandRow {
+                            coefficients: vec![Rational::from(slope), Rational::from(shift)],
+                            carrier: Atom::one(),
+                            source_keys: Vec::new(),
+                        }],
+                    )
+                    .unwrap(),
+                )])
+                .unwrap()
+        };
+        let product = factor(2, 3).zip_mul(&factor(1, 2)).unwrap();
+        let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+            product.atom(&cut).unwrap(),
+            &builder,
+            product.numerators(),
+            product.parametric_terms(&cut),
+            None,
+            Some(crate::utils::hyperdual_utils::simple_n_deriv_shape(1)),
+            &settings,
+        )
+        .unwrap();
+        let orientations =
+            TiVec::<OrientationID, _>::from_iter([EdgeVec::from_iter(std::iter::empty::<
+                Orientation,
+            >())]);
+        let filter = SubSet::full(1);
+        for symjit in [false, true] {
+            if symjit {
+                stack
+                    .for_each_generic_evaluator_mut(|evaluator| {
+                        evaluator.activate_symjit(CompilationOptimizationLevel::O0)
+                    })
+                    .unwrap();
+            }
+            for method in [
+                EvaluatorMethod::SingleParametric,
+                EvaluatorMethod::SummedFunctionMap,
+                EvaluatorMethod::Summed,
+                EvaluatorMethod::Iterative,
+            ] {
+                let mut runtime = RuntimeSettings::default();
+                runtime.general.evaluator_method = method.clone();
+                let output = stack
+                    .evaluate(
+                        InputParams {
+                            values: SliceMut::Owned(values.clone()),
+                            residue_map_id_start: 0,
+                            orientations_start: 0,
+                            multiplicative_offset: 2,
+                        },
+                        SingleOrAllOrientations::All {
+                            all: &orientations,
+                            filter: &filter,
+                        },
+                        &runtime,
+                        &mut EvaluationMetaData::new_empty(),
+                    )
+                    .unwrap();
+                let [DualOrNot::Dual(actual)] = output.as_slice() else {
+                    panic!("expected typed product dual output")
+                };
+                assert_eq!(
+                    actual.values,
+                    vec![Complex::new_re(F(1382400.0)); 2],
+                    "{method:?}, SymJIT={symjit}",
+                );
+            }
+        }
     }
 
     #[test]
@@ -5052,21 +5273,19 @@ mod tests {
     fn complete_source_sums_share_numerators_and_count_each_row_once() {
         test_initialise().unwrap();
         let q = Atom::var(symbol!("evaluator_test::complete_sum_q"));
+        let r = Atom::var(symbol!("evaluator_test::complete_sum_r"));
         let x = Atom::var(symbol!("evaluator_test::complete_sum_x"));
         let family = symbol!("evaluator_test::complete_sum_family");
-        let definitions = [(&q * &x + 1).pow(4), &q * &x + 2]
-            .into_iter()
-            .enumerate()
-            .map(|(tag, rhs)| {
-                Arc::new(FnMapEntry {
-                    inlining: Default::default(),
-                    lhs: function!(family, tag, q.clone()),
-                    rhs,
-                    tags: vec![Atom::num(tag)],
-                    args: vec![Indeterminate::try_from(q.clone()).unwrap()],
-                })
-            })
-            .collect::<Vec<_>>();
+        let definition = Arc::new(FnMapEntry {
+            inlining: Default::default(),
+            lhs: function!(family, 0, q.clone(), r.clone()),
+            rhs: (&q * &x + 1).pow(4) * (&r * &x + 2),
+            tags: vec![Atom::num(0)],
+            args: vec![
+                Indeterminate::try_from(q.clone()).unwrap(),
+                Indeterminate::try_from(r).unwrap(),
+            ],
+        });
         let mut builder = ParamBuilder::new_empty();
         builder.pairs.additional_params = [x].into_iter().collect();
         let parameter_count = builder.pairs.update_ranges();
@@ -5081,24 +5300,37 @@ mod tests {
         let filter = SubSet::full(orientations.len());
         let mut numerator_program_shapes = None;
         for rows in [2, 4, 8] {
-            let production = (1..=rows)
-                .map(|i| Atom::num(i) * function!(family, 0, i))
-                .sum::<Atom>();
-            let child = (1..=3).map(|i| function!(family, 1, i)).sum::<Atom>();
             // The UV child owns its sum, while this addback has no production
             // row at all. A global loop over production rows duplicates both.
-            let root = production * child + Atom::num(5);
+            let term = ParametricIntegrandTerm {
+                numerator: Arc::clone(&definition),
+                rows: (1..=rows)
+                    .flat_map(|i| {
+                        (1..=3).map(move |j| crate::uv::ParametricIntegrandRow {
+                            coefficients: vec![Rational::from(i), Rational::from(j)],
+                            carrier: Atom::num(i),
+                            source_keys: Vec::new(),
+                        })
+                    })
+                    .collect(),
+            };
             let expected = ((1..=rows).map(|i: i64| i * (2 * i + 1).pow(4)).sum::<i64>()
                 * (1..=3).map(|i| 2 * i + 2).sum::<i64>()
                 + 5) as f64;
-            let (mut stack, _) = EvaluatorStack::new_explicit_sum_with_timings(
-                &[root],
+            let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+                &Atom::num(5),
                 &builder,
-                &definitions,
+                &[],
+                &[term],
+                None,
                 None,
                 &settings,
             )
             .unwrap();
+            assert_eq!(
+                stack.parametric_rows.as_ref().unwrap().rows.len(),
+                rows as usize * 3 + 1
+            );
             let program = stack.single_parametric.f64_eager.export_instructions();
             // Tensor lowering can split one additive family into several
             // scalar components. Their bodies must stay independent of the
@@ -5235,6 +5467,197 @@ mod tests {
                 std::fs::remove_dir_all(directory).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn joint_rows_preserve_native_precision_derivatives_and_inactive_terms() {
+        test_initialise().unwrap();
+        let q = Atom::var(symbol!("evaluator_test::joint_precision_q"));
+        let x = Atom::var(symbol!("evaluator_test::joint_precision_x"));
+        let family = symbol!("evaluator_test::joint_precision_family");
+        let precise = Rational::new(9_007_199_254_740_993i64, 9_007_199_254_740_992i64);
+        let terms = [
+            (&q * x.pow(2), vec![precise.clone(), Rational::one()]),
+            // This body is singular at the other term's q=1 row. Lazy term
+            // selection must guard its numerator as well as its denominator.
+            ((&q - 1).pow(-1) * &x, vec![Rational::from(2)]),
+            // Its coefficient is a constant zero. An unpruned tangent of
+            // sqrt(q) would introduce 0 / sqrt(0) into physical derivatives.
+            (
+                q.pow(Atom::num(Rational::new(1, 2))) * &x,
+                vec![Rational::zero()],
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(tag, (rhs, rows))| ParametricIntegrandTerm {
+            numerator: Arc::new(FnMapEntry {
+                lhs: function!(family, tag, q.clone()),
+                rhs,
+                tags: vec![Atom::num(tag)],
+                args: vec![Indeterminate::try_from(q.clone()).unwrap()],
+                inlining: Default::default(),
+            }),
+            rows: rows
+                .into_iter()
+                .map(|coefficient| crate::uv::ParametricIntegrandRow {
+                    coefficients: vec![coefficient],
+                    carrier: Atom::one(),
+                    source_keys: Vec::new(),
+                })
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params = [x].into_iter().collect();
+        let input_count = builder.pairs.update_ranges();
+        let x_index = builder.pairs.additional_params.value_range.start;
+        fn check<T: FloatLike>(
+            stack: &mut EvaluatorStack,
+            input_count: usize,
+            x_index: usize,
+            precise: &Rational,
+        ) {
+            let zero = F(T::new_zero());
+            let sum_q = zero.from_rational(precise) + zero.one();
+            let expected = [
+                zero.from_usize(9) * &sum_q + zero.from_usize(8),
+                zero.from_usize(6) * sum_q + zero.one(),
+            ];
+            let orientations =
+                TiVec::<OrientationID, _>::from_iter([EdgeVec::from_iter(std::iter::empty::<
+                    Orientation,
+                >())]);
+            let filter = SubSet::full(1);
+            for method in [
+                EvaluatorMethod::SingleParametric,
+                EvaluatorMethod::SummedFunctionMap,
+                EvaluatorMethod::Summed,
+                EvaluatorMethod::Iterative,
+            ] {
+                let mut values = vec![Complex::new_re(zero.clone()); input_count * 2];
+                values[2 * x_index] = Complex::new_re(zero.from_usize(3));
+                values[2 * x_index + 1] = Complex::new_re(zero.one());
+                let input = InputParams {
+                    values: SliceMut::Owned(values),
+                    residue_map_id_start: 0,
+                    orientations_start: 0,
+                    multiplicative_offset: 2,
+                };
+                let mut runtime = RuntimeSettings::default();
+                runtime.general.evaluator_method = method.clone();
+                let output = stack
+                    .evaluate(
+                        input,
+                        SingleOrAllOrientations::All {
+                            all: &orientations,
+                            filter: &filter,
+                        },
+                        &runtime,
+                        &mut EvaluationMetaData::new_empty(),
+                    )
+                    .unwrap();
+                let [DualOrNot::Dual(value)] = output.as_slice() else {
+                    panic!("expected one dual result")
+                };
+                for (actual, expected) in value.values.iter().zip(&expected) {
+                    assert!(
+                        (actual.re.clone() - expected).abs()
+                            <= expected.abs() * zero.epsilon() * zero.from_usize(64),
+                        "{method:?}: {actual:?} != {expected:?}"
+                    );
+                    assert_eq!(actual.im, zero);
+                }
+                if zero.epsilon() < zero.from_usize(2).powi(-60) {
+                    assert!(value.values[0].re > zero.from_usize(26));
+                }
+            }
+        }
+        for store_atom in [false, true] {
+            for do_fn_map_replacements in [false, true] {
+                let settings = EvaluatorSettings {
+                    store_atom,
+                    do_fn_map_replacements,
+                    summed_function_map: true,
+                    summed: true,
+                    iterative_orientation_optimization: true,
+                    ..Default::default()
+                };
+                let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+                    &Atom::num(5),
+                    &builder,
+                    &[],
+                    &terms,
+                    None,
+                    Some(vec![vec![0], vec![1]]),
+                    &settings,
+                )
+                .unwrap();
+                let rows = stack.parametric_rows.as_ref().unwrap();
+                assert_eq!(rows.rows.len(), 5);
+                assert_eq!(
+                    stack.single_parametric.zero_components,
+                    (input_count..input_count + rows.parameters.len())
+                        .map(|p| (p, 1))
+                        .collect::<Vec<_>>()
+                );
+                check::<f64>(&mut stack, input_count, x_index, &precise);
+                check::<f128>(&mut stack, input_count, x_index, &precise);
+                check::<ArbPrec>(&mut stack, input_count, x_index, &precise);
+                stack
+                    .for_each_generic_evaluator_mut(|evaluator| {
+                        evaluator.activate_symjit(CompilationOptimizationLevel::O0)
+                    })
+                    .unwrap();
+                check::<f64>(&mut stack, input_count, x_index, &precise);
+            }
+        }
+    }
+
+    #[test]
+    fn joint_rows_support_an_empty_physical_signature_without_losing_precision() {
+        test_initialise().unwrap();
+        let q = Atom::var(symbol!("evaluator_test::constant_joint_row"));
+        let family = symbol!("evaluator_test::constant_joint_family");
+        let term = ParametricIntegrandTerm {
+            numerator: Arc::new(FnMapEntry {
+                lhs: function!(family, 0, q.clone()),
+                rhs: q.clone(),
+                tags: vec![Atom::num(0)],
+                args: vec![Indeterminate::try_from(q).unwrap()],
+                inlining: Default::default(),
+            }),
+            rows: [
+                Rational::new(9_007_199_254_740_993i64, 9_007_199_254_740_992i64),
+                Rational::from(-1),
+            ]
+            .into_iter()
+            .map(|value| crate::uv::ParametricIntegrandRow {
+                coefficients: vec![value],
+                carrier: Atom::one(),
+                source_keys: Vec::new(),
+            })
+            .collect(),
+        };
+        let (mut stack, _) = EvaluatorStack::from_integrand_with_timings(
+            &Atom::Zero,
+            &ParamBuilder::new_empty(),
+            &[],
+            &[term],
+            None,
+            None,
+            &EvaluatorSettings::default(),
+        )
+        .unwrap();
+        let actual =
+            stack.evaluate_single_parametric::<ArbPrec>(&[], &mut EvaluationMetaData::new_empty());
+        let expected =
+            F::<ArbPrec>::default().from_rational(&Rational::new(1, 9_007_199_254_740_992i64));
+        assert!(expected > expected.zero());
+        assert_eq!(
+            actual.into_iter().next().unwrap().unwrap_real(),
+            Complex::new_re(expected)
+        );
     }
 
     #[test]
@@ -5581,6 +6004,7 @@ mod tests {
                 &builder,
                 &orientations,
                 &ids,
+                None,
                 &Some(vec![vec![0], vec![1]]),
                 &settings,
             )

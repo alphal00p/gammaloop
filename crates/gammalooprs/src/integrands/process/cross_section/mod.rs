@@ -1037,9 +1037,7 @@ impl CrossSectionGraphTerm {
                     return Err(eyre!("Generation interrupted by user"));
                 }
                 let mut cut_group_integrands = BTreeMap::new();
-                for (cut_cff_index, integrand_for_subset) in
-                    integrand_for_cut_group.integrands.iter()
-                {
+                for cut_cff_index in integrand_for_cut_group.integrands.cut_indices() {
                     if crate::is_interrupted() {
                         return Err(eyre!("Generation interrupted by user"));
                     }
@@ -1047,9 +1045,15 @@ impl CrossSectionGraphTerm {
 
                     let (evaluator_stack, evaluator_timings) =
                         EvaluatorStack::from_integrand_with_timings(
-                            integrand_for_subset,
+                            integrand_for_cut_group
+                                .integrands
+                                .atom(cut_cff_index)
+                                .expect("every integrand cut has a registered scalar lane"),
                             &graph.graph.param_builder,
                             integrand_for_cut_group.integrands.numerators(),
+                            integrand_for_cut_group
+                                .integrands
+                                .parametric_terms(cut_cff_index),
                             (!settings.generation.requires_complete_orientation_sum())
                                 .then_some((&orientations.raw, &production_orientation_ids)),
                             dual_shape,
