@@ -16,7 +16,7 @@ symbolica-typst-atom-payload = { version = "0.1.0", default-features = false, fe
 
 # Consuming workspaces choose these sources through their own root patches.
 [patch.crates-io]
-symbolica-typst-atom-payload = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "cf7b9fe59ba3fc7fe9ea70b875f5660ee2addd7a" }
+symbolica-typst-atom-payload = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "7f869adc14dcf2758bab16aaa25e06eb10ffbfad" }
 symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "06906976bca24fefc5203aee699d90d62ebe08cd" }
 
 [profile.release]

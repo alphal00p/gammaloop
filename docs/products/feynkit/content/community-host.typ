@@ -32,7 +32,7 @@ FeynKit, Spenso, and the native Typst payload transitively:
 ```toml
 [patch.crates-io]
 symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "a19c760dd567c239f30d87e4e924ca2f8b8457ab" }
-symbolica-typst-atom-payload = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "cf7b9fe59ba3fc7fe9ea70b875f5660ee2addd7a" }
+symbolica-typst-atom-payload = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "7f869adc14dcf2758bab16aaa25e06eb10ffbfad" }
 ```
 
 Only the top-level workspace's patches apply; dependency workspaces do not

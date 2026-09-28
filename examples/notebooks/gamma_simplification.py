@@ -52,6 +52,13 @@ def _():
     )
 
 
+@app.cell
+def _():
+    from symbolica.community.hep import Symbols
+
+    return (Symbols,)
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -292,6 +299,7 @@ def _(mo):
 
 @app.cell
 def _(
+    Symbols,
     S,
     TensorExpression,
     TensorName,
@@ -317,7 +325,11 @@ def _(
     slash_p = slash(p_compact)(a, b)
     slash_q = slash(q_compact)(a, b)
     slash_sandwich = word(slash(p_compact), slash(q_compact), slash(p_compact))
-    incoming, outgoing, chain_head = S("spenso::in", "spenso::out", "spenso::chain")
+    incoming, outgoing, chain_head = (
+        Symbols.chain_in,
+        Symbols.chain_out,
+        Symbols.gamma_chain,
+    )
     p_squared = metric_head(p_compact, p_compact)
     p_dot_q = metric_head(p_compact, q_compact)
     slash_check = identity_card(
@@ -518,6 +530,7 @@ def _(mo):
 
 @app.cell
 def _(
+    Symbols,
     S,
     TensorExpression,
     g5,
@@ -540,7 +553,7 @@ def _(
 ):
     axial_expected = TensorExpression(
         4
-        * S("spenso::epsilon")(
+        * Symbols.levi_civita(
             *(lorentz(index).to_expression() for index in (mu, nu, rho, sigma))
         )
     )
@@ -600,6 +613,7 @@ def _(mo):
 
 @app.cell
 def _(
+    Symbols,
     D,
     S,
     TensorExpression,
@@ -621,7 +635,7 @@ def _(
     word,
 ):
     _left, _right = spin(a).to_expression(), spin(b).to_expression()
-    _c = S("spenso::charge_conjugation")(incoming, outgoing)
+    _c = Symbols.charge_conjugation(incoming, outgoing)
     _forward = gamma_head(incoming, outgoing, lorentz(mu).to_expression())
     _transpose = gamma_head(outgoing, incoming, lorentz(mu).to_expression())
     _square = TensorExpression(chain_head(_left, _right, _c, _c))
@@ -2552,7 +2566,9 @@ def _(mo):
 
 
 @app.cell
-def _(E, S, TensorExpression, TensorName, form_executable, g5, lorentz, slash, tr):
+def _(
+    Symbols, E, S, TensorExpression, TensorName, form_executable, g5, lorentz, slash, tr
+):
     from itertools import permutations
 
     from symbolica import Expression
@@ -2577,7 +2593,7 @@ def _(E, S, TensorExpression, TensorName, form_executable, g5, lorentz, slash, t
         [-2, 1, 3, -1],
         [2, 2, -1, 3],
     ]
-    _epsilon_name = TensorName("spenso::epsilon", is_antisymmetric=True)
+    _epsilon_name = TensorName(Symbols.levi_civita.get_name())
     _epsilon = Tensor.sparse(
         _epsilon_name(lorentz, lorentz, lorentz, lorentz), Expression
     )

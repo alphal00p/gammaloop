@@ -9,6 +9,7 @@ from math import prod
 from pathlib import Path
 from time import process_time_ns
 
+from symbolica.community.hep import Symbols
 from symbolica import E, S, T
 from symbolica.community.spenso import (
     AUTO,
@@ -342,7 +343,7 @@ class FreeTrace:
             library = TensorLibrary.hep_lib_atom()
             # Same explicit epsilon components as gamma_simplification.py's HEP check.
             epsilon = Tensor.sparse(
-                TensorName("spenso::epsilon", is_antisymmetric=True)(*[rep] * 4),
+                TensorName(Symbols.levi_civita.get_name())(*[rep] * 4),
                 Expression,
             )
             for permutation, sign in signed_permutations:
@@ -366,7 +367,7 @@ class FreeTrace:
                 "r3components::d_",
             )
             metric_pattern = TensorName.g().to_expression()(*wildcards[:2])
-            epsilon_pattern = S("spenso::epsilon")(*wildcards)
+            epsilon_pattern = Symbols.levi_civita(*wildcards)
             results = {}
             for label, expression in expressions.items():
                 if label == "source":
@@ -430,7 +431,7 @@ class AxialTrace(FreeTrace):
 
     def import_form(self, text):
         text = re.sub(r"\s+", "", text)
-        epsilon = S("spenso::epsilon")
+        epsilon = Symbols.levi_civita
 
         def convert(match):
             return epsilon(
@@ -454,7 +455,7 @@ class ProductionNumerator:
         # Q is registered by the combined host, including its display metadata.
         TensorName.gamma()
         TensorName.t()
-        Representation.mink(S("gammalooprs::dim"))
+        Representation.mink(Symbols.dimension)
         Representation.bis(4)
         Representation.cof(3)
         Representation.coad(8)

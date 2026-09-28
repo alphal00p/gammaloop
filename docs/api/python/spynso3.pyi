@@ -3909,6 +3909,24 @@ def formatted(expression: Expression, show_dimensions: typing.Optional[builtins.
     Build Symbolica's rich display wrapper for a tensor expression.
     """
 
+def load_math_font() -> builtins.str:
+    r"""
+    Return a style element containing the bundled math font for offline HTML.
+
+    Normal expression HTML references a pinned CDN font, preferring a locally
+    installed STIX Two Math. Display this setup once before your expressions to
+    avoid font downloads, or insert it once into an exported HTML document's
+    head. Keep the setup output when saving a notebook. It applies to expressions
+    in the same HTML document; isolated output frames need their own setup.
+    The returned HTML includes the font's redistribution license.
+
+    Examples
+    --------
+    >>> from IPython.display import HTML, display
+    >>> from symbolica.community import spenso
+    >>> display(HTML(spenso.load_math_font()))
+    """
+
 def set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> builtins.bool:
     r"""
     Configure whether Spenso may use Rayon for Symbolica operations.

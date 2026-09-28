@@ -7,6 +7,23 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 == Unreleased
 
+- MathML output loads the full STIX Two Math font from a pinned CDN URL when
+  it is not installed locally. Expressions share the font download and contain
+  no embedded font bytes.
+- `symbolica.community.spenso.load_math_font()` returns a style element with
+  the bundled font for offline notebooks and standalone HTML exports. Display
+  it once before expressions in the same HTML document:
+
+  ```python
+  from IPython.display import HTML, display
+  from symbolica.community import spenso
+
+  display(HTML(spenso.load_math_font()))
+  ```
+
+  Keep this setup output when saving a notebook. Isolated output frames require
+  their own setup; normal online output needs no setup cell.
+
 == #link("https://github.com/alphal00p/spenso/compare/spynso3-v0.1.1...spynso3-v0.1.2")[0.1.2] - 2026-01-14
 
 === Other

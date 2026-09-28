@@ -355,9 +355,9 @@ else:
     assert fraction_html.count("<mfrac>") == 1, fraction_html
     assert rational.to_expression() == before_render
     html = indexed.to_html()
-    # Standalone notebook fragments use the page's fonts without embedding font files.
+    # Standalone notebook fragments share a pinned font URL without embedding font files.
     assert "data:font" not in html
-    assert "@font-face" not in html
+    assert "https://cdn.jsdelivr.net/gh/stipub/stixfonts@2.13b171/" in html
     assert "<div data-spenso-math>" in html
     assert "Momentum" not in html
     assert ">𝑞<" in html
