@@ -980,18 +980,21 @@ mod tests {
 
     #[test]
     fn default_template_renders_generic_config_and_static_subgraphs_with_typst() {
+        // Fail rather than skip without Typst: the Nix dev shell and the clinnet
+        // CI check both provide it.
         let typst = std::env::var_os("TYPST_TEST_EXECUTABLE")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("typst"));
-        let Ok(version) = Command::new(&typst).arg("--version").output() else {
-            return;
-        };
-        if !version.status.success()
-            || TypstRenderer::require_typst_version(&String::from_utf8_lossy(&version.stdout))
-                .is_err()
-        {
-            return;
-        }
+        let version = Command::new(&typst)
+            .arg("--version")
+            .output()
+            .unwrap_or_else(|error| panic!("cannot run {}: {error}", typst.display()));
+        assert!(
+            version.status.success(),
+            "{} --version failed",
+            typst.display()
+        );
+        TypstRenderer::require_typst_version(&String::from_utf8_lossy(&version.stdout)).unwrap();
 
         let base = std::env::temp_dir().join(format!(
             "clinnet-real-typst-{}-{}",
@@ -1285,13 +1288,21 @@ mod tests {
             .compile_template(&assertions, base.join("generic-assertions.pdf"), &[])
             .unwrap();
 
-        let gamma_assertions =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/gamma-style-behavior.typ");
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let gamma_assertions = manifest.join("tests/resources/gamma-style-behavior.typ");
+        // The fixture imports across the workspace, so root the compilation there.
+        let workspace = manifest.join("../..").canonicalize().unwrap();
+        let imports = [
+            "crates/linnest/typst/src/lib.typ",
+            "assets/embedded/drawing/templates/layout-core.typ",
+            "docs/assets/typst/portal-graphs/edge-style.typ",
+        ]
+        .map(|import| workspace.join(import));
         renderer
             .compile_template(
                 &gamma_assertions,
                 base.join("gamma-style-assertions.pdf"),
-                &[],
+                &imports.each_ref().map(PathBuf::as_path),
             )
             .unwrap();
 

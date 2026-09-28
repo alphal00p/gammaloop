@@ -481,7 +481,10 @@
     "alphal00p-docs-catalogs" = [
       "docs/api/python"
     ];
-    clinnet = ["docs/assets/typst/portal-graphs/edge-style.typ"];
+    clinnet = [
+      "docs/assets/typst/portal-graphs/edge-style.typ"
+      "docs/assets/typst/theme.typ"
+    ];
     "gammaloop-api" = [
       "tests/resources/graphs/scalar_box.dot"
       "tests/resources/graphs/scalar_bubble.dot"
@@ -2383,9 +2386,16 @@
       '';
     });
 
-  nextestPackageGroups = map (target: target // lib.optionalAttrs (target.name == "docs") {
-    runtimeTools = [docsTypst nextestPython pkgs.git pkgs.jujutsu];
-  }) ci.groups;
+  nextestPackageGroups = map (target:
+    target
+    // lib.optionalAttrs (target.name == "docs") {
+      runtimeTools = [docsTypst nextestPython pkgs.git pkgs.jujutsu];
+    }
+    // lib.optionalAttrs (target.name == "clinnet") {
+      # The Typst behaviour tests fail rather than skip without Typst 0.15.
+      runtimeTools = [docsTypst];
+    })
+  ci.groups;
 
   sortedUnique = list: lib.sort (left: right: left < right) (lib.unique list);
 

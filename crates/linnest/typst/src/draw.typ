@@ -393,6 +393,36 @@
   /// points through that same Hobby path.
   /// `route: "straight-through"` draws the two straight force springs from
   /// source to edge position and from edge position to sink.
+  /// `pattern-natural-endpoints` defaults to `false`. For built-in coil strings
+  /// (`"coil"`, `"helix"`, `"spring"`) on complete continuous paths with both
+  /// endpoints anchored, `true` constructs a fitted `kurvst.coil` dictionary in
+  /// Typst and applies it once via ordinary `kurvst.pattern`: full-amplitude
+  /// inward endpoint phases and half-integer coil periods, with exact endpoints
+  /// and no taper, straight stubs, or connectors. This overrides `pattern-phase`,
+  /// bypasses `pattern-fit` integer fitting, and ignores `pattern-endpoint-slope`
+  /// (`endpoint-ramp: false`). Fitted dictionaries also work directly as
+  /// `pattern` without this flag; see the Kurvst manual's Path Patterns section
+  /// for the fitting formula and one-pass application settings. Other patterns
+  /// ignore this flag. Without it, anchored coils use the 75%-wavelength
+  /// endpoint taper (capped at half the path length), with a squared
+  /// longitudinal envelope.
+  /// Without automatic fitting, `pattern-fit: true` adjusts the wavelength to the
+  /// nearest whole number of periods on a complete, unbroken edge.
+  /// `pattern-phase` is in radians; `calc.pi / 2` gives coils matching,
+  /// gently tapered endpoint phases without straight end sections.
+  /// `pattern-endpoint-slope` sets the taper's initial slope, from 0 to 3.
+  /// Zero (default) keeps tangential ends; positive values allow angled ends
+  /// without detaching them. The angle also depends on phase, amplitude, and
+  /// wavelength.
+  /// When `source-style` and `sink-style` share a pattern and differ only in
+  /// stroke (for example colour), the whole edge is patterned once, fitted like
+  /// a single edge, and cut at the edge layout point, so each half keeps its own
+  /// stroke while the coil runs continuously through the split.
+  /// Other split-style halves and partially anchored paths, such as crossing-gap
+  /// fragments, keep the requested wavelength, taper only anchored endpoints,
+  /// and preserve phase continuity across hidden spans. Neither automatic coil
+  /// construction nor integer fitting applies. A path with gaps is patterned
+  /// per continuous run, carrying the phase across each gap.
   /// A finite layer can set `shift` to move along the logical edge, with
   /// positive values moving toward its end. `label` attaches content near the
   /// layer midpoint; `label-shift` (default `0`) moves its reference point by
@@ -441,7 +471,9 @@
   edge-omega: 1.0,
   /// Optional style key for anchored source/sink routes. Set
   /// `anchor-control-distance` in `source-style` or `sink-style` to override
-  /// the automatic guide distance used by cubic anchored routes.
+  /// that endpoint's automatic guide distance in graph units. Per-edge endpoint
+  /// styles control each end independently; `auto` is resolved independently.
+  /// Set it in `edge-style` to supply a shared distance for both ends.
   /// -> auto | int | float
   /// Arc-length accuracy for trimming edge curves at node outsets. -> float
   edge-trim-accuracy: 0.001,

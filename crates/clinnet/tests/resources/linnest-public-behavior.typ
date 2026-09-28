@@ -677,6 +677,35 @@
   (:)
 }
 
+// Parallel edges share endpoints and edge.pos but keep their local endpoint
+// distances independent. Empty endpoint styles inherit the shared edge style.
+#let anchor-distance-graph = graph.build({
+  node(<anchor-distance-source>, pos: pos(x: 0, y: 0, mode: "pin"))
+  node(<anchor-distance-sink>, pos: pos(x: 10, y: 0, mode: "pin"))
+  for (color, shared, source-style, sink-style) in (
+    ("#1234a1", auto, (anchor-control-distance: 4), (anchor-control-distance: 1.5)),
+    ("#1234a2", auto, (anchor-control-distance: 1.5), (anchor-control-distance: 4)),
+    ("#1234a3", 2, (:), (:)),
+    ("#1234a4", 2, (anchor-control-distance: 4), (:)),
+    ("#1234a5", auto, (anchor-control-distance: 4), (:)),
+    ("#1234a6", auto, (:), (anchor-control-distance: 1.5)),
+    ("#1234a7", auto, (anchor-control-distance: 2), (anchor-control-distance: 2)),
+    ("#1234a8", auto, (:), (:)),
+  ) {
+    edge(
+      source(<anchor-distance-source>), sink(<anchor-distance-sink>),
+      pos: pos(x: 4, y: 3, mode: "pin"),
+      edge-style: (
+        source-anchor: "east", sink-anchor: "west",
+        anchor-control-distance: shared,
+        stroke: rgb(color) + 0.8pt,
+      ),
+      source-style: source-style,
+      sink-style: sink-style,
+    )
+  }
+})
+
 #let bare-draw = (
   unit: 10pt,
   padding: 1,
@@ -832,4 +861,5 @@
   ),
   after-static,
   after-callback,
+  draw(anchor-distance-graph, ..bare-draw),
 )

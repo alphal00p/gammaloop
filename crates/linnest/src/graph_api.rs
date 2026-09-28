@@ -617,6 +617,12 @@ fn apply_typst_graph_structural_patch(
     patch: TypstGraphStructuralPatch,
 ) -> Result<(), String> {
     let mut node_positions = typst_node_positions(graph);
+    let original_node_positions = node_positions.clone();
+    let original_edge_positions = (0..graph.graph.n_edges())
+        .map(|index| graph.graph[EdgeIndex(index)].pos)
+        .collect::<Vec<_>>();
+    let mut patched_node_positions = vec![false; graph.graph.n_nodes()];
+    let mut patched_edge_positions = vec![false; graph.graph.n_edges()];
     let mut refresh_positions = false;
 
     for node in patch.nodes {
@@ -633,6 +639,7 @@ fn apply_typst_graph_structural_patch(
             let placement = pos.resolve(&node_positions, "node structural patch")?;
             if let Some(point) = placement.point {
                 refresh_positions = true;
+                patched_node_positions[node.index] = true;
                 let previous = node_positions[node.index];
                 node_positions[node.index] = if placement.merge_axes {
                     ResolvedPoint {
@@ -654,7 +661,10 @@ fn apply_typst_graph_structural_patch(
                 .statements
                 .insert("shift".to_string(), shift.to_statement()?);
         }
-        refresh_positions |= point_statements_changed(&node.statements);
+        if point_statements_changed(&node.statements) {
+            refresh_positions = true;
+            patched_node_positions[node.index] = true;
+        }
         graph.graph[index].statements.extend(node.statements);
         if let Some((x, y)) = statement_point(&graph.graph[index].statements, "shift") {
             graph.graph[index].shift = Some(Vector2::new(x, y));
@@ -673,7 +683,10 @@ fn apply_typst_graph_structural_patch(
         let index = EdgeIndex(edge.index);
         if let Some(pos) = edge.pos {
             let placement = pos.resolve(&node_positions, "edge structural patch")?;
-            refresh_positions |= placement.point.is_some();
+            if placement.point.is_some() {
+                refresh_positions = true;
+                patched_edge_positions[edge.index] = true;
+            }
             let statements = std::mem::take(&mut graph.graph[index].statements);
             graph.graph[index].statements =
                 apply_placement_statements(statements, Some(&placement));
@@ -698,7 +711,10 @@ fn apply_typst_graph_structural_patch(
                 .statements
                 .insert("bend".to_string(), format!("{bend}rad"));
         }
-        refresh_positions |= point_statements_changed(&edge.statements);
+        if point_statements_changed(&edge.statements) {
+            refresh_positions = true;
+            patched_edge_positions[edge.index] = true;
+        }
         graph.graph[index].statements.extend(edge.statements);
         let data = &mut graph.graph[index];
         if let Some((x, y)) = statement_point(&data.statements, "shift") {
@@ -739,6 +755,18 @@ fn apply_typst_graph_structural_patch(
 
     if refresh_positions {
         refresh_structural_state_from_statements(graph);
+        // Constraint metadata may still contain pre-layout seeds; only patched
+        // points should replace their current solved coordinates.
+        for (index, position) in original_node_positions.into_iter().enumerate() {
+            if !patched_node_positions[index] {
+                graph.graph[NodeIndex(index)].pos = Point2::new(position.x, position.y);
+            }
+        }
+        for (index, position) in original_edge_positions.into_iter().enumerate() {
+            if !patched_edge_positions[index] {
+                graph.graph[EdgeIndex(index)].pos = position;
+            }
+        }
     }
     Ok(())
 }

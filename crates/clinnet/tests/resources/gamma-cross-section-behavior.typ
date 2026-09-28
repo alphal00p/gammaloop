@@ -78,7 +78,8 @@
 #draw(positioned, title: none)
 
 // Public Gamma layout keeps outside labels close to the free endpoint, with
-// extra room only when momentum is shown. Explicit layout distances still win.
+// extra room only when momentum is shown (layout-core's label-length-scale of
+// 0.45 versus 0.30). Explicit layout distances still win.
 #let spacing-input = ```dot
 digraph {
   a [pos="0,0!"];
@@ -90,10 +91,10 @@ digraph {
 ```.text
 #for cross-section in (false, true) {
   for (arrows, momentum, distance, expected) in (
-    (true, auto, none, 0.25),
-    (true, false, none, 0.10),
-    (false, auto, none, 0.10),
-    (false, true, none, 0.25),
+    (true, auto, none, 0.45),
+    (true, false, none, 0.30),
+    (false, auto, none, 0.30),
+    (false, true, none, 0.45),
     (true, false, 0.6, 0.6),
   ) {
     context gamma-layout(spacing-input,
