@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, fmt::Write};
 
-use super::expression::CutCffResidueAxis;
+use super::expression::{CutCffResidueAxis, ThreeDExpression};
 use super::*;
 use crate::{
     dot,

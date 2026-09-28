@@ -21,8 +21,7 @@ use crate::{
     cff::{
         expression::{
             GammaLoopOrientationExpression, OrientationExpression, OrientationID,
-            OrientationSelector, ThreeDExpression,
-            normalize_cut_edge_support_with_raised_edge_groups,
+            OrientationSelector, normalize_cut_edge_support_with_raised_edge_groups,
             normalize_three_d_expression_cut_support_with_raised_edge_groups,
             select_indexed_cff_residues,
         },
