@@ -2504,6 +2504,7 @@ impl PyDiagramGroup {
 #[derive(Clone)]
 pub struct PyGenerationResult {
     inner: GenerationResult,
+    cross_section: bool,
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -2621,7 +2622,7 @@ impl PyGenerationResult {
         )
     }
 
-    /// Render generation statistics and a bounded diagram gallery as HTML.
+    /// Render a thumbnail strip and one shared interactive diagram viewer.
     ///
     /// At most six diagrams are rendered so that displaying a large generation
     /// result remains responsive. Access ``result.diagrams`` to inspect the
@@ -2634,46 +2635,32 @@ impl PyGenerationResult {
     /// >>> from IPython.display import display
     /// >>> display(result)
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        const PREVIEW_LIMIT: usize = 6;
-
-        let report = PyGenerationReport {
-            inner: self.inner.report.clone(),
-        }
-        ._repr_html_();
-        let diagrams = self
-            .inner
-            .diagrams
-            .iter()
-            .take(PREVIEW_LIMIT)
-            .map(|diagram| {
-                PyFeynmanDiagram::from(diagram.clone())
-                    ._repr_html_(py)
-                    .map(|html| {
-                        format!("<div style=\"min-width:0;overflow-x:auto\">{}</div>", html)
-                    })
-            })
-            .collect::<PyResult<String>>()?;
-        let gallery = if diagrams.is_empty() {
-            "<p style=\"margin:.5rem 0;opacity:.75\">No diagrams retained.</p>".to_owned()
+        let title = if self.cross_section {
+            "Cross section"
         } else {
-            format!(
-                "<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr));gap:.75rem;margin-top:.5rem\">{diagrams}</div>"
-            )
+            "Generation result"
         };
-        let remainder = self.inner.diagrams.len().saturating_sub(PREVIEW_LIMIT);
-        let omitted = if remainder == 0 {
-            String::new()
-        } else {
-            format!(
-                "<p style=\"margin:.5rem 0 0;opacity:.75\">{remainder} additional diagram{} not shown.</p>",
-                if remainder == 1 { "" } else { "s" },
-            )
-        };
-
-        Ok(format!(
-            "<section class=\"feynkit-generation-result\" style=\"max-width:100%\">\
-             <h3 style=\"margin:.25rem 0\">Generation result</h3>{report}{gallery}{omitted}</section>"
-        ))
+        let subtitle = format!(
+            "{} diagrams · {} groups · {}",
+            self.inner.diagrams.len(),
+            self.inner.groups.len(),
+            if self.inner.report.completed {
+                "complete"
+            } else {
+                "incomplete"
+            },
+        );
+        crate::display::collection_html(
+            py,
+            title,
+            &subtitle,
+            self.inner
+                .diagrams
+                .iter()
+                .cloned()
+                .map(PyFeynmanDiagram::from),
+            None,
+        )
     }
 
     /// Write a concise result summary to an IPython pretty printer.
@@ -3025,7 +3012,10 @@ fn run_generation(
         deliver_progress(true)?;
         py.check_signals()?;
         result
-            .map(|inner| PyGenerationResult { inner })
+            .map(|inner| PyGenerationResult {
+                inner,
+                cross_section: generation_type == GenerationType::CrossSection,
+            })
             .map_err(error::generation)
     })();
     if let Some((_, state, _)) = marimo_progress {

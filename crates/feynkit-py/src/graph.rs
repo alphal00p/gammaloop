@@ -3623,7 +3623,7 @@ impl PyFeynmanDiagram {
     ///     Highlight a region while preserving the full diagram as muted context.
     ///     A Subgraph highlights its own region by default.
     #[pyo3(signature = (*, config=None, momenta=false, lmb=None, highlight=None))]
-    fn render(
+    pub(crate) fn render(
         &self,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr="linnet.RenderConfig | None", imports=("linnet")))]

@@ -83,6 +83,72 @@ pub(crate) fn render_diagram_html(diagram: &FeynmanDiagram, svg: &str) -> String
     )
 }
 
+pub(crate) const PREVIEW_LIMIT: usize = 6;
+
+/// Compact collections share the graph renderer and Spenso's expression printer.
+/// SVG templates remain inert until a row or thumbnail is selected.
+pub(crate) fn collection_html(
+    py: Python<'_>,
+    title: &str,
+    subtitle: &str,
+    diagrams: impl ExactSizeIterator<Item = crate::graph::PyFeynmanDiagram>,
+    terms: Option<&[String]>,
+) -> PyResult<String> {
+    let count = diagrams.len();
+    let mut html = format!(
+        "<style>{}</style><section class=\"feynkit-collection\"><header><strong>{}</strong><small>{}</small></header>",
+        include_str!("collection.css"),
+        escape_html(title),
+        escape_html(subtitle),
+    );
+    let mut templates = String::new();
+    if terms.is_none() {
+        html.push_str("<div class=\"fk-strip\" role=\"group\" aria-label=\"Choose diagram\">");
+    }
+    for (index, diagram) in diagrams.take(PREVIEW_LIMIT).enumerate() {
+        let svg = diagram.render(py, None, false, None, None)?;
+        write!(templates, "<template>{svg}</template>").unwrap();
+        let label = format!("Diagram {}", index + 1);
+        let mut caption = format!(
+            "{} · {} loop{}",
+            diagram.inner.name(),
+            diagram.inner.loop_count(),
+            if diagram.inner.loop_count() == 1 {
+                ""
+            } else {
+                "s"
+            },
+        );
+        let cuts = diagram.inner.cuts().len();
+        if cuts > 0 {
+            write!(caption, " · {cuts} cut{}", if cuts == 1 { "" } else { "s" }).unwrap();
+        }
+        let caption = escape_html(&caption);
+        let thumbnail = format!("<img class=\"fk-thumbnail\" alt=\"{label}\">");
+        if let Some(terms) = terms {
+            write!(html, "<details class=\"fk-row\"><summary>{thumbnail}<div class=\"fk-term\"><small>{label} · Contribution</small>{}</div></summary><div class=\"fk-stage\"></div><div class=\"fk-caption\">{caption}</div></details>", terms[index]).unwrap();
+        } else {
+            write!(html, "<button type=\"button\" aria-pressed=\"false\" data-caption=\"{caption}\">{thumbnail}{label}</button>").unwrap();
+        }
+    }
+    if terms.is_none() {
+        html.push_str("</div><div class=\"fk-stage\"></div><div class=\"fk-caption\" aria-live=\"polite\"></div>");
+    }
+    if count == 0 {
+        html.push_str("<p>No diagrams retained.</p>");
+    }
+    if count > PREVIEW_LIMIT {
+        write!(html, "<small>Showing {PREVIEW_LIMIT} of {count} diagrams. Access .diagrams to inspect the complete collection.</small>").unwrap();
+    }
+    write!(
+        html,
+        "{templates}</section><script>{}</script>",
+        include_str!("collection.js")
+    )
+    .unwrap();
+    Ok(html)
+}
+
 #[cfg(test)]
 mod tests {
     use super::escape_html;

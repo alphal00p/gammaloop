@@ -368,7 +368,7 @@ impl PyAmplitude {
             self.inner.is_conjugated()
         )
     }
-    /// Render the operator using Spenso's existing tensor printer.
+    /// Render compact diagram rows with weighted operators and expandable graphs.
     ///
     /// Examples
     /// --------
@@ -376,12 +376,37 @@ impl PyAmplitude {
     ///
     /// >>> from IPython.display import display
     /// >>> display(amplitude)
-    fn _repr_html_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        Ok(self
-            .expression(py)?
-            .bind(py)
-            .call_method0("_repr_html_")?
-            .unbind())
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        let terms = self
+            .inner
+            .terms()
+            .iter()
+            .take(crate::display::PREVIEW_LIMIT)
+            .map(|term| {
+                TensorExpression::from_atom_interface(py, term.clone(), None)?
+                    .bind(py)
+                    .call_method0("to_html")?
+                    .extract::<String>()
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        crate::display::collection_html(
+            py,
+            if self.inner.is_conjugated() {
+                "Conjugate amplitude"
+            } else {
+                "Amplitude"
+            },
+            &format!(
+                "{} diagrams · {} external legs",
+                self.inner.diagrams().len(),
+                self.inner.legs().len()
+            ),
+            self.inner
+                .diagrams()
+                .iter()
+                .map(|diagram| PyFeynmanDiagram::from(diagram.as_ref().clone())),
+            Some(&terms),
+        )
     }
 }
 

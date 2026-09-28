@@ -169,9 +169,9 @@ class Amplitude:
 
         >>> print(amplitude)
         """
-    def _repr_html_(self) -> typing.Any:
+    def _repr_html_(self) -> builtins.str:
         r"""
-        Render the operator using Spenso's existing tensor printer.
+        Render compact diagram rows with weighted operators and expandable graphs.
 
         Examples
         --------
@@ -4104,7 +4104,7 @@ class GenerationResult:
         """
     def _repr_html_(self) -> builtins.str:
         r"""
-        Render generation statistics and a bounded diagram gallery as HTML.
+        Render a thumbnail strip and one shared interactive diagram viewer.
 
         At most six diagrams are rendered so that displaying a large generation
         result remains responsive. Access ``result.diagrams`` to inspect the
