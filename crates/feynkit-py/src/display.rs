@@ -298,7 +298,10 @@ pub(crate) fn process_svg(
  let config = config + (title: if title == auto { none } else { title })
  let options = (mode: process-mode, label-fill: palette.ink) + config.at("options", default: (:))
  let drawing = config.at("draw", default: (:))
- let style = (node-label: none, node-style: (radius: drawing.at("node-radius", default: 3.0), fill: none, stroke: (paint: palette.ink, thickness: 0.7pt, dash: "dashed"))) + config.at("style", default: (:))
+ let blob-fill = tiling(size: (5pt, 5pt), {
+   place(line(start: (0pt, 5pt), end: (5pt, 0pt), stroke: palette.ink + 0.35pt))
+ })
+ let style = (node-label: none, node-style: (radius: drawing.at("node-radius", default: 3.0), fill: blob-fill, stroke: (paint: palette.ink, thickness: 0.7pt, dash: "dashed"))) + config.at("style", default: (:))
  // Size the process springs from the final blob, including element styles.
  let effective = renderer._effective-options((unit: 1.5, node-label-style: (padding: 0.08)), style, drawing)
  let callbacks = renderer._callbacks(effective)
