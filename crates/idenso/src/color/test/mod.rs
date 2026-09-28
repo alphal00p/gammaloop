@@ -1,6 +1,8 @@
+use crate::representations::ColorSextet;
 use insta::assert_snapshot;
 use spenso::network::parsing::{ParseSettings, StructureFromAtom};
 use spenso::network::tags::SPENSO_TAG;
+use spenso::shadowing::{Collectable, TensorCollectExt, TensorCollectFilter};
 use spenso::structure::{Canonicalized, IndexlessNamedStructure, TensorStructure};
 use symbolica_utils::AtomPrintExt;
 
@@ -19,13 +21,11 @@ static _CF: LazyLock<Canonicalized<IndexlessNamedStructure<Symbol, ()>>> = LazyL
 });
 
 use spenso::{antisym, chain, network::parsing::ShadowedStructure, s, slot, sym, trace};
-use symbolica::{id::Pattern, parse, parse_lit};
+use symbolica::{function, parse, parse_lit};
 
-use crate::dirac::PS;
-use crate::selective_expand::SelectiveExpand;
 use crate::shorthands::schoonschip::Schoonschip;
 use crate::tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
-use crate::{Cookable, IndexTooling, dirac::GammaSimplifier, shorthands::metric::MetricSimplifier};
+use crate::{Cookable, IndexTooling};
 use crate::{color_cas, color_f, color_gram, color_idx, color_str_t, color_t, f};
 
 use super::*;
@@ -33,7 +33,16 @@ use super::*;
 use crate::test_support::{TestReps, test_initialize};
 
 fn assert_color_zero(expr: Atom) {
-    assert!(expr.simplify_color().is_zero());
+    assert!(
+        crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+            .is_zero()
+    );
 }
 
 #[test]
@@ -90,7 +99,26 @@ fn test_color_simplification() {
         ) ^ 2,
         default_namespace = "spenso"
     );
-    let simplified = atom.simplify_color();
+    let dimension_value = parse_lit!(Nc ^ 2 - 1, default_namespace = "spenso");
+    let dimension = Atom::var(symbol!("test_color_simplification_dimension"));
+    let admitted = atom
+        .replace(dimension_value.to_pattern())
+        .with(dimension.to_pattern());
+    assert_eq!(
+        admitted
+            .replace(dimension.to_pattern())
+            .with(dimension_value.to_pattern()),
+        atom
+    );
+    let simplified = crate::tensor::SymbolicTensor::infer(admitted)
+        .unwrap()
+        .simplify_color(crate::color::ColorSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression()
+        .replace(dimension.to_pattern())
+        .with(dimension_value.to_pattern());
 
     assert_snapshot!(simplified.to_bare_ordered_string(), @"(-1+Nc^2)*cas(2,coad(-1+Nc^2))");
 }
@@ -115,20 +143,41 @@ fn untyped_structure_constants_do_not_assume_an_adjoint_dimension() {
     test_initialize();
 
     let atom = f!(3, 1, 5) * f!(3, 5, 1);
-    assert_eq!(atom.simplify_color(), atom);
+    assert!(SymbolicTensor::infer(atom.clone()).is_err());
+    assert_eq!(
+        super::simplify::ColorAlgebraSimplifier {
+            settings: ColorSimplifySettings::default(),
+        }
+        .step(atom.as_view(), true),
+        atom
+    );
 }
 
 #[test]
 fn partially_typed_or_inconsistent_structure_constants_are_not_rewritten() {
     test_initialize();
     let partially_typed = parse_lit!(f(coad(dA, a), b, c) ^ 2, default_namespace = "spenso");
-    assert_eq!(partially_typed.simplify_color(), partially_typed);
+    assert!(SymbolicTensor::infer(partially_typed.clone()).is_err());
+    assert_eq!(
+        super::simplify::ColorAlgebraSimplifier {
+            settings: ColorSimplifySettings::default(),
+        }
+        .step(partially_typed.as_view(), true),
+        partially_typed
+    );
 
     let inconsistent = parse_lit!(
         f(coad(dA, a), coad(dA, b), coad(other_dA, c)) ^ 2,
         default_namespace = "spenso"
     );
-    assert_eq!(inconsistent.simplify_color(), inconsistent);
+    assert!(SymbolicTensor::infer(inconsistent.clone()).is_err());
+    assert_eq!(
+        super::simplify::ColorAlgebraSimplifier {
+            settings: ColorSimplifySettings::default(),
+        }
+        .step(inconsistent.as_view(), true),
+        inconsistent
+    );
 }
 
 #[test]
@@ -312,21 +361,50 @@ fn cof_dimension_simplification_preserves_factorized_spectators() {
         cas(2, coad(8)) * idx(2, cof(3)),
         default_namespace = "spenso"
     );
-    assert_eq!(invariants.simplify_color(), invariants);
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((invariants).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        invariants
+    );
 
     let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 3 * (opaque(z) + opaque(w)));
     let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
-    let simplified = (invariants * spectator.clone()).simplify_color_with(settings);
+    let simplified = crate::tensor::SymbolicTensor::infer(
+        (invariants * spectator.clone()).as_atom_view().to_owned(),
+    )
+    .unwrap()
+    .simplify_color(settings)
+    .unwrap()
+    .resolved()
+    .unwrap()
+    .into_expression();
     // Exact Atom equality checks that the spectator's sums and power stay intact.
     assert_eq!(simplified, (Atom::num(3) / Atom::num(2)) * spectator);
-    assert_eq!(simplified.simplify_color_with(settings), simplified);
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((simplified).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        simplified
+    );
 }
 
 #[test]
 fn color_collection_preserves_powered_noncolor_trace_sums() {
     test_initialize();
-    let traces = parse_lit!(
-        (trace(bis(4), opaque_trace_a(1, 2)) + trace(bis(4), opaque_trace_b(1, 2))) ^ 5,
+    // Opaque word factors still declare their structural channels.
+    let _ = spenso::tensor_symbol!("spenso::opaque_trace_a");
+    let _ = spenso::tensor_symbol!("spenso::opaque_trace_b");
+    let traces = parse!(
+        "(trace(bis(4), opaque_trace_a(in, out)) + trace(bis(4), opaque_trace_b(in, out))) ^ 5",
         default_namespace = "spenso"
     );
     let color = parse_lit!(
@@ -341,9 +419,24 @@ fn color_collection_preserves_powered_noncolor_trace_sums() {
     ] {
         // Non-color traces are opaque numerator factors. Collecting them as
         // polynomial variables would distribute this power of a sum.
-        assert_eq!(traces.simplify_color_with(settings), traces);
         assert_eq!(
-            (&traces * &color).simplify_color_with(settings),
+            crate::tensor::SymbolicTensor::infer((traces).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_color(settings)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            traces
+        );
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((&traces * &color).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_color(settings)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
             Atom::num(24) * &traces
         );
     }
@@ -352,42 +445,76 @@ fn color_collection_preserves_powered_noncolor_trace_sums() {
 #[test]
 fn color_collection_closes_generic_chains_after_metric_reduction() {
     test_initialize();
+    // Opaque word factors still declare their structural channels.
+    let _ = spenso::tensor_symbol!("spenso::opaque_matrix");
     let chains = parse!(
-        "spenso::chain(spenso::mink(4,spenso::i),spenso::mink(4,spenso::j),spenso::g(spenso::in,spenso::out))*spenso::chain(spenso::mink(4,spenso::j),spenso::mink(4,spenso::i),spenso::opaque_matrix(1,2))"
+        "spenso::chain(spenso::mink(4,spenso::i),spenso::mink(4,spenso::j),spenso::g(spenso::in,spenso::out))*spenso::chain(spenso::mink(4,spenso::j),spenso::mink(4,spenso::i),spenso::opaque_matrix(spenso::in,spenso::out))"
     );
-    let trace = parse_lit!(
-        trace(mink(4), cyclic(opaque_matrix(1, 2))),
+    let trace = parse!(
+        "trace(mink(4), cyclic(opaque_matrix(in, out)))",
         default_namespace = "spenso"
     );
     let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 3);
     // The identity chain first becomes a metric. Contracting that metric then
     // closes the other chain, so one pass of independent node rewrites is not enough.
     let expected = &spectator * trace;
-    assert_eq!((spectator * chains).simplify_color(), expected);
-    assert_eq!(expected.simplify_color(), expected);
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((spectator * chains).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        expected
+    );
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((expected).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        expected
+    );
 }
 
 #[test]
 fn color_collection_preserves_generic_chain_normalization() {
     test_initialize();
+    // Opaque word factors still declare their structural channels.
+    let _ = spenso::tensor_symbol!("spenso::spectator_tensor");
     let spectator = parse_lit!((opaque(x) + opaque(y)) ^ 5);
-    let chain = parse_lit!(
-        chain(mink(4, i), mink(4, i), spectator_tensor(1, 2)),
+    let chain = parse!(
+        "chain(mink(4, i), mink(4, i), spectator_tensor(in, out))",
         default_namespace = "spenso"
     );
-    let expected = parse_lit!(
-        trace(mink(4), cyclic(spectator_tensor(1, 2))),
+    let expected = parse!(
+        "trace(mink(4), cyclic(spectator_tensor(in, out)))",
         default_namespace = "spenso"
     );
     assert_eq!(
-        (spectator.clone() * chain).simplify_color(),
+        crate::tensor::SymbolicTensor::infer((spectator.clone() * chain).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
         spectator * expected
     );
     let identity = parse!(
         "spenso::chain(spenso::mink(4,spenso::i),spenso::mink(4,spenso::j),spenso::g(spenso::in,spenso::out))"
     );
     assert_eq!(
-        identity.simplify_color(),
+        crate::tensor::SymbolicTensor::infer((identity).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
         parse_lit!(g(mink(4, i), mink(4, j)), default_namespace = "spenso")
     );
 }
@@ -395,6 +522,8 @@ fn color_collection_preserves_generic_chain_normalization() {
 #[test]
 fn color_collection_preserves_wrappers_and_mixed_tensor_slots() {
     test_initialize();
+    // Opaque word factors still declare their structural channels.
+    let _ = spenso::tensor_symbol!("spenso::mixed_tensor");
     let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
     let color = parse_lit!(
         f(coad(8, a), coad(8, b), coad(8, c)) ^ 2,
@@ -413,14 +542,29 @@ fn color_collection_preserves_wrappers_and_mixed_tensor_slots() {
         } else {
             function!(wrapper, scalar)
         };
-        assert_eq!(input.simplify_color_with(settings), expected);
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_color(settings)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            expected
+        );
     }
     let mixed = parse_lit!(
         mixed_tensor(cof(3, i), mink(4, mu)) * g(mink(4, mu), mink(4, nu)),
         default_namespace = "spenso"
     );
     assert_eq!(
-        mixed.simplify_color_with(settings),
+        crate::tensor::SymbolicTensor::infer((mixed).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
         parse_lit!(
             mixed_tensor(cof(3, i), mink(4, nu)),
             default_namespace = "spenso"
@@ -431,6 +575,10 @@ fn color_collection_preserves_wrappers_and_mixed_tensor_slots() {
 #[test]
 fn color_payload_reduction_preserves_non_color_coefficients() {
     test_initialize();
+    let _ = spenso::vector_symbol!("spenso::p");
+    // Opaque word factors still declare their structural channels.
+    let _ = spenso::tensor_symbol!("spenso::spectator_tensor");
+    let _ = spenso::tensor_symbol!("spenso::mixed_tensor");
     let settings = ColorSimplifySettings {
         simplify_non_color: false,
         ..ColorSimplifySettings::default().with_cof_dimension_invariants()
@@ -439,27 +587,60 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
         f(coad(8, a), coad(8, b), coad(8, c)) ^ 2,
         default_namespace = "spenso"
     );
-    let spectator = parse_lit!(
-        (opaque(x) + opaque(y))
-            ^ 5 * g(mink(4, mu), mink(4, nu))
-                * p(mink(4, mu))
-                * trace(mink(4), cyclic(spectator_tensor(1, 2))),
+    let spectator = parse!(
+        "(opaque(x) + opaque(y)) ^ 5 * g(mink(4, mu), mink(4, nu)) * p(mink(4, mu)) * trace(mink(4), cyclic(spectator_tensor(in, out)))",
         default_namespace = "spenso"
     );
     let input = &color * &spectator;
-    let simplified = input.simplify_color_with(settings);
+    let simplified = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+        .unwrap()
+        .simplify_color(settings)
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
     assert_eq!(simplified, Atom::num(24) * spectator);
-    assert_eq!(simplified.simplify_color_with(settings), simplified);
     assert_eq!(
-        simplified.simplify_metrics(),
-        input.simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants())
+        crate::tensor::SymbolicTensor::infer((simplified).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        simplified
+    );
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((simplified).as_atom_view().to_owned())
+            .unwrap()
+            .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
     );
 
     let mixed = parse_lit!(
         mixed_tensor(cof(3, i), mink(4, mu)) * g(mink(4, mu), mink(4, nu)),
         default_namespace = "spenso"
     );
-    assert_eq!(mixed.simplify_color_with(settings), mixed);
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((mixed).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        mixed
+    );
 
     let fundamental = ColorFundamental {}.new_rep(3);
     let adjoint = ColorAdjoint {}.new_rep(8);
@@ -470,7 +651,13 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
         color_t!(slot!(adjoint, a)),
     );
     assert_eq!(
-        open.simplify_color_with(settings),
+        crate::tensor::SymbolicTensor::infer((open).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
         parse_lit!(
             4 / 3 * g(cof(3, idenso::i), dind(cof(3, idenso::j))),
             default_namespace = "spenso"
@@ -480,7 +667,7 @@ fn color_payload_reduction_preserves_non_color_coefficients() {
 
 #[test]
 fn color_trace_projectors_preserve_adjoint_slots_and_algebra() {
-    use spenso::network::parsing::{AtomStructureExt, StructureInferenceMode};
+    use spenso::network::parsing::{AtomStructureExt, NetworkParse};
     use spenso::structure::{OrderedStructure, TensorStructure, representation::LibraryRep};
 
     test_initialize();
@@ -505,25 +692,42 @@ fn color_trace_projectors_preserve_adjoint_slots_and_algebra() {
         (&antisymmetric, Atom::i() * 6),
     ] {
         let fast = expression
-            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
-                StructureInferenceMode::Fast,
-            )
+            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>()
             .unwrap();
         let expanded = expression
-            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
-                StructureInferenceMode::Expanded,
-            )
+            .parse_to_atom_net::<AbstractIndex>(&spenso::network::parsing::ParseSettings::default())
             .unwrap();
+        let expanded = OrderedStructure::new(expanded.graph.dangling_indices());
         assert_eq!(fast.canonical().order(), 3);
         assert_eq!(fast.canonical(), expanded.canonical());
         assert_eq!(
-            (expression * &closing).simplify_color_with(settings),
+            crate::tensor::SymbolicTensor::infer((expression * &closing).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_color(settings)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
             expected
         );
     }
     assert_eq!(
-        (&symmetric + &antisymmetric).simplify_color_with(settings),
-        ordered.simplify_color_with(settings)
+        crate::tensor::SymbolicTensor::infer(
+            (&symmetric + &antisymmetric).as_atom_view().to_owned()
+        )
+        .unwrap()
+        .simplify_color(settings)
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression(),
+        crate::tensor::SymbolicTensor::infer((ordered).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
     );
 }
 
@@ -535,16 +739,40 @@ fn cof_dimension_simplification_resolves_new_color_invariants() {
         f(coad(8, a), coad(8, b), coad(8, c)) ^ 2,
         default_namespace = "spenso"
     );
-    assert_eq!(closed.simplify_color_with(settings), Atom::num(24));
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((closed).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        Atom::num(24)
+    );
 
     let open = parse_lit!(
         f(coad(8, a), coad(8, b), coad(8, c)) * f(coad(8, a), coad(8, b), coad(8, d)),
         default_namespace = "spenso"
     );
     let expected = parse_lit!(3 * g(coad(8, c), coad(8, d)), default_namespace = "spenso");
-    let simplified = open.simplify_color_with(settings);
+    let simplified = crate::tensor::SymbolicTensor::infer((open).as_atom_view().to_owned())
+        .unwrap()
+        .simplify_color(settings)
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
     assert_eq!(simplified, expected);
-    assert_eq!(simplified.simplify_color_with(settings), simplified);
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((simplified).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        simplified
+    );
 
     let fundamental = ColorFundamental {}.new_rep(3);
     let adjoint = ColorAdjoint {}.new_rep(8);
@@ -553,7 +781,16 @@ fn cof_dimension_simplification_resolves_new_color_invariants() {
         color_t!(slot!(adjoint, a)),
         color_t!(slot!(adjoint, a)),
     );
-    assert_eq!(trace.simplify_color_with(settings), Atom::num(4));
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((trace).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        Atom::num(4)
+    );
 }
 
 #[test]
@@ -564,7 +801,16 @@ fn cof_dimension_simplification_preserves_unsupported_invariants() {
         default_namespace = "spenso"
     );
     let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
-    assert_eq!(expression.simplify_color_with(settings), expression);
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((expression).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        expression
+    );
 }
 
 #[test]
@@ -588,9 +834,25 @@ fn cof_dimension_simplification_respects_disabled_trace_evaluation() {
     let settings = ColorSimplifySettings::default()
         .without_trace_evaluation()
         .with_cof_dimension_invariants();
-    let simplified = (invariant * closed_chain).simplify_color_with(settings);
+    let simplified =
+        crate::tensor::SymbolicTensor::infer((invariant * closed_chain).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
     assert_eq!(simplified, expected);
-    assert_eq!(simplified.simplify_color_with(settings), simplified);
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((simplified).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        simplified
+    );
 }
 
 #[test]
@@ -611,9 +873,26 @@ fn cof_dimension_simplification_respects_disabled_fierz_expansion() {
     let settings = ColorSimplifySettings::default()
         .without_cross_chain_fierz_expansion()
         .with_cof_dimension_invariants();
-    let simplified = (invariant * chains.clone()).simplify_color_with(settings);
+    let simplified = crate::tensor::SymbolicTensor::infer(
+        (invariant * chains.clone()).as_atom_view().to_owned(),
+    )
+    .unwrap()
+    .simplify_color(settings)
+    .unwrap()
+    .resolved()
+    .unwrap()
+    .into_expression();
     assert_eq!(simplified, chains / Atom::num(2));
-    assert_eq!(simplified.simplify_color_with(settings), simplified);
+    assert_eq!(
+        crate::tensor::SymbolicTensor::infer((simplified).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(settings)
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        simplified
+    );
 }
 
 #[test]
@@ -640,7 +919,7 @@ fn permuted_structure_constant_square_simplifies_with_sign() {
         default_namespace = "spenso"
     );
 
-    assert_snapshot!(atom.simplify_color().to_bare_ordered_string(), @"-8*cas(2,coad(8))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((atom).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-8*cas(2,coad(8))");
 }
 
 #[test]
@@ -727,7 +1006,19 @@ fn three_loop_pole_part_color() {
         default_namespace = "spenso"
     );
 
-    let color_zero_candidate = input.cook_indices().simplify_color().collect_color();
+    let color_zero_candidate =
+        crate::tensor::SymbolicTensor::infer((input.cook_indices()).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+            .collect_reps([
+                ColorAdjoint {}.into(),
+                ColorFundamental {}.into(),
+                ColorSextet {}.into(),
+            ]);
 
     let common = parse_lit!(
         CA * eps ^ (-3) * gs ^ 6 * cas(2, coad(8)) ^ 2 * dot(P(0, mink(4)), P(0, mink(4))),
@@ -767,7 +1058,19 @@ fn three_loop_pole_part_color() {
         default_namespace = "spenso"
     );
 
-    let color_zero_candidate = input.cook_indices().simplify_color().collect_color();
+    let color_zero_candidate =
+        crate::tensor::SymbolicTensor::infer((input.cook_indices()).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+            .collect_reps([
+                ColorAdjoint {}.into(),
+                ColorFundamental {}.into(),
+                ColorSextet {}.into(),
+            ]);
 
     assert_snapshot!(
         &color_zero_candidate
@@ -819,14 +1122,14 @@ fn kaapo_gl34_color_input_simplifies_to_zero() {
         * g(coad(-1 + Nc^2, hedge(12)), coad(-1 + Nc^2, hedge(13)))
         * g(coad(-1 + Nc^2, hedge(14)), coad(-1 + Nc^2, hedge(15)))
         * g(coad(-1 + Nc^2, hedge(16)), coad(-1 + Nc^2, hedge(17)))
-        * gamma(bis(4, hedge(0)), bis(4, hedge(2)), mink(4, hedge(4)))
-        * gamma(bis(4, hedge(3)), bis(4, hedge(9)), mink(4, hedge(14)))
-        * gamma(bis(4, hedge(7)), bis(4, hedge(1)), mink(4, hedge(12)))
-        * gamma(bis(4, hedge(8)), bis(4, hedge(6)), mink(4, hedge(10)))
-        * gamma(bis(4, hedge(1)), bis(4, hedge(0)), mink(4, edge(0, 1)))
-        * gamma(bis(4, hedge(2)), bis(4, hedge(3)), mink(4, edge(1, 1)))
-        * gamma(bis(4, hedge(6)), bis(4, hedge(7)), mink(4, edge(3, 1)))
-        * gamma(bis(4, hedge(9)), bis(4, hedge(8)), mink(4, edge(4, 1)))
+        * spenso::gamma(bis(4, hedge(0)), bis(4, hedge(2)), mink(4, hedge(4)))
+        * spenso::gamma(bis(4, hedge(3)), bis(4, hedge(9)), mink(4, hedge(14)))
+        * spenso::gamma(bis(4, hedge(7)), bis(4, hedge(1)), mink(4, hedge(12)))
+        * spenso::gamma(bis(4, hedge(8)), bis(4, hedge(6)), mink(4, hedge(10)))
+        * spenso::gamma(bis(4, hedge(1)), bis(4, hedge(0)), mink(4, edge(0, 1)))
+        * spenso::gamma(bis(4, hedge(2)), bis(4, hedge(3)), mink(4, edge(1, 1)))
+        * spenso::gamma(bis(4, hedge(6)), bis(4, hedge(7)), mink(4, edge(3, 1)))
+        * spenso::gamma(bis(4, hedge(9)), bis(4, hedge(8)), mink(4, edge(4, 1)))
         * t(coad(-1 + Nc^2, hedge(4)), cof(Nc, hedge(2)), dind(cof(Nc, hedge(0))))
         * t(coad(-1 + Nc^2, hedge(10)), cof(Nc, hedge(6)), dind(cof(Nc, hedge(8))))
         * t(coad(-1 + Nc^2, hedge(12)), cof(Nc, hedge(1)), dind(cof(Nc, hedge(7))))
@@ -836,7 +1139,32 @@ fn kaapo_gl34_color_input_simplifies_to_zero() {
         ",
         default_namespace = "spenso"
     );
-    let color_zero_candidate = input.cook_indices().simplify_color().collect_color();
+    let dimension_value = parse_lit!(Nc ^ 2 - 1, default_namespace = "spenso");
+    let dimension = Atom::var(symbol!("kaapo_gl34_adjoint_dimension"));
+    let indexed = input
+        .replace(dimension_value.to_pattern())
+        .with(dimension.to_pattern());
+    let cooking = crate::CookSettings::indices().with_mode(crate::CookMode::ReversibleEncoding);
+    let admitted = cooking.try_cook_indices(indexed.as_view()).unwrap();
+    assert_eq!(
+        cooking
+            .uncook(admitted.as_view())
+            .replace(dimension.to_pattern())
+            .with(dimension_value.to_pattern()),
+        input
+    );
+    let color_zero_candidate = crate::tensor::SymbolicTensor::infer(admitted)
+        .unwrap()
+        .simplify_color(crate::color::ColorSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression()
+        .collect_reps([
+            ColorAdjoint {}.into(),
+            ColorFundamental {}.into(),
+            ColorSextet {}.into(),
+        ]);
 
     assert!(
         color_zero_candidate.is_zero(),
@@ -956,7 +1284,7 @@ fn antisymmetric_two_generator_trace_vanishes() {
         antisym!(color_t!(slot!(r.coad_da, a)), color_t!(slot!(r.coad_da, b)))
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"0");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"0");
 }
 
 #[test]
@@ -972,7 +1300,7 @@ fn antisymmetric_three_generator_trace_reduces_to_structure_constant() {
         )
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2");
 }
 
 #[test]
@@ -985,7 +1313,7 @@ fn antisymmetric_trace_commutator_reduces_before_terminal_trace() {
         color_t!(slot!(r.coad_da, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))*𝑖/2");
 }
 
 #[test]
@@ -998,7 +1326,7 @@ fn antisymmetric_trace_commutator_preserves_projector_sign() {
         color_t!(slot!(r.coad_da, c)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-𝑖/2*f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-𝑖/2*f(coad(dA,a),coad(dA,b),coad(dA,c))*idx(2,cof(Nc))");
 }
 
 #[test]
@@ -1011,7 +1339,7 @@ fn antisymmetric_chain_commutator_reduces_to_structure_constant() {
         antisym!(color_t!(slot!(r.coad_da, a)), color_t!(slot!(r.coad_da, b))),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,x),in,out))*f(coad(dA,a),coad(dA,b),coad(dA,x))*𝑖/2");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,x),in,out))*f(coad(dA,a),coad(dA,b),coad(dA,x))*𝑖/2");
 }
 
 #[test]
@@ -1031,8 +1359,13 @@ fn cyclic_trace_structure_product_scans_nonleading_pairs() {
         slot!(r.coad_da, c),
     );
 
-    let simplified =
-        expr.simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants());
+    let simplified = crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+        .unwrap()
+        .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
     let simplified = simplified.to_bare_ordered_string();
 
     assert!(
@@ -1065,7 +1398,7 @@ fn trace_structure_product_orientation_sign_cancels() {
 }
 
 #[test]
-fn expand_color_keeps_closed_traces_on_color_side() {
+fn coefficient_list_keeps_closed_traces_on_color_side() {
     test_initialize();
     let r = TestReps::new();
     let trace_factor = trace!(
@@ -1082,16 +1415,23 @@ fn expand_color_keeps_closed_traces_on_color_side() {
             slot!(r.coad_da, c),
         );
 
-    let expanded = expr.expand_color();
+    let expanded = SymbolicTensor::infer(expr)
+        .unwrap()
+        .coefficient_list(TensorCollectFilter::Reps([
+            ColorAdjoint {}.into(),
+            ColorFundamental {}.into(),
+            ColorSextet {}.into(),
+        ]))
+        .unwrap();
 
     assert_eq!(expanded.len(), 1);
     let (color_factor, residual) = &expanded[0];
-    let color_factor = color_factor.to_bare_ordered_string();
+    let color_factor = color_factor.expression().to_bare_ordered_string();
     assert!(
         color_factor.contains("trace(") && color_factor.contains("f("),
         "expected closed trace and structure constant to stay in color factor, got {color_factor}"
     );
-    let residual = residual.to_bare_ordered_string();
+    let residual = residual.expression().to_bare_ordered_string();
     assert_eq!(
         residual, "x",
         "expected residual factor to be color-free, got {}",
@@ -1114,8 +1454,20 @@ fn color_simplify_defaults_match_simplify_color() {
     );
 
     assert_eq!(
-        expr.simplify_color_with(ColorSimplifySettings::default()),
-        expr.simplify_color()
+        crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
     );
 }
 
@@ -1136,7 +1488,13 @@ fn color_trace_evaluation_can_be_disabled() {
     );
 
     assert_eq!(
-        expr.simplify_color_with(ColorSimplifySettings::default().without_trace_evaluation()),
+        crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(ColorSimplifySettings::default().without_trace_evaluation())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
         expected,
     );
 }
@@ -1156,9 +1514,13 @@ fn color_cross_chain_fierz_can_be_disabled() {
     );
 
     assert_eq!(
-        expr.simplify_color_with(
-            ColorSimplifySettings::default().without_cross_chain_fierz_expansion()
-        ),
+        crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(ColorSimplifySettings::default().without_cross_chain_fierz_expansion())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
         expr,
     );
 }
@@ -1204,8 +1566,30 @@ fn color_cross_chain_fierz_handles_longer_open_chains() {
             / s!(Nc);
 
     assert_eq!(
-        expr.simplify_color().simplify_metrics(),
-        expected.simplify_metrics(),
+        crate::tensor::SymbolicTensor::infer(
+            (crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression())
+            .as_atom_view()
+            .to_owned()
+        )
+        .unwrap()
+        .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression(),
+        crate::tensor::SymbolicTensor::infer((expected).as_atom_view().to_owned())
+            .unwrap()
+            .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
     );
 }
 
@@ -1230,7 +1614,7 @@ fn symmetric_trace_d33_partial_contraction() {
         )
     );
 
-    assert_snapshot!((left * right).simplify_color().to_bare_ordered_string(), @"dA^(-1)*g(coad(dA,c),coad(dA,d))*gram(3,cof(Nc),cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((left * right).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"dA^(-1)*g(coad(dA,c),coad(dA,d))*gram(3,cof(Nc),cof(Nc))");
 }
 
 #[test]
@@ -1256,7 +1640,7 @@ fn symmetric_trace_d44_partial_contraction() {
         )
     );
 
-    assert_snapshot!((left * right).simplify_color().to_bare_ordered_string(), @"dA^(-1)*g(coad(dA,d),coad(dA,e))*gram(4,cof(Nc),cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((left * right).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"dA^(-1)*g(coad(dA,d),coad(dA,e))*gram(4,cof(Nc),cof(Nc))");
 }
 
 #[test]
@@ -1282,7 +1666,7 @@ fn symmetric_trace_d44_full_contraction() {
         )
     );
 
-    assert_snapshot!((left * right).simplify_color().to_bare_ordered_string(), @"gram(4,cof(Nc),cof(Nc))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((left * right).as_atom_view().to_owned()).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"gram(4,cof(Nc),cof(Nc))");
 }
 
 mod feyncalc_reference;
@@ -1312,7 +1696,7 @@ fn colored_matrix_element() -> (Atom, Atom) {
             *g(coad(Nc^2-1,6),coad(Nc^2-1,9))
             *g(cof(Nc,0),dind(cof(Nc,5)))
             *g(cof(Nc,4),dind(cof(Nc,1)))
-            *gamma(bis(D,5),bis(D,4),mink(D,4))
+            *spenso::gamma(bis(D,5),bis(D,4),mink(D,4))
             *vbar(1,bis(D,1))
             *u(0,bis(D,0))
             *ϵbar(2,mink(D,2))
@@ -1388,7 +1772,13 @@ fn t_structure() {
     test_initialize();
     println!("{}", CS.t_strct::<AbstractIndex>(3, 8));
 
-    let _ = Atom::Zero.simplify_metrics();
+    let _ = crate::tensor::SymbolicTensor::infer((Atom::Zero).as_atom_view().to_owned())
+        .unwrap()
+        .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
 }
 
 #[test]
@@ -1410,7 +1800,7 @@ fn test_val() {
             * g(coad(Nc ^ 2 - 1, 1), coad(Nc ^ 2 - 1, l(9)))
             * g(coad(Nc ^ 2 - 1, 4), coad(Nc ^ 2 - 1, l(10)))
             * g(coad(Nc ^ 2 - 1, l(7)), coad(Nc ^ 2 - 1, l(11)))
-            * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+            * spenso::gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
             * t(coad(Nc ^ 2 - 1, l(7)), cof(Nc, l(6)), dind(cof(Nc, l(5))))
             * f(
                 coad(Nc ^ 2 - 1, l(8)),
@@ -1442,7 +1832,7 @@ fn test_val() {
                 * g(coad(Nc ^ 2 - 1, 1), coad(Nc ^ 2 - 1, l(9)))
                 * g(coad(Nc ^ 2 - 1, 4), coad(Nc ^ 2 - 1, l(10)))
                 * g(coad(Nc ^ 2 - 1, l(7)), coad(Nc ^ 2 - 1, l(11)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * spenso::gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
                 * t(coad(Nc ^ 2 - 1, l(7)), cof(Nc, l(6)), dind(cof(Nc, l(5))))
                 * f(
                     coad(Nc ^ 2 - 1, l(8)),
@@ -1474,7 +1864,7 @@ fn test_val() {
                 * g(coad(Nc ^ 2 - 1, 1), coad(Nc ^ 2 - 1, l(9)))
                 * g(coad(Nc ^ 2 - 1, 4), coad(Nc ^ 2 - 1, l(10)))
                 * g(coad(Nc ^ 2 - 1, l(7)), coad(Nc ^ 2 - 1, l(11)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * spenso::gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
                 * t(coad(Nc ^ 2 - 1, l(7)), cof(Nc, l(6)), dind(cof(Nc, l(5))))
                 * f(
                     coad(Nc ^ 2 - 1, l(8)),
@@ -1506,7 +1896,7 @@ fn test_val() {
                     * g(coad(Nc ^ 2 - 1, 1), coad(Nc ^ 2 - 1, r(9)))
                     * g(coad(Nc ^ 2 - 1, 4), coad(Nc ^ 2 - 1, r(10)))
                     * g(coad(Nc ^ 2 - 1, r(7)), coad(Nc ^ 2 - 1, r(11)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                    * spenso::gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
                     * t(coad(Nc ^ 2 - 1, r(7)), cof(Nc, r(5)), dind(cof(Nc, r(6))))
                     * f(
                         coad(Nc ^ 2 - 1, r(8)),
@@ -1538,7 +1928,7 @@ fn test_val() {
                     * g(coad(Nc ^ 2 - 1, 1), coad(Nc ^ 2 - 1, r(9)))
                     * g(coad(Nc ^ 2 - 1, 4), coad(Nc ^ 2 - 1, r(10)))
                     * g(coad(Nc ^ 2 - 1, r(7)), coad(Nc ^ 2 - 1, r(11)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                    * spenso::gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
                     * t(coad(Nc ^ 2 - 1, r(7)), cof(Nc, r(5)), dind(cof(Nc, r(6))))
                     * f(
                         coad(Nc ^ 2 - 1, r(8)),
@@ -1570,7 +1960,7 @@ fn test_val() {
                     * g(coad(Nc ^ 2 - 1, 1), coad(Nc ^ 2 - 1, r(9)))
                     * g(coad(Nc ^ 2 - 1, 4), coad(Nc ^ 2 - 1, r(10)))
                     * g(coad(Nc ^ 2 - 1, r(7)), coad(Nc ^ 2 - 1, r(11)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                    * spenso::gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
                     * t(coad(Nc ^ 2 - 1, r(7)), cof(Nc, r(5)), dind(cof(Nc, r(6))))
                     * f(
                         coad(Nc ^ 2 - 1, r(8)),
@@ -1591,15 +1981,58 @@ fn test_val() {
     );
 
     println!("{expr}");
-    println!("Simplify_metrics");
-    println!("{}", expr.clone().simplify_metrics());
     println!("Simplify_color");
+    let dimension_value = parse_lit!(Nc ^ 2 - 1, default_namespace = "spenso");
+    let dimension = Atom::var(symbol!("color_test_val_adjoint_dimension"));
+    let indexed = expr
+        .replace(dimension_value.to_pattern())
+        .with(dimension.to_pattern());
+    let cooking = crate::CookSettings::indices().with_mode(crate::CookMode::ReversibleEncoding);
+    let admitted = cooking.try_cook_indices(indexed.as_view()).unwrap();
+    assert_eq!(
+        cooking
+            .uncook(admitted.as_view())
+            .replace(dimension.to_pattern())
+            .with(dimension_value.to_pattern()),
+        expr
+    );
+    let metric_result = crate::tensor::SymbolicTensor::infer(admitted.clone())
+        .unwrap()
+        .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
+    println!(
+        "Simplify_metrics: {}",
+        cooking
+            .uncook(metric_result.as_view())
+            .replace(dimension.to_pattern())
+            .with(dimension_value.to_pattern())
+    );
+    let simplified = crate::tensor::SymbolicTensor::infer(admitted)
+        .unwrap()
+        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+        .unwrap()
+        .simplify_color(crate::color::ColorSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
+    let contracted = crate::tensor::SymbolicTensor::infer(simplified)
+        .unwrap()
+        .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
     println!(
         "{:>}",
-        expr.simplify_gamma()
-            .simplify_color()
+        cooking
+            .uncook(contracted.as_view())
+            .replace(dimension.to_pattern())
+            .with(dimension_value.to_pattern())
             .expand()
-            .simplify_metrics()
             .to_dots()
     );
 }
@@ -1629,9 +2062,19 @@ fn ratio_simplify() {
         default_namespace = "spenso"
     );
 
-    let simplified = expr.cook_indices().simplify_color();
+    let simplified =
+        crate::tensor::SymbolicTensor::infer((expr.cook_indices()).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
 
-    assert_snapshot!(simplified.collect_color_constants().collect_factors().to_bare_ordered_string(), @"-𝑖/2*G^4*cas(2,coad(ohoho))*ee^2*idx(2,cof(ahaha))*ohoho");
+    assert_snapshot!(simplified.collect_with_map(|a| {
+        matches!(a, AtomView::Var(a) if a.get_symbol() == CS.tr || a.get_symbol() == CS.ca || a.get_symbol() == CS.cf)
+            || matches!(a, AtomView::Fun(f) if f.get_symbol() == CS.cas || f.get_symbol() == CS.idx || f.get_symbol() == CS.gram)
+    }).into_inner().unwrap_collect().collect_factors().to_bare_ordered_string(), @"-𝑖/2*G^4*cas(2,coad(ohoho))*ee^2*idx(2,cof(ahaha))*ohoho");
 }
 
 #[test]
@@ -1651,8 +2094,21 @@ fn structure_pair_with_closed_generator_chain_matches_form() {
         default_namespace = "spenso"
     );
 
+    let dimension_value = parse_lit!(Nc ^ 2 - 1, default_namespace = "spenso");
+    let dimension = Atom::var(symbol!(
+        "structure_pair_with_closed_generator_chain_matches_form_dimension"
+    ));
+    let admitted = expr
+        .replace(dimension_value.to_pattern())
+        .with(dimension.to_pattern());
+    assert_eq!(
+        admitted
+            .replace(dimension.to_pattern())
+            .with(dimension_value.to_pattern()),
+        expr
+    );
     assert_snapshot!(
-        expr.simplify_color().to_bare_ordered_string(),
+        crate::tensor::SymbolicTensor::infer(admitted).unwrap().simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().replace(dimension.to_pattern()).with(dimension_value.to_pattern()).to_bare_ordered_string(),
         @"(-1+Nc^2)*-1*cas(2,coad(-1+Nc^2))*idx(2,cof(Nc))"
     );
 }
@@ -1718,32 +2174,73 @@ fn minus_sign() {
     // );
     println!(
         "{}\n",
-        expr1
-            .simplify_metrics()
+        crate::tensor::SymbolicTensor::infer(expr1.cook_indices())
+            .unwrap()
+            .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
             .expect("test expression should canonicalize")
     );
     println!(
         "{}\n",
-        expr2
-            .simplify_metrics()
+        crate::tensor::SymbolicTensor::infer(expr2.cook_indices())
+            .unwrap()
+            .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
             .expect("test expression should canonicalize")
     );
-    let residual = (expr1.simplify_color() + expr2.simplify_color())
-        .expand()
-        .simplify_metrics()
-        .cook_indices();
+    let residual = crate::tensor::SymbolicTensor::infer(
+        ((crate::tensor::SymbolicTensor::infer(expr1.cook_indices())
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+            + crate::tensor::SymbolicTensor::infer(expr2.cook_indices())
+                .unwrap()
+                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression())
+        .expand())
+        .as_atom_view()
+        .to_owned(),
+    )
+    .unwrap()
+    .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+    .unwrap()
+    .resolved()
+    .unwrap()
+    .into_expression()
+    .cook_indices();
 
     println!("{}", residual);
 
-    let residual = residual
-        .canonize(AbstractIndex::Dummy)
-        .expect("test expression should canonicalize")
-        .simplify_metrics()
-        .expand();
+    let residual = crate::tensor::SymbolicTensor::infer(
+        (residual
+            .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize"))
+        .as_atom_view()
+        .to_owned(),
+    )
+    .unwrap()
+    .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+    .unwrap()
+    .resolved()
+    .unwrap()
+    .into_expression()
+    .expand();
     assert!(residual.is_zero());
 }
 
@@ -1752,6 +2249,8 @@ mod failing {
 
     #[test]
     fn test_color_matrix_element() {
+        use crate::shorthands::{UndoShorthands, chain::Chain};
+
         test_initialize();
         let spin_sum_rule = parse!(
             "
@@ -1773,18 +2272,55 @@ mod failing {
                     * g(cof(Nc, 4), dind(cof(Nc, 1)))",
             default_namespace = "spenso"
         );
-        let amplitude_color_left = amplitude_color.wrap_indices(symbol!("spenso::left"));
-
-        // return;
-        let amplitude_color_right = amplitude_color
+        // Network dimensions are integers or symbols. Previously the compound
+        // adjoint dimension was silently discarded as metadata by the parser.
+        // Admit it explicitly for index tooling, then restore the original algebra.
+        let adjoint_dimension = Atom::var(symbol!("matrix_element_adjoint_dimension"));
+        let dimension_value = parse_lit!(Nc ^ 2 - 1, default_namespace = "spenso");
+        let indexed_color = amplitude_color
+            .replace(dimension_value.clone())
+            .with(adjoint_dimension.clone());
+        assert_eq!(
+            indexed_color
+                .replace(adjoint_dimension.clone())
+                .with(dimension_value.clone()),
+            amplitude_color
+        );
+        // Scope while dimensions are admitted: compound dimensions would leave
+        // adjoint-color indices untouched and collide between the two amplitudes.
+        let amplitude_color_left = indexed_color
+            .wrap_indices(symbol!("spenso::left"))
+            .replace(adjoint_dimension.clone())
+            .with(dimension_value.clone());
+        let amplitude_color_right = indexed_color
             .dirac_adjoint::<AbstractIndex>(false)
             .unwrap()
-            .wrap_indices(symbol!("spenso::right"));
+            .wrap_indices(symbol!("spenso::right"))
+            .replace(adjoint_dimension.clone())
+            .with(dimension_value.clone());
         println!("left{amplitude_color_left}");
 
         println!("right{amplitude_color_right}");
         let amp_squared_color = amplitude_color_left * spin_sum_rule * amplitude_color_right;
-        let simplified_color = amp_squared_color.simplify_metrics().simplify_color();
+        let cooking = crate::CookSettings::indices().with_mode(crate::CookMode::ReversibleEncoding);
+        let indexed = amp_squared_color
+            .replace(dimension_value.to_pattern())
+            .with(adjoint_dimension.to_pattern());
+        let admitted = cooking.try_cook_indices(indexed.as_view()).unwrap();
+        assert_eq!(cooking.uncook(admitted.as_view()), indexed);
+        let simplified_color = crate::tensor::SymbolicTensor::infer(admitted)
+            .unwrap()
+            .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+            .replace(adjoint_dimension.to_pattern())
+            .with(dimension_value.to_pattern());
         println!("simplified_color={}", simplified_color);
 
         let spin_sum_rule_src = parse_lit!(
@@ -1803,8 +2339,8 @@ mod failing {
             "
                 1/4*1/(D-2)^2*
                 (
-                    (-1) * gamma(bis(D,left(1)),bis(D,right(1)),mink(D,1337))*Q(1,mink(D,1337))
-                    * gamma(bis(D,right(0)),bis(D,left(0)),mink(D,1338))*Q(0,mink(D,1338))
+                    (-1) * spenso::gamma(bis(D,left(1)),bis(D,right(1)),mink(D,1337))*Q(1,mink(D,1337))
+                    * spenso::gamma(bis(D,right(0)),bis(D,left(0)),mink(D,1338))*Q(0,mink(D,1338))
                     * (-1) * g(mink(D,left(2)),mink(D,right(2)))
                     * (-1) * g(mink(D,left(3)),mink(D,right(3)))
                     )
@@ -1819,7 +2355,19 @@ mod failing {
 
         let (amplitude, tgt) = colored_matrix_element();
 
-        let amplitude_left = amplitude.wrap_indices(symbol!("spenso::left"));
+        let indexed_amplitude = amplitude
+            .replace(dimension_value.clone())
+            .with(adjoint_dimension.clone());
+        assert_eq!(
+            indexed_amplitude
+                .replace(adjoint_dimension.clone())
+                .with(dimension_value.clone()),
+            amplitude
+        );
+        let amplitude_left = indexed_amplitude
+            .wrap_indices(symbol!("spenso::left"))
+            .replace(adjoint_dimension.clone())
+            .with(dimension_value.clone());
 
         println!("Amplitude left:\n{}", amplitude_left.collect_factors());
 
@@ -1827,22 +2375,35 @@ mod failing {
             "Amplitude left cooked:\n{}",
             amplitude_left.collect_factors().cook_indices()
         );
-        let amplitude_right = amplitude.wrap_indices(symbol!("spenso::right"));
+        let amplitude_right = indexed_amplitude
+            .wrap_indices(symbol!("spenso::right"))
+            .replace(adjoint_dimension.clone())
+            .with(dimension_value.clone());
 
         println!("Amplitude right:\n{}", amplitude_right.factor());
 
+        // The full amplitude needs the same explicit dimension admission as
+        // its color-only part above. Reuse the checked result for both consumers.
+        let indexed_right = amplitude_right
+            .replace(dimension_value.clone())
+            .with(adjoint_dimension.clone());
+        assert_eq!(
+            indexed_right
+                .replace(adjoint_dimension.clone())
+                .with(dimension_value.clone()),
+            amplitude_right
+        );
+        let amplitude_right_adjoint = indexed_right
+            .dirac_adjoint::<AbstractIndex>(false)
+            .unwrap()
+            .replace(adjoint_dimension.to_pattern())
+            .with(dimension_value.to_pattern());
         println!(
             "Amplitude right conj:\n{}",
-            amplitude_right
-                .dirac_adjoint::<AbstractIndex>(false)
-                .unwrap()
-                .factor()
+            amplitude_right_adjoint.factor()
         );
 
-        let mut amp_squared = amplitude_left
-            * amplitude_right
-                .dirac_adjoint::<AbstractIndex>(false)
-                .unwrap();
+        let mut amp_squared = amplitude_left * amplitude_right_adjoint;
 
         println!("Amplitude squared:\n{}", amp_squared.factor());
 
@@ -1857,17 +2418,40 @@ mod failing {
 
         println!("Amplitude squared spin-summed:\n{}", amp_squared);
 
-        let mut simplified_amp_squared = amp_squared.clone();
-
-        simplified_amp_squared = simplified_amp_squared.simplify_color();
-
+        let indexed = amp_squared
+            .replace(dimension_value.to_pattern())
+            .with(adjoint_dimension.to_pattern());
+        let cooked = cooking.try_cook_indices(indexed.as_view()).unwrap();
+        assert_eq!(
+            cooking
+                .uncook(cooked.as_view())
+                .replace(adjoint_dimension.to_pattern())
+                .with(dimension_value.to_pattern()),
+            amp_squared
+        );
+        let admitted = cooked.chainify(crate::representations::Bispinor {}.into());
+        assert_eq!(
+            admitted.undo_chain::<AbstractIndex>().unwrap(),
+            cooked.undo_chain::<AbstractIndex>().unwrap()
+        );
+        let color = crate::tensor::SymbolicTensor::infer(admitted)
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap();
         println!(
             "Color-simplified amplitude squared:\n{}",
-            simplified_amp_squared
+            color.resolved().unwrap().expression
         );
-
-        simplified_amp_squared = simplified_amp_squared.simplify_gamma();
-
+        let gamma = color
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
+        let mut simplified_amp_squared = cooking
+            .uncook(gamma.as_view())
+            .replace(adjoint_dimension.to_pattern())
+            .with(dimension_value.to_pattern());
         println!(
             "Gamma+color-simplified amplitude squared:\n{}",
             simplified_amp_squared
@@ -1880,6 +2464,8 @@ mod failing {
 
     #[test]
     fn test_color_matrix_element_two() {
+        use crate::shorthands::chain::Chain;
+
         test_initialize();
 
         let spin_sum_rule_src = parse_lit!(
@@ -1898,8 +2484,8 @@ mod failing {
             "
                 1/4*1/(D-2)^2*
                 (
-                    (-1) * gamma(bis(D,left(1)),bis(D,right(1)),mink(D,1337))*Q(1,mink(D,1337))
-                    * gamma(bis(D,right(0)),bis(D,left(0)),mink(D,1338))*Q(0,mink(D,1338))
+                    (-1) * spenso::gamma(bis(D,left(1)),bis(D,right(1)),mink(D,1337))*Q(1,mink(D,1337))
+                    * spenso::gamma(bis(D,right(0)),bis(D,left(0)),mink(D,1338))*Q(0,mink(D,1338))
                     * (-1) * g(mink(D,left(2)),mink(D,right(2)))
                     * (-1) * g(mink(D,left(3)),mink(D,right(3)))
                     )
@@ -1909,71 +2495,67 @@ mod failing {
 
         let (amplitude, tgt) = colored_matrix_element();
 
-        let amplitude_left = amplitude
+        // Keep the supported symbolic-dimension boundary explicit, without
+        // losing the original Nc dependence or omitting adjoint ports.
+        let adjoint_dimension = Atom::var(symbol!("matrix_element_two_adjoint_dimension"));
+        let dimension_value = parse_lit!(Nc ^ 2 - 1, default_namespace = "spenso");
+        let indexed_amplitude = amplitude
+            .replace(dimension_value.clone())
+            .with(adjoint_dimension.clone());
+        assert_eq!(
+            indexed_amplitude
+                .replace(adjoint_dimension.clone())
+                .with(dimension_value.clone()),
+            amplitude
+        );
+        let amplitude_left = indexed_amplitude
             .wrap_dummies::<AbstractIndex>(symbol!("spenso::left"))
-            .unwrap();
+            .unwrap()
+            .replace(adjoint_dimension.clone())
+            .with(dimension_value.clone());
 
         println!("Amplitude left:\n{}", amplitude_left.collect_factors());
 
-        let amplitude_right = amplitude
+        let amplitude_right = indexed_amplitude
             .wrap_dummies::<AbstractIndex>(symbol!("spenso::right"))
-            .unwrap();
+            .unwrap()
+            .replace(adjoint_dimension.clone())
+            .with(dimension_value.clone());
 
         println!("Amplitude right:\n{}", amplitude_right.conj().factor());
 
-        let mut amp_squared = amplitude_left * amplitude_right.conj();
+        let amp_squared = amplitude_left * amplitude_right.conj();
+        let spin_summed = amp_squared
+            .replace(spin_sum_rule_src.to_pattern())
+            .with(spin_sum_rule_trg.to_pattern());
+        // Scalar conjugation does not implement the tensor adjoint or turn
+        // conjugated spinors into the spin-sum rule's conjugate wavefunctions.
+        assert_eq!(spin_summed, amp_squared);
 
-        println!("Amplitude squared:\n{}", amp_squared.factor());
-
-        let _spin_sum_pat = parse!(
-            "gamma(bis(D,left(1)),bis(D,right(1)),mink(D,1337))",
-            default_namespace = "spenso"
-        )
-        .to_pattern();
-
-        let pols_pats: Vec<Pattern> = vec![
-            function!(PS.vbar, RS.x__).into(),
-            function!(PS.v, RS.x__).into(),
-            function!(PS.u, RS.x__).into(),
-            function!(PS.ubar, RS.x__).into(),
-            function!(PS.eps, RS.x__).into(),
-            function!(PS.ebar, RS.x__).into(),
-        ];
-
-        let mut pols_coefs = amp_squared.expand_in_patterns(&pols_pats);
-
-        for (c, _) in &mut pols_coefs {
-            println!("c:{c}");
-            let r = c
-                .replace(spin_sum_rule_src.to_pattern())
-                .with(spin_sum_rule_trg.to_pattern());
-            println!("r:{r}");
-            *c = r;
-        }
-
-        amp_squared = pols_coefs.iter().fold(Atom::Zero, |a, (c, s)| a + c * s);
-
-        println!("Amplitude squared spin-summed:\n{}", amp_squared.factor());
-
-        let mut simplified_amp_squared = amp_squared.clone();
-
-        simplified_amp_squared = simplified_amp_squared.simplify_color();
-
-        println!(
-            "Color-simplified amplitude squared:\n{}",
-            simplified_amp_squared
+        let cooking = crate::CookSettings::indices().with_mode(crate::CookMode::ReversibleEncoding);
+        let indexed = spin_summed
+            .replace(dimension_value.to_pattern())
+            .with(adjoint_dimension.to_pattern());
+        let cooked = cooking.try_cook_indices(indexed.as_view()).unwrap();
+        assert_eq!(
+            cooking
+                .uncook(cooked.as_view())
+                .replace(adjoint_dimension.to_pattern())
+                .with(dimension_value.to_pattern()),
+            spin_summed
         );
-
-        simplified_amp_squared = simplified_amp_squared.simplify_gamma().simplify_metrics();
-
-        println!(
-            "Gamma+color-simplified amplitude squared:\n{}",
-            simplified_amp_squared
+        let admitted = cooked.chainify(crate::representations::Bispinor {}.into());
+        // conj(Q(slot)) is an opaque scalar function at the typed boundary.
+        // Its surrounding metric summands therefore have different interfaces;
+        // accepting them used to silently discard the conjugated vector ports.
+        let error = crate::tensor::SymbolicTensor::infer(admitted).unwrap_err();
+        assert!(
+            matches!(error, crate::tensor::inference::TensorInferenceError::Invalid(ref reason)
+            if reason.contains("compatible tensor interfaces"))
         );
-
-        simplified_amp_squared = simplified_amp_squared.to_dots();
-
-        assert_ne!(tgt, simplified_amp_squared.factor());
+        // Retain the original negative reference. The supported tensor-adjoint
+        // route is exercised by test_color_matrix_element above.
+        assert_ne!(tgt, spin_summed.factor());
     }
 }
 
@@ -1984,8 +2566,13 @@ fn color_trace_metric_closures_reduce_before_terminal_invariants() {
         "trace(cof(Nc),t(coad(Na,aa),in,out),t(coad(Na,bb),in,out),t(coad(Na,cc),in,out),t(coad(Na,dd),in,out))*g(coad(Na,aa),coad(Na,cc))*g(coad(Na,bb),coad(Na,dd))",
         default_namespace = "spenso"
     );
-    let result = expr
-        .simplify_color()
+    let result = crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+        .unwrap()
+        .simplify_color(crate::color::ColorSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression()
         .to_cof_dimension_invariants()
         .replace(parse!("Na", default_namespace = "spenso"))
         .with(parse!("Nc^2-1", default_namespace = "spenso"))
@@ -2001,8 +2588,13 @@ fn symmetric_color_trace_with_contracted_pair_reuses_casimir_rules() {
         "trace(cof(Nc),sym(t(coad(Na,aa),in,out),t(coad(Na,bb),in,out),t(coad(Na,cc),in,out),t(coad(Na,dd),in,out)))*g(coad(Na,aa),coad(Na,cc))*g(coad(Na,bb),coad(Na,dd))",
         default_namespace = "spenso"
     );
-    let result = expr
-        .simplify_color()
+    let result = crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+        .unwrap()
+        .simplify_color(crate::color::ColorSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression()
         .to_cof_dimension_invariants()
         .replace(parse!("Na", default_namespace = "spenso"))
         .with(parse!("Nc^2-1", default_namespace = "spenso"))
@@ -2010,7 +2602,129 @@ fn symmetric_color_trace_with_contracted_pair_reuses_casimir_rules() {
     let expected = parse!("(Nc^2-1)*(2*Nc^2-3)/(12*Nc)", default_namespace = "spenso");
     assert_eq!((result - expected).expand(), Atom::Zero);
     assert_eq!(
-        expr.simplify_color().simplify_color(),
-        expr.simplify_color()
+        crate::tensor::SymbolicTensor::infer(
+            (crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression())
+            .as_atom_view()
+            .to_owned()
+        )
+        .unwrap()
+        .simplify_color(crate::color::ColorSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression(),
+        crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
     );
+}
+
+#[test]
+fn cooked_dimensions_preserve_color_invariants_and_zero() {
+    use crate::{CookMode, CookSettings};
+    test_initialize();
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let n = Atom::var(CS.nc);
+    let adjoint = n.clone().pow(Atom::num(2)) - Atom::num(1);
+    let cof = ColorFundamental {}.to_symbolic([n.clone()]);
+    let coad = ColorAdjoint {}.to_symbolic([adjoint.clone()]);
+    let supported = [
+        color_idx!(2, cof.clone()),
+        color_cas!(2, cof.clone()),
+        color_cas!(2, coad.clone()),
+        color_gram!(3, cof.clone(), cof.clone()),
+        color_gram!(4, cof.clone(), cof),
+    ];
+    for source in supported {
+        let encoded = cooking.cook(source.as_view());
+        let actual = cooking.uncook(encoded.to_cof_dimension_invariants().as_view());
+        let expected = source.to_cof_dimension_invariants();
+        assert_eq!(actual, expected);
+        assert_eq!(actual.to_cof_dimension_invariants(), expected);
+    }
+    let source = color_cas!(2, coad) - n;
+    let result = SymbolicTensor::infer(cooking.cook(source.as_view()))
+        .unwrap()
+        .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())
+        .unwrap()
+        .resolved()
+        .unwrap();
+    assert!(result.expression().is_zero());
+    assert_eq!(cooking.uncook(result.expression().as_view()), Atom::Zero);
+    for source in [
+        parse_lit!(cas(2, coad(8)), default_namespace = "spenso"),
+        parse_lit!(cas(2, cof(3)), default_namespace = "spenso"),
+    ] {
+        assert_eq!(cooking.cook(source.as_view()), source);
+        assert_eq!(
+            cooking.cook(source.as_view()).to_cof_dimension_invariants(),
+            source.to_cof_dimension_invariants()
+        );
+    }
+}
+
+#[test]
+fn cooked_compound_dimension_color_contraction_matches_raw_invariant_identity() {
+    use crate::{CookMode, CookSettings};
+    test_initialize();
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let source = parse!(
+        "f(coad(Nc^2-1,a),coad(Nc^2-1,b),coad(Nc^2-1,c))^2",
+        default_namespace = "spenso"
+    );
+    let expected = Atom::var(CS.nc) * (Atom::var(CS.nc).pow(Atom::num(2)) - Atom::num(1));
+    let result = SymbolicTensor::infer(cooking.cook(source.as_view()))
+        .unwrap()
+        .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())
+        .unwrap()
+        .resolved()
+        .unwrap();
+    let decoded = cooking.uncook(result.expression().as_view());
+    assert_eq!((decoded - expected).together().cancel(), Atom::Zero);
+    assert_eq!(
+        result
+            .clone()
+            .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())
+            .unwrap()
+            .resolved()
+            .unwrap(),
+        result
+    );
+}
+
+#[test]
+fn scalar_invariant_prefactor_preserves_closed_color_trace_collection() {
+    test_initialize();
+    let input = symbolica::atom::Atom::parse(
+        "idx(2,cof(2))*(-trace(cof(2),cyclic(t(coad(3,a),in,out),t(coad(3,c),in,out)))^2/2+trace(cof(2),cyclic(t(coad(3,a),in,out),t(coad(3,a),in,out),t(coad(3,c),in,out),t(coad(3,c),in,out))))",
+        "spenso", symbolica::parser::ParseSettings::symbolica()).unwrap();
+    let spectator = (symbolica::atom::Atom::var(symbolica::symbol!("closed_color_x"))
+        + symbolica::atom::Atom::var(symbolica::symbol!("closed_color_y")))
+    .pow(3);
+    for coefficient in [symbolica::atom::Atom::one(), spectator] {
+        let tensor = crate::tensor::SymbolicTensor::infer(&input * &coefficient).unwrap();
+        let result = tensor
+            .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())
+            .unwrap()
+            .resolved()
+            .unwrap();
+        assert_eq!(
+            result.into_expression(),
+            symbolica::atom::Atom::num((3, 8)) * coefficient
+        );
+    }
 }

@@ -40,6 +40,7 @@ assert color.spenso_conjugate().to_expression() == color.to_expression()
 norm = (
     TensorExpression(color.to_expression() * color.spenso_conjugate().to_expression())
     .simplify_color()
+    .to_expression()
     .to_cof_dimension_invariants()
 )
 assert norm.is_scalar
@@ -48,5 +49,5 @@ assert norm.to_expression() == E("40/3")
 particle = model.particle_by_pdg(25)
 assert TensorExpression(
     particle.color_sum(S("x"), S("x"), average=True)
-).simplify_metrics().to_expression() == E("1")
+).contract().to_expression().to_expression() == E("1")
 print("Generated UFO d tensor: real adjoint interface and SU(3) norm 40/3 passed")

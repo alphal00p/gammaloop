@@ -7,13 +7,13 @@
 #let nu = slot(V, 2)
 #let p = vector("p")
 #let expression = mul(metric(V, mu, nu), p(nu))
-#let contracted = simplify-metrics(expression)
+#let contracted = contract(expression)
 #let parsed = math($#metric(V, mu, nu) #p(nu)$)
 
 #assert.eq(mu.kind, "slot")
 #assert.eq(mu.representation.name, "mink")
 #assert.eq(mu.representation.dimension, 4)
-#assert.eq(inspect(simplify-metrics(parsed)), inspect(p(mu)))
+#assert.eq(inspect(contract(parsed)), inspect(p(mu)))
 #assert(type(to-typst(contracted)) == content)
 // Component style is a public notation option and leaves abstract indices unchanged.
 #assert.eq(to-typst(contracted, notation: notation(component-style: "array")), to-typst(contracted))
@@ -49,7 +49,7 @@
 #let j = slot(R, $j$)
 #let j-dual = slot(dual-representation(R), $j$)
 #let q = vector("q", namespace: "dual_test")
-#let dual-contraction = simplify-metrics(mul(metric(R, i, j-dual), q(j)))
+#let dual-contraction = contract(mul(metric(R, i, j-dual), q(j)))
 #assert.eq(inspect(dual-contraction), inspect(q(i)))
 
 #let exact-index = symbol("i", namespace: "exact_index_test")

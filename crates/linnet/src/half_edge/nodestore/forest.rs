@@ -4,13 +4,13 @@ use super::{NodeStorage, NodeStorageOps, NodeStorageVec};
 use crate::{
     half_edge::{
         involution::Hedge,
-        subgraph::{BaseSubgraph, Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
+        subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
         swap::Swap,
         NodeIndex, NodeVec,
     },
     tree::{
-        parent_pointer::ParentPointerStore, Forest, ForestNodeStore, ForestNodeStorePreorder,
-        RootData, RootId, TreeNodeId,
+        parent_pointer::{PPNode, ParentPointerStore},
+        Forest, ForestNodeStore, ForestNodeStorePreorder, RootData, RootId, TreeNodeId,
     },
 };
 
@@ -222,13 +222,7 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         nodes: I,
         n_hedges: usize,
     ) -> Self {
-        Forest::from_bitvec_partition(nodes.into_iter().map(|n| {
-            (
-                n.data,
-                SuBitGraph::from_hedge_iter(n.hedges.into_iter(), n_hedges),
-            )
-        }))
-        .unwrap()
+        Self::build_with_mapping(nodes, n_hedges, std::convert::identity)
     }
 
     fn build_with_mapping<
@@ -239,13 +233,57 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         n_hedges: usize,
         mut map_data: impl FnMut(ND) -> Self::NodeData,
     ) -> Self {
-        Forest::from_bitvec_partition(nodes.into_iter().map(|n| {
-            (
-                map_data(n.data),
-                SuBitGraph::from_hedge_iter(n.hedges.into_iter(), n_hedges),
-            )
-        }))
-        .unwrap()
+        // The builder already owns each node's incidence list. Construct the
+        // same parent-pointer forest directly instead of allocating a full
+        // hedge bitset for every node and decoding those bitsets again.
+        let mut entries = Vec::new();
+        let mut roots = Vec::new();
+        let mut covered = Vec::new();
+        for node in nodes {
+            let data = map_data(node.data);
+            if roots.is_empty() {
+                entries.resize_with(n_hedges, || None);
+                covered.resize(n_hedges, false);
+            } else {
+                // Retain the existing partition constructor's admission: its
+                // coverage starts after the first partition. Builder-produced
+                // incidence is disjoint, but direct trait calls keep the same
+                // behavior for repeated or malformed incidence.
+                assert!(
+                    node.hedges.iter().all(|h| !covered[h.0]),
+                    "hedge incidence must form a partition"
+                );
+                for h in &node.hedges {
+                    covered[h.0] = true;
+                }
+            }
+            // Bitset iteration picked the lowest hedge, independent of the
+            // order or duplicate entries in the supplied incidence list.
+            let first = node.hedges.iter().min().copied().map(TreeNodeId::from);
+            let root = RootId(roots.len());
+            for h in node.hedges {
+                entries[h.0] = Some(if Some(TreeNodeId::from(h)) == first {
+                    PPNode::dataless_root(root)
+                } else {
+                    PPNode::dataless_child(first.unwrap())
+                });
+            }
+            roots.push(RootData {
+                root_id: first.unwrap_or(TreeNodeId::EMPTY),
+                data,
+            });
+        }
+        Self {
+            nodes: P::from_pp(
+                entries
+                    .into_iter()
+                    .collect::<Option<Vec<_>>>()
+                    .unwrap()
+                    .into_iter()
+                    .collect(),
+            ),
+            roots,
+        }
     }
 
     fn drain(self) -> impl Iterator<Item = (NodeIndex, Self::NodeData)> {
@@ -872,3 +910,126 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
 //     > {
 //     }
 // }
+
+#[cfg(test)]
+mod builder_tests {
+    use super::*;
+    use crate::{
+        half_edge::{builder::HedgeNodeBuilder, subgraph::BaseSubgraph},
+        tree::{child_pointer::ParentChildStore, child_vec::ChildVecStore},
+    };
+
+    fn builders(parts: &[Vec<usize>]) -> Vec<HedgeNodeBuilder<usize>> {
+        parts
+            .iter()
+            .enumerate()
+            .map(|(data, hedges)| HedgeNodeBuilder {
+                data,
+                hedges: hedges.iter().copied().map(Hedge).collect(),
+            })
+            .collect()
+    }
+
+    fn reference<P: ForestNodeStore>(parts: &[Vec<usize>], n_hedges: usize) -> Forest<usize, P> {
+        Forest::from_bitvec_partition(builders(parts).into_iter().map(|node| {
+            (
+                node.data,
+                SuBitGraph::from_hedge_iter(node.hedges.into_iter(), n_hedges),
+            )
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn direct_forest_builder_preserves_parent_root_and_crown_order() {
+        for (parts, n_hedges) in [
+            (vec![], 0),
+            (vec![], 3),
+            (vec![vec![]], 0),
+            (vec![vec![], vec![], vec![]], 0),
+            (vec![vec![3, 0, 1, 2]], 4),
+            (vec![vec![3, 1], vec![], vec![2, 0]], 4),
+            (vec![vec![2, 2, 0], vec![3, 1, 3]], 4),
+            (vec![vec![], vec![0], vec![]], 1),
+        ] {
+            macro_rules! compare {
+                ($store:ty) => {{
+                    let actual = <Forest<usize, $store> as NodeStorageOps>::build(
+                        builders(&parts),
+                        n_hedges,
+                    );
+                    let expected = reference::<$store>(&parts, n_hedges);
+                    assert_eq!(actual, expected);
+                    let actual_parents: ParentPointerStore<()> = actual.nodes.clone().into();
+                    let expected_parents =
+                        reference::<ParentPointerStore<()>>(&parts, n_hedges).nodes;
+                    assert_eq!(actual_parents, expected_parents);
+                    assert_eq!(actual.nodes.n_nodes(), expected.nodes.n_nodes());
+                    for i in 0..parts.len() {
+                        assert_eq!(
+                            actual
+                                .get_neighbor_iterator(NodeIndex(i))
+                                .collect::<Vec<_>>(),
+                            expected
+                                .get_neighbor_iterator(NodeIndex(i))
+                                .collect::<Vec<_>>()
+                        );
+                    }
+                }};
+            }
+            compare!(ParentChildStore<()>);
+            compare!(ChildVecStore<()>);
+        }
+    }
+
+    #[test]
+    fn direct_forest_builder_retains_partition_failure_boundary() {
+        for (parts, n_hedges) in [
+            (vec![vec![1]], 1),
+            (vec![vec![0]], 2),
+            (vec![vec![]], 1),
+            (vec![vec![0], vec![1], vec![1]], 2),
+            // The old partition constructor does not add the first partition
+            // to its overlap mask. Preserve, rather than fix, that behavior.
+            (vec![vec![0], vec![0]], 1),
+        ] {
+            let actual = std::panic::catch_unwind(|| {
+                <Forest<usize, ParentChildStore<()>> as NodeStorageOps>::build(
+                    builders(&parts),
+                    n_hedges,
+                )
+            });
+            let expected =
+                std::panic::catch_unwind(|| reference::<ParentChildStore<()>>(&parts, n_hedges));
+            assert_eq!(actual.is_ok(), expected.is_ok());
+            if let (Ok(actual), Ok(expected)) = (actual, expected) {
+                assert_eq!(actual, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn direct_forest_builder_maps_nonclone_payloads_once_in_node_order() {
+        use std::sync::Mutex;
+        let nodes = (0..3).map(|i| HedgeNodeBuilder {
+            data: Mutex::new(i),
+            hedges: vec![Hedge(i)],
+        });
+        let mut calls = Vec::new();
+        let actual =
+            <Forest<Mutex<usize>, ParentChildStore<()>> as NodeStorageOps>::build_with_mapping(
+                nodes,
+                3,
+                |data| {
+                    let value = data.into_inner().unwrap();
+                    calls.push(value);
+                    Mutex::new(value + 10)
+                },
+            );
+        assert_eq!(calls, vec![0, 1, 2]);
+        for (i, root) in actual.roots.iter().enumerate() {
+            assert_eq!(*root.data.lock().unwrap(), i + 10);
+            assert_eq!(root.root_id, TreeNodeId(i));
+        }
+    }
+}

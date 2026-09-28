@@ -52,7 +52,7 @@ safe_product = TensorExpression(
 
 assert len(safe_product.list_dangling()) == 2
 assert (
-    safe_product.simplify_metrics().to_expression()
+    safe_product.contract(rank_one=False).to_expression().to_expression()
     == p(nu).to_expression() * q(rho).to_expression()
 )
 ```
@@ -126,14 +126,13 @@ remain symbolic; this does not claim a general higher-rank invariant reduction.
   substitutions must still be requested explicitly.
 ])
 
-== Schoonschip network parsing
+== Shared structural contraction
 
-The Schoonschip path parses large gamma-chain expressions into the same Spenso-compatible
-network model before contraction. It resolves aliases and normalizes the expression before
-constructing the network. Spenso then plans and executes contractions, while Idenso supplies
-the representation and algebra rules. Avoid substituting scalar parameters too early: doing so
-can substantially increase intermediate expression size even when the resulting tensor network
-is unchanged.
+`contract()` reads the borrowed Spenso factor graph and applies Idenso’s shared component
+reducer. It retains generated sums as literal aliases and uses the ordered substitution owner
+when callbacks require it. Scalar coefficients stay factored. Concrete tensor-network execution
+remains a separate Spenso operation when component data are required. Avoid substituting scalar
+parameters too early: this can increase expression size without changing tensor incidence.
 
 Concrete syntax and rewrite cases are documented in the
 #developer-link(

@@ -327,7 +327,7 @@ fn node_expression_to_dot(
             split_xs_by_initial_states: true,
             output_full_numerator: false,
             ..DotExportSettings::default()
-        });
+        })?;
     dot_graph
         .global_data
         .statements

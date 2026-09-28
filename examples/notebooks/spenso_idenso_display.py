@@ -461,7 +461,7 @@ def _(Representation, TensorExpression, mu, p):
     # Crossing to ordinary Symbolica explicitly leaves the repeated index visible
     # to Idenso instead of asking Spenso to choose a tensor-aware contraction.
     metric_product = metric.to_expression() * p(1, mu).to_expression()
-    simplified_tensor = TensorExpression(metric_product).simplify_metrics()
+    simplified_tensor = TensorExpression(metric_product).contract(rank_one=False).to_expression()
     simplified_atom = simplified_tensor.to_expression()
     return metric_product, simplified_atom, simplified_tensor
 
@@ -483,8 +483,8 @@ def _(
             mo.md(
                 "## 3. Idenso transformation on a TensorExpression\n\n"
                 "`TensorExpression` validates the Symbolica input. Its "
-                "`simplify_metrics()` method applies Idenso and infers the result’s "
-                "typed external interface."
+                "`contract(rank_one=False)` method contracts metrics while retaining "
+                "the typed external interface. `to_expression()` resolves its aliases."
             ),
             mo.hstack(
                 [

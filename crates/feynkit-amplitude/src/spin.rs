@@ -334,8 +334,8 @@ impl SpinSum {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idenso::{dirac::GammaSimplifier, shorthands::schoonschip::Schoonschip};
-    use symbolica::{parse, symbol};
+    use idenso::tensor::{ContractionSettings, SymbolicTensor};
+    use symbolica::parse;
 
     #[test]
     fn polarized_density_has_one_state_and_shared_wavefunction_replacement() {
@@ -368,17 +368,32 @@ mod tests {
                 .expression(&p, [a.clone(), b.clone()], None, None)
                 .unwrap();
             assert!(
-                (plus.clone() + minus - ordinary)
-                    .expand()
-                    .simplify_gamma()
-                    .expand()
-                    .is_zero()
+                idenso::tensor::SymbolicTensor::infer(
+                    ((plus.clone() + minus - ordinary).expand())
+                        .as_atom_view()
+                        .to_owned()
+                )
+                .unwrap()
+                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+                .expand()
+                .is_zero()
             );
             let trace = sum
                 .expression(&p, [a.clone(), a.clone()], None, Some(&spin))
                 .unwrap();
             assert_eq!(
-                trace.expand().simplify_gamma().expand(),
+                idenso::tensor::SymbolicTensor::infer((trace.expand()).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression()
+                    .expand(),
                 Atom::num(2 * sign) * particle.symbolic_mass(&model)
             );
             let pair = function!(ket, 7, rep.pattern(&a)) * function!(bra, 7, rep.pattern(&b));
@@ -387,11 +402,19 @@ mod tests {
             let expression = &pair * &spectator + &unpaired;
             let replaced = sum.apply(&expression, &p, 7, None, Some(&spin)).unwrap();
             assert!(
-                (replaced.clone() - plus * spectator - unpaired)
-                    .expand()
-                    .simplify_gamma()
-                    .expand()
-                    .is_zero()
+                idenso::tensor::SymbolicTensor::infer(
+                    ((replaced.clone() - plus * spectator - unpaired).expand())
+                        .as_atom_view()
+                        .to_owned()
+                )
+                .unwrap()
+                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+                .expand()
+                .is_zero()
             );
             assert_eq!(
                 sum.apply(&replaced, &p, 7, None, Some(&spin)).unwrap(),
@@ -527,8 +550,8 @@ mod tests {
     fn vector_projectors_are_transverse_and_count_physical_states() {
         let model =
             Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
-        let p = symbol!("spin_test::p").to_atom();
-        let n = symbol!("spin_test::n").to_atom();
+        let p = spenso::vector_symbol!("spin_test::p").to_atom();
+        let n = spenso::vector_symbol!("spin_test::n").to_atom();
         let mu = parse!("mu");
         let nu = parse!("nu");
         let rep = Minkowski {}.new_rep(4);
@@ -546,23 +569,45 @@ mod tests {
             } else {
                 particle.symbolic_mass(&model).pow(2)
             };
-            let longitudinal = (projector.clone() * rep.vector(p.as_view(), [mu.clone()]))
-                .expand()
-                .to_dots()
-                .replace(p2.to_pattern())
-                .with(mass_squared.to_pattern())
-                .together();
+            let longitudinal = SymbolicTensor::infer(
+                (projector.clone() * rep.vector(p.as_view(), [mu.clone()])).expand(),
+            )
+            .unwrap()
+            .contract(ContractionSettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .to_dots()
+            .unwrap()
+            .into_expression()
+            .replace(p2.to_pattern())
+            .with(mass_squared.to_pattern())
+            .together();
             assert!(longitudinal.is_zero(), "{longitudinal}");
             if let Some(reference) = reference {
-                let axial = (projector.clone() * rep.vector(reference.as_view(), [mu.clone()]))
-                    .expand()
-                    .to_dots()
-                    .together();
+                let axial = SymbolicTensor::infer(
+                    (projector.clone() * rep.vector(reference.as_view(), [mu.clone()])).expand(),
+                )
+                .unwrap()
+                .contract(ContractionSettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .to_dots()
+                .unwrap()
+                .into_expression()
+                .together();
                 assert!(axial.is_zero(), "{axial}");
             }
-            let trace = (projector * rep.id(&mu, &nu))
-                .expand()
+            let trace = SymbolicTensor::infer((projector * rep.id(&mu, &nu)).expand())
+                .unwrap()
+                .contract(ContractionSettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
                 .to_dots()
+                .unwrap()
+                .into_expression()
                 .replace(p2.to_pattern())
                 .with(mass_squared.to_pattern())
                 .together();
@@ -574,8 +619,8 @@ mod tests {
     fn dimensional_vector_sums_count_states_and_sew_matching_slots() {
         let model =
             Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
-        let p = parse!("dimension_spin::p");
-        let n = parse!("dimension_spin::n");
+        let p = spenso::vector_symbol!("dimension_spin::p").to_atom();
+        let n = spenso::vector_symbol!("dimension_spin::n").to_atom();
         let mu = parse!("mu");
         let nu = parse!("nu");
         for dimension in [Atom::num(4), Atom::num(6), parse!("dimension_spin::D")] {
@@ -599,30 +644,53 @@ mod tests {
                     let projector = sum
                         .expression(&p, [mu.clone(), nu.clone()], reference, None)
                         .unwrap();
-                    let trace = (projector.clone() * rep.id(&mu, &nu))
-                        .expand()
-                        .to_dots()
-                        .replace(p2.to_pattern())
-                        .with(mass_squared.to_pattern())
-                        .together();
+                    let trace =
+                        SymbolicTensor::infer((projector.clone() * rep.id(&mu, &nu)).expand())
+                            .unwrap()
+                            .contract(ContractionSettings::default())
+                            .unwrap()
+                            .resolved()
+                            .unwrap()
+                            .to_dots()
+                            .unwrap()
+                            .into_expression()
+                            .replace(p2.to_pattern())
+                            .with(mass_squared.to_pattern())
+                            .together();
                     let expected = if average {
                         -Atom::one()
                     } else {
                         Atom::num(missing) - &dimension
                     };
                     assert!((trace - expected).together().is_zero());
-                    let longitudinal = (projector.clone() * rep.vector(p.as_view(), [mu.clone()]))
-                        .expand()
-                        .to_dots()
-                        .replace(p2.to_pattern())
-                        .with(mass_squared.to_pattern())
-                        .together();
+                    let longitudinal = SymbolicTensor::infer(
+                        (projector.clone() * rep.vector(p.as_view(), [mu.clone()])).expand(),
+                    )
+                    .unwrap()
+                    .contract(ContractionSettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .to_dots()
+                    .unwrap()
+                    .into_expression()
+                    .replace(p2.to_pattern())
+                    .with(mass_squared.to_pattern())
+                    .together();
                     assert!(longitudinal.is_zero());
                     if let Some(reference) = reference {
-                        let axial = (projector.clone()
-                            * rep.vector(reference.as_view(), [mu.clone()]))
-                        .expand()
+                        let axial = SymbolicTensor::infer(
+                            (projector.clone() * rep.vector(reference.as_view(), [mu.clone()]))
+                                .expand(),
+                        )
+                        .unwrap()
+                        .contract(ContractionSettings::default())
+                        .unwrap()
+                        .resolved()
+                        .unwrap()
                         .to_dots()
+                        .unwrap()
+                        .into_expression()
                         .together();
                         assert!(axial.is_zero());
                     }
@@ -679,7 +747,14 @@ mod tests {
             .expression(&parse!("p"), [parse!("i"), parse!("i")], None, None)
             .unwrap();
         assert_eq!(
-            unpolarized.simplify_gamma().expand(),
+            idenso::tensor::SymbolicTensor::infer((unpolarized).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+                .expand(),
             4 * tau.symbolic_mass(&model)
         );
     }
@@ -697,7 +772,14 @@ mod tests {
                 .expression(&parse!("p"), [parse!("i"), parse!("i")], None, None)
                 .unwrap();
             assert_eq!(
-                projector.simplify_gamma().expand(),
+                idenso::tensor::SymbolicTensor::infer((projector).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression()
+                    .expand(),
                 expected * particle.symbolic_mass(&model)
             );
         }

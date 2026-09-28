@@ -61,12 +61,12 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSpensoName {
         if let Ok(structure) = structure.extract::<SpensoName>() {
             Ok(ConvertibleToSpensoName(structure, Vec::new()))
         } else if let Ok(expression) = structure.extract::<PyRef<'_, TensorExpression>>() {
-            if !expression.interface.canonical().is_scalar() {
+            if !expression.interface().canonical().is_scalar() {
                 return Err(PyTypeError::new_err(
                     "a TensorExpression used as a name must have rank zero",
                 ));
             }
-            let AtomView::Fun(function) = expression.as_super().expr.as_view() else {
+            let AtomView::Fun(function) = expression.atom().as_view() else {
                 return Err(PyTypeError::new_err(
                     "a TensorExpression used as a name must be an atomic tensor call",
                 ));
@@ -162,13 +162,13 @@ impl<'a, 'py> FromPyObject<'a, 'py> for SpensoSlotOrArgOrRep {
         } else if let Ok(s) = structure.extract::<SpensoRepresentation>() {
             Ok(SpensoSlotOrArgOrRep::Rep(s))
         } else if let Ok(s) = structure.extract::<PyRef<'_, TensorExpression>>() {
-            if !s.interface.canonical().is_scalar() {
+            if !s.interface().canonical().is_scalar() {
                 return Err(PyTypeError::new_err(
                     "tensor key arguments must be scalar expressions",
                 ));
             }
             Ok(SpensoSlotOrArgOrRep::Arg(PythonExpression {
-                expr: s.as_super().expr.clone(),
+                expr: s.atom().clone(),
             }))
         } else if let Ok(s) = structure.extract::<ConvertibleToExpression>() {
             Ok(SpensoSlotOrArgOrRep::Arg(s.to_expression()))
@@ -1581,14 +1581,14 @@ mod tests {
                     };
                     let value = tensor.__call__(py, &PyTuple::new(py, args)?)?;
                     let value = value.bind(py).borrow();
-                    assert_eq!(value.interface.canonical().order(), 1);
+                    assert_eq!(value.interface().canonical().order(), 1);
                     assert_eq!(
-                        value.interface.logical_slots()[0].aind,
+                        value.interface().logical_slots()[0].aind,
                         PartialIndex::Explicit(AbstractIndex::Normal(9))
                     );
                     assert!(value.name.is_none());
                     assert!(value.name_args.is_empty());
-                    expressions.push(value.as_super().expr.clone());
+                    expressions.push(value.atom().clone());
                 }
             }
             assert_ne!(expressions[0], expressions[2]);
@@ -1671,13 +1671,13 @@ mod tests {
             )?;
             let expression = name.__call__(py, &arguments)?;
             let expression_ref = expression.bind(py).borrow();
-            assert_eq!(expression_ref.interface.canonical().order(), 2);
+            assert_eq!(expression_ref.interface().canonical().order(), 2);
             assert!(matches!(
-                expression_ref.interface.logical_slots()[0].aind,
+                expression_ref.interface().logical_slots()[0].aind,
                 PartialIndex::Explicit(AbstractIndex::Normal(41))
             ));
             assert!(matches!(
-                expression_ref.interface.logical_slots()[1].aind,
+                expression_ref.interface().logical_slots()[1].aind,
                 PartialIndex::Open(_)
             ));
             assert_eq!(expression_ref.name_args, vec![Atom::num(11)]);
@@ -1691,7 +1691,7 @@ mod tests {
                     .into_any()],
             )?;
             let scalar = name.__call__(py, &scalar_arguments)?;
-            assert!(scalar.bind(py).borrow().interface.canonical().is_scalar());
+            assert!(scalar.bind(py).borrow().interface().canonical().is_scalar());
             let descriptor = scalar
                 .bind(py)
                 .as_any()

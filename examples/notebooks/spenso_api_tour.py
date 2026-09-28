@@ -1,7 +1,5 @@
 """Executable tour of every public Spenso type and its display protocols."""
 
-# ruff: noqa: PLR1711 -- marimo cells retain explicit return statements.
-
 import marimo
 
 __generated_with = "0.21.1"
@@ -38,9 +36,21 @@ def example_specification():
         ),
         (
             "TensorExpression",
-            "Symbolic algebra plus an ordered external interface. Calling it assigns indices; repeated compatible indices contract. The simplification methods preserve and validate that interface.",
+            "An immutable symbolic tensor and ordered interface. Calling it assigns indices. Tensor-aware operations preserve that interface; to_expression() is the explicit boundary for general Symbolica algebra.",
             'expression = A(rep, rep)\nindexed = expression("mu", "nu")',
             "indexed",
+        ),
+        (
+            "TensorRule",
+            "A reusable tensor-safe replacement: construction validates wildcard closure, and each application checks the actual interface. Ordered rule lists share the same matching owner.",
+            "rule = sp.TensorRule(indexed, 2 * indexed)\nreplaced = indexed.replace(rule)",
+            "rule",
+        ),
+        (
+            "AliasedTensorExpression",
+            "A typed root and literal tensor definitions. Domain operations preserve the registry; to_expression resolves it, while expand explicitly materializes a polynomial.",
+            "aliased = sp.AliasedTensorExpression.from_expression(indexed)",
+            "aliased",
         ),
         (
             "TensorStructure",
@@ -163,12 +173,6 @@ def example_specification():
             "cook_settings",
         ),
         (
-            "SchoonschipSettings",
-            "Controls compact vector, dot and chain notation, recursion, sum expansion and contraction order. Expansion is opt-in.",
-            "schoonschip_settings = sp.SchoonschipSettings.depth_first(depth_limit=2)",
-            "schoonschip_settings",
-        ),
-        (
             "ExecutionMode",
             "Network execution policy: All performs every possible contraction, Single selects one smallest-degree rewrite per step, Scalar only contracts scalar operations.",
             "execution_mode = sp.ExecutionMode.All",
@@ -192,24 +196,6 @@ def example_specification():
             "cook_mode = sp.CookMode.ReversibleEncoding",
             "cook_mode",
         ),
-        (
-            "SchoonschipMode",
-            "Selects one simplification pass or recursive processing.",
-            "schoonschip_mode = sp.SchoonschipMode.Recursive",
-            "schoonschip_mode",
-        ),
-        (
-            "SchoonschipTraversal",
-            "Selects depth-first or breadth-first recursive processing.",
-            "traversal = sp.SchoonschipTraversal.DepthFirst",
-            "traversal",
-        ),
-        (
-            "SchoonschipContractionOrder",
-            "Chooses which contraction is performed first. This controls the execution strategy, not the mathematical expression.",
-            "contraction_order = sp.SchoonschipContractionOrder.SmallestDegree",
-            "contraction_order",
-        ),
     ]
 
     for _name, _description in [
@@ -218,11 +204,6 @@ def example_specification():
         (
             "DiracAdjointError",
             "A Dirac adjoint cannot be formed for the supplied tensor structure.",
-        ),
-        ("DotExpansionError", "Dot notation cannot be expanded consistently."),
-        (
-            "GammaConjugationError",
-            "Conjugated gamma matrices cannot be rewritten consistently.",
         ),
         ("NetworkToolingError", "A symbolic network cannot be parsed or processed."),
     ]:
@@ -359,18 +340,21 @@ def _(mo):
 
     - `dot(p, q)`, `chain(start, end, *factors)` and `trace(rep, *factors)` construct tensor operations.
       Symbolic operands return `TensorExpression`; a concrete `Tensor` or `TensorNetwork` operand gives a `TensorNetwork`.
-    - `outer`, `contract`, `compose`, arithmetic and `trace` are also methods on the relevant tensor types.
-    - Scalar algebra: `expand`, `factor`, `collect`, `collect_num`, `collect_factors`, `together`, `cancel`, `apart` and Horner collection.
-    - Dirac algebra: `simplify_gamma`, `collect_gamma_chains`, gamma conjugation and `dirac_adjoint`.
-    - Color algebra: `simplify_color`, `collect_color`, `to_color_casimir` and dimension-invariant substitution.
-    - Index algebra: `simplify_metrics`, `simplify_epsilon`, `with_lorentz_dimension`, cooking and canonicalization.
-    - Compact notation: `schoonschip`, `schoonschip_net`, `to_dots`, chain collection and their expansion/undo methods.
+    - `outer`, `contract_ports`, `compose`, arithmetic and `trace` are methods on tensor expressions. `contract` performs graph contraction and returns a typed alias DAG.
+    - `replace` applies a reusable `TensorRule` or an ordered rule list.
+    - Materialization is explicit: `expand` emits a polynomial result and `evaluator` builds numerical evaluation.
+    - An `AliasedTensorExpression` retains definitions separately. Its `to_expression()` resolves them to a `TensorExpression`; a second `to_expression()` crosses to ordinary Symbolica algebra. Reconstruct with `TensorExpression(raw, structure=source.structure)` to validate and retain a logical layout.
+    - Dirac algebra: `simplify_gamma`, with `GammaSimplifySettings(output="chains")` for collected words, gamma conjugation and `dirac_adjoint`.
+    - Color algebra: `simplify_color`, `to_color_casimir` and dimension-invariant substitution.
+    - Index algebra: `contract`, `simplify_epsilon`, `with_lorentz_dimension`, cooking and canonicalization.
+    - Compact notation: `to_dots`, `undo_dots` and gamma-chain collection. Shared `contract` handles metric and vector contractions.
     - `format_tensor`, `to_typst`, `to_html`, `to_svg` and `formatted` also accept ordinary Symbolica expressions.
-      `as_tensor` restores a structured tensor after an ordinary expression operation.
+      `TensorExpression(raw)` validates and wraps an ordinary expression.
 
-    `TensorExpression` and `TensorPattern` inherit Symbolica algebra, but their gamma
-    factories and tensor indexing have tensor-specific meanings. A scalar gamma
-    special function remains `Expression.gamma()`.
+    `TensorExpression` owns the shared typed value; it does not inherit `Expression`.
+    `TensorPattern` remains a Symbolica pattern. Tensor gamma factories and index
+    operations have tensor-specific meanings; a scalar gamma special function uses
+    `Expression.gamma()`.
     """)
     return
 

@@ -1,18 +1,22 @@
 //! Python conversion and result wrapping for Idenso's typed alias registry.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
-use idenso::tensor::{SymbolicTensor, aliases::AliasInterfaces, inference::TensorInferenceError};
-use pyo3::{exceptions::PyValueError, prelude::*};
+use idenso::tensor::{
+    ContractionSettings, SymbolicTensor, aliases::AliasInterfaces, inference::TensorInferenceError,
+};
+use pyo3::prelude::*;
 use spenso::structure::partial::PartialStructure;
 use symbolica::{
     api::python::{PythonExpression, PythonExpressionEvaluator},
     atom::{AliasedAtom, Atom, Symbol},
-    domains::float::Complex,
-    evaluate::OptimizationSettings,
 };
 
-use crate::{ModuleInit, expression::TensorExpression};
+use crate::{
+    ModuleInit,
+    expression::TensorExpression,
+    simplification::{PyColorSimplifySettings, PyGammaSimplifySettings, PySimplifySettings},
+};
 
 type Descriptor = (Option<Symbol>, Vec<Atom>);
 
@@ -25,23 +29,31 @@ type Descriptor = (Option<Symbol>, Vec<Atom>);
     module = "symbolica.community.spenso"
 )]
 pub struct AliasedTensorExpression {
-    pub(crate) value: SymbolicTensor<AliasInterfaces, AliasedAtom>,
+    pub(crate) value: Arc<SymbolicTensor<AliasInterfaces, AliasedAtom>>,
     descriptor: Descriptor,
-    descriptors: HashMap<Atom, (Descriptor, Descriptor)>,
+    descriptors: Arc<HashMap<Atom, (Descriptor, Descriptor)>>,
 }
 
 impl ModuleInit for AliasedTensorExpression {}
 
 impl AliasedTensorExpression {
     pub(crate) fn from_parts(
-        value: SymbolicTensor<AliasInterfaces, AliasedAtom>,
+        value: Arc<SymbolicTensor<AliasInterfaces, AliasedAtom>>,
         name: Option<Symbol>,
         arguments: Vec<Atom>,
     ) -> Self {
         Self {
             value,
             descriptor: (name, arguments),
-            descriptors: HashMap::new(),
+            descriptors: Arc::new(HashMap::new()),
+        }
+    }
+
+    fn with_value(&self, value: Arc<SymbolicTensor<AliasInterfaces, AliasedAtom>>) -> Self {
+        Self {
+            value,
+            descriptor: self.descriptor.clone(),
+            descriptors: Arc::clone(&self.descriptors),
         }
     }
 
@@ -50,13 +62,7 @@ impl AliasedTensorExpression {
         tensor: SymbolicTensor<PartialStructure>,
         descriptor: &Descriptor,
     ) -> PyResult<Py<TensorExpression>> {
-        TensorExpression::from_parts_unchecked(
-            py,
-            tensor.expression,
-            tensor.structure,
-            descriptor.0,
-            descriptor.1.clone(),
-        )
+        TensorExpression::from_shared(py, Arc::new(tensor), descriptor.0, descriptor.1.clone())
     }
 
     fn descriptor(value: &PyRef<'_, TensorExpression>) -> Descriptor {
@@ -81,49 +87,62 @@ impl AliasedTensorExpression {
                 let handle = handle.borrow(py);
                 let body = body.borrow(py);
                 descriptors.insert(
-                    handle.as_super().expr.clone(),
+                    handle.atom().clone(),
                     (Self::descriptor(&handle), Self::descriptor(&body)),
                 );
                 (
-                    TensorExpression::structured(&handle),
-                    TensorExpression::structured(&body),
+                    TensorExpression::structured(&handle).clone(),
+                    TensorExpression::structured(&body).clone(),
                 )
             })
             .collect::<Vec<_>>();
         Ok(Self {
-            value: TensorExpression::structured(&root)
-                .with_aliases(aliases)
-                .map_err(TensorExpression::inference_error)?,
+            value: Arc::new(
+                TensorExpression::structured(&root)
+                    .clone()
+                    .with_aliases(aliases)
+                    .map_err(TensorExpression::inference_error)?,
+            ),
             descriptor: Self::descriptor(&root),
-            descriptors,
+            descriptors: Arc::new(descriptors),
         })
     }
 
     /// Give a tensor one fresh opaque handle, retaining its original definition.
     #[staticmethod]
     fn from_expression(expression: PyRef<'_, TensorExpression>) -> PyResult<Self> {
-        let body = TensorExpression::structured(&expression);
+        let body = TensorExpression::structured(&expression).clone();
         let handle = body
             .alias_handle()
             .map_err(TensorExpression::inference_error)?;
         let descriptor = Self::descriptor(&expression);
         let descriptors = HashMap::from([(
-            handle.expression.clone(),
+            handle.expression().clone(),
             ((None, Vec::new()), descriptor.clone()),
         )]);
         Ok(Self {
-            value: handle
-                .clone()
-                .with_aliases([(handle, body)])
-                .map_err(TensorExpression::inference_error)?,
+            value: Arc::new(
+                handle
+                    .clone()
+                    .with_aliases([(handle, body)])
+                    .map_err(TensorExpression::inference_error)?,
+            ),
             descriptor,
-            descriptors,
+            descriptors: Arc::new(descriptors),
         })
     }
 
     #[getter]
     fn root(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         Self::wrap(py, self.value.root(), &self.descriptor)
+    }
+
+    /// Whether the metric/vector contractor certified completion.
+    /// False also covers an uncontracted value or an exact retained frontier
+    /// stopped by its budget; explicit materialization is a separate operation.
+    #[getter]
+    fn contraction_complete(&self) -> bool {
+        self.value.contraction_complete()
     }
 
     #[getter]
@@ -138,7 +157,7 @@ impl AliasedTensorExpression {
             .map(|(handle, body)| {
                 let empty = ((None, Vec::new()), (None, Vec::new()));
                 let (handle_descriptor, body_descriptor) =
-                    self.descriptors.get(&handle.expression).unwrap_or(&empty);
+                    self.descriptors.get(handle.expression()).unwrap_or(&empty);
                 Ok((
                     Self::wrap(py, handle, handle_descriptor)?,
                     Self::wrap(py, body, body_descriptor)?,
@@ -168,25 +187,34 @@ impl AliasedTensorExpression {
     }
 
     fn get_byte_size(&self) -> usize {
-        self.value.expression.get_byte_size()
+        self.value.expression().get_byte_size()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "AliasedTensorExpression(root={}, definitions={}, bytes={})",
+            crate::display::format_structured(&self.value.root(), false),
+            self.value.expression().get_aliases().len(),
+            self.get_byte_size(),
+        )
     }
 
     /// Apply a Python callback once per definition, retaining its typed interface.
     fn map_aliases(&self, py: Python<'_>, callback: Py<PyAny>) -> PyResult<Self> {
         let mut callback_error = None;
-        let mut descriptors = self.descriptors.clone();
+        let mut descriptors = (*self.descriptors).clone();
         let value = self.value.map_aliases(|handle, body| {
             let result = (|| {
                 let empty = ((None, Vec::new()), (None, Vec::new()));
-                let descriptor = self.descriptors.get(&handle.expression).unwrap_or(&empty);
+                let descriptor = self.descriptors.get(handle.expression()).unwrap_or(&empty);
                 let argument = Self::wrap(py, body, &descriptor.1)?;
                 let output = callback.call1(py, (argument,))?;
                 let tensor = output.extract::<PyRef<'_, TensorExpression>>(py)?;
                 descriptors.insert(
-                    handle.expression.clone(),
+                    handle.expression().clone(),
                     (descriptor.0.clone(), Self::descriptor(&tensor)),
                 );
-                Ok::<_, PyErr>(TensorExpression::structured(&tensor))
+                Ok::<_, PyErr>(TensorExpression::structured(&tensor).clone())
             })();
             result.map_err(|error| {
                 callback_error = Some(error);
@@ -197,10 +225,97 @@ impl AliasedTensorExpression {
             return Err(error);
         }
         Ok(Self {
-            value: value.map_err(TensorExpression::inference_error)?,
+            value: Arc::new(value.map_err(TensorExpression::inference_error)?),
             descriptor: self.descriptor.clone(),
-            descriptors,
+            descriptors: Arc::new(descriptors),
         })
+    }
+
+    /// Apply ordered tensor rules to the root and reachable definitions without resolving them.
+    /// The shared owner preserves first-match priority and per-call callback caches.
+    #[pyo3(signature=(rules))]
+    fn replace(&self, rules: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let rules = crate::tensor_rule::PyTensorRule::extract_rules(rules)?;
+        let value = self
+            .value
+            .replace_rules(&rules)
+            .map_err(TensorExpression::inference_error)?;
+        Ok(self.with_value(value))
+    }
+
+    /// Contract the root and reachable definitions, reusing certified completed results.
+    #[pyo3(signature=(order=None, *, rank_one=true))]
+    fn contract(&self, order: Option<Vec<usize>>, rank_one: bool) -> PyResult<Self> {
+        let mut settings = ContractionSettings::default();
+        if let Some(order) = &order {
+            settings = settings.with_order(order);
+        }
+        if !rank_one {
+            settings = settings.without_rank_one_tensors();
+        }
+        let value = self
+            .value
+            .contract(settings)
+            .map_err(TensorExpression::inference_error)?;
+        Ok(self.with_value(value))
+    }
+
+    /// Render compact metric products in the root and reachable definitions.
+    fn to_dots(&self) -> PyResult<Self> {
+        self.value
+            .to_dots()
+            .map(|value| self.with_value(value))
+            .map_err(TensorExpression::inference_error)
+    }
+
+    /// Open dots into indexed contractions without resolving the alias registry.
+    fn undo_dots(&self) -> PyResult<Self> {
+        self.value
+            .undo_dots()
+            .map(|value| self.with_value(value))
+            .map_err(TensorExpression::inference_error)
+    }
+
+    /// Apply shared tensor identities to the root and reachable definitions.
+    #[pyo3(signature=(settings=None))]
+    fn simplify(&self, settings: Option<&PySimplifySettings>) -> PyResult<Self> {
+        let settings = settings.copied().unwrap_or_default();
+        let value = self
+            .value
+            .simplify(settings.rust())
+            .map_err(TensorExpression::inference_error)?;
+        Ok(self.with_value(value))
+    }
+
+    /// Apply Dirac identities while retaining tensor-valued trace definitions.
+    #[pyo3(signature=(settings=None))]
+    fn simplify_gamma(&self, settings: Option<&PyGammaSimplifySettings>) -> PyResult<Self> {
+        let settings = settings.map_or_else(Default::default, PyGammaSimplifySettings::rust);
+        let value = self
+            .value
+            .simplify_gamma(settings)
+            .map_err(TensorExpression::inference_error)?;
+        Ok(self.with_value(value))
+    }
+
+    /// Apply color identities to the root and reachable definitions.
+    #[pyo3(signature=(settings=None))]
+    fn simplify_color(&self, settings: Option<&PyColorSimplifySettings>) -> PyResult<Self> {
+        let settings = settings.map_or_else(Default::default, PyColorSimplifySettings::rust);
+        let value = self
+            .value
+            .simplify_color(settings)
+            .map_err(TensorExpression::inference_error)?;
+        Ok(self.with_value(value))
+    }
+
+    /// Apply epsilon identities to the root and reachable definitions.
+    fn simplify_epsilon(&self) -> PyResult<Self> {
+        let value = self
+            .value
+            .simplify_epsilon()
+            .map_err(TensorExpression::inference_error)?;
+        Ok(self.with_value(value))
     }
 
     /// Build Symbolica's evaluator directly from the root and its definitions.
@@ -216,34 +331,10 @@ impl AliasedTensorExpression {
             .into_iter()
             .map(|value| value.expr)
             .collect::<Vec<_>>();
-        let settings = OptimizationSettings::new()
-            .horner_iterations(iterations)
-            .cores(n_cores);
-        let evaluator = py
-            .detach(|| {
-                self.value
-                    .evaluator(&params)
-                    .map_err(|error| error.to_string())?
-                    .optimization_settings(settings)
-                    .build()
-                    .map_err(|error| error.to_string())
-            })
-            .map_err(PyValueError::new_err)?;
-        Ok(PythonExpressionEvaluator {
-            rational_constants: evaluator.get_constants().to_vec(),
-            eval_complex: evaluator.map_coeff(&|c| Complex::new(c.re.to_f64(), c.im.to_f64())),
-            eval_real: None,
-            #[cfg(feature = "native")]
-            jit_real: None,
-            #[cfg(feature = "native")]
-            jit_complex: None,
-            eval_double_float: None,
-            eval_double_float_complex: None,
-            eval_arb_prec: None,
-            eval_arb_prec_complex: None,
-            jit_compile: false,
-            #[cfg(feature = "native")]
-            jit_settings: symbolica::evaluate::JITCompilationSettings::new(),
-        })
+        let builder = self
+            .value
+            .evaluator(&params)
+            .map_err(TensorExpression::inference_error)?;
+        TensorExpression::build_evaluator(py, builder, iterations, n_cores)
     }
 }

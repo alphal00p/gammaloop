@@ -727,7 +727,6 @@ fn rust_example_mode(component: &str, item: &str, language: &str) -> Result<Rust
                     "IndexTooling"
                         | "CookSettings"
                         | "Cookable"
-                        | "SelectiveExpand"
                         | "bis"
                         | "cof"
                         | "coad"

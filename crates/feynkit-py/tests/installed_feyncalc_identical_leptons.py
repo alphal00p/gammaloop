@@ -35,6 +35,7 @@ a, b, c, inverse, wave, rep, index = S(
     "a_", "b_", "c_", "inverse_", "wave_", "rep_", "index_"
 )
 conjugate, wrapped = S("spenso::conj", "identical_leptons::adjoint_index")
+scope = S("spenso::index_scope")
 pi = Expression.PI
 s_cm = S("identical_leptons::s_cm", is_positive=True)
 beta = S("identical_leptons::beta", is_positive=True)
@@ -95,7 +96,7 @@ for label, pdgs in (
                 * factor
                 * diagram.numerator_prefactor_expression()
                 / denominator
-            ).expand()
+            )
         )
         operators.append(operator.to_expression())
     assert set(denominators) == ({s, t} if label == "Bhabha" else {t, u})
@@ -114,9 +115,25 @@ for label, pdgs in (
         )
         for real in (s, t, u, mass, charge):
             adjoint = adjoint.replace(conjugate(real), real)
-        adjoints.append(TensorExpression(adjoint).wrap_indices(wrapped))
+        adjoints.append(TensorExpression(adjoint).wrap_indices(wrapped).to_expression())
     combined_adjoint = adjoints.pop()
-    assert (combined_adjoint - sum(adjoints, E("0"))).expand() == E("0")
+    # Shared gamma reduction removes boundary gamma-zero words before the
+    # same dummy-index canonicalization tests adjoint linearity exactly.
+    combined_normalized = (
+        TensorExpression(combined_adjoint)
+        .simplify_gamma()
+        .to_expression()
+        .canonize()
+        .to_expression()
+    )
+    separate_normalized = (
+        TensorExpression(sum(adjoints, E("0")))
+        .simplify_gamma()
+        .to_expression()
+        .canonize()
+        .to_expression()
+    )
+    assert combined_normalized == separate_normalized
 
     spins = E("1")
     for position, pdg in enumerate(pdgs):
@@ -124,9 +141,9 @@ for label, pdgs in (
         # incoming spins independently and sum both final spins.
         column = (position < 2) == (pdg > 0)
         left, right = (
-            (ports[position], wrapped(ports[position]))
+            (ports[position], scope(wrapped, ports[position]))
             if column
-            else (wrapped(ports[position]), ports[position])
+            else (scope(wrapped, ports[position]), ports[position])
         )
         spins *= model.particle_by_pdg(pdg).spin_sum(
             P(position), left, right, average=position < 2
@@ -138,13 +155,11 @@ for label, pdgs in (
     ):
         scalar = (
             TensorExpression(raw * spins, cook_indices=CookSettings.indices())
-            .expand()
             .simplify_gamma()
-            .expand()
-            .simplify_gamma()
-            .simplify_metrics()
-            .to_dots()
+            .contract()
         )
+        assert scalar.contraction_complete
+        scalar = scalar.to_expression().to_dots()
         assert scalar.is_scalar
         evaluated.append(
             kin.apply(scalar.to_expression()).replace(u, 4 * mass**2 - s - t).together()

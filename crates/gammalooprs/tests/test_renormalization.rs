@@ -12,11 +12,11 @@ use gammalooprs::{
     },
 };
 use idenso::{
-    Cookable, IndexTooling, cof,
-    color::{CS, ColorSimplifier},
+    CookMode, CookSettings, IndexTooling, cof,
+    color::{CS, ColorSimplifier, ColorSimplifySettings},
     color_idx,
-    dirac::GammaSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+    dirac::GammaSimplifySettings,
+    tensor::{ContractionSettings, SymbolicTensor},
 };
 use spenso::{shadowing::symbolica_utils::LogPrint, structure::abstract_index::AbstractIndex};
 use symbolica::{
@@ -53,15 +53,39 @@ fn pole_part_uv_settings() -> UVgenerationSettings {
 // Their ghost-gluon momentum and color conventions differ as well, so the net
 // graph sign cannot be inferred from the ghost-edge count or applied globally.
 pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
-    (model
-        .apply_parameter_replacement_rules(&model.expand_couplings(&atom.simplify_color().expand()))
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let color = SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap())
+        .unwrap()
+        .simplify_color(ColorSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap();
+    let color = cooking.uncook(color.expression().as_view());
+    let expression = model
+        .apply_parameter_replacement_rules(&model.expand_couplings(&color))
         .replace(parse_lit!(gammalooprs::dim))
         .with(parse_lit!(4))
-        .collect_factors()
-        .simplify_metrics()
-        .simplify_gamma()
-        .simplify_color()
+        .collect_factors();
+    let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view()).unwrap())
+        .unwrap()
+        .contract(ContractionSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .simplify_gamma(GammaSimplifySettings::default())
+        .unwrap()
+        .simplify_color(ColorSimplifySettings::default())
+        .unwrap()
+        .contract(ContractionSettings::default())
+        .unwrap()
         .to_dots()
+        .unwrap()
+        .resolved()
+        .unwrap();
+    (cooking
+        .uncook(expression.expression().as_view())
         .replace(CS.tr)
         .with(Atom::num((1, 2)))
         .replace(CS.nc)
@@ -125,11 +149,19 @@ fn scalar_pole_part() {
             .unwrap();
 
         println!("ren part: {:>}", a);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let color = SymbolicTensor::infer(cooking.try_cook(a.expression.as_view()).unwrap())
+            .unwrap()
+            .simplify_color(ColorSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap();
+        let color = cooking.uncook(color.expression().as_view());
         println!(
             "ren part: {:>}",
-            model.apply_parameter_replacement_rules(
-                &model.expand_couplings(&a.simplify_color().expand())
-            )
+            model.apply_parameter_replacement_rules(&model.expand_couplings(&color))
         );
         assert!(
             !a.is_zero(),
@@ -229,9 +261,20 @@ fn finite_part_quark_lo() {
         // also covers equivalent forms such as log(mUV²/μ_R²), without imposing
         // a particular logarithm spelling or rewriting complex branches.
         let log_coefficient = Atom::var(GS.mu_r_sq) * muv.derivative(GS.mu_r_sq);
-        let contracted_log_coefficient = log_coefficient
-            .normalize_dots()
-            .metric_shorthand_to_dot()
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let contracted_log_coefficient =
+            SymbolicTensor::infer(cooking.try_cook(log_coefficient.as_view()).unwrap())
+                .unwrap()
+                .contract(ContractionSettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .to_dots()
+                .unwrap();
+        let contracted_log_coefficient = cooking
+            .uncook(contracted_log_coefficient.expression().as_view())
             .collect_factors();
         // Vakint can leave a repeated Lorentz dummy as an indexed momentum squared. After
         // contracting it and stripping the standard i/(16 pi^2) loop normalization,
@@ -280,11 +323,26 @@ fn finite_part_ghost_2loop() {
         new_settings: &UVgenerationSettings,
     ) {
         let normalize = |atom: &Atom| {
-            atom.replace(parse_lit!(gammalooprs::dim))
-                .with(parse_lit!(4))
-                .simplify_metrics()
+            let atom = atom
+                .replace(parse_lit!(gammalooprs::dim))
+                .with(parse_lit!(4));
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let atom = SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap())
+                .unwrap()
+                .contract(ContractionSettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
                 .to_dots()
-                .simplify_color()
+                .unwrap()
+                .simplify_color(ColorSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap();
+            cooking
+                .uncook(atom.expression().as_view())
                 .expand_num()
                 .collect_factors()
         };
@@ -596,15 +654,25 @@ mod failing {
         // native GammaLoop / RQFT = +1.
         // The two remaining six-f terms have an odd signed graph automorphism and
         // vanish independently during tensor canonicalization.
-        let aligned = align_to_rqft(&a, &model)
-            .expand()
-            .map_terms_single_core(|term| {
-                term.cook_indices()
-                    .canonize::<AbstractIndex>(AbstractIndex::Dummy)
-                    .expect("test expression should canonicalize")
-            })
-            .collect_factors()
-            .to_dots();
+        let aligned = align_to_rqft(&a, &model);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let aligned = cooking
+            .try_cook(aligned.as_view())
+            .unwrap()
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
+            .collect_factors();
+        let aligned = SymbolicTensor::infer(aligned)
+            .unwrap()
+            .contract(ContractionSettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .to_dots()
+            .unwrap();
+        let aligned = cooking.uncook(aligned.expression().as_view());
         insta::assert_snapshot!(
            aligned.to_bare_ordered_string(),@"(-1/16+5/192*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );

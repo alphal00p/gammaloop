@@ -10,6 +10,8 @@ from symbolica import E, S, Symbol
 from symbolica.community import hep
 from symbolica.community.spenso import CookSettings, TensorExpression
 
+index_scope = S("spenso::index_scope")
+
 model = hep.Model.standard_model()
 P = S("gammalooprs::P")
 s = S("gg::s", is_positive=True)
@@ -75,15 +77,15 @@ for diagram in generated.diagrams:
     )
 assert set(denominators) == {E("1"), s, t, u}
 amplitude = sum(terms, E("0"))
-operator = kin.apply(TensorExpression(amplitude).expand().simplify_metrics().to_dots())
+operator = kin.apply(TensorExpression(amplitude).contract().to_expression().to_dots())
 amplitude = operator.to_expression()
 assert len(operator.structure.slots) == 8
 adjoint = operator.spenso_conjugate().to_expression().replace(conj(P(a, b)), P(a, b))
 for real in (s, t, u, D, gs):
     adjoint = adjoint.replace(conj(real), real)
-adjoint = TensorExpression(adjoint).wrap_indices(wrapped)
+adjoint = TensorExpression(adjoint).wrap_indices(wrapped).to_expression()
 for i in range(4):
-    adjoint = adjoint.replace(wrapped(ports[i]), bars[i])
+    adjoint = adjoint.replace(index_scope(wrapped, ports[i]), bars[i])
 colors = E("1")
 for i in range(4):
     colors *= gluon.color_sum(ports[i], bars[i], average=i < 2)
@@ -95,13 +97,10 @@ colored = (
     TensorExpression(generic, cook_indices=CookSettings.indices())
     .simplify_color()
     .to_expression()
+    .to_expression()
     .replace(dA, N**2 - 1)
 )
 colored = TensorExpression(colored).to_cof_dimension_invariants().to_expression()
-pieces = TensorExpression(colored).expand_mink()
-colored = sum(
-    (structure * coefficient.together() for structure, coefficient in pieces), E("0")
-)
 # Physical axial references pair the two incoming and the two outgoing gluons.
 result = colored
 for i, j in enumerate((1, 0, 3, 2)):
@@ -110,9 +109,8 @@ for i, j in enumerate((1, 0, 3, 2)):
     )
     projector = kin.apply(projector)
     print("polarization", i, "start", flush=True)
-    expanded = (result * projector).expand()
-    tensor = TensorExpression(expanded)
-    tensor = tensor.simplify_metrics().to_dots()
+    tensor = TensorExpression(result * projector)
+    tensor = tensor.contract().to_expression().to_dots()
     result = tensor.to_expression()
     result = kin.apply(result).replace(u, -s - t)
     print("polarization", i, "done", flush=True)

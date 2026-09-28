@@ -1,8 +1,7 @@
 use idenso::{
     IndexTooling,
     representations::initialize,
-    shorthands::schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
-    tensor::SymbolicNetParse,
+    tensor::{SymbolicNetParse, SymbolicTensor, contract::ContractionSettings},
 };
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::{
@@ -13,16 +12,15 @@ use spenso::{
             symbolic::{ExplicitKey, TensorLibrary},
         },
         parsing::{ParseSettings, ShadowedStructure, StrictTensorFilter},
-        store::NetworkStore,
+        store::{NetworkStore, TensorScalarStoreMapping},
     },
-    shadowing::TensorCollectExt,
     structure::{
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         representation::{LibraryRep, Lorentz, Minkowski, RepName},
         slot::{DualSlotTo, DummyAind, IsAbstractSlot},
     },
     symbol_set,
-    tensors::data::DataTensor,
+    tensors::data::{DataTensor, StorageTensor},
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
@@ -34,16 +32,24 @@ symbol_set!(TestSymbols, TS;
     mu1 mu2 mu3 mu4 mu5 mu6 mu7 mu8 mu9 mu10 mu11
 );
 
-fn assert_factorized_contraction(input: &Atom, output: &Atom, settings: &SchoonschipSettings) {
+fn contract(input: &Atom, settings: &ContractionSettings<'_>) -> Atom {
+    SymbolicTensor::infer(input.clone())
+        .unwrap()
+        .contract(*settings)
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression()
+}
+
+fn assert_factorized_contraction(input: &Atom, output: &Atom, settings: &ContractionSettings<'_>) {
     // Sum-by-sum boundaries deliberately remain factorized in this mode. A
     // metric/rank-one probe under the same settings still requires contraction
     // progress, so returning every input unchanged cannot satisfy this oracle.
     let probe =
         parse!("spenso::g(spenso::mink(4,mu6),spenso::mink(4,mu7))*k(99,spenso::mink(4,mu6))");
     assert_eq!(
-        probe
-            .schoonschip_with_net::<false, AbstractIndex>(settings)
-            .unwrap(),
+        contract(&probe, settings),
         parse!("k(99,spenso::mink(4,mu7))"),
     );
 
@@ -66,7 +72,7 @@ fn assert_factorized_contraction(input: &Atom, output: &Atom, settings: &Schoons
         TensorLibrary<DataTensor<Atom, ExplicitKey<AbstractIndex>>, AbstractIndex>;
     let mut library = ComponentLibrary::new();
     library.update_ids();
-    let components = [input, output].map(|expression| {
+    let networks = [input, output].map(|expression| {
         // Bare k(i) in an existing scalar g(k(i),k(j)) has an implicit
         // Minkowski representation. Make it explicit for the component parser,
         // whose existing shorthand materializer then contracts that dot with
@@ -83,7 +89,7 @@ fn assert_factorized_contraction(input: &Atom, output: &Atom, settings: &Schoons
                 );
             }
         });
-        let mut network = Network::<
+        Network::<
             NetworkStore<DataTensor<Atom, ShadowedStructure<AbstractIndex>>, Atom>,
             ExplicitKey<AbstractIndex>,
             Symbol,
@@ -91,28 +97,26 @@ fn assert_factorized_contraction(input: &Atom, output: &Atom, settings: &Schoons
         >::try_from_view::<ShadowedStructure<AbstractIndex>, ComponentLibrary>(
             expression.as_view(),
             &library,
-            &ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps),
+            &ParseSettings {
+                precontract_scalars: false,
+                ..ParseSettings::default()
+                    .with_strict_tensor_filter(StrictTensorFilter::ContainsReps)
+            },
         )
-        .unwrap();
-        network
-            .execute::<
-                Sequential,
-                SmallestDegree,
-                DataTensor<Atom, ExplicitKey<AbstractIndex>>,
-                ComponentLibrary,
-                ErroringLibrary<Symbol>,
-            >(&library, &ErroringLibrary::new())
-            .unwrap();
-        match network.result_scalar().unwrap() {
-            ExecutionResult::One => Atom::one(),
-            ExecutionResult::Zero => Atom::zero(),
-            ExecutionResult::Val(value) => value.into_owned(),
-        }
+        .unwrap()
     });
     let mut nonzero = false;
     for seed in 1..=3 {
-        let [before, after] = components.each_ref().map(|expression| {
+        let assign = |expression: &Atom| {
             expression.replace_map(|view, _, out| {
+                if let AtomView::Var(scalar) = view {
+                    if scalar.get_symbol() == symbol!("a") {
+                        **out = Atom::num(seed + 1);
+                    } else if scalar.get_symbol() == symbol!("b") {
+                        **out = Atom::num(2 * seed - 1);
+                    }
+                    return;
+                }
                 let AtomView::Fun(vector) = view else {
                     return;
                 };
@@ -132,6 +136,25 @@ fn assert_factorized_contraction(input: &Atom, output: &Atom, settings: &Schoons
                         - 3,
                 );
             })
+        };
+        // Assign exact components on the existing network store before finite
+        // contraction, so this oracle never builds a symbolic numerator sum.
+        let [before, after] = networks.each_ref().map(|network| {
+            let mut numeric = network.map_ref(assign, |tensor| tensor.map_data_ref(assign));
+            numeric
+                .execute::<
+                    Sequential,
+                    SmallestDegree,
+                    DataTensor<Atom, ExplicitKey<AbstractIndex>>,
+                    ComponentLibrary,
+                    ErroringLibrary<Symbol>,
+                >(&library, &ErroringLibrary::new())
+                .unwrap();
+            match numeric.result_scalar().unwrap() {
+                ExecutionResult::One => Atom::one(),
+                ExecutionResult::Zero => Atom::zero(),
+                ExecutionResult::Val(value) => value.into_owned(),
+            }
         });
         assert!(
             matches!(before.as_view(), AtomView::Num(_)),
@@ -152,27 +175,29 @@ fn spenso_bare_symb_vertex_substitution() {
     symbol!("k";
         tags=["spenso::tensor","spenso::rank1"]);
 
-    let v1 =
-        parse!("vx(1,-k(0), k(0)-k(1), k(1), k(10), spenso::mink(4,mu1), spenso::mink(4,mu8))");
+    let v1 = parse!(
+        "vx(1,-k(0,spenso::mink(4)), k(0,spenso::mink(4))-k(1,spenso::mink(4)), k(1,spenso::mink(4)), k(10,spenso::mink(4)), spenso::mink(4,mu1), spenso::mink(4,mu8))"
+    );
     let v2 = parse!(
-        "vx(2,-k(1), k(2), k(1)-k(2), spenso::mink(4,mu1), spenso::mink(4,mu2), spenso::mink(4,mu9))"
+        "vx(2,-k(1,spenso::mink(4)), k(2,spenso::mink(4)), k(1,spenso::mink(4))-k(2,spenso::mink(4)), spenso::mink(4,mu1), spenso::mink(4,mu2), spenso::mink(4,mu9))"
     );
     let v3 = parse!(
-        "vx(3,-k(2), k(3), k(2)-k(3), spenso::mink(4,mu2), spenso::mink(4,mu3), spenso::mink(4,mu10))"
+        "vx(3,-k(2,spenso::mink(4)), k(3,spenso::mink(4)), k(2,spenso::mink(4))-k(3,spenso::mink(4)), spenso::mink(4,mu2), spenso::mink(4,mu3), spenso::mink(4,mu10))"
     );
     let v4 = parse!(
-        "vx(4,-k(3), k(4), k(3)-k(4), spenso::mink(4,mu3), spenso::mink(4,mu4), spenso::mink(4,mu11))"
+        "vx(4,-k(3,spenso::mink(4)), k(4,spenso::mink(4)), k(3,spenso::mink(4))-k(4,spenso::mink(4)), spenso::mink(4,mu3), spenso::mink(4,mu4), spenso::mink(4,mu11))"
     );
-    let v5 =
-        parse!("vx(5,-k(4), k(0), k(4)-k(0), spenso::mink(4,mu4), k(20), spenso::mink(4,mu5))");
+    let v5 = parse!(
+        "vx(5,-k(4,spenso::mink(4)), k(0,spenso::mink(4)), k(4,spenso::mink(4))-k(0,spenso::mink(4)), spenso::mink(4,mu4), k(20,spenso::mink(4)), spenso::mink(4,mu5))"
+    );
     let _v6 = parse!(
-        "vx(6,-k(4)+k(0), -k(3)+k(4), k(3)-k(0), spenso::mink(4,mu5), spenso::mink(4,mu11), spenso::mink(4,mu6))"
+        "vx(6,-k(4,spenso::mink(4))+k(0,spenso::mink(4)), -k(3,spenso::mink(4))+k(4,spenso::mink(4)), k(3,spenso::mink(4))-k(0,spenso::mink(4)), spenso::mink(4,mu5), spenso::mink(4,mu11), spenso::mink(4,mu6))"
     );
     let _v7 = parse!(
-        "vx(7,-k(3)+k(0), -k(2)+k(3), k(2)-k(0), spenso::mink(4,mu6), spenso::mink(4,mu10), spenso::mink(4,mu7))"
+        "vx(7,-k(3,spenso::mink(4))+k(0,spenso::mink(4)), -k(2,spenso::mink(4))+k(3,spenso::mink(4)), k(2,spenso::mink(4))-k(0,spenso::mink(4)), spenso::mink(4,mu6), spenso::mink(4,mu10), spenso::mink(4,mu7))"
     );
     let _v8 = parse!(
-        "vx(8,-k(2)+k(0), -k(1)+k(2), k(1)-k(0), spenso::mink(4,mu7), spenso::mink(4,mu9), spenso::mink(4,mu8))"
+        "vx(8,-k(2,spenso::mink(4))+k(0,spenso::mink(4)), -k(1,spenso::mink(4))+k(2,spenso::mink(4)), k(1,spenso::mink(4))-k(0,spenso::mink(4)), spenso::mink(4,mu7), spenso::mink(4,mu9), spenso::mink(4,mu8))"
     );
 
     let gluon_rule = parse!(
@@ -198,11 +223,7 @@ fn spenso_bare_symb_vertex_substitution() {
             .min_level(0)
             .max_level(Some(0))
             .rhs_cache_size(1000)
-            .with_map(move |matches| {
-                gluon_rule
-                    .replace_wildcards_with_matches(matches)
-                    .normalize_dots()
-            });
+            .with_map(move |matches| gluon_rule.replace_wildcards_with_matches(matches));
     }
 
     let result = r.to_string();
@@ -212,10 +233,8 @@ fn spenso_bare_symb_vertex_substitution() {
     settings.max_line_length = Some(80);
     println!("in:{}", r.printer(settings.clone()));
 
-    let contraction_settings = SchoonschipSettings::partial().into_single_pass();
-    let out = r
-        .schoonschip_with_net::<false, AbstractIndex>(&contraction_settings)
-        .unwrap();
+    let contraction_settings = ContractionSettings::default();
+    let out = contract(&r, &contraction_settings);
 
     println!("out:{}", out.printer(settings.clone()));
 
@@ -247,13 +266,14 @@ fn substituted_three_vertex_reproducer() -> (Atom, [(&'static str, Atom); 3]) {
     symbol!("k";
         tags=["spenso::tensor","spenso::rank1"]);
 
-    let v1 =
-        parse!("vx(1,-k(0), k(0)-k(1), k(1), k(10), spenso::mink(4,mu1), spenso::mink(4,mu8))");
+    let v1 = parse!(
+        "vx(1,-k(0,spenso::mink(4)), k(0,spenso::mink(4))-k(1,spenso::mink(4)), k(1,spenso::mink(4)), k(10,spenso::mink(4)), spenso::mink(4,mu1), spenso::mink(4,mu8))"
+    );
     let v2 = parse!(
-        "vx(2,-k(1), k(2), k(1)-k(2), spenso::mink(4,mu1), spenso::mink(4,mu2), spenso::mink(4,mu9))"
+        "vx(2,-k(1,spenso::mink(4)), k(2,spenso::mink(4)), k(1,spenso::mink(4))-k(2,spenso::mink(4)), spenso::mink(4,mu1), spenso::mink(4,mu2), spenso::mink(4,mu9))"
     );
     let v8 = parse!(
-        "vx(8,-k(2)+k(0), -k(1)+k(2), k(1)-k(0), spenso::mink(4,mu7), spenso::mink(4,mu9), spenso::mink(4,mu8))"
+        "vx(8,-k(2,spenso::mink(4))+k(0,spenso::mink(4)), -k(1,spenso::mink(4))+k(2,spenso::mink(4)), k(1,spenso::mink(4))-k(0,spenso::mink(4)), spenso::mink(4,mu7), spenso::mink(4,mu9), spenso::mink(4,mu8))"
     );
 
     let gluon_rule = parse!(
@@ -276,11 +296,7 @@ fn substituted_three_vertex_reproducer() -> (Atom, [(&'static str, Atom); 3]) {
             .min_level(0)
             .max_level(Some(0))
             .rhs_cache_size(1000)
-            .with_map(move |matches| {
-                gluon_rule
-                    .replace_wildcards_with_matches(matches)
-                    .normalize_dots()
-            });
+            .with_map(move |matches| gluon_rule.replace_wildcards_with_matches(matches));
     }
 
     (
@@ -315,38 +331,18 @@ fn print_three_vertex_method(name: &str, out: Atom, dummies: &[(&str, Atom)]) {
     );
 }
 
-fn cleanup_with_smallest_degree(mut result: Atom) -> Atom {
-    let cleanup_settings = SchoonschipSettings::partial()
-        .into_single_pass()
-        .with_contraction_order(SchoonschipContractionOrder::SmallestDegree);
-    for _ in 0..4 {
-        let next = result
-            .schoonschip_with_net::<false, AbstractIndex>(&cleanup_settings)
-            .unwrap();
-        if next == result {
-            break;
-        }
-        result = next;
-    }
-    result
-}
-
 fn print_two_dummy_method(name: &str, out: Atom, mu1: &Atom, mu9: &Atom) {
     let dummies = [("mu1", mu1.clone()), ("mu9", mu9.clone())];
     print_three_vertex_method(name, out, &dummies);
 }
 
 #[test]
-fn min_product_terms_three_vertex_simplifies_after_boundary_cleanup() {
+fn three_vertex_shared_contraction_preserves_external_ports() {
     initialize();
     let _ = TS.mu1;
     let (r, _) = substituted_three_vertex_reproducer();
-    let contraction_settings = SchoonschipSettings::partial()
-        .into_single_pass()
-        .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
-    let out = r
-        .schoonschip_with_net::<false, AbstractIndex>(&contraction_settings)
-        .unwrap();
+    let contraction_settings = ContractionSettings::default();
+    let out = contract(&r, &contraction_settings);
 
     // Only mu2 and mu7 are physical external slots. Parsing every sum branch
     // validates the internal contractions without distributing the numerator.
@@ -378,10 +374,7 @@ fn compare_two_slot_boundary_shapes() {
 
     let mu1: Atom = mu1.into();
     let mu9: Atom = mu9.into();
-    let settings = SchoonschipSettings::partial()
-        .into_single_pass()
-        .with_expanded_contracted_sums()
-        .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
+    let settings = ContractionSettings::default();
 
     let cases = [
         (
@@ -389,82 +382,63 @@ fn compare_two_slot_boundary_shapes() {
             parse!(
                 "(a * spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
                    + b * spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9)))
-                 * (spenso::g(k(2), spenso::mink(4,mu1))
-                   * spenso::g(k(3), spenso::mink(4,mu9))
-                   + spenso::g(k(4), spenso::mink(4,mu1))
-                   * spenso::g(k(5), spenso::mink(4,mu9)))"
+                 * (spenso::g(k(2,spenso::mink(4)), spenso::mink(4,mu1))
+                   * spenso::g(k(3,spenso::mink(4)), spenso::mink(4,mu9))
+                   + spenso::g(k(4,spenso::mink(4)), spenso::mink(4,mu1))
+                   * spenso::g(k(5,spenso::mink(4)), spenso::mink(4,mu9)))"
             ),
         ),
         (
             "metric times simple vector product",
             parse!(
                 "spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
-                 * spenso::g(k(0), spenso::mink(4,mu1))
-                 * spenso::g(k(1), spenso::mink(4,mu9))"
+                 * spenso::g(k(0,spenso::mink(4)), spenso::mink(4,mu1))
+                 * spenso::g(k(1,spenso::mink(4)), spenso::mink(4,mu9))"
             ),
         ),
         (
             "metric times vector product with summed momenta",
             parse!(
                 "spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
-                 * spenso::g(k(0)-k(1), spenso::mink(4,mu1))
-                 * spenso::g(k(1)-k(0), spenso::mink(4,mu9))"
+                 * spenso::g(k(0,spenso::mink(4))-k(1,spenso::mink(4)), spenso::mink(4,mu1))
+                 * spenso::g(k(1,spenso::mink(4))-k(0,spenso::mink(4)), spenso::mink(4,mu9))"
             ),
         ),
         (
             "sum side metric term times simple target sum",
             parse!(
                 "(spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
-                   + spenso::g(k(0), spenso::mink(4,mu1))
-                     * spenso::g(k(1), spenso::mink(4,mu9)))
-                 * (spenso::g(k(2), spenso::mink(4,mu1))
-                   * spenso::g(k(3), spenso::mink(4,mu9))
-                   + spenso::g(k(4), spenso::mink(4,mu1))
-                   * spenso::g(k(5), spenso::mink(4,mu9)))"
+                   + spenso::g(k(0,spenso::mink(4)), spenso::mink(4,mu1))
+                     * spenso::g(k(1,spenso::mink(4)), spenso::mink(4,mu9)))
+                 * (spenso::g(k(2,spenso::mink(4)), spenso::mink(4,mu1))
+                   * spenso::g(k(3,spenso::mink(4)), spenso::mink(4,mu9))
+                   + spenso::g(k(4,spenso::mink(4)), spenso::mink(4,mu1))
+                   * spenso::g(k(5,spenso::mink(4)), spenso::mink(4,mu9)))"
             ),
         ),
         (
             "sum side metric term times summed-momentum target sum",
             parse!(
                 "(spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
-                   + spenso::g(k(0), spenso::mink(4,mu1))
-                     * spenso::g(k(1), spenso::mink(4,mu9)))
-                 * (spenso::g(k(2)-k(3), spenso::mink(4,mu1))
-                   * spenso::g(k(3)-k(2), spenso::mink(4,mu9))
-                   + spenso::g(k(4)-k(5), spenso::mink(4,mu1))
-                   * spenso::g(k(5)-k(4), spenso::mink(4,mu9)))"
+                   + spenso::g(k(0,spenso::mink(4)), spenso::mink(4,mu1))
+                     * spenso::g(k(1,spenso::mink(4)), spenso::mink(4,mu9)))
+                 * (spenso::g(k(2,spenso::mink(4))-k(3,spenso::mink(4)), spenso::mink(4,mu1))
+                   * spenso::g(k(3,spenso::mink(4))-k(2,spenso::mink(4)), spenso::mink(4,mu9))
+                   + spenso::g(k(4,spenso::mink(4))-k(5,spenso::mink(4)), spenso::mink(4,mu1))
+                   * spenso::g(k(5,spenso::mink(4))-k(4,spenso::mink(4)), spenso::mink(4,mu9)))"
             ),
         ),
     ];
 
-    println!("\ntwo-slot contraction boundary shape comparison");
     for (name, expr) in cases {
-        print_two_dummy_method(
-            &format!("{name} / normalize_dots"),
-            expr.normalize_dots(),
-            &mu1,
-            &mu9,
-        );
-        print_two_dummy_method(
-            &format!("{name} / network"),
-            expr.schoonschip_with_net::<false, AbstractIndex>(&settings)
-                .unwrap(),
-            &mu1,
-            &mu9,
-        );
-        print_two_dummy_method(
-            &format!("{name} / expanded-input network"),
-            expr.expand()
-                .schoonschip_with_net::<false, AbstractIndex>(&settings)
-                .unwrap(),
-            &mu1,
-            &mu9,
-        );
+        let output = contract(&expr, &settings);
+        print_two_dummy_method(name, output.clone(), &mu1, &mu9);
+        assert_factorized_contraction(&expr, &output, &settings);
     }
 }
 
 #[test]
-fn metric_sum_boundary_uses_pattern_schoonschip_cleanup() {
+fn metric_sum_boundary_contracts_without_expanding_inputs() {
     initialize();
     let _mink = Minkowski {}.new_rep(4);
 
@@ -474,29 +448,21 @@ fn metric_sum_boundary_uses_pattern_schoonschip_cleanup() {
     let mu1: Atom = mu1.into();
     let mu9: Atom = mu9.into();
     let dummies = [("mu1", mu1.clone()), ("mu9", mu9.clone())];
-    let settings = SchoonschipSettings::partial()
-        .into_single_pass()
-        .with_expanded_contracted_sums()
-        .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
+    let settings = ContractionSettings::default();
 
     let target_after_metric_identification = parse!(
-        "spenso::g(k(2), spenso::mink(4,mu9))
-         * spenso::g(k(3), spenso::mink(4,mu9))
-         + spenso::g(k(4), spenso::mink(4,mu9))
-         * spenso::g(k(5), spenso::mink(4,mu9))"
+        "spenso::g(k(2,spenso::mink(4)), spenso::mink(4,mu9))
+         * spenso::g(k(3,spenso::mink(4)), spenso::mink(4,mu9))
+         + spenso::g(k(4,spenso::mink(4)), spenso::mink(4,mu9))
+         * spenso::g(k(5,spenso::mink(4)), spenso::mink(4,mu9))"
     );
     assert_eq!(
-        residual_dummy_names(
-            &target_after_metric_identification.normalize_dots(),
-            &dummies
-        ),
+        residual_dummy_names(&target_after_metric_identification, &dummies),
         ["mu9"]
     );
     assert!(
         residual_dummy_names(
-            &target_after_metric_identification
-                .schoonschip_with_net::<false, AbstractIndex>(&settings)
-                .unwrap(),
+            &contract(&target_after_metric_identification, &settings),
             &dummies
         )
         .is_empty()
@@ -505,29 +471,16 @@ fn metric_sum_boundary_uses_pattern_schoonschip_cleanup() {
     let boundary_expression = parse!(
         "(a * spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9))
            + b * spenso::g(spenso::mink(4,mu1), spenso::mink(4,mu9)))
-         * (spenso::g(k(2), spenso::mink(4,mu1))
-           * spenso::g(k(3), spenso::mink(4,mu9))
-           + spenso::g(k(4), spenso::mink(4,mu1))
-           * spenso::g(k(5), spenso::mink(4,mu9)))"
+         * (spenso::g(k(2,spenso::mink(4)), spenso::mink(4,mu1))
+           * spenso::g(k(3,spenso::mink(4)), spenso::mink(4,mu9))
+           + spenso::g(k(4,spenso::mink(4)), spenso::mink(4,mu1))
+           * spenso::g(k(5,spenso::mink(4)), spenso::mink(4,mu9)))"
     );
-    assert!(
-        residual_dummy_names(
-            &boundary_expression
-                .schoonschip_with_net::<false, AbstractIndex>(&settings)
-                .unwrap(),
-            &dummies
-        )
-        .is_empty()
-    );
-    assert!(
-        residual_dummy_names(
-            &boundary_expression
-                .expand()
-                .schoonschip_with_net::<false, AbstractIndex>(&settings)
-                .unwrap(),
-            &dummies
-        )
-        .is_empty()
+    assert!(residual_dummy_names(&contract(&boundary_expression, &settings), &dummies).is_empty());
+    assert_factorized_contraction(
+        &boundary_expression,
+        &contract(&boundary_expression, &settings),
+        &settings,
     );
 }
 
@@ -542,10 +495,7 @@ fn non_linear_metric_simplifies_summed_momentum_boundary_without_expansion() {
     let mu1: Atom = mu1.into();
     let mu9: Atom = mu9.into();
     let dummies = [("mu1", mu1.clone()), ("mu9", mu9.clone())];
-    let settings = SchoonschipSettings::partial()
-        .into_single_pass()
-        .with_expanded_contracted_sums()
-        .with_contraction_order(SchoonschipContractionOrder::MinProductTerms);
+    let settings = ContractionSettings::default();
 
     let metric_identified_target = parse!(
         "spenso::g(k(2,spenso::mink(4))-k(3,spenso::mink(4)), spenso::mink(4,mu9))
@@ -554,10 +504,7 @@ fn non_linear_metric_simplifies_summed_momentum_boundary_without_expansion() {
          * spenso::g(k(5,spenso::mink(4))-k(4,spenso::mink(4)), spenso::mink(4,mu9))"
     );
 
-    let simplified = metric_identified_target
-        .normalize_dots()
-        .collect_tensors()
-        .schoonschip();
+    let simplified = contract(&metric_identified_target, &settings);
 
     let res = residual_dummy_names(&simplified, &dummies);
     assert!(
@@ -577,29 +524,16 @@ fn non_linear_metric_simplifies_summed_momentum_boundary_without_expansion() {
            * spenso::g(k(5,spenso::mink(4))-k(4,spenso::mink(4)), spenso::mink(4,mu9)))"
     );
 
-    assert!(
-        residual_dummy_names(
-            &boundary_expression
-                .schoonschip_with_net::<false, AbstractIndex>(&settings)
-                .unwrap(),
-            &dummies
-        )
-        .is_empty()
-    );
-    assert!(
-        residual_dummy_names(
-            &boundary_expression
-                .expand()
-                .schoonschip_with_net::<false, AbstractIndex>(&settings)
-                .unwrap(),
-            &dummies
-        )
-        .is_empty()
+    assert!(residual_dummy_names(&contract(&boundary_expression, &settings), &dummies).is_empty());
+    assert_factorized_contraction(
+        &boundary_expression,
+        &contract(&boundary_expression, &settings),
+        &settings,
     );
 }
 
 #[test]
-fn metric_vector_product_with_free_metric_slot_simplifies_in_bare_cleanup() {
+fn metric_vector_product_preserves_its_free_metric_slot() {
     initialize();
     let _mu1 = TS.mu1;
     let _mink = Minkowski {}.new_rep(4);
@@ -608,100 +542,35 @@ fn metric_vector_product_with_free_metric_slot_simplifies_in_bare_cleanup() {
 
     let mu9: Atom = TS.mu9.into();
     let dummies = [("mu9", mu9.clone())];
-    let settings = SchoonschipSettings::partial()
-        .into_single_pass()
-        .with_expanded_contracted_sums();
+    let settings = ContractionSettings::default();
     let expr = parse!(
         "spenso::g(spenso::mink(4,mu7), spenso::mink(4,mu9))
          * spenso::g(k(0,spenso::mink(4))-k(1,spenso::mink(4)), spenso::mink(4,mu9))"
     );
 
-    assert!(residual_dummy_names(&expr.collect_metrics().schoonschip(), &dummies).is_empty());
-    assert!(
-        residual_dummy_names(
-            &expr
-                .schoonschip_with_net::<false, AbstractIndex>(&settings)
-                .unwrap(),
-            &dummies
-        )
-        .is_empty()
+    let output = contract(&expr, &settings);
+    assert!(residual_dummy_names(&output, &dummies).is_empty());
+    let network = output
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    assert_eq!(
+        network.graph.dangling_indices(),
+        vec![
+            Minkowski {}
+                .new_rep(4)
+                .slot::<AbstractIndex, _>(TS.mu7)
+                .cast::<LibraryRep>()
+        ]
     );
 }
 
 #[test]
-fn compare_three_vertex_residual_methods() {
-    let (r, dummies) = substituted_three_vertex_reproducer();
-    let orders = [
-        (
-            "smallest_degree",
-            SchoonschipContractionOrder::SmallestDegree,
-        ),
-        ("largest_degree", SchoonschipContractionOrder::LargestDegree),
-        (
-            "min_largest_operand_bytes",
-            SchoonschipContractionOrder::MinLargestOperandBytes,
-        ),
-        (
-            "min_product_terms",
-            SchoonschipContractionOrder::MinProductTerms,
-        ),
-        (
-            "min_product_bytes",
-            SchoonschipContractionOrder::MinProductBytes,
-        ),
-        (
-            "smallest_degree_min_largest_operand_bytes",
-            SchoonschipContractionOrder::SmallestDegreeMinLargestOperandBytes,
-        ),
-        (
-            "smallest_degree_min_product_terms",
-            SchoonschipContractionOrder::SmallestDegreeMinProductTerms,
-        ),
-        (
-            "smallest_degree_min_product_bytes",
-            SchoonschipContractionOrder::SmallestDegreeMinProductBytes,
-        ),
-    ];
-
-    println!("\nthree-vertex residual contraction comparison");
-    print_three_vertex_method("normalize_dots", r.normalize_dots(), &dummies);
-    print_three_vertex_method("bare schoonschip", r.schoonschip(), &dummies);
-
-    for (name, order) in orders {
-        let one_pass = r
-            .schoonschip_with_net::<false, AbstractIndex>(
-                &SchoonschipSettings::partial()
-                    .into_single_pass()
-                    .with_contraction_order(order),
-            )
-            .unwrap();
-        print_three_vertex_method(
-            &format!("net one-pass partial factorized {name}"),
-            one_pass.clone(),
-            &dummies,
-        );
-        print_three_vertex_method(
-            &format!("net one-pass + smallest cleanup {name}"),
-            cleanup_with_smallest_degree(one_pass),
-            &dummies,
-        );
-
-        let full = r
-            .schoonschip_with_net::<false, AbstractIndex>(
-                &SchoonschipSettings::full().with_contraction_order(order),
-            )
-            .unwrap();
-        print_three_vertex_method(
-            &format!("net full factorized {name}"),
-            full.clone(),
-            &dummies,
-        );
-        print_three_vertex_method(
-            &format!("net full + smallest cleanup {name}"),
-            cleanup_with_smallest_degree(full),
-            &dummies,
-        );
-    }
+fn three_vertex_contraction_preserves_components() {
+    let (input, dummies) = substituted_three_vertex_reproducer();
+    let settings = ContractionSettings::default();
+    let output = contract(&input, &settings);
+    print_three_vertex_method("shared contraction", output.clone(), &dummies);
+    assert_factorized_contraction(&input, &output, &settings);
 }
 
 #[test]

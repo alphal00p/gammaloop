@@ -1072,7 +1072,7 @@ impl PropagatorGammaLoopExt for Propagator {
 mod tests {
     use super::*;
     use feynkit_amplitude::ColorSum;
-    use idenso::shorthands::metric::MetricSimplifier;
+    use idenso::tensor::{ContractionSettings, SymbolicTensor};
     use spenso::{network::library::symbolic::ETS, structure::TensorStructure};
 
     #[test]
@@ -1111,12 +1111,19 @@ mod tests {
                     .expression([left.clone(), right.clone()]),
                 "runtime ports for UFO color {color}"
             );
-            assert_eq!(
+            let contracted = SymbolicTensor::infer(
                 completeness
                     .replace(right.to_pattern())
-                    .with(left.to_pattern())
-                    .simplify_metrics(),
-                Atom::num(color.unsigned_abs()),
+                    .with(left.to_pattern()),
+            )
+            .unwrap()
+            .contract(ContractionSettings::default().without_rank_one_tensors())
+            .unwrap()
+            .resolved()
+            .unwrap();
+            assert_eq!(
+                contracted.expression(),
+                &Atom::num(color.unsigned_abs()),
                 "completeness trace for UFO color {color}"
             );
         }

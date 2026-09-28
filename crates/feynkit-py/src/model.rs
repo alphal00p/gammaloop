@@ -3103,14 +3103,15 @@ impl PyModel {
         py: Python<'_>,
         expression: &Bound<'_, PyAny>,
     ) -> PyResult<Py<PyAny>> {
+        if let Ok(tensor) = expression.extract::<PyRef<'_, TensorExpression>>() {
+            let result = self
+                .inner
+                .expand_couplings(tensor.structured().expression());
+            return TensorExpression::preserving_interface(&tensor, py, result).map(Py::into_any);
+        }
         let input = expression.extract::<PyRef<'_, PythonExpression>>()?;
         let result = self.inner.expand_couplings(&input.expr);
-        if expression.is_instance_of::<TensorExpression>() {
-            let tensor = expression.extract::<PyRef<'_, TensorExpression>>()?;
-            TensorExpression::preserving_interface(&tensor, py, result).map(Py::into_any)
-        } else {
-            Py::new(py, PythonExpression { expr: result }).map(Py::into_any)
-        }
+        Py::new(py, PythonExpression { expr: result }).map(Py::into_any)
     }
 
     /// Return all interaction vertex rules in model order.

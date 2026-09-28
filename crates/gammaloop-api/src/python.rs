@@ -14,7 +14,7 @@ use gammalooprs::{
     settings::{global::OrientationPattern, RuntimeSettings},
     utils::tracing::LogLevel,
 };
-use idenso::shorthands::schoonschip::Schoonschip;
+use idenso::tensor::SymbolicTensor;
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::{ModifySubSet, SuBitGraph},
@@ -165,7 +165,11 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 #[pyfunction]
 #[pyo3(name = "to_dots")]
 pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
-    let dotted = parse!(atom_str, default_namespace = "python").to_dots();
+    let dotted = SymbolicTensor::infer(parse!(atom_str, default_namespace = "python"))?
+        .contract(Default::default())?
+        .resolved()?
+        .to_dots()?
+        .into_expression();
     Ok(format!(
         "{}",
         dotted.as_view().printer(PrintOptions {

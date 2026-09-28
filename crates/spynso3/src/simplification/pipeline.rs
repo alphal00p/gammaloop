@@ -1,41 +1,27 @@
-//! Composition of existing algebra passes; each pass retains its native dimension rules.
+//! Python conversion for the shared tensor-algebra scheduler.
 use super::{PyColorSimplifySettings, PyGammaSimplifySettings};
-use pyo3::{exceptions::PyValueError, prelude::*};
+use idenso::tensor::simplification::SimplifySettings;
+use pyo3::prelude::*;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
-/// Immutable choice of algebra passes for TensorExpression.simplify().
-/// Dimensions come from tensor slots. No dimensional substitution or gamma5
-/// prescription is chosen by this settings object. Individual algebra identities
-/// can introduce sums; expand controls additional full polynomial expansion.
+/// Immutable selection of tensor identities. Dimensions come from tensor slots.
+/// Materialize scalar polynomials explicitly with the result's `expand()` method.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
     from_py_object,
-    get_all,
     name = "SimplifySettings",
     module = "symbolica.community.spenso"
 )]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub(crate) struct PySimplifySettings {
-    pub(crate) metrics: bool,
-    pub(crate) gamma: Option<PyGammaSimplifySettings>,
-    pub(crate) color: Option<PyColorSimplifySettings>,
-    pub(crate) epsilon: bool,
-    pub(crate) expand: bool,
-    pub(crate) max_passes: usize,
+    inner: SimplifySettings,
 }
 
-impl Default for PySimplifySettings {
-    fn default() -> Self {
-        Self {
-            metrics: true,
-            gamma: None,
-            color: None,
-            epsilon: false,
-            expand: false,
-            max_passes: 16,
-        }
+impl PySimplifySettings {
+    pub(crate) fn rust(&self) -> &SimplifySettings {
+        &self.inner
     }
 }
 
@@ -44,38 +30,54 @@ impl Default for PySimplifySettings {
 impl PySimplifySettings {
     /// Select passes explicitly. Defaults contract metrics without expanding scalar algebra.
     #[new]
-    #[pyo3(signature=(*, metrics=true, gamma=None, color=None, epsilon=false, expand=false, max_passes=16))]
-    fn new(
+    #[pyo3(signature=(*, metrics=true, gamma=None, color=None, epsilon=false, max_passes=16))]
+    pub(crate) fn new(
         metrics: bool,
         gamma: Option<PyGammaSimplifySettings>,
         color: Option<PyColorSimplifySettings>,
         epsilon: bool,
-        expand: bool,
         max_passes: usize,
     ) -> PyResult<Self> {
-        if max_passes == 0 {
-            return Err(PyValueError::new_err("max_passes must be positive"));
-        }
-        Ok(Self {
+        let inner = SimplifySettings {
             metrics,
-            gamma,
-            color,
+            gamma: gamma.map(|settings| settings.rust()),
+            color: color.map(|settings| settings.rust()),
             epsilon,
-            expand,
             max_passes,
-        })
+        };
+        inner
+            .validate()
+            .map_err(crate::expression::TensorExpression::inference_error)?;
+        Ok(Self { inner })
     }
 
-    /// Enable metric, gamma, color, and epsilon passes with their native defaults.
-    /// Full polynomial expansion and the optional three-gamma epsilon identity stay off.
+    /// Enable metric, gamma, color, and epsilon identities with their native defaults.
     #[staticmethod]
     fn hep() -> Self {
         Self {
-            gamma: Some(PyGammaSimplifySettings::repeated_pairs()),
-            color: Some(PyColorSimplifySettings::new(true, true, false)),
-            epsilon: true,
-            ..Self::default()
+            inner: SimplifySettings::hep(),
         }
+    }
+
+    #[getter]
+    fn metrics(&self) -> bool {
+        self.inner.metrics
+    }
+    #[getter]
+    fn gamma(&self) -> Option<PyGammaSimplifySettings> {
+        self.inner.gamma.map(PyGammaSimplifySettings::from_rust)
+    }
+    #[getter]
+    fn color(&self) -> Option<PyColorSimplifySettings> {
+        self.inner.color.map(PyColorSimplifySettings::from_rust)
+    }
+    #[getter]
+    fn epsilon(&self) -> bool {
+        self.inner.epsilon
+    }
+    #[getter]
+    fn max_passes(&self) -> usize {
+        self.inner.max_passes
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> PyResult<String> {
@@ -88,7 +90,6 @@ impl PySimplifySettings {
                 ("gamma", "gamma"),
                 ("color", "color"),
                 ("epsilon", "epsilon"),
-                ("expand", "expand"),
                 ("max_passes", "max_passes"),
             ],
         )

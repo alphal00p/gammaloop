@@ -11,7 +11,8 @@ rewrite families:
 - `IndexTooling` covers canonicalization, conjugation, index wrapping, and dangling-index
   inspection for Symbolica atoms;
 - `Cookable`, `CookSettings`, and the cook filters control reversible or flattening encodings;
-- `SelectiveExpand` expands terms by recognized representation families;
+- `SymbolicTensor::collect` retains selected sectors in the shared alias registry;
+  `coefficient_list` returns typed selected sectors and their factored coefficients;
 - `dirac`, `color`, `epsilon`, and shorthand modules implement algebra-specific rewrites;
 - `representations::initialize` installs the standard representation and tensor symbols.
 
@@ -37,15 +38,16 @@ register `SpensoModule` through `SymbolicaCommunityModule`. Building the Rust cr
 not add the community module to an already installed Symbolica package.
 
 The generated #link("reference/python/")[Python API] records exact signatures and defaults. Its
-operations group naturally into four phases:
+operations cover:
 
 - setup: importing the community module registers its symbols;
-- expansion: `expand_bis`, `expand_mink`, `expand_mink_bis`, `expand_metrics`, and
-  `expand_color`;
+- collection and materialization: `collect` preserves factored sectors; `expand` explicitly
+  materializes an expanded result;
 - index preparation: `wrap_indices`, `wrap_dummies`, `list_dangling`, `cook_indices`, and
   `cook_function`;
-- algebra: `dirac_adjoint`, `simplify_gamma`, `to_dots`, `simplify_metrics`, and
-  `simplify_color`.
+- algebra: `contract`, `simplify`, `simplify_gamma`, `simplify_color`, and `simplify_epsilon`;
+- notation and canonical labels: `to_dots`, `undo_dots`, and `canonize`;
+- conjugation: `dirac_adjoint` and `spenso_conjugate`.
 
 ```python
 from symbolica.community.spenso import Representation, TensorExpression, TensorName
@@ -58,14 +60,17 @@ momentum = TensorName.vector("p")
 expression = metric(mu, nu) * momentum(mu)
 
 external_indices = expression.list_dangling()
-reduced = expression.schoonschip_net()
+reduced = expression.contract().to_expression()
 assert len(external_indices) == 1
 assert len(reduced.list_dangling()) == 1
 assert reduced == momentum(nu)
 ```
 
-Use `schoonschip_net()` to execute typed `bracket` contractions. Focused simplifiers such as
-`simplify_metrics()` rewrite ordinary indexed products.
+`contract()` returns an `AliasedTensorExpression` and reports whether contraction is complete.
+Use `contract(rank_one=False)` for metrics only. `contract_ports(rhs, left=..., right=...)`
+is the separate binary operation on selected logical ports. `to_dots()` changes notation;
+request `contract()` first when repeated explicit indices need contraction.
+Resolve aliases with `to_expression()`, or explicitly distribute the result with `expand()`.
 
 Idenso does not define a second parser syntax: the example constructs a Spenso-compatible
 `TensorExpression` and then applies one Idenso transformation through its methods. Keep transformations separate

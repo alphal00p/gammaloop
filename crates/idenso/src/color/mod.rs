@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 use spenso::{
     network::{library::symbolic::ExplicitKey, tags::SPENSO_TAG as T},
-    shadowing::{Collectable, IntoAtom, TensorCollectExt, symbolica_utils::SpensoPrintSettings},
+    shadowing::{IntoAtom, symbolica_utils::SpensoPrintSettings},
     structure::{
         Canonicalized, TensorStructure,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
@@ -17,15 +17,12 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, EvaluationInfo, FunctionBuilder, Symbol},
     coefficient::CoefficientView,
     domains::rational::Rational,
-    function,
     printer::{PrintOptions, PrintState},
     symbol,
 };
 
 use crate::{
-    color::{casimir::CofDimensionInvariantRewriter, simplify::ColorAlgebraSimplifier},
-    representations::{ColorAntiFundamental, ColorSextet},
-    selective_expand::SelectiveExpand,
+    color::casimir::CofDimensionInvariantRewriter, representations::ColorAntiFundamental,
     shorthands::metric::PermuteWithMetric,
 };
 
@@ -35,7 +32,7 @@ use super::representations::{ColorAdjoint, ColorFundamental};
 mod casimir;
 mod conjugate;
 mod macros;
-mod simplify;
+pub(crate) mod simplify;
 
 pub use conjugate::color_conj_impl;
 
@@ -622,24 +619,10 @@ impl ColorCasimirSettings {
     }
 }
 
-/// Trait for applying SU(N) color algebra simplification rules to a symbolic expression.
-///
-/// Implementors simplify expressions containing color factors such as structure constants
-/// (`f_abc`), generators (`T^a`), closed traces, the trace normalization (`TR`), and the
-/// number of colors (`Nc`).
+/// Rewrite color dimensions and scalar invariants between SU(N) conventions.
+/// Indexed generator, structure-constant and trace reduction belongs to
+/// `simplify_color` method on [`SymbolicTensor`](crate::tensor::SymbolicTensor).
 pub trait ColorSimplifier {
-    /// Attempts to simplify the color structure of the expression.
-    ///
-    /// Applies various identities of SU(N) algebra, including Fierz identities,
-    /// Casimir relations, and contractions involving `f_abc` and `T^a`.
-    ///
-    /// Returns a rewritten atom. Unsupported or open indexed structures may remain in the
-    /// result; their presence is not reported as an error.
-    fn simplify_color(&self) -> Atom;
-
-    /// Simplifies color structures with explicit chain/trace settings.
-    fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom;
-
     /// Replace concrete QCD fundamental and adjoint dimensions by their
     /// parametric SU(Nc) expressions while preserving all color indices.
     ///
@@ -661,28 +644,8 @@ pub trait ColorSimplifier {
 
     /// Rewrites supported `cof(N)` invariant factors into explicit dimension formulas.
     fn to_cof_dimension_invariants(&self) -> Atom;
-
-    /// Expands factorized terms around color representation factors.
-    fn expand_color(&self) -> Vec<(Atom, Atom)>;
-
-    /// Collects factorized terms around color representation factors.
-    fn collect_color(&self) -> Atom;
-
-    fn collect_color_constants(&self) -> Atom;
-
-    // fn canonize_color(&self) -> Atom;
-
-    fn wrap_color(&self, symbol: Symbol) -> Atom;
 }
 impl ColorSimplifier for Atom {
-    fn simplify_color(&self) -> Atom {
-        self.simplify_color_with(ColorSimplifySettings::default())
-    }
-
-    fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom {
-        self.as_view().simplify_color_with(settings)
-    }
-
     fn to_parametric_color(&self) -> Atom {
         self.as_view().to_parametric_color()
     }
@@ -712,37 +675,9 @@ impl ColorSimplifier for Atom {
     fn to_cof_dimension_invariants(&self) -> Atom {
         CofDimensionInvariantRewriter.run(self.as_atom_view())
     }
-
-    fn expand_color(&self) -> Vec<(Atom, Atom)> {
-        self.as_view().expand_color()
-    }
-
-    fn collect_color(&self) -> Atom {
-        self.as_view().collect_color()
-    }
-
-    fn collect_color_constants(&self) -> Atom {
-        self.as_view().collect_color_constants()
-    }
-
-    // fn canonize_color(&self) -> Atom {
-    //     self.as_view().canonize_color()
-    // }
-
-    fn wrap_color(&self, symbol: Symbol) -> Atom {
-        self.as_view().wrap_color(symbol)
-    }
 }
 
 impl ColorSimplifier for AtomView<'_> {
-    fn simplify_color(&self) -> Atom {
-        self.simplify_color_with(ColorSimplifySettings::default())
-    }
-
-    fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom {
-        ColorAlgebraSimplifier { settings }.run(*self)
-    }
-
     fn to_parametric_color(&self) -> Atom {
         let adjoint = ColorAdjoint {};
         let fundamental = ColorFundamental {};
@@ -753,24 +688,6 @@ impl ColorSimplifier for AtomView<'_> {
             )
             .replace(fundamental.to_symbolic([RS.d_, RS.a_]))
             .with(fundamental.to_symbolic([nc, Atom::var(RS.a_)]))
-    }
-
-    fn collect_color_constants(&self) -> Atom {
-        self.collect_with_map(
-            |a| {
-                matches!(a,AtomView::Var(a) if a.get_symbol()==CS.tr || a.get_symbol()==CS.ca|| a.get_symbol()==CS.cf )
-                    || matches!(a, AtomView::Fun(f) if f.get_symbol() == CS.cas || f.get_symbol() == CS.idx || f.get_symbol() == CS.gram)
-            },
-        )
-        .unwrap_collect()
-    }
-
-    fn collect_color(&self) -> Atom {
-        self.collect_reps([
-            ColorAdjoint {}.into(),
-            ColorFundamental {}.into(),
-            ColorSextet {}.into(),
-        ])
     }
 
     fn to_color_casimir(&self, fundamental_rep: AtomView<'_>, adjoint_rep: AtomView<'_>) -> Atom {
@@ -797,50 +714,6 @@ impl ColorSimplifier for AtomView<'_> {
 
     fn to_cof_dimension_invariants(&self) -> Atom {
         CofDimensionInvariantRewriter.run(self.as_atom_view())
-    }
-
-    fn expand_color(&self) -> Vec<(Atom, Atom)> {
-        let cof = ColorFundamental {};
-        let coaf = ColorFundamental {}.dual();
-        let coad = ColorAdjoint {};
-
-        let color_trace_pat = function!(T.trace, cof.to_symbolic([RS.b__]), RS.a___).to_pattern();
-        let color_chain_pat = function!(
-            T.chain,
-            cof.to_symbolic([RS.b__]),
-            coaf.to_symbolic([RS.c__]),
-            RS.a___
-        )
-        .to_pattern();
-        let color_d_pat = function!(CS.d, RS.a___).to_pattern();
-        let color_gram_pat = function!(CS.gram, RS.a___).to_pattern();
-        let color_cas_pat = function!(CS.cas, RS.a___).to_pattern();
-        let color_idx_pat = function!(CS.idx, RS.a___).to_pattern();
-        let cof_pat = function!(RS.f_, RS.a___, cof.to_symbolic([RS.b__]), RS.c___).to_pattern();
-        let coaf_pat = function!(RS.f_, RS.a___, coaf.to_symbolic([RS.b__]), RS.c___).to_pattern();
-        let coad_pat = function!(RS.f_, RS.a___, coad.to_symbolic([RS.b__]), RS.c___).to_pattern();
-
-        self.expand_in_patterns(&[
-            color_trace_pat,
-            color_chain_pat,
-            color_d_pat,
-            color_gram_pat,
-            color_cas_pat,
-            color_idx_pat,
-            cof_pat,
-            coad_pat,
-            coaf_pat,
-        ])
-    }
-
-    // fn canonize_color(&self) -> Atom {
-    //     self..canonize_color()
-    // }
-
-    fn wrap_color(&self, symbol: Symbol) -> Atom {
-        self.expand_color()
-            .into_iter()
-            .fold(Atom::Zero, |a, (c, s)| a + function!(symbol, c) * s)
     }
 }
 

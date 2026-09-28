@@ -8,7 +8,13 @@ from pathlib import Path
 
 from symbolica import E, S
 from symbolica.community import hep as fk
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.spenso import (
+    CookSettings,
+    GammaSimplifySettings,
+    TensorExpression,
+)
+
+index_scope = S("spenso::index_scope")
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 P = S("gammalooprs::P")
@@ -75,25 +81,30 @@ for pdg in (11, -11):
             / denominator
         )
 
-    operator = TensorExpression(amplitude.expand())
+    operator = TensorExpression(amplitude)
     assert len(operator.structure.slots) == 4
-    adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
+    adjoint = (
+        operator.dirac_adjoint()
+        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .to_expression()
+        .to_expression()
+    )
     # Physical external momenta, the tree-level charge, masses and invariants
     # are real. Idenso retains these assumptions as explicit conjugations.
     adjoint = adjoint.replace(conjugate(P(a, b)), P(a, b))
     for real in (mass, charge, s, t, u):
         adjoint = adjoint.replace(conjugate(real), real)
-    adjoint = TensorExpression(adjoint).wrap_indices(adjoint_index)
+    adjoint = TensorExpression(adjoint).wrap_indices(adjoint_index).to_expression()
 
     for axial in (False, True):
         density = E("1")
         # Dirac adjunction exchanges matrix input/output roles. Completeness
         # tensors join the original ket to the corresponding adjoint bra.
         for particle, momentum, left, right, average in [
-            (pdg, P(0), ports[0], adjoint_index(ports[2]), True),
-            (pdg, P(2), adjoint_index(ports[0]), ports[2], False),
-            (22, P(1), ports[1], adjoint_index(ports[1]), True),
-            (22, P(3), ports[3], adjoint_index(ports[3]), False),
+            (pdg, P(0), ports[0], index_scope(adjoint_index, ports[2]), True),
+            (pdg, P(2), index_scope(adjoint_index, ports[0]), ports[2], False),
+            (22, P(1), ports[1], index_scope(adjoint_index, ports[1]), True),
+            (22, P(3), ports[3], index_scope(adjoint_index, ports[3]), False),
         ]:
             if particle < 0:
                 left, right = right, left
@@ -109,9 +120,8 @@ for pdg in (11, -11):
                 operator.to_expression() * adjoint * density,
                 cook_indices=CookSettings.indices(),
             )
-            .expand()
             .simplify_gamma()
-            .expand()
+            .to_expression()
             .to_dots()
             .to_expression()
         )

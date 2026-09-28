@@ -2,8 +2,7 @@
 
 use idenso::{
     representations::initialize,
-    shorthands::schoonschip::{Schoonschip, SchoonschipContractionOrder, SchoonschipSettings},
-    tensor::{SymbolicNet, SymbolicNetParse},
+    tensor::{SymbolicNet, SymbolicNetParse, SymbolicTensor, aliases::AliasInterfaces},
 };
 use spenso::{
     network::parsing::ParseSettings,
@@ -17,7 +16,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
-    id::Pattern,
+    id::{AliasedAtom, Pattern},
     license::LicenseManager,
     parse, symbol,
     transformer::Transformer,
@@ -51,39 +50,23 @@ pub fn nested_dot_expression() -> Atom {
     &p1 * (&q2 + &p2 * (&q3_2 * &q2_2 + &p2_2 * &q2_2))
 }
 
-pub fn run_schoonschip(expr: Atom, settings: &SchoonschipSettings) -> Atom {
-    expr.schoonschip_with_net::<false, AbstractIndex>(settings)
-        .expect("benchmark expression should be a valid tensor network")
+pub fn run_contraction(expr: Atom) -> SymbolicTensor<AliasInterfaces, AliasedAtom> {
+    SymbolicTensor::infer(expr)
+        .expect("valid benchmark tensor")
+        .contract(Default::default())
+        .expect("valid contraction")
 }
 
-pub fn assert_benchmark_outputs_match() {
-    let expr = nested_dot_expression();
-    let expected = run_schoonschip(expr.clone(), &SchoonschipSettings::full());
-
-    for (name, settings) in benchmark_settings() {
-        let result = run_schoonschip(expr.clone(), &settings);
-        assert_eq!(
-            result, expected,
-            "benchmark mode {name} produced a different output"
-        );
-    }
+pub fn assert_contraction_invariants() {
+    let result = std::sync::Arc::new(run_contraction(nested_dot_expression()));
+    assert!(result.contraction_complete());
+    let repeated = result.contract(Default::default()).unwrap();
+    assert!(std::sync::Arc::ptr_eq(&result, &repeated));
 }
 
-#[allow(dead_code)]
 pub fn checked_nested_dot_expression() -> Atom {
-    assert_benchmark_outputs_match();
+    assert_contraction_invariants();
     nested_dot_expression()
-}
-
-pub fn benchmark_settings() -> Vec<(&'static str, SchoonschipSettings)> {
-    vec![
-        ("depth_first_depth_1", SchoonschipSettings::partial()),
-        (
-            "breadth_first_depth_1",
-            SchoonschipSettings::breadth_first(Some(1)),
-        ),
-        ("full", SchoonschipSettings::full()),
-    ]
 }
 
 pub struct NetworkVertexFixture {
@@ -120,30 +103,34 @@ fn network_vertex_fixture(vertex_count: usize) -> NetworkVertexFixture {
     symbol!("k"; tags=["spenso::tensor","spenso::rank1"]);
 
     let mut vertices = vec![
-        parse!("vx(1,-k(0), k(0)-k(1), k(1), k(10), spenso::mink(4,mu1), spenso::mink(4,mu8))"),
         parse!(
-            "vx(2,-k(1), k(2), k(1)-k(2), spenso::mink(4,mu1), spenso::mink(4,mu2), spenso::mink(4,mu9))"
+            "vx(1,-k(0,spenso::mink(4)), k(0,spenso::mink(4))-k(1,spenso::mink(4)), k(1,spenso::mink(4)), k(10,spenso::mink(4)), spenso::mink(4,mu1), spenso::mink(4,mu8))"
         ),
         parse!(
-            "vx(3,-k(2), k(3), k(2)-k(3), spenso::mink(4,mu2), spenso::mink(4,mu3), spenso::mink(4,mu10))"
+            "vx(2,-k(1,spenso::mink(4)), k(2,spenso::mink(4)), k(1,spenso::mink(4))-k(2,spenso::mink(4)), spenso::mink(4,mu1), spenso::mink(4,mu2), spenso::mink(4,mu9))"
         ),
         parse!(
-            "vx(4,-k(3), k(4), k(3)-k(4), spenso::mink(4,mu3), spenso::mink(4,mu4), spenso::mink(4,mu11))"
+            "vx(3,-k(2,spenso::mink(4)), k(3,spenso::mink(4)), k(2,spenso::mink(4))-k(3,spenso::mink(4)), spenso::mink(4,mu2), spenso::mink(4,mu3), spenso::mink(4,mu10))"
         ),
-        parse!("vx(5,-k(4), k(0), k(4)-k(0), spenso::mink(4,mu4), k(20), spenso::mink(4,mu5))"),
+        parse!(
+            "vx(4,-k(3,spenso::mink(4)), k(4,spenso::mink(4)), k(3,spenso::mink(4))-k(4,spenso::mink(4)), spenso::mink(4,mu3), spenso::mink(4,mu4), spenso::mink(4,mu11))"
+        ),
+        parse!(
+            "vx(5,-k(4,spenso::mink(4)), k(0,spenso::mink(4)), k(4,spenso::mink(4))-k(0,spenso::mink(4)), spenso::mink(4,mu4), k(20,spenso::mink(4)), spenso::mink(4,mu5))"
+        ),
     ];
     match vertex_count {
         5 => {}
         6..=8 => {
             vertices.extend([
                 parse!(
-                    "vx(6,-k(4)+k(0), -k(3)+k(4), k(3)-k(0), spenso::mink(4,mu5), spenso::mink(4,mu11), spenso::mink(4,mu6))"
+                    "vx(6,-k(4,spenso::mink(4))+k(0,spenso::mink(4)), -k(3,spenso::mink(4))+k(4,spenso::mink(4)), k(3,spenso::mink(4))-k(0,spenso::mink(4)), spenso::mink(4,mu5), spenso::mink(4,mu11), spenso::mink(4,mu6))"
                 ),
                 parse!(
-                    "vx(7,-k(3)+k(0), -k(2)+k(3), k(2)-k(0), spenso::mink(4,mu6), spenso::mink(4,mu10), spenso::mink(4,mu7))"
+                    "vx(7,-k(3,spenso::mink(4))+k(0,spenso::mink(4)), -k(2,spenso::mink(4))+k(3,spenso::mink(4)), k(2,spenso::mink(4))-k(0,spenso::mink(4)), spenso::mink(4,mu6), spenso::mink(4,mu10), spenso::mink(4,mu7))"
                 ),
                 parse!(
-                    "vx(8,-k(2)+k(0), -k(1)+k(2), k(1)-k(0), spenso::mink(4,mu7), spenso::mink(4,mu9), spenso::mink(4,mu8))"
+                    "vx(8,-k(2,spenso::mink(4))+k(0,spenso::mink(4)), -k(1,spenso::mink(4))+k(2,spenso::mink(4)), k(1,spenso::mink(4))-k(0,spenso::mink(4)), spenso::mink(4,mu7), spenso::mink(4,mu9), spenso::mink(4,mu8))"
                 ),
             ]);
             vertices.truncate(vertex_count);
@@ -274,11 +261,7 @@ pub fn network_vertex_substitution(fixture: NetworkVertexFixture) -> Atom {
             .min_level(0)
             .max_level(Some(0))
             .rhs_cache_size(1000)
-            .with_map(move |matches| {
-                gluon_rule
-                    .replace_wildcards_with_matches(matches)
-                    .normalize_dots()
-            });
+            .with_map(move |matches| gluon_rule.replace_wildcards_with_matches(matches));
     }
 
     result
@@ -316,8 +299,10 @@ pub fn network_substituted_8() -> Atom {
     network_vertex_substitution(network_vertex_fixture_8())
 }
 
-pub fn network_normalize_substituted(expr: Atom) -> Atom {
-    expr.normalize_dots()
+pub fn network_admit_substituted(expr: Atom) -> Atom {
+    SymbolicTensor::infer(expr)
+        .expect("valid substituted tensor")
+        .into_expression()
 }
 
 pub fn network_parse_normalized(expr: Atom) -> SymbolicNet<AbstractIndex> {
@@ -330,54 +315,19 @@ pub fn network_parse_normalized(expr: Atom) -> SymbolicNet<AbstractIndex> {
     .unwrap()
 }
 
-pub fn network_schoonschip_substituted(expr: Atom) -> Atom {
-    network_schoonschip_substituted_with_order(expr, SchoonschipContractionOrder::default())
-}
-
-pub fn network_schoonschip_substituted_with_order(
-    expr: Atom,
-    order: SchoonschipContractionOrder,
-) -> Atom {
-    let mut result = expr
-        .schoonschip_with_net::<false, AbstractIndex>(
-            &SchoonschipSettings::partial()
-                .with_expanded_contracted_sums()
-                .with_contraction_order(order),
-        )
-        .expect("benchmark expression should be a valid tensor network");
-
-    let needs_cleanup = matches!(
-        order,
-        SchoonschipContractionOrder::LargestDegree
-            | SchoonschipContractionOrder::MinLargestOperandBytes
-            | SchoonschipContractionOrder::MinProductTerms
-            | SchoonschipContractionOrder::MinProductBytes
-    );
-
-    if needs_cleanup {
-        let cleanup_settings = SchoonschipSettings::partial()
-            .with_expanded_contracted_sums()
-            .with_contraction_order(SchoonschipContractionOrder::SmallestDegree);
-        for _ in 0..4 {
-            let next = result
-                .schoonschip_with_net::<false, AbstractIndex>(&cleanup_settings)
-                .expect("benchmark cleanup should produce a valid tensor network");
-            if next == result {
-                break;
-            }
-            result = next;
-        }
-    }
-
-    result
+pub fn network_contract_substituted(expr: Atom) -> Atom {
+    run_contraction(expr)
+        .resolved()
+        .expect("valid alias registry")
+        .into_expression()
 }
 
 pub fn network_full_algebra_5(fixture: NetworkVertexFixture) -> Atom {
-    network_schoonschip_substituted(network_vertex_substitution(fixture))
+    network_contract_substituted(network_vertex_substitution(fixture))
 }
 
 pub fn network_full_algebra_8(fixture: NetworkVertexFixture) -> Atom {
-    network_schoonschip_substituted(network_vertex_substitution(fixture))
+    network_contract_substituted(network_vertex_substitution(fixture))
 }
 
 pub fn assert_no_network_internal_indices(result: &Atom) {

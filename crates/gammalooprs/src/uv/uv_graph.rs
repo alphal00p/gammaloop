@@ -4,7 +4,6 @@ use std::{cell::RefCell, collections::BTreeSet, ops::Deref};
 use ahash::{AHashMap, AHashSet};
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::shorthands::schoonschip::Schoonschip;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
     involution::{Flow, Hedge},
@@ -31,7 +30,7 @@ use crate::{
     uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
 };
 
-use super::{Spinney, Wood, spenso_lor_atom};
+use super::{Spinney, Wood};
 
 pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn n_loops<S: SubGraphLike, E, V, H>(&self, subgraph: &S) -> usize
@@ -513,14 +512,11 @@ impl UltravioletGraph for Graph {
         let mut denominator = Atom::one();
         for (pair, edge_id, _) in self.underlying.iter_edges_of(subgraph) {
             if pair.is_paired() {
-                denominator *= GS.den(
-                    usize::from(edge_id),
-                    function!(GS.emr_mom, usize::from(edge_id)),
-                    &Atom::Zero,
-                    spenso_lor_atom(usize::from(edge_id) as i32, usize::from(edge_id), GS.dim)
-                        .pow(2)
-                        .to_dots(),
-                );
+                denominator *= feynkit_graph::expressions::PropagatorSymbols {
+                    momentum: GS.emr_mom,
+                    denominator: GS.den,
+                }
+                .denominator(edge_id, &Atom::Zero, GS.dim);
             }
         }
         let integrand = self
@@ -560,6 +556,8 @@ pub trait UVE {
 #[cfg(test)]
 mod shared_expression_tests {
     use super::*;
+    use crate::uv::spenso_lor_atom;
+    use idenso::tensor::{ContractionSettings, SymbolicTensor};
     use linnet::half_edge::involution::EdgeIndex;
 
     #[test]
@@ -567,14 +565,20 @@ mod shared_expression_tests {
         crate::initialisation::test_initialise().unwrap();
         let edge = EdgeIndex(7);
         let mass_squared = symbolica::symbol!("shared_propagator_test::m").pow(2);
+        let momentum_square =
+            SymbolicTensor::infer(spenso_lor_atom(edge.0 as i32, edge.0, GS.dim).pow(2))
+                .unwrap()
+                .contract(ContractionSettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .to_dots()
+                .unwrap();
         let previous = GS.den(
             edge.0,
             GS.emr_mom.call(edge.0),
             &mass_squared,
-            spenso_lor_atom(edge.0 as i32, edge.0, GS.dim)
-                .pow(2)
-                .to_dots()
-                - &mass_squared,
+            momentum_square.expression() - &mass_squared,
         );
         let shared = feynkit_graph::expressions::PropagatorSymbols {
             momentum: GS.emr_mom,

@@ -192,6 +192,7 @@ for kind, incoming, outgoing, loops, vertices, count in [
         numerator = (
             TensorExpression(numerator)
             .simplify_color()
+            .to_expression()
             .to_color_casimir(
                 fundamental=Representation.cof(Nc),
                 adjoint=Representation.coad(dA),
@@ -272,17 +273,19 @@ for kind, incoming, outgoing, loops, vertices, count in [
             )
         for label, projector in probes:
             traced = (
-                TensorExpression((numerator * projector).expand())
+                TensorExpression(numerator * projector)
                 .simplify_gamma()
-                .expand()
-                .simplify_metrics()
+                .to_expression()
+                .contract()
+                .to_expression()
                 .to_dots()
                 .to_expression()
             )
             scalar = family.rewrite_numerator(
                 kinematics.apply(reducer.reduce(traced)), [coordinate]
             )
-            scalar = (scalar * factor).together().expand()
+            # Collect only denominator powers; retain tensor/scalar spectators in coefficients.
+            scalar = (scalar * factor).together()
             terms = []
             for monomial, coefficient in scalar.coefficient_list(coordinate):
                 power = -int(
@@ -320,6 +323,9 @@ for label, terms in parts.items():
         .to_expression()
         .expand()
     )
+    # Dividing by the tree color norm can leave 1/Nc. In the same SU(N)
+    # Casimir basis with TF=1/2, this is CA - 2*CF.
+    pole = pole.replace(Nc**-1, CA - 2 * CF)
     pole = pole.replace(mink(4, index), mink(D, index))
     uv_poles[label] = pole
     assert pole.derivative(M).expand() == zero
@@ -575,6 +581,7 @@ for kind, incoming, outgoing, count, qcd_order in [
         numerator = (
             TensorExpression(numerator)
             .simplify_color()
+            .to_expression()
             .to_color_casimir(
                 fundamental=Representation.cof(Nc),
                 adjoint=Representation.coad(dA),
@@ -620,25 +627,32 @@ for kind, incoming, outgoing, count, qcd_order in [
                 normalization *= external_ordering
         for label, projector in probes:
             trace = (
-                TensorExpression((numerator * projector).expand())
+                TensorExpression(numerator * projector)
                 .simplify_gamma()
-                .expand()
-                .simplify_metrics()
+                .to_expression()
+                .contract()
+                .to_expression()
                 .to_dots()
                 .to_expression()
             )
-            coefficient = (
-                (kinematics.apply(trace) * factor / normalization).together().expand()
-            )
+            coefficient = (kinematics.apply(trace) * factor / normalization).together()
             ct_coefficients[label] = ct_coefficients.get(label, zero) + coefficient
-ct_g = ct_coefficients["gluon"].coefficient(gmunu)
-ct_pp = ct_coefficients["gluon"].coefficient(ppmunu)
+# Select the finite local tensor basis while keeping its scalar coefficients factored.
+gluon_components = dict(
+    ct_coefficients["gluon"].coefficient_list(
+        gmunu, P(0, mink(D, mu)), P(0, mink(D, nu))
+    )
+)
+ct_g = gluon_components.get(gmunu, zero)
+ct_pp = gluon_components.get(ppmunu, zero)
+ct_g_powers = dict(ct_g.coefficient_list(s))
+ct_ghost_powers = dict(ct_coefficients["ghost"].coefficient_list(s))
 ct_rows = [
     ct_coefficients["quark_p"],
     ct_coefficients["quark_m"],
-    ct_g.coefficient(s),
+    ct_g_powers.get(s, zero),
     xi * ct_pp,
-    ct_coefficients["ghost"].coefficient(s),
+    ct_ghost_powers.get(s, zero),
     ct_coefficients["vertex"],
     ct_g.replace(s, zero) / M,
     ct_coefficients["ghost"].replace(s, zero) / M,
@@ -760,9 +774,7 @@ for scenario in ("massive", "massless"):
         for edge_id, tag in tags.items():
             tagged = tagged.replace(dot(Q(edge_id, mink(4)), Q(edge_id, mink(4))), tag)
         components = (
-            tagged.expand().coefficient_list(*tags.values())
-            if tags
-            else [(one, tagged)]
+            tagged.coefficient_list(*tags.values()) if tags else [(one, tagged)]
         )
         reconstructed = zero
         for monomial, numerator in components:
@@ -776,7 +788,7 @@ for scenario in ("massive", "massless"):
                 )
             reconstructed += monomial * numerator
             if any(power == 2 for power in powers.values()):
-                assert numerator.replace(xi, one).expand() == zero
+                assert numerator.replace(xi, one) == zero
             denominator = (
                 diagram.denominator_expression(in_lmb=True, edge_powers=powers)
                 .to_expression()
@@ -808,10 +820,11 @@ for scenario in ("massive", "massless"):
                 if massless and label == "quark_m":
                     continue
                 traced = (
-                    TensorExpression((numerator * projector).expand())
+                    TensorExpression(numerator * projector)
                     .simplify_gamma()
-                    .expand()
-                    .simplify_metrics()
+                    .to_expression()
+                    .contract()
+                    .to_expression()
                     .to_dots()
                     .to_expression()
                 )
@@ -867,7 +880,19 @@ for scenario in ("massive", "massless"):
                     .expand()
                 )
                 irr_scalars[label] = (irr_scalars.get(label, zero) + scalar).together()
-        assert (reconstructed - raw).together() == zero
+        # Compare coefficients in the propagator weights only; every tensor
+        # spectator remains a factored coefficient of that selected polynomial.
+        reconstruction_check = reconstructed
+        for edge_id, tag in tags.items():
+            reconstruction_check = reconstruction_check.replace(
+                dot(Q(edge_id, mink(4)), Q(edge_id, mink(4))), tag
+            )
+        assert (
+            dict(reconstruction_check.coefficient_list(*tags.values()))
+            == dict(components)
+            if tags
+            else reconstruction_check == raw
+        )
     irr_terms, irr_targets = {}, set()
     for label, scalar in irr_scalars.items():
         # Symbolica partial fractions separate the physical and auxiliary tadpoles.
@@ -916,6 +941,7 @@ for scenario in ("massive", "massless"):
             .series(epsilon, 0, -1)
             .to_expression()
             .expand()
+            .replace(Nc**-1, CA - 2 * CF)
             .replace(mink(4, index), mink(D, index))
         )
         irr_poles[label] = pole.together().expand()

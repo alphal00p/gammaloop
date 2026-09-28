@@ -1,12 +1,13 @@
 //! Reproducible native trace comparison: cargo run -p idenso --profile dev-optim
 //! --example trace_form -- /absolute/path/to/form [maximum_even_length]
-//! Idenso times are in-process; FORM times include process startup, parsing,
+//! Idenso times include typed admission, gamma simplification, alias resolution,
+//! and result destruction; FORM times include process startup, parsing,
 //! sorting and the exact scalar check. Neither includes input construction.
 //! Term counts describe the output representation, not algebraic correctness.
 
 use std::{hint::black_box, process::Command, time::Instant};
 
-use idenso::{dirac::GammaSimplifier, gamma, representations::Bispinor};
+use idenso::{gamma, representations::Bispinor};
 use spenso::{
     network::library::symbolic::ETS,
     p, q,
@@ -72,12 +73,30 @@ fn main() {
                 .collect();
             let input = trace!(&spin; indices.iter().map(|mu| gamma!(mu)));
             let start = Instant::now();
-            let result = black_box(&input).simplify_gamma();
+            let result = idenso::tensor::SymbolicTensor::infer(
+                (black_box(&input)).as_atom_view().to_owned(),
+            )
+            .unwrap()
+            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
             let cold = start.elapsed().as_secs_f64();
             let mut times = Vec::new();
             for _ in 0..5 {
                 let start = Instant::now();
-                let _ = black_box(black_box(&input).simplify_gamma());
+                let _ = black_box(
+                    idenso::tensor::SymbolicTensor::infer(
+                        (black_box(&input)).as_atom_view().to_owned(),
+                    )
+                    .unwrap()
+                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
+                );
                 times.push(start.elapsed().as_secs_f64());
             }
             // Verify the full scalar polynomial in p^2, q^2 and p.q,

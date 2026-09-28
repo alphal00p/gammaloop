@@ -65,11 +65,10 @@ for coordinate in generated.cuts[0].edges:
         )
     numerator = model.expand_couplings(numerator * projector)
     contracted = (
-        TensorExpression(numerator.expand())
+        TensorExpression(numerator)
         .simplify_gamma()
-        .expand()
         .simplify_epsilon()
-        .expand()
+        .to_expression()
         .to_dots()
         .to_expression()
     )

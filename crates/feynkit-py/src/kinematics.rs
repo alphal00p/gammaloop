@@ -332,17 +332,16 @@ impl PyKinematics {
     ///     Expression with compact scalar products.
     #[gen_stub(skip)]
     fn apply(&self, py: Python<'_>, expression: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        if let Ok(tensor) = expression.extract::<PyRef<'_, TensorExpression>>() {
+            let result = self.inner.apply(tensor.structured().expression());
+            return TensorExpression::preserving_interface(&tensor, py, result).map(Py::into_any);
+        }
         let atom = expression
             .extract::<ConvertibleToExpression>()?
             .to_expression()
             .expr;
         let result = self.inner.apply(&atom);
-        if expression.is_instance_of::<TensorExpression>() {
-            let tensor = expression.extract::<PyRef<'_, TensorExpression>>()?;
-            TensorExpression::preserving_interface(&tensor, py, result).map(Py::into_any)
-        } else {
-            Py::new(py, PythonExpression { expr: result }).map(Py::into_any)
-        }
+        Py::new(py, PythonExpression { expr: result }).map(Py::into_any)
     }
 }
 

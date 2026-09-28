@@ -13,7 +13,13 @@ from pathlib import Path
 
 from symbolica import E, Expression, S
 from symbolica.community import hep as fk
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.spenso import (
+    CookSettings,
+    GammaSimplifySettings,
+    TensorExpression,
+)
+
+index_scope = S("spenso::index_scope")
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 P = S("gammalooprs::P")
@@ -44,7 +50,9 @@ measure = measure.replace((physical_mass**4 * beta**2).sqrt(), physical_mass**2 
 flux = physical_kin.flux(P(0))
 assert (measure - beta / (32 * pi**2)).together() == E("0")
 assert flux == 2 * physical_mass
-assert model.particle_by_pdg(25).spin_sum(P(0), ports[0], wrapped(ports[0])) == E("1")
+assert model.particle_by_pdg(25).spin_sum(
+    P(0), ports[0], index_scope(wrapped, ports[0])
+) == E("1")
 
 for pdgs, mass, yukawa, yukawa_mass in (
     ((11, -11), S("UFO::Me"), "ye", "yme"),
@@ -82,16 +90,19 @@ for pdgs, mass, yukawa, yukawa_mass in (
             dict(matches[0])[index], ports[edge.external_index]
         )
     operator = TensorExpression(
-        (
-            numerator
-            * diagram.overall_factor_expression(evaluate=True)
-            * diagram.numerator_prefactor_expression()
-        ).expand()
+        numerator
+        * diagram.overall_factor_expression(evaluate=True)
+        * diagram.numerator_prefactor_expression()
     )
-    adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
+    adjoint = (
+        operator.dirac_adjoint()
+        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .to_expression()
+        .to_expression()
+    )
     for real in (charge, sw, cw, mh, mw, mz, mass):
         adjoint = adjoint.replace(conjugate(real), real)
-    adjoint = TensorExpression(adjoint).wrap_indices(wrapped)
+    adjoint = TensorExpression(adjoint).wrap_indices(wrapped).to_expression()
 
     color_projector = E("1")
     for position, particle_pdg in enumerate(pdgs, start=1):
@@ -105,7 +116,9 @@ for pdgs, mass, yukawa, yukawa_mass in (
                 continue
             closure = metric(
                 slot.dual().to_expression(),
-                original.replace(ports[position], wrapped(ports[position])),
+                original.replace(
+                    ports[position], index_scope(wrapped, ports[position])
+                ),
             )
             match = next(
                 closure.match(particle.color_sum(left, right), max_level=0), None
@@ -118,25 +131,27 @@ for pdgs, mass, yukawa, yukawa_mass in (
     if yukawa is not None:
         # Dirac adjunction exchanges the open fermion-chain endpoints.
         spin_projector = model.particle_by_pdg(pdgs[0]).spin_sum(
-            P(1), wrapped(ports[2]), ports[1]
-        ) * model.particle_by_pdg(pdgs[1]).spin_sum(P(2), ports[2], wrapped(ports[1]))
+            P(1), index_scope(wrapped, ports[2]), ports[1]
+        ) * model.particle_by_pdg(pdgs[1]).spin_sum(
+            P(2), ports[2], index_scope(wrapped, ports[1])
+        )
     else:
         # Sum all three physical polarizations of each final vector, including
         # its longitudinal Proca term. There is no initial spin average.
         spin_projector = model.particle_by_pdg(pdgs[0]).spin_sum(
-            P(1), ports[1], wrapped(ports[1])
-        ) * model.particle_by_pdg(pdgs[1]).spin_sum(P(2), ports[2], wrapped(ports[2]))
+            P(1), ports[1], index_scope(wrapped, ports[1])
+        ) * model.particle_by_pdg(pdgs[1]).spin_sum(
+            P(2), ports[2], index_scope(wrapped, ports[2])
+        )
     scalar = (
         TensorExpression(
             operator.to_expression() * adjoint * spin_projector * color_projector,
             cook_indices=CookSettings.indices(),
         )
-        .expand()
-        .simplify_gamma()
-        .expand()
         .simplify_gamma()
         .simplify_color()
-        .simplify_metrics()
+        .contract()
+        .to_expression()
         .to_dots()
     )
     assert scalar.is_scalar
@@ -171,7 +186,7 @@ for pdgs, mass, yukawa, yukawa_mass in (
     # Apply the explicit 1/2! only for the identical ZZ final state.
     symmetry = E("1/2") if pdgs == (23, 23) else E("1")
     width = symmetry * 4 * pi * measure * squared / flux
-    width = width.replace(charge**2, 4 * pi * alpha)
+    width = width.factor().replace(charge**2, 4 * pi * alpha)
     if yukawa is not None:
         expected_width = (
             colors * alpha * physical_mass * mass**2 * beta**3 / (8 * mw**2 * sw**2)

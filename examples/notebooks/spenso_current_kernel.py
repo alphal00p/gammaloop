@@ -213,7 +213,7 @@ def _():
     data can instead be registered when required. Repeated compatible indices
     are contracted, while unmatched indices form the result's tensor interface.
     The Idenso operations exposed through `TensorExpression`, including
-    `simplify_metrics`, `simplify_gamma` and
+    `contract`, `simplify_gamma` and
     `simplify_color`, can reduce metric, Dirac and colour identities
     before component evaluation [@SymbolicaSoftware].
 
@@ -509,7 +509,7 @@ def _(AUTO, Representation, TensorExpression, mo, trace):
         _gamma(AUTO, AUTO, lorentz("mu")),
         _gamma(AUTO, AUTO, lorentz("nu")),
     )
-    reduced_trace = gamma_trace.simplify_gamma().simplify_metrics()
+    reduced_trace = gamma_trace.simplify_gamma().to_expression()
     assert (
         reduced_trace.to_expression() - 4 * lorentz.g("mu", "nu").to_expression()
     ).expand() == 0

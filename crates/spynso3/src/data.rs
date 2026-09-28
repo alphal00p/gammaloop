@@ -59,7 +59,7 @@ impl Spensor {
 
     pub(crate) fn select_components(&self, selection: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let py = selection.py();
-        let layout = tensor_data_layout(&self.descriptor.structure)?;
+        let layout = tensor_data_layout(self.descriptor.structure())?;
         if let Ok(index) = selection.extract::<isize>() {
             return self.__getitem__(SliceOrIntOrExpanded::Int(Self::normalized_component_index(
                 index,
@@ -182,7 +182,7 @@ impl Spensor {
     fn shape<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(
             py,
-            tensor_data_layout(&self.descriptor.structure)?.logical_shape(),
+            tensor_data_layout(self.descriptor.structure())?.logical_shape(),
         )
     }
 
@@ -287,7 +287,7 @@ impl Spensor {
     ) -> PyResult<Self> {
         let array = PyModule::import(array.py(), "numpy")?.call_method1("asarray", (array,))?;
         let shape = array.getattr("shape")?.extract::<Vec<usize>>()?;
-        let expected = tensor_data_layout(&structure.descriptor.structure)?;
+        let expected = tensor_data_layout(structure.descriptor.structure())?;
         if shape != expected.logical_shape() {
             return Err(PyValueError::new_err(format!(
                 "array shape {shape:?} does not match tensor shape {:?}",

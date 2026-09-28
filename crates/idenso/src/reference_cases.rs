@@ -11,9 +11,10 @@ use spenso::{
 use symbolica::atom::Atom;
 
 use crate::{
-    color::{CS, ColorSimplifier},
-    dirac::{GammaSimplifier, GammaSimplifySettings},
+    color::{CS, ColorSimplifySettings},
+    dirac::GammaSimplifySettings,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, initialize},
+    tensor::SymbolicTensor,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -55,13 +56,23 @@ impl ReferenceCase {
     }
 
     pub fn simplify(&self, expression: &Atom) -> Atom {
-        match self.simplification {
-            ReferenceSimplification::GammaDefault => expression.simplify_gamma(),
-            ReferenceSimplification::GammaCanonical => {
-                expression.simplify_gamma_with(GammaSimplifySettings::canonical())
+        let tensor = SymbolicTensor::infer(expression.clone()).expect("valid reference tensor");
+        let result = match self.simplification {
+            ReferenceSimplification::GammaDefault => {
+                tensor.simplify_gamma(GammaSimplifySettings::default())
             }
-            ReferenceSimplification::ColorDefault => expression.simplify_color(),
-        }
+            ReferenceSimplification::GammaCanonical => {
+                tensor.simplify_gamma(GammaSimplifySettings::canonical())
+            }
+            ReferenceSimplification::ColorDefault => {
+                tensor.simplify_color(ColorSimplifySettings::default())
+            }
+        };
+        result
+            .expect("valid reference simplification")
+            .resolved()
+            .expect("valid reference aliases")
+            .into_expression()
     }
 
     pub fn simplified(&self) -> Atom {

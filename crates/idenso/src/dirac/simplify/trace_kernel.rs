@@ -4,24 +4,104 @@
 //! indices escape into the global recipe cache.
 
 use std::{
+    cell::RefCell,
     collections::{BTreeMap, HashMap},
     sync::{LazyLock, OnceLock},
 };
 
 use itertools::Itertools;
-use spenso::g;
-use symbolica::atom::{Atom, AtomCore, AtomView};
+use spenso::{g, structure::partial::PartialStructure};
+#[cfg(test)]
+use symbolica::atom::AtomCore;
+use symbolica::atom::{Atom, AtomView};
 
-use super::{THREE_GAMMA_METRIC_TERMS, is_four_dimension, is_minkowski_slot};
-use crate::epsilon::epsilon4;
+#[cfg(test)]
+use super::is_four_dimension;
+use super::{THREE_GAMMA_METRIC_TERMS, is_minkowski_slot};
+use crate::{
+    epsilon::epsilon4,
+    tensor::{
+        SymbolicTensor,
+        aliases::Definition,
+        inference::{InterfaceInference, TensorInferenceError},
+    },
+};
 
 mod factored;
+#[cfg(test)]
 mod sparse;
 
-#[derive(Clone, Copy)]
-pub(super) enum TraceOutput {
+#[derive(Clone, Copy, Debug)]
+pub(super) enum TraceOutput<'a> {
+    // Independent coefficient-list oracle. Public materialization belongs to
+    // SymbolicTensor's alias materializer and never selects this output mode.
+    #[cfg(test)]
     Expanded,
     Factored,
+    Aliased(&'a RefCell<TraceDefinitions>),
+}
+
+/// Temporary registrations for one rewrite. The completed result owns these
+/// definitions in Symbolica's existing alias registry, not in a second DAG.
+#[derive(Default, Debug)]
+pub(super) struct TraceDefinitions {
+    definitions: Vec<Definition>,
+    handles: HashMap<Atom, Atom>,
+    error: Option<TensorInferenceError>,
+}
+
+impl TraceDefinitions {
+    pub(super) fn into_definitions(self) -> Result<Vec<Definition>, TensorInferenceError> {
+        match self.error {
+            Some(error) => Err(error),
+            None => Ok(self.definitions),
+        }
+    }
+
+    fn retain(&mut self, expression: Atom) -> Atom {
+        // Only sums need a handle: products of existing handles are already
+        // bounded, and atomic values need no additional definition.
+        if self.error.is_some()
+            || !matches!(expression.as_view(), AtomView::Add(_))
+            || !InterfaceInference::normalization_is_intrinsic(expression.as_view())
+        {
+            return expression;
+        }
+        if let Some(handle) = self.handles.get(&expression) {
+            return handle.clone();
+        }
+        let admitted = SymbolicTensor::<PartialStructure>::infer(expression.clone())
+            .and_then(|body| body.alias_handle().map(|handle| (handle, body)));
+        match admitted {
+            Ok((handle, body)) => {
+                let atom = handle.expression.clone();
+                self.handles.insert(expression, atom.clone());
+                self.definitions.push((handle, body));
+                atom
+            }
+            Err(error) => {
+                self.error = Some(error);
+                expression
+            }
+        }
+    }
+}
+
+impl TraceOutput<'_> {
+    fn factored(self) -> bool {
+        match self {
+            Self::Factored | Self::Aliased(_) => true,
+            #[cfg(test)]
+            Self::Expanded => false,
+        }
+    }
+
+    fn retain(self, expression: Atom) -> Atom {
+        match self {
+            Self::Aliased(definitions) => definitions.borrow_mut().retain(expression),
+            _ => expression,
+        }
+    }
 }
 
 pub(super) struct TraceKernel<const N: usize> {
@@ -129,7 +209,7 @@ impl<const N: usize> TraceKernel<N> {
         let mut metrics: Vec<_> = (0..N)
             .flat_map(|a| (0..N).map(move |b| g!(indices[a], indices[b])))
             .collect();
-        if matches!(output, TraceOutput::Factored) && N >= 10 {
+        if output.factored() && N >= 10 {
             let factored = self.factored(axial);
             metrics.extend(factored.epsilons.iter().map(|&[a, b, c, d]| {
                 epsilon4(
@@ -143,6 +223,7 @@ impl<const N: usize> TraceKernel<N> {
                 factored.polynomial.root,
                 &metrics,
                 Atom::num(4).as_view(),
+                &mut |value| output.retain(value),
             );
         }
         let max_coefficient = self.terms.iter().map(|(_, c)| c.abs()).max().unwrap_or(0);
@@ -151,26 +232,29 @@ impl<const N: usize> TraceKernel<N> {
             .collect();
         let mut last_epsilon_key = [u8::MAX; 4];
         let mut last_epsilon = Atom::Zero;
-        Atom::add_many(self.terms.iter().map(|(indices_recipe, coefficient)| {
-            let epsilon = if axial {
-                let key: [u8; 4] = indices_recipe[..4].try_into().unwrap();
-                if key != last_epsilon_key {
-                    last_epsilon_key = key;
-                    let [a, b, c, d] = key;
-                    last_epsilon = epsilon4(
-                        indices[a as usize],
-                        indices[b as usize],
-                        indices[c as usize],
-                        indices[d as usize],
-                    );
-                }
-                Some(last_epsilon.as_view())
-            } else {
-                None
-            };
-            let pairs = &indices_recipe[if axial { 4 } else { 0 }..];
-            Atom::mul_many(
-                std::iter::once(coefficients[(*coefficient + max_coefficient) as usize].as_view())
+        output.retain(Atom::add_many(self.terms.iter().map(
+            |(indices_recipe, coefficient)| {
+                let epsilon = if axial {
+                    let key: [u8; 4] = indices_recipe[..4].try_into().unwrap();
+                    if key != last_epsilon_key {
+                        last_epsilon_key = key;
+                        let [a, b, c, d] = key;
+                        last_epsilon = epsilon4(
+                            indices[a as usize],
+                            indices[b as usize],
+                            indices[c as usize],
+                            indices[d as usize],
+                        );
+                    }
+                    Some(last_epsilon.as_view())
+                } else {
+                    None
+                };
+                let pairs = &indices_recipe[if axial { 4 } else { 0 }..];
+                Atom::mul_many(
+                    std::iter::once(
+                        coefficients[(*coefficient + max_coefficient) as usize].as_view(),
+                    )
                     .chain(epsilon)
                     .chain(
                         pairs
@@ -179,14 +263,15 @@ impl<const N: usize> TraceKernel<N> {
                             .iter()
                             .map(|p| metrics[usize::from(p[0]) * N + usize::from(p[1])].as_view()),
                     ),
-            )
-        }))
+                )
+            },
+        )))
     }
 }
 
 /// Build the ordinary pairing polynomial without intermediate trace nodes.
 /// Repeated subwords share their result for this evaluation only.
-struct PairingTrace<'a, Output: TraceAlgebra = FactoredOutput> {
+struct PairingTrace<'a, Output: TraceAlgebra = FactoredOutput<'a>> {
     width: usize,
     arguments: Vec<AtomView<'a>>,
     metrics: Vec<Option<Atom>>,
@@ -219,12 +304,13 @@ trait TraceAlgebra {
     fn add(&mut self, left: Self::Value, right: Self::Value) -> Self::Value;
     fn subtract(&mut self, left: Self::Value, right: Self::Value) -> Self::Value;
     fn sum(&mut self, values: Vec<Self::Value>) -> Self::Value;
+    #[cfg(test)]
     fn finish(self, value: Self::Value) -> Atom;
 }
 
-struct FactoredOutput;
+struct FactoredOutput<'a>(TraceOutput<'a>);
 
-impl TraceAlgebra for FactoredOutput {
+impl TraceAlgebra for FactoredOutput<'_> {
     type Value = Atom;
     fn unit(&mut self, trace_unit: AtomView<'_>) -> Atom {
         trace_unit.to_owned()
@@ -260,14 +346,15 @@ impl TraceAlgebra for FactoredOutput {
         coefficient * value
     }
     fn add(&mut self, left: Atom, right: Atom) -> Atom {
-        left + right
+        self.0.retain(left + right)
     }
     fn subtract(&mut self, left: Atom, right: Atom) -> Atom {
-        left - right
+        self.0.retain(left - right)
     }
     fn sum(&mut self, values: Vec<Atom>) -> Atom {
-        Atom::add_many(values)
+        self.0.retain(Atom::add_many(values))
     }
+    #[cfg(test)]
     fn finish(self, value: Atom) -> Atom {
         value
     }
@@ -284,6 +371,7 @@ impl<'a, Output: TraceAlgebra> PairingTrace<'a, Output> {
             .as_view()
     }
 
+    #[cfg(test)]
     fn supports_sparse_output(&mut self, word: &[usize]) -> bool {
         // Extend only contracted words: a free 16-factor trace already has over
         // two million pairings. Sparse emission also bounds its row buffers.
@@ -333,6 +421,7 @@ impl<'a, Output: TraceAlgebra> PairingTrace<'a, Output> {
             .metric_product(metric.as_view(), coefficient, value)
     }
 
+    #[cfg(test)]
     fn with_output<Other: TraceAlgebra>(self, output: Other) -> PairingTrace<'a, Other> {
         debug_assert!(self.subwords.is_empty());
         PairingTrace {
@@ -609,21 +698,21 @@ pub(super) fn evaluate_generic(
         metrics: vec![None; width * width],
         trace_unit,
         subwords: HashMap::new(),
-        output: FactoredOutput,
+        output: FactoredOutput(output),
         canonical_arguments,
         summed_indices,
     };
-    if matches!(output, TraceOutput::Expanded) && trace.supports_sparse_output(&word) {
-        let mut trace = trace.with_output(sparse::SparseOutput::default());
-        let result = trace.evaluate(&word);
-        trace.output.finish(result)
-    } else {
-        let result = trace.evaluate(&word);
-        match output {
-            TraceOutput::Factored => result,
-            TraceOutput::Expanded => result.expand(),
-        }
+    #[cfg(test)]
+    if matches!(output, TraceOutput::Expanded) {
+        return if trace.supports_sparse_output(&word) {
+            let mut trace = trace.with_output(sparse::SparseOutput::default());
+            let result = trace.evaluate(&word);
+            trace.output.finish(result)
+        } else {
+            trace.evaluate(&word).expand()
+        };
     }
+    trace.evaluate(&word)
 }
 
 impl Monomial {
@@ -762,6 +851,34 @@ short_trace_dispatch!(2, 4, 6, 8, 10, 12, 14);
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+
+    #[test]
+    fn alias_materialization_matches_the_explicit_sparse_trace_oracle() {
+        let reps = crate::test_support::test_initialize();
+        for representation in [&reps.mink4, &reps.mink_d] {
+            let slots = (0..6)
+                .map(|position| representation.to_symbolic([Atom::num(93500 + position)]))
+                .collect::<Vec<_>>();
+            for word in [vec![0, 1, 2, 3, 4, 5], vec![0, 1, 2, 0, 3, 4, 5, 3]] {
+                let indices = word.iter().map(|&i| slots[i].as_view()).collect::<Vec<_>>();
+                let unit = Atom::num(4);
+                let expected =
+                    evaluate_generic(&indices, unit.as_view(), true, TraceOutput::Expanded);
+                let definitions = RefCell::new(TraceDefinitions::default());
+                let root = evaluate_generic(
+                    &indices,
+                    unit.as_view(),
+                    true,
+                    TraceOutput::Aliased(&definitions),
+                );
+                let value = SymbolicTensor::<PartialStructure>::infer(root)
+                    .unwrap()
+                    .with_aliases(definitions.into_inner().into_definitions().unwrap())
+                    .unwrap();
+                assert_eq!(value.expanded().unwrap().expression, expected);
+            }
+        }
+    }
 
     // Independent Clifford-algebra oracle in a Euclidean orthonormal basis.
     // Store all basis blades and multiply by each vector, without trace
@@ -929,7 +1046,7 @@ pub(super) mod tests {
                     .collect(),
                 trace_unit: unit.as_view(),
                 subwords: HashMap::new(),
-                output: FactoredOutput,
+                output: FactoredOutput(TraceOutput::Factored),
                 canonical_arguments: false,
                 summed_indices: Vec::new(),
             };
@@ -993,7 +1110,7 @@ pub(super) mod tests {
                     metrics: metrics.iter().cloned().map(Some).collect(),
                     trace_unit: unit.as_view(),
                     subwords: HashMap::new(),
-                    output: FactoredOutput,
+                    output: FactoredOutput(TraceOutput::Factored),
                     canonical_arguments: true,
                     summed_indices: Vec::new(),
                 };
@@ -1129,8 +1246,7 @@ pub(super) mod tests {
     fn long_axial_fallback_matches_a_clifford_component() {
         use super::super::{DiracFactor, DiracSimplifier};
         use crate::{
-            dirac::GammaSimplifier, epsilon::EpsilonSimplifier, gamma, gamma5,
-            shorthands::schoonschip::Schoonschip,
+            epsilon::EpsilonSimplifier, gamma, gamma5, shorthands::schoonschip::Schoonschip,
         };
         use spenso::{network::library::symbolic::ETS, p, q, vector};
         use symbolica::{atom::AtomCore, symbol};
@@ -1150,8 +1266,9 @@ pub(super) mod tests {
             .collect();
         // Force one long-trace step before projection so the fallback is
         // exercised. Projecting first would only test repeated-pair reductions.
-        let mut reduced =
-            DiracSimplifier::simplify_single_gamma5_trace(spin.as_view(), &parsed, 0).unwrap();
+        let mut reduced = DiracSimplifier::new(&crate::dirac::GammaSimplifySettings::default())
+            .simplify_single_gamma5_trace(spin.as_view(), &parsed, 0)
+            .unwrap();
         let basis = [
             p!(reps.mink4.to_symbolic([])),
             q!(reps.mink4.to_symbolic([])),
@@ -1164,8 +1281,16 @@ pub(super) mod tests {
                 .replace(index.to_pattern())
                 .with(basis[axis].to_pattern());
         }
-        let result = reduced
-            .simplify_gamma()
+        // Component substitution can create nested compact vectors; finish
+        // that existing notation before entering the strict typed boundary.
+        reduced = reduced.normalize_dots();
+        let result = crate::tensor::SymbolicTensor::infer((reduced).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
             .expand()
             .simplify_epsilon()
             .schoonschip()

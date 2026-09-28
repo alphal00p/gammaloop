@@ -79,7 +79,8 @@ for count in (1, 3, 5):
             TensorExpression(numerator.expand())
             .simplify_gamma()
             .expand()
-            .simplify_metrics()
+            .contract()
+            .to_expression()
             .to_dots()
         )
         assert tensor.is_scalar

@@ -305,3 +305,13 @@ __marimo__/
 
 # Raw tensor benchmark expressions; compact records are versioned.
 /examples/notebooks/tensor_benchmark_m1/
+
+# Local Symbolica evaluator executables.
+/gcc_compiled_evaluator_complex
+/gcc_compiled_evaluator_real
+
+# Untracked full-expression timing dumps; retain the compact versioned records.
+/examples/notebooks/tensor_contraction_parity.json
+/examples/notebooks/contraction_performance.json
+/examples/notebooks/dot_normalization.json
+/examples/notebooks/symbolica_main_update.json

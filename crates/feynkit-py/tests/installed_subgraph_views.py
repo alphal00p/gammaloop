@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import linnet
+from symbolica.community.spenso import TensorExpression
 
 fk = importlib.import_module(
     f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
@@ -47,17 +48,20 @@ assert type(internal.linnet_selection) is linnet.Subgraph
 assert internal.original.to_json() == snapshot
 assert internal.loop_count == diagram.loop_count
 assert empty.loop_count == 0
-assert empty.numerator_expression() == empty.denominator_expression() == 1
+assert (
+    empty.numerator_expression()
+    == empty.denominator_expression()
+    == TensorExpression(1)
+)
 assert full.numerator_expression() == diagram.numerator_expression()
 assert full.denominator_expression() == diagram.denominator_expression()
 
 # Nested selection and selection algebra retain the immutable physics owner.
 assert internal.subgraph(raw_full).linnet_selection == internal.linnet_selection
 assert internal.filter(edge=lambda edge: edge.data.is_external).loop_count == 0
-assert (
-    internal.filter(edge=lambda edge: edge.data.is_external).denominator_expression()
-    == 1
-)
+assert internal.filter(
+    edge=lambda edge: edge.data.is_external
+).denominator_expression() == TensorExpression(1)
 assert (internal | external).linnet_selection == full.linnet_selection
 assert (internal & external).linnet_selection == empty.linnet_selection
 assert (full - external).linnet_selection == internal.linnet_selection

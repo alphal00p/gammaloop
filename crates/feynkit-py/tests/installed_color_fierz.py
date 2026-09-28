@@ -5,19 +5,22 @@ Reference: https://feyncalc.github.io/FeynCalcBook/SUNSimplify.html
 
 from symbolica import E
 from symbolica.community.spenso import (
+    AUTO,
     ColorSimplifySettings,
     Representation,
     TensorExpression,
+)
+from symbolica.community.spenso import (
+    trace as tensor_trace,
 )
 
 for colors in (2, 3, 5):
     generator = TensorExpression.t(colors**2 - 1, colors)
     fundamental = Representation.cof(colors)
     adjoint = Representation.coad(colors**2 - 1)
-    loop = (
-        generator("b", "k", "l") * generator("a", "l", "m") * generator("c", "m", "k")
+    trace = tensor_trace(
+        fundamental, *(generator(a, AUTO, AUTO) for a in ("b", "a", "c"))
     )
-    trace = loop.collect_chains(fundamental)
     mixed = TensorExpression(
         generator("a", "i", "j").to_expression() * trace.to_expression()
     )
@@ -26,18 +29,24 @@ for colors in (2, 3, 5):
         (generator("c", "i", "k") * generator("b", "k", "j")).to_expression() / 2
         - identity.to_expression() * adjoint.g("b", "c").to_expression() / (4 * colors)
     )
-    reduced = mixed.simplify_color().to_cof_dimension_invariants()
+    reduced = mixed.simplify_color().to_expression().to_cof_dimension_invariants()
     assert reduced.to_expression().expand() == (
-        expected.simplify_color().to_expression().expand()
+        expected.simplify_color().to_expression().to_expression().expand()
     )
-    assert reduced.simplify_color().to_expression() == reduced.to_expression()
+    assert (
+        reduced.simplify_color().to_expression().to_expression()
+        == reduced.to_expression()
+    )
     disabled = ColorSimplifySettings(
         evaluate_traces=False, expand_cross_chain_fierz=False
     )
-    preserved = mixed.simplify_color(disabled)
+    preserved = mixed.simplify_color(disabled).to_expression()
     assert preserved.to_expression() != reduced.to_expression()
     assert (
-        preserved.simplify_color().to_cof_dimension_invariants().to_expression()
+        preserved.simplify_color()
+        .to_expression()
+        .to_cof_dimension_invariants()
+        .to_expression()
         == reduced.to_expression()
     )
     # Close the fundamental endpoints against the opposite generator word.
@@ -45,7 +54,11 @@ for colors in (2, 3, 5):
     other_trace = trace.spenso_conjugate()
     closed = TensorExpression(trace.to_expression() * other_trace.to_expression())
     trace_norm = (
-        closed.simplify_color().to_cof_dimension_invariants().simplify_metrics()
+        closed.simplify_color()
+        .to_expression()
+        .to_cof_dimension_invariants()
+        .contract()
+        .to_expression()
     )
     assert trace_norm.is_scalar
     assert trace_norm.to_expression() == E(str((colors**2 - 1) * (colors**2 - 2))) / (

@@ -1,11 +1,12 @@
 use ahash::{HashMap, HashMapExt};
-use idenso::{Cookable, dirac::GammaSimplifier, representations::Bispinor};
+use idenso::{Cookable, representations::Bispinor};
 use spenso::{
     algebra::upgrading_arithmetic::FallibleSub,
     iterators::IteratableTensor,
     network::{
         ExecutionResult, Sequential, SmallestDegree,
-        parsing::{ParseSettings, ShadowedStructure},
+        library::symbolic::{ETS, ExplicitKey},
+        parsing::{ParseSettings, ShadowedStructure, StrictTensorFilter},
     },
     shadowing::Concretize,
     structure::{
@@ -16,18 +17,25 @@ use spenso::{
     },
     tensors::{
         data::{DenseTensor, SparseOrDense},
-        parametric::atomcore::TensorAtomMaps,
+        parametric::{MixedTensor, ParamTensor},
     },
 };
-use spenso_hep_lib::{FUN_LIB, HEP_LIB};
+use spenso_hep_lib::{FUN_LIB, HepNet, hep_lib_atom};
 
-use symbolica::{atom::Atom, function, id::ConditionResult, parse_lit, symbol};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    function, parse_lit, symbol,
+};
 
-use crate::common::{HepAtomExt, gamma, gamma0, gammaadj, gammaconj, p, q, test_initialize, u, ub};
+use crate::common::{gamma, gamma0, gammaadj, gammaconj, p, q, test_initialize, u, ub};
 
 mod common;
 #[test]
 fn validate() {
+    let _ = (
+        spenso::vector_symbol!("spenso::p"),
+        spenso::vector_symbol!("spenso::q"),
+    );
     test_initialize();
     let mut const_map = HashMap::new();
     let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
@@ -41,10 +49,7 @@ fn validate() {
     .unwrap();
 
     for (i, a) in pt.iter_flat() {
-        const_map.insert(
-            a.clone(),
-            symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
-        );
+        const_map.insert(a.clone(), Atom::num(usize::from(i)));
     }
 
     let qt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
@@ -58,10 +63,7 @@ fn validate() {
     .unwrap();
 
     for (i, a) in qt.iter_flat() {
-        const_map.insert(
-            a.clone(),
-            symbolica::domains::float::Complex::new((usize::from(i) + 1) as f64 * 1., 0.),
-        );
+        const_map.insert(a.clone(), Atom::num(usize::from(i) + 1));
     }
 
     // gamma.reindex_storage(&[1, 2, 3]).unwrap().apply()
@@ -159,51 +161,91 @@ fn validate() {
     // );
 }
 
-fn validate_gamma(expr: Atom, const_map: HashMap<Atom, symbolica::domains::float::Complex<f64>>) {
-    let mut net = expr.parse_to_hep_net(&ParseSettings::default()).unwrap();
+fn validate_gamma(expr: Atom, const_map: HashMap<Atom, Atom>) {
+    let mut library = hep_lib_atom::<AbstractIndex, MixedTensor<f64, ExplicitKey<AbstractIndex>>>();
+    // Keep metric leaves exact too: the mixed library's generic factory uses f64.
+    for (representation, lorentzian) in [
+        (Minkowski {}.new_rep(4).to_lib(), true),
+        (Bispinor {}.new_rep(4).to_lib(), false),
+    ] {
+        let key = ExplicitKey::from_iter([representation; 2], ETS.metric, None);
+        let components = (0..16)
+            .map(|flat| {
+                Atom::num(if flat / 4 != flat % 4 {
+                    0
+                } else if lorentzian && flat > 0 {
+                    -1
+                } else {
+                    1
+                })
+            })
+            .collect();
+        library.insert_explicit(key.map_canonical(|structure| {
+            MixedTensor::Param(ParamTensor::param(
+                DenseTensor::from_storage_data(components, structure)
+                    .unwrap()
+                    .into(),
+            ))
+        }));
+    }
+    let settings =
+        ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
+    let mut net =
+        HepNet::<AbstractIndex>::try_from_view(expr.as_view(), &library, &settings).unwrap();
 
     println!("Expression: {}", expr);
-    let simplified = expr.simplify_gamma();
-
-    println!("Simplified to {}", simplified);
-    let mut net_simplified = simplified
-        .parse_to_hep_net(&ParseSettings::default())
+    let simplified = idenso::tensor::SymbolicTensor::infer(expr)
+        .unwrap()
+        .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
         .unwrap();
+
+    println!("Simplified to {}", simplified.root().expression());
+    // Keep the declared ports when simplification produces a typed zero.
+    let (mut net_simplified, scalar_definitions): (spenso_hep_lib::HepNet<AbstractIndex>, _) =
+        simplified
+            .to_network(
+                &library,
+                &*FUN_LIB,
+                &settings,
+                None,
+                |net| net.execute::<Sequential, SmallestDegree, _, _, _>(&library, &*FUN_LIB),
+                Ok,
+                |_| false,
+            )
+            .unwrap();
+    assert!(scalar_definitions.get_aliases().is_empty());
 
     println!("{}", net_simplified.dot_pretty());
-    net.execute::<Sequential, SmallestDegree, _, _, _>(&*HEP_LIB, &*FUN_LIB)
+    net.execute::<Sequential, SmallestDegree, _, _, _>(&library, &*FUN_LIB)
         .unwrap();
     net_simplified
-        .execute::<Sequential, SmallestDegree, _, _, _>(&*HEP_LIB, &*FUN_LIB)
+        .execute::<Sequential, SmallestDegree, _, _, _>(&library, &*FUN_LIB)
         .unwrap();
 
-    if let ExecutionResult::Val(v) = net.result_tensor(&*HEP_LIB).unwrap() {
-        if let ExecutionResult::Val(v2) = net_simplified.result_tensor(&*HEP_LIB).unwrap() {
+    if let ExecutionResult::Val(v) = net.result_tensor(&library).unwrap() {
+        if let ExecutionResult::Val(v2) = net_simplified.result_tensor(&library).unwrap() {
             let mut res = v.into_owned();
             println!("{res}");
             let mut res_simplified = v2.into_owned();
-            res.evaluate_complex(&const_map);
-            res_simplified.evaluate_complex(&const_map);
+            // Apply the same integer assignments exactly before comparing components.
+            // Rounding each route separately can turn exact cancellations into nonzero floats.
+            for (component, value) in &const_map {
+                res = res.replace(component.to_pattern()).with(value.to_pattern());
+                res_simplified = res_simplified
+                    .replace(component.to_pattern())
+                    .with(value.to_pattern());
+            }
             res = res.to_dense();
             res_simplified = res_simplified.to_dense();
 
             let mut sub = res.sub_fallible(&res_simplified).unwrap();
             sub.to_param();
             let sub = sub.try_into_parametric().unwrap();
-            let zero = sub
-                .zero_test(10, 0.01)
-                .iter_flat()
-                .fold(ConditionResult::True, |a, (_, b)| a & *b);
-
-            match zero {
-                ConditionResult::False => panic!(
-                    "Should be zero but \n{}\n minus simplified\n{}\n is \n{}",
-                    res, res_simplified, sub
-                ),
-                ConditionResult::Inconclusive => panic!("Inconclusive"),
-                _ => {
-                    println!("Works:res\n{}res_simplified\n{}", res, res_simplified)
-                }
+            for (index, component) in sub.iter_flat() {
+                assert!(
+                    component.is_zero(),
+                    "component {index}: {component}\noriginal: {res}\nsimplified: {res_simplified}"
+                );
             }
         } else {
             panic!("Expected tensor result");
@@ -218,6 +260,10 @@ mod failing {
 
     #[test]
     fn gl_03() {
+        let _ = (
+            spenso::vector_symbol!("spenso::P"),
+            spenso::vector_symbol!("spenso::K"),
+        );
         test_initialize();
         let mut const_map = HashMap::new();
         let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
@@ -231,10 +277,7 @@ mod failing {
         .unwrap();
 
         for (i, a) in pt.iter_flat() {
-            const_map.insert(
-                a.clone(),
-                symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
-            );
+            const_map.insert(a.clone(), Atom::num(usize::from(i)));
         }
 
         let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
@@ -248,10 +291,7 @@ mod failing {
         .unwrap();
 
         for (i, a) in pt.iter_flat() {
-            const_map.insert(
-                a.clone(),
-                symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
-            );
+            const_map.insert(a.clone(), Atom::num(usize::from(i)));
         }
 
         let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
@@ -265,28 +305,19 @@ mod failing {
         .unwrap();
 
         for (i, a) in pt.iter_flat() {
-            const_map.insert(
-                a.clone(),
-                symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
-            );
+            const_map.insert(a.clone(), Atom::num(usize::from(i)));
         }
 
-        const_map.insert(
-            parse_lit!(spenso::MC),
-            symbolica::domains::float::Complex::new(11232., 0.),
-        );
+        const_map.insert(parse_lit!(spenso::MC), Atom::num(11232));
 
-        const_map.insert(
-            parse_lit!(spenso::MW),
-            symbolica::domains::float::Complex::new(1231., 0.),
-        );
+        const_map.insert(parse_lit!(spenso::MW), Atom::num(1231));
 
         let expr = parse_lit!(
             1 / 6
                 ^ 4
                 ^ -2 * (MC * g(bis(4, hedge(1)), bis(4, hedge(2)))
                     - K(0, mink(4, edge(1, 1)))
-                        * gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))))
+                        * spenso::gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))))
                     * (-K(0, mink(4, edge(3, 1))) - K(1, mink(4, edge(3, 1))))
                     * (-g(mink(4, hedge(7)), mink(4, hedge(8))) + MW
                         ^ -2 * (-P(0, mink(4, hedge(7))) - K(1, mink(4, hedge(7))))
@@ -295,10 +326,10 @@ mod failing {
                         + K(0, mink(4, edge(5, 1)))
                         + K(1, mink(4, edge(5, 1))))
                     * g(mink(4, hedge(0)), mink(4, hedge(8)))
-                    * gamma(bis(4, hedge(10)), bis(4, hedge(6)), mink(4, hedge(11)))
-                    * gamma(bis(4, hedge(2)), bis(4, vertex(1, 1)), mink(4, hedge(7)))
-                    * gamma(bis(4, hedge(6)), bis(4, hedge(5)), mink(4, edge(3, 1)))
-                    * gamma(bis(4, hedge(9)), bis(4, hedge(10)), mink(4, edge(5, 1)))
+                    * spenso::gamma(bis(4, hedge(10)), bis(4, hedge(6)), mink(4, hedge(11)))
+                    * spenso::gamma(bis(4, hedge(2)), bis(4, vertex(1, 1)), mink(4, hedge(7)))
+                    * spenso::gamma(bis(4, hedge(6)), bis(4, hedge(5)), mink(4, edge(3, 1)))
+                    * spenso::gamma(bis(4, hedge(9)), bis(4, hedge(10)), mink(4, edge(5, 1)))
                     * projm(bis(4, hedge(5)), bis(4, hedge(1)))
                     * projm(bis(4, vertex(1, 1)), bis(4, hedge(9)))
                     * (1 / 2)

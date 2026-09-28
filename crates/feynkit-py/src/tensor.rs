@@ -33,7 +33,9 @@ use crate::error;
 ///
 /// >>> from symbolica import S, E
 /// >>> from symbolica.community import hep
-/// >>> D, k, p, mu, nu = S("D", "k", "p", "mu", "nu")
+/// >>> from symbolica.community.spenso import TensorName
+/// >>> D, mu, nu = S("D", "mu", "nu")
+/// >>> k, p = (TensorName.vector(name).to_expression() for name in ("k", "p"))
 /// >>> mink = S("spenso::mink")
 /// >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
 /// >>> numerator = k(mink(D, mu)) * k(mink(D, nu))
@@ -277,7 +279,8 @@ impl PyTensorReducer {
     /// >>> from symbolica import S
     /// >>> from symbolica.community import hep
     /// >>> D, mu, nu = S("hep_docs::D", "hep_docs::mu", "hep_docs::nu")
-    /// >>> k, p = S("hep_docs::k", "hep_docs::p")
+    /// >>> from symbolica.community.spenso import TensorName
+    /// >>> k, p = (TensorName.vector("hep_docs::" + name).to_expression() for name in ("k", "p"))
     /// >>> mink, dot = S("spenso::mink", "spenso::dot")
     /// >>> k_compact = k(mink(D))
     /// >>> p_compact = p(mink(D))

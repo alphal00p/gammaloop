@@ -3,13 +3,41 @@
 use feynkit_amplitude::{Amplitude, AmplitudeError, AmplitudeOptions};
 use feynkit_generator::{GenerationFilter, GenerationOptions, NumeratorGrouping, Process};
 use feynkit_model::Model;
-use idenso::{IndexTooling, shorthands::metric::MetricSimplifier};
-use spenso::structure::abstract_index::AbstractIndex;
+use idenso::{
+    CookMode, CookSettings, IndexTooling,
+    tensor::{ContractionSettings, SymbolicTensor},
+};
+use spenso::{
+    shadowing::TensorCollectFilter,
+    structure::{abstract_index::AbstractIndex, partial::PartialStructure},
+};
 use std::{collections::BTreeMap, sync::Arc};
 use symbolica::{
     atom::{Atom, AtomCore},
+    id::ConditionResult,
     parse,
 };
+
+fn canonical_tensor(expression: Atom) -> SymbolicTensor<PartialStructure> {
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let source = SymbolicTensor::infer(cooking.try_cook(expression.as_view()).unwrap()).unwrap();
+    let contracted = source
+        .contract(ContractionSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap();
+    let canonical = contracted
+        .expression()
+        .canonize::<AbstractIndex>(AbstractIndex::from)
+        .unwrap();
+    SymbolicTensor::infer(canonical).unwrap()
+}
 
 fn photons() -> Vec<Arc<feynkit_graph::FeynmanDiagram>> {
     let model =
@@ -43,15 +71,15 @@ fn generated_amplitude_aligns_ports_and_conjugates_involutively() {
     assert!(adjoint.is_conjugated());
     assert!(!adjoint.expression().to_plain_string().contains("conj"));
     let roundtrip = adjoint.conjugate().unwrap();
-    let canonical = |a: Atom| {
-        a.expand()
-            .simplify_metrics()
-            .canonize::<AbstractIndex>(AbstractIndex::from)
-            .unwrap()
-    };
     assert_eq!(
-        canonical(roundtrip.expression()),
-        canonical(amplitude.expression())
+        canonical_tensor(roundtrip.expression())
+            .coefficients_equal(
+                &canonical_tensor(amplitude.expression()),
+                TensorCollectFilter::<0>::Tensors,
+            )
+            .unwrap(),
+        ConditionResult::True,
+        "conjugation must be involutive by exact coefficient proof"
     );
 }
 
@@ -105,14 +133,19 @@ fn coherent_square_includes_cross_diagram_interference() {
             .sum_spins(&[0, 1, 2, 3], true, &BTreeMap::new(), &BTreeMap::new())
             .unwrap()
             .expression()
-            .expand()
-            .simplify_metrics()
-            .canonize::<AbstractIndex>(AbstractIndex::from)
-            .unwrap()
+            .clone()
     };
     // Two identical diagrams give |2 A|² = 4 |A|², not the diagonal-only 2 |A|².
-    let difference = normalize(&doubled) - normalize(&one) * Atom::num(4);
-    assert!(difference.expand().is_zero());
+    assert_eq!(
+        canonical_tensor(normalize(&doubled))
+            .coefficients_equal(
+                &canonical_tensor(normalize(&one) * Atom::num(4)),
+                TensorCollectFilter::<0>::Tensors,
+            )
+            .unwrap(),
+        ConditionResult::True,
+        "the coherent square must include every interference term"
+    );
 }
 
 #[test]
@@ -258,9 +291,9 @@ fn loop_square_keeps_independent_integration_momenta() {
     assert!(
         squared
             .expression()
-            .contains(&parse!("gammalooprs::K(0,spenso::mink(4))"))
+            .contains(parse!("gammalooprs::K(0,spenso::mink(4))"))
     );
-    assert!(squared.expression().contains(&parse!(
+    assert!(squared.expression().contains(parse!(
         "gammalooprs::K(feynkit_amplitude::bra(0),spenso::mink(4))"
     )));
 }

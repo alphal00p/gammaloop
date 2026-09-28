@@ -91,9 +91,8 @@ for coordinate_index in (0, 1):
                 )
                 .simplify_gamma()
                 .expand()
-                .simplify_gamma()
-                .expand()
-                .simplify_metrics()
+                .contract()
+                .to_expression()
                 .to_dots()
             )
             assert scalar.is_scalar

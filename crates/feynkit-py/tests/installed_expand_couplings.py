@@ -39,7 +39,7 @@ for source in (
 
 cancelled = model.expand_couplings((coupling - analytic) * ordered)
 assert isinstance(cancelled, TensorExpression)
-assert cancelled == 0 and cancelled.rank == 2
+assert not cancelled and cancelled.rank == 2
 assert model.expand_couplings(coupling * ordered) == analytic * ordered
 
 # A user-defined vanishing coupling must retain the rank of an open tensor too.
@@ -48,7 +48,7 @@ next(c for c in definition["couplings"] if c["name"] == "GC_11")["expression"] =
 zero_model = hep.Model.from_json(json.dumps(definition))
 zero = zero_model.expand_couplings(coupling * ordered)
 assert isinstance(zero, TensorExpression)
-assert zero == 0 and zero.structure.slots == ordered.structure.slots
+assert not zero and zero.structure.slots == ordered.structure.slots
 
 # Exercise a factored generated numerator without expanding its local factors.
 diagram = model.process(["e-", "e+"], ["a", "a"]).generate_diagrams(progress=None)[0]
@@ -56,7 +56,7 @@ numerator = diagram.numerator_expression(in_lmb=True)
 expanded = model.expand_couplings(numerator)
 assert expanded.structure.slots == numerator.structure.slots
 assert expanded.to_expression() == model.expand_couplings(numerator.to_expression())
-assert not expanded.matches(S("UFO::GC_3"))
+assert not expanded.to_expression().matches(S("UFO::GC_3"))
 assert model.expand_couplings(E("0")) == 0
 print(
     "Coupling expansion: overloads, coefficients, ordered ports, zeros and diagram passed"

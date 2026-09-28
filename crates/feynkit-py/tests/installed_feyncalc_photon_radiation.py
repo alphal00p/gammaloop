@@ -9,7 +9,13 @@ https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/Ga-QQbarGl
 import numpy as np
 from symbolica import E, S, Symbol
 from symbolica.community import hep
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.spenso import (
+    CookSettings,
+    GammaSimplifySettings,
+    TensorExpression,
+)
+
+index_scope = S("spenso::index_scope")
 
 model = hep.Model.standard_model()
 P = S("gammalooprs::P")
@@ -66,17 +72,17 @@ def calculate(outgoing, kin):
             * diagram.numerator_prefactor_expression()
             / denominator
         )
-    operator = TensorExpression(sum(terms, E("0")).expand())
+    operator = TensorExpression(sum(terms, E("0")))
     adjoint = (
         operator.dirac_adjoint()
-        .expand()
-        .simplify_gamma0()
+        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .to_expression()
         .to_expression()
         .replace(conj(P(a, b)), P(a, b))
     )
     for real in (mass, ee, gs, A, B, C):
         adjoint = adjoint.replace(conj(real), real)
-    adjoint = TensorExpression(adjoint).wrap_indices(wrap)
+    adjoint = TensorExpression(adjoint).wrap_indices(wrap).to_expression()
     color_projector = E("1")
     for position, name in enumerate(["a", *outgoing]):
         particle = model.particle(name)
@@ -89,7 +95,7 @@ def calculate(outgoing, kin):
                 continue
             closure = metric(
                 slot.dual().to_expression(),
-                original.replace(ports[position], wrap(ports[position])),
+                original.replace(ports[position], index_scope(wrap, ports[position])),
             )
             match = next(
                 closure.match(particle.color_sum(left, right), max_level=0), None
@@ -107,26 +113,25 @@ def calculate(outgoing, kin):
         TensorExpression(generic, cook_indices=CookSettings.indices())
         .simplify_color()
         .to_expression()
+        .to_expression()
         .replace(dA, Nc**2 - 1)
     )
     colored = TensorExpression(colored).to_cof_dimension_invariants()
     print("COLOR PASS", flush=True)
     spins = model.particle(outgoing[0]).spin_sum(
-        P(1), wrap(ports[2]), ports[1]
-    ) * model.particle(outgoing[1]).spin_sum(P(2), ports[2], wrap(ports[1]))
+        P(1), index_scope(wrap, ports[2]), ports[1]
+    ) * model.particle(outgoing[1]).spin_sum(
+        P(2), ports[2], index_scope(wrap, ports[1])
+    )
     traced = (
         TensorExpression(
             colored.to_expression() * spins.replace(S("UFO::MM"), mass),
             cook_indices=CookSettings.indices(),
         )
-        .expand()
         .simplify_gamma()
-        .expand()
-        .simplify_gamma()
+        .to_expression()
     )
-    reduced = kin.apply(traced.expand().simplify_metrics().to_dots())
-    pieces = [(tensor, coeff.together()) for tensor, coeff in reduced.expand_mink()]
-    print("STRUCTURES", len(pieces), flush=True)
+    reduced = kin.apply(traced.contract().to_expression().to_dots())
     results = {}
     modes = (
         [
@@ -141,13 +146,13 @@ def calculate(outgoing, kin):
     )
     for mode in modes:
         photon = model.particle("a").spin_sum(
-            P(0), ports[0], wrap(ports[0]), covariant=True
+            P(0), ports[0], index_scope(wrap, ports[0]), covariant=True
         )
         gluon = (
             model.particle("g").spin_sum(
                 P(3),
                 ports[3],
-                wrap(ports[3]),
+                index_scope(wrap, ports[3]),
                 covariant=mode in ("covariant", "photon Ward", "gluon Ward"),
                 reference=P(1)
                 if mode == "quark reference"
@@ -160,25 +165,25 @@ def calculate(outgoing, kin):
         )
         if mode == "gluon Ward":
             gluon = P(3, S("spenso::mink")(4, ports[3])) * P(
-                3, S("spenso::mink")(4, wrap(ports[3]))
+                3, S("spenso::mink")(4, index_scope(wrap, ports[3]))
             )
         if mode == "photon Ward":
             photon = P(0, S("spenso::mink")(4, ports[0])) * P(
-                0, S("spenso::mink")(4, wrap(ports[0]))
+                0, S("spenso::mink")(4, index_scope(wrap, ports[0]))
             )
-        contractions = []
-        for tensor, coeff in pieces:
-            contracted = (
-                TensorExpression(
-                    (tensor * photon * gluon).expand(),
-                    cook_indices=CookSettings.indices(),
-                )
-                .simplify_metrics()
-                .to_dots()
+        # The shared contractor selects the connected tensor factors while
+        # retaining scalar coefficients; no coefficient-splitting API is needed.
+        contracted = (
+            TensorExpression(
+                reduced.to_expression() * photon * gluon,
+                cook_indices=CookSettings.indices(),
             )
-            assert contracted.is_scalar
-            contractions.append(coeff * kin.apply(contracted.to_expression()))
-        results[mode] = sum(contractions, E("0")).together()
+            .contract()
+            .to_expression()
+            .to_dots()
+        )
+        assert contracted.is_scalar
+        results[mode] = kin.apply(contracted.to_expression()).together()
         print("PASS", outgoing, mode, flush=True)
     for mode in [name for name in modes if name.endswith("Ward")]:
         assert results[mode] == E("0")

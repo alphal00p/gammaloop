@@ -9,8 +9,11 @@ use color_eyre::Result;
 use colored::Colorize;
 use gammalooprs::model::ModelGammaLoopExt;
 use gammalooprs::uv::ApproximationType;
-use idenso::color::{ColorSimplifier, CS};
-use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
+use idenso::{
+    color::{ColorSimplifySettings, CS},
+    tensor::SymbolicTensor,
+    CookMode, CookSettings,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
@@ -116,13 +119,19 @@ impl Renormalize {
                 .renormalization_part(&state.model, &settings)?
                 .expression;
 
-            part =
-                state
-                    .model
-                    .apply_parameter_replacement_rules(&state.model.expand_couplings(
-                        &part.simplify_color().expand().simplify_metrics().to_dots(),
-                    ))
-                    .collect_factors();
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let simplified = SymbolicTensor::infer(cooking.try_cook(part.as_view())?)?
+                .simplify_color(ColorSimplifySettings::default())?
+                .contract(Default::default())?
+                .to_dots()?
+                .resolved()?;
+            let simplified = cooking.uncook(simplified.expression().as_view());
+            part = state
+                .model
+                .apply_parameter_replacement_rules(&state.model.expand_couplings(&simplified))
+                .collect_factors();
 
             if self.align_to_rqft {
                 part = (part

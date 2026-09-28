@@ -65,17 +65,23 @@ for sign in (1, -1):
     assert len(color.structure.slots) == 3
     conjugate = color.spenso_conjugate()
     assert conjugate.spenso_conjugate().to_expression() == color.to_expression()
-    norm = TensorExpression(
-        color.to_expression() * conjugate.to_expression()
-    ).simplify_epsilon()
+    norm = (
+        TensorExpression(color.to_expression() * conjugate.to_expression())
+        .simplify_epsilon()
+        .to_expression()
+    )
     assert norm.is_scalar
     assert norm.to_expression() == E("6")
     # One incoming triplet is averaged; the two distinct outgoing species are summed.
-    average = TensorExpression(
-        model.particle_by_pdg(sign * (pdg_base + 1)).color_sum(
-            S("i"), S("i"), average=True
+    average = (
+        TensorExpression(
+            model.particle_by_pdg(sign * (pdg_base + 1)).color_sum(
+                S("i"), S("i"), average=True
+            )
         )
-    ).simplify_metrics()
+        .contract()
+        .to_expression()
+    )
     assert average.to_expression() == E("1")
     print(
         f"Generated {'Epsilon' if sign > 0 else 'EpsilonBar'}: dual conjugate, norm 6 passed"

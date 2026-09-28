@@ -110,9 +110,9 @@ for target in targets:
     assert series.coefficient(eps**-2).together() == E("0")
     finite = dict(series.coefficient_list(eps))[E("1")].together()
     for invariant, first_mass, second_mass in points:
-        a0 = oneloop.A0(first_mass, 1.0)
-        a1 = oneloop.A0(second_mass, 1.0)
-        b0 = oneloop.B0(invariant, first_mass, second_mass, 1.0)
+        a0 = oneloop.a0(first_mass, 1.0)
+        a1 = oneloop.a0(second_mass, 1.0)
+        b0 = oneloop.b0(invariant, first_mass, second_mass, 1.0)
         assert abs(complex(a0[1]) - first_mass) < 1e-12
         assert abs(complex(a1[1]) - second_mass) < 1e-12
         assert abs(complex(b0[1]) - 1) < 1e-12

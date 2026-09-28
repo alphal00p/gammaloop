@@ -18,7 +18,8 @@ from symbolica.community.spenso import TensorExpression
 model = hep.Model.phi4()
 particle = model.particle("phi")
 mass, coupling = S("UFO::mass", "UFO::lam")
-M, s, t, u, mu2, p2, eps = S(
+d, M, s, t, u, mu2, p2, eps = S(
+    "phi4_one::d",
     "phi4_one::M",
     "phi4_one::s",
     "phi4_one::t",
@@ -88,9 +89,16 @@ for diagram in diagrams["vertex"]:
         * diagram.numerator_prefactor_expression()
     )
     assert coefficient == coupling**2 / 2
-    reduction = oneloop.IntegralFamily(
-        [oneloop.Propagator(M)] * 2, [invariant]
-    ).reduce()
+    bubble_kinematics = hep.Kinematics(d, momenta=[K(0), P(0)]).with_scalar_product(
+        P(0), P(0), invariant
+    )
+    bubble_family = hep.IntegralFamily(
+        [K(0)],
+        [P(0)],
+        [bubble_kinematics.scalar_product(q, q) - M for q in (K(0), K(0) - P(0))],
+        kinematics=bubble_kinematics,
+    )
+    reduction = oneloop.reduce(bubble_family, [1, 1])
     assert len(reduction.terms) == 1
     channel_coefficients[invariant] = coefficient
     channel_reductions[invariant] = reduction
@@ -103,7 +111,7 @@ loop_poles, finite_parts = {}, {}
 vertex_finite, vertex_pole = zero, zero
 for invariant, reduction in channel_reductions.items():
     coefficients = oneloop.reduction_coefficients(reduction, mu2)
-    master = reduction.terms[0][1].to_oneloopmaster(mu2)
+    master = reduction.terms[0][1].to_expression(mu2)
     pole_expression = oneloop.get_expression(master, coefficient=-1)
     pole = oneloop.select_branch(
         pole_expression, [Replacement(invariant, one), Replacement(M, one)]
@@ -121,8 +129,15 @@ self_numerator = (
 assert self_numerator == coupling / 2
 self_family = self_diagram.propagator_family()
 assert len(self_family.denominators) == 1
-self_reduction = oneloop.IntegralFamily([oneloop.Propagator(M)], []).reduce()
-self_master = self_reduction.terms[0][1].to_oneloopmaster(mu2)
+tadpole_kinematics = hep.Kinematics(d, momenta=[K(0)])
+tadpole_family = hep.IntegralFamily(
+    [K(0)],
+    [],
+    [tadpole_kinematics.scalar_product(K(0), K(0)) - M],
+    kinematics=tadpole_kinematics,
+)
+self_reduction = oneloop.reduce(tadpole_family, [1])
+self_master = self_reduction.terms[0][1].to_expression(mu2)
 self_pole = (
     self_numerator / coupling * oneloop.get_expression(self_master, coefficient=-1)
 )
@@ -185,7 +200,13 @@ for label, legs, count in [("self_energy", 1, 2), ("vertex", 2, 1)]:
         numerator = ct_model.expand_couplings(
             diagram.numerator_expression().to_expression()
         )
-        numerator = TensorExpression(numerator.expand()).to_dots().to_expression()
+        numerator = (
+            TensorExpression(numerator)
+            .contract()
+            .to_expression()
+            .to_dots()
+            .to_expression()
+        )
         numerator = diagram.momentum_basis().route_expression(numerator)
         amplitude += (
             self_kinematics.apply(numerator)
@@ -260,7 +281,7 @@ for mass_squared, sv, tv, scale in points:
             expected = (
                 -np.dot(weights, np.log((mass_squared - qv * x * (1 - x)) / scale)) / 2
             )
-        actual = complex(oneloop.B0(qv, mass_squared, mass_squared, scale)[0])
+        actual = complex(oneloop.b0(qv, mass_squared, mass_squared, scale)[0])
         assert abs(actual - expected) < 2e-10, (qv, mass_squared, actual, expected)
         reference += expected / 2
     actual = complex(

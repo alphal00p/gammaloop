@@ -121,9 +121,9 @@ for name, incoming, outgoing in [
                 diagram.numerator_expression().to_expression() * projector
             )
             numerator = (
-                TensorExpression(numerator.expand())
+                TensorExpression(numerator)
                 .simplify_gamma()
-                .expand()
+                .to_expression()
                 .to_dots()
                 .to_expression()
             )

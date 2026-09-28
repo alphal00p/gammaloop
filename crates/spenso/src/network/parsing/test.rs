@@ -26,20 +26,9 @@ fn chain_factor_with_external(name: Symbol, external: Atom) -> Atom {
         .finish()
 }
 
-fn opaque_fast_settings() -> ParseSettings {
+fn opaque_settings() -> ParseSettings {
     ParseSettings {
-        shorthand_parsing: ShorthandParsing::Opaque {
-            inference: StructureInferenceMode::Fast,
-        },
-        ..Default::default()
-    }
-}
-
-fn opaque_expanded_settings() -> ParseSettings {
-    ParseSettings {
-        shorthand_parsing: ShorthandParsing::Opaque {
-            inference: StructureInferenceMode::Expanded,
-        },
+        shorthand_parsing: ShorthandParsing::Opaque,
         ..Default::default()
     }
 }
@@ -105,7 +94,7 @@ fn nested_chain_and_trace_scopes_are_rejected_before_parsing() {
         ));
     }
     assert!(matches!(
-        outer_chain(wrapped_inner).parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings()),
+        outer_chain(wrapped_inner).parse_to_atom_net::<AbstractIndex>(&opaque_settings()),
         Err(TensorNetworkError::ChainNesting(_))
     ));
 }
@@ -135,7 +124,7 @@ fn sibling_and_singly_wrapped_chain_scopes_remain_valid() {
     );
     assert!(
         wrapped
-            .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+            .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
             .is_ok()
     );
 }
@@ -155,19 +144,18 @@ fn direct_structure_inference_rejects_nested_chain_scopes() {
         [inner],
     );
 
-    for mode in [
-        StructureInferenceMode::Fast,
-        StructureInferenceMode::Expanded,
-    ] {
-        assert!(matches!(
-            OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_atom(
-                expression.as_view(),
-                mode,
-            ),
-            Err(StructureError::ParsingError(message))
-                if message.contains("cannot be nested")
-        ));
-    }
+    assert!(matches!(
+        OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_atom(
+            expression.as_view(),
+            &mut crate::structure::slot::SlotMatcher::default(),
+        ),
+        Err(StructureError::ParsingError(message)) if message.contains("cannot be nested")
+    ));
+    assert!(
+        expression
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .is_err()
+    );
 }
 
 #[test]
@@ -181,7 +169,7 @@ fn parse_chain_as_opaque_tensor() {
     );
 
     let parsed = expr
-        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+        .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
@@ -207,11 +195,7 @@ fn parse_projected_trace_sum_preserves_tensor_structure() {
     ];
     let symmetric = trace!(&rep, crate::shadowing::sym(factors.clone()));
     let antisymmetric = trace!(&rep, crate::shadowing::antisym(factors));
-    for settings in [
-        opaque_fast_settings(),
-        opaque_expanded_settings(),
-        ParseSettings::default(),
-    ] {
+    for settings in [opaque_settings(), ParseSettings::default()] {
         let parsed = (&symmetric + &antisymmetric)
             .parse_to_atom_net::<AbstractIndex>(&settings)
             .unwrap();
@@ -221,7 +205,7 @@ fn parse_projected_trace_sum_preserves_tensor_structure() {
 }
 
 #[test]
-fn parse_chain_as_opaque_tensor_with_expanded_structure() {
+fn parse_chain_opaque_structure_matches_expanded_graph() {
     let rep = mink4();
     let expr = chain!(
         slot!(rep, i),
@@ -231,12 +215,19 @@ fn parse_chain_as_opaque_tensor_with_expanded_structure() {
     );
 
     let parsed = expr
-        .parse_to_atom_net::<AbstractIndex>(&opaque_expanded_settings())
+        .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
     assert_eq!(parsed.graph.n_nodes(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
+    let expanded = expr
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    assert_eq!(
+        OrderedStructure::new(parsed.graph.dangling_indices()).canonical(),
+        OrderedStructure::new(expanded.graph.dangling_indices()).canonical(),
+    );
 }
 
 #[test]
@@ -375,7 +366,7 @@ fn parse_trace_as_opaque_tensor_with_fast_structure() {
     );
 
     let parsed = expr
-        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+        .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
@@ -383,7 +374,7 @@ fn parse_trace_as_opaque_tensor_with_fast_structure() {
 }
 
 #[test]
-fn parse_trace_as_opaque_tensor_with_expanded_structure() {
+fn parse_trace_opaque_structure_matches_expanded_graph() {
     let trace_rep = Lorentz {}.new_rep(4);
     let external_rep = mink4();
     let expr = trace!(
@@ -403,12 +394,19 @@ fn parse_trace_as_opaque_tensor_with_expanded_structure() {
     );
 
     let parsed = expr
-        .parse_to_atom_net::<AbstractIndex>(&opaque_expanded_settings())
+        .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
     assert_eq!(parsed.graph.n_nodes(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 3);
+    let expanded = expr
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    assert_eq!(
+        OrderedStructure::new(parsed.graph.dangling_indices()).canonical(),
+        OrderedStructure::new(expanded.graph.dangling_indices()).canonical(),
+    );
 }
 
 #[test]
@@ -492,7 +490,7 @@ fn opaque_schoonschip_vectors_parse_as_tensor_scalar() {
     let expr = p!(q!(mink!(4)));
 
     let parsed = expr
-        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+        .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::Scalar);
@@ -505,7 +503,7 @@ fn parse_slot_metric_as_tensor() {
     let expr = ETS.metric(slot!(rep, i).to_atom(), slot!(rep, j).to_atom());
 
     let parsed = expr
-        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+        .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
@@ -735,7 +733,7 @@ fn opaque_schoonschipped_metric_product_parses_as_tensor_scalar() {
     );
 
     let parsed = expr
-        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+        .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::Scalar);
@@ -883,6 +881,11 @@ fn compact_inner_product_contracts_only_repeated_spectators() {
 
 #[test]
 fn multiple_compact_axes_do_not_choose_an_implicit_contraction() {
+    let state = ParseState::<AbstractIndex>::default();
+    let materializer = materialization::SchoonschipMaterializer::with_mode(
+        &state,
+        SchoonschipExpansionMode::full(),
+    );
     let rep = mink4();
     for other in [rep.to_symbolic([]), Lorentz {}.new_rep(4).to_symbolic([])] {
         let expr = function!(
@@ -890,9 +893,7 @@ fn multiple_compact_axes_do_not_choose_an_implicit_contraction() {
             tensor!(compact_left, rep.to_symbolic([]), &other),
             tensor!(compact_right, rep.to_symbolic([]), &other)
         );
-        assert!(
-            !materialization::SchoonschipMaterializer::<AbstractIndex>::contains_schoonschip_shorthand(expr.as_view())
-        );
+        assert!(!materializer.contains_schoonschip_shorthand(expr.as_view()));
     }
 }
 
@@ -906,7 +907,7 @@ fn opaque_schoonschipped_dot_product_parses_as_tensor_scalar() {
     );
 
     let parsed = expr
-        .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+        .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::Scalar);
@@ -971,11 +972,7 @@ fn dual_slot_metrics_remain_tensors_in_products_and_sums() {
         StrictTensorFilter::TaggedChecked,
         StrictTensorFilter::ContainsReps,
     ] {
-        for mut settings in [
-            ParseSettings::default(),
-            opaque_fast_settings(),
-            opaque_expanded_settings(),
-        ] {
+        for mut settings in [ParseSettings::default(), opaque_settings()] {
             settings.strict_tensor_filter = filter;
             for precontract in [false, true] {
                 settings.precontract_scalars = precontract;
@@ -995,4 +992,249 @@ fn dual_slot_metrics_remain_tensors_in_products_and_sums() {
             }
         }
     }
+}
+
+#[test]
+fn parser_and_inference_share_serialized_dummy_reservations() {
+    let state = ParseState::<AbstractIndex>::default();
+    let written = AbstractIndex::new_dummy_at(1_000_000);
+    let slot = Minkowski {}
+        .new_slot::<AbstractIndex, _, _>(4, written)
+        .to_atom();
+    state.reserve_indices(slot.as_view());
+    let clone = state.clone();
+    let first = state.next();
+    let second = clone.next();
+    assert_ne!(first.to_atom(), written.to_atom());
+    assert_ne!(second.to_atom(), first.to_atom());
+    let global = state.fresh_index();
+    let another = ParseState::<AbstractIndex>::default().fresh_index();
+    assert_ne!(global.to_atom(), another.to_atom());
+    assert!(clone.reserved_indices.borrow().contains(&global.to_atom()));
+}
+
+#[test]
+fn opaque_leaf_keeps_logical_order_separate_from_component_storage() {
+    let slots = [Minkowski {}.new_slot(4, 31), Minkowski {}.new_slot(4, 7)];
+    let source = FunctionBuilder::new(tensor_symbol!(logical_network_leaf))
+        .add_args(slots.map(|slot| slot.to_atom()))
+        .finish();
+    let network = source
+        .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
+        .unwrap();
+    let node = network.graph.graph.node_id(network.graph.head());
+    assert_eq!(
+        network.graph.logical_slots(node).unwrap(),
+        slots.map(|slot| slot.to_lib())
+    );
+    assert_ne!(
+        network.graph.slots(node),
+        network.graph.logical_slots(node).unwrap()
+    );
+    assert_eq!(
+        network.graph.logical_slot_order.len(),
+        network.graph.graph.n_hedges()
+    );
+}
+
+#[test]
+fn registered_vector_sums_preserve_all_ports() {
+    let a = slot!(mink4(), sum_a).to_atom();
+    let b = slot!(mink4(), sum_b).to_atom();
+    let c = slot!(mink4(), sum_c).to_atom();
+    let q = crate::vector_symbol!(sum_registered_q);
+    let source = function!(q, 2, &c) * crate::g!(&a, &b) + function!(q, 4, &b) * crate::g!(&a, &c);
+    for precontract_scalars in [false, true] {
+        let network = source
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings {
+                precontract_scalars,
+                ..opaque_settings()
+            })
+            .unwrap();
+        network.graph.graph.check().unwrap();
+        assert_eq!(network.graph.dangling_indices().len(), 3);
+    }
+}
+
+#[test]
+fn precontracted_scalar_sources_keep_factorization_and_normalizer_calls() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static CALLS: AtomicUsize = AtomicUsize::new(0);
+    let hook = symbol!(
+        "parser_scalar_fold::hook";
+        Scalar;
+        norm = |_, _| { CALLS.fetch_add(1, Ordering::SeqCst); }
+    );
+    let (a, b, c, d) = symbol!(
+        "parser_scalar_fold::a",
+        "parser_scalar_fold::b",
+        "parser_scalar_fold::c",
+        "parser_scalar_fold::d"
+    );
+    let left = Atom::var(a) + Atom::var(b);
+    let right = Atom::var(c) + Atom::var(d);
+    let payload = function!(hook, left.clone());
+    let sources = [
+        left.clone().pow(3) * &right * &payload,
+        left.clone().pow(3) + right.clone().pow(2) + &payload,
+        Atom::num(0.1) * &left * &right * &payload,
+        Atom::num(0.1) * &left + Atom::num(0.2) * &right + &payload,
+        &left + &left,
+    ];
+    for source in sources {
+        CALLS.store(0, Ordering::SeqCst);
+        let parsed = source
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert_eq!(parsed.state, NetworkState::PureScalar);
+        assert_eq!(parsed.store.scalar, vec![source]);
+        assert!(parsed.store.tensors.is_empty());
+        assert_eq!(parsed.graph.n_nodes(), 1);
+        assert_eq!(CALLS.load(Ordering::SeqCst), 0);
+    }
+}
+
+#[test]
+fn mixed_scalar_coefficient_retains_order_and_tensor_admission() {
+    let (a, b, c, d) = symbol!(
+        "parser_mixed_fold::a",
+        "parser_mixed_fold::b",
+        "parser_mixed_fold::c",
+        "parser_mixed_fold::d"
+    );
+    let coefficient =
+        Atom::num(0.1) * (Atom::var(a) + Atom::var(b)).pow(3) * (Atom::var(c) + Atom::var(d));
+    let tensor = tensor!(parser_mixed_fold_tensor, mink!(4, parser_mixed_mu));
+    let source = &coefficient * &tensor;
+    let parsed = source
+        .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    assert_eq!(parsed.store.scalar, vec![coefficient.clone()]);
+    assert_eq!(parsed.graph.dangling_indices().len(), 1);
+    let dot = function!(
+        SPENSO_TAG.dot,
+        vector!(parser_mixed_p, mink!(4)),
+        vector!(parser_mixed_q, mink!(4))
+    );
+    let parsed_sum = (&coefficient + dot)
+        .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
+        .unwrap();
+    assert_eq!(parsed_sum.store.scalar, vec![coefficient]);
+    assert_eq!(parsed_sum.store.tensors.len(), 1);
+    assert!(
+        (source + Atom::one())
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .is_err()
+    );
+}
+
+#[test]
+fn parser_scope_reuse_keeps_custom_inference_checked() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static CALLS: AtomicUsize = AtomicUsize::new(0);
+    struct CustomStructure;
+    impl StructureFromAtom for CustomStructure {
+        fn structure_from_atom(
+            value: AtomView<'_>,
+            matcher: &mut SlotMatcher,
+        ) -> Result<Canonicalized<Self>, StructureError> {
+            CALLS.fetch_add(1, Ordering::SeqCst);
+            OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_atom(value, matcher)
+                .map(|structure| structure.map_canonical(|_| Self))
+        }
+    }
+    let rep = mink4();
+    let source = tensor!(parser_scope_reuse_custom, mink!(4, scope_reuse_i));
+    source.validate_chain_like_nesting().unwrap();
+    let state = ParseState::<AbstractIndex> {
+        chain_scope_validated: true,
+        ..Default::default()
+    }
+    .with_view(source.as_view());
+    assert_eq!(state.current_view(), source.as_view());
+    CustomStructure::structure_from_parser(&state).unwrap();
+    assert_eq!(CALLS.load(Ordering::SeqCst), 1);
+
+    // An unvalidated state, including one rebound after normalization, retains
+    // the public checked entry for both built-in structure implementations.
+    let nested = SPENSO_TAG.trace(
+        rep.to_symbolic([]),
+        [SPENSO_TAG.trace(
+            rep.to_symbolic([]),
+            [chain_factor(tensor_symbol!(scope_reuse_inner))],
+        )],
+    );
+    let generated = state.materialized().with_view(nested.as_view());
+    assert!(!generated.chain_scope_validated);
+    assert!(matches!(
+        OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_parser(&generated),
+        Err(StructureError::ParsingError(message)) if message.contains("cannot be nested")
+    ));
+    assert!(matches!(
+        ShadowedStructure::<AbstractIndex>::structure_from_parser(&generated),
+        Err(StructureError::ParsingError(message)) if message.contains("cannot be nested")
+    ));
+    assert!(CustomStructure::structure_from_parser(&generated).is_err());
+    assert_eq!(CALLS.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn scalar_broadcast_descent_does_not_inherit_scope_validation() {
+    let rep = mink4();
+    let inner = SPENSO_TAG.trace(
+        rep.to_symbolic([]),
+        [chain_factor(tensor_symbol!(scalar_broadcast_scope_leaf))],
+    );
+    let nested = SPENSO_TAG.trace(rep.to_symbolic([]), [inner.clone()]);
+    let broadcast = symbol!("parser_scope::scalar_broadcast"; Scalar; tags = [
+        SPENSO_TAG.broadcast.clone()
+    ]);
+    let source = function!(broadcast, nested);
+    // Scalar metadata is intentionally opaque to the root validator, whereas
+    // the explicit broadcast parser descends through this same function.
+    source.validate_chain_like_nesting().unwrap();
+    let error = source
+        .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
+        .unwrap_err();
+    assert!(error.to_string().contains("cannot be nested"), "{error}");
+    assert!(
+        function!(broadcast, inner)
+            .parse_to_atom_net::<AbstractIndex>(&opaque_settings())
+            .is_ok()
+    );
+}
+
+#[test]
+fn materialized_callback_output_rechecks_chain_scope() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static LOWERED: AtomicUsize = AtomicUsize::new(0);
+    let vector = crate::vector_symbol!(
+        "parser_scope::callback_vector",
+        norm = |value, out| {
+            if let AtomView::Fun(function) = value
+                && let Some(argument) = function.iter().next()
+                && Slot::<LibraryRep, AbstractIndex>::try_from(argument).is_ok()
+            {
+                LOWERED.fetch_add(1, Ordering::SeqCst);
+                let rep = mink4();
+                let inner = SPENSO_TAG.trace(
+                    rep.to_symbolic([]),
+                    [chain_factor(tensor_symbol!(callback_scope_leaf))],
+                );
+                let nested = SPENSO_TAG.trace(rep.to_symbolic([]), [inner]);
+                **out = function!(tensor_symbol!(callback_scope_result), argument, nested);
+            }
+        }
+    );
+    let source = function!(
+        tensor_symbol!(callback_scope_owner),
+        function!(vector, mink4().to_symbolic([]))
+    );
+    source.validate_chain_like_nesting().unwrap();
+    assert_eq!(LOWERED.load(Ordering::SeqCst), 0);
+    let error = source
+        .parse_to_atom_net::<AbstractIndex>(&schoonschip_only_settings())
+        .unwrap_err();
+    assert!(LOWERED.load(Ordering::SeqCst) > 0);
+    assert!(error.to_string().contains("cannot be nested"), "{error}");
 }

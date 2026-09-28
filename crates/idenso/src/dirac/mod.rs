@@ -23,11 +23,8 @@ use symbolica::{
 };
 
 use crate::{
-    IndexTooling, bis, gamma, gamma0,
-    rep_symbols::RS,
-    shorthands::{bracket::BracketNormalizer, chain::Chain},
+    IndexTooling, bis, gamma, gamma0, rep_symbols::RS, shorthands::bracket::BracketNormalizer,
 };
-use eyre::Result;
 
 use super::representations::Bispinor;
 
@@ -510,69 +507,8 @@ impl PolSymbols {
     }
 }
 
-/// Trait for simplifying expressions involving Dirac gamma matrices using Clifford algebra.
-///
-/// Implementors provide a method to apply gamma matrix identities, such as
-/// anticommutation relations and trace evaluations.
-pub trait GammaSimplifier {
-    /// Simplifies gamma matrix structures within the expression.
-    ///
-    /// Uses the Clifford algebra relation `{gamma^mu, gamma^nu} = 2 * g^{mu nu}`
-    /// and evaluates traces of products of gamma matrices. It handles intermediate
-    /// simplification steps involving metric tensors.
-    ///
-    /// # Returns
-    /// An [`Atom`] representing the expression after gamma matrix simplification.
-    fn simplify_gamma(&self) -> Atom;
-
-    /// Simplifies gamma matrices with explicit chain-ordering and trace settings.
-    fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom;
-
-    fn simplify_gamma0(&self) -> Atom;
-
-    fn collect_gamma_chains(&self) -> Atom;
-
-    fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> eyre::Result<Atom>;
-}
-
-impl GammaSimplifier for Atom {
-    fn simplify_gamma(&self) -> Atom {
-        self.as_view().simplify_gamma()
-    }
-
-    fn collect_gamma_chains(&self) -> Atom {
-        self.as_view().collect_gamma_chains()
-    }
-
-    fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
-        self.as_view().simplify_gamma_with(settings)
-    }
-
-    fn simplify_gamma0(&self) -> Atom {
-        self.as_view().simplify_gamma0()
-    }
-
-    fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> eyre::Result<Atom> {
-        self.as_view().simplify_gamma_conj::<Aind>()
-    }
-}
-
-impl GammaSimplifier for AtomView<'_> {
-    fn simplify_gamma(&self) -> Atom {
-        self.simplify_gamma_with(GammaSimplifySettings::default())
-    }
-    fn collect_gamma_chains(&self) -> Atom {
-        let rep: LibraryRep = Bispinor {}.into();
-        let collected = BracketNormalizer::normalize(*self)
-            .chainify(rep)
-            .collect_chains(rep);
-        BracketNormalizer::normalize(collected.as_view())
-    }
-    fn simplify_gamma_with(&self, settings: GammaSimplifySettings) -> Atom {
-        DiracSimplifier::new(&settings).simplify(*self)
-    }
-
-    fn simplify_gamma0(&self) -> Atom {
+impl DiracSimplifier<'_> {
+    pub(crate) fn factor_gamma_zero(expr: AtomView<'_>) -> Atom {
         let repeated_gamma0 = gamma0!(RS.a__, RS.b__) * gamma0!(RS.b__, RS.c__);
 
         let gamma0_ia = gamma0!([RS.d_, RS.i_], [RS.d_, RS.a_]);
@@ -598,7 +534,7 @@ impl GammaSimplifier for AtomView<'_> {
             * gamma0_bj)
             .to_pattern();
 
-        let simplified = BracketNormalizer::normalize(*self)
+        let simplified = BracketNormalizer::normalize(expr)
             .replace(gmg)
             .with(gmgrhs)
             .replace(gmgn)
@@ -609,7 +545,7 @@ impl GammaSimplifier for AtomView<'_> {
         BracketNormalizer::normalize(simplified.as_view())
     }
 
-    fn simplify_gamma_conj<Aind: DummyAind + ParseableAind>(&self) -> Result<Atom> {
+    pub(crate) fn conjugate_matrices<Aind: DummyAind + ParseableAind>(expr: AtomView<'_>) -> Atom {
         let dummy = symbol!("dummy");
 
         let dummypati = function!(dummy, RS.i_).to_pattern();
@@ -653,7 +589,7 @@ impl GammaSimplifier for AtomView<'_> {
                 );
             rules.push((tensor.spenso_conj(), transpose.to_pattern()));
         }
-        let mut result = self.to_owned();
+        let mut result = expr.to_owned();
         for (conjugate, transpose) in rules {
             let dummypati = dummypati.clone();
             let dummypatj = dummypatj.clone();
@@ -667,7 +603,7 @@ impl GammaSimplifier for AtomView<'_> {
                     .with(Aind::new_dummy().to_atom())
             });
         }
-        Ok(result)
+        result
     }
 }
 
@@ -678,6 +614,6 @@ pub fn id_atom(i: impl Into<Atom>, j: impl Into<Atom>) -> Atom {
 mod macros;
 mod simplify;
 pub(crate) use simplify::DiracSimplifier;
-pub use simplify::{GammaChainOrdering, GammaSimplifySettings};
+pub use simplify::{GammaChainOrdering, GammaOutput, GammaSimplifySettings};
 #[cfg(test)]
 mod test;

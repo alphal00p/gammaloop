@@ -14,7 +14,7 @@ use symbolica::{
     coefficient::CoefficientView,
 };
 
-use crate::shorthands::schoonschip::Schoonschip;
+use crate::shorthands::schoonschip::{SchoonschipSettings, SchoonschipWithSettings};
 
 spenso::symbolica_init_lazy_static! {
     /// Symbolica-level Levi-Civita symbol. The `Antisymmetric` attribute lets
@@ -87,9 +87,25 @@ impl EpsilonSimplifier for AtomView<'_> {
     }
 }
 
-struct EpsilonSimplifierPass;
+pub(crate) struct EpsilonSimplifierPass;
 
 impl EpsilonSimplifierPass {
+    /// Apply epsilon identities once. The shared tensor scheduler contracts
+    /// emitted metrics after registering any changed literal alias uses.
+    pub(crate) fn step(expr: AtomView<'_>) -> Atom {
+        let _ = *EPSILON_SYMBOL;
+        expr.replace_map(|term, _context, out| {
+            let rewritten = match term {
+                AtomView::Pow(_) => Self::simplify_power(term),
+                AtomView::Mul(_) => Self::simplify_pair_product(term),
+                _ => None,
+            };
+            if let Some(rewritten) = rewritten {
+                **out = rewritten;
+            }
+        })
+    }
+
     /// Runs the epsilon identities to a fixed point, then lets metric
     /// simplification consume any determinants that collapsed to traces.
     fn run(expr: AtomView<'_>) -> Atom {
@@ -100,28 +116,21 @@ impl EpsilonSimplifierPass {
             return expr.to_owned();
         }
 
-        let mut current = expr.schoonschip();
+        let settings = SchoonschipSettings::default();
+        let reducer = SchoonschipWithSettings {
+            settings: &settings,
+        };
+        let mut current = reducer.run(expr, &mut Vec::new());
 
         loop {
-            let mut changed = false;
-            let next = current.replace_map(|term, _context, out| {
-                let rewritten = match term {
-                    AtomView::Pow(_) => Self::simplify_power(term),
-                    AtomView::Mul(_) => Self::simplify_pair_product(term),
-                    _ => None,
-                };
-                if let Some(rewritten) = rewritten {
-                    changed = true;
-                    **out = rewritten;
-                }
-            });
-            if !changed {
+            let next = Self::step(current.as_view());
+            if next == current {
                 return next;
             }
 
             // Epsilon identities introduce determinants whose metrics may now
             // contract. Unchanged visits need no further tensor normalization.
-            let next = next.schoonschip();
+            let next = reducer.run(next.as_view(), &mut Vec::new());
             if next == current {
                 return next;
             }

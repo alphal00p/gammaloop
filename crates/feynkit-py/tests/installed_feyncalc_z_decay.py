@@ -7,7 +7,13 @@ from pathlib import Path
 
 from symbolica import E, Expression, S
 from symbolica.community import hep as fk
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.spenso import (
+    CookSettings,
+    GammaSimplifySettings,
+    TensorExpression,
+)
+
+index_scope = S("spenso::index_scope")
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 P = S("gammalooprs::P")
@@ -33,7 +39,7 @@ for matrix in matrices:
     numeric_matrices.append([complex(value) for value in network.result_tensor()[:]])
 gamma0 = numeric_matrices[0]
 for matrix, values in zip(matrices, numeric_matrices, strict=True):
-    adjoint = matrix.dirac_adjoint().simplify_gamma().undo_chain()
+    adjoint = matrix.dirac_adjoint().simplify_gamma().to_expression().undo_chain()
     network = adjoint.to_network()
     network.execute()
     actual = [complex(value) for value in network.result_tensor()[:]]
@@ -78,16 +84,19 @@ for pdg, mass, weak_isospin, electric_charge in (
             dict(matches[0])[index], ports[edge.external_index]
         )
     operator = TensorExpression(
-        (
-            numerator
-            * diagram.overall_factor_expression(evaluate=True)
-            * diagram.numerator_prefactor_expression()
-        ).expand()
+        numerator
+        * diagram.overall_factor_expression(evaluate=True)
+        * diagram.numerator_prefactor_expression()
     )
-    adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
+    adjoint = (
+        operator.dirac_adjoint()
+        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .to_expression()
+        .to_expression()
+    )
     for real in (charge, sw, cw, mz, mass):
         adjoint = adjoint.replace(conjugate(real), real)
-    adjoint = TensorExpression(adjoint).wrap_indices(wrapped)
+    adjoint = TensorExpression(adjoint).wrap_indices(wrapped).to_expression()
 
     color_projector = E("1")
     for position, particle_pdg in ((1, pdg), (2, -pdg)):
@@ -101,7 +110,9 @@ for pdg, mass, weak_isospin, electric_charge in (
                 continue
             closure = metric(
                 slot.dual().to_expression(),
-                original.replace(ports[position], wrapped(ports[position])),
+                original.replace(
+                    ports[position], index_scope(wrapped, ports[position])
+                ),
             )
             match = next(
                 closure.match(particle.color_sum(left, right), max_level=0), None
@@ -114,10 +125,14 @@ for pdg, mass, weak_isospin, electric_charge in (
     # The final fermions are summed, while the three initial Z polarizations
     # are averaged with the full Proca projector, including its longitudinal term.
     spin_projector = (
-        model.particle_by_pdg(pdg).spin_sum(P(1), wrapped(ports[2]), ports[1])
-        * model.particle_by_pdg(-pdg).spin_sum(P(2), ports[2], wrapped(ports[1]))
+        model.particle_by_pdg(pdg).spin_sum(
+            P(1), index_scope(wrapped, ports[2]), ports[1]
+        )
+        * model.particle_by_pdg(-pdg).spin_sum(
+            P(2), ports[2], index_scope(wrapped, ports[1])
+        )
         * model.particle_by_pdg(23).spin_sum(
-            P(0), ports[0], wrapped(ports[0]), average=True
+            P(0), ports[0], index_scope(wrapped, ports[0]), average=True
         )
     )
     scalar = (
@@ -125,12 +140,10 @@ for pdg, mass, weak_isospin, electric_charge in (
             operator.to_expression() * adjoint * spin_projector * color_projector,
             cook_indices=CookSettings.indices(),
         )
-        .expand()
-        .simplify_gamma()
-        .expand()
         .simplify_gamma()
         .simplify_color()
-        .simplify_metrics()
+        .contract()
+        .to_expression()
         .to_dots()
     )
     assert scalar.is_scalar
@@ -193,7 +206,7 @@ for pdg, mass, weak_isospin, electric_charge in (
     # f and fbar are distinct final particles, so no factorial is present.
     width = 4 * pi * measure * physical_squared / flux
     gf = S("z_decay::G_F")
-    width = width.replace(
+    width = width.factor().replace(
         charge**2, 4 * E("2").sqrt() * gf * physical_mass**2 * sw**2 * cw**2
     )
     expected_width = (

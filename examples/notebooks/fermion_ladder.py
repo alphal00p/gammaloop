@@ -103,9 +103,7 @@ class FermionLadder:
         }
         # The three-loop 4D scalar is small enough to expand in one step. Larger
         # cases benefit from collecting each momentum substitution separately.
-        self.settings = GammaSimplifySettings(
-            expand_traces=mode == "tracen" or loops == 4
-        )
+        self.settings = GammaSimplifySettings()
         self.staged_routing = mode == "tracen" or loops == 4
         if self.staged_routing:
             self._prepare_polynomial_routing()
@@ -130,7 +128,9 @@ class FermionLadder:
                     )
         self.form_order = "trace-first"
         self.strategy = {
-            "expand_traces": self.settings.expand_traces,
+            "trace_materialization": "explicit alias expansion"
+            if self.staged_routing
+            else "explicit factored alias resolution",
             "scalar_expansion": (
                 "grouped polynomial substitution, outer momentum pairs first"
                 if self.staged_routing
@@ -213,7 +213,10 @@ class FermionLadder:
         """Trace, insert physical momentum routing, then fully collect the scalar."""
         if source is None:
             source = self.source
-        traced = source.simplify_gamma(self.settings).to_expression()
+        traced = source.simplify_gamma(self.settings)
+        traced = (
+            traced.expand() if self.staged_routing else traced.to_expression()
+        ).to_expression()
         if self.staged_routing:
             polynomial = traced.to_polynomial(vars=self.polynomial_variables)
             return self._substitute_momenta(polynomial).to_expression()
@@ -234,7 +237,10 @@ class FermionLadder:
     def phases(self, expected):
         """Separate diagnostic clock; never substituted for the complete timing."""
         start = process_time_ns()
-        traced = self.source.simplify_gamma(self.settings).to_expression()
+        traced = self.source.simplify_gamma(self.settings)
+        traced = (
+            traced.expand() if self.staged_routing else traced.to_expression()
+        ).to_expression()
         after_trace = process_time_ns()
         if self.staged_routing:
             polynomial = traced.to_polynomial(vars=self.polynomial_variables)
@@ -569,22 +575,29 @@ def consolidation_child(args):
     before = hashlib.sha256(core_path.read_bytes()).hexdigest()
     if args.expected_core and before != args.expected_core:
         raise ValueError(f"Core identity changed: {before}")
-    setup = process_time_ns()
-    case = make_case(args.case)
     route = args.route
-    if route == "scalar" and not isinstance(case, HistoricalLadder):
-        raise ValueError(
-            "The pure Symbolica recipe is defined only for the historical ladder"
-        )
     if route == "factorized":
         from tensor_benchmark_factorized import prepare, reduce
 
-        if not (args.case.startswith(("historical-", "gluon-"))):
-            raise ValueError("The factorized route requires a gluonic ladder fixture")
-        prepared = prepare(case)
-        call = lambda: reduce(case, prepared)
-    else:
-        call = case.scalar if route == "scalar" else case.reduce
+    def construct_call():
+        case = make_case(args.case)
+        if route == "scalar" and not isinstance(case, HistoricalLadder):
+            raise ValueError(
+                "The pure Symbolica recipe is defined only for the historical ladder"
+            )
+        if route == "factorized":
+            if not (args.case.startswith(("historical-", "gluon-"))):
+                raise ValueError(
+                    "The factorized route requires a gluonic ladder fixture"
+                )
+            prepared = prepare(case)
+            call = lambda observer=None: reduce(case, prepared, observer)
+        else:
+            call = case.scalar if route == "scalar" else case.reduce
+        return case, call
+
+    setup = process_time_ns()
+    case, call = construct_call()
     setup = process_time_ns() - setup
     warmup = call()
     warmup_identity = hashlib.sha256(atom(warmup).format_plain().encode()).hexdigest()
@@ -603,6 +616,38 @@ def consolidation_child(args):
         == warmup_identity
     )
     assert all(value == result for value in outputs)
+    complete_algebra = None
+    if args.complete_algebra:
+        # Warm the same full operation once, with a newly constructed input.
+        fresh_case, fresh_call = construct_call()
+        fresh_warmup = fresh_call()
+        assert atom(fresh_warmup) == atom(result)
+        del fresh_warmup, fresh_call, fresh_case
+        # Keep cases, callables and outputs alive until after the clock so that
+        # destruction, conversion for checks, and equality checks stay outside.
+        fresh_inputs, fresh_outputs = [], []
+        full_cpu, full_thread, full_wall = (
+            process_time_ns(),
+            thread_time_ns(),
+            perf_counter_ns(),
+        )
+        for _ in range(args.calls):
+            fresh_case, fresh_call = construct_call()
+            fresh_inputs.append((fresh_case, fresh_call))
+            fresh_outputs.append(fresh_call())
+        full_wall = perf_counter_ns() - full_wall
+        full_thread = thread_time_ns() - full_thread
+        full_cpu = process_time_ns() - full_cpu
+        assert all(atom(value) == atom(result) for value in fresh_outputs)
+        complete_algebra = {
+            "calls": args.calls,
+            "fixed_warmups": 1,
+            "wall_ns": full_wall,
+            "process_ns": full_cpu,
+            "thread_ns": full_thread,
+            "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians.",
+        }
+        del fresh_outputs, fresh_inputs, fresh_call, fresh_case
     # Conversion of scalar-reference notation is an oracle adapter, not algebra timing.
     result = case.convert_scalar(result) if route == "scalar" else atom(result)
     result_path = args.output.with_suffix(".expression")
@@ -626,9 +671,11 @@ def consolidation_child(args):
         "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
         "resource": resource_snapshot(args.cpu),
     }
+    if complete_algebra is not None:
+        record["complete_algebra"] = complete_algebra
     if route == "factorized":
         phases = {}
-        assert reduce(case, prepared, phases) == result
+        assert call(phases) == result
         record["phases"] = phases
         record["strategy"] = {
             "vertex_order": list(case.order),
@@ -645,7 +692,7 @@ def consolidation_child(args):
         if isinstance(case, HistoricalLadder):
             assert describe(result)["terms"] == 9652
             typed = case.typed()
-            assert atom(typed.schoonschip(case.settings)) == result
+            assert atom(typed.contract().expand()) == result
             record["scalar_rank_and_fixedpoint"] = typed.is_scalar
             assert record["scalar_rank_and_fixedpoint"]
         if args.form and hasattr(case, "import_form"):
@@ -808,6 +855,28 @@ def consolidation_benchmark(args):
     variants = [value.split("=", 1) for value in interpreters]
     if len({label for label, _ in variants}) != len(variants):
         raise ValueError("Interpreter labels must be unique")
+    frontends = {}
+    expected_cores = dict(value.split("=", 1) for value in (args.core or []))
+    for item in args.frontend or []:
+        label, manifest_path = item.split("=", 1)
+        if label not in dict(variants) or label in frontends:
+            raise ValueError(f"Unknown or repeated frontend label: {label}")
+        manifest_path = Path(manifest_path).resolve()
+        manifest = json.loads(manifest_path.read_text())
+        if manifest["core_sha256"] != expected_cores.get(label):
+            raise ValueError(
+                f"Saved frontend requires its explicitly bound core: {label}"
+            )
+        for source, digest in manifest["sources"].items():
+            if hashlib.sha256(Path(source).read_bytes()).hexdigest() != digest:
+                raise ValueError(f"Saved frontend changed: {source}")
+        if manifest["entrypoint"] not in manifest["sources"]:
+            raise ValueError("Saved frontend entrypoint is not source-bound")
+        frontends[label] = {
+            "manifest_path": str(manifest_path),
+            "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+            **manifest,
+        }
     ladder_routes = dict(value.split("=", 1) for value in (args.ladder_route or []))
     if set(ladder_routes) - {label for label, _ in variants} or any(
         route not in ("typed", "factorized") for route in ladder_routes.values()
@@ -830,7 +899,6 @@ def consolidation_benchmark(args):
                     "gluon_ladder.py",
                     "fermion_ladder_validation.py",
                     "gluon_ladder_validation.py",
-                    "gamma_simplification.py",
                     "fermion_propagator_ladder.frm",
                     "gluon_propagator_ladder.frm",
                 )
@@ -855,6 +923,8 @@ def consolidation_benchmark(args):
         "created_utc": datetime.now(UTC).isoformat(),
         "sources": sources,
         "interpreters": dict(variants),
+        "saved_frontends": frontends,
+        "target_api": "Typed rule/alias contraction; gamma result expanded explicitly within the measured operation when the case requests a polynomial",
         "ladder_routes": ladder_routes,
         "cases": cases,
         "timing": "Fresh interpreter for each case/route/round; one fixed unmeasured warmup, checked and disposed before clocks; fixed measured calls; setup/checks/disposal excluded; no discarded measured samples or retries",
@@ -863,6 +933,7 @@ def consolidation_benchmark(args):
         "host_scope": "Pinned among cooperating jobs, not an exclusive-host claim",
         "records": [],
         "checks": [],
+        "interpreter_equality": [],
         "form": [],
         "summary": {},
     }
@@ -872,6 +943,8 @@ def consolidation_benchmark(args):
                 **report,
                 "calls": args.calls,
                 "fixed_warmups": 1,
+                "complete_algebra": args.complete_algebra,
+                "complete_algebra_order": "Prepared-input sample first, then one complete-operation warmup and fresh-input sample; raw clocks retained separately",
                 "expected_cores": dict(
                     value.split("=", 1) for value in (args.core or [])
                 ),
@@ -894,7 +967,9 @@ def consolidation_benchmark(args):
         output = directory / f"{label}-{case}-{route}-{suffix}.json"
         command = [
             python,
-            str(Path(__file__).resolve()),
+            frontends[label]["entrypoint"]
+            if label in frontends
+            else str(Path(__file__).resolve()),
             "--suite",
             "consolidation",
             "--child",
@@ -907,6 +982,8 @@ def consolidation_benchmark(args):
             "--output",
             str(output),
         ]
+        if measurement and args.complete_algebra:
+            command += ["--complete-algebra"]
         if args.cpu is not None:
             command += ["--cpu", str(args.cpu)]
         if label in cores:
@@ -953,6 +1030,9 @@ def consolidation_benchmark(args):
         output.with_suffix(".stdout").write_text(run.stdout)
         output.with_suffix(".stderr").write_text(run.stderr)
         receipt = {
+            "frontend": frontends.get(
+                label, {"entrypoint": str(Path(__file__).resolve()), "api": "target"}
+            ),
             "label": label,
             "case": case,
             "route": route,
@@ -976,13 +1056,57 @@ def consolidation_benchmark(args):
 
     for case in cases:
         if not args.form_only:
+            # Declare the capture's cooked index tags before parsing its outputs.
+            component_case = make_case(case) if case == "production-aa-aa" else None
             expected = None
+            expected_input = None
+            expected_outputs = {}
             for label, python in variants:
                 value = child(label, python, case, "typed", "check", check=True)
                 expression = Path(value["expression"]).read_text()
                 if expected is None:
                     expected = expression
-                assert expression == expected, f"Interpreter output differs for {case}"
+                    expected_input = value["input"]["sha256"]
+                assert value["input"]["sha256"] == expected_input, (
+                    f"Interpreter input differs for {case}"
+                )
+                # Each interpreter has its own symbol ordering. Compare its
+                # saved output under this one parser, without expanding it.
+                parsed_expression, parsed_expected = E(expression), E(expected)
+                exact_equal = parsed_expression == parsed_expected
+                assert type(exact_equal) is bool
+                comparison = {
+                    "case": case,
+                    "label": label,
+                    "literal_equal": expression == expected,
+                    "same_parser_exact_equal": exact_equal,
+                    "same_parser_output_sha256": hashlib.sha256(
+                        str(parsed_expression).encode()
+                    ).hexdigest(),
+                    "same_parser_expected_sha256": hashlib.sha256(
+                        str(parsed_expected).encode()
+                    ).hexdigest(),
+                }
+                report["interpreter_equality"].append(comparison)
+                args.output.write_text(json.dumps(report, indent=2) + "\n")
+                if not exact_equal:
+                    assert case == "production-aa-aa", (
+                        f"Interpreter output differs for {case}"
+                    )
+                    component_path = directory / f"{label}-{case}-components.json"
+                    comparison["components"] = {
+                        "passed": False,
+                        "path": str(component_path),
+                    }
+                    args.output.write_text(json.dumps(report, indent=2) + "\n")
+                    assert component_case is not None
+                    comparison["components"] = (
+                        component_case.check_interpreter_components(
+                            E(expression), E(expected), component_path
+                        )
+                    )
+                expected_outputs[label] = expression
+                args.output.write_text(json.dumps(report, indent=2) + "\n")
             if case.startswith("historical-"):
                 value = child(*variants[0], case, "scalar", "check", check=True)
                 assert Path(value["expression"]).read_text() == expected
@@ -1000,7 +1124,10 @@ def consolidation_benchmark(args):
                         check=bool(args.diagnostic),
                         measurement=True,
                     )
-                    assert Path(value["expression"]).read_text() == expected
+                    # Each measured output must exactly repeat its checked interpreter result.
+                    assert (
+                        Path(value["expression"]).read_text() == expected_outputs[label]
+                    )
                 if case.startswith("historical-"):
                     value = child(
                         *variants[0], case, "scalar", f"round{round_index + 1}"
@@ -1104,6 +1231,34 @@ def consolidation_benchmark(args):
                 clock: median(r[clock] / r["calls"] for r in own)
                 for clock in ("wall_ns", "process_ns", "thread_ns")
             }
+            if args.complete_algebra:
+                summary[label]["complete_algebra"] = {
+                    clock: median(
+                        r["complete_algebra"][clock] / r["complete_algebra"]["calls"]
+                        for r in own
+                    )
+                    for clock in ("wall_ns", "process_ns", "thread_ns")
+                }
+                if label != variants[0][0]:
+                    full_base = [
+                        r["record"]["complete_algebra"]
+                        for r in rows
+                        if r["label"] == variants[0][0] and r["route"] != "scalar"
+                    ]
+                    full_own = [r["complete_algebra"] for r in own]
+                    ratios = {
+                        clock: [
+                            (c[clock] / c["calls"]) / (b[clock] / b["calls"])
+                            for b, c in zip(full_base, full_own, strict=True)
+                        ]
+                        for clock in ("wall_ns", "process_ns", "thread_ns")
+                    }
+                    summary[label]["complete_algebra"].update(
+                        paired_ratios=ratios,
+                        median_paired_ratio={
+                            clock: median(values) for clock, values in ratios.items()
+                        },
+                    )
             if own and own[0]["route"] == "factorized":
                 summary[label]["factorized"] = {
                     "phase_cpu_ns": {
@@ -1209,6 +1364,12 @@ def consolidation_benchmark(args):
     for receipt in report["checks"] + report["records"]:
         value = receipt["record"]
         assert sha(value["core"]) == value["core_sha256"], "Core changed during cohort"
+    for frontend in frontends.values():
+        assert sha(frontend["manifest_path"]) == frontend["manifest_sha256"]
+        for source, digest in frontend["sources"].items():
+            assert sha(source) == digest, (
+                f"Saved frontend changed during cohort: {source}"
+            )
     report["acceptance"] = {}
     if args.diagnostic == "partial-parse":
         for label, _ in variants[1:]:
@@ -1269,6 +1430,11 @@ if __name__ == "__main__":
         action="append",
         help="LABEL=expected core SHA256; binds release identity",
     )
+    parser.add_argument(
+        "--frontend",
+        action="append",
+        help="LABEL=/path/to/saved-frontend.json; benchmark-only exact saved source/API adapter; requires matching --core",
+    )
     parser.add_argument("--milestone", default="M0")
     parser.add_argument(
         "--ladder-route",
@@ -1277,6 +1443,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("--cases", help="Comma-separated consolidation case names")
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument(
+        "--complete-algebra",
+        action="store_true",
+        help="Also measure fresh input/rule construction through the same algebra/materialization in one clock",
+    )
     parser.add_argument(
         "--form-only",
         action="store_true",

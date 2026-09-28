@@ -54,9 +54,9 @@ numerator = model.expand_couplings(
     diagram.numerator_expression().to_expression() * projector
 )
 contracted = (
-    TensorExpression(numerator.expand())
+    TensorExpression(numerator)
     .simplify_gamma()
-    .expand()
+    .to_expression()
     .to_dots()
     .to_expression()
 )

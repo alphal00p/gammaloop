@@ -27,20 +27,20 @@ fn network_vertex_substitution_8(fixture: common::NetworkVertexFixture) -> Atom 
 
 #[library_benchmark]
 #[bench::network_5(setup = common::network_substituted_5)]
-fn network_normalize_substituted_5(expr: Atom) -> Atom {
-    common::network_normalize_substituted(black_box(expr))
+fn network_admit_substituted_5(expr: Atom) -> Atom {
+    common::network_admit_substituted(black_box(expr))
 }
 
 #[library_benchmark]
 #[bench::network_8(setup = common::network_substituted_8)]
-fn network_normalize_substituted_8(expr: Atom) -> Atom {
-    common::network_normalize_substituted(black_box(expr))
+fn network_admit_substituted_8(expr: Atom) -> Atom {
+    common::network_admit_substituted(black_box(expr))
 }
 
 #[library_benchmark]
 #[bench::network_5(setup = common::network_substituted_5)]
-fn network_schoonschip_substituted_5(expr: Atom) -> Atom {
-    common::network_schoonschip_substituted(black_box(expr))
+fn network_contract_substituted_5(expr: Atom) -> Atom {
+    common::network_contract_substituted(black_box(expr))
 }
 
 #[library_benchmark]
@@ -50,7 +50,7 @@ fn network_parse_normalized_5(expr: Atom) -> SymbolicNet<AbstractIndex> {
 }
 
 fn setup_network_normalized_5() -> Atom {
-    common::network_normalize_substituted(common::network_substituted_5())
+    common::network_admit_substituted(common::network_substituted_5())
 }
 
 #[library_benchmark]
@@ -60,7 +60,7 @@ fn network_parse_normalized_8(expr: Atom) -> SymbolicNet<AbstractIndex> {
 }
 
 fn setup_network_normalized_8() -> Atom {
-    common::network_normalize_substituted(common::network_substituted_8())
+    common::network_admit_substituted(common::network_substituted_8())
 }
 
 #[library_benchmark]
@@ -81,9 +81,9 @@ library_benchmark_group!(
         network_vertex_substitution_5,
         network_full_algebra_5,
         network_vertex_substitution_8,
-        network_normalize_substituted_5,
-        network_normalize_substituted_8,
-        network_schoonschip_substituted_5,
+        network_admit_substituted_5,
+        network_admit_substituted_8,
+        network_contract_substituted_5,
         network_parse_normalized_5,
         network_parse_normalized_8,
         bare_vertex_substitution_5,

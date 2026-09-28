@@ -15,7 +15,7 @@ use color_eyre::Result;
 use momtrop::SampleGenerator;
 
 use crate::cff::EsurfaceID;
-use idenso::dirac::GammaSimplifier;
+use idenso::{CookMode, CookSettings, dirac::GammaSimplifySettings, tensor::SymbolicTensor};
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
@@ -1119,7 +1119,11 @@ impl AmplitudeGraph {
 
         let before_gamma = num.to_d_dim(GS.dim).get_single_atom().unwrap();
         let before_gamma_plain = before_gamma.to_plain_string();
-        let four_dimensional_numerator = before_gamma.simplify_gamma();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let simplified = SymbolicTensor::infer(cooking.try_cook(before_gamma.as_view())?)?
+            .simplify_gamma(GammaSimplifySettings::default())?
+            .resolved()?;
+        let four_dimensional_numerator = cooking.uncook(simplified.expression().as_view());
         let after_gamma_plain = four_dimensional_numerator.to_plain_string();
         crate::debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
             stage = "amplitude_to_vakint_after_simplify_gamma",

@@ -49,7 +49,7 @@ p3 = "UFO::P(UFO::idx(1,3),UFO::idx(1,3))"
 uuv = next(
     item for item in specification["lorentz_structures"] if item["name"] == "UUV1"
 )
-assert E(uuv["structure"]) == E(p2 + "+" + p3)
+assert E(uuv["structure"], default_namespace="UFO") == E(p2 + "+" + p3)
 P, mink, hedge, wave, index, mu = S(
     "gammalooprs::P",
     "spenso::mink",
@@ -133,9 +133,20 @@ for name, (particles, coupling_name) in vertices.items():
             color = TensorExpression.f(8)(
                 *(indices[edges[external].id] for external in slots)
             ).to_expression()
-        assert diagram.overall_factor_expression(evaluate=True) == one
+        # External Grassmann states use the canonical (antighost, ghost)
+        # order. Crossing keeps the UFO vertex tensor unchanged and records
+        # the permutation sign separately in the diagram's overall factor.
+        ordering_sign = one if slots[1] < slots[0] else -one
+        assert diagram.overall_factor_expression(evaluate=True) == ordering_sign
         assert diagram.numerator_prefactor_expression() == one
-        residual = (actual - coupling * color * momentum).expand()
+        residual = (
+            TensorExpression(actual - coupling * color * momentum)
+            .contract()
+            .to_expression()
+            .to_expression()
+            .collect_factors()
+            .collect_num()
+        )
         assert residual == zero, (name, slots, residual)
 
 # Generation must also be linear before applying momentum conservation. Signed
@@ -175,10 +186,17 @@ for label, tensor in (
 for name in ("V_18", "V_19", "V_35"):
     for label, coefficient in (("P2+P3", 1), ("P2-P3", -1), ("P2+2P3", 2)):
         residual = (
-            linearity[name, label]
-            - linearity[name, "P2"]
-            - coefficient * linearity[name, "P3"]
-        ).expand()
+            TensorExpression(
+                linearity[name, label]
+                - linearity[name, "P2"]
+                - coefficient * linearity[name, "P3"]
+            )
+            .contract()
+            .to_expression()
+            .to_expression()
+            .collect_factors()
+            .collect_num()
+        )
         assert residual == zero, (name, label, residual)
 
 print("Passed 36 EW and 3 QCD ghost crossings, plus 15 Lorentz-linearity probes.")

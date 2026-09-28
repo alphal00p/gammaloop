@@ -4,11 +4,20 @@ These exercise the external-momentum reduction used by FeynCalc's loop
 examples; scalar integration and IBP reduction are separate operations.
 """
 
-from symbolica import E, S
-from symbolica.community import feynkit as fk
+import importlib
+import sys
 
-D, k, p, r = S(
-    "tensor_check::D", "tensor_check::k", "tensor_check::p", "tensor_check::r"
+from symbolica import E, S
+from symbolica.community.spenso import TensorName
+
+fk = importlib.import_module(
+    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
+)
+
+D = S("tensor_check::D")
+k, p, r = (
+    TensorName.vector("tensor_check::" + name).to_expression()
+    for name in ("k", "p", "r")
 )
 mink, dot = S("spenso::mink", "spenso::dot")
 mu, nu, rho, sigma = S(

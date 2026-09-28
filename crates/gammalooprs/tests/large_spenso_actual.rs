@@ -6,7 +6,7 @@ use gammalooprs::{
 use spenso::{
     network::{
         ExecutionResult, MinResultRank,
-        parsing::{ParseSettings, ShadowedStructure, ShorthandParsing, StructureInferenceMode},
+        parsing::{ParseSettings, ShadowedStructure, ShorthandParsing},
     },
     structure::{HasStructure, TensorStructure},
     tensors::parametric::ParamTensor,
@@ -24,9 +24,7 @@ fn parse_inline_expression(input: &str) -> Atom {
 
 fn parse_actual_net(label: &str, expr: &Atom) -> ParsingNet {
     let settings = ParseSettings {
-        shorthand_parsing: ShorthandParsing::Opaque {
-            inference: StructureInferenceMode::Fast,
-        },
+        shorthand_parsing: ShorthandParsing::Opaque,
         ..Default::default()
     };
     let lib = TENSORLIB.read().unwrap();

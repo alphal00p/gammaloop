@@ -8,7 +8,13 @@ from pathlib import Path
 
 from symbolica import E, Replacement, S
 from symbolica.community import hep as fk
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.spenso import (
+    CookSettings,
+    GammaSimplifySettings,
+    TensorExpression,
+)
+
+index_scope = S("spenso::index_scope")
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 P = S("gammalooprs::P")
@@ -68,13 +74,18 @@ for outgoing, vertices, count in (
         d in denominators
         for d in ((s, t - mass**2, u - mass**2) if count == 3 else (s,))
     )
-    operator = TensorExpression(amplitude.expand())
+    operator = TensorExpression(amplitude)
     assert len(operator.structure.slots) == (8 if count == 3 else 6)
-    adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
+    adjoint = (
+        operator.dirac_adjoint()
+        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .to_expression()
+        .to_expression()
+    )
     adjoint = adjoint.replace(conjugate(P(a, b)), P(a, b))
     for real in (mass, gs, s, t, u):
         adjoint = adjoint.replace(conjugate(real), real)
-    adjoint = TensorExpression(adjoint).wrap_indices(adjoint_index)
+    adjoint = TensorExpression(adjoint).wrap_indices(adjoint_index).to_expression()
 
     # Match the shared completeness tensor against the dual of each external slot.
     # Matching selects color slots and determines the quark/antiquark orientation.
@@ -92,7 +103,9 @@ for outgoing, vertices, count in (
                 continue
             closure = metric(
                 slot.dual().to_expression(),
-                original.replace(ports[position], adjoint_index(ports[position])),
+                original.replace(
+                    ports[position], index_scope(adjoint_index, ports[position])
+                ),
             )
             match = next(
                 closure.match(particle.color_sum(left, right), max_level=0), None
@@ -116,6 +129,7 @@ for outgoing, vertices, count in (
         TensorExpression(generic, cook_indices=CookSettings.indices())
         .simplify_color()
         .to_expression()
+        .to_expression()
         .replace(dA, Nc**2 - 1)
     )
     colored = TensorExpression(colored).to_cof_dimension_invariants()
@@ -123,19 +137,17 @@ for outgoing, vertices, count in (
     # Dirac adjunction exchanges the two endpoints of the open fermion chain.
     # Reduce the fermion trace before introducing the physical gluon projectors.
     spin_projector = model.particle_by_pdg(5).spin_sum(
-        P(0), ports[0], adjoint_index(ports[1]), average=True
+        P(0), ports[0], index_scope(adjoint_index, ports[1]), average=True
     ) * model.particle_by_pdg(-5).spin_sum(
-        P(1), adjoint_index(ports[0]), ports[1], average=True
+        P(1), index_scope(adjoint_index, ports[0]), ports[1], average=True
     )
     spin_summed = (
         TensorExpression(
             colored.to_expression() * spin_projector,
             cook_indices=CookSettings.indices(),
         )
-        .expand()
         .simplify_gamma()
-        .expand()
-        .simplify_gamma()
+        .to_expression()
     )
     polarizations = E("1")
     if count == 3:
@@ -143,7 +155,7 @@ for outgoing, vertices, count in (
             polarizations *= model.particle_by_pdg(21).spin_sum(
                 P(position),
                 ports[position],
-                adjoint_index(ports[position]),
+                index_scope(adjoint_index, ports[position]),
                 covariant=True,
             )
     scalar = (
@@ -151,8 +163,8 @@ for outgoing, vertices, count in (
             spin_summed.to_expression() * polarizations,
             cook_indices=CookSettings.indices(),
         )
-        .expand()
-        .simplify_metrics()
+        .contract()
+        .to_expression()
         .to_dots()
     )
     assert scalar.is_scalar

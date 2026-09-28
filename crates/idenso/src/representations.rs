@@ -8,7 +8,7 @@ use spenso::{
 use spenso_macros::SimpleRepresentation;
 use symbolica::atom::Atom;
 
-use super::{color::CS, dirac::AGS, rep_symbols::RS, shorthands::metric::MS};
+use super::{color::CS, dirac::AGS, rep_symbols::RS};
 
 #[rustfmt::skip]
 #[derive(SimpleRepresentation)]
@@ -135,7 +135,6 @@ pub fn initialize() {
     let _ = ColorFundamental {}.to_symbolic([Atom::Zero]);
     let _ = ColorSextet {}.to_symbolic([Atom::Zero]);
     let _ = RS.a_;
-    let _ = MS.dummy;
     let _ = AGS.gamma;
     let _ = *crate::epsilon::EPSILON_SYMBOL;
     let _ = ETS.metric;

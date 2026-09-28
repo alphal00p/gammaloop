@@ -79,6 +79,8 @@ check: build check-wasm-features
     symbolica_version="3.0.0"
     symbolica_git="$(nix eval --impure --raw --expr '(builtins.fromTOML (builtins.readFile ../Cargo.toml)).patch.crates-io.symbolica.git')"
     symbolica_revision="$(nix eval --impure --raw --expr '(builtins.fromTOML (builtins.readFile ../Cargo.toml)).patch.crates-io.symbolica.rev')"
+    numerica_git="$(nix eval --impure --raw --expr '(builtins.fromTOML (builtins.readFile ../Cargo.toml)).patch.crates-io.numerica.git')"
+    numerica_revision="$(nix eval --impure --raw --expr '(builtins.fromTOML (builtins.readFile ../Cargo.toml)).patch.crates-io.numerica.rev')"
     check_dir="$(mktemp -d)"
     trap 'rm -rf "$check_dir"' EXIT
     mkdir -p "$check_dir/tymbolica" ../target/tymbolica
@@ -89,6 +91,9 @@ check: build check-wasm-features
     sed -i \
       "s|git = \"https://github.com/symbolica-dev/symbolica.git\", branch = \"main\"|git = \"$symbolica_git\", rev = \"$symbolica_revision\"|g" \
       "$tymbolica_checkout/Cargo.toml"
+    sed -i \
+      "/^\[patch\.crates-io\]/a\numerica = { git = \"$numerica_git\", rev = \"$numerica_revision\" }" \
+      "$tymbolica_checkout/Cargo.toml"
     # Rebuild the pinned combined algebra/integration engine without changing the checkout.
     # Its build script reads Cargo's target and feature settings; generated plugin
     # assets remain outside the Rust source inputs.
@@ -98,7 +103,7 @@ check: build check-wasm-features
       cd "$tymbolica_checkout"
       unset CARGO_TARGET_DIR
       # Upstream builds with --locked; resolve the workspace pin in this copy first.
-      cargo update --package symbolica
+      cargo update --package symbolica --package numerica
       nix run --no-write-lock-file "path:$PWD#build"
     )
     for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
@@ -106,6 +111,8 @@ check: build check-wasm-features
         source="registry+https://github.com/rust-lang/crates.io-index"
         if [ "$package" = symbolica ]; then
           source="git+$symbolica_git?rev=$symbolica_revision#$symbolica_revision"
+        elif [ "$package" = numerica ]; then
+          source="git+$numerica_git?rev=$numerica_revision#$numerica_revision"
         fi
         expected="$(printf 'version = "%s"\nsource = "%s"\n' "$symbolica_version" "$source")"
         resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"

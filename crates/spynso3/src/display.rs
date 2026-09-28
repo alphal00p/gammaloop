@@ -385,8 +385,8 @@ struct IndexAliases {
 impl IndexAliases {
     fn for_descriptor(descriptor: &SymbolicTensor<PartialStructure>, style: &str) -> Self {
         let mut bundle = FunctionBuilder::new(spenso::structure::abstract_index::AIND_SYMBOLS.aind)
-            .add_arg(&descriptor.expression);
-        for slot in descriptor.structure.logical_slots() {
+            .add_arg(descriptor.expression());
+        for slot in descriptor.structure().logical_slots() {
             bundle = bundle.add_arg(composition::port_atom(slot));
         }
         Self::for_atom(&bundle.finish(), style)
@@ -555,7 +555,14 @@ impl IndexAliases {
                 .filter(|(_, _, scopes, _)| *scopes == scope)
                 .collect::<Vec<_>>();
             let decorated = loop {
-                let primes = IndexDisplay::text("′".repeat(count)).unwrap();
+                // Text displays are bounded; retain a unique scope label even
+                // when the number of scopes exceeds the prime-string limit.
+                let primes = IndexDisplay::text(if count <= 1024 {
+                    "′".repeat(count)
+                } else {
+                    format!("′({count})")
+                })
+                .unwrap();
                 let decorated = group
                     .iter()
                     .map(|(rep, index, _, display)| {
@@ -1180,7 +1187,7 @@ fn format_tensor_interface(
     let aliases = IndexAliases::for_descriptor(&tensor.descriptor, &settings.index_style);
     tensor
         .descriptor
-        .structure
+        .structure()
         .logical_slots()
         .into_iter()
         .map(composition::port_atom)
@@ -1268,7 +1275,7 @@ impl<'a> ConcreteTensorView<'a> {
     ) -> Option<Self> {
         Some(Self {
             tensor,
-            layout: crate::tensor_data_layout(&tensor.descriptor.structure).ok()?,
+            layout: crate::tensor_data_layout(tensor.descriptor.structure()).ok()?,
             mode,
             settings,
         })
@@ -1724,7 +1731,7 @@ fn format_tensor_interface_rows(
     let mut top = Vec::new();
     let mut bottom = Vec::new();
     let aliases = IndexAliases::for_descriptor(&tensor.descriptor, &settings.index_style);
-    for slot in tensor.descriptor.structure.logical_slots() {
+    for slot in tensor.descriptor.structure().logical_slots() {
         let representation = slot.rep_name();
         let row = representation
             .metadata()
@@ -2050,7 +2057,7 @@ pub(crate) fn concrete_tensor_to_html(
     notation_source: Option<&str>,
 ) -> PyResult<String> {
     if settings.tensor_view == "interactive"
-        && !tensor.descriptor.structure.logical_slots().is_empty()
+        && !tensor.descriptor.structure().logical_slots().is_empty()
     {
         return explorer::to_html(py, tensor, settings, notation_source);
     }
@@ -2429,6 +2436,40 @@ mod tests {
             base.clone().with_top(IndexDisplay::text("′′").unwrap())
         );
         assert_eq!(atom, original);
+    }
+
+    #[test]
+    fn scoped_index_aliases_remain_distinct_beyond_the_text_limit() {
+        let base = AbstractIndex::from(0);
+        let indices = (0..1025)
+            .map(|i| {
+                Atom::from(base.scoped(symbol!(format!("display_index_tests::many_scopes_{i:04}"))))
+            })
+            .collect::<Vec<_>>();
+        let tensor = indexed_test_tensor(indices.clone());
+        let original = tensor.clone();
+        let aliases = IndexAliases::for_atom(&tensor, "alphabet");
+        let rep = ExtendibleReps::MINKOWSKI.symbol();
+        assert_eq!(aliases.entries.len(), indices.len());
+        let labels = indices
+            .iter()
+            .map(|index| IndexAliases::label_key(&aliases.entries[&(rep, index.clone())].1))
+            .collect::<HashSet<_>>();
+        assert_eq!(labels.len(), indices.len());
+        assert_eq!(tensor, original);
+
+        // A manually chosen compact label still reserves its spelling.
+        let manual = register_math_display_symbol(
+            &aliases.entries[&(rep, indices[1024].clone())].1,
+            "display_index_tests",
+        )
+        .unwrap();
+        let occupied = indexed_test_tensor(indices.iter().cloned().chain([Atom::var(manual)]));
+        let occupied_aliases = IndexAliases::for_atom(&occupied, "alphabet");
+        assert_ne!(
+            occupied_aliases.entries[&(rep, indices[1024].clone())].1,
+            aliases.entries[&(rep, indices[1024].clone())].1
+        );
     }
 
     #[test]

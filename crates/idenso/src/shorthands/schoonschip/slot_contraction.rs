@@ -1,9 +1,7 @@
 //! Contract a metric or tagged vector by replacing one compatible tensor slot.
 
 mod components;
-use components::Intake;
-
-use ahash::AHashMap;
+pub(crate) use components::{ContractionStatus, FactorizedContraction};
 
 use spenso::{
     network::{
@@ -57,17 +55,16 @@ impl<'a> Endpoint<'a> {
 
 enum SlotReplacement {
     Absent,
-    Replaced(Atom),
+    Replaced(Atom, Vec<(Atom, Atom)>),
     Ambiguous,
 }
 
-#[cfg(test)]
-std::thread_local! {
-    pub(super) static COLLECTION_COUNTS: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
-}
+// Chosen source and partner positions, replacement, and literal port changes.
+type ContractionCandidate = (usize, usize, Atom, Vec<(Atom, Atom)>);
 
 pub(crate) struct SlotContraction {
     metric: Symbol,
+    alias: Symbol,
     tags: &'static SpensoTags,
     projectors: [Symbol; 2],
 }
@@ -76,31 +73,10 @@ impl SlotContraction {
     pub(crate) fn new() -> Self {
         Self {
             metric: ETS.metric,
+            alias: *crate::tensor::aliases::TENSOR_ALIAS_SYMBOL,
             tags: &SPENSO_TAG,
             projectors: [*shadowing::CYCLIC, *shadowing::SYM],
         }
-    }
-
-    pub(super) fn component_sum_candidate(view: AtomView<'_>, expand_sums: bool) -> bool {
-        matches!(view, AtomView::Add(_))
-            || (expand_sums && matches!(view, AtomView::Mul(_) | AtomView::Pow(_)))
-    }
-
-    /// Emit a fully admitted metric/vector sum before any dot cleanup work.
-    pub(super) fn component_sum(view: AtomView<'_>, expand_sums: bool) -> Option<Atom> {
-        if !Self::component_sum_candidate(view, expand_sums) {
-            return None;
-        }
-        let mut slots = SlotMatcher::default();
-        Self::new().collect_component_sum(
-            view,
-            &mut slots,
-            if expand_sums {
-                Intake::FactoredContraction
-            } else {
-                Intake::ExpandedContraction
-            },
-        )
     }
 
     /// Expand admitted scalar sums without constructing or reducing tensor ports.
@@ -109,7 +85,7 @@ impl SlotContraction {
             return None;
         }
         let mut slots = SlotMatcher::default();
-        Self::new().collect_component_sum(view, &mut slots, Intake::ScalarExpansion)
+        Self::new().materialize_scalar_sum(view, &mut slots)
     }
 
     /// Contract explicit metrics and optional vectors while preserving scalar factors.
@@ -119,24 +95,22 @@ impl SlotContraction {
         view: AtomView<'_>,
         chain_like: bool,
         rank_one: bool,
-        collect_components: bool,
+        literal_relabellings: &mut Vec<(Atom, Atom)>,
     ) -> Atom {
         let mut current = view.to_owned();
         let mut slots = SlotMatcher::default();
         // SlotMatcher has already initialized these predefined bundles. Retain
         // their handles instead of probing Symbolica's state on every candidate.
         let contractor = Self::new();
-        if collect_components
-            && rank_one
-            && let Some(result) =
-                contractor.collect_component_sum(view, &mut slots, Intake::ExpandedContraction)
-        {
-            return result;
-        }
         loop {
             if let AtomView::Mul(product) = current.as_view()
-                && let Some(next) =
-                    contractor.contract_product(product, chain_like, rank_one, &mut slots)
+                && let Some(next) = contractor.contract_product(
+                    product,
+                    chain_like,
+                    rank_one,
+                    &mut slots,
+                    literal_relabellings,
+                )
             {
                 if next == current {
                     return next;
@@ -174,9 +148,13 @@ impl SlotContraction {
             }
             let next = current.replace_map(|atom, _, out| match atom {
                 AtomView::Mul(product) => {
-                    if let Some(contracted) =
-                        contractor.contract_product(product, chain_like, rank_one, &mut slots)
-                    {
+                    if let Some(contracted) = contractor.contract_product(
+                        product,
+                        chain_like,
+                        rank_one,
+                        &mut slots,
+                        literal_relabellings,
+                    ) {
                         **out = contracted;
                     }
                 }
@@ -201,14 +179,14 @@ impl SlotContraction {
         chain_like: bool,
         rank_one: bool,
         slots: &mut SlotMatcher,
+        literal_relabellings: &mut Vec<(Atom, Atom)>,
     ) -> Option<Atom> {
-        if let Some(contracted) = self.contract_metric_components(product, slots) {
-            return Some(contracted);
-        }
+        let mut committed = Vec::new();
         let mut contraction = self.find_contraction(product.iter(), chain_like, rank_one, slots)?;
         let mut factors: Vec<_> = product.iter().map(AtomOrView::View).collect();
         loop {
-            let (source, partner, replacement) = contraction;
+            let (source, partner, replacement, observations) = contraction;
+            committed.extend(observations);
             if replacement.is_zero() {
                 return Some(Atom::Zero);
             }
@@ -220,200 +198,16 @@ impl SlotContraction {
                 rank_one,
                 slots,
             ) else {
-                return Some(Atom::mul_many(factors));
+                let result = Atom::mul_many(factors);
+                // Discovery probes and refused linear candidates carry their
+                // own records. Publish only the chosen product rewrites.
+                if !result.is_zero() {
+                    literal_relabellings.extend(committed);
+                }
+                return Some(result);
             };
             contraction = next;
         }
-    }
-
-    /// Internal indices in a metric path only transport its two boundary slots;
-    /// a closed path contributes its dimension. Resolve those connections before
-    /// constructing any new metric, without parsing unrelated tensor payloads.
-    fn contract_metric_components(
-        &self,
-        product: MulView<'_>,
-        slots: &mut SlotMatcher,
-    ) -> Option<Atom> {
-        if product.iter().len() < 4 {
-            return None;
-        }
-        let metric = self.metric;
-        let count = product.iter().filter(|factor| {
-            matches!(factor, AtomView::Fun(f) if f.get_symbol_id() == metric.get_id() && f.get_nargs() == 2)
-        }).count();
-        if count < 3 {
-            return None;
-        }
-        struct Metric<'a> {
-            position: usize,
-            arguments: [AtomView<'a>; 2],
-            dimension: AtomView<'a>,
-            // A half-edge is 2 * index in this vector + argument position.
-            neighbors: [Option<usize>; 2],
-            removed: bool,
-        }
-        let mut metrics: Vec<Metric> = Vec::new();
-        let mut occurrences: AHashMap<_, (usize, LibraryRep, bool)> = AHashMap::new();
-        // Exact representation/dimension pairs recur along a path. Hash their
-        // shared identity once instead of including both payloads in each key.
-        let mut spaces = AHashMap::new();
-        let mut last_space = None;
-        for (position, factor) in product.iter().enumerate() {
-            let AtomView::Fun(function) = factor else {
-                continue;
-            };
-            if function.get_symbol_id() != metric.get_id() || function.get_nargs() != 2 {
-                continue;
-            }
-            let mut arguments = function.iter();
-            let arguments = [arguments.next().unwrap(), arguments.next().unwrap()];
-            let [Some(first), Some(second)] = arguments.map(|arg| Endpoint::parse(arg, slots))
-            else {
-                continue;
-            };
-            if !first.compatible(&second) || first.matches(&second) {
-                continue;
-            }
-            if metrics.is_empty() {
-                metrics.reserve(count);
-                occurrences.reserve(count * 2);
-            }
-            let edge = metrics.len();
-            metrics.push(Metric {
-                position,
-                arguments,
-                dimension: first.dimension,
-                neighbors: [None; 2],
-                removed: false,
-            });
-            let space_key = (first.representation.base(), first.dimension);
-            let space = if let Some((previous, space)) = last_space
-                && previous == space_key
-            {
-                space
-            } else {
-                let next = spaces.len();
-                let space = *spaces.entry(space_key).or_insert(next);
-                last_space = Some((space_key, space));
-                space
-            };
-            for (side, endpoint) in [first, second].into_iter().enumerate() {
-                let key = (space, endpoint.index);
-                match occurrences.entry(key) {
-                    std::collections::hash_map::Entry::Vacant(entry) => {
-                        entry.insert((2 * edge + side, endpoint.representation, false));
-                    }
-                    std::collections::hash_map::Entry::Occupied(mut entry) => {
-                        let (other, other_rep, repeated) = entry.get_mut();
-                        // More than two metric occurrences have no unambiguous
-                        // path interpretation; retain ordered slot substitution.
-                        if std::mem::replace(repeated, true) {
-                            return None;
-                        }
-                        if !endpoint.representation.matches(other_rep) {
-                            continue;
-                        }
-                        metrics[edge].neighbors[side] = Some(*other);
-                        metrics[*other / 2].neighbors[*other % 2] = Some(2 * edge + side);
-                    }
-                }
-            }
-        }
-        if metrics.len() < 3 {
-            return None;
-        }
-        // A tensor occurrence in addition to two metric endpoints makes the
-        // incidence ambiguous. The ordered substitution below owns that case.
-        let mut metric_positions = metrics.iter().map(|metric| metric.position).peekable();
-        for (position, factor) in product.iter().enumerate() {
-            if metric_positions.peek() == Some(&position) {
-                metric_positions.next();
-                continue;
-            }
-            let mut ambiguous = false;
-            factor.visitor(&mut |atom| {
-                if ambiguous {
-                    return false;
-                }
-                if let Some(endpoint) = Endpoint::parse(atom, slots) {
-                    if let Some(&space) =
-                        spaces.get(&(endpoint.representation.base(), endpoint.dimension))
-                    {
-                        ambiguous = occurrences
-                            .get(&(space, endpoint.index))
-                            .is_some_and(|entry| entry.2);
-                    }
-                    return false;
-                }
-                !matches!(atom,AtomView::Fun(f) if f.get_symbol().is_scalar())
-                    && matches!(slots.classify(atom), SlotMatch::Other)
-            });
-            if ambiguous {
-                return None;
-            }
-        }
-        let mut replacements = Vec::new();
-        // Every node has at most two neighbors. Walking away from both sides
-        // finds a path's boundaries without a DFS stack; returning to its start
-        // closes a loop. Removed nodes also mark completed components.
-        for start in 0..metrics.len() {
-            if metrics[start].removed || metrics[start].neighbors == [None; 2] {
-                continue;
-            }
-            metrics[start].removed = true;
-            let mut boundary = [metrics[start].arguments[0]; 2];
-            let mut closed = false;
-            for (side, boundary) in boundary.iter_mut().enumerate() {
-                let (mut edge, mut side) = (start, side);
-                loop {
-                    let Some(next) = metrics[edge].neighbors[side] else {
-                        *boundary = metrics[edge].arguments[side];
-                        break;
-                    };
-                    let (next, next_side) = (next / 2, next % 2);
-                    if next == start {
-                        closed = true;
-                        break;
-                    }
-                    metrics[next].removed = true;
-                    edge = next;
-                    side = 1 - next_side;
-                }
-                if closed {
-                    break;
-                }
-            }
-            replacements.push(if closed {
-                metrics[start].dimension.to_owned()
-            } else {
-                FunctionBuilder::new(metric)
-                    .add_arg(boundary[0])
-                    .add_arg(boundary[1])
-                    .finish()
-            });
-        }
-        if replacements.is_empty() {
-            return None;
-        }
-        let mut metric_positions = metrics.iter().peekable();
-        Some(Atom::mul_many(
-            product
-                .iter()
-                .enumerate()
-                .filter_map(|(position, factor)| {
-                    if let Some(metric) = metric_positions.peek()
-                        && metric.position == position
-                    {
-                        let removed = metric.removed;
-                        metric_positions.next();
-                        if removed {
-                            return None;
-                        }
-                    }
-                    Some(AtomOrView::View(factor))
-                })
-                .chain(replacements.into_iter().map(AtomOrView::Atom)),
-        ))
     }
 
     fn find_contraction<'a>(
@@ -422,7 +216,7 @@ impl SlotContraction {
         chain_like: bool,
         rank_one: bool,
         slots: &mut SlotMatcher,
-    ) -> Option<(usize, usize, Atom)> {
+    ) -> Option<ContractionCandidate> {
         // Preserve metric-first contraction. Canonical products already expose
         // their factors, so finding a source needs no commutative pattern search.
         for (position, factor) in factors.clone().enumerate() {
@@ -478,7 +272,7 @@ impl SlotContraction {
                     source,
                     &|| {
                         let stripped = source.representation.base().to_symbolic([source.dimension]);
-                        Self::replace_argument(function, slot_position, stripped)
+                        self.replace_argument(function, slot_position, stripped, &mut Vec::new())
                     },
                     chain_like,
                     slots,
@@ -502,7 +296,7 @@ impl SlotContraction {
                     && let Some(replacement) =
                         self.contract_linear_source(factor, tensor, chain_like, rank_one, slots)
                 {
-                    return Some((partner, source, replacement));
+                    return Some((partner, source, replacement.0, replacement.1));
                 }
             }
         }
@@ -516,7 +310,7 @@ impl SlotContraction {
         chain_like: bool,
         rank_one: bool,
         slots: &mut SlotMatcher,
-    ) -> Option<Atom> {
+    ) -> Option<(Atom, Vec<(Atom, Atom)>)> {
         match expression {
             AtomView::Fun(function)
                 if function.get_symbol() == self.metric
@@ -528,33 +322,37 @@ impl SlotContraction {
                     rank_one,
                     slots,
                 )
-                .map(|(_, _, result)| result)
+                .map(|(_, _, result, observations)| (result, observations))
             }
             AtomView::Add(sum) => {
                 // Every branch must absorb the partner before it can be
-                // removed from the surrounding product.
-                let terms = sum
-                    .iter()
-                    .map(|term| {
-                        self.contract_linear_source(term, partner, chain_like, rank_one, slots)
-                    })
-                    .collect::<Option<Vec<_>>>()?;
-                Some(Atom::add_many(terms))
+                // removed from the surrounding product. Refused sums discard
+                // the successful candidates' observations along with them.
+                let mut terms = Vec::new();
+                let mut observations = Vec::new();
+                for term in sum.iter() {
+                    let (term, uses) =
+                        self.contract_linear_source(term, partner, chain_like, rank_one, slots)?;
+                    terms.push(term);
+                    observations.extend(uses);
+                }
+                Some((Atom::add_many(terms), observations))
             }
             AtomView::Mul(product) => {
                 for (position, factor) in product.iter().enumerate() {
-                    if let Some(replaced) =
+                    if let Some((replaced, observations)) =
                         self.contract_linear_source(factor, partner, chain_like, rank_one, slots)
                     {
-                        return Some(Atom::mul_many(product.iter().enumerate().map(
-                            |(i, factor)| {
+                        return Some((
+                            Atom::mul_many(product.iter().enumerate().map(|(i, factor)| {
                                 if i == position {
                                     replaced.as_view()
                                 } else {
                                     factor
                                 }
-                            },
-                        )));
+                            })),
+                            observations,
+                        ));
                     }
                 }
                 None
@@ -585,7 +383,7 @@ impl SlotContraction {
         replacement: &impl Fn() -> Atom,
         chain_like: bool,
         slots: &mut SlotMatcher,
-    ) -> Option<(usize, usize, Atom)> {
+    ) -> Option<ContractionCandidate> {
         for (position, factor) in factors.enumerate() {
             if position == source_position {
                 continue;
@@ -599,8 +397,8 @@ impl SlotContraction {
                 }
                 _ => SlotReplacement::Absent,
             };
-            if let SlotReplacement::Replaced(replaced) = result {
-                return Some((source_position, position, replaced));
+            if let SlotReplacement::Replaced(replaced, observations) = result {
+                return Some((source_position, position, replaced, observations));
             }
         }
         None
@@ -624,10 +422,14 @@ impl SlotContraction {
             }
             AtomView::Add(sum) => {
                 let mut replaced = Vec::new();
+                let mut observations = Vec::new();
                 let mut absent = false;
                 for term in sum.iter() {
                     match self.replace_linear(term, source, replacement, chain_like, slots) {
-                        SlotReplacement::Replaced(term) if !absent => replaced.push(term),
+                        SlotReplacement::Replaced(term, uses) if !absent => {
+                            replaced.push(term);
+                            observations.extend(uses);
+                        }
                         SlotReplacement::Absent if replaced.is_empty() => absent = true,
                         _ => return SlotReplacement::Ambiguous,
                     }
@@ -635,32 +437,33 @@ impl SlotContraction {
                 if absent {
                     SlotReplacement::Absent
                 } else {
-                    SlotReplacement::Replaced(Atom::add_many(replaced))
+                    SlotReplacement::Replaced(Atom::add_many(replaced), observations)
                 }
             }
             AtomView::Mul(product) => {
                 let mut changed = None;
                 for (position, factor) in product.iter().enumerate() {
                     match self.replace_linear(factor, source, replacement, chain_like, slots) {
-                        SlotReplacement::Replaced(factor) if changed.is_none() => {
-                            changed = Some((position, factor));
+                        SlotReplacement::Replaced(factor, observations) if changed.is_none() => {
+                            changed = Some((position, factor, observations));
                         }
                         SlotReplacement::Absent => {}
                         _ => return SlotReplacement::Ambiguous,
                     }
                 }
-                let Some((position, replacement)) = changed else {
+                let Some((position, replacement, observations)) = changed else {
                     return SlotReplacement::Absent;
                 };
-                SlotReplacement::Replaced(Atom::mul_many(product.iter().enumerate().map(
-                    |(i, factor)| {
+                SlotReplacement::Replaced(
+                    Atom::mul_many(product.iter().enumerate().map(|(i, factor)| {
                         if i == position {
                             replacement.as_view()
                         } else {
                             factor
                         }
-                    },
-                )))
+                    })),
+                    observations,
+                )
             }
             AtomView::Pow(power) => {
                 // A tensor power can expose a nonlinear occurrence. It cannot
@@ -699,7 +502,10 @@ impl SlotContraction {
                 return SlotReplacement::Absent;
             };
             return if source.matches(&endpoint) {
-                SlotReplacement::Replaced(Self::replace_argument(function, position, replacement()))
+                let mut observations = Vec::new();
+                let result =
+                    self.replace_argument(function, position, replacement(), &mut observations);
+                SlotReplacement::Replaced(result, observations)
             } else if linear && source.same_index(&endpoint) {
                 SlotReplacement::Ambiguous
             } else {
@@ -710,7 +516,7 @@ impl SlotContraction {
         for (position, argument) in function.iter().enumerate() {
             let replaced = if let Some(endpoint) = Endpoint::parse(argument, slots) {
                 if source.matches(&endpoint) {
-                    SlotReplacement::Replaced(replacement())
+                    SlotReplacement::Replaced(replacement(), Vec::new())
                 } else if linear && source.same_index(&endpoint) {
                     // A same-variance occurrence cannot hide an internal pair
                     // while another occurrence consumes the external metric.
@@ -736,21 +542,23 @@ impl SlotContraction {
                 SlotReplacement::Absent
             };
             match replaced {
-                SlotReplacement::Replaced(replaced) if !linear => {
-                    return SlotReplacement::Replaced(Self::replace_argument(
-                        function, position, replaced,
-                    ));
+                SlotReplacement::Replaced(replaced, mut observations) if !linear => {
+                    let result =
+                        self.replace_argument(function, position, replaced, &mut observations);
+                    return SlotReplacement::Replaced(result, observations);
                 }
-                SlotReplacement::Replaced(replaced) if changed.is_none() => {
-                    changed = Some((position, replaced));
+                SlotReplacement::Replaced(replaced, observations) if changed.is_none() => {
+                    changed = Some((position, replaced, observations));
                 }
                 SlotReplacement::Absent => {}
                 _ => return SlotReplacement::Ambiguous,
             }
         }
         match changed {
-            Some((position, replacement)) => {
-                SlotReplacement::Replaced(Self::replace_argument(function, position, replacement))
+            Some((position, replacement, mut observations)) => {
+                let result =
+                    self.replace_argument(function, position, replacement, &mut observations);
+                SlotReplacement::Replaced(result, observations)
             }
             None => SlotReplacement::Absent,
         }
@@ -770,27 +578,35 @@ impl SlotContraction {
                 continue;
             };
             match self.replace_function(function, source, replacement, false, linear, slots) {
-                SlotReplacement::Replaced(replaced) if !linear => {
-                    return SlotReplacement::Replaced(Self::replace_argument(
-                        projector, position, replaced,
-                    ));
+                SlotReplacement::Replaced(replaced, mut observations) if !linear => {
+                    let result =
+                        self.replace_argument(projector, position, replaced, &mut observations);
+                    return SlotReplacement::Replaced(result, observations);
                 }
-                SlotReplacement::Replaced(replaced) if changed.is_none() => {
-                    changed = Some((position, replaced));
+                SlotReplacement::Replaced(replaced, observations) if changed.is_none() => {
+                    changed = Some((position, replaced, observations));
                 }
                 SlotReplacement::Absent => {}
                 _ => return SlotReplacement::Ambiguous,
             }
         }
         match changed {
-            Some((position, replacement)) => {
-                SlotReplacement::Replaced(Self::replace_argument(projector, position, replacement))
+            Some((position, replacement, mut observations)) => {
+                let result =
+                    self.replace_argument(projector, position, replacement, &mut observations);
+                SlotReplacement::Replaced(result, observations)
             }
             None => SlotReplacement::Absent,
         }
     }
 
-    fn replace_argument(function: FunView<'_>, position: usize, replacement: Atom) -> Atom {
+    fn replace_argument(
+        &self,
+        function: FunView<'_>,
+        position: usize,
+        replacement: Atom,
+        literal_relabellings: &mut Vec<(Atom, Atom)>,
+    ) -> Atom {
         let mut result = FunctionBuilder::new(function.get_symbol());
         for (i, argument) in function.iter().enumerate() {
             result = result.add_arg(if i == position {
@@ -799,7 +615,11 @@ impl SlotContraction {
                 argument
             });
         }
-        result.finish()
+        let result = result.finish();
+        if function.get_symbol() == self.alias && result.as_view() != function.as_view() {
+            literal_relabellings.push((function.as_view().to_owned(), result.clone()));
+        }
+        result
     }
 }
 
@@ -825,6 +645,50 @@ mod tests {
     }
 
     #[test]
+    fn ordered_alias_observations_exclude_discovery_and_refused_branches() {
+        crate::representations::initialize();
+        let a = spenso::mink!(4, 97101);
+        let b = spenso::mink!(4, 97103);
+        let alias = spenso::tensor_symbol!("idenso::tensor_alias");
+        let source = FunctionBuilder::new(alias)
+            .add_arg(97101)
+            .add_arg(&a)
+            .finish();
+        let target = FunctionBuilder::new(alias)
+            .add_arg(97101)
+            .add_arg(&b)
+            .finish();
+        let input = ETS.metric(&a, &b) * &source;
+        let wrapper = spenso::tensor_symbol!("ordered_alias_observation_wrapper");
+        for (input, expected) in [
+            (input.clone(), target.clone()),
+            (
+                FunctionBuilder::new(wrapper).add_arg(&input).finish(),
+                FunctionBuilder::new(wrapper).add_arg(&target).finish(),
+            ),
+        ] {
+            let mut observations = Vec::new();
+            assert_eq!(
+                SlotContraction::run(input.as_view(), false, false, &mut observations),
+                expected
+            );
+            // The nested discovery probe builds the same candidate, but only
+            // the replacement committed by contract_product is registered.
+            assert_eq!(observations, [(source.clone(), target.clone())]);
+        }
+        let refused = ETS.metric(&a, &b) * (&source + Atom::num(1));
+        let mut observations = Vec::new();
+        assert_eq!(
+            SlotContraction::run(refused.as_view(), false, false, &mut observations),
+            refused
+        );
+        assert!(
+            observations.is_empty(),
+            "an incomplete linear sum cannot publish uses"
+        );
+    }
+
+    #[test]
     fn metric_first_substitution_is_oriented_and_slot_aware() {
         crate::representations::initialize();
         for (input, expected) in [
@@ -837,10 +701,10 @@ mod tests {
             ("g(mink(4,a),P(mink(4)))*T(mink(4,a))", "T(P(mink(4)))"),
         ] {
             let expression = parse(input);
-            let result = SlotContraction::run(expression.as_view(), false, false, true);
+            let result = SlotContraction::run(expression.as_view(), false, false, &mut Vec::new());
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(
-                SlotContraction::run(result.as_view(), false, false, true),
+                SlotContraction::run(result.as_view(), false, false, &mut Vec::new()),
                 result
             );
         }
@@ -880,12 +744,12 @@ mod tests {
             ),
         ] {
             calls.lock().unwrap().clear();
-            let result = SlotContraction::run(input.as_view(), false, false, true);
+            let result = SlotContraction::run(input.as_view(), false, false, &mut Vec::new());
             assert_eq!(result, output);
             assert_eq!(*calls.lock().unwrap(), expected_calls);
             calls.lock().unwrap().clear();
             assert_eq!(
-                SlotContraction::run(result.as_view(), false, false, true),
+                SlotContraction::run(result.as_view(), false, false, &mut Vec::new()),
                 result
             );
             assert!(calls.lock().unwrap().is_empty());
@@ -907,7 +771,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), false, false, true),
+                SlotContraction::run(expression.as_view(), false, false, &mut Vec::new()),
                 parse(expected),
                 "{input}"
             );
@@ -935,10 +799,10 @@ mod tests {
                 "T(slot_contraction_p(mink(4)))",
             ),
         ] {
-            let result = SlotContraction::run(parse(input).as_view(), false, true, true);
+            let result = SlotContraction::run(parse(input).as_view(), false, true, &mut Vec::new());
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(
-                SlotContraction::run(result.as_view(), false, true, true),
+                SlotContraction::run(result.as_view(), false, true, &mut Vec::new()),
                 result
             );
         }
@@ -986,10 +850,10 @@ mod tests {
             ),
         ] {
             let expression = parse(input);
-            let result = SlotContraction::run(expression.as_view(), true, true, true);
+            let result = SlotContraction::run(expression.as_view(), true, true, &mut Vec::new());
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(
-                SlotContraction::run(result.as_view(), true, true, true),
+                SlotContraction::run(result.as_view(), true, true, &mut Vec::new()),
                 result
             );
         }
@@ -1004,12 +868,12 @@ mod tests {
         let expected = parse(
             "g(mink(4,c),mink(4,d))*epsilon(mink(4,b),mink(4,e),mink(4,f),mink(4,h))-g(mink(4,c),mink(4,b))*epsilon(mink(4,d),mink(4,e),mink(4,f),mink(4,h))",
         );
-        let result = SlotContraction::run(determinant.as_view(), false, false, true);
+        let result = SlotContraction::run(determinant.as_view(), false, false, &mut Vec::new());
         // Epsilon normalization can move a common minus sign outside the
         // two-term tensor polynomial. There are no scalar spectators here.
         assert_eq!(result.expand(), expected.expand());
         assert_eq!(
-            SlotContraction::run(result.as_view(), false, false, true),
+            SlotContraction::run(result.as_view(), false, false, &mut Vec::new()),
             result
         );
         for (input, expected, rank_one) in [
@@ -1032,14 +896,15 @@ mod tests {
             let expression = parse(input);
             if rank_one {
                 assert_eq!(
-                    SlotContraction::run(expression.as_view(), false, false, true),
+                    SlotContraction::run(expression.as_view(), false, false, &mut Vec::new()),
                     expression
                 );
             }
-            let result = SlotContraction::run(expression.as_view(), false, rank_one, true);
+            let result =
+                SlotContraction::run(expression.as_view(), false, rank_one, &mut Vec::new());
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(
-                SlotContraction::run(result.as_view(), false, rank_one, true),
+                SlotContraction::run(result.as_view(), false, rank_one, &mut Vec::new()),
                 result
             );
         }
@@ -1051,7 +916,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), false, false, true),
+                SlotContraction::run(expression.as_view(), false, false, &mut Vec::new()),
                 expression
             );
         }
@@ -1076,7 +941,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), true, true, true),
+                SlotContraction::run(expression.as_view(), true, true, &mut Vec::new()),
                 expression,
                 "{input}"
             );
@@ -1116,10 +981,11 @@ mod tests {
                 "D*Nc",
             ),
         ] {
-            let result = SlotContraction::run(parse(input).as_view(), false, false, true);
+            let result =
+                SlotContraction::run(parse(input).as_view(), false, false, &mut Vec::new());
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(
-                SlotContraction::run(result.as_view(), false, false, true),
+                SlotContraction::run(result.as_view(), false, false, &mut Vec::new()),
                 result
             );
         }
@@ -1128,23 +994,19 @@ mod tests {
     #[test]
     fn ambiguous_metric_incidence_keeps_ordered_substitution() {
         crate::representations::initialize();
-        let contractor = SlotContraction {
-            metric: ETS.metric,
-            tags: &SPENSO_TAG,
-            projectors: [*shadowing::CYCLIC, *shadowing::SYM],
-        };
         for source in [
             "g(mink(4,a),mink(4,b))*g(mink(4,a),mink(4,c))*g(mink(4,a),mink(4,d))*g(mink(4,x),mink(4,y))",
             "g(mink(4,a),mink(4,b))*g(mink(4,b),mink(4,c))*g(mink(4,c),mink(4,d))*T(mink(4,b))",
         ] {
             let expression = parse(source);
-            let AtomView::Mul(product) = expression.as_view() else {
-                panic!("expected product");
-            };
             assert!(
-                contractor
-                    .contract_metric_components(product, &mut SlotMatcher::default())
-                    .is_none()
+                crate::tensor::SymbolicTensor::infer(expression.clone()).is_err(),
+                "ambiguous incidence must be rejected before graph planning"
+            );
+            let ordered = SlotContraction::run(expression.as_view(), false, false, &mut Vec::new());
+            assert_eq!(
+                SlotContraction::run(ordered.as_view(), false, false, &mut Vec::new()),
+                ordered
             );
         }
     }
@@ -1159,7 +1021,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), true, true, true),
+                SlotContraction::run(expression.as_view(), true, true, &mut Vec::new()),
                 expression
             );
         }
@@ -1171,7 +1033,7 @@ mod tests {
         let distinct =
             parse("g(mink(4,1),mink(4,2))*T(mink(4,4294967297))*U(mink(4,k))*V(mink(4,k))");
         assert_eq!(
-            SlotContraction::run(distinct.as_view(), false, false, true),
+            SlotContraction::run(distinct.as_view(), false, false, &mut Vec::new()),
             distinct
         );
         for (input, expected) in [
@@ -1185,7 +1047,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                SlotContraction::run(parse(input).as_view(), false, false, true),
+                SlotContraction::run(parse(input).as_view(), false, false, &mut Vec::new()),
                 parse(expected)
             );
         }
@@ -1206,7 +1068,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                SlotContraction::run(parse(input).as_view(), false, false, true),
+                SlotContraction::run(parse(input).as_view(), false, false, &mut Vec::new()),
                 parse(expected)
             );
         }
@@ -1217,7 +1079,7 @@ mod tests {
         crate::representations::initialize();
         let endpoint = parse("g(bis(4,a),bis(4,b))*chain(bis(4,b),bis(4,c),F(in,out))");
         assert_eq!(
-            SlotContraction::run(endpoint.as_view(), false, false, true),
+            SlotContraction::run(endpoint.as_view(), false, false, &mut Vec::new()),
             parse("chain(bis(4,a),bis(4,c),F(in,out))")
         );
         for (input, expected) in [
@@ -1236,12 +1098,12 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), false, false, true),
+                SlotContraction::run(expression.as_view(), false, false, &mut Vec::new()),
                 expression,
                 "{input}"
             );
             assert_eq!(
-                SlotContraction::run(expression.as_view(), true, false, true),
+                SlotContraction::run(expression.as_view(), true, false, &mut Vec::new()),
                 parse(expected),
                 "{input}"
             );
@@ -1253,7 +1115,7 @@ mod tests {
         crate::representations::initialize();
         let expression = parse("g(mink(4,a),mink(4,b))*g(mink(4,c),mink(4,d))*T(mink(4,d))");
         assert_eq!(
-            SlotContraction::run(expression.as_view(), false, false, true),
+            SlotContraction::run(expression.as_view(), false, false, &mut Vec::new()),
             parse("g(mink(4,a),mink(4,b))*T(mink(4,c))")
         );
     }
@@ -1274,7 +1136,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), false, false, true),
+                SlotContraction::run(expression.as_view(), false, false, &mut Vec::new()),
                 expression,
                 "{input}"
             );

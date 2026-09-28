@@ -691,7 +691,8 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     v: feynkit_graph::symbols::v(),
     u: feynkit_graph::symbols::u(),
     emr_mom: feynkit_graph::symbols::momentum(),
-    uv_momentum_provenance: symbol!("gammalooprs::uv::momentum_provenance"),
+    // The original index-free momentum is provenance metadata, not a tensor child.
+    uv_momentum_provenance: symbol!("gammalooprs::uv::momentum_provenance"; Scalar),
     uv_class: symbol!("gammalooprs::uv::class"),
     orientation_delta: symbol!("orientation_delta"),
     emr_vec: symbol!(
@@ -1134,6 +1135,35 @@ mod tests {
         let collected = GS.collect_orientation_if(expression);
         assert_eq!(collected, expected);
         assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
+    }
+
+    #[test]
+    fn uv_provenance_is_scalar_metadata_with_exact_momentum_roundtrip() {
+        use idenso::tensor::SymbolicTensor;
+        use spenso::structure::representation::{Minkowski, RepName};
+
+        crate::initialisation::test_initialise().unwrap();
+        let momentum = GS.emr_mom.call(2) - GS.emr_mom.call(3);
+        let provenance =
+            GS.uv_momentum_provenance_tag(7, UvMomentumProvenanceRole::TaylorFixed, &momentum);
+        assert_eq!(
+            GS.uv_momentum_provenance_data(provenance.as_view()),
+            Some((
+                EdgeIndex(7),
+                UvMomentumProvenanceRole::TaylorFixed,
+                momentum.clone()
+            ))
+        );
+        let mink = Minkowski {}.new_rep(GS.dim);
+        for slot in [mink.to_symbolic([]), mink.to_symbolic([Atom::num(1)])] {
+            let tagged = function!(GS.emr_mom, &provenance, &slot);
+            let typed = SymbolicTensor::infer(tagged.clone()).unwrap();
+            assert_eq!(typed.expression(), &tagged);
+            assert_eq!(
+                GS.erase_uv_momentum_provenance(typed.expression()),
+                GS.indexed_momentum(&momentum, &[slot])
+            );
+        }
     }
 
     #[test]

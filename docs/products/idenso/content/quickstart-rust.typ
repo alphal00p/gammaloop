@@ -4,13 +4,13 @@
 = Using Idenso from Rust
 
 This route constructs the same indexed metric contraction as the Python example, applies
-Idenso's native `MetricSimplifier`, and checks the exact reduced Symbolica expression.
+Idenso’s shared `SymbolicTensor::contract`, and checks the exact reduced Symbolica expression.
 
 #callout("Use the current Git API until the next crate release", [
   The published `idenso 0.3.0` predates the current module layout and uses an older Symbolica
   dependency. Mixing its API with the current manual can create incompatible `Atom` types. The
-  pinned Git dependency below matches this documentation; switch to the next published Idenso
-  version once it carries the same API.
+  example below uses a local checkout carrying this API and its pinned Symbolica revision.
+  Use that checkout’s dependency versions when embedding it in another workspace.
 ])
 
 == Create a Rust project
@@ -21,30 +21,30 @@ Use Rust 1.89 or newer:
 ```sh
 cargo new idenso-quickstart
 cd idenso-quickstart
-cargo add idenso \
-  --git https://github.com/alphal00p/gammaloop.git \
-  --rev 6a09acd2a310b40332e5c22042a468bc18876ce5
-cargo add symbolica@3.0.0 --no-default-features
+cargo add idenso --path /path/to/gammaloop/crates/idenso
+cargo add spenso --path /path/to/gammaloop/crates/spenso
 ```
 
-Replace `src/main.rs` with:
+Copy the checkout’s `[patch.crates-io]` dependency overrides into your `Cargo.toml`
+so all tensor crates share one Symbolica build. Replace `src/main.rs` with:
 
 // docs-example: compile idenso-rust-quickstart
 ```rust
-use idenso::shorthands::metric::MetricSimplifier;
-use symbolica::parse_lit;
+use idenso::tensor::SymbolicTensor;
+use spenso::{g, mink, vector};
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     idenso::representations::initialize();
 
-    let expression = parse_lit!(
-        spenso::g(spenso::mink(4, 0), spenso::mink(4, 1))
-            * p(spenso::mink(4, 1))
-    );
-    let reduced = expression.simplify_metrics();
+    let expression = g!(mink!(4, 0), mink!(4, 1)) * vector!(p, mink!(4, 1));
+    let reduced = SymbolicTensor::infer(expression)?
+        .contract(Default::default())?
+        .resolved()?
+        .into_expression();
 
-    assert_eq!(reduced, parse_lit!(p(spenso::mink(4, 0))));
+    assert_eq!(reduced, vector!(p, mink!(4, 0)));
     println!("{reduced}");
+    Ok(())
 }
 ```
 

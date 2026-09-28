@@ -14,19 +14,16 @@
 //! Three additional factored generic-tensor controls exercise a selected bispinor
 //! representation and both orientations of an unrelated dual representation.
 //!
+//! Typed gamma methods include admission and alias resolution in each call.
 //! Each method is called directly through the linked production API. Compare
 //! output snapshots across builds; term counts alone do not establish equivalence.
 
 use std::{hint::black_box, path::Path, time::Instant};
 
 use idenso::{
-    dirac::GammaSimplifier,
-    epsilon::EpsilonSimplifier,
     representations::Bispinor,
-    shorthands::{
-        chain::Chain,
-        schoonschip::{Schoonschip, SchoonschipSettings},
-    },
+    shorthands::chain::Chain,
+    tensor::{SymbolicTensor, contract::ContractionSettings},
 };
 use spenso::network::{parsing::AtomStructureExt, tags::SPENSO_TAG};
 use symbolica::atom::{Atom, AtomCore, AtomView};
@@ -35,26 +32,24 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 enum Method {
     Clone,
     RepeatedIndices,
-    NormalizeDots,
-    MetricSchoonschip,
-    Schoonschip,
+    ToDots,
+    MetricContractResolve,
+    ContractResolve,
     Epsilon,
     Chainify,
-    CollectChains,
-    CollectGammaChains,
-    Gamma,
+    TypedGammaChainsResolve,
+    TypedGammaResolve,
 }
-const METHODS: [Method; 10] = [
+const METHODS: [Method; 9] = [
     Method::Clone,
     Method::RepeatedIndices,
-    Method::NormalizeDots,
-    Method::MetricSchoonschip,
-    Method::Schoonschip,
+    Method::ToDots,
+    Method::MetricContractResolve,
+    Method::ContractResolve,
     Method::Epsilon,
     Method::Chainify,
-    Method::CollectChains,
-    Method::CollectGammaChains,
-    Method::Gamma,
+    Method::TypedGammaChainsResolve,
+    Method::TypedGammaResolve,
 ];
 
 enum Outcome {
@@ -77,19 +72,54 @@ fn run(method: Method, view: AtomView<'_>) -> Outcome {
     }
     Outcome::Atom(match method {
         Clone => view.to_owned(),
-        NormalizeDots => view.normalize_dots(),
-        MetricSchoonschip => view.schoonschip_with_settings(
-            &SchoonschipSettings::default()
-                .without_rank1_tensors()
-                .with_chain_like_functions(),
-        ),
-        Schoonschip => view
-            .schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions()),
-        Epsilon => view.simplify_epsilon(),
+        ToDots => SymbolicTensor::infer(view.to_owned())
+            .unwrap()
+            .to_dots()
+            .unwrap()
+            .into_expression(),
+        MetricContractResolve => SymbolicTensor::infer(view.to_owned())
+            .unwrap()
+            .contract(ContractionSettings::default().without_rank_one_tensors())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        ContractResolve => SymbolicTensor::infer(view.to_owned())
+            .unwrap()
+            .contract(Default::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        Epsilon => SymbolicTensor::infer(view.to_owned())
+            .unwrap()
+            .simplify_epsilon()
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
         Chainify => view.chainify(Bispinor {}.into()),
-        CollectChains => view.collect_chains(Bispinor {}.into()),
-        CollectGammaChains => view.collect_gamma_chains(),
-        Gamma => view.simplify_gamma(),
+        TypedGammaChainsResolve => {
+            idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(idenso::dirac::GammaSimplifySettings {
+                    output: idenso::dirac::GammaOutput::Chains,
+                    ..Default::default()
+                })
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+        }
+        TypedGammaResolve => {
+            idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+        }
         RepeatedIndices => unreachable!(),
     })
 }
@@ -142,18 +172,21 @@ fn main() {
         let source = std::fs::read_to_string(path).unwrap();
         (case, variant, has_gamma, source)
     });
+    SPENSO_TAG.tensor_symbol("spenso::generic");
+    // Typed controls use atomic dimensions and one coherent open interface.
+    // Their scalar spectator remains factored throughout every stage.
     let controls = [
         (
             "generic_bispinor_factored",
-            "((x+y)^8+generic((x+y)^8,bis(n^2-1,label(a)),metadata,bis(n^2-1,label(b))))^2",
+            "(x+y)^8*generic((x+y)^8,metadata,bis(Ns,a),bis(Ns,b))",
         ),
         (
             "generic_other_representation_factored",
-            "((x+y)^8+generic((x+y)^8,cof(n^2-1,label(a)),metadata,dind(cof(n^2-1,label(b)))))^2",
+            "(x+y)^8*generic((x+y)^8,metadata,cof(Nc,a),dind(cof(Nc,b)))",
         ),
         (
             "generic_other_representation_reversed",
-            "((x+y)^8+generic((x+y)^8,dind(cof(n^2-1,label(a))),metadata,cof(n^2-1,label(b))))^2",
+            "(x+y)^8*generic((x+y)^8,metadata,dind(cof(Nc,a)),cof(Nc,b))",
         ),
     ]
     .into_iter()
@@ -177,11 +210,11 @@ fn main() {
         )
         .unwrap();
         for method in METHODS {
-            if matches!(method, Method::Gamma) && !has_gamma {
+            if matches!(method, Method::TypedGammaResolve) && !has_gamma {
                 continue;
             }
             let output = run(method, input.as_view()).atom();
-            if matches!(method, Method::Gamma) && variant == "gamma_terminal" {
+            if matches!(method, Method::TypedGammaResolve) && variant == "gamma_terminal" {
                 assert_eq!(output, input, "{case}: terminal gamma expression changed");
             }
             let changed = output != input;

@@ -50,7 +50,7 @@ impl Recipe {
         let mut counters = HashMap::new();
         let mut indices = Vec::new();
         let mut dimensions = Vec::new();
-        for slot in tensor.descriptor.structure.logical_slots() {
+        for slot in tensor.descriptor.structure().logical_slots() {
             let rep = slot.rep();
             let base = rep.rep.base();
             let dimension = match rep.dim {
@@ -176,13 +176,13 @@ pub(crate) fn to_html(
             .bind(py)
             .call1(PyTuple::new(py, &recipe.indices)?)?
             .extract::<Py<TensorExpression>>()?;
-        tensor.descriptor = TensorExpression::structured(&indexed.borrow(py));
+        tensor.descriptor = TensorExpression::structured(&indexed.borrow(py)).clone();
         let name = tensor.descriptor_name.expect("library tensors are named");
         let title = name.get_name();
         let svg = structured_to_svg(py, &tensor.descriptor, settings, None)?;
         let shape = tensor
             .descriptor
-            .structure
+            .structure()
             .logical_slots()
             .into_iter()
             .map(|slot| slot.rep().dim.to_string())

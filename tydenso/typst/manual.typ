@@ -114,7 +114,7 @@ dictionary; `vector` creates a callable rank-one tensor name.
 #let p = vector("p")
 
 #let before = math($#metric(V, mu, nu) #p(nu)$)
-#let after = simplify-metrics(before)
+#let after = contract(before)
 
 $
   #to-typst(before)
@@ -411,8 +411,8 @@ unambiguous.
 = Transform tensors
 
 Idenso provides the domain-specific transformations. The most common ones
-simplify metrics, gamma matrices, and color structures; selective expanders and
-index-wrapping functions are available for lower-level workflows.
+contract tensor indices and simplify gamma matrices and color structures.
+Index-wrapping functions are available for lower-level workflows.
 
 == Contract a metric chain
 
@@ -431,7 +431,7 @@ eliminates both contracted dummy indices in one pass.
   metric(V, nu, rho),
   p(rho),
 )
-#let reduced = simplify-metrics(chain)
+#let reduced = contract(chain)
 
 $
   #to-typst(chain)
@@ -450,16 +450,18 @@ $
   inset: 6pt,
   stroke: 0.4pt + rgb("#d7cfda"),
   table.header([*Family*], [*Purpose*]),
-  [`simplify-metrics`, `expand-metrics`, `expand-mink`, `expand-bis`],
+  [`contract`],
   [Metric, Minkowski, and bispinor structure.],
   [`simplify-gamma`, `dirac-adjoint`],
   [Dirac chains and conjugation.],
-  [`simplify-color`, `expand-color`],
+  [`simplify-color`],
   [Color generators and structure constants.],
   [`cook-function`, `cook-indices`, `wrap-dummies`, `wrap-indices`],
   [Canonical index organization and explicit wrappers.],
   [`to-dots`],
-  [Rewrite supported contractions as dot products.],
+  [Render compact metric products as dots; call `contract` first for explicit indices.],
+  [`undo-dots`],
+  [Open dots into symbolic indexed contractions without expanding the numerator.],
 )
 
 The mathematical conventions and supported identities track
@@ -653,15 +655,14 @@ surface as a dictionary bound to a selected plugin module.
   (
     title: [Metric and index transformations],
     names: (
-      "cook-function", "cook-indices", "expand-bis", "expand-metrics",
-      "expand-mink", "expand-mink-bis", "list-dangling", "simplify-metrics",
-      "to-dots", "wrap-dummies", "wrap-indices",
+      "cook-function", "cook-indices", "list-dangling", "contract",
+      "to-dots", "undo-dots", "wrap-dummies", "wrap-indices",
     ),
   ),
   (
     title: [Dirac and color transformations],
     names: (
-      "dirac-adjoint", "expand-color", "simplify-color", "simplify-gamma",
+      "dirac-adjoint", "simplify-color", "simplify-gamma",
     ),
   ),
   (

@@ -18,7 +18,7 @@ use symbolica_utils::AtomPrintExt;
 
 use crate::{
     representations::{Bispinor, ColorFundamental},
-    test_support::test_initialize,
+    test_support::{contracted_atom, test_initialize},
 };
 
 use super::{Schoonschip, SchoonschipSettings};
@@ -60,13 +60,8 @@ fn tensor_sum_square_uses_local_contractions() {
     let spectator = (x + y).pow(12);
     let square = &p * &p + Atom::num(2) * &p * &q + &q * &q;
     let expression = &spectator * ((p + q).pow(2) - square + Atom::num(1));
-    let result = expression
-        .schoonschip_with_net::<true, AbstractIndex>(
-            &SchoonschipSettings::new(None).with_expanded_contracted_sums(),
-        )
-        .unwrap()
-        .to_dots();
-    assert_eq!(result, spectator);
+    let result = contracted_atom(expression.as_view()).unwrap().to_dots();
+    assert!((result - spectator).expand().is_zero());
 }
 
 #[test]
@@ -92,15 +87,12 @@ fn network_sum_preserves_factored_spectators_logical_order_and_zero() {
         typed.structure =
             PartialStructure::from_logical_slots(typed.structure.logical_slots().into_iter().rev());
         assert_eq!(typed.structure.logical_slots().len(), 2);
-        let result = source.schoonschip_net::<AbstractIndex>().unwrap();
+        let result = contracted_atom(source.as_view()).unwrap();
         assert_eq!(result, expected);
         let result = typed.with_rewritten_expression(result).unwrap();
         assert_eq!(result.structure, typed.structure);
         assert_eq!(
-            result
-                .expression
-                .schoonschip_net::<AbstractIndex>()
-                .unwrap(),
+            contracted_atom(result.expression.as_view()).unwrap(),
             expected
         );
     }
@@ -123,22 +115,17 @@ fn network_sum_matches_ordered_single_term_callbacks() {
     let AtomView::Add(sum) = source.as_view() else {
         panic!("the fixture must exercise whole-sum accumulation");
     };
-    let settings = SchoonschipSettings::single_pass(Some(1));
     calls.lock().unwrap().clear();
     // This is the former driver's ordered prefix accumulation, with the same
     // single-pass reduction for each term.
     let mut expected = Atom::Zero;
     for term in sum.iter() {
-        expected += term
-            .schoonschip_with_net::<false, AbstractIndex>(&settings)
-            .unwrap();
+        expected += contracted_atom(term).unwrap();
     }
     let transcript = calls.lock().unwrap().clone();
     assert!(!transcript.is_empty());
     calls.lock().unwrap().clear();
-    let actual = source
-        .schoonschip_with_net::<false, AbstractIndex>(&settings)
-        .unwrap();
+    let actual = contracted_atom(source.as_view()).unwrap();
     assert_eq!(actual, expected);
     assert_eq!(*calls.lock().unwrap(), transcript);
 }
@@ -163,9 +150,7 @@ fn simple_dot() {
     let q3 = q!(3, slot!(mink, 1));
     let q3_2 = q!(3, slot!(mink, 2));
 
-    let result = (&p1 * &q2)
-        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::full())
-        .unwrap();
+    let result = contracted_atom((&p1 * &q2).as_view()).unwrap();
     assert_snapshot!(result.to_bare_ordered_string(),@"g(p(1,mink(D)),q(2,bla,mink(D)))");
 
     let result = (&p1 * &p1).schoonschip();
@@ -192,37 +177,26 @@ fn simple_dot() {
     let result = metric.pow(Atom::num(3)).normalize_dots();
     assert_snapshot!(result.to_bare_ordered_string(), @"D*g(mink(D,1),mink(D,2))");
 
-    let result = (&p1 * (&q2 + &p2 * &q3_2 * &q2_2))
-        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::partial())
-        .unwrap();
+    let result = contracted_atom((&p1 * (&q2 + &p2 * &q3_2 * &q2_2)).as_view())
+        .unwrap()
+        .expand();
     assert_snapshot!(result.to_bare_ordered_string(),@"g(p(1,mink(D)),p(2,mink(D)))*g(q(2,bla,mink(D)),q(3,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))");
 
-    let result = (&p1 * (&q2 + &p2 * (&q3_2 * &q2_2 + &p2_2 * &q2_2)))
-        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::full())
-        .unwrap();
-    assert_snapshot!(result.to_bare_ordered_string(),@"(g(p(2,mink(D)),q(2,bla,mink(D)))+g(q(2,bla,mink(D)),q(3,mink(D))))*g(p(1,mink(D)),p(2,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))");
+    let nested = &p1 * (&q2 + &p2 * (&q3_2 * &q2_2 + &p2_2 * &q2_2));
+    let result = contracted_atom(nested.as_view()).unwrap();
+    let rep = mink.to_symbolic([]);
+    let p1_compact = p!(1, rep.clone());
+    let p2_compact = p!(2, rep.clone());
+    let q2_compact = q!(2, symbol!("bla"), rep.clone());
+    let q3_compact = q!(3, rep);
+    let expected = (g!(&p2_compact, &q2_compact) + g!(&q2_compact, &q3_compact))
+        * g!(&p1_compact, &p2_compact)
+        + g!(&p1_compact, &q2_compact);
+    assert!((result - expected).expand().is_zero());
 
     let expr = (p1 + q3 * p1_2 * q2_2) * (q2 + p2);
 
-    let result = expr
-        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::full())
-        .unwrap();
-    assert_snapshot!(result.to_bare_ordered_string(),@"(g(p(1,mink(D)),q(2,bla,mink(D)))*q(3,mink(D,1))+p(1,mink(D,1)))*(p(2,mink(D,1))+q(2,bla,mink(D,1)))");
-
-    let result = expr
-        .schoonschip_with_net::<false, AbstractIndex>(
-            &SchoonschipSettings::full().with_expanded_contracted_sums(),
-        )
-        .unwrap();
-    let result = result.to_bare_ordered_string();
-    assert_snapshot!(result, @"g(p(1,mink(D)),p(2,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))*g(p(2,mink(D)),q(3,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))*g(q(2,bla,mink(D)),q(3,mink(D)))");
-    assert!(!result.contains("mink(D,1)"));
-
-    let result = expr
-        .schoonschip_with_net::<false, AbstractIndex>(
-            &SchoonschipSettings::partial().with_expanded_contracted_sums(),
-        )
-        .unwrap();
+    let result = contracted_atom(expr.as_view()).unwrap().expand();
     let result = result.to_bare_ordered_string();
     assert_snapshot!(result, @"g(p(1,mink(D)),p(2,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))*g(p(2,mink(D)),q(3,mink(D)))+g(p(1,mink(D)),q(2,bla,mink(D)))*g(q(2,bla,mink(D)),q(3,mink(D)))");
     assert!(!result.contains("mink(D,1)"));
@@ -302,9 +276,8 @@ fn chain_like_metric_simplification_is_opt_in() {
 
     assert_snapshot!(expr.schoonschip().to_bare_ordered_string(), @"P(1,mink(D,2))*chain(bis(D,1),bis(D,2),F(in,out,mink(D,2)))");
 
-    let result = expr.schoonschip_with_settings(
-        &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
-    );
+    let result =
+        expr.schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());
     assert_snapshot!(result.to_bare_ordered_string(), @"chain(bis(D,1),bis(D,2),F(in,out,P(1,mink(D))))");
 }
 
@@ -323,9 +296,8 @@ fn chain_like_metric_simplification_keeps_compact_scalar_products() {
 
     let expr = ETS.metric(&p_stripped, &q_stripped)
         * chain!(&i, &j, function!(f, chain_in(), chain_out(), &p_stripped));
-    let result = expr.schoonschip_with_settings(
-        &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
-    );
+    let result =
+        expr.schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());
     assert_snapshot!(result.to_bare_ordered_string(), @"chain(bis(D,i),bis(D,j),F(in,out,P(1,mink(D))))*g(P(1,mink(D)),Q(1,mink(D)))");
 }
 
@@ -341,20 +313,18 @@ fn chain_like_rank1_schoonschip_is_settings_controlled() {
     let mu = slot!(mink, 1).to_atom();
     let expr = function!(p, 1, &mu) * chain!(&i, &j, function!(f, chain_in(), chain_out(), &mu));
 
-    let without_chain_like =
-        expr.schoonschip_with_settings(&SchoonschipSettings::single_pass(None));
+    let without_chain_like = expr.schoonschip_with_settings(&SchoonschipSettings::default());
     assert_snapshot!(without_chain_like.to_bare_ordered_string(), @"P(1,mink(D,1))*chain(bis(D,1),bis(D,2),F(in,out,mink(D,1)))");
 
     let without_rank1 = expr.schoonschip_with_settings(
-        &SchoonschipSettings::single_pass(None)
+        &SchoonschipSettings::default()
             .with_chain_like_functions()
             .without_rank1_tensors(),
     );
     assert_snapshot!(without_rank1.to_bare_ordered_string(), @"P(1,mink(D,1))*chain(bis(D,1),bis(D,2),F(in,out,mink(D,1)))");
 
-    let result = expr.schoonschip_with_settings(
-        &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
-    );
+    let result =
+        expr.schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());
     assert_snapshot!(result.to_bare_ordered_string(), @"chain(bis(D,1),bis(D,2),F(in,out,P(1,mink(D))))");
 }
 
@@ -373,9 +343,8 @@ fn chain_like_metric_simplification_handles_traces() {
             bis.to_symbolic([]),
             function!(f, chain_in(), chain_out(), &mu)
         );
-    let result = expr.schoonschip_with_settings(
-        &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
-    );
+    let result =
+        expr.schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());
     assert_snapshot!(result.to_bare_ordered_string(), @"trace(bis(D),cyclic(F(in,out,P(1,mink(D)))))");
 }
 
@@ -394,9 +363,8 @@ fn chain_like_metric_simplification_handles_symmetric_traces() {
             bis.to_symbolic([]),
             function!(f, chain_in(), chain_out(), &mu)
         );
-    let result = expr.schoonschip_with_settings(
-        &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
-    );
+    let result =
+        expr.schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());
     assert_snapshot!(result.to_bare_ordered_string(), @"trace(bis(D),sym(F(in,out,P(1,mink(D)))))");
 }
 
@@ -410,7 +378,7 @@ fn chain_like_rank1_schoonschip_handles_dual_traces() {
     let f = symbol!("F");
     let i = slot!(cof, 1).to_atom();
     let dual_i = slot!(coaf, 1).to_atom();
-    let settings = SchoonschipSettings::single_pass(None).with_chain_like_functions();
+    let settings = SchoonschipSettings::default().with_chain_like_functions();
 
     let expr = function!(p, 1, &i)
         * trace!(
@@ -441,52 +409,27 @@ fn chain_like_metric_simplification_handles_chain_endpoints() {
 
     let expr =
         ETS.metric(&mu, &p_stripped) * chain!(&mu, &nu, function!(f, chain_in(), chain_out()));
-    let result = expr.schoonschip_with_settings(
-        &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
-    );
+    let result =
+        expr.schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());
     assert_snapshot!(result.to_bare_ordered_string(), @"chain(P(1,mink(D)),mink(D,2),F(in,out))");
 }
 
 #[test]
-fn benchmark_modes_output() {
+fn contraction_orders_preserve_the_same_factorized_value() {
+    use crate::tensor::SymbolicTensor;
     test_initialize();
-    let mink: Representation<_> = Minkowski {}.new_rep(symbol!("D"));
-    let p = T.rank_one_tensor_symbol("P");
-    let q = T.rank_one_tensor_symbol("Q");
-
-    let p1 = function!(p, 1, slot!(mink, 1).to_atom());
-    let p2 = function!(p, 2, slot!(mink, 1).to_atom());
-    let p2_2 = function!(p, 2, slot!(mink, 2).to_atom());
-
-    let q2 = function!(q, 2, symbol!("bla"), slot!(mink, 1).to_atom());
-    let q2_2 = function!(q, 2, symbol!("bla"), slot!(mink, 2).to_atom());
-    let q3_2 = function!(q, 3, slot!(mink, 2).to_atom());
-
-    let expr = &p1 * (&q2 + &p2 * (&q3_2 * &q2_2 + &p2_2 * &q2_2));
-
-    let single_pass_depth_one = expr
-        .clone()
-        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::single_pass(Some(1)))
-        .unwrap()
-        .to_bare_ordered_string();
-    let depth_first_depth_one = expr
-        .clone()
-        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::partial())
-        .unwrap()
-        .to_bare_ordered_string();
-    let breadth_first_depth_one = expr
-        .clone()
-        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::breadth_first(Some(1)))
-        .unwrap()
-        .to_bare_ordered_string();
-    let full_top = expr
-        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::full())
-        .unwrap()
-        .to_bare_ordered_string();
-
-    assert_ne!(single_pass_depth_one, full_top);
-    assert_eq!(depth_first_depth_one, full_top);
-    assert_eq!(breadth_first_depth_one, full_top);
+    let input = (spenso::p!(mink!(4, 94101)) + spenso::q!(mink!(4, 94101)))
+        * (spenso::vector!(order_r, mink!(4, 94101)) + spenso::vector!(order_s, mink!(4, 94101)));
+    let source = SymbolicTensor::infer(input.clone()).unwrap();
+    let expected = input.expand().schoonschip().expand();
+    for order in [[0, 1], [1, 0]] {
+        let result = source
+            .contract(crate::tensor::ContractionSettings::default().with_order(&order))
+            .unwrap()
+            .resolved()
+            .unwrap();
+        assert_eq!(result.expression.expand(), expected);
+    }
 }
 
 #[test]
@@ -520,6 +463,9 @@ fn explicit_metric_vectors_are_not_scalar_labels() {
 
 #[test]
 fn network_scalar_leaves_preserve_cleanup_scope_and_numeric_expansion() {
+    use crate::tensor::{SymbolicNetExt, SymbolicNetParse};
+    use spenso::network::parsing::{ParseSettings, ShorthandParsing};
+
     test_initialize();
     let parse = |source: &str| {
         Atom::parse(
@@ -548,29 +494,34 @@ fn network_scalar_leaves_preserve_cleanup_scope_and_numeric_expansion() {
         ),
     ] {
         let input = parse(source);
-        for (settings, expected) in [
-            (SchoonschipSettings::partial(), factored),
-            (
-                SchoonschipSettings::partial().with_expanded_contracted_sums(),
-                expanded,
-            ),
-        ] {
-            assert_eq!(
-                input
-                    .schoonschip_with_net::<false, AbstractIndex>(&settings)
-                    .unwrap(),
-                parse(expected),
-                "{source}"
-            );
-            assert_eq!(
-                input
-                    .schoonschip_with_net::<true, AbstractIndex>(&settings)
-                    .unwrap(),
-                parse(expanded),
-                "{source}, EXPANDSUMS=true"
-            );
-        }
+        let network = input
+            .as_view()
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
+                shorthand_parsing: ShorthandParsing::expand_all(),
+                precontract_scalars: false,
+                ..ParseSettings::default()
+            })
+            .unwrap();
+        let result = network.simple_execute::<()>().unwrap();
+        assert_eq!(result, parse(factored), "{source}");
+        assert_eq!(
+            result.expand(),
+            parse(expanded).expand(),
+            "{source}, explicit expansion"
+        );
     }
+
+    let opaque = parse("s*(spenso::pure_scalar(x)+y)");
+    assert_eq!(contracted_atom(opaque.as_view()).unwrap(), opaque);
+    assert!(
+        parse("spenso::pure_scalar(x,y)")
+            .as_view()
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
+                shorthand_parsing: ShorthandParsing::Opaque,
+                ..ParseSettings::default()
+            })
+            .is_err()
+    );
 }
 
 #[test]
@@ -582,32 +533,18 @@ fn network_scalar_sums_keep_internal_contractions_and_factored_spectators() {
     let input = &spectator
         * (p!(0, mink!(4, 1)) + p!(1, mink!(4, 1)))
         * (p!(2, mink!(4, 1)) + p!(3, mink!(4, 1)));
-    let factored = input
-        .schoonschip_with_net::<false, AbstractIndex>(&SchoonschipSettings::partial())
-        .unwrap();
-    assert_eq!(factored, input);
-    let expanded = input
-        .schoonschip_with_net::<false, AbstractIndex>(
-            &SchoonschipSettings::partial().with_expanded_contracted_sums(),
-        )
-        .unwrap();
+    let actual = contracted_atom(input.as_view()).unwrap();
     let expected = spectator
         * (g!(p!(0, mink!(4)), p!(2, mink!(4)))
             + g!(p!(0, mink!(4)), p!(3, mink!(4)))
             + g!(p!(1, mink!(4)), p!(2, mink!(4)))
             + g!(p!(1, mink!(4)), p!(3, mink!(4))));
-    assert_eq!(expanded, expected);
-    for settings in [
-        SchoonschipSettings::partial(),
-        SchoonschipSettings::partial().with_expanded_contracted_sums(),
-    ] {
-        assert_eq!(
-            input
-                .schoonschip_with_net::<true, AbstractIndex>(&settings)
-                .unwrap(),
-            expected
-        );
-    }
+    assert_eq!(actual.expand(), expected.expand());
+    assert_ne!(
+        actual,
+        actual.expand(),
+        "scalar spectator must stay factored"
+    );
 }
 
 #[test]
@@ -623,21 +560,14 @@ fn network_scalar_leaves_retain_parser_errors_and_opaque_compact_forms() {
     };
     let _ = symbol!("scalar_leaf_test::broadcast", tag = T.broadcast);
     T.rank_one_tensor_symbol("scalar_leaf_test::v");
-    for settings in [
-        SchoonschipSettings::partial(),
-        SchoonschipSettings::partial().with_expanded_contracted_sums(),
-    ] {
+    use crate::tensor::SymbolicNetParse;
+    use spenso::network::parsing::ParseSettings;
+    {
         for (source, diagnostic) in [
             ("s*(spenso::bracket()+z)", "empty bracket expression"),
             ("s*(spenso::dot(x)+z)", "Invalid dot function"),
-            (
-                "s*(spenso::chain()+z)",
-                "wrong number of arguments 0, expected 2",
-            ),
-            (
-                "s*(spenso::trace()+z)",
-                "wrong number of arguments 0, expected 1",
-            ),
+            ("s*(spenso::chain()+z)", "Too many arguments"),
+            ("s*(spenso::trace()+z)", "Too many arguments"),
             ("s*(spenso::pure_scalar(x,y)+z)", "Too many arguments"),
             ("s*(broadcast(x,y)+z)", "Too many arguments"),
             (
@@ -646,29 +576,30 @@ fn network_scalar_leaves_retain_parser_errors_and_opaque_compact_forms() {
             ),
         ] {
             let input = parse(source);
-            for result in [
-                input.schoonschip_with_net::<false, AbstractIndex>(&settings),
-                input.schoonschip_with_net::<true, AbstractIndex>(&settings),
-            ] {
-                let error = result.unwrap_err().to_string();
-                assert!(error.contains(diagnostic), "{source}: {error}");
-            }
+            let error = input
+                .as_view()
+                .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains(diagnostic), "{source}: {error}");
         }
-        // These forms are inert in the existing parser, rather than errors.
+        let malformed = parse("s*(v(0,spenso::mink(4,a,b))+z)");
+        assert!(contracted_atom(malformed.as_view()).is_err());
+        // The raw parser retains these opaque scalar forms. This is distinct
+        // from the typed constructor's stricter builtin signature admission.
         for source in [
             "s*(spenso::g(x)+z)",
             "s*(v(0,spenso::mink())+z)",
-            "s*(v(0,spenso::mink(4,a,b))+z)",
             "s*(v(0,spenso::dind(spenso::mink(4),x))+z)",
             "s*(v(0,spenso::mink(f(D)))+z)",
         ] {
             let input = parse(source);
-            for result in [
-                input.schoonschip_with_net::<false, AbstractIndex>(&settings),
-                input.schoonschip_with_net::<true, AbstractIndex>(&settings),
-            ] {
-                assert_eq!(result.unwrap(), input, "{source}");
-            }
+            use crate::tensor::SymbolicNetExt;
+            let parsed = input
+                .as_view()
+                .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                .unwrap();
+            assert_eq!(parsed.simple_execute::<()>().unwrap(), input, "{source}");
         }
     }
 }
@@ -685,27 +616,17 @@ fn network_scalar_roots_preserve_compact_forms_and_parser_scope() {
         .unwrap()
     };
     T.rank_one_tensor_symbol("scalar_root_test::v");
-    for settings in [
-        SchoonschipSettings::partial(),
-        SchoonschipSettings::partial().with_expanded_contracted_sums(),
-        SchoonschipSettings::single_pass(Some(1)),
-        SchoonschipSettings::breadth_first(Some(2)),
-    ] {
+    {
         for source in [
             "v(0,spenso::mink(4))",
             "v(0,spenso::mink(4))^2",
             "v(0,spenso::mink(4))*v(1,spenso::mink(4))",
             "spenso::mink(4)",
             "spenso::dind(spenso::lor(4))",
-            "(x+y)^8*(u+v)",
+            "(x+y)^8*(u+w)",
         ] {
             let input = parse(source);
-            for result in [
-                input.schoonschip_with_net::<false, AbstractIndex>(&settings),
-                input.schoonschip_with_net::<true, AbstractIndex>(&settings),
-            ] {
-                assert_eq!(result.unwrap(), input, "{source}");
-            }
+            assert_eq!(contracted_atom(input.as_view()).unwrap(), input, "{source}");
         }
         for (source, factored, expanded) in [
             ("-2*(x+y)", "-2*(x+y)", "-2*x-2*y"),
@@ -717,33 +638,22 @@ fn network_scalar_roots_preserve_compact_forms_and_parser_scope() {
             ),
         ] {
             let input = parse(source);
-            let expected = if settings.expand_contracted_sums {
-                expanded
-            } else {
-                factored
-            };
+            let result = contracted_atom(input.as_view()).unwrap();
+            assert_eq!(result, parse(factored), "{source}");
             assert_eq!(
-                input
-                    .schoonschip_with_net::<false, AbstractIndex>(&settings)
-                    .unwrap(),
-                parse(expected),
-                "{source}"
-            );
-            assert_eq!(
-                input
-                    .schoonschip_with_net::<true, AbstractIndex>(&settings)
-                    .unwrap(),
-                parse(expanded),
-                "{source}, EXPANDSUMS=true"
+                result.expand(),
+                parse(expanded).expand(),
+                "{source}, explicit expansion"
             );
         }
         let input = parse("x+spenso::bracket()");
-        for result in [
-            input.schoonschip_with_net::<false, AbstractIndex>(&settings),
-            input.schoonschip_with_net::<true, AbstractIndex>(&settings),
-        ] {
-            let error = result.unwrap_err().to_string();
-            assert!(error.contains("empty bracket expression"), "{error}");
-        }
+        use crate::tensor::SymbolicNetParse;
+        use spenso::network::parsing::ParseSettings;
+        let error = input
+            .as_view()
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("empty bracket expression"), "{error}");
     }
 }

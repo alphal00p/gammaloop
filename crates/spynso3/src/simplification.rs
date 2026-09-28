@@ -4,18 +4,16 @@ use pyo3::{
 };
 
 mod algebra;
-pub(crate) mod expansion;
 mod pipeline;
 mod tooling;
 
 pub(crate) use pipeline::PySimplifySettings;
 
 pub(crate) use algebra::{
-    GammaConjugationError, PyColorCasimirSettings, PyColorSimplifySettings, PyGammaSimplifySettings,
+    PyColorCasimirSettings, PyColorSimplifySettings, PyGammaSimplifySettings,
 };
 pub(crate) use tooling::{
-    CanonicalizationError, CookingError, DiracAdjointError, DotExpansionError, NetworkToolingError,
-    PyCookSettings, PySchoonschipSettings,
+    CanonicalizationError, CookingError, DiracAdjointError, NetworkToolingError, PyCookSettings,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -51,60 +49,35 @@ mod tests {
         "CookTagFilter",
         "CookingError",
         "DiracAdjointError",
-        "DotExpansionError",
         "GammaChainOrdering",
-        "GammaConjugationError",
         "GammaSimplifySettings",
         "NetworkToolingError",
-        "SchoonschipContractionOrder",
-        "SchoonschipMode",
-        "SchoonschipSettings",
-        "SchoonschipTraversal",
         "SimplifySettings",
         "alias_subtensors",
         "canonize",
         "chainify",
-        "collect_chains",
-        "collect_color",
-        "collect_color_constants",
-        "collect_gamma_chains",
         "conjugate_transpose",
         "cook",
         "cook_function",
         "cook_indices",
         "dirac_adjoint",
-        "expand_bis",
-        "expand_color",
-        "expand_dots",
-        "expand_in_patterns",
-        "expand_metrics",
-        "expand_mink",
-        "expand_mink_bis",
         "list_dangling",
-        "metric_shorthand_to_dot",
         "normalize_chains",
-        "normalize_dots",
-        "schoonschip",
-        "schoonschip_net",
         "simplify_color",
         "simplify",
         "simplify_epsilon",
         "simplify_gamma",
-        "simplify_gamma0",
-        "simplify_gamma_conjugate",
-        "simplify_metrics",
         "spenso_conjugate",
         "to_cof_dimension_invariants",
         "to_color_casimir",
         "to_dots",
         "uncook",
         "undo_all",
+        "undo_schoonschip",
         "undo_chain",
         "undo_dots",
-        "undo_schoonschip",
         "undo_single_length",
         "undo_trace",
-        "wrap_color",
         "wrap_dummies",
         "wrap_indices",
     ];
@@ -179,16 +152,14 @@ mod tests {
                 Vec::new(),
             )?;
 
-            for name in ["undo_dots", "schoonschip_net"] {
-                let error = expression
-                    .bind(py)
-                    .call_method0(name)
-                    .expect_err("malformed dot notation should return an error");
-                assert!(error.is_instance_of::<NetworkToolingError>(py));
-                assert!(error.is_instance_of::<PyValueError>(py));
-                assert!(error.to_string().contains("cannot parse tensor network"));
-                assert!(error.to_string().contains("Invalid dot function"));
-            }
+            let error = expression
+                .bind(py)
+                .call_method0("undo_dots")
+                .expect_err("malformed dot notation should return an error");
+            assert!(error.is_instance_of::<NetworkToolingError>(py));
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert!(error.to_string().contains("cannot parse tensor network"));
+            assert!(error.to_string().contains("Invalid dot function"));
 
             let error = expression
                 .bind(py)
@@ -253,15 +224,11 @@ mod tests {
             for (name, expected) in [
                 (
                     "GammaSimplifySettings",
-                    "(*, chain_ordering=None, evaluate_traces=True, expand_traces=False, expand_three_gamma_epsilon=False)",
+                    "(*, output='reduced', chain_ordering=None, evaluate_traces=True, gamma0=False, conjugate=False, expand_three_gamma_epsilon=False)",
                 ),
                 (
                     "CookSettings",
                     "(*, mode=None, source=None, output_tags=None, preserve_tags=False)",
-                ),
-                (
-                    "SchoonschipSettings",
-                    "(*, depth_limit=1, mode=None, traversal=None, expand_contracted_sums=False, simplify_chain_like_functions=False, schoonschip_rank1_tensors=True, contraction_order=None)",
                 ),
             ] {
                 let class = module.getattr(name).unwrap();
@@ -287,15 +254,9 @@ mod tests {
                 "cook_function",
                 "cook_indices",
                 "dirac_adjoint",
-                "expand_bis",
-                "expand_color",
-                "expand_metrics",
-                "expand_mink",
-                "expand_mink_bis",
                 "list_dangling",
                 "simplify_color",
                 "simplify_gamma",
-                "simplify_metrics",
                 "to_dots",
                 "wrap_dummies",
                 "wrap_indices",

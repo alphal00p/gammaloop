@@ -1483,6 +1483,13 @@ impl PyLoopMomentumBasis {
                 ));
             }
         }
+        if let Ok(tensor) = expression.extract::<PyRef<'_, TensorExpression>>() {
+            let routed = self
+                .inner
+                .route_expression(tensor.structured().expression())
+                .replace_multiple(replacements);
+            return TensorExpression::preserving_interface(&tensor, py, routed).map(Py::into_any);
+        }
         let atom = expression
             .extract::<ConvertibleToExpression>()?
             .to_expression()
@@ -1491,12 +1498,7 @@ impl PyLoopMomentumBasis {
             .inner
             .route_expression(&atom)
             .replace_multiple(replacements);
-        if expression.is_instance_of::<TensorExpression>() {
-            let tensor = expression.extract::<PyRef<'_, TensorExpression>>()?;
-            TensorExpression::preserving_interface(&tensor, py, routed).map(Py::into_any)
-        } else {
-            Py::new(py, PythonExpression { expr: routed }).map(Py::into_any)
-        }
+        Py::new(py, PythonExpression { expr: routed }).map(Py::into_any)
     }
 
     /// Route four-momenta through every diagram edge.
@@ -2862,7 +2864,8 @@ impl PyFeynmanDiagram {
         py: Python<'_>,
         uv_mass: ConvertibleToExpression,
         dimension: i32,
-        numerator: Option<ConvertibleToExpression>,
+        #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.spenso.TensorExpression | None", imports=("symbolica", "symbolica.community.spenso")))]
+        numerator: Option<&Bound<'_, PyAny>>,
         edge_powers: Option<BTreeMap<usize, isize>>,
     ) -> PyResult<Py<TensorExpression>> {
         let selected = self.selection();
@@ -2871,10 +2874,18 @@ impl PyFeynmanDiagram {
             .into_iter()
             .map(|(edge, power)| (feynkit_graph::EdgeId(edge), power))
             .collect();
-        let numerator = numerator.map_or_else(
-            || self.local_numerator(None),
-            |value| value.to_expression().expr,
-        );
+        let numerator = match numerator {
+            Some(value) => match value.extract::<PyRef<'_, TensorExpression>>() {
+                Ok(value) => value.structured().expression().clone(),
+                Err(_) => {
+                    value
+                        .extract::<ConvertibleToExpression>()?
+                        .to_expression()
+                        .expr
+                }
+            },
+            None => self.local_numerator(None),
+        };
         let expanded = self
             .inner
             .uv_expansion_of(
@@ -2920,11 +2931,12 @@ impl PyFeynmanDiagram {
         py: Python<'_>,
         uv_mass: ConvertibleToExpression,
         dimension: i32,
-        numerator: Option<ConvertibleToExpression>,
+        #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.spenso.TensorExpression | None", imports=("symbolica", "symbolica.community.spenso")))]
+        numerator: Option<&Bound<'_, PyAny>>,
         edge_powers: Option<BTreeMap<usize, isize>>,
     ) -> PyResult<Py<TensorExpression>> {
         let expanded = self.uv_expansion(py, uv_mass, dimension, numerator, edge_powers)?;
-        let counterterm = -&expanded.borrow(py).as_super().expr;
+        let counterterm = -expanded.borrow(py).structured().expression();
         TensorExpression::from_atom_interface(py, counterterm, None)
     }
 
@@ -2987,7 +2999,8 @@ impl PyFeynmanDiagram {
         &self,
         py: Python<'_>,
         dimension: ConvertibleToExpression,
-        expression: Option<ConvertibleToExpression>,
+        #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.spenso.TensorExpression | None", imports=("symbolica", "symbolica.community.spenso")))]
+        expression: Option<&Bound<'_, PyAny>>,
         projector: Option<ConvertibleToExpression>,
     ) -> PyResult<Py<TensorExpression>> {
         if expression.is_some() && projector.is_some() {
@@ -2996,7 +3009,16 @@ impl PyFeynmanDiagram {
             ));
         }
         let selected = self.selection();
-        let expression = expression.map(|expression| expression.to_expression().expr);
+        let expression = expression
+            .map(
+                |expression| match expression.extract::<PyRef<'_, TensorExpression>>() {
+                    Ok(value) => Ok(value.structured().expression().clone()),
+                    Err(_) => expression
+                        .extract::<ConvertibleToExpression>()
+                        .map(|value| value.to_expression().expr),
+                },
+            )
+            .transpose()?;
         let projector = match projector {
             Some(projector) => projector.to_expression().expr,
             None if expression.is_some() => Atom::one(),

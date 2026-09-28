@@ -617,3 +617,35 @@ fn expand_antisym_in_chain_handles_canonicalization_sign() {
 
     assert_eq!(expanded.expand(), expected.expand());
 }
+
+#[test]
+fn expand_projectors_keeps_tensor_products_powers_and_spectators_factored() {
+    let start = Atom::var(symbol!("projector_factored_start"));
+    let end = Atom::var(symbol!("projector_factored_end"));
+    let first = Atom::var(symbol!("projector_factored_first"));
+    let second = Atom::var(symbol!("projector_factored_second"));
+    let symmetric = chain!(
+        start.clone(),
+        end.clone(),
+        sym!(first.clone(), second.clone())
+    );
+    let antisymmetric = chain!(start, end, antisym!(first, second));
+    let a = symbolica::function!(
+        crate::tensor_symbol!("projector_factored_a"),
+        mink!(4, 98631)
+    );
+    let b = symbolica::function!(
+        crate::tensor_symbol!("projector_factored_b"),
+        mink!(4, 98631)
+    );
+    let x = Atom::var(symbol!("projector_factored_x"));
+    let y = Atom::var(symbol!("projector_factored_y"));
+    let spectator = (a + b) * (x + y).pow(8);
+    assert_eq!(spectator.expand_projectors(), spectator);
+    let expected =
+        symmetric.expand_projectors() * antisymmetric.expand_projectors().pow(2) * &spectator;
+    let source = symmetric * antisymmetric.pow(2) * spectator;
+    let actual = source.expand_projectors();
+    assert_eq!(actual, expected);
+    assert_eq!(actual.expand_projectors(), actual);
+}

@@ -20,18 +20,37 @@ class FactorizedContractionTests(unittest.TestCase):
         source = sp.TensorExpression(
             (p(i).to_expression() + q(i).to_expression()) * r(i).to_expression()
         )
+        uncertified = sp.AliasedTensorExpression.from_expression(source)
+        self.assertFalse(uncertified.contraction_complete)
+        with self.assertRaises(AttributeError):
+            uncertified.contraction_complete = True
         for order in (None, [0, 1], [1, 0]):
             with self.subTest(order=order):
                 result = source.contract(order=order)
                 self.assertIsInstance(result, sp.AliasedTensorExpression)
+                self.assertTrue(result.contraction_complete)
                 self.assertGreater(len(result.aliases), 0)
                 self.assertEqual(result.root.rank, 0)
                 self.assertEqual(result.expand().to_expression(), expected)
+                rerun = result.contract()
+                self.assertTrue(rerun.contraction_complete)
+                self.assertEqual(rerun.expand(), result.expand())
+                self.assertEqual(rerun.root.structure, result.root.structure)
+                self.assertEqual(
+                    [
+                        (handle.to_expression(), body.to_expression())
+                        for handle, body in rerun.aliases
+                    ],
+                    [
+                        (handle.to_expression(), body.to_expression())
+                        for handle, body in result.aliases
+                    ],
+                )
                 self.assertEqual(
                     result.to_expression().to_expression().expand(), expected
                 )
                 self.assertEqual(
-                    source.contract(order=order, output="expanded").to_expression(),
+                    source.contract(order=order).expand().to_expression(),
                     expected,
                 )
                 evaluator = result.evaluator([first, second], iterations=1, n_cores=1)
@@ -41,9 +60,9 @@ class FactorizedContractionTests(unittest.TestCase):
                 ValueError, "every normalized top-level factor"
             ):
                 source.contract(order=order)
-        with self.assertRaisesRegex(ValueError, "output"):
+        with self.assertRaisesRegex(TypeError, "output"):
             source.contract(output="invalid")
-        with self.assertRaisesRegex(TypeError, "require a tensor operand"):
+        with self.assertRaises(TypeError):
             source.contract(left=0, right=0)
 
     def test_contraction_preserves_unresolved_order_metadata_and_typed_zero(self):

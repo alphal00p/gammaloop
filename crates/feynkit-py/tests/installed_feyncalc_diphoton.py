@@ -8,7 +8,14 @@ from pathlib import Path
 
 from symbolica import E, Replacement, S, Symbol
 from symbolica.community import hep as fk
-from symbolica.community.spenso import CookSettings, Representation, TensorExpression
+from symbolica.community.spenso import (
+    CookSettings,
+    GammaSimplifySettings,
+    Representation,
+    TensorExpression,
+)
+
+index_scope = S("spenso::index_scope")
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 P = S("gammalooprs::P")
@@ -67,28 +74,31 @@ for diagram in generated.diagrams:
         / denominator
     )
 assert set(denominators) == {t - mass**2, u - mass**2}
-operator = TensorExpression(amplitude.expand())
+operator = TensorExpression(amplitude)
 assert len(operator.structure.slots) == 4
-adjoint = operator.dirac_adjoint().expand().simplify_gamma0().to_expression()
+adjoint = (
+    operator.dirac_adjoint()
+    .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+    .to_expression()
+    .to_expression()
+)
 adjoint = adjoint.replace(conjugate(P(a, b)), P(a, b))
 # Physical momenta and tree-level parameters are real; keep that assumption explicit.
 for real in (mass, charge, s, t, u):
     adjoint = adjoint.replace(conjugate(real), real)
-adjoint = TensorExpression(adjoint).wrap_indices(adjoint_index)
+adjoint = TensorExpression(adjoint).wrap_indices(adjoint_index).to_expression()
 # Dirac adjunction exchanges the open fermion chain's endpoints.
 spins = model.particle_by_pdg(11).spin_sum(
-    P(0), ports[0], adjoint_index(ports[1]), average=True
+    P(0), ports[0], index_scope(adjoint_index, ports[1]), average=True
 ) * model.particle_by_pdg(-11).spin_sum(
-    P(1), adjoint_index(ports[0]), ports[1], average=True
+    P(1), index_scope(adjoint_index, ports[0]), ports[1], average=True
 )
 spin_summed = (
     TensorExpression(
         operator.to_expression() * adjoint * spins, cook_indices=CookSettings.indices()
     )
-    .expand()
     .simplify_gamma()
-    .expand()
-    .simplify_gamma()
+    .to_expression()
 )
 x, y = t - mass**2, u - mass**2
 expected = (
@@ -112,21 +122,21 @@ for references, ward in (
             mink = Representation.mink(4)
             longitudinal = P(position, mink(ports[position]).to_expression())
             density *= longitudinal * longitudinal.replace(
-                ports[position], adjoint_index(ports[position])
+                ports[position], index_scope(adjoint_index, ports[position])
             )
         else:
             density *= model.particle_by_pdg(22).spin_sum(
                 P(position),
                 ports[position],
-                adjoint_index(ports[position]),
+                index_scope(adjoint_index, ports[position]),
                 reference=reference,
             )
     scalar = (
         TensorExpression(
             spin_summed.to_expression() * density, cook_indices=CookSettings.indices()
         )
-        .expand()
-        .simplify_metrics()
+        .contract()
+        .to_expression()
         .to_dots()
     )
     assert scalar.is_scalar
@@ -138,7 +148,7 @@ for references, ward in (
     if ward is None:
         results.append(squared)
     print("PASS", references, ward, flush=True)
-assert all(result == results[0] for result in results)
+assert all((result - results[0]).together() == E("0") for result in results)
 assert (
     results[0] - results[0].replace_multiple([Replacement(t, u), Replacement(u, t)])
 ).together() == E("0")

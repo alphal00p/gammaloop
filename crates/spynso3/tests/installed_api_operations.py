@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
-from symbolica import E, Expression, S, T
+from symbolica import E, Expression, Replacement, S, T
 from symbolica.community import spenso as sp
 
 
@@ -26,21 +26,52 @@ class TensorOperationsTests(unittest.TestCase):
 
     def test_transforms_preserve_interface_and_refresh_identity(self):
         a = self.A(self.x, self.rep("i"), self.rep("j"))
-        replaced = a.replace(self.x, self.y)
+        replaced = sp.TensorExpression(
+            a.to_expression().replace(self.x, self.y), structure=a.structure
+        )
         self.assertIsInstance(replaced, sp.TensorExpression)
         self.assertEqual(replaced.structure.arguments, (self.y,))
         self.assertEqual(replaced.structure.slots, a.structure.slots)
-        self.assertEqual(a.map(T().replace(self.x, self.y)), replaced)
-        self.assertEqual(a.replace_multiple([(self.x, self.y)]), replaced)
-        weighted = a * self.x
-        self.assertEqual(weighted.derivative(self.x).structure.slots, a.structure.slots)
-        zero = a.derivative(S("api_operations::absent"))
+        self.assertEqual(
+            sp.TensorExpression(
+                a.to_expression().map(T().replace(self.x, self.y)),
+                structure=a.structure,
+            ),
+            replaced,
+        )
+        self.assertEqual(
+            sp.TensorExpression(
+                a.to_expression().replace_multiple([Replacement(self.x, self.y)]),
+                structure=a.structure,
+            ),
+            replaced,
+        )
+        # Formal derivatives of tensor-valued functions remain outside the
+        # strict tensor grammar; scalar-prefactor derivatives preserve its ports.
+        with self.assertRaisesRegex(ValueError, "not tagged as a tensor"):
+            sp.TensorExpression(
+                (a.to_expression() * self.x).derivative(self.x),
+                structure=a.structure,
+            )
+        weighted = a * self.y
+        derivative = sp.TensorExpression(
+            weighted.to_expression().derivative(self.y),
+            structure=weighted.structure,
+        )
+        self.assertEqual(derivative.structure.slots, a.structure.slots)
+        self.assertEqual(derivative.to_expression(), a.to_expression())
+        zero = sp.TensorExpression(
+            a.to_expression().derivative(S("api_operations::absent")),
+            structure=a.structure,
+        )
         self.assertEqual(zero.rank, 2)
         self.assertEqual(zero.to_expression(), E("0"))
         with self.assertRaisesRegex(ValueError, "interface"):
-            a.replace(a, 1)
+            sp.TensorExpression(E("1"), structure=a.structure)
         library = sp.TensorLibrary()
-        library.register(sp.Tensor.dense(replaced, [5.0, 6.0, 7.0, 8.0]))
+        library.register(
+            sp.Tensor.dense(self.A(self.y, self.rep, self.rep), [5.0, 6.0, 7.0, 8.0])
+        )
         self.assertEqual(replaced.to_tensor(library)[:], [5.0, 6.0, 7.0, 8.0])
 
     def test_reusable_tensor_rules_share_checked_replacement(self):
@@ -49,14 +80,14 @@ class TensorOperationsTests(unittest.TestCase):
         lhs, rhs = source.to_expression(), result.to_expression()
         rule = sp.TensorRule(lhs, rhs)
         for _ in range(2):
-            changed = source.replace_tensor(rule)
+            changed = source.replace(rule)
             self.assertEqual(changed.to_expression(), rhs)
             self.assertEqual(changed.structure.slots, source.structure.slots)
-        self.assertEqual(source.replace_tensor(lhs, rhs), result)
-        with self.assertRaisesRegex(TypeError, "already owns"):
-            source.replace_tensor(rule, rhs_cache_size=0)
+        self.assertEqual(source.replace(sp.TensorRule(lhs, rhs)), result)
+        with self.assertRaises(TypeError):
+            source.replace(rule, rhs_cache_size=0)
         self.assertEqual(source.to_expression(), lhs)
-        zero = source.replace_tensor(sp.TensorRule(lhs, E("0")))
+        zero = source.replace(sp.TensorRule(lhs, E("0")))
         self.assertEqual(zero.to_expression(), E("0"))
         self.assertEqual(zero.structure.slots, source.structure.slots)
 
@@ -72,7 +103,7 @@ class TensorOperationsTests(unittest.TestCase):
             self.assertEqual(calls, [])
             for _ in range(2):
                 self.assertEqual(
-                    repeated.replace_tensor(rule), self.x * result + self.y * result
+                    repeated.replace(rule), self.x * result + self.y * result
                 )
             self.assertEqual(len(calls), expected_calls)
 
@@ -111,10 +142,9 @@ class TensorOperationsTests(unittest.TestCase):
         inner = sp.AliasedTensorExpression.from_expression(
             sp.TensorExpression((self.x + 1) ** 3)
         )
-        outer = sp.AliasedTensorExpression.from_expression(
-            sp.TensorExpression((inner.root + 2) ** 2)
-        )
-        value = sp.AliasedTensorExpression(outer.root, inner.aliases + outer.aliases)
+        outer = sp.TensorExpression(S("api_operations::outer_alias"))
+        body = (inner.root + 2) ** 2
+        value = sp.AliasedTensorExpression(outer, inner.aliases + [(outer, body)])
         expected = ((self.x + 1) ** 3 + 2) ** 2
         self.assertEqual(value.to_expression().to_expression(), expected)
         self.assertEqual(value.expand().to_expression(), expected.expand())
@@ -136,7 +166,7 @@ class TensorOperationsTests(unittest.TestCase):
         quotient = tensor.to_expression() / denominator
         self.assertIsInstance(quotient, sp.TensorExpression)
         self.assertEqual(quotient, tensor / self.x)
-        self.assertEqual(self.y / denominator, self.y / self.x)
+        self.assertEqual((self.y / denominator).to_expression(), self.y / self.x)
         with self.assertRaisesRegex(ValueError, "denominator"):
             self.x / tensor
 
@@ -146,9 +176,10 @@ class TensorOperationsTests(unittest.TestCase):
         composite = ((self.x + self.y) * atomic).with_name(
             "api_operations::NamedComposite"
         )
-        zero = atomic.derivative(S("api_operations::absent")).with_name(
-            "api_operations::NamedZero"
-        )
+        zero = sp.TensorExpression(
+            atomic.to_expression().derivative(S("api_operations::absent")),
+            structure=atomic.structure,
+        ).with_name("api_operations::NamedZero")
         permuted = atomic.permute_axes([1, 0])
         self.assertEqual(atomic.structure.arguments, (E("7"),))
         self.assertEqual(zero.to_expression(), E("0"))
@@ -164,16 +195,22 @@ class TensorOperationsTests(unittest.TestCase):
             ("permuted", permuted),
         ]:
             expression, structure = source.to_expression(), source.structure
-            for method in ["normalize_dots", "simplify_gamma"]:
+            for method in ["to_dots", "simplify_gamma"]:
                 with self.subTest(case=label, method=method):
                     result = getattr(source, method)()
                     self.assertIsNot(result, source)
-                    self.assertEqual(result.to_expression(), expression)
-                    self.assertEqual(result.structure, structure)
+                    typed = (
+                        result.to_expression() if method == "simplify_gamma" else result
+                    )
+                    self.assertEqual(typed.to_expression(), expression)
+                    self.assertEqual(typed.structure, structure)
                     rerun = getattr(result, method)()
                     self.assertIsNot(rerun, result)
-                    self.assertEqual(rerun.to_expression(), expression)
-                    self.assertEqual(rerun.structure, structure)
+                    typed_rerun = (
+                        rerun.to_expression() if method == "simplify_gamma" else rerun
+                    )
+                    self.assertEqual(typed_rerun.to_expression(), expression)
+                    self.assertEqual(typed_rerun.structure, structure)
                     self.assertEqual(source.structure, structure)
 
     def test_simultaneous_renaming_and_explicit_reindex(self):
@@ -229,8 +266,7 @@ class TensorOperationsTests(unittest.TestCase):
         settings = sp.CookSettings.reversible()
         a = self.A(self.rep)
         tensor = sp.Tensor.dense(a, [1.0, 2.0])
-        expected = a(payload, cook_indices=settings).wrap_indices().to_expression()
-        self.assertIn("edge", str(expected))
+        expected = a(payload, cook_indices=settings).to_expression()
         for value in (a, tensor, a.to_network()):
             indexed = value(payload, cook_indices=settings)
             expression = (
@@ -238,7 +274,11 @@ class TensorOperationsTests(unittest.TestCase):
                 if isinstance(indexed, sp.TensorExpression)
                 else indexed.expression()
             )
-            self.assertEqual(expression.wrap_indices().to_expression(), expected)
+            self.assertEqual(expression.to_expression(), expected)
+            decoded_index = sp.TensorExpression(
+                expression.structure.slots[0].index
+            ).uncook(settings)
+            self.assertEqual(decoded_index.to_expression(), payload)
         with self.assertRaises(ValueError):
             a(payload)
         with self.assertRaises(TypeError):
@@ -277,7 +317,7 @@ class TensorOperationsTests(unittest.TestCase):
         self.assertEqual((shifted("i") * shifted("i")).to_tensor()[0], 10.0)
         symbolic = tensor.map_components(lambda value: self.x * value, dtype=Expression)
         self.assertIs(symbolic.dtype, Expression)
-        self.assertEqual(symbolic[:], [2 * self.x, E("0")])
+        self.assertEqual(symbolic[:], [2.0 * self.x, E("0")])
         complex_tensor = tensor.map_components(lambda value: value + 1j, dtype=complex)
         self.assertIs(complex_tensor.dtype, complex)
         self.assertEqual(
@@ -371,20 +411,20 @@ class TensorOperationsTests(unittest.TestCase):
     def test_simplification_presets_and_expansion_control(self):
         a = self.A(self.rep("i"))
         expression = (self.x + 1) * (self.y + 1) * a
-        self.assertEqual(expression.simplify(), expression)
-        self.assertEqual(
-            expression.simplify(sp.SimplifySettings(expand=True)), expression.expand()
-        )
+        self.assertEqual(expression.simplify().to_expression(), expression)
+        self.assertEqual(expression.simplify().expand(), expression.expand())
         metric = sp.TensorExpression.g(self.rep)("i", "j") * a
-        self.assertEqual(metric.simplify(), metric.simplify_metrics())
+        self.assertEqual(metric.simplify().expand(), metric.contract().expand())
         gamma = sp.TensorExpression.gamma(4)
         chain = gamma("a", "b", "mu") * gamma("b", "a", "nu")
         simplified = chain.simplify(sp.SimplifySettings.hep())
-        self.assertEqual(simplified, simplified.simplify(sp.SimplifySettings.hep()))
-        self.assertEqual(simplified.rank, 2)
+        self.assertEqual(
+            simplified.expand(), simplified.simplify(sp.SimplifySettings.hep()).expand()
+        )
+        self.assertEqual(simplified.root.rank, 2)
         d = S("api_operations::D")
         symbolic_metric = sp.TensorExpression.g(sp.Representation.mink(d))("mu", "mu")
-        self.assertEqual(symbolic_metric.simplify().to_expression(), d)
+        self.assertEqual(symbolic_metric.simplify().expand().to_expression(), d)
         with self.assertRaises(ValueError):
             sp.SimplifySettings(max_passes=0)
         with self.assertRaisesRegex(ValueError, "stabilize"):

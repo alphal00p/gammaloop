@@ -19,11 +19,9 @@
 
 use std::{hint::black_box, path::Path, time::Instant};
 
-use idenso::{
-    dirac::GammaSimplifier, gamma, gamma5, representations::Bispinor, tensor::SymbolicNetParse,
-};
+use idenso::{gamma, gamma5, representations::Bispinor, tensor::SymbolicNetParse};
 use spenso::{
-    network::parsing::{AtomStructureExt, ParseSettings, ShorthandParsing, StructureInferenceMode},
+    network::parsing::{AtomStructureExt, ParseSettings, ShorthandParsing},
     structure::{
         OrderedStructure, TensorStructure,
         abstract_index::AbstractIndex,
@@ -33,7 +31,7 @@ use spenso::{
     trace,
 };
 use symbolica::{
-    atom::{Atom, AtomView},
+    atom::{Atom, AtomCore, AtomView},
     symbol,
 };
 
@@ -121,7 +119,15 @@ impl Case {
             }));
             cases.push(Self {
                 name: format!("axial_{length}"),
-                expression: trace!(&spin; factors).simplify_gamma(),
+                expression: idenso::tensor::SymbolicTensor::infer(
+                    (trace!(&spin; factors)).as_atom_view().to_owned(),
+                )
+                .unwrap()
+                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
                 repeated: false,
             });
         }
@@ -143,9 +149,7 @@ impl Case {
             self.name
         );
         let infer = |expression: AtomView<'_>| {
-            let structure = match expression
-                .infer_structure::<OrderedStructure>(StructureInferenceMode::Fast)
-            {
+            let structure = match expression.infer_structure::<OrderedStructure>() {
                 Ok(structure) => structure,
                 Err(error) => return format!("error: {error}\n"),
             };
@@ -213,23 +217,16 @@ impl Method {
                 black_box(expression.has_repeated_explicit_indices());
             }
             Self::InferFast => {
-                let _ = black_box(
-                    expression.infer_structure::<OrderedStructure>(StructureInferenceMode::Fast),
-                );
+                let _ = black_box(expression.infer_structure::<OrderedStructure>());
             }
             Self::InferAllTerms => match expression {
                 AtomView::Add(sum) => {
                     for term in sum.iter() {
-                        let _ = black_box(
-                            term.infer_structure::<OrderedStructure>(StructureInferenceMode::Fast),
-                        );
+                        let _ = black_box(term.infer_structure::<OrderedStructure>());
                     }
                 }
                 expression => {
-                    let _ = black_box(
-                        expression
-                            .infer_structure::<OrderedStructure>(StructureInferenceMode::Fast),
-                    );
+                    let _ = black_box(expression.infer_structure::<OrderedStructure>());
                 }
             },
             Self::PartialParse => {
@@ -259,16 +256,14 @@ fn main() {
     idenso::representations::initialize();
     let _ = *idenso::epsilon::EPSILON_SYMBOL;
     let settings = ParseSettings {
-        shorthand_parsing: ShorthandParsing::Opaque {
-            inference: StructureInferenceMode::Fast,
-        },
+        shorthand_parsing: ShorthandParsing::Opaque,
         ..ParseSettings::default()
     };
     for case in Case::cases() {
         case.validate_and_snapshot(directory, &settings);
         let inference_ok = case
             .expression
-            .infer_structure::<OrderedStructure>(StructureInferenceMode::Fast)
+            .infer_structure::<OrderedStructure>()
             .is_ok();
         let partial_parse_ok = case
             .expression

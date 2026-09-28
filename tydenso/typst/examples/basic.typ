@@ -8,7 +8,7 @@
 #let p = vector("p")
 
 #let expression = mul(metric(V, mu-slot, nu-slot), p(nu-slot))
-#let contracted = simplify-metrics(expression)
+#let contracted = contract(expression)
 #let W = lor(4)
 #let T = tensor("T")
 #let mixed = T(slot(W, 1), slot(W, 2, dual: true))
@@ -38,7 +38,7 @@ $
 #let j = slot(R, j-name)
 #let j-dual = slot(R-dual, j-name)
 #let q = vector("q", namespace: "dual_example")
-#let custom-dual-contraction = simplify-metrics(mul(metric(R, i, j-dual), q(j)))
+#let custom-dual-contraction = contract(mul(metric(R, i, j-dual), q(j)))
 
 // Raw Typst math is one portable display label in tensor and vector calls.
 // Wrap the same input in `math` when it should be Symbolica algebra instead.

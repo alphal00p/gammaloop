@@ -141,11 +141,6 @@ impl<const N: usize> SimplificationCandidates<N> {
         self.traversal_complete && !self.repeated_indices && !self.brackets && !self.dots
     }
 
-    /// The complete scan found no normalization or supplied-symbol work.
-    pub(crate) fn finished(&self) -> bool {
-        self.complete && self.normalized() && self.symbols.iter().all(|&present| !present)
-    }
-
     fn observe_symbol(&mut self, id: u32, bracket: u32, symbols: &[u32; N]) {
         if id == bracket {
             self.brackets = true;

@@ -1,7 +1,13 @@
 """Verify discovered loop shifts and scalar numerator/power mappings."""
 
+import importlib
+import sys
+
 from symbolica import E, S
-from symbolica.community import feynkit as fk
+
+fk = importlib.import_module(
+    f"symbolica.community.{sys.argv[1] if len(sys.argv) > 1 else 'feynkit'}"
+)
 
 k, q, l, r, p, s = S(
     "map_check::k", "map_check::q", "map_check::l", "map_check::r", "map_check::p", "s"

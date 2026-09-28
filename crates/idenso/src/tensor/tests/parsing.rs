@@ -207,10 +207,10 @@ fn parse_ratio() {
       3	 [label = "T:P(1,mink(4,1))"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
-      3:7:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
+      1:4:s	-> 0:3:s	 [id=1  color="red:blue;0.5"];
       2:5:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
-      1:4:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
-      2:6:s	-> 3:8:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|1"];
+      2:6:s	-> 3:8:s	 [id=3 dir=none  color="red:blue;0.5" label="mink4|1"];
+      3:7:s	-> 0:1:s	 [id=4  color="red:blue;0.5"];
     }
     "#);
 
@@ -353,34 +353,34 @@ fn parse_val() {
       15	 [label = "T:ebar(4,mink(4,hedge_4))"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
-      15:55:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
-      14:53:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
-      13:51:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
-      12:49:s	-> 0:4:s	 [id=4  color="red:blue;0.5"];
-      11:47:s	-> 0:5:s	 [id=5  color="red:blue;0.5"];
-      10:45:s	-> 0:6:s	 [id=6  color="red:blue;0.5"];
-      9:43:s	-> 0:7:s	 [id=7  color="red:blue;0.5"];
-      8:39:s	-> 0:8:s	 [id=8  color="red:blue;0.5"];
-      7:35:s	-> 0:9:s	 [id=9  color="red:blue;0.5"];
-      6:31:s	-> 0:10:s	 [id=10  color="red:blue;0.5"];
-      5:27:s	-> 0:11:s	 [id=11  color="red:blue;0.5"];
-      4:23:s	-> 0:12:s	 [id=12  color="red:blue;0.5"];
-      3:20:s	-> 0:13:s	 [id=13  color="red:blue;0.5"];
-      2:17:s	-> 0:14:s	 [id=14  color="red:blue;0.5"];
-      1:16:s	-> 0:15:s	 [id=15  color="red:blue;0.5"];
-      2:19:s	-> 3:21:s	 [id=16 dir=back  color="red:blue;0.5" label="cof🠓3|_hedge_2"];
-      2:18:s	-> 3:22:s	 [id=17  color="red:blue;0.5" label="cof🠑3|^hedge_1"];
-      4:26:s	-> 13:52:s	 [id=18 dir=none  color="red:blue;0.5" label="mink4|hedge_0"];
-      4:24:s	-> 12:50:s	 [id=19 dir=none  color="red:blue;0.5" label="bis4|hedge_2"];
-      4:25:s	-> 8:41:s	 [id=20 dir=none  color="red:blue;0.5" label="bis4|hedge_8"];
-      5:30:s	-> 14:54:s	 [id=21 dir=none  color="red:blue;0.5" label="mink4|hedge_3"];
-      5:28:s	-> 11:48:s	 [id=22 dir=none  color="red:blue;0.5" label="bis4|hedge_1"];
-      5:29:s	-> 6:32:s	 [id=23 dir=none  color="red:blue;0.5" label="bis4|hedge_5"];
-      6:33:s	-> 7:36:s	 [id=24 dir=none  color="red:blue;0.5" label="bis4|hedge_6"];
-      6:34:s	-> 9:44:s	 [id=25 dir=none  color="red:blue;0.5" label="mink4|edge_5_1"];
-      7:37:s	-> 8:40:s	 [id=26 dir=none  color="red:blue;0.5" label="bis4|hedge_7"];
-      7:38:s	-> 15:56:s	 [id=27 dir=none  color="red:blue;0.5" label="mink4|hedge_4"];
-      8:42:s	-> 10:46:s	 [id=28 dir=none  color="red:blue;0.5" label="mink4|edge_6_1"];
+      1:16:s	-> 0:15:s	 [id=1  color="red:blue;0.5"];
+      2:17:s	-> 0:14:s	 [id=2  color="red:blue;0.5"];
+      2:18:s	-> 3:22:s	 [id=3  color="red:blue;0.5" label="cof🠑3|^hedge_1"];
+      2:19:s	-> 3:21:s	 [id=4 dir=back  color="red:blue;0.5" label="cof🠓3|_hedge_2"];
+      3:20:s	-> 0:13:s	 [id=5  color="red:blue;0.5"];
+      7:38:s	-> 15:56:s	 [id=6 dir=none  color="red:blue;0.5" label="mink4|hedge_4"];
+      15:55:s	-> 0:1:s	 [id=7  color="red:blue;0.5"];
+      4:23:s	-> 0:12:s	 [id=8  color="red:blue;0.5"];
+      4:24:s	-> 12:50:s	 [id=9 dir=none  color="red:blue;0.5" label="bis4|hedge_2"];
+      4:25:s	-> 8:41:s	 [id=10 dir=none  color="red:blue;0.5" label="bis4|hedge_8"];
+      4:26:s	-> 13:52:s	 [id=11 dir=none  color="red:blue;0.5" label="mink4|hedge_0"];
+      5:27:s	-> 0:11:s	 [id=12  color="red:blue;0.5"];
+      5:28:s	-> 11:48:s	 [id=13 dir=none  color="red:blue;0.5" label="bis4|hedge_1"];
+      5:29:s	-> 6:32:s	 [id=14 dir=none  color="red:blue;0.5" label="bis4|hedge_5"];
+      5:30:s	-> 14:54:s	 [id=15 dir=none  color="red:blue;0.5" label="mink4|hedge_3"];
+      6:31:s	-> 0:10:s	 [id=16  color="red:blue;0.5"];
+      10:45:s	-> 0:6:s	 [id=17  color="red:blue;0.5"];
+      6:33:s	-> 7:36:s	 [id=18 dir=none  color="red:blue;0.5" label="bis4|hedge_6"];
+      6:34:s	-> 9:44:s	 [id=19 dir=none  color="red:blue;0.5" label="mink4|edge_5_1"];
+      7:35:s	-> 0:9:s	 [id=20  color="red:blue;0.5"];
+      14:53:s	-> 0:2:s	 [id=21  color="red:blue;0.5"];
+      7:37:s	-> 8:40:s	 [id=22 dir=none  color="red:blue;0.5" label="bis4|hedge_7"];
+      11:47:s	-> 0:5:s	 [id=23  color="red:blue;0.5"];
+      8:39:s	-> 0:8:s	 [id=24  color="red:blue;0.5"];
+      12:49:s	-> 0:4:s	 [id=25  color="red:blue;0.5"];
+      13:51:s	-> 0:3:s	 [id=26  color="red:blue;0.5"];
+      8:42:s	-> 10:46:s	 [id=27 dir=none  color="red:blue;0.5" label="mink4|edge_6_1"];
+      9:43:s	-> 0:7:s	 [id=28  color="red:blue;0.5"];
     }
     "#);
     assert_eq!(net.simple_execute::<()>().unwrap(), expr);
@@ -419,14 +419,14 @@ fn parse_scalar_tensors_step_by() {
       6	 [label = "T:d(mink(4,2))"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
-      4:10:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
-      3:8:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
-      2:6:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
-      1:5:s	-> 0:4:s	 [id=4  color="red:blue;0.5"];
-      2:7:s	-> 3:9:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
-      5:14:s	-> 6:16:s	 [id=6 dir=none  color="red:blue;0.5" label="mink4|2"];
-      6:15:s	-> 4:11:s	 [id=7  color="red:blue;0.5"];
-      5:13:s	-> 4:12:s	 [id=8  color="red:blue;0.5"];
+      1:5:s	-> 0:4:s	 [id=1  color="red:blue;0.5"];
+      2:6:s	-> 0:3:s	 [id=2  color="red:blue;0.5"];
+      2:7:s	-> 3:9:s	 [id=3 dir=none  color="red:blue;0.5" label="mink4|1"];
+      3:8:s	-> 0:2:s	 [id=4  color="red:blue;0.5"];
+      6:15:s	-> 4:11:s	 [id=5  color="red:blue;0.5"];
+      4:10:s	-> 0:1:s	 [id=6  color="red:blue;0.5"];
+      5:13:s	-> 4:12:s	 [id=7  color="red:blue;0.5"];
+      5:14:s	-> 6:16:s	 [id=8 dir=none  color="red:blue;0.5" label="mink4|2"];
     }
     "#
     );
@@ -447,13 +447,13 @@ fn parse_scalar_tensors_step_by() {
       0	 [label = "T:d(mink(4,2))"];
       ext0	 [style=invis];
       5:0:s	-> ext0	 [id=0 color="red"];
-      0:13:s	-> 5:12:s	 [id=1  color="red:blue;0.5"];
-      3:8:s	-> 5:2:s	 [id=2  color="red:blue;0.5"];
-      2:6:s	-> 5:3:s	 [id=3  color="red:blue;0.5"];
-      1:5:s	-> 5:4:s	 [id=4  color="red:blue;0.5"];
-      2:7:s	-> 3:9:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
+      1:5:s	-> 5:4:s	 [id=1  color="red:blue;0.5"];
+      2:6:s	-> 5:3:s	 [id=2  color="red:blue;0.5"];
+      2:7:s	-> 3:9:s	 [id=3 dir=none  color="red:blue;0.5" label="mink4|1"];
+      3:8:s	-> 5:2:s	 [id=4  color="red:blue;0.5"];
+      4:10:s	-> 5:11:s	 [id=5  color="red:blue;0.5"];
       0:14:s	-> 4:1:s	 [id=6 dir=none  color="red:blue;0.5" label="mink4|2"];
-      4:10:s	-> 5:11:s	 [id=7  color="red:blue;0.5"];
+      0:13:s	-> 5:12:s	 [id=7  color="red:blue;0.5"];
     }
     "#
     );
@@ -473,11 +473,11 @@ fn parse_scalar_tensors_step_by() {
       0	 [label = "T:d(mink(4,1))"];
       ext0	 [style=invis];
       4:0:s	-> ext0	 [id=0 color="red"];
-      3:1:s	-> 4:10:s	 [id=1  color="red:blue;0.5"];
-      0:8:s	-> 4:2:s	 [id=2  color="red:blue;0.5"];
-      2:6:s	-> 4:3:s	 [id=3  color="red:blue;0.5"];
-      1:5:s	-> 4:4:s	 [id=4  color="red:blue;0.5"];
-      2:7:s	-> 0:9:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
+      1:5:s	-> 4:4:s	 [id=1  color="red:blue;0.5"];
+      2:6:s	-> 4:3:s	 [id=2  color="red:blue;0.5"];
+      2:7:s	-> 0:9:s	 [id=3 dir=none  color="red:blue;0.5" label="mink4|1"];
+      0:8:s	-> 4:2:s	 [id=4  color="red:blue;0.5"];
+      3:1:s	-> 4:10:s	 [id=5  color="red:blue;0.5"];
     }
     "#
     );
@@ -496,9 +496,9 @@ fn parse_scalar_tensors_step_by() {
       3	 [label = "T:b(mink(4,1))*d(mink(4,1))"];
       ext0	 [style=invis];
       2:0:s	-> ext0	 [id=0 color="red"];
-      0:1:s	-> 2:3:s	 [id=1  color="red:blue;0.5"];
-      3:6:s	-> 2:2:s	 [id=2  color="red:blue;0.5"];
-      1:5:s	-> 2:4:s	 [id=3  color="red:blue;0.5"];
+      1:5:s	-> 2:4:s	 [id=1  color="red:blue;0.5"];
+      0:1:s	-> 2:3:s	 [id=2  color="red:blue;0.5"];
+      3:6:s	-> 2:2:s	 [id=3  color="red:blue;0.5"];
     }
     "#
     );
@@ -886,10 +886,47 @@ fn parse_problem() {
         default_namespace = "spenso"
     );
 
-    let net = expr
+    // Untagged function-shaped labels need an explicit reversible admission
+    // boundary; their ports must not disappear into scalar metadata.
+    let cooking = crate::cook::CookSettings::reversible()
+        .with_index_payload_filter(None)
+        .with_output_tags(["idenso::parse_problem_index"]);
+    let cooked = cooking.cook_indices(expr.as_view());
+    assert_eq!(cooking.uncook(cooked.as_view()), expr);
+    let net = cooked
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
-    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
+    let exposed = net
+        .graph
+        .dangling_indices()
+        .into_iter()
+        .map(|slot| cooking.uncook(slot.to_atom().as_view()))
+        .collect::<std::collections::HashSet<_>>();
+    // The three tensor squares close their own ports. These four spinor
+    // endpoints and the two metric endpoints remain outside those squares.
+    let expected = parse_lit!(
+        parse_problem_ports(
+            bis(4, hedge(5)),
+            bis(4, hedge(6)),
+            bis(4, hedge(7)),
+            bis(4, hedge(8)),
+            mink(4, hedge_3),
+            mink(4, hedge_4)
+        ),
+        default_namespace = "spenso"
+    );
+    let AtomView::Fun(expected) = expected.as_view() else {
+        unreachable!()
+    };
+    assert_eq!(
+        exposed,
+        expected
+            .iter()
+            .map(|port| port.to_owned())
+            .collect::<std::collections::HashSet<_>>()
+    );
+    let result = net.simple_execute::<()>().unwrap();
+    assert_eq!(cooking.uncook(result.as_view()), expr);
 }
 #[test]
 // #[should_panic]
@@ -959,13 +996,13 @@ fn infinite_execution() {
       ext1	 [style=invis];
       0:3:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
       ext2	 [style=invis];
-      0:4:s	-> ext2	 [id=2 dir=none color="red" label="bis4|l_2"];
+      0:1:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_4"];
       ext3	 [style=invis];
       0:5:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_3"];
       ext4	 [style=invis];
-      0:1:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_4"];
+      0:2:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_1"];
       ext5	 [style=invis];
-      0:2:s	-> ext5	 [id=5 dir=none color="red" label="mink4|l_1"];
+      0:4:s	-> ext5	 [id=5 dir=none color="red" label="bis4|l_2"];
     }
     "#
     );
@@ -1197,4 +1234,158 @@ fn symbolic_structure_parsing() {
 
     let _a =
         SymbolicTensor::<OrderedStructure<LibraryRep, AbstractIndex>>::parse(a.as_view()).unwrap();
+}
+
+#[test]
+fn structural_network_borrows_source_leaves_and_owns_generated_shorthand() {
+    use spenso::network::store::TensorScalarStoreMapping;
+    use symbolica::atom::AtomOrView;
+    type Tensor<'a> = SymbolicTensor<OrderedStructure, AtomOrView<'a>>;
+    type Net<'a> = SymbolicNet<AbstractIndex, AtomOrView<'a>>;
+    test_initialize();
+    let source = symbolica::function!(tensor_symbol!(borrowed_network_left), mink!(4, i))
+        + symbolica::function!(tensor_symbol!(borrowed_network_right), mink!(4, i));
+    let settings = ParseSettings {
+        precontract_scalars: false,
+        ..ParseSettings::default()
+    };
+    let network = Net::try_from_view::<OrderedStructure, _>(
+        source.as_view(),
+        &DummyLibrary::<Tensor<'_>>::new(),
+        &settings,
+    )
+    .unwrap();
+    assert_eq!(network.store.tensors.len(), 2);
+    assert!(
+        network
+            .store
+            .tensors
+            .iter()
+            .all(|tensor| matches!(tensor.expression, AtomOrView::View(_)))
+    );
+    let owned = network.map(AtomOrView::into_owned, |tensor| SymbolicTensor {
+        proofs: Default::default(),
+        structure: tensor.structure,
+        expression: tensor.expression.into_owned(),
+        is_metric: tensor.is_metric,
+        is_composite: tensor.is_composite,
+    });
+    let reference = source
+        .parse_to_symbolic_net::<AbstractIndex>(&settings)
+        .unwrap();
+    assert_eq!(owned, reference);
+
+    let compact = symbolica::function!(
+        tensor_symbol!(borrowed_network_compact),
+        vector!(p, mink!(4))
+    );
+    let materialized = Net::try_from_view::<OrderedStructure, _>(
+        compact.as_view(),
+        &DummyLibrary::<Tensor<'_>>::new(),
+        &schoonschip_only_settings(),
+    )
+    .unwrap();
+    assert!(!materialized.store.tensors.is_empty());
+    assert!(
+        materialized
+            .store
+            .tensors
+            .iter()
+            .all(|tensor| matches!(tensor.expression, AtomOrView::Atom(_)))
+    );
+    let owned = materialized.map(AtomOrView::into_owned, |tensor| SymbolicTensor {
+        proofs: Default::default(),
+        structure: tensor.structure,
+        expression: tensor.expression.into_owned(),
+        is_metric: tensor.is_metric,
+        is_composite: tensor.is_composite,
+    });
+    assert_eq!(
+        owned,
+        compact
+            .parse_to_symbolic_net::<AbstractIndex>(&schoonschip_only_settings())
+            .unwrap()
+    );
+}
+
+#[test]
+fn structural_network_requires_materialization_before_execution() {
+    use spenso::network::{
+        graph::{NetworkLeaf, NetworkNode, ScalarRef},
+        store::TensorScalarStore,
+    };
+    test_initialize();
+    let source = symbolica::function!(tensor_symbol!(bound_network_leaf), mink!(4, i));
+    let mut network = source
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+        .unwrap();
+    let node = network
+        .graph
+        .graph
+        .iter_nodes()
+        .find_map(|(node, _, data)| {
+            matches!(data, NetworkNode::Leaf(NetworkLeaf::LocalTensor(_))).then_some(node)
+        })
+        .unwrap();
+    let value = network.store.add_scalar(vector!(p, mink!(4)));
+    assert!(
+        network
+            .graph
+            .bind_dangling_port(node, 0, ScalarRef::Store(value))
+    );
+    let before = network.clone();
+    let library = DummyLibrary::<SymbolicTensor>::new();
+    assert!(
+        network
+            .execute::<Sequential, SmallestDegree, _, _, _>(&library, &ErroringLibrary::new())
+            .is_err()
+    );
+    assert_eq!(network, before);
+}
+
+#[test]
+fn borrowed_scalar_power_base_preserves_implicit_contractions() {
+    use spenso::structure::{HasStructure, ScalarStructure};
+    use symbolica::atom::AtomOrView;
+    test_initialize();
+    let source = vector!(p, mink!(4, i)) * vector!(q, mink!(4, i));
+    let make = |expression| SymbolicTensor {
+        proofs: Default::default(),
+        structure: OrderedStructure::<LibraryRep, AbstractIndex>::scalar_structure(),
+        expression,
+        is_metric: false,
+        is_composite: true,
+    };
+    let owned = make(AtomOrView::Atom(source.clone()))
+        .scalar_power_base()
+        .unwrap();
+    let borrowed = make(AtomOrView::View(source.as_view()))
+        .scalar_power_base()
+        .unwrap();
+    assert_eq!(borrowed, owned);
+    assert_eq!(
+        borrowed.as_view(),
+        spenso::bracket!(source.as_view()).as_view()
+    );
+}
+
+#[test]
+fn aliased_scalar_power_base_keeps_definition_registry() {
+    use spenso::structure::{HasStructure, ScalarStructure};
+    use symbolica::atom::AliasedAtom;
+    test_initialize();
+    let alias = parse_lit!(structural_alias);
+    let source = vector!(p, mink!(4, i)) * vector!(q, mink!(4, i)) * &alias;
+    let mut expression = AliasedAtom::from(source.clone());
+    expression.register_alias(alias.clone(), parse_lit!(x + y));
+    let tensor = SymbolicTensor {
+        proofs: Default::default(),
+        structure: OrderedStructure::<LibraryRep, AbstractIndex>::scalar_structure(),
+        expression,
+        is_metric: false,
+        is_composite: true,
+    };
+    let result = tensor.scalar_power_base().unwrap();
+    assert_eq!(result.get_root(), &spenso::bracket!(source));
+    assert_eq!(result.get_aliases().get(&alias), Some(&parse_lit!(x + y)));
 }

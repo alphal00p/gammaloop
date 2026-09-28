@@ -72,9 +72,10 @@ Q = TensorName.vector("gammalooprs::Q", tags=S("gammalooprs::Q").get_tags())
 for selected_basis in (basis, alternate):
     indexed = Q(loop_edge.id, mu)
     # Expose numerical signs before routing, which only substitutes momenta.
-    cancelling = (
-        indexed - selected_basis.route_expression(indexed.to_expression())
-    ).expand_num()
+    cancelling = indexed - selected_basis.route_expression(indexed.to_expression())
+    cancelling = TensorExpression(
+        cancelling.to_expression().expand_num(), structure=cancelling.structure
+    )
     for tensor in (
         indexed,
         Q(loop_edge.id, lorentz),
@@ -90,7 +91,7 @@ for selected_basis in (basis, alternate):
         assert isinstance(plain, Expression) and not isinstance(plain, TensorExpression)
         assert routed.to_expression() == plain
     cancelled = selected_basis.route_expression(cancelling)
-    assert cancelled == 0
+    assert not cancelled
     assert cancelled.rank == 1
     for scalar in (E("3"), 3, 2.5):
         routed = selected_basis.route_expression(scalar)
@@ -129,11 +130,11 @@ for name in ("numerator_expression", "denominator_expression"):
         routed = expression(lmb=selected_basis)
         assert isinstance(routed, TensorExpression)
         assert routed == selected_basis.route_expression(raw)
-    assert getattr(empty, name)(in_lmb=True) == 1
-    assert getattr(empty, name)(lmb=alternate) == 1
+    assert getattr(empty, name)(in_lmb=True) == TensorExpression(1)
+    assert getattr(empty, name)(lmb=alternate) == TensorExpression(1)
 
 without_region = diagram.numerator_expression(without=region)
-assert without_region == 1
+assert without_region == TensorExpression(1)
 assert diagram.numerator_expression(without=region, in_lmb=True) == (
     basis.route_expression(without_region)
 )
@@ -257,15 +258,23 @@ assert edge.particle.mass_expression == model.particle("scalar_1").mass_expressi
 assert edge.particle.mass_expression != 0
 assert edge.particle.width_parameter == "width_scalar_1"
 assert edge.denominator_expression() == massive.denominator_expression()
-assert edge.particle.mass_expression in edge.denominator_expression().get_all_symbols()
+assert (
+    edge.particle.mass_expression
+    in edge.denominator_expression().to_expression().get_all_symbols()
+)
 a, b, c, quadratic = S(
     "edge_test::a_", "edge_test::b_", "edge_test::c_", "edge_test::q_"
 )
-explicit = edge.denominator_expression(dimension=4).replace(
-    S("gammalooprs::denom")(a, b, c, quadratic), quadratic
+explicit = (
+    edge.denominator_expression(dimension=4)
+    .to_expression()
+    .replace(S("gammalooprs::denom")(a, b, c, quadratic), quadratic)
 )
 momentum = edge.momentum_expression(dimension=4)
-assert explicit == dot(momentum, momentum) - edge.particle.mass_expression**2
+assert (
+    explicit
+    == (dot(momentum, momentum) - edge.particle.mass_expression**2).to_expression()
+)
 denominator = edge.denominator_expression(in_lmb=True)
 del massive
 assert edge.denominator_expression(in_lmb=True) == denominator
@@ -292,7 +301,7 @@ tadpole = next(
     )
 )
 zero_momentum = tadpole.external_edges[0].momentum_expression(in_lmb=True)
-assert zero_momentum == 0 and zero_momentum.rank == 1
+assert not zero_momentum and zero_momentum.rank == 1
 
 
 # Custom names label independent coordinates without changing the routing.
@@ -323,7 +332,7 @@ for selected_basis in (basis, alternate, two_loop.loop_momentum_basis):
     zero = 0 * Q(selected_basis.loop_edges[0], mu)
     routed_zero = selected_basis.route_expression(zero, **options)
     assert isinstance(routed_zero, TensorExpression)
-    assert routed_zero == 0 and routed_zero.structure.slots == zero.structure.slots
+    assert not routed_zero and routed_zero.structure.slots == zero.structure.slots
     for edge, signature in selected_basis.edge_signatures.items():
         for port in (mu, lorentz):
             raw = Q(edge, port)
@@ -363,7 +372,7 @@ for selected_basis in (basis, alternate, two_loop.loop_momentum_basis):
             S("gammalooprs::Q"),
             S("gammalooprs::K"),
             S("gammalooprs::P"),
-        } & set(named_dot.get_all_symbols())
+        } & set(named_dot.to_expression().get_all_symbols())
 
     for invalid, message in (
         ({"loop_momenta": []}, "loop_momenta requires"),

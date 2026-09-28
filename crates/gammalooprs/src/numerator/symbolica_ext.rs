@@ -1,7 +1,6 @@
 use std::ops::Deref;
 
 use color_eyre::eyre::{bail, ensure};
-use idenso::color::ColorSimplifier;
 use spenso::{
     network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
     structure::representation::{Minkowski, RepName},
@@ -13,7 +12,7 @@ use symbolica::{
     poly::series::SeriesDepth,
 };
 
-use crate::utils::{GS, TENSORLIB, W_};
+use crate::utils::{TENSORLIB, W_};
 
 use super::ParsingNet;
 pub type ParsingNetError = spenso::network::TensorNetworkError<
@@ -43,9 +42,6 @@ pub trait NumeratorAtomExt {
         numerator_family_keys: &[Atom],
     ) -> color_eyre::Result<Atom>;
 
-    // fn wrap_color(&self, symbol: Symbol) -> Atom;
-    fn kill_color(&self) -> Atom;
-
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom;
 
     fn unwrap_function(&self, symbol: Symbol) -> Atom;
@@ -70,16 +66,9 @@ impl NumeratorAtomExt for Atom {
         )
     }
 
-    fn kill_color(&self) -> Atom {
-        self.wrap_color(GS.killing_func)
-    }
-
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
         self.as_view().map_mink_dim(dim)
     }
-    // fn wrap_color(&self, symbol: Symbol) -> Atom {
-    //     self.as_view().wrap_color(symbol)
-    // }
 
     fn unwrap_function(&self, symbol: Symbol) -> Atom {
         self.as_view().unwrap_function(symbol)
@@ -180,19 +169,10 @@ impl NumeratorAtomExt for AtomView<'_> {
         Ok(independent * grouped)
     }
 
-    fn kill_color(&self) -> Atom {
-        self.wrap_color(GS.killing_func)
-    }
-
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
         self.replace(Minkowski {}.to_symbolic([W_.d_, W_.a___]))
             .with(Minkowski {}.to_symbolic([dim.into().into_owned(), Atom::var(W_.a___)]))
     }
-    // fn wrap_color(&self, symbol: Symbol) -> Atom {
-    //     self.expand_color()
-    //         .into_iter()
-    //         .fold(Atom::Zero, |a, (c, s)| a + function!(symbol, c) * s)
-    // }
 
     fn unwrap_function(&self, symbol: Symbol) -> Atom {
         self.replace(function!(symbol, W_.a___)).with(W_.a___)

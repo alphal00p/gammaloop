@@ -1,4 +1,5 @@
 use super::*;
+use crate::shorthands::{UndoShorthands, chain::Chain};
 use insta::assert_snapshot;
 use spenso::{g, network::tags::SPENSO_TAG as T, p, q, trace};
 
@@ -12,7 +13,7 @@ fn dirac_simplify_id1_repeated_d_dim_gamma_is_dimension() {
         gamma!(slot!(r.mink_d, mu)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"d*g(bis(d,i),bis(d,j))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"d*g(bis(d,i),bis(d,j))");
 }
 
 #[test]
@@ -28,7 +29,7 @@ fn dirac_simplify_id2_odd_interior_chain() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,nu)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,nu)))");
 }
 
 #[test]
@@ -44,19 +45,37 @@ fn dirac_simplify_id3_four_interior_chain() {
         gamma!(slot!(r.mink4, sigma)),
         gamma!(slot!(r.mink4, mu)),
     ) / 2;
-    let simplified = expr.simplify_gamma();
+    let simplified = crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+        .unwrap()
+        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
     println!(
         "{}",
         simplified.spenso_print(&SpensoPrintSettings::compact())
     );
-    // Normalize only the test oracle: production simplification preserves factored sums.
-    assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))+chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)))");
-    let simplified = expr.simplify_gamma_with(GammaSimplifySettings::canonical());
+    // Keep the original arithmetic oracle without distributing the numerator.
+    crate::test_support::assert_factored_snapshot_eq(
+        &simplified.to_bare_ordered_string(),
+        "chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))+chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)))",
+    );
+    let simplified = crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+        .unwrap()
+        .simplify_gamma(GammaSimplifySettings::canonical())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
     println!(
         "{}",
         simplified.spenso_print(&SpensoPrintSettings::compact())
     );
-    assert_snapshot!(&expr.simplify_gamma_with(GammaSimplifySettings::canonical()).to_bare_ordered_string(), @"(-4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,sigma)))+-4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,rho)))*g(mink(4,beta),mink(4,sigma))+-4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,sigma)))*g(mink(4,alpha),mink(4,rho))+4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)))*g(mink(4,rho),mink(4,sigma))+4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))*g(mink(4,beta),mink(4,rho))+4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)))*g(mink(4,alpha),mink(4,sigma))+4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,sigma)))*g(mink(4,alpha),mink(4,beta)))*1/2");
+    crate::test_support::assert_factored_snapshot_eq(
+        &simplified.to_bare_ordered_string(),
+        "(-4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,sigma)))+-4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,rho)))*g(mink(4,beta),mink(4,sigma))+-4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,sigma)))*g(mink(4,alpha),mink(4,rho))+4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)))*g(mink(4,rho),mink(4,sigma))+4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))*g(mink(4,beta),mink(4,rho))+4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)))*g(mink(4,alpha),mink(4,sigma))+4*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,sigma)))*g(mink(4,alpha),mink(4,beta)))*1/2",
+    );
 }
 
 #[test]
@@ -71,7 +90,7 @@ fn dirac_simplify_id4_slash_sandwich() {
             * chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma!(q.clone()))
             * chain!(slot!(r.bis4, b), slot!(r.bis4, j), gamma!(p.clone()));
 
-    assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*g(p(mink(4)),q(mink(4)))+chain(bis(4,i),bis(4,j),gamma(in,out,q(mink(4))))*g(p(mink(4)),p(mink(4)))+g(bis(4,i),bis(4,j))*g(p(mink(4)),p(mink(4)))*m");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"-2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*g(p(mink(4)),q(mink(4)))+chain(bis(4,i),bis(4,j),gamma(in,out,q(mink(4))))*g(p(mink(4)),p(mink(4)))+g(bis(4,i),bis(4,j))*g(p(mink(4)),p(mink(4)))*m");
 }
 
 #[test]
@@ -84,7 +103,7 @@ fn dirac_simplify_id5_gamma5_anticommutes_left() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)),gamma5(in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)),gamma5(in,out))");
 }
 
 #[test]
@@ -97,7 +116,24 @@ fn dirac_simplify_id23_trace_evaluation_can_stay_disabled() {
         gamma!(slot!(r.mink4, a))
     ) + gamma!(1, 2, a) * gamma!(2, 3, a);
 
-    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,3))+trace(bis(4),cyclic(gamma(in,out,mink(4,a)),gamma(in,out,mink(4,a)),gamma(in,out,mink(4,b))))");
+    // These references combine independent tensors with different interfaces.
+    // Simplify each summand through its checked boundary; such a sum itself
+    // is deliberately not admitted as one tensor.
+    let independent = expr;
+    assert!(crate::tensor::SymbolicTensor::infer(independent.clone()).is_err());
+    let symbolica::atom::AtomView::Add(terms) = independent.as_view() else {
+        panic!("the reference must contain distinct tensor summands");
+    };
+    let simplified = Atom::add_many(terms.iter().map(|term| {
+        crate::tensor::SymbolicTensor::infer(term.to_owned())
+            .unwrap()
+            .simplify_gamma(GammaSimplifySettings::repeated_pairs().without_trace_evaluation())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+    }));
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,3))+trace(bis(4),cyclic(gamma(in,out,mink(4,a)),gamma(in,out,mink(4,a)),gamma(in,out,mink(4,b))))");
 }
 
 #[test]
@@ -115,7 +151,24 @@ fn dirac_simplify_id24_odd_trace_vanishes() {
         gamma!(slot!(r.mink4, b)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,a)),gamma(in,out,mink(4,b)))");
+    // These references combine independent tensors with different interfaces.
+    // Simplify each summand through its checked boundary; such a sum itself
+    // is deliberately not admitted as one tensor.
+    let independent = expr;
+    assert!(crate::tensor::SymbolicTensor::infer(independent.clone()).is_err());
+    let symbolica::atom::AtomView::Add(terms) = independent.as_view() else {
+        panic!("the reference must contain distinct tensor summands");
+    };
+    let simplified = Atom::add_many(terms.iter().map(|term| {
+        crate::tensor::SymbolicTensor::infer(term.to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+    }));
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,a)),gamma(in,out,mink(4,b)))");
 }
 
 #[test]
@@ -136,7 +189,24 @@ fn dirac_simplify_id25_four_trace_recurses_beside_open_chain() {
         gamma!(slot!(r.mink4, d)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-4*g(mink(4,a),mink(4,c))*g(mink(4,b),mink(4,d))+4*g(mink(4,a),mink(4,b))*g(mink(4,c),mink(4,d))+4*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,c))+chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,a)),gamma(in,out,mink(4,b)),gamma(in,out,mink(4,c)),gamma(in,out,mink(4,d)))");
+    // These references combine independent tensors with different interfaces.
+    // Simplify each summand through its checked boundary; such a sum itself
+    // is deliberately not admitted as one tensor.
+    let independent = expr;
+    assert!(crate::tensor::SymbolicTensor::infer(independent.clone()).is_err());
+    let symbolica::atom::AtomView::Add(terms) = independent.as_view() else {
+        panic!("the reference must contain distinct tensor summands");
+    };
+    let simplified = Atom::add_many(terms.iter().map(|term| {
+        crate::tensor::SymbolicTensor::infer(term.to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+    }));
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"-4*g(mink(4,a),mink(4,c))*g(mink(4,b),mink(4,d))+4*g(mink(4,a),mink(4,b))*g(mink(4,c),mink(4,d))+4*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,c))+chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,a)),gamma(in,out,mink(4,b)),gamma(in,out,mink(4,c)),gamma(in,out,mink(4,d)))");
 }
 
 #[test]
@@ -157,7 +227,7 @@ fn dirac_simplify_id30_dirac_order_anticommutator() {
         * g!(slot!(r.mink4, nu), p)
         * chain!(slot!(r.bis4, i), slot!(r.bis4, j); Vec::<Atom>::new());
 
-    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::canonical()).to_bare_ordered_string(), @"0");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_gamma(GammaSimplifySettings::canonical()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"0");
 }
 
 #[test]
@@ -172,10 +242,20 @@ fn dirac_simplify_id36_empty_trace_is_spin_dimension() {
         gamma!(slot!(r.mink_d, b))
     );
 
-    assert_snapshot!(expr_4.simplify_gamma().to_bare_ordered_string(), @"4");
-    assert_snapshot!(expr_d.simplify_gamma().to_bare_ordered_string(), @"d");
-    assert_snapshot!(expr_color.simplify_gamma().to_bare_ordered_string(), @"Nc");
-    assert_snapshot!(pair_d.simplify_gamma().to_bare_ordered_string(), @"d*g(mink(d,a),mink(d,b))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr_4).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"4");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr_d).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"d");
+    let color = crate::tensor::SymbolicTensor::infer(expr_color.clone()).unwrap();
+    assert_eq!(
+        color
+            .simplify_gamma(GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
+        expr_color
+    );
+    assert_snapshot!(color.simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"Nc");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((pair_d).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"d*g(mink(d,a),mink(d,b))");
 }
 
 #[test]
@@ -197,7 +277,24 @@ fn dirac_simplify_id40_repeated_gamma_and_two_trace() {
             gamma!(slot!(r.mink4, nu))
         );
 
-    assert_snapshot!((open + tr).simplify_gamma().expand().to_bare_ordered_string(), @"-2*c1*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))+4*c1*g(bis(4,i),bis(4,j))*m+4*c2*g(mink(4,mu),mink(4,nu))");
+    // These references combine independent tensors with different interfaces.
+    // Simplify each summand through its checked boundary; such a sum itself
+    // is deliberately not admitted as one tensor.
+    let independent = open + tr;
+    assert!(crate::tensor::SymbolicTensor::infer(independent.clone()).is_err());
+    let symbolica::atom::AtomView::Add(terms) = independent.as_view() else {
+        panic!("the reference must contain distinct tensor summands");
+    };
+    let simplified = Atom::add_many(terms.iter().map(|term| {
+        crate::tensor::SymbolicTensor::infer(term.to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+    }));
+    assert_snapshot!(simplified.expand().to_bare_ordered_string(), @"-2*c1*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))+4*c1*g(bis(4,i),bis(4,j))*m+4*c2*g(mink(4,mu),mink(4,nu))");
 }
 
 #[test]
@@ -218,8 +315,8 @@ fn dirac_simplify_id45_slash_square_and_sandwich() {
         gamma!(p),
     );
 
-    assert_snapshot!(slash_square.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))");
-    assert_snapshot!(sandwich.simplify_gamma().expand().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))+2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*p(mink(4,mu))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((slash_square).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((sandwich).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))+2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*p(mink(4,mu))");
 }
 
 #[test]
@@ -237,7 +334,16 @@ fn dirac_simplify_id46_d_dim_repeated_gamma_slash_sum() {
             * gamma!(slot!(r.bis_d, i), slot!(r.bis_d, a), slot!(r.mink_d, mu))
             * gamma!(slot!(r.bis_d, a), slot!(r.bis_d, j), slot!(r.mink_d, mu));
 
-    assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-1*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*d+-1*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*d+2*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))+2*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))+d*g(bis(d,i),bis(d,j))*m");
+    // Formal spin channels are admitted by the existing word boundary;
+    // standalone gamma factories retain their four-dimensional spin ports.
+    let chainified = expr.chainify(Bispinor {}.into());
+    // The source already contains slash chains; compare both expressions at
+    // the same explicit-matrix boundary without expanding their products.
+    assert_eq!(
+        chainified.undo_chain::<AbstractIndex>().unwrap(),
+        expr.undo_chain::<AbstractIndex>().unwrap()
+    );
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer(chainified).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"-1*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*d+-1*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*d+2*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))+2*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))+d*g(bis(d,i),bis(d,j))*m");
 }
 
 #[test]
@@ -251,11 +357,30 @@ fn chiral_projector_traces() {
     for (symbol, sign) in [(AGS.projp, 1), (AGS.projm, -1)] {
         let projector = function!(symbol, T.chain_in, T.chain_out);
         assert_eq!(
-            trace!(rep.clone(), projector.clone()).simplify_gamma(),
+            crate::tensor::SymbolicTensor::infer(
+                (trace!(rep.clone(), projector.clone()))
+                    .as_atom_view()
+                    .to_owned()
+            )
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression(),
             Atom::num(2)
         );
         let expr = trace!(rep.clone(), projector.clone(), gamma!(mu), gamma!(nu));
-        assert_eq!(expr.simplify_gamma(), 2 * g!(mu, nu));
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            2 * g!(mu, nu)
+        );
 
         let ordinary = trace!(
             rep.clone(),
@@ -280,16 +405,52 @@ fn chiral_projector_traces() {
             gamma!(rho),
             gamma!(sigma)
         );
-        let reduced = expr.simplify_gamma();
+        let reduced = crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         assert_eq!(
             (reduced.clone()
-                - (ordinary.simplify_gamma() + Atom::num(sign) * axial.simplify_gamma()) / 2)
-                .expand(),
+                - (crate::tensor::SymbolicTensor::infer((ordinary).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression()
+                    + Atom::num(sign)
+                        * crate::tensor::SymbolicTensor::infer((axial).as_atom_view().to_owned())
+                            .unwrap()
+                            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                            .unwrap()
+                            .resolved()
+                            .unwrap()
+                            .into_expression())
+                    / 2)
+            .expand(),
             Atom::Zero
         );
-        assert_eq!(reduced.simplify_gamma(), reduced);
         assert_eq!(
-            expr.simplify_gamma_with(GammaSimplifySettings::default().without_trace_evaluation()),
+            crate::tensor::SymbolicTensor::infer((reduced).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            reduced
+        );
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(GammaSimplifySettings::default().without_trace_evaluation())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
             expr
         );
 
@@ -301,22 +462,78 @@ fn chiral_projector_traces() {
             projector.clone(),
             gamma!(nu)
         );
-        assert_eq!(expr.simplify_gamma(), Atom::Zero);
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            Atom::Zero
+        );
         let expr = trace!(rep.clone(), projector.clone(), projector.clone());
-        assert_eq!(expr.simplify_gamma(), Atom::num(2));
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            Atom::num(2)
+        );
         let mixed = trace!(rep.clone(), projector.clone(), gamma!(slot!(r.mink_d, mu)));
-        assert_eq!(mixed.simplify_gamma(), mixed);
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((mixed).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            mixed
+        );
         let dimensional = trace!(r.bis_d.to_symbolic([]), projector);
-        assert_eq!(dimensional.simplify_gamma(), dimensional);
+        assert_eq!(
+            crate::tensor::SymbolicTensor::infer((dimensional).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            dimensional
+        );
     }
     let plus = function!(AGS.projp, T.chain_in, T.chain_out);
     let minus = function!(AGS.projm, T.chain_in, T.chain_out);
     assert_eq!(
-        trace!(rep.clone(), plus.clone(), minus.clone()).simplify_gamma(),
+        crate::tensor::SymbolicTensor::infer(
+            (trace!(rep.clone(), plus.clone(), minus.clone()))
+                .as_atom_view()
+                .to_owned()
+        )
+        .unwrap()
+        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression(),
         Atom::Zero
     );
     assert_eq!(
-        trace!(rep, plus, gamma!(mu), minus, gamma!(nu)).simplify_gamma(),
+        crate::tensor::SymbolicTensor::infer(
+            (trace!(rep, plus, gamma!(mu), minus, gamma!(nu)))
+                .as_atom_view()
+                .to_owned()
+        )
+        .unwrap()
+        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression(),
         2 * g!(mu, nu)
     );
 }

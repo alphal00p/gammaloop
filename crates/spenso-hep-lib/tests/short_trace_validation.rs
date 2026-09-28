@@ -4,10 +4,9 @@
 use std::{cell::RefCell, collections::HashMap, sync::Once};
 
 use idenso::{
-    dirac::GammaSimplifier,
     epsilon::EPSILON_SYMBOL,
     representations::{Bispinor, initialize},
-    shorthands::schoonschip::{Schoonschip, SchoonschipSettings},
+    tensor::{ContractionSettings, SymbolicTensor},
 };
 use spenso::{
     network::{
@@ -284,7 +283,13 @@ impl TraceEvaluation {
         let evaluations = [0, 1, 2].map(Self::new);
         for axial in [false, true] {
             let expression = evaluations[0].trace(length, axial);
-            let simplified = expression.simplify_gamma();
+            let simplified = idenso::tensor::SymbolicTensor::infer(expression.clone())
+                .unwrap()
+                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
             let mut nonzero_samples = 0;
             for (sample, evaluation) in evaluations.iter().enumerate() {
                 let label = format!("sample {sample}, length {length}, gamma5 {axial}");
@@ -324,7 +329,13 @@ impl TraceEvaluation {
                 factors.insert(position, idenso::gamma5!());
             }
             let expression = spenso::trace!(&Bispinor {}.new_rep(4); factors);
-            let simplified = expression.simplify_gamma();
+            let simplified = idenso::tensor::SymbolicTensor::infer(expression.clone())
+                .unwrap()
+                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
             for (sample, evaluation) in evaluations.iter().enumerate() {
                 let label = format!(
                     "sample {sample}, repeated indices {left}/{right}, gamma5 at {gamma5_position:?}"
@@ -363,9 +374,25 @@ impl TraceEvaluation {
             let trace = spenso::trace!(&Bispinor {}.new_rep(4); factors);
             // Simplify before attaching spectators: distinct explicit slots
             // select the standalone axial shortcut rather than its full pass.
-            let simplified = trace.simplify_gamma();
+            let simplified =
+                idenso::tensor::SymbolicTensor::infer((trace).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression();
             assert_ne!(trace, simplified);
-            assert_eq!(simplified.simplify_gamma(), simplified);
+            assert_eq!(
+                idenso::tensor::SymbolicTensor::infer(simplified.clone())
+                    .unwrap()
+                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
+                simplified
+            );
             // Contract each closing vector at its original gamma before taking
             // the matrix trace. HEP's nested trace boundary would otherwise
             // materialize a tensor with 4^length free Lorentz components before
@@ -418,9 +445,24 @@ impl TraceEvaluation {
             spenso::trace!(&Bispinor {}.new_rep(4); slots.iter().map(|slot| idenso::gamma!(slot)));
         // Keep D symbolic until after simplification, so the generic trace
         // recurrence is exercised independently of the four-dimensional kernel.
-        let simplified = trace.simplify_gamma();
+        let simplified = idenso::tensor::SymbolicTensor::infer((trace).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         assert_ne!(trace, simplified);
-        assert_eq!(simplified.simplify_gamma(), simplified);
+        assert_eq!(
+            idenso::tensor::SymbolicTensor::infer(simplified.clone())
+                .unwrap()
+                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            simplified
+        );
         let specialize = |expression: &Atom| {
             expression.replace_map(|atom, _, output| {
                 if atom == dimension.as_view() {
@@ -478,7 +520,13 @@ impl TraceEvaluation {
         let trace = spenso::trace!(&Bispinor {}.new_rep(4); factors);
         // Evaluate first: this must exercise substitution into the factored
         // metric/epsilon polynomial, not index contraction inside the trace.
-        let evaluated = trace.simplify_gamma();
+        let evaluated = idenso::tensor::SymbolicTensor::infer((trace).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         let specialize = |expression: &Atom| {
             expression.replace_map(|atom, _, out| {
                 if atom == Atom::var(dimension).as_view() {
@@ -489,13 +537,28 @@ impl TraceEvaluation {
         for right in [1, length / 2] {
             let metric = spenso::g!(&slots[0], &slots[right]);
             let late = &metric * &evaluated;
-            let result = late.simplify_gamma();
+            let result = idenso::tensor::SymbolicTensor::infer((late).as_atom_view().to_owned())
+                .unwrap()
+                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression();
             assert_ne!(late, result);
             assert!(
                 !result.has_repeated_explicit_indices(),
                 "remaining contraction at length {length}, axial {axial}, metric endpoints 0/{right}"
             );
-            assert_eq!(result.simplify_gamma(), result);
+            assert_eq!(
+                idenso::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
+                    .unwrap()
+                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
+                result
+            );
             let result = specialize(&result);
             let remaining: Vec<_> = slots
                 .iter()
@@ -603,7 +666,13 @@ fn repeated_slashes_match_exact_hep_tensor_contractions() {
                 }
                 let expression = spenso::trace!(&Bispinor {}.new_rep(4); factors);
                 let label = format!("sample {sample}, repeated slashes {order:?}, gamma5 {axial}");
-                let simplified = expression.simplify_gamma();
+                let simplified = idenso::tensor::SymbolicTensor::infer(expression.clone())
+                    .unwrap()
+                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression();
                 let _ = evaluation.assert_simplification(&expression, &simplified, &label);
             }
         }
@@ -628,7 +697,18 @@ fn repeated_pair_order_and_cyclic_cuts_match_exact_hep_contractions() {
     let odd_first_factors =
         [3, 4, 0, 2, 1, 5, 6, 7].map(|index| idenso::gamma!(&evaluations[0].momenta[index]));
     cases.push(Atom::num(4) * spenso::trace!(&bis; odd_first_factors));
-    let simplified: Vec<_> = cases.iter().map(GammaSimplifier::simplify_gamma).collect();
+    let simplified: Vec<_> = cases
+        .iter()
+        .map(|expression| {
+            idenso::tensor::SymbolicTensor::infer(expression.clone())
+                .unwrap()
+                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression()
+        })
+        .collect();
     for (sample, evaluation) in evaluations.iter().enumerate() {
         let expected = evaluation.evaluate(&original);
         assert!(
@@ -655,17 +735,27 @@ fn external_metric_trace_matches_exact_hep_contractions() {
     factors[5] = idenso::gamma!(&c);
     factors[8] = idenso::gamma!(&d);
     let original = spenso::g!(&a, &c) * spenso::g!(&b, &d) * spenso::trace!(&bis; factors);
-    let precontracted = original.schoonschip_with_settings(
-        &SchoonschipSettings::default()
-            .with_chain_like_functions()
-            .without_rank1_tensors(),
-    );
+    let precontracted = SymbolicTensor::infer(original.clone())
+        .unwrap()
+        .contract(ContractionSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .resolved()
+        .unwrap()
+        .into_expression();
     assert_ne!(
         original, precontracted,
         "external metrics must reach the trace body"
     );
     let cases = [original, precontracted];
-    let simplified = cases.each_ref().map(GammaSimplifier::simplify_gamma);
+    let simplified = cases.each_ref().map(|expression| {
+        idenso::tensor::SymbolicTensor::infer(expression.clone())
+            .unwrap()
+            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+    });
     for (sample, evaluation) in evaluations.iter().enumerate() {
         let expected = evaluation.evaluate(&repeated);
         assert!(
@@ -692,7 +782,15 @@ fn axial_pair_order_and_gamma5_positions_match_exact_hep_contractions() {
         factors.insert(position, idenso::gamma5!());
         spenso::trace!(&bis; factors)
     });
-    let simplified = cases.each_ref().map(GammaSimplifier::simplify_gamma);
+    let simplified = cases.each_ref().map(|expression| {
+        idenso::tensor::SymbolicTensor::infer(expression.clone())
+            .unwrap()
+            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression()
+    });
     for (sample, evaluation) in evaluations.iter().enumerate() {
         let expected = evaluation.evaluate(&cases[0]);
         assert!(
@@ -706,6 +804,69 @@ fn axial_pair_order_and_gamma5_positions_match_exact_hep_contractions() {
             // also covers cuts with gamma5 inside a candidate contracted pair.
             let sign = if position % 2 == 0 { 1 } else { -1 };
             assert_eq!(value, Atom::num(sign) * &expected, "{label}");
+        }
+    }
+}
+
+#[test]
+fn reversed_axial_words_match_exact_hep_components() {
+    use idenso::dirac::{AGS, GammaSimplifySettings};
+    use spenso::network::tags::SPENSO_TAG as T;
+    use symbolica::atom::FunctionBuilder;
+
+    let evaluation = TraceEvaluation::new(0);
+    let spin = Bispinor {}.new_rep(4);
+    for length in [2, 3, 4, 6] {
+        for position in [0, length / 2, length] {
+            for paired in [false, true] {
+                let mut word = evaluation.momenta[..length]
+                    .iter()
+                    .map(|p| idenso::gamma!(p))
+                    .collect::<Vec<_>>();
+                word.insert(position, idenso::gamma5!());
+                if paired {
+                    word.push(idenso::gamma5!());
+                }
+                let reversed = word
+                    .iter()
+                    .map(|factor| {
+                        let AtomView::Fun(factor) = factor.as_view() else {
+                            unreachable!()
+                        };
+                        assert!([AGS.gamma, AGS.gamma5].contains(&factor.get_symbol()));
+                        let mut result = FunctionBuilder::new(factor.get_symbol())
+                            .add_arg(Atom::var(T.chain_out))
+                            .add_arg(Atom::var(T.chain_in));
+                        for argument in factor.iter().skip(2) {
+                            result = result.add_arg(argument);
+                        }
+                        result.finish()
+                    })
+                    .collect::<Vec<_>>();
+                let input = spenso::trace!(&spin; &reversed);
+                let forward = spenso::trace!(&spin; word.iter().rev());
+                assert_eq!(
+                    evaluation.evaluate(&input),
+                    evaluation.evaluate(&forward),
+                    "transpose identity"
+                );
+                let simplified = SymbolicTensor::infer(input.clone())
+                    .unwrap()
+                    .simplify_gamma(GammaSimplifySettings::default())
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression();
+                let value =
+                    evaluation.assert_simplification(&input, &simplified, "reversed axial word");
+                if length == 4 && !paired {
+                    assert_eq!(
+                        value,
+                        Atom::num(if position % 2 == 0 { 4 } else { -4 }) * Atom::i(),
+                        "epsilon orientation in (+---) basis"
+                    );
+                }
+            }
         }
     }
 }

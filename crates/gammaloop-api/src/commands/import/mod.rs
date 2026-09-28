@@ -14,13 +14,13 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
-    CLISettings,
     commands::generate::parse_process_spec_string,
     completion::CompletionArgExt,
     state::{GraphImportOptions, ProcessRef, State},
+    CLISettings,
 };
 use color_eyre::Result;
-use eyre::{Context, eyre};
+use eyre::{eyre, Context};
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Import {
@@ -345,11 +345,9 @@ mod tests {
         let imported = Import::load_graph_file(&path, &model)?;
 
         assert_eq!(imported.len(), generated.diagrams.len());
-        assert!(
-            imported
-                .iter()
-                .all(|graph| !graph.finalized_cuts.is_empty())
-        );
+        assert!(imported
+            .iter()
+            .all(|graph| !graph.finalized_cuts.is_empty()));
         Ok(())
     }
 }
