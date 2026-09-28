@@ -8,11 +8,13 @@ use tabled::{builder::Builder, settings::Style};
 
 use crate::{
     GraphInfo, HybridSurfaceID, LinearEnergyExpr, LinearSurfaceKind, NumeratorSamplingScaleMode,
-    OrientationExpression, OrientationID, ThreeDExpression, surface::SurfaceOrigin,
+    OrientationExpression, OrientationID, RepresentationMode, ThreeDExpression,
+    surface::SurfaceOrigin,
 };
 
 #[derive(Debug, Clone, Default)]
 pub struct DisplayOptions {
+    pub representation: RepresentationMode,
     pub use_color: bool,
     pub details_for_orientation: Option<String>,
 }
@@ -32,24 +34,33 @@ pub fn render_expression_summary(
     options: &DisplayOptions,
 ) -> String {
     if let Some(selector) = options.details_for_orientation.as_deref() {
-        return orientation_details(expression, selector, graph, options.use_color);
+        return orientation_details(expression, selector, graph, options);
     }
 
     let mut out = Vec::new();
     out.push(format!(
         "{}\n{}",
-        title("CFF structure", options.use_color),
+        title(
+            &format!(
+                "{} structure",
+                options.representation.to_string().to_uppercase()
+            ),
+            options.use_color,
+        ),
         summary_table(
             expression,
             graph,
             energy_degree_bounds,
             numerator,
             sampling_scale,
-            options.use_color,
+            options,
         )
     ));
     out.push(surface_table(expression, options.use_color));
-    out.push(orientation_table(expression, graph, options.use_color));
+    if options.representation == RepresentationMode::Ltd {
+        out.push("Residue map: each affine loop-energy key supplies the arguments of the shared numerator N.\nSum every row and term for each integrand evaluation; H-surface cancellation requires the complete sum.\nfactors [i^p] denote (2*OSE[i])^p in the denominator; M is the numerator sampling scale.".to_string());
+    }
+    out.push(orientation_table(expression, graph, options));
 
     out.join("\n\n")
 }
@@ -60,13 +71,14 @@ fn summary_table(
     energy_degree_bounds: Option<&[(usize, usize)]>,
     numerator: NumeratorDisplay<'_>,
     sampling_scale: NumeratorSamplingScaleMode,
-    use_color: bool,
+    options: &DisplayOptions,
 ) -> String {
+    let use_color = options.use_color;
     let mut table = Builder::new();
     table.push_record(vec![h("field", use_color), h("value", use_color)]);
     table.push_record(vec![
         "family".to_string(),
-        c("cff", Color::Green, use_color),
+        c(&options.representation.to_string(), Color::Green, use_color),
     ]);
     table.push_record(vec![
         "internal edges".to_string(),
@@ -97,7 +109,12 @@ fn summary_table(
         },
     ]);
     table.push_record(vec![
-        "orientations".to_string(),
+        if options.representation == RepresentationMode::Ltd {
+            "residue keys"
+        } else {
+            "orientations"
+        }
+        .to_string(),
         expression.orientations.len().to_string(),
     ]);
     table.push_record(vec![
@@ -129,7 +146,11 @@ fn summary_table(
     ]);
     table.push_record(vec![
         "energy degree bounds".to_string(),
-        format_energy_degree_bounds(energy_degree_bounds, use_color),
+        if options.representation == RepresentationMode::Ltd && energy_degree_bounds.is_none() {
+            "not required (simple poles)".to_string()
+        } else {
+            format_energy_degree_bounds(energy_degree_bounds, use_color)
+        },
     ]);
     table.push_record(vec![
         "numerator sampling scale".to_string(),
@@ -210,12 +231,21 @@ fn surface_table(expression: &ThreeDExpression<OrientationID>, use_color: bool) 
 fn orientation_table(
     expression: &ThreeDExpression<OrientationID>,
     graph: &GraphInfo,
-    use_color: bool,
+    options: &DisplayOptions,
 ) -> String {
+    let use_color = options.use_color;
+    let ltd = options.representation == RepresentationMode::Ltd;
     let mut table = Builder::new();
     table.push_record(vec![
         h("id", use_color),
-        h("orientation", use_color),
+        h(
+            if ltd {
+                "loop-energy key"
+            } else {
+                "orientation"
+            },
+            use_color,
+        ),
         h("variant", use_color),
         h("origin", use_color),
         h("pref", use_color),
@@ -247,7 +277,17 @@ fn orientation_table(
                 } else {
                     String::new()
                 },
-                if variant_id == 0 {
+                if variant_id == 0 && ltd {
+                    entry
+                        .orientation
+                        .loop_energy_map
+                        .iter()
+                        .enumerate()
+                        .map(|(axis, expr)| {
+                            format!("k{axis} = {}", format_linear_energy_expr(expr, use_color))
+                        })
+                        .join("\n")
+                } else if variant_id == 0 {
                     color_orientation_label(&entry.label, graph.n_external_edges, use_color)
                 } else {
                     String::new()
@@ -265,7 +305,7 @@ fn orientation_table(
 
     format!(
         "{}\n{}",
-        title("Orientations", use_color),
+        title(if ltd { "Residue map" } else { "Orientations" }, use_color),
         table.build().with(Style::rounded())
     )
 }
@@ -274,8 +314,14 @@ fn orientation_details(
     expression: &ThreeDExpression<OrientationID>,
     selector: &str,
     graph: &GraphInfo,
-    use_color: bool,
+    options: &DisplayOptions,
 ) -> String {
+    let use_color = options.use_color;
+    let entry_kind = if options.representation == RepresentationMode::Ltd {
+        "Residue"
+    } else {
+        "Orientation"
+    };
     let parsed_selector = DetailSelector::parse(selector);
     let matching = orientation_display_entries(expression)
         .into_iter()
@@ -288,8 +334,9 @@ fn orientation_details(
         .collect_vec();
     if matching.is_empty() {
         return format!(
-            "{}\nNo orientation matched `{selector}`.",
-            title("Details", use_color)
+            "{}\nNo {} matched `{selector}`.",
+            title("Details", use_color),
+            entry_kind.to_lowercase()
         );
     }
 
@@ -311,7 +358,7 @@ fn orientation_details(
     for entry in matching {
         sections.push(format!(
             "{} {}:{}",
-            c("Orientation", Color::Blue, use_color),
+            c(entry_kind, Color::Blue, use_color),
             c(&entry.id.to_string(), Color::Green, use_color),
             color_orientation_label(&entry.label, graph.n_external_edges, use_color)
         ));
@@ -1032,6 +1079,7 @@ mod tests {
             &DisplayOptions {
                 use_color: false,
                 details_for_orientation: None,
+                ..Default::default()
             },
         );
 
@@ -1050,6 +1098,7 @@ mod tests {
             &DisplayOptions {
                 use_color: false,
                 details_for_orientation: None,
+                ..Default::default()
             },
         );
         assert!(explicit_constant.contains("explicit constant"));
@@ -1063,6 +1112,7 @@ mod tests {
             &DisplayOptions {
                 use_color: false,
                 details_for_orientation: Some("0".to_string()),
+                ..Default::default()
             },
         );
 
@@ -1095,6 +1145,7 @@ mod tests {
             &DisplayOptions {
                 use_color: false,
                 details_for_orientation: Some(selector),
+                ..Default::default()
             },
         );
 
@@ -1102,6 +1153,122 @@ mod tests {
         assert!(rendered.contains("variant 0"));
         assert!(rendered.contains("children"));
         assert_eq!(rendered.matches("Orientation ").count(), 1);
+    }
+
+    #[test]
+    fn ltd_display_preserves_affine_keys_and_raised_sampling_maps() {
+        for (parsed, bounds) in [
+            (crate::graph_io::test_graphs::box_graph(), None),
+            (
+                crate::graph_io::test_graphs::box_pow3_graph(),
+                Some(vec![(0, 1), (1, 1), (3, 4)]),
+            ),
+        ] {
+            let expression = generate_3d_expression_from_parsed(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    representation: RepresentationMode::Ltd,
+                    energy_degree_bounds: bounds.clone(),
+                    numerator_sampling_scale: NumeratorSamplingScaleMode::All,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let graph = graph_info(&parsed);
+            let mut options = DisplayOptions {
+                representation: RepresentationMode::Ltd,
+                ..Default::default()
+            };
+            let rendered = render_expression_summary(
+                &expression,
+                &graph,
+                bounds.as_deref(),
+                NumeratorDisplay::default(),
+                NumeratorSamplingScaleMode::All,
+                &options,
+            );
+            assert!(rendered.contains("LTD structure"));
+            assert!(!rendered.contains("CFF structure"));
+            assert!(rendered.contains("Residue map"));
+            assert!(rendered.contains("Sum every row and term"));
+            assert!(!rendered.contains('\u{1b}'));
+            assert!(
+                rendered.contains("E["),
+                "external shifts must remain explicit"
+            );
+            assert!(
+                expression
+                    .surfaces
+                    .linear_surface_cache
+                    .iter()
+                    .any(|s| s.kind == LinearSurfaceKind::Hsurface)
+            );
+            assert!(
+                expression
+                    .surfaces
+                    .linear_surface_cache
+                    .iter()
+                    .any(|s| s.kind == LinearSurfaceKind::Esurface)
+            );
+            if bounds.is_none() {
+                assert_eq!(expression.orientations.len(), 4);
+                assert!(rendered.contains("not required (simple poles)"));
+            } else {
+                assert!(expression.orientations.len() > 4);
+                assert!(
+                    rendered.contains("+ M"),
+                    "raised-pole sample offsets must be visible"
+                );
+                assert!(
+                    rendered.contains("^2"),
+                    "repeated factors must retain powers"
+                );
+            }
+            for entry in orientation_display_entries(&expression) {
+                for (axis, expr) in entry.orientation.loop_energy_map.iter().enumerate() {
+                    assert!(rendered.contains(&format!(
+                        "k{axis} = {}",
+                        format_linear_energy_expr(expr, false)
+                    )));
+                }
+                // Equal orientation labels must not conflate distinct affine maps.
+                options.details_for_orientation = Some(format!("{}|0", entry.label));
+                let details = render_expression_summary(
+                    &expression,
+                    &graph,
+                    bounds.as_deref(),
+                    NumeratorDisplay::default(),
+                    NumeratorSamplingScaleMode::All,
+                    &options,
+                );
+                assert_eq!(details.matches("Residue ").count(), 1);
+                assert!(details.contains(&format!("Residue {}:{}", entry.id, entry.label)));
+                assert!(details.contains("loop q0 map"));
+                assert!(details.contains("edge q0 map"));
+                assert!(details.contains("variant 0"));
+            }
+            options.details_for_orientation = Some("999999".to_string());
+            let missing = render_expression_summary(
+                &expression,
+                &graph,
+                bounds.as_deref(),
+                NumeratorDisplay::default(),
+                NumeratorSamplingScaleMode::All,
+                &options,
+            );
+            assert!(missing.contains("No residue matched"));
+            options.details_for_orientation = None;
+            options.use_color = true;
+            let colored = render_expression_summary(
+                &expression,
+                &graph,
+                bounds.as_deref(),
+                NumeratorDisplay::default(),
+                NumeratorSamplingScaleMode::All,
+                &options,
+            );
+            assert!(colored.contains('\u{1b}'));
+        }
     }
 
     #[test]

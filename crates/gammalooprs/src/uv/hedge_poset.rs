@@ -1282,15 +1282,21 @@ impl Forests {
         Ok(())
     }
 
+    /// Return the measured representation-independent part of this computation.
     pub(crate) fn compute(
         &mut self,
         graph: &mut Graph,
         vakint: &Vakint,
         orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
-    ) -> Result<()> {
-        self.integrate(graph, vakint, settings)?;
+        compute_four_d: bool,
+    ) -> Result<std::time::Duration> {
         let mut projection_context = Local4dProjectionContext::default();
+        if compute_four_d {
+            let started = std::time::Instant::now();
+            self.integrate(graph, vakint, settings)?;
+            projection_context.shared_preparation_time += started.elapsed();
+        }
 
         for (compatible_subset, cutset) in self.cuts.clone() {
             let localizer = Localizer::new(&cutset, orientation);
@@ -1320,7 +1326,7 @@ impl Forests {
             }
         }
 
-        Ok(())
+        Ok(projection_context.shared_preparation_time)
     }
 
     pub(crate) fn orientation_parametric_exprs(
@@ -1353,7 +1359,7 @@ impl Forests {
                     .final_integrands
                     .map_expressions(|integrand| Ok(integrand.clone().collect_color()))?;
                 sum = Some(match sum {
-                    Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
+                    Some(sum) => sum.zip_add([terms]).wrap_err_with(|| {
                         format!("while aggregating hedge-poset term {operation} for cut {cutset:?}")
                     })?,
                     None => terms,

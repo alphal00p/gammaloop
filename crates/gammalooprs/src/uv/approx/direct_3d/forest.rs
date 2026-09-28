@@ -127,6 +127,19 @@ impl Direct3dCts {
         localizer
             .orientation
             .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
+        let tree_edges = graph.tree_edges.subtract(&graph.initial_state_cut);
+        let four_d_denominators = GS.wrap_tree_denoms(graph.denominator(&tree_edges, |_| -1));
+        if production.representation == three_dimensional_reps::RepresentationMode::Ltd {
+            // Physical residue localization changes LTD's affine numerator
+            // arguments. Use the same source-owned map projection as UV
+            // children; the original production key cannot identify it.
+            let projected =
+                localizer.project_cff(graph, &graph.empty_subgraph(), cff, tree_edges)?;
+            return Ok(Self::Root(
+                DirectResidueBranches::from_transient(&projected)?
+                    .map_expressions(|atom| Ok(atom * &four_d_denominators))?,
+            ));
+        }
         let indices = cff.terms.keys().copied().collect::<Vec<_>>();
         // Bridge this source's CFF energy-factor convention once at the root.
         // Forest Taylor subtraction signs are applied separately below.
@@ -166,9 +179,6 @@ impl Direct3dCts {
             ));
         }
 
-        let four_d_denominators = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
         Ok(Self::Root(DirectResidueBranches::from_keyed(
             branches.into_iter().map(|(id, integrands)| {
                 (

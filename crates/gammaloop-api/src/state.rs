@@ -440,21 +440,21 @@ impl AggregateGenerationProgressReporter {
         let phase_detail = if state.phase == Some(GenerationProgressPhase::GraphPreprocessing) {
             let steps = match state.kind {
                 Some(GenerationProcessKind::Amplitude) => {
-                    "CFFs + LMBs + integrands + threshold CTs + tropical samplers"
+                    "3D expressions + LMBs + integrands + threshold CTs + tropical samplers"
                 }
-                _ => "cuts + CFFs + LMBs + integrands + threshold CTs",
+                _ => "cuts + 3D expressions + LMBs + integrands + threshold CTs",
             };
             format!("{} {}", "step".bold().blue(), steps.cyan())
         } else {
-            let total_time = state.stats.total_time;
+            let total_time = state.stats.timings.total_time;
             let expression_share =
                 Self::progress_time_share(state.stats.expression_build_time(), total_time);
             let spenso_share =
-                Self::progress_time_share(state.stats.evaluator_spenso_time, total_time);
+                Self::progress_time_share(state.stats.timings.evaluator_spenso_time, total_time);
             let symbolica_share =
-                Self::progress_time_share(state.stats.evaluator_symbolica_time, total_time);
+                Self::progress_time_share(state.stats.timings.evaluator_symbolica_time, total_time);
             let compile_share =
-                Self::progress_time_share(state.stats.evaluator_compile_time, total_time);
+                Self::progress_time_share(state.stats.timings.evaluator_compile_time, total_time);
             format!(
                 "{} {} {} / {} {} / {} {} / {} {}",
                 "time".bold().blue(),
@@ -607,8 +607,8 @@ impl GenerationProgressObserver for AggregateGenerationProgressReporter {
             .lock()
             .expect("aggregate generation progress state mutex is poisoned");
         state.done_graphs = state.total_graphs;
-        state.stats.total_time += elapsed;
-        state.stats.evaluator_compile_time += elapsed;
+        state.stats.timings.total_time += elapsed;
+        state.stats.timings.evaluator_compile_time += elapsed;
         self.refresh(&state);
     }
 }
@@ -1592,6 +1592,8 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
+// Version 11 stores ordered 3D representations, representation-indexed generated
+// payloads, and retained numerator programs. Earlier states require regeneration.
 // Version 10 records UFO and subgraph printer registrations, including symbols removed
 // from a restricted model. Older archives cannot restore those callbacks and must be regenerated.
 // Version 9 combines the Symbolica 3 evaluator/CFF payloads with advanced sampling
@@ -1606,7 +1608,7 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 5 persists component-local generated-CFF ownership and prefactor
 // metadata. Older states use a previous positional bincode layout and must be
 // regenerated rather than decoded as the new expression type.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 10;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 11;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -3717,17 +3719,15 @@ mod tests {
             let source_expressions = |state: &State| {
                 ["first", "second"].map(|name| {
                     let source = match &state.process_list.processes[0].collection {
-                        ProcessCollection::Amplitudes(amplitudes) => amplitudes[name].graphs[0]
-                            .derived_data
-                            .cff_expression
-                            .as_ref()
-                            .unwrap(),
-                        ProcessCollection::CrossSections(cross_sections) => cross_sections[name]
-                            .supergraphs[0]
-                            .derived_data
-                            .global_cff_expression
-                            .as_ref()
-                            .unwrap(),
+                        ProcessCollection::Amplitudes(amplitudes) => {
+                            &amplitudes[name].graphs[0].derived_data.representations
+                                [&three_dimensional_reps::RepresentationMode::Cff]
+                                .expression
+                        }
+                        ProcessCollection::CrossSections(cross_sections) => {
+                            &cross_sections[name].supergraphs[0].derived_data.expressions
+                                [&three_dimensional_reps::RepresentationMode::Cff]
+                        }
                     };
                     source
                         .expression
@@ -3889,7 +3889,10 @@ mod tests {
             "itg",
             "GL01",
             &GraphGenerationStats {
-                total_time: Duration::from_secs(3),
+                timings: gammalooprs::processes::GenerationTimings {
+                    total_time: Duration::from_secs(3),
+                    ..Default::default()
+                },
                 ..GraphGenerationStats::default()
             },
             None,
@@ -3900,7 +3903,7 @@ mod tests {
                 .lock()
                 .expect("aggregate generation progress state mutex is poisoned");
             assert_eq!(state.done_graphs, 1);
-            assert_eq!(state.stats.total_time, Duration::from_secs(3));
+            assert_eq!(state.stats.timings.total_time, Duration::from_secs(3));
             assert_eq!(
                 AggregateGenerationProgressReporter::graph_progress_counts(&state),
                 (1, 0, 2)
@@ -3932,11 +3935,13 @@ mod tests {
             "itg",
             "GL01",
             &GraphGenerationStats {
-                evaluator_count: 2,
-                total_time: Duration::from_secs(4),
-                evaluator_spenso_time: Duration::from_secs(1),
-                evaluator_symbolica_time: Duration::from_secs(1),
-                evaluator_compile_time: Duration::ZERO,
+                timings: gammalooprs::processes::GenerationTimings {
+                    evaluator_count: 2,
+                    total_time: Duration::from_secs(4),
+                    evaluator_spenso_time: Duration::from_secs(1),
+                    evaluator_symbolica_time: Duration::from_secs(1),
+                    evaluator_compile_time: Duration::ZERO,
+                },
                 ..GraphGenerationStats::default()
             },
             None,
@@ -3947,11 +3952,13 @@ mod tests {
             "itg",
             "GL02",
             &GraphGenerationStats {
-                evaluator_count: 3,
-                total_time: Duration::from_secs(6),
-                evaluator_spenso_time: Duration::from_secs(2),
-                evaluator_symbolica_time: Duration::ZERO,
-                evaluator_compile_time: Duration::ZERO,
+                timings: gammalooprs::processes::GenerationTimings {
+                    evaluator_count: 3,
+                    total_time: Duration::from_secs(6),
+                    evaluator_spenso_time: Duration::from_secs(2),
+                    evaluator_symbolica_time: Duration::ZERO,
+                    evaluator_compile_time: Duration::ZERO,
+                },
                 ..GraphGenerationStats::default()
             },
             None,
@@ -3967,11 +3974,17 @@ mod tests {
             assert_eq!(state.done_cuts, 3);
             assert!(state.active_graphs.is_empty());
             assert_eq!(state.last_graph.as_deref(), Some("GL02"));
-            assert_eq!(state.stats.evaluator_count, 5);
-            assert_eq!(state.stats.total_time, Duration::from_secs(10));
+            assert_eq!(state.stats.timings.evaluator_count, 5);
+            assert_eq!(state.stats.timings.total_time, Duration::from_secs(10));
             assert_eq!(state.stats.expression_build_time(), Duration::from_secs(6));
-            assert_eq!(state.stats.evaluator_spenso_time, Duration::from_secs(3));
-            assert_eq!(state.stats.evaluator_symbolica_time, Duration::from_secs(1));
+            assert_eq!(
+                state.stats.timings.evaluator_spenso_time,
+                Duration::from_secs(3)
+            );
+            assert_eq!(
+                state.stats.timings.evaluator_symbolica_time,
+                Duration::from_secs(1)
+            );
             assert_eq!(
                 AggregateGenerationProgressReporter::progress_units(&state),
                 (5, 5)
@@ -3995,8 +4008,11 @@ mod tests {
             .expect("aggregate generation progress state mutex is poisoned");
         assert_eq!(state.phase, Some(GenerationProgressPhase::Backend));
         assert_eq!(state.done_graphs, 2);
-        assert_eq!(state.stats.total_time, Duration::from_secs(12));
-        assert_eq!(state.stats.evaluator_compile_time, Duration::from_secs(2));
+        assert_eq!(state.stats.timings.total_time, Duration::from_secs(12));
+        assert_eq!(
+            state.stats.timings.evaluator_compile_time,
+            Duration::from_secs(2)
+        );
     }
 
     #[test]

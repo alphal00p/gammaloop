@@ -1481,6 +1481,11 @@ class IntegrandGraph:
         Whether this graph is the representative graph of its group.
         """
     @property
+    def native_residue_counts(self) -> builtins.list[tuple[builtins.str, builtins.int]]:
+        r"""
+        Native residue-map counts as (representation, count), in generation order.
+        """
+    @property
     def threshold_counterterm_directives(self) -> builtins.list[ThresholdCountertermDirective]:
         r"""
         Threshold directives requested for this graph, including implicit defaults.
@@ -1507,6 +1512,11 @@ class IntegrandGraphGroup:
         Graphs in this group, with the representative graph marked as master.
         """
     @property
+    def complete_residue_sum(self) -> builtins.bool:
+        r"""
+        Whether every native residue is evaluated through the complete-sum layout.
+        """
+    @property
     def orientation_edge_ids(self) -> builtins.list[builtins.int]:
         r"""
         Edge identifiers that establish the ordering of every orientation signature.
@@ -1514,7 +1524,7 @@ class IntegrandGraphGroup:
     @property
     def orientations(self) -> builtins.list[IntegrandOrientation]:
         r"""
-        Available causal-flow orientations for the representative graph.
+        Runtime execution orientations; a complete-sum slot is not a native residue key.
         """
     @property
     def loop_momentum_bases(self) -> builtins.list[IntegrandLoopMomentumBasis]:
@@ -1561,6 +1571,11 @@ class IntegrandInfo:
     def kind(self) -> builtins.str:
         r"""
         ``"amplitude"`` or ``"cross section"``.
+        """
+    @property
+    def generated_representations(self) -> builtins.list[builtins.str]:
+        r"""
+        Generated representations, in persisted generation order.
         """
     @property
     def generation_backend(self) -> builtins.str:
@@ -1954,12 +1969,17 @@ class SlotIntegrationResult:
 @typing.final
 class StabilityResult:
     r"""
-    Outcome and cost of one numerical-stability precision level.
+    Outcome and cost of one stability attempt, including precision and representation.
     """
     @property
     def precision(self) -> builtins.str:
         r"""
         Numerical precision used for this stability level.
+        """
+    @property
+    def three_dimensional_representation(self) -> builtins.str:
+        r"""
+        Generated three-dimensional representation evaluated at this level.
         """
     @property
     def estimated_relative_accuracy(self) -> typing.Optional[builtins.float]:

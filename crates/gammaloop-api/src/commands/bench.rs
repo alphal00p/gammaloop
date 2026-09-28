@@ -488,7 +488,14 @@ fn apply_minimal_integrand_settings(settings: &mut RuntimeSettings) {
     settings.observables = Default::default();
     settings.selectors = Default::default();
     settings.stability.rotation_axis = Vec::new();
-    settings.stability.levels = vec![StabilityLevelSetting::default_double()];
+    settings.stability.levels = vec![StabilityLevelSetting {
+        three_dimensional_representation: settings
+            .stability
+            .levels
+            .first()
+            .and_then(|level| level.three_dimensional_representation),
+        ..StabilityLevelSetting::default_double()
+    }];
     settings.stability.check_on_norm = false;
     settings.stability.escalate_if_exact_zero = false;
     settings.stability.loop_momenta_norm_escalation_factor = -1.0;

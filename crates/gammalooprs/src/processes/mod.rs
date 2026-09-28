@@ -25,8 +25,9 @@ use crate::model::Model;
 
 mod generation_report;
 pub use generation_report::{
-    EvaluatorBuildTimings, GeneratedGraphKey, GeneratedGraphReport, GraphGenerationStats,
-    NamedGraphGenerationReport, merge_generated_graph_reports,
+    EvaluatorBuildTimings, GeneratedGraphKey, GeneratedGraphReport, GenerationTimings,
+    GraphGenerationStats, NamedGraphGenerationReport, RepresentationGenerationStats,
+    merge_generated_graph_reports,
 };
 mod generation_progress;
 pub use generation_progress::{

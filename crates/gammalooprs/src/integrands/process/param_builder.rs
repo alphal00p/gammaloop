@@ -35,7 +35,7 @@ use crate::{
         amplitude::export::ExportAtomTo,
         evaluators::{InputParams, SliceMut},
     },
-    model::Model,
+    model::{Model, UFOSymbol},
     momentum::sample::{ExternalFourMomenta, MomentumSample},
     momentum::{Helicity, PolType},
     numerator::ParsingNet,
@@ -660,6 +660,7 @@ pub struct ParamBuilder<T: FloatLike = f64> {
 )]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct FnMapEntry {
+    pub inlining: symbolica::evaluate::InliningPolicy,
     pub lhs: Atom,
     pub rhs: Atom,
     pub args: Vec<Indeterminate>,
@@ -685,7 +686,8 @@ impl FnMapEntry {
         Replacement::new(lhs.to_pattern(), rhs)
     }
 
-    pub fn archive<T: ExportAtomTo>(&self) -> Result<(T, T, Vec<T>, Vec<T>)> {
+    #[allow(clippy::type_complexity)] // Shared tuple schema used by self-contained standalone loaders.
+    pub fn archive<T: ExportAtomTo>(&self) -> Result<(T, T, Vec<T>, Vec<T>, bool)> {
         Ok((
             T::export_atom_to(&self.lhs)?,
             T::export_atom_to(&self.rhs)?,
@@ -697,6 +699,7 @@ impl FnMapEntry {
                 .iter()
                 .map(|t| T::export_atom_to(&Atom::from(t.clone())))
                 .collect::<Result<Vec<_>>>()?,
+            matches!(self.inlining, symbolica::evaluate::InliningPolicy::Never),
         ))
     }
 }
@@ -1054,7 +1057,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         &mut self,
         name: Symbol,
         tags: Vec<Atom>,
-        _rename: String,
+        inlining: symbolica::evaluate::InliningPolicy,
         args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
@@ -1062,6 +1065,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         let atom_args = args.iter().map(|a| Atom::from(a.clone())).collect_vec();
 
         self.reps.push(FnMapEntry {
+            inlining,
             lhs: FunctionBuilder::new(name)
                 .add_args(&tags)
                 .add_args(&atom_args)
@@ -1072,7 +1076,13 @@ impl<T: FloatLike> ParamBuilder<T> {
         });
 
         self.fn_map
-            .add_tagged_function(name, tags, args, body)
+            .add_tagged_function_with_options(
+                name,
+                tags,
+                args,
+                body,
+                symbolica::evaluate::FunctionRegistrationOptions::new().inlining(inlining),
+            )
             .map_err(|e| e.to_string())
 
         // body.evaluate(coeff_map, const_map, function_map)
@@ -1087,6 +1097,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         let args = args.into_iter().map(|a| a.into()).collect_vec();
         let atom_args = args.iter().map(|a| Atom::from(a.clone())).collect_vec();
         self.reps.push(FnMapEntry {
+            inlining: Default::default(),
             lhs: FunctionBuilder::new(name).add_args(&atom_args).finish(),
             rhs: body.clone(),
             tags: vec![],
@@ -1134,6 +1145,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     pub fn add_constant(&mut self, key: Atom, value: symbolica::domains::float::Complex<Rational>) {
         self.reps.push(FnMapEntry {
+            inlining: Default::default(),
             lhs: key.clone(),
             rhs: Atom::num(value.clone()),
             tags: vec![],
@@ -1212,7 +1224,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             new.add_tagged_function::<Symbol>(
                 function.get_symbol(),
                 function.iter().map(|arg| arg.to_owned()).collect(),
-                lhs.to_string(),
+                Default::default(),
                 vec![],
                 rhs,
             )
@@ -1234,7 +1246,7 @@ impl<T: FloatLike> ParamBuilder<T> {
                         Atom::num(edge_id.0 as i64),
                         Atom::from(ExpandedIndex::from_iter([i])),
                     ],
-                    format!("Q({edge_id}, {i})"),
+                    Default::default(),
                     vec![],
                     lmb.loop_atom(
                         edge_id,
@@ -1339,29 +1351,25 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     /// Refresh model-dependent parameter slots while preserving the builder's graph layout.
     pub fn update_model_values(&mut self, model: &Model) {
-        for (value_index, values) in self.values.iter_mut().enumerate() {
-            let multiplicative_offset = value_index + 1;
-            let mut pos = self.pairs.model_parameters.value_range.start * multiplicative_offset;
-            let _value_index = multiplicative_offset - 1;
-            for cpl in model.couplings.values().filter(|c| c.value.is_some()) {
-                if let Some(value) = cpl.value {
-                    values[pos] = value.map(F::from_f64);
-                    pos += multiplicative_offset;
-                }
+        // Symbol import can change the model maps' order. The numerical program
+        // still expects the parameter order persisted with this builder.
+        for (parameter, position) in self
+            .pairs
+            .model_parameters
+            .params
+            .iter()
+            .zip_eq(self.pairs.model_parameters.value_range.clone())
+        {
+            let symbol = parameter
+                .as_var_view()
+                .expect("Model parameters must be symbolic variables")
+                .get_symbol();
+            let value = model
+                .get_symbol_value(UFOSymbol(symbol))
+                .expect("A persisted model parameter must have a numerical value");
+            for (value_index, values) in self.values.iter_mut().enumerate() {
+                values[position * (value_index + 1)] = value.map(F::<T>::from_ff64);
             }
-            for param in model.parameters.values().filter(|p| p.value.is_some()) {
-                if let Some(value) = param.value {
-                    let value =
-                        Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
-                    values[pos] = value.clone();
-                    pos += multiplicative_offset;
-                }
-            }
-
-            debug_assert_eq!(
-                pos,
-                self.pairs.model_parameters.value_range.end * multiplicative_offset
-            );
         }
     }
 
@@ -1734,6 +1742,41 @@ mod tests {
         momentum::sample::{BareMomentumSample, LoopMomenta},
         utils::{ArbPrec, SamplingFloat},
     };
+
+    #[test]
+    fn model_refresh_preserves_persisted_parameter_order_and_dual_seeds() {
+        test_initialise().unwrap();
+        let model = Model::from_file(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
+        )
+        .unwrap();
+        let mut builder = ParamBuilder::<f64>::new_empty();
+        builder.pairs.model_parameters = model.generate_params().into_iter().collect();
+        let size = builder.pairs.model_parameters.params.len();
+        builder.values = vec![vec![Complex::new_re(F(0.0)); size]];
+        builder.update_model_values(&model);
+        let expected = builder.values[0].iter().rev().cloned().collect::<Vec<_>>();
+        assert_ne!(builder.values[0], expected);
+
+        builder.pairs.model_parameters.params.reverse();
+        builder.values[0].fill(Complex::new_re(F(-7.0)));
+        builder.initialize_duals(3);
+        for values in builder.values.iter_mut().skip(1) {
+            values.fill(Complex::new_re(F(-7.0)));
+        }
+        builder.update_model_values(&model);
+        for (index, values) in builder.values.iter().enumerate() {
+            for (components, expected) in values.chunks(index + 1).zip(&expected) {
+                assert_eq!(&components[0], expected);
+                assert!(
+                    components[1..]
+                        .iter()
+                        .all(|seed| *seed == Complex::new_re(F(-7.0)))
+                );
+            }
+        }
+    }
 
     #[test]
     fn initialize_duals_extends_value_buffers_by_requested_size() {

@@ -51,6 +51,8 @@ mod examples;
 mod inspect;
 #[path = "test_runs/integrations.rs"]
 mod integrations;
+#[path = "test_runs/ltd_polygon_benchmarks.rs"]
+mod ltd_polygon_benchmarks;
 #[path = "test_runs/multi_integrand.rs"]
 mod multi_integrand;
 #[path = "test_runs/photonic.rs"]

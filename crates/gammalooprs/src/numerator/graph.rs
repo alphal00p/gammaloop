@@ -484,10 +484,15 @@ mod test {
 
         graph.generate_cff(&GenerationSettings::default()).unwrap();
         graph
-            .build_integrands(&GenerationSettings::default(), vk)
+            .build_integrands(&GenerationSettings::default(), vk, &mut Default::default())
             .unwrap();
 
-        println!("{}", graph.derived_data.all_mighty_integrand);
+        println!(
+            "{}",
+            graph.derived_data.representations
+                [&three_dimensional_reps::generation::RepresentationMode::Cff]
+                .all_mighty_integrand
+        );
     }
 
     #[test]

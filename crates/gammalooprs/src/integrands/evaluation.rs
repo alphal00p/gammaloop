@@ -16,6 +16,7 @@ use tabled::{
         themes::BorderCorrection,
     },
 };
+use three_dimensional_reps::RepresentationMode;
 
 use crate::observables::{
     AdditionalWeightKey, EventGroupList, GenericEventGroupList, HistogramAccumulatorState,
@@ -245,24 +246,40 @@ impl<T: FloatLike> GenericEvaluationResult<T> {
                     })?;
                 }
                 // Auxiliary components remain factorized, but their complete
-                // multiplier is known. Bound each component's possible contribution
-                // to BOTH final phases before allowing an underflowed tail to round
-                // to zero; a complex factor may promote real weight into imaginary.
+                // multiplier is known. When it mixes the phases, bound BOTH
+                // original components together before either rounds to zero:
+                // individually tiny terms can add to a normal final component.
                 let component_factor = event
                     .additional_weights
                     .weights
                     .get(&AdditionalWeightKey::FullMultiplicativeFactor)
                     .filter(|factor| factor.re.0.is_finite() && factor.im.0.is_finite())
                     .map(|factor| {
-                        let real = factor.re.abs();
-                        let imag = factor.im.abs();
-                        if real > imag { real } else { imag }
+                        (
+                            factor.re.abs() + factor.im.abs(),
+                            factor.re != factor.re.zero() && factor.im != factor.im.zero(),
+                        )
                     });
                 for (key, weight) in &event.additional_weights.weights {
                     let remaining = if *key == AdditionalWeightKey::FullMultiplicativeFactor {
                         None
                     } else {
-                        component_factor.as_ref()
+                        component_factor
+                            .as_ref()
+                            .and_then(|(factor, mixes_phases)| {
+                                if *mixes_phases {
+                                    let real = weight.re.abs();
+                                    let imag = weight.im.abs();
+                                    let bound = (if real > imag { real } else { imag }) * factor;
+                                    (weight.re.0.is_finite()
+                                        && weight.im.0.is_finite()
+                                        && bound.0.is_finite()
+                                        && bound < F::<T>::from_f64(f64::MIN_POSITIVE))
+                                    .then_some(factor)
+                                } else {
+                                    Some(factor)
+                                }
+                            })
                     };
                     for (component, value) in [("re", &weight.re), ("im", &weight.im)] {
                         check(value, remaining).wrap_err_with(|| {
@@ -1076,6 +1093,9 @@ pub struct RotatedEvaluation {
 #[derive(Clone, Debug, Serialize)]
 pub struct StabilityResult {
     pub precision: Precision,
+    /// Generated representation actually evaluated at this attempt.
+    #[serde(rename = "three_dimensional_representation")]
+    pub representation: RepresentationMode,
     pub estimated_relative_accuracy: Option<F<f64>>,
     /// -log10 of the nonzero relative estimate, computed before narrowing to f64.
     /// None denotes missing/nonfinite data or an exact zero, which has no finite logarithm.
@@ -1225,7 +1245,7 @@ impl Display for EvaluationMetaData {
                 .stability_results
                 .iter()
                 .map(|result| StabilitySummaryRow {
-                    level: result.precision.to_string(),
+                    level: format!("{} / {}", result.precision, result.representation),
                     relative_accuracy: format_optional_real_generic(
                         result.estimated_relative_accuracy.as_ref(),
                     ),
@@ -1687,7 +1707,7 @@ mod tests {
     use super::{
         BatchSampleEvaluationResult, EvaluationMetaData, EvaluationResult,
         NumericalStabilityHistogramAccumulator, NumericalStabilityLevel, NumericalStabilityMedian,
-        StabilityResult, StabilityStatus, StatisticsCounter,
+        RepresentationMode, StabilityResult, StabilityStatus, StatisticsCounter,
     };
 
     #[test]
@@ -1770,6 +1790,7 @@ mod tests {
         let metadata = EvaluationMetaData {
             stability_results: vec![
                 StabilityResult {
+                    representation: RepresentationMode::Cff,
                     precision: Precision::Double,
                     estimated_relative_accuracy: Some(1.0e-5.into()),
                     estimated_decimal_digits: Some(5.0.into()),
@@ -1777,6 +1798,7 @@ mod tests {
                     total_time: Duration::from_micros(120),
                 },
                 StabilityResult {
+                    representation: RepresentationMode::Cff,
                     precision: Precision::Quad,
                     estimated_relative_accuracy: None,
                     estimated_decimal_digits: None,
@@ -1791,6 +1813,9 @@ mod tests {
         assert!(rendered.contains("Stable(3 samples)"), "{rendered}");
         assert!(rendered.contains("Unknown(1 sample)"), "{rendered}");
         assert!(rendered.contains("None"), "{rendered}");
+        let encoded = serde_json::to_value(&metadata.stability_results[0]).unwrap();
+        assert_eq!(encoded["three_dimensional_representation"], "cff");
+        assert!(encoded.get("3drep").is_none());
     }
 
     #[test]
@@ -1798,6 +1823,7 @@ mod tests {
         let mut first = EvaluationResult::zero();
         first.evaluation_metadata.stability_results = vec![
             StabilityResult {
+                representation: RepresentationMode::Cff,
                 precision: Precision::Double,
                 estimated_relative_accuracy: Some(1.0e-8.into()),
                 estimated_decimal_digits: Some(8.0.into()),
@@ -1805,6 +1831,7 @@ mod tests {
                 total_time: Duration::ZERO,
             },
             StabilityResult {
+                representation: RepresentationMode::Cff,
                 precision: Precision::Quad,
                 estimated_relative_accuracy: Some(0.0.into()),
                 estimated_decimal_digits: None,
@@ -1852,6 +1879,7 @@ mod tests {
                 .evaluation_metadata
                 .stability_results
                 .push(StabilityResult {
+                    representation: RepresentationMode::Cff,
                     precision: Precision::Arb,
                     estimated_relative_accuracy: Some(accuracy.into()),
                     estimated_decimal_digits: (accuracy != 0.0).then(|| (-accuracy.log10()).into()),
@@ -1904,6 +1932,7 @@ mod tests {
                 .evaluation_metadata
                 .stability_results
                 .push(StabilityResult {
+                    representation: RepresentationMode::Cff,
                     precision,
                     estimated_relative_accuracy: Some(10.0_f64.powi(-digits).into()),
                     estimated_decimal_digits: Some(f64::from(digits).into()),

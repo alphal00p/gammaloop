@@ -197,6 +197,7 @@
         "native"
       ],
       "three-dimensional-reps": [
+        "cli",
         "display"
       ]
     },
@@ -886,6 +887,7 @@
         "native"
       ],
       "three-dimensional-reps": [
+        "cli",
         "display"
       ]
     },

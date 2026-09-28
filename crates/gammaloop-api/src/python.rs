@@ -618,6 +618,132 @@ mod settings_wrapper_tests {
     }
 
     #[test]
+    fn settings_snapshots_preserve_generated_representation_order_and_stability_choice() {
+        use gammalooprs::settings::GlobalSettings;
+        use three_dimensional_reps::RepresentationMode;
+
+        Python::initialize();
+        let global: GlobalSettings = toml::from_str(
+            r#"
+[generation]
+three_dimensional_representations = ["ltd", "cff", "ltd"]
+[generation.uv]
+local_uv_cts_from_expanded_4d_integrands = true
+"#,
+        )
+        .unwrap();
+        let encoded = render_smart_toml(&global).unwrap();
+        let restored: GlobalSettings = toml::from_str(&encoded).unwrap();
+        assert_eq!(
+            restored.generation.three_dimensional_representations,
+            [RepresentationMode::Ltd, RepresentationMode::Cff]
+        );
+        let mut runtime = RuntimeSettings::default();
+        runtime.stability.levels[0].three_dimensional_representation =
+            Some(RepresentationMode::Cff);
+        let encoded = render_smart_toml(&runtime).unwrap();
+        let restored_runtime: RuntimeSettings = toml::from_str(&encoded).unwrap();
+        assert_eq!(
+            restored_runtime.stability.levels[0].three_dimensional_representation,
+            Some(RepresentationMode::Cff)
+        );
+        let global_snapshot =
+            PySettingsValue::from_settings(&restored, "global settings", "global").unwrap();
+        let runtime_snapshot =
+            PySettingsValue::from_settings(&restored_runtime, "runtime settings", "runtime")
+                .unwrap();
+        Python::attach(|py| {
+            let generation = Py::new(py, restored.generation.clone()).unwrap();
+            assert!(generation
+                .bind(py)
+                .hasattr("three_dimensional_representations")
+                .unwrap());
+            assert!(!generation
+                .bind(py)
+                .hasattr("three_d_representations")
+                .unwrap());
+            let level = Py::new(py, restored_runtime.stability.levels[0]).unwrap();
+            assert!(level
+                .bind(py)
+                .hasattr("three_dimensional_representation")
+                .unwrap());
+            assert!(!level.bind(py).hasattr("representation").unwrap());
+            let modes = global_snapshot
+                .to_dict(py)
+                .unwrap()
+                .get_item("generation")
+                .unwrap()
+                .get_item("three_dimensional_representations")
+                .unwrap()
+                .extract::<Vec<String>>()
+                .unwrap();
+            assert_eq!(modes, ["ltd", "cff"]);
+            let mode = runtime_snapshot
+                .to_dict(py)
+                .unwrap()
+                .get_item("stability")
+                .unwrap()
+                .get_item("levels")
+                .unwrap()
+                .get_item(0)
+                .unwrap()
+                .get_item("three_dimensional_representation")
+                .unwrap()
+                .extract::<String>()
+                .unwrap();
+            assert_eq!(mode, "cff");
+        });
+        let schema = serde_json::to_value(schemars::schema_for!(GlobalSettings)).unwrap();
+        assert!(schema
+            .to_string()
+            .contains("three_dimensional_representations"));
+        let schema = serde_json::to_value(schemars::schema_for!(RuntimeSettings)).unwrap();
+        assert!(schema
+            .to_string()
+            .contains("three_dimensional_representation"));
+    }
+
+    #[test]
+    fn runtime_settings_snapshot_exposes_overlap_objectives() {
+        use gammalooprs::settings::runtime::OverlapCenterObjective;
+        Python::initialize();
+        let settings: RuntimeSettings = toml::from_str(
+            "[subtraction.overlap_settings]\nobjective='min_sum'\nenable_heuristics=false",
+        )
+        .unwrap();
+        let restored: RuntimeSettings =
+            toml::from_str(&render_smart_toml(&settings).unwrap()).unwrap();
+        assert_eq!(
+            restored.subtraction.overlap_settings.objective,
+            OverlapCenterObjective::MinSum
+        );
+        let snapshot =
+            PySettingsValue::from_settings(&restored, "runtime settings", "runtime").unwrap();
+        Python::attach(|py| {
+            let overlap = snapshot
+                .to_dict(py)
+                .unwrap()
+                .get_item("subtraction")
+                .unwrap()
+                .get_item("overlap_settings")
+                .unwrap();
+            assert_eq!(
+                overlap
+                    .get_item("objective")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "min_sum"
+            );
+            assert!(!overlap
+                .get_item("enable_heuristics")
+                .unwrap()
+                .extract::<bool>()
+                .unwrap());
+        });
+    }
+
+    #[test]
     fn runtime_settings_wrapper_exposes_canonical_sampling_names() {
         use gammalooprs::settings::runtime::{
             MultiChannelingSettings, SamplingChannelDefinition, SamplingChannelWeight,
@@ -893,6 +1019,8 @@ pub struct PyIntegrandGraphInfo {
     pub name: String,
     /// Whether this graph is the representative graph of its group.
     pub is_master: bool,
+    /// Native residue-map counts as (representation, count), in generation order.
+    pub native_residue_counts: Vec<(String, usize)>,
     /// Threshold directives requested for this graph, including implicit defaults.
     pub threshold_counterterm_directives: Vec<PyThresholdCountertermDirectiveInfo>,
     /// Resolved graph-local threshold registry, when generated metadata is available.
@@ -1109,9 +1237,11 @@ pub struct PyIntegrandGraphGroupInfo {
     pub group_id: usize,
     /// Graphs in this group, with the representative graph marked as master.
     pub graphs: Vec<PyIntegrandGraphInfo>,
+    /// Whether every native residue is evaluated through the complete-sum layout.
+    pub complete_residue_sum: bool,
     /// Edge identifiers that establish the ordering of every orientation signature.
     pub orientation_edge_ids: Vec<usize>,
-    /// Available causal-flow orientations for the representative graph.
+    /// Runtime execution orientations; a complete-sum slot is not a native residue key.
     pub orientations: Vec<PyIntegrandOrientationInfo>,
     /// Available loop-momentum bases for the representative graph.
     pub loop_momentum_bases: Vec<PyIntegrandLoopMomentumBasisInfo>,
@@ -1136,6 +1266,8 @@ pub struct PyIntegrandInfo {
     pub integrand_name: String,
     /// ``"amplitude"`` or ``"cross section"``.
     pub kind: String,
+    /// Generated representations, in persisted generation order.
+    pub generated_representations: Vec<String>,
     /// Compilation backend frozen into the generated integrand.
     pub generation_backend: String,
     /// Backend-specific compilation options, when configured.
@@ -1817,13 +1949,15 @@ impl PyIntegrationResult {
     }
 }
 
-/// Outcome and cost of one numerical-stability precision level.
+/// Outcome and cost of one stability attempt, including precision and representation.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "StabilityResult", get_all)]
 #[derive(Clone)]
 pub struct PyStabilityResult {
     /// Numerical precision used for this stability level.
     pub precision: String,
+    /// Generated three-dimensional representation evaluated at this level.
+    pub three_dimensional_representation: String,
     /// Estimated relative accuracy, or ``None`` when it could not be estimated.
     pub estimated_relative_accuracy: Option<f64>,
     pub estimated_decimal_digits: Option<f64>,
@@ -1933,6 +2067,7 @@ impl PySampleEvaluationResult {
                     .iter()
                     .map(|result| PyStabilityResult {
                         precision: result.precision.to_string(),
+                        three_dimensional_representation: result.representation.to_string(),
                         estimated_relative_accuracy: result
                             .estimated_relative_accuracy
                             .map(|value| value.0),
@@ -2789,6 +2924,11 @@ fn py_integrand_graph_info_from_info(graph: IntegrandGraphInfo) -> PyIntegrandGr
         graph_id: graph.graph_id,
         name: graph.name,
         is_master: graph.is_master,
+        native_residue_counts: graph
+            .native_residue_counts
+            .into_iter()
+            .map(|(mode, count)| (mode.to_string(), count))
+            .collect(),
         threshold_counterterm_directives: graph
             .threshold_counterterm_directives
             .into_iter()
@@ -3032,6 +3172,7 @@ fn py_integrand_graph_group_info_from_info(
             .into_iter()
             .map(py_integrand_graph_info_from_info)
             .collect(),
+        complete_residue_sum: group.complete_residue_sum,
         orientation_edge_ids: group.orientation_edge_ids,
         orientations: group
             .orientations
@@ -3063,6 +3204,11 @@ fn py_integrand_info_from_info(info: IntegrandInfo) -> PyIntegrandInfo {
         process_name: info.process_name,
         integrand_name: info.integrand_name,
         kind: info.kind.to_string(),
+        generated_representations: info
+            .generated_representations
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
         generation_backend: info
             .generation_compilation
             .active_backend_name()
@@ -4168,9 +4314,20 @@ impl GammaLoopAPI {
                 exceptions::PyException::new_err(format!("Could not find integrand: {}", e))
             })?;
 
+        let representation = self.gammaloop_state.process_list.processes[pid]
+            .settings_history
+            .as_ref()
+            .and_then(|settings| {
+                settings
+                    .generation
+                    .three_dimensional_representations
+                    .first()
+            })
+            .copied()
+            .unwrap_or(three_dimensional_reps::RepresentationMode::Cff);
         let orientations = match &self.gammaloop_state.process_list.processes[pid].collection {
             ProcessCollection::Amplitudes(amplitudes) => {
-                let cff = amplitudes
+                let data = amplitudes
                     .get(&name)
                     .unwrap()
                     .graphs
@@ -4179,11 +4336,12 @@ impl GammaLoopAPI {
                     .as_ref()
                     .unwrap()
                     .derived_data
-                    .cff_expression
-                    .as_ref()
+                    .representations
+                    .get(&representation)
                     .unwrap();
 
-                cff.expression
+                data.expression
+                    .expression
                     .orientations
                     .iter()
                     .map(|or_data| or_data.data.orientation.clone())
@@ -4191,7 +4349,7 @@ impl GammaLoopAPI {
             }
 
             ProcessCollection::CrossSections(cross_sections) => {
-                let cff = cross_sections
+                let data = cross_sections
                     .get(&name)
                     .unwrap()
                     .supergraphs
@@ -4200,11 +4358,11 @@ impl GammaLoopAPI {
                     .as_ref()
                     .unwrap()
                     .derived_data
-                    .global_cff_expression
-                    .as_ref()
+                    .expressions
+                    .get(&representation)
                     .unwrap();
 
-                cff.expression
+                data.expression
                     .orientations
                     .iter()
                     .map(|or_data| or_data.data.orientation.clone())

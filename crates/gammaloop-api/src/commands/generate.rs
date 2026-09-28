@@ -36,8 +36,8 @@ use gammalooprs::model::Model;
 use gammalooprs::numerator::GlobalPrefactor;
 use gammalooprs::processes::amplitude::Amplitude;
 use gammalooprs::processes::{
-    merge_generated_graph_reports, CrossSection, GeneratedGraphReport, GraphGenerationStats,
-    Process, ProcessDefinition, ProcessList,
+    merge_generated_graph_reports, CrossSection, GeneratedGraphReport, GenerationTimings,
+    GraphGenerationStats, Process, ProcessDefinition, ProcessList,
 };
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 
@@ -499,98 +499,72 @@ pub(crate) fn render_generation_summary(
     builder.push_record([
         "integrand".bold().blue().to_string(),
         "graph".bold().blue().to_string(),
+        "scope".bold().blue().to_string(),
         "# evals".bold().blue().to_string(),
+        "total work".bold().blue().to_string(),
         "expr build".bold().blue().to_string(),
         "spenso".bold().blue().to_string(),
         "symbolica eval".bold().blue().to_string(),
         "compile".bold().blue().to_string(),
     ]);
 
+    let mut next_row = 1;
     let mut total_stats = GraphGenerationStats::default();
     for report in &sorted_reports {
         total_stats.merge_in_place(&report.stats);
-        let expr_time = report.stats.expression_build_time();
-        let total_time = report.stats.total_time;
-        let expr_value = format!(
-            "{} ({})",
-            format_generation_duration(expr_time).magenta(),
-            format_generation_fraction(expr_time, total_time).cyan()
-        );
-        let spenso_value = format!(
-            "{} ({})",
-            format_generation_duration(report.stats.evaluator_spenso_time).magenta(),
-            format_generation_fraction(report.stats.evaluator_spenso_time, total_time).cyan()
-        );
-        let symbolica_value = format!(
-            "{} ({})",
-            format_generation_duration(report.stats.evaluator_symbolica_time).magenta(),
-            format_generation_fraction(report.stats.evaluator_symbolica_time, total_time).cyan()
-        );
-        let compile_value = format!(
-            "{} ({})",
-            format_generation_duration(report.stats.evaluator_compile_time).magenta(),
-            format_generation_fraction(report.stats.evaluator_compile_time, total_time).cyan()
-        );
-
-        builder.push_record([
-            report.integrand_name.yellow().to_string(),
-            report.graph_name.yellow().to_string(),
-            report
-                .stats
-                .evaluator_count
-                .to_string()
-                .yellow()
-                .to_string(),
-            expr_value,
-            spenso_value,
-            symbolica_value,
-            compile_value,
-        ]);
     }
-
-    let total_time = total_stats.total_time;
-    let total_expr_time = total_stats.expression_build_time();
-    let total_expr_value = format!(
-        "{} ({})",
-        format_generation_duration(total_expr_time).magenta(),
-        format_generation_fraction(total_expr_time, total_time).cyan()
-    );
-    let total_spenso_value = format!(
-        "{} ({})",
-        format_generation_duration(total_stats.evaluator_spenso_time).magenta(),
-        format_generation_fraction(total_stats.evaluator_spenso_time, total_time).cyan()
-    );
-    let total_symbolica_value = format!(
-        "{} ({})",
-        format_generation_duration(total_stats.evaluator_symbolica_time).magenta(),
-        format_generation_fraction(total_stats.evaluator_symbolica_time, total_time).cyan()
-    );
-    let total_compile_value = format!(
-        "{} ({})",
-        format_generation_duration(total_stats.evaluator_compile_time).magenta(),
-        format_generation_fraction(total_stats.evaluator_compile_time, total_time).cyan()
-    );
-    builder.push_record([
-        "Total".bold().yellow().to_string(),
-        String::new(),
-        total_stats
-            .evaluator_count
-            .to_string()
-            .bold()
-            .yellow()
-            .to_string(),
-        total_expr_value,
-        total_spenso_value,
-        total_symbolica_value,
-        total_compile_value,
-    ]);
+    let mut separator_row = 0;
+    for (index, (integrand, graph, stats)) in sorted_reports
+        .iter()
+        .map(|report| {
+            (
+                report.integrand_name.as_str(),
+                report.graph_name.as_str(),
+                &report.stats,
+            )
+        })
+        .chain(std::iter::once(("Total", "", &total_stats)))
+        .enumerate()
+    {
+        if index == sorted_reports.len() {
+            separator_row = next_row;
+        }
+        let mut push_row = |scope: &str, timings: &GenerationTimings| {
+            let duration = |value| {
+                format!(
+                    "{} ({})",
+                    format_generation_duration(value).magenta(),
+                    format_generation_fraction(value, stats.timings.total_time).cyan(),
+                )
+            };
+            builder.push_record([
+                integrand.yellow().to_string(),
+                graph.yellow().to_string(),
+                scope.to_string(),
+                timings.evaluator_count.to_string().yellow().to_string(),
+                duration(timings.total_time),
+                duration(timings.expression_build_time()),
+                duration(timings.evaluator_spenso_time),
+                duration(timings.evaluator_symbolica_time),
+                duration(timings.evaluator_compile_time),
+            ]);
+            next_row += 1;
+        };
+        push_row("all", &stats.timings);
+        if !stats.representations.is_empty() {
+            push_row("shared", &stats.shared_stats());
+            for representation in &stats.representations {
+                push_row(
+                    &representation.representation.to_string(),
+                    &representation.timings,
+                );
+            }
+        }
+    }
 
     let mut table = builder.build();
     let mut style = Theme::from_style(Style::rounded());
-    style.insert_horizontal_line(
-        sorted_reports.len() + 1,
-        HorizontalLine::inherit(Style::modern()),
-    );
+    style.insert_horizontal_line(separator_row, HorizontalLine::inherit(Style::modern()));
     table.with(style);
     let mut sections = Vec::new();
     if let Some(title) = title {
@@ -614,6 +588,7 @@ pub(crate) fn render_generation_summary(
     };
     sections.push(resources);
     sections.push(table.to_string());
+    sections.push("Common graph/UV preparation and helpers are counted once. Representation rows partition the remaining work; percentages refer to the aggregate. Summed graph durations can overlap during parallel generation.".to_string());
     Some(sections.join("\n"))
 }
 
@@ -717,6 +692,14 @@ impl Generate {
             Some(GenerateCmd::Amp(a)) => Some((GenerationType::Amplitude, a)),
             _ => None,
         };
+        if !generation_mode
+            .as_ref()
+            .is_some_and(|(_, args)| args.only_diagrams)
+        {
+            global_settings
+                .generation
+                .validate_for_runtime(runtime_settings)?;
+        }
         if let Some((_, args)) = generation_mode.as_ref() {
             if !state.process_list.processes.is_empty() && args.clear_existing_processes {
                 info!(
@@ -2247,6 +2230,93 @@ mod tests {
     }
 
     #[test]
+    fn generation_preflight_preserves_processes_before_parsing_or_clearing() -> Result<()> {
+        use gammalooprs::processes::ProcessCollection;
+        use gammalooprs::settings::global::RepresentationMode;
+
+        let temp = tempfile::tempdir()?;
+        for amplitude in [true, false] {
+            for invalid_generation in [true, false] {
+                let mut state = State::new_test();
+                let definition = ProcessDefinition {
+                    folder_name: "preserved".to_owned(),
+                    ..Default::default()
+                };
+                state.process_list.processes.push(Process {
+                    definition: definition.clone(),
+                    settings_history: None,
+                    collection: ProcessCollection::Amplitudes(BTreeMap::new()),
+                });
+                let mut global = GlobalSettings::default();
+                let mut runtime = RuntimeSettings::default();
+                let expected = if invalid_generation {
+                    global.generation.three_dimensional_representations =
+                        vec![RepresentationMode::Ltd];
+                    "local_uv_cts_from_expanded_4d_integrands = true"
+                } else {
+                    runtime.stability.levels[0].three_dimensional_representation =
+                        Some(RepresentationMode::Ltd);
+                    "runtime.stability.levels[0].three_dimensional_representation"
+                };
+                // An invalid spec and empty model would fail if parsing or
+                // diagram generation ran before the settings preflight.
+                let mut args = base_args("invalid process specification");
+                args.only_diagrams = false;
+                args.clear_existing_processes = true;
+                let command = Generate {
+                    keep_sources: false,
+                    mode: Some(if amplitude {
+                        GenerateCmd::Amp(args)
+                    } else {
+                        GenerateCmd::Xs(args)
+                    }),
+                };
+                let error = command
+                    .run(&mut state, temp.path(), true, &global, &runtime)
+                    .unwrap_err();
+                assert!(error.to_string().contains(expected), "{error:?}");
+                assert_eq!(state.process_list.processes.len(), 1);
+                assert_eq!(state.process_list.processes[0].definition, definition);
+                assert!(std::fs::read_dir(temp.path())?.next().is_none());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn generation_only_diagrams_ignores_integrand_representation_settings() -> Result<()> {
+        use gammalooprs::processes::ProcessCollection;
+        use gammalooprs::settings::global::RepresentationMode;
+
+        test_initialise()?;
+        let temp = tempfile::tempdir()?;
+        let mut state = State::new_test();
+        state.model = load_generic_model("sm");
+        let mut global = GlobalSettings::default();
+        global.generation.three_dimensional_representations = vec![RepresentationMode::Ltd];
+        let mut runtime = RuntimeSettings::default();
+        runtime.stability.levels[0].three_dimensional_representation =
+            Some(RepresentationMode::Cff);
+        let mut args = base_args("a > d d~ [ {0} ]");
+        args.process_name = Some("diagrams_only".to_owned());
+        Generate {
+            keep_sources: false,
+            mode: Some(GenerateCmd::Amp(args)),
+        }
+        .run(&mut state, temp.path(), true, &global, &runtime)?;
+        assert_eq!(state.process_list.processes.len(), 1);
+        let ProcessCollection::Amplitudes(amplitudes) = &state.process_list.processes[0].collection
+        else {
+            panic!("expected an amplitude process");
+        };
+        let amplitude = &amplitudes["default"];
+        assert!(!amplitude.graphs.is_empty());
+        assert!(amplitude.integrand.is_none());
+        assert!(std::fs::read_dir(temp.path())?.next().is_none());
+        Ok(())
+    }
+
+    #[test]
     fn parse_generate_keep_sources_after_subcommand() {
         let repl =
             Repl::try_parse_from(["gammaloop", "generate", "existing", "--keep-sources"]).unwrap();
@@ -2268,11 +2338,13 @@ mod tests {
                 integrand_name: "itg".to_string(),
                 graph_name: "GL01".to_string(),
                 stats: GraphGenerationStats {
-                    evaluator_count: 2,
-                    total_time: Duration::from_secs(4),
-                    evaluator_spenso_time: Duration::from_secs(1),
-                    evaluator_symbolica_time: Duration::from_secs(1),
-                    evaluator_compile_time: Duration::from_secs(1),
+                    timings: GenerationTimings {
+                        evaluator_count: 2,
+                        total_time: Duration::from_secs(4),
+                        evaluator_spenso_time: Duration::from_secs(1),
+                        evaluator_symbolica_time: Duration::from_secs(1),
+                        evaluator_compile_time: Duration::from_secs(1),
+                    },
                     ..GraphGenerationStats::default()
                 },
             },
@@ -2281,11 +2353,13 @@ mod tests {
                 integrand_name: "itg".to_string(),
                 graph_name: "GL02".to_string(),
                 stats: GraphGenerationStats {
-                    evaluator_count: 3,
-                    total_time: Duration::from_secs(6),
-                    evaluator_spenso_time: Duration::from_secs(2),
-                    evaluator_symbolica_time: Duration::ZERO,
-                    evaluator_compile_time: Duration::from_secs(3),
+                    timings: GenerationTimings {
+                        evaluator_count: 3,
+                        total_time: Duration::from_secs(6),
+                        evaluator_spenso_time: Duration::from_secs(2),
+                        evaluator_symbolica_time: Duration::ZERO,
+                        evaluator_compile_time: Duration::from_secs(3),
+                    },
                     ..GraphGenerationStats::default()
                 },
             },
@@ -2318,6 +2392,68 @@ mod tests {
             separator_line.chars().any(|ch| "┼╪╫┿├┤".contains(ch)),
             "missing horizontal separator before Total row: {separator_line}"
         );
+    }
+
+    #[test]
+    fn generation_summary_partitions_shared_work_and_preserves_representation_order() {
+        use three_dimensional_reps::RepresentationMode;
+        let mut stats = GraphGenerationStats {
+            timings: GenerationTimings {
+                evaluator_count: 6,
+                total_time: Duration::from_secs(10),
+                evaluator_spenso_time: Duration::from_secs(1),
+                evaluator_symbolica_time: Duration::from_secs(2),
+                evaluator_compile_time: Duration::from_secs(3),
+            },
+            ..GraphGenerationStats::default()
+        };
+        *stats.representation_mut(RepresentationMode::Ltd) = GenerationTimings {
+            evaluator_count: 2,
+            total_time: Duration::from_secs(3),
+            evaluator_symbolica_time: Duration::from_secs(1),
+            evaluator_compile_time: Duration::from_secs(1),
+            ..GenerationTimings::default()
+        };
+        *stats.representation_mut(RepresentationMode::Cff) = GenerationTimings {
+            evaluator_count: 3,
+            total_time: Duration::from_secs(5),
+            evaluator_spenso_time: Duration::from_secs(1),
+            evaluator_symbolica_time: Duration::from_secs(1),
+            evaluator_compile_time: Duration::from_secs(2),
+        };
+        let summary = render_generation_summary(
+            &[GeneratedGraphReport {
+                process_id: 0,
+                integrand_name: "itg".to_string(),
+                graph_name: "GL01".to_string(),
+                stats,
+            }],
+            0,
+            Some(1),
+            None,
+        )
+        .unwrap();
+        let plain = Regex::new(r"\x1b\[[0-9;]*m")
+            .unwrap()
+            .replace_all(&summary, "")
+            .into_owned();
+        let rows = plain
+            .lines()
+            .filter(|line| line.contains("GL01"))
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), 4, "{plain}");
+        for (row, scope, count, share) in [
+            (rows[0], "all", 6, "100%"),
+            (rows[1], "shared", 1, "20%"),
+            (rows[2], "ltd", 2, "30%"),
+            (rows[3], "cff", 3, "50%"),
+        ] {
+            let cells = row.split('│').map(str::trim).collect::<Vec<_>>();
+            assert_eq!(cells[3], scope);
+            assert_eq!(cells[4], count.to_string());
+            assert!(cells[5].contains(share), "{row}");
+        }
+        assert!(plain.contains("counted once"));
     }
 
     fn base_args(tokens: &str) -> SpecArgs {

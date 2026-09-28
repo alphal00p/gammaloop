@@ -8,7 +8,8 @@ use symbolica::state::State;
 use super::{
     CrossSectionIntegrand,
     load::{
-        STANDALONE_EVALUATORS_VERSION, StandaloneCountertermArchive, StandaloneCrossSectionArchive,
+        STANDALONE_EVALUATORS_VERSION, StandaloneCountertermArchive,
+        StandaloneCountertermIntegrandsArchive, StandaloneCrossSectionArchive,
         StandaloneCrossSectionGraphTermArchive, StandaloneCutCFFIndex,
         StandaloneEvaluatorStackArchive, StandaloneGenericEvaluatorArchive,
         StandaloneIndexedEvaluatorStackArchive, StandaloneIndexedGenericEvaluatorArchive,
@@ -86,6 +87,7 @@ fn export_generic_evaluator<T: ExportAtomTo>(
             .transpose()?,
         additional_fn_map_entries,
         dual_shape: evaluator.dual_shape.clone(),
+        zero_components: evaluator.zero_components.clone(),
     })
 }
 
@@ -288,6 +290,7 @@ pub(crate) fn export_threshold_multiplier_collection<T: ExportAtomTo>(
                         .map(|entry| entry.archive())
                         .collect::<Result<Vec<_>>>()?,
                     dual_shape: None,
+                    zero_components: Vec::new(),
                 })
             })
             .collect::<Result<Vec<_>>>()?,
@@ -318,28 +321,57 @@ fn export_counterterm<T: ExportAtomTo>(
 ) -> Result<StandaloneCountertermArchive<T>> {
     if let Some(multipliers) = &evaluators.threshold_multipliers {
         multipliers.validate(
-            evaluators.left_thresholds_evaluator.len(),
-            evaluators.right_thresholds_evaluator.len(),
+            evaluators.threshold_helpers.left_thresholds.len(),
+            evaluators.threshold_helpers.right_thresholds.len(),
         )?;
     }
     Ok(StandaloneCountertermArchive {
-        left_thresholds_evaluator: evaluators
-            .left_thresholds_evaluator
+        integrands: evaluators
+            .integrands
             .iter()
-            .map(|stacks| {
-                export_evaluator_map(stacks, orientation_start, residue_map_id_start, mult_offset)
+            .map(|(representation, payload)| {
+                Ok((
+                    representation.to_string(),
+                    StandaloneCountertermIntegrandsArchive {
+                        left_thresholds_evaluator: payload
+                            .left_thresholds_evaluator
+                            .iter()
+                            .map(|stacks| {
+                                export_evaluator_map(
+                                    stacks,
+                                    orientation_start,
+                                    residue_map_id_start,
+                                    mult_offset,
+                                )
+                            })
+                            .collect::<Result<Vec<_>>>()?,
+                        right_thresholds_evaluator: payload
+                            .right_thresholds_evaluator
+                            .iter()
+                            .map(|stacks| {
+                                export_evaluator_map(
+                                    stacks,
+                                    orientation_start,
+                                    residue_map_id_start,
+                                    mult_offset,
+                                )
+                            })
+                            .collect::<Result<Vec<_>>>()?,
+                        iterated_evaluator: export_iterated_collection(
+                            &payload.iterated_evaluator,
+                            |stacks| {
+                                export_evaluator_map(
+                                    stacks,
+                                    orientation_start,
+                                    residue_map_id_start,
+                                    mult_offset,
+                                )
+                            },
+                        )?,
+                    },
+                ))
             })
-            .collect::<Result<Vec<_>>>()?,
-        right_thresholds_evaluator: evaluators
-            .right_thresholds_evaluator
-            .iter()
-            .map(|stacks| {
-                export_evaluator_map(stacks, orientation_start, residue_map_id_start, mult_offset)
-            })
-            .collect::<Result<Vec<_>>>()?,
-        iterated_evaluator: export_iterated_collection(&evaluators.iterated_evaluator, |stacks| {
-            export_evaluator_map(stacks, orientation_start, residue_map_id_start, mult_offset)
-        })?,
+            .collect::<Result<BTreeMap<_, _>>>()?,
         left_threshold_helpers: evaluators
             .threshold_helpers
             .left_thresholds
@@ -418,7 +450,13 @@ fn export_threshold_counterterm_metadata(
 }
 
 fn standalone_rust_script() -> String {
-    let mut script = include_str!("load.rs").to_string();
+    let mut script = include_str!("load.rs").replace(
+        "use crate::integrands::process::retained_dual::{RetainedFunctionDefinition, build_dual_evaluator};",
+        &format!(
+            "mod retained_dual {{\n{}\n}}\nuse retained_dual::{{RetainedFunctionDefinition, build_dual_evaluator}};",
+            include_str!("../retained_dual.rs"),
+        ),
+    );
     if let Some(rest) = script.strip_prefix("//#!/usr/bin/env -S rust-script\n") {
         script = format!("#!/usr/bin/env -S rust-script\n{rest}");
     }
@@ -533,15 +571,21 @@ impl CrossSectionIntegrand {
                 let cut_group_integrands = term
                     .integrand
                     .iter()
-                    .map(|stacks| {
-                        export_evaluator_map(
-                            stacks,
-                            orientation_start,
-                            residue_map_id_start,
-                            multiplicative_offset,
-                        )
+                    .map(|(representation, cuts)| {
+                        let cuts = cuts
+                            .iter()
+                            .map(|stacks| {
+                                export_evaluator_map(
+                                    stacks,
+                                    orientation_start,
+                                    residue_map_id_start,
+                                    multiplicative_offset,
+                                )
+                            })
+                            .collect::<Result<Vec<_>>>()?;
+                        Ok((representation.to_string(), cuts))
                     })
-                    .collect::<Result<Vec<_>>>()?;
+                    .collect::<Result<BTreeMap<_, _>>>()?;
 
                 let counterterms = term
                     .counterterm
@@ -577,6 +621,12 @@ impl CrossSectionIntegrand {
 
         Ok(StandaloneCrossSectionArchive {
             version: STANDALONE_EVALUATORS_VERSION,
+            three_d_representations: self
+                .data
+                .three_d_representations
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
             symbolica_state,
             graph_terms,
         })

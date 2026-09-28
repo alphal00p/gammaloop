@@ -34,14 +34,40 @@ use crate::{
     },
 };
 
+mod ltd;
+
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    Default,
+    Encode,
+    Decode,
+    schemars::JsonSchema,
 )]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "cli", derive(clap::ValueEnum))]
 #[serde(rename_all = "snake_case")]
 pub enum RepresentationMode {
     #[default]
     Cff,
     Ltd,
+}
+
+impl std::fmt::Display for RepresentationMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Cff => "cff",
+            Self::Ltd => "ltd",
+        })
+    }
 }
 
 #[derive(
@@ -87,14 +113,15 @@ pub struct Generate3DExpressionOptions {
     pub representation: RepresentationMode,
     #[serde(default)]
     pub cff_generation_context: CffGenerationContext,
-    /// `None` keeps the legacy numerator class, which is affine in every EMR
-    /// edge energy. `Some` selects an explicit bounded class; omitted edges
-    /// then have degree zero, including when the vector itself is empty.
+    /// For CFF, `None` keeps the legacy class affine in every EMR edge energy.
+    /// Ordinary LTD ignores these bounds; raised LTD requires `Some` to sample
+    /// higher-order residues exactly. Omitted edges in an explicit bounded class
+    /// have degree zero, including when the vector itself is empty.
     #[serde(default)]
     pub energy_degree_bounds: Option<Vec<(usize, usize)>>,
     pub numerator_sampling_scale: NumeratorSamplingScaleMode,
     /// Internal edge IDs whose unintegrated four-dimensional denominators stay
-    /// outside the causal CFF graph. Their affine energy maps and typed
+    /// outside the integrated graph. Their affine energy maps and typed
     /// residual factors remain in the generated result.
     #[serde(default)]
     pub preserve_internal_edges_as_four_d_denominators: Vec<usize>,
@@ -192,6 +219,7 @@ impl CffGlobalPrefactorSign {
 
 #[derive(Debug, Clone)]
 pub struct GeneratedThreeDExpression<E = (), H = ()> {
+    pub representation: RepresentationMode,
     pub expression: ThreeDExpression<OrientationID, E, H>,
     pub energy_factor_ownership: CffEnergyFactorOwnership,
     /// Rational-component metadata retained with persisted expressions.  The
@@ -221,6 +249,7 @@ where
         &self,
         encoder: &mut Encoder,
     ) -> std::result::Result<(), bincode::error::EncodeError> {
+        bincode::Encode::encode(&self.representation, encoder)?;
         bincode::Encode::encode(&self.expression, encoder)?;
         bincode::Encode::encode(&self.energy_factor_ownership, encoder)?;
         bincode::Encode::encode(&self.energy_factor_components, encoder)?;
@@ -240,6 +269,7 @@ where
         decoder: &mut Decoder,
     ) -> std::result::Result<Self, bincode::error::DecodeError> {
         Ok(Self {
+            representation: bincode::Decode::decode(decoder)?,
             expression: bincode::Decode::decode(decoder)?,
             energy_factor_ownership: bincode::Decode::decode(decoder)?,
             energy_factor_components: bincode::Decode::decode(decoder)?,
@@ -286,6 +316,7 @@ mod generated_expression_persistence_tests {
         expression.orientations.push(orientation);
         let generated: GeneratedThreeDExpression =
             GeneratedThreeDExpression {
+                representation: RepresentationMode::Cff,
                 expression,
                 energy_factor_ownership: CffEnergyFactorOwnership::VariantLocal,
                 energy_factor_components: vec![
@@ -319,6 +350,7 @@ mod generated_expression_persistence_tests {
             )
             .unwrap();
         assert_eq!(bytes_read, bytes.len());
+        assert_eq!(decoded.representation, generated.representation);
         assert_eq!(
             decoded.energy_factor_ownership,
             generated.energy_factor_ownership
@@ -368,10 +400,16 @@ mod generated_expression_persistence_tests {
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
+    #[error("invalid LTD residue coordinate: {0}")]
+    InvalidResidueCoordinate(String),
     #[error(
-        "three-dimensional representation mode {mode:?} is not implemented; only CFF is currently supported"
+        "an LTD residue with a raised pole and a varying numerator map requires certified numerator energy bounds"
     )]
-    NotImplemented { mode: RepresentationMode },
+    LtdResidueRequiresEnergyBounds,
+    #[error(
+        "LTD with repeated propagators requires explicit numerator energy-degree bounds; use an empty list for a scalar numerator"
+    )]
+    LtdRepeatedPropagatorsRequireEnergyBounds,
     #[error(
         "this generalized CFF higher energy-numerator sector is not supported by the current Rust port"
     )]
@@ -427,11 +465,6 @@ pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
     graph: &G,
     options: &Generate3DExpressionOptions,
 ) -> Result<GeneratedThreeDExpression> {
-    if options.representation != RepresentationMode::Cff {
-        return Err(GenerationError::NotImplemented {
-            mode: options.representation,
-        });
-    }
     let parsed = graph.to_three_d_parsed_graph()?;
     let validation = crate::validate_parsed_graph(&parsed);
     if !validation
@@ -570,15 +603,14 @@ fn generate_3d_expression_from_parsed_generated(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<GeneratedThreeDExpression> {
-    if options.representation != RepresentationMode::Cff {
-        return Err(GenerationError::NotImplemented {
-            mode: options.representation,
-        });
-    }
-    let bounds = normalize_energy_degree_bounds(
-        options.energy_degree_bounds.as_deref().unwrap_or(&[]),
-        parsed.internal_edges.len(),
-    )?;
+    let bounds = if options.representation == RepresentationMode::Cff {
+        normalize_energy_degree_bounds(
+            options.energy_degree_bounds.as_deref().unwrap_or(&[]),
+            parsed.internal_edges.len(),
+        )?
+    } else {
+        Vec::new()
+    };
     if !options
         .preserve_internal_edges_as_four_d_denominators
         .is_empty()
@@ -589,6 +621,10 @@ fn generate_3d_expression_from_parsed_generated(
         generated.expression = generated.expression.fuse_compatible_variants();
         assign_numerator_map_labels(&mut generated.expression.orientations);
         return Ok(generated);
+    }
+
+    if options.representation == RepresentationMode::Ltd {
+        return ltd::LtdBuilder::new(parsed, options)?.build();
     }
 
     let uses_generalized_expression = cff_bounds_need_generalized_expression(&bounds);
@@ -686,6 +722,7 @@ fn generate_3d_expression_from_parsed_generated(
         .into_iter()
         .collect();
     Ok(GeneratedThreeDExpression {
+        representation: RepresentationMode::Cff,
         expression,
         energy_factor_ownership,
         energy_factor_components,
@@ -770,7 +807,9 @@ fn build_expression_preserving_internal_edges(
 
     let (active_parsed, active_to_orig) = contract_preserved_parsed_edges(parsed, &preserved);
     if active_parsed.denominator_internal_edge_ids().is_empty() {
-        return expression_with_only_preserved_edges(parsed, &preserved);
+        let mut generated = expression_with_only_preserved_edges(parsed, &preserved)?;
+        generated.representation = options.representation;
+        return Ok(generated);
     }
 
     let orig_to_active = active_to_orig
@@ -823,6 +862,7 @@ fn build_expression_preserving_internal_edges(
         .map(|component| component.remap_internal_edges(&active_edge_map))
         .collect();
     Ok(GeneratedThreeDExpression {
+        representation: generated.representation,
         expression: lift_expression_to_preserved_graph(
             parsed,
             &generated.expression,
@@ -885,6 +925,7 @@ fn expression_with_only_preserved_edges(
         .collect();
     assign_numerator_map_labels(&mut expression.orientations);
     Ok(GeneratedThreeDExpression {
+        representation: RepresentationMode::Cff,
         expression,
         energy_factor_ownership: CffEnergyFactorOwnership::GlobalSourceProduct,
         energy_factor_components: Vec::new(),
@@ -1190,6 +1231,7 @@ fn generate_rational_component_product(
         );
     }
     Ok(Some(GeneratedThreeDExpression {
+        representation: options.representation,
         expression: lift_component_expression_product(parsed, &expressions),
         energy_factor_ownership,
         energy_factor_components,
@@ -4543,7 +4585,7 @@ fn contact_nodes(bound: usize) -> Vec<i32> {
     nodes
 }
 
-fn lagrange_basis(nodes: &[i32], index: usize) -> Vec<Rational> {
+pub(crate) fn lagrange_basis(nodes: &[i32], index: usize) -> Vec<Rational> {
     let mut poly = vec![Rational::one()];
     let mut denominator = Rational::one();
     let xj = Rational::from(nodes[index]);
@@ -6043,22 +6085,16 @@ mod representation_tests {
     }
 
     #[test]
-    fn ltd_setting_returns_explicit_not_implemented_error() {
-        let error = generate_3d_expression_from_parsed(
+    fn ltd_setting_generates_residue_maps() {
+        let expression = generate_3d_expression_from_parsed(
             &crate::graph_io::test_graphs::box_graph(),
             &Generate3DExpressionOptions {
                 representation: RepresentationMode::Ltd,
                 ..Default::default()
             },
         )
-        .unwrap_err();
-
-        assert!(matches!(
-            error,
-            GenerationError::NotImplemented {
-                mode: RepresentationMode::Ltd
-            }
-        ));
+        .unwrap();
+        assert!(!expression.orientations.is_empty());
     }
 }
 

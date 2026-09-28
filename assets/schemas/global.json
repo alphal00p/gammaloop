@@ -4,18 +4,23 @@
   "type": "object",
   "properties": {
     "display_directive": {
+      "description": "Tracing filter applied to terminal output shown by the interactive session.",
       "type": "string"
     },
     "generation": {
+      "description": "Diagram, numerator, counterterm, evaluator, and compilation settings used during generation.",
       "$ref": "#/$defs/GenerationSettings"
     },
     "log_style": {
+      "description": "Formatting choices shared by terminal and file tracing subscribers.",
       "$ref": "#/$defs/LogStyle"
     },
     "logfile_directive": {
+      "description": "Tracing filter applied to the optional log-file sink; `off` disables that sink.",
       "type": "string"
     },
     "n_cores": {
+      "description": "Per-stage worker counts for diagram generation, evaluator construction, compilation, and integration.",
       "$ref": "#/$defs/Parallelisation"
     }
   },
@@ -25,6 +30,7 @@
       "type": "object",
       "properties": {
         "susbstitute_masters": {
+          "description": "Substitute AlphaLoop master integrals by their registered expressions.",
           "type": "boolean"
         }
       },
@@ -45,6 +51,7 @@
       "type": "object",
       "properties": {
         "external_pdg_set": {
+          "description": "Signed PDG identifiers on the counterterm's external boundary.",
           "type": "array",
           "items": {
             "type": "integer",
@@ -53,6 +60,7 @@
           "uniqueItems": true
         },
         "internal_pdg_set": {
+          "description": "Optional internal PDG identifiers; omitting them makes the rule match any internal set.",
           "type": [
             "array",
             "null"
@@ -70,9 +78,11 @@
       "type": "object",
       "properties": {
         "ct_identifier": {
+          "description": "Particle-content pattern that selects the counterterms to which this rule applies.",
           "$ref": "#/$defs/CTIdentifier"
         },
         "prescription": {
+          "description": "Approximation that replaces the default prescription for matching counterterms.",
           "$ref": "#/$defs/ApproximationType"
         }
       },
@@ -110,14 +120,17 @@
       "type": "object",
       "properties": {
         "abort_level": {
+          "description": "Optimization stage at which evaluator construction aborts for diagnostic isolation.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "compile": {
+          "description": "Compile the lowered evaluator using the configured generation compilation backend.",
           "type": "boolean"
         },
         "cpe_iterations": {
+          "description": "Optional number of common-pair-elimination optimization passes.",
           "type": [
             "integer",
             "null"
@@ -126,43 +139,53 @@
           "minimum": 0
         },
         "direct_translation": {
+          "description": "Translate compatible symbolic expressions directly into Spenso networks.",
           "type": "boolean"
         },
         "do_algebra": {
+          "description": "Perform symbolic tensor and scalar algebra before lowering to an evaluator.",
           "type": "boolean"
         },
         "do_fn_map_replacements": {
+          "description": "Apply function-map replacements before numerical lowering.",
           "type": "boolean"
         },
         "horner_iterations": {
+          "description": "Number of Horner-scheme optimization passes applied to scalar expressions.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "iterative_orientation_optimization": {
+          "description": "Re-optimize orientation expressions iteratively while building the evaluator.",
           "type": "boolean"
         },
         "max_common_pair_cache_entries": {
+          "description": "Maximum cached candidate pairs during common-pair elimination.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "max_common_pair_distance": {
+          "description": "Maximum expression-tree distance considered during common-pair elimination.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "max_horner_scheme_variables": {
+          "description": "Maximum variable count for attempting a Horner-scheme optimization.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "n_cores": {
+          "description": "Worker threads used while constructing one evaluator.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "spenso_execution_mode": {
+          "description": "Spenso execution and contraction modes used by the lowered tensor network.",
           "type": "array",
           "maxItems": 2,
           "minItems": 2,
@@ -176,18 +199,23 @@
           ]
         },
         "store_atom": {
+          "description": "Retain the intermediate Symbolica atom alongside the executable evaluator.",
           "type": "boolean"
         },
         "summed": {
+          "description": "Build one evaluator for the sum of all contributions instead of separate evaluators.",
           "type": "boolean"
         },
         "summed_function_map": {
+          "description": "Represent a summed evaluator through a shared Symbolica function map.",
           "type": "boolean"
         },
         "tensor_network_contraction_order": {
+          "description": "Heuristic used to order tensor-network contractions.",
           "$ref": "#/$defs/TensorNetworkContractionOrder"
         },
         "verbose": {
+          "description": "Emit detailed evaluator-construction diagnostics.",
           "type": "boolean"
         }
       }
@@ -205,9 +233,11 @@
       "type": "object",
       "properties": {
         "expand_masters": {
+          "description": "Expand FMFT master-integral abbreviations before returning the result.",
           "type": "boolean"
         },
         "susbstitute_masters": {
+          "description": "Substitute FMFT master integrals by their known analytic expressions.",
           "type": "boolean"
         }
       },
@@ -217,6 +247,7 @@
       "type": "object",
       "properties": {
         "gamma_simplification_closure_check": {
+          "description": "Check that gamma-matrix simplification is closed under the generated rewrite sequence.",
           "type": "boolean"
         }
       },
@@ -233,24 +264,30 @@
       "type": "object",
       "properties": {
         "compilation_mode": {
+          "description": "Evaluator backend: Symbolica JIT, generated C++, or generated assembly.",
           "$ref": "#/$defs/CompilationMode"
         },
         "compiler": {
+          "description": "External C++ compiler executable used by C++ and assembly modes.",
           "type": "string"
         },
         "custom": {
+          "description": "Additional command-line arguments passed verbatim to the external compiler.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "fast_math": {
+          "description": "Permit algebraic floating-point transformations that ignore strict IEEE ordering.",
           "type": "boolean"
         },
         "optimization_level": {
+          "description": "Optimization level passed to the selected evaluator compiler.",
           "$ref": "#/$defs/CompilationOptimizationLevel"
         },
         "unsafe_math": {
+          "description": "Permit compiler math optimizations that may change exceptional-value behavior.",
           "type": "boolean"
         }
       },
@@ -259,19 +296,28 @@
     "GenerationSettings": {
       "type": "object",
       "properties": {
+        "three_dimensional_representations": {
+          "description": "Three-dimensional representations to generate; the first is the default for stability levels.",
+          "$ref": "#/$defs/ThreeDRepresentationSelection"
+        },
         "compile": {
+          "description": "Code-generation backend, compiler, and optimization flags.",
           "$ref": "#/$defs/GammaloopCompileOptions"
         },
         "evaluator": {
+          "description": "Symbolic simplification, contraction, optimization, and compilation controls for evaluators.",
           "$ref": "#/$defs/EvaluatorSettings"
         },
         "explicit_orientation_sum_only": {
+          "description": "Sum all generated residue branches explicitly, removing runtime orientation selectors.",
           "type": "boolean"
         },
         "feyngen": {
+          "description": "Feynman-graph generation checks and diagnostics.",
           "$ref": "#/$defs/FeyGenSettings"
         },
         "force_cuts": {
+          "description": "Explicit particle-name sets forced to define graph cuts.",
           "type": "array",
           "items": {
             "type": "array",
@@ -281,30 +327,38 @@
           }
         },
         "orientation_pattern": {
+          "description": "Optional causal-orientation pattern applied during generation.",
           "$ref": "#/$defs/OrientationPattern"
         },
         "override_lmb_heuristics": {
+          "description": "Use explicitly supplied loop-momentum bases instead of the built-in basis heuristics.",
           "type": "boolean"
         },
         "threshold_subtraction": {
+          "description": "Generation-time selection of local threshold counterterms.",
           "$ref": "#/$defs/ThresholdSubtractionSettings"
         },
         "tropical_subgraph_table": {
+          "description": "Controls construction of tropical subgraph power-counting tables.",
           "$ref": "#/$defs/TropicalSubgraphTableSettings"
         },
         "uniform_numerator_sampling_scale": {
+          "description": "Choose which numerator-energy reconstructions use the shared runtime sampling scale.",
           "$ref": "#/$defs/UniformNumeratorSamplingScale"
         },
         "uv": {
+          "description": "Ultraviolet counterterm generation, prescription, and Vakint backend settings.",
           "$ref": "#/$defs/UVgenerationSettings"
         },
         "vector_polarization_sum_gauge": {
+          "description": "Gauge used when summing external vector-particle polarizations.",
           "$ref": "#/$defs/VectorPolarizationSumGauge"
         }
       },
       "additionalProperties": false
     },
     "LogFormat": {
+      "description": "Amount of prefix and source detail shown by the terminal and logfile sinks.",
       "type": "string",
       "enum": [
         "Long",
@@ -318,15 +372,19 @@
       "type": "object",
       "properties": {
         "full_line_source": {
+          "description": "Include the complete source file path and line number for each event.",
           "type": "boolean"
         },
         "include_fields": {
+          "description": "Render structured tracing fields in addition to the formatted event message.",
           "type": "boolean"
         },
         "log_format": {
+          "description": "Amount of timestamp, target, level, and source context included in each log line.",
           "$ref": "#/$defs/LogFormat"
         },
         "short_timestamp": {
+          "description": "Use compact timestamps instead of full date-and-time values.",
           "type": "boolean"
         }
       },
@@ -336,15 +394,19 @@
       "type": "object",
       "properties": {
         "direct_numerical_substition": {
+          "description": "Numerically substitute constants directly in the MATAD result.",
           "type": "boolean"
         },
         "expand_masters": {
+          "description": "Expand MATAD master-integral abbreviations before returning the result.",
           "type": "boolean"
         },
         "substitute_hpls": {
+          "description": "Substitute harmonic polylogarithms produced by MATAD where formulas are available.",
           "type": "boolean"
         },
         "susbstitute_masters": {
+          "description": "Substitute MATAD master integrals by their known analytic expressions.",
           "type": "boolean"
         }
       },
@@ -354,6 +416,7 @@
       "type": "object",
       "properties": {
         "pat": {
+          "description": "Symbolica pattern matched against serialized causal orientations.",
           "anyOf": [
             {
               "$ref": "#/$defs/ParseableAtom"
@@ -370,21 +433,25 @@
       "type": "object",
       "properties": {
         "compile": {
+          "description": "Worker threads used for evaluator compilation.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "feyngen": {
+          "description": "Worker threads used by Feynman-graph generation.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "generate": {
+          "description": "Worker threads used to construct symbolic graph evaluators.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "integrate": {
+          "description": "Worker threads used by numerical integration.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
@@ -402,23 +469,28 @@
       "type": "object",
       "properties": {
         "max_n_evals": {
+          "description": "Maximum pySecDec sample count before the numerical integration stops.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "min_n_evals": {
+          "description": "Minimum pySecDec sample count before a precision-based stop is accepted.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "quiet": {
+          "description": "Suppress pySecDec progress output while Vakint evaluates an integral.",
           "type": "boolean"
         },
         "relative_precision": {
+          "description": "Requested relative precision for the pySecDec numerical integration.",
           "type": "number",
           "format": "double"
         },
         "reuse_existing_output": {
+          "description": "Existing pySecDec output directory to reuse instead of regenerating integration code.",
           "type": [
             "string",
             "null"
@@ -431,15 +503,19 @@
       "type": "object",
       "properties": {
         "log_divergent": {
+          "description": "Approximation applied to logarithmically divergent ultraviolet counterterms.",
           "$ref": "#/$defs/ApproximationType"
         },
         "massive_power_divergent": {
+          "description": "Approximation applied to power-divergent counterterms with massive external structure.",
           "$ref": "#/$defs/ApproximationType"
         },
         "massless_power_divergent": {
+          "description": "Approximation applied to power-divergent counterterms with massless external structure.",
           "$ref": "#/$defs/ApproximationType"
         },
         "overrides": {
+          "description": "Counterterm-specific prescription rules evaluated before the divergence-class defaults.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/CTRenormalizationRule"
@@ -447,6 +523,13 @@
         }
       },
       "additionalProperties": false
+    },
+    "RepresentationMode": {
+      "type": "string",
+      "enum": [
+        "cff",
+        "ltd"
+      ]
     },
     "TensorNetworkContractionOrder": {
       "type": "string",
@@ -458,19 +541,37 @@
         "intermediate_cost"
       ]
     },
+    "ThreeDRepresentationSelection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RepresentationMode"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RepresentationMode"
+          },
+          "minItems": 1
+        }
+      ]
+    },
     "ThresholdSubtractionSettings": {
       "type": "object",
       "properties": {
         "assume_positive_external_energies": {
+          "description": "Simplify existence tests by assuming all external-state energies are positive.",
           "type": "boolean"
         },
         "check_esurface_at_generation": {
+          "description": "Test E-surface existence against the active model while generating counterterms.",
           "type": "boolean"
         },
         "disable_integrated_ct": {
+          "description": "Generate local threshold counterterms without their integrated counterparts.",
           "type": "boolean"
         },
         "enable_thresholds": {
+          "description": "Generate local threshold counterterms for eligible E-surfaces.",
           "type": "boolean"
         },
         "esurface_existence_threshold": {
@@ -480,6 +581,7 @@
           "minimum": 0.0
         },
         "skip_thresholds_that_are_cuts": {
+          "description": "Omit threshold counterterms whose E-surface coincides with a physical cut.",
           "type": "boolean"
         }
       },
@@ -489,12 +591,15 @@
       "type": "object",
       "properties": {
         "disable_tropical_generation": {
+          "description": "Disable tropical subgraph table construction entirely.",
           "type": "boolean"
         },
         "panic_on_fail": {
+          "description": "Abort generation instead of reporting and skipping a failed tropical table construction.",
           "type": "boolean"
         },
         "target_omega": {
+          "description": "Target superficial degree used when classifying tropical subgraphs.",
           "type": "number",
           "format": "double"
         }
@@ -513,24 +618,31 @@
       "type": "object",
       "properties": {
         "add_marker": {
+          "description": "Insert explicit marker functions around generated ultraviolet counterterms.",
           "type": "boolean"
         },
         "final_integrand": {
+          "description": "Dimensional representation used for the final locally subtracted integrand.",
           "$ref": "#/$defs/FinalIntegrandDimension"
         },
         "generate_integrated": {
+          "description": "Generate analytically integrated ultraviolet counterterms.",
           "type": "boolean"
         },
         "inner_products": {
+          "description": "Rewrite Lorentz contractions into scalar inner products during ultraviolet processing.",
           "type": "boolean"
         },
         "keep_marker": {
+          "description": "Preserve ultraviolet marker functions after counterterm orchestration.",
           "type": "boolean"
         },
         "local_uv_cts_from_expanded_4d_integrands": {
+          "description": "Construct local counterterms by Taylor-expanding 4D integrands before CFF projection.\nRequires an explicit sum over all generated orientations.",
           "type": "boolean"
         },
         "orchestrator": {
+          "description": "Algorithm used to enumerate and combine nested ultraviolet counterterms.",
           "$ref": "#/$defs/UVOrchestrator"
         },
         "project_integrated_uv_cts_onto_tensor_integrals": {
@@ -538,15 +650,19 @@
           "type": "boolean"
         },
         "renormalization_prescription": {
+          "description": "Default and counterterm-specific renormalization approximation schemes.",
           "$ref": "#/$defs/RenormalizationPrescriptionSettings"
         },
         "softct": {
+          "description": "Generate soft ultraviolet counterterms where required by the selected prescription.",
           "type": "boolean"
         },
         "subtract_uv": {
+          "description": "Subtract generated ultraviolet counterterms from the final integrand.",
           "type": "boolean"
         },
         "vakint": {
+          "description": "Vakint backend configuration for integrated ultraviolet counterterms.",
           "$ref": "#/$defs/VakintSettings"
         }
       },
@@ -564,45 +680,57 @@
       "type": "object",
       "properties": {
         "additional_normalization": {
+          "description": "Extra symbolic normalization factor multiplied into every Vakint result.",
           "type": "string"
         },
         "alphaloop": {
+          "description": "AlphaLoop-specific master-integral substitution controls.",
           "$ref": "#/$defs/AlphaLoopSettings"
         },
         "clean_tmp_dir": {
+          "description": "Remove Vakint's temporary backend directory after a successful evaluation.",
           "type": "boolean"
         },
         "evaluation_methods": {
+          "description": "Ordered Vakint evaluation backends tried for each matched vacuum integral.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "fmft": {
+          "description": "FMFT-specific master-integral expansion and substitution controls.",
           "$ref": "#/$defs/FMFTSettings"
         },
         "form_exe_path": {
+          "description": "FORM executable used by analytic Vakint evaluation backends.",
           "type": "string"
         },
         "matad": {
+          "description": "MATAD-specific master-integral and substitution controls.",
           "$ref": "#/$defs/MATADSettings"
         },
         "normalization": {
+          "description": "Named normalization convention applied to matched vacuum integrals.",
           "type": "string"
         },
         "pysecdec": {
+          "description": "pySecDec precision, sample, and output-reuse controls.",
           "$ref": "#/$defs/PySecDecSettings"
         },
         "python_exe_path": {
+          "description": "Python interpreter used to invoke pySecDec.",
           "type": "string"
         },
         "run_time_decimal_precision": {
+          "description": "Decimal precision used when substituting backend results at run time.",
           "type": "integer",
           "format": "uint",
           "default": 100,
           "minimum": 0
         },
         "temporary_directory": {
+          "description": "Parent directory for temporary Vakint backend files; the system default is used when absent.",
           "type": [
             "string",
             "null"

@@ -100,6 +100,7 @@ impl ThresholdMultiplierFunctions {
                 }
             });
             entries.push(FnMapEntry {
+                inlining: Default::default(),
                 lhs: FunctionBuilder::new(name)
                     .add_args(formals.iter().map(|formal| Atom::var(*formal)))
                     .finish(),

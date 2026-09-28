@@ -2121,22 +2121,40 @@ impl<'a> UVProfileRunner<'a> {
         let analytic_integrands = if !self.profile_settings.analyse_analytically {
             Vec::new()
         } else {
-            let integrand = g.derived_data.resolved_integrand()?;
-            g.derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .expression
-                .orientations
-                .iter_enumerated()
-                .map(|(orientation_id, orientation)| {
-                    analytic_integrand_for_orientation(
-                        orientation_id,
-                        &orientation.data,
-                        &integrand,
-                    )
-                })
-                .collect()
+            let (representation, complete_sum) = {
+                let integrand = self.integrand.lock().expect("integrand mutex poisoned");
+                let representation = self.settings.stability.levels[0]
+                    .resolved_representation(integrand.generated_representations())?;
+                let ProcessIntegrand::Amplitude(amplitude) = &*integrand else {
+                    unreachable!("UV profiling expects amplitudes")
+                };
+                (representation, amplitude.data.explicit_orientation_sum_only)
+            };
+            let data = &g.derived_data.representations[&representation];
+            let integrand = data.resolved_integrand()?;
+            if complete_sum {
+                vec![(
+                    OrientationData {
+                        orientation: Vec::new().into(),
+                        label: Some(format!("{representation} complete residue sum")),
+                        numerator_map_index: None,
+                    },
+                    integrand,
+                )]
+            } else {
+                data.expression
+                    .expression
+                    .orientations
+                    .iter_enumerated()
+                    .map(|(orientation_id, orientation)| {
+                        analytic_integrand_for_orientation(
+                            orientation_id,
+                            &orientation.data,
+                            &integrand,
+                        )
+                    })
+                    .collect()
+            }
         };
         let orientation_labels = if profiles_per_orientation {
             let integrand = self.integrand.lock().expect("integrand mutex poisoned");

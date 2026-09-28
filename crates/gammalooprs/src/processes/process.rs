@@ -939,6 +939,8 @@ impl Process {
             .generation;
         let resolved = self.get_integrand(integrand_name)?;
         let integrand = resolved.require_generated()?;
+        let representation = integrand.get_settings().stability.levels[0]
+            .resolved_representation(integrand.generated_representations())?;
         let integrand_path = match &self.collection {
             ProcessCollection::Amplitudes(_) => path
                 .as_ref()
@@ -966,7 +968,14 @@ impl Process {
                             .graphs
                             .get(graph_id)
                             .ok_or_else(|| eyre!("Missing source amplitude graph {graph_id}"))?;
-                        (&source.graph, source.derived_data.cff_expression.as_ref())
+                        (
+                            &source.graph,
+                            source
+                                .derived_data
+                                .representations
+                                .get(&representation)
+                                .map(|data| &data.expression),
+                        )
                     }
                     ProcessCollection::CrossSections(cross_sections) => {
                         let source = cross_sections[&resolved.canonical_name]
@@ -977,7 +986,7 @@ impl Process {
                             })?;
                         (
                             &source.graph,
-                            source.derived_data.global_cff_expression.as_ref(),
+                            source.derived_data.expressions.get(&representation),
                         )
                     }
                 };
@@ -993,7 +1002,7 @@ impl Process {
                     graph,
                     expression.ok_or_else(|| {
                         eyre!(
-                            "Graph {} has no stored production CFF for computed UV forest export",
+                            "Graph {} has no stored production {representation} expression for computed UV forest export",
                             graph.name
                         )
                     })?,
@@ -1002,7 +1011,9 @@ impl Process {
                 None
             };
             let cff_options = source
-                .map(|(graph, _)| graph.production_cff_3d_expression_options(generation_settings))
+                .map(|(graph, _)| {
+                    graph.production_3d_expression_options(generation_settings, representation)
+                })
                 .transpose()?;
             let orientation = source
                 .zip(cff_options.as_ref())
@@ -1011,7 +1022,7 @@ impl Process {
                         expression,
                         options,
                         &generation_settings.orientation_pattern,
-                        generation_settings.explicit_orientation_sum_only,
+                        generation_settings.requires_complete_orientation_sum(),
                     )
                 });
             let export = integrand.export_uv_forest_graph(
@@ -1578,11 +1589,8 @@ mod tests {
                             expected_exported_expressions = None;
                             production_expression = Some(source_expression(
                                 &retained.graph,
-                                retained
-                                    .derived_data
-                                    .global_cff_expression
-                                    .as_ref()
-                                    .unwrap(),
+                                &retained.derived_data.expressions
+                                    [&three_dimensional_reps::generation::RepresentationMode::Cff],
                             )?);
                             let plan = cross_section.plan_graph_group_selection(
                                 &GraphGroupSelectionSpec::from_master_graph_names(vec![
@@ -1652,14 +1660,14 @@ mod tests {
                                 let graph = &amplitudes["default"].graphs[0];
                                 (
                                     &graph.graph,
-                                    graph.derived_data.cff_expression.as_ref().unwrap(),
+                                    &graph.derived_data.representations[&three_dimensional_reps::generation::RepresentationMode::Cff].expression,
                                 )
                             }
                             ProcessCollection::CrossSections(cross_sections) => {
                                 let graph = &cross_sections["default"].supergraphs[0];
                                 (
                                     &graph.graph,
-                                    graph.derived_data.global_cff_expression.as_ref().unwrap(),
+                                    &graph.derived_data.expressions[&three_dimensional_reps::generation::RepresentationMode::Cff],
                                 )
                             }
                         };
@@ -1819,20 +1827,19 @@ mod tests {
                         )
                         .unwrap_err();
                     assert!(format!("{error:#}").contains("Source/runtime graph mismatch"));
-                    let source = match &mut processes.processes[0].collection {
+                    match &mut processes.processes[0].collection {
                         ProcessCollection::Amplitudes(amplitudes) => {
                             let graph = &mut amplitudes.get_mut("default").unwrap().graphs[0];
                             graph.graph.name = graph_name.clone();
-                            &mut graph.derived_data.cff_expression
+                            graph.derived_data.representations.clear();
                         }
                         ProcessCollection::CrossSections(cross_sections) => {
                             let graph =
                                 &mut cross_sections.get_mut("default").unwrap().supergraphs[0];
                             graph.graph.name = graph_name.clone();
-                            &mut graph.derived_data.global_cff_expression
+                            graph.derived_data.expressions.clear();
                         }
                     };
-                    *source = None;
                     let topology_dir = case_dir.join("topology_without_source");
                     processes.export_uv_forests(
                         &topology_dir,
@@ -1864,7 +1871,7 @@ mod tests {
                             &UVForestExportSettings { computed: true },
                         )
                         .unwrap_err();
-                    assert!(format!("{error:#}").contains("has no stored production CFF"));
+                    assert!(format!("{error:#}").contains("has no stored production cff"));
                 }
             }
         }

@@ -37,6 +37,19 @@ test-group = "integration"
 threads-required = 10
 
 [[profile.default.overrides]]
+# The three center objectives share 75k adaptive samples. Use three workers to
+# keep the larger numerical budget near the three-minute target.
+filter = "test(=integrations::overlap_center_objectives_preserve_the_integrated_amplitude)"
+threads-required = 3
+slow-timeout = { period = "1m", terminate-after = 4 }
+
+[[profile.default.overrides]]
+# Box4E uses two correlated representation slots and four threshold channels.
+filter = "test(=integrations::box_4e_multichannel_subtraction_reproduces_published_integral)"
+threads-required = 3
+slow-timeout = { period = "1m", terminate-after = 3 }
+
+[[profile.default.overrides]]
 # Mark tests with "heavy" in the name as memory-intensive
 filter = "test(heavy) or test(memory) or test(large)"
 test-group = "memory-intensive"

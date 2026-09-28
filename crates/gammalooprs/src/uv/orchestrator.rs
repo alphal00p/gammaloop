@@ -1,3 +1,5 @@
+use std::{collections::BTreeMap, time::Instant};
+
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use idenso::{
@@ -6,11 +8,13 @@ use idenso::{
     shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
 use symbolica::atom::{Atom, AtomCore};
+use three_dimensional_reps::RepresentationMode;
 use vakint::Vakint;
 
 use crate::{
     graph::{Graph, cuts::CutSet, feynman_graph::FeynmanGraph},
     numerator::aind::Aind,
+    processes::GraphGenerationStats,
     uv::{
         Integrands, RenormalizationPart, UVOrchestrator, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, OrientationProjection, local_3d::Localizer},
@@ -28,9 +32,10 @@ impl UVOrchestrator {
         graph: &mut Graph,
         cut_structure: CutStructure,
         vakint: &Vakint,
-        orientation: OrientationProjection<'_>,
+        orientations: &[OrientationProjection<'_>],
         settings: &UVgenerationSettings,
-    ) -> Result<Vec<ParametricIntegrands>> {
+        stats: &mut GraphGenerationStats,
+    ) -> Result<BTreeMap<RepresentationMode, Vec<ParametricIntegrands>>> {
         if !matches!(settings.final_integrand, FinalIntegrandDimension::ThreeD) {
             return Err(eyre!(
                 "4D parametric UV integrands are not supported yet; this mode is planned for a future implementation"
@@ -38,24 +43,43 @@ impl UVOrchestrator {
         }
 
         let result = match self {
-            Self::LegacyDagForest => {
-                legacy_parametric_integrands(graph, cut_structure, vakint, orientation, settings)
-            }
+            Self::LegacyDagForest => legacy_parametric_integrands(
+                graph,
+                cut_structure,
+                vakint,
+                orientations,
+                settings,
+                stats,
+            ),
             Self::HedgePoset => hedge_poset_parametric_integrands(
                 graph,
                 cut_structure,
                 vakint,
-                orientation,
+                orientations,
                 settings,
+                stats,
             ),
-            Self::Compare => {
-                compare_parametric_integrands(graph, cut_structure, vakint, orientation, settings)
-            }
+            Self::Compare => compare_parametric_integrands(
+                graph,
+                cut_structure,
+                vakint,
+                orientations,
+                settings,
+                stats,
+            ),
         }?;
         let marker = UvMarker::new(settings);
         result
             .into_iter()
-            .map(|integrands| integrands.map_expressions(|atom| Ok(marker.finish(atom))))
+            .map(|(representation, integrands)| {
+                let started = Instant::now();
+                let integrands = integrands
+                    .into_iter()
+                    .map(|integrands| integrands.map_expressions(|atom| Ok(marker.finish(atom))))
+                    .collect::<Result<_>>()?;
+                stats.representation_mut(representation).total_time += started.elapsed();
+                Ok((representation, integrands))
+            })
             .collect()
     }
 
@@ -83,51 +107,87 @@ fn legacy_parametric_integrands(
     graph: &mut Graph,
     cut_structure: CutStructure,
     vakint: &Vakint,
-    orientation: OrientationProjection<'_>,
+    orientations: &[OrientationProjection<'_>],
     settings: &UVgenerationSettings,
-) -> Result<Vec<ParametricIntegrands>> {
+    stats: &mut GraphGenerationStats,
+) -> Result<BTreeMap<RepresentationMode, Vec<ParametricIntegrands>>> {
     let cut_woods = CutWoods::new(cut_structure, graph, settings);
     let mut cut_forests = cut_woods.unfold(graph);
-    cut_forests.compute(graph, vakint, orientation, settings)?;
-    cut_forests.orientation_parametric_exprs(graph, settings)
+    orientations
+        .iter()
+        .enumerate()
+        .map(|(index, &orientation)| {
+            let started = Instant::now();
+            let shared = cut_forests.compute(graph, vakint, orientation, settings, index == 0)?;
+            let integrands = cut_forests.orientation_parametric_exprs(graph, settings)?;
+            let representation = orientation.cff_options()?.representation;
+            stats.representation_mut(representation).total_time +=
+                started.elapsed().saturating_sub(shared);
+            Ok((representation, integrands))
+        })
+        .collect()
 }
 
 fn hedge_poset_parametric_integrands(
     graph: &mut Graph,
     cut_structure: CutStructure,
     vakint: &Vakint,
-    orientation: OrientationProjection<'_>,
+    orientations: &[OrientationProjection<'_>],
     settings: &UVgenerationSettings,
-) -> Result<Vec<ParametricIntegrands>> {
+    stats: &mut GraphGenerationStats,
+) -> Result<BTreeMap<RepresentationMode, Vec<ParametricIntegrands>>> {
     let wood = HedgePosetWood::new(cut_structure, graph, settings);
     let mut forests = wood.unfold();
-    forests.compute(graph, vakint, orientation, settings)?;
-    forests.orientation_parametric_exprs(graph, settings)
+    orientations
+        .iter()
+        .enumerate()
+        .map(|(index, &orientation)| {
+            let started = Instant::now();
+            let shared = forests.compute(graph, vakint, orientation, settings, index == 0)?;
+            let integrands = forests.orientation_parametric_exprs(graph, settings)?;
+            let representation = orientation.cff_options()?.representation;
+            stats.representation_mut(representation).total_time +=
+                started.elapsed().saturating_sub(shared);
+            Ok((representation, integrands))
+        })
+        .collect()
 }
 
 fn compare_parametric_integrands(
     graph: &mut Graph,
     cut_structure: CutStructure,
     vakint: &Vakint,
-    orientation: OrientationProjection<'_>,
+    orientations: &[OrientationProjection<'_>],
     settings: &UVgenerationSettings,
-) -> Result<Vec<ParametricIntegrands>> {
+    stats: &mut GraphGenerationStats,
+) -> Result<BTreeMap<RepresentationMode, Vec<ParametricIntegrands>>> {
     let mut hedge_graph = graph.clone();
-    let legacy =
-        legacy_parametric_integrands(graph, cut_structure.clone(), vakint, orientation, settings)?;
+    let legacy = legacy_parametric_integrands(
+        graph,
+        cut_structure.clone(),
+        vakint,
+        orientations,
+        settings,
+        stats,
+    )?;
     let hedge = hedge_poset_parametric_integrands(
         &mut hedge_graph,
         cut_structure,
         vakint,
-        orientation,
+        orientations,
         settings,
+        stats,
     )?;
 
-    ParametricIntegrandsComparison {
-        legacy: &legacy,
-        hedge: &hedge,
+    for (representation, legacy) in &legacy {
+        let started = Instant::now();
+        ParametricIntegrandsComparison {
+            legacy,
+            hedge: &hedge[representation],
+        }
+        .compare()?;
+        stats.representation_mut(*representation).total_time += started.elapsed();
     }
-    .compare()?;
     Ok(legacy)
 }
 
@@ -153,6 +213,7 @@ fn legacy_renormalization_part(
         Localizer::new(&cuts, orientation),
         settings,
         &mut super::approx::projected_4d::Local4dProjectionContext::default(),
+        true,
     )?;
 
     forest.renormalization_part_of_ends(graph, settings)

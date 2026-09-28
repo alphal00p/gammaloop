@@ -21,7 +21,10 @@ use symbolica::{
 };
 use typed_index_collections::TiVec;
 
+mod ltd;
+
 use crate::{
+    generation::RepresentationMode,
     graph_io::EnergyEdgeIndexMap,
     surface::{EsurfaceID, HybridSurfaceID, LinearEnergyExpr, SurfaceCache},
     symbols::{
@@ -668,6 +671,24 @@ impl OrientationExpression {
             variant.remap_energy_edge_indices(edge_map);
         }
     }
+
+    /// Identify equal on-shell coordinates without changing the independent
+    /// numerator argument slots or their source-edge provenance.
+    pub fn remap_on_shell_energy_values(&mut self, energy_map: &BTreeMap<usize, usize>) {
+        for energy in self
+            .loop_energy_map
+            .iter_mut()
+            .chain(&mut self.edge_energy_map)
+        {
+            *energy = std::mem::replace(energy, LinearEnergyExpr::zero())
+                .remap_internal_edges(energy_map);
+        }
+        for variant in &mut self.variants {
+            for edge in &mut variant.half_edges {
+                *edge = EdgeIndex(energy_map.get(&edge.0).copied().unwrap_or(edge.0));
+            }
+        }
+    }
 }
 
 fn denominator_tree_from_chains(chains: &[Vec<HybridSurfaceID>]) -> Tree<HybridSurfaceID> {
@@ -995,8 +1016,7 @@ where
     /// Keep only terms supported by at least one physical Cutkosky alternative
     /// immediately before consuming its residue. The physical support test is
     /// representation-neutral; selected routing-sign provenance is consumed
-    /// here because its algebraic sign is already in the prefactor. A future
-    /// LTD implementation keeps any additional signs in its own sidecar.
+    /// here because its algebraic sign is already in the prefactor.
     pub fn restrict_to_cut_alternatives(
         mut self,
         cut_edge_alternatives: &[Vec<EdgeIndex>],
@@ -1016,6 +1036,7 @@ where
     pub fn select_esurface_residue(
         mut self,
         raised_esurface_group: &impl RaisedEsurfaceGroupView,
+        representation: RepresentationMode,
     ) -> Vec<ThreeDExpression<O, E, H>>
     where
         E: Clone,
@@ -1027,9 +1048,11 @@ where
         // denominator carries an overall sign, consuming it moves that sign
         // into the residue prefactor without touching spectator-denominator
         // signs.
-        // Powered-pole generation is completed in this same causal basis.
-        // A future LTD or local-series coordinate remains a separate backend
-        // and must not change physical CFF residue selection here.
+        // CFF powered poles are completed in this same causal basis. LTD
+        // coefficients instead retain their signed generated denominator:
+        // converting that denominator to the canonical surface already put
+        // its sign in the prefactor, including its multiplicity. Removing the
+        // pole must not undo that algebraic conversion a second time.
         self.normalize_single_raising(raised_esurface_group);
 
         let representative_esurface_id = raised_esurface_group.esurface_ids()[0];
@@ -1048,7 +1071,18 @@ where
                         occurrence + numerator_count,
                     );
 
-                    variant.clear_selected_denominator_surface_sign(raised_esurface_group);
+                    match representation {
+                        RepresentationMode::Cff => {
+                            variant.clear_selected_denominator_surface_sign(raised_esurface_group)
+                        }
+                        RepresentationMode::Ltd => {
+                            for esurface_id in raised_esurface_group.esurface_ids() {
+                                variant
+                                    .denominator_surface_signs
+                                    .remove(&HybridSurfaceID::Esurface(*esurface_id));
+                            }
+                        }
+                    }
 
                     variant
                         .denominator
@@ -1294,6 +1328,67 @@ mod tests {
             uniform_scale_power: 0,
             numerator_surfaces: Vec::new(),
             denominator: Tree::from_root(HybridSurfaceID::Unit),
+        }
+    }
+
+    #[test]
+    fn ltd_pole_selection_preserves_signed_powers_and_spectator_factors() {
+        use crate::surface::HsurfaceID;
+
+        let selected = HybridSurfaceID::Esurface(EsurfaceID(0));
+        let spectator = HybridSurfaceID::Hsurface(HsurfaceID(0));
+        for order in 1..=3 {
+            for numerator_power in 0..=1 {
+                // The source is (-eta)^numerator_power /
+                // [(-eta)^(order + numerator_power) * (-H)].
+                // Its Laurent coefficient is (-1)^(order + 1)/H.
+                let mut variant = cut_variant(&[0, 1], &[]);
+                variant.prefactor = Rational::from(if order % 2 == 0 { -1 } else { 1 });
+                variant.denominator = Tree::from_root(spectator);
+                let mut parent = NodeId::root();
+                for index in 0..order + numerator_power {
+                    variant.denominator.insert_node(parent, selected);
+                    parent = NodeId(index + 1);
+                }
+                variant.numerator_surfaces = vec![selected; numerator_power];
+                variant.denominator_surface_signs.insert(spectator, -1);
+                if (order + numerator_power) % 2 == 1 {
+                    variant.denominator_surface_signs.insert(selected, -1);
+                }
+                let mut expression = ThreeDExpression::<OrientationID>::new_empty();
+                expression.orientations.push(OrientationExpression {
+                    data: OrientationData::new(EdgeVec::from_iter([Orientation::Default])),
+                    loop_energy_map: Vec::new(),
+                    edge_energy_map: Vec::new(),
+                    variants: vec![variant],
+                });
+                let residues = expression.select_esurface_residue(
+                    &RaisedEsurfaceGroup {
+                        esurface_ids: vec![EsurfaceID(0)],
+                        max_occurence: order,
+                    },
+                    RepresentationMode::Ltd,
+                );
+                assert!(
+                    residues[..order - 1]
+                        .iter()
+                        .all(|residue| residue.orientations[OrientationID(0)].variants.is_empty())
+                );
+                let [coefficient] = residues[order - 1].orientations[OrientationID(0)]
+                    .variants
+                    .as_slice()
+                else {
+                    panic!("the selected power must have exactly one Laurent coefficient");
+                };
+                let expected =
+                    Atom::num(if order % 2 == 0 { -1 } else { 1 }) / Atom::from(spectator);
+                assert_eq!(coefficient.to_atom(), expected);
+                assert_eq!(
+                    coefficient.denominator_surface_signs,
+                    BTreeMap::from([(spectator, -1)]),
+                    "pole selection must retain spectator sign provenance"
+                );
+            }
         }
     }
 

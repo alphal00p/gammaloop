@@ -42,7 +42,11 @@ anchor = "load_state_manifest(&save_path)?"
 # ownership are documented in architecture-current.typ.
 # Reviewed 2026-09-25: sampling files now share process::sampling ownership;
 # only module/import paths changed, with numerical and persistence contracts unchanged.
-digest = "c2c7f88951d6467295977b12f17861b2e866a42e"
+# Reviewed 2026-09-27: State v11 persists ordered CFF/LTD payloads and retained
+# numerator programs; regeneration and semantic parameter ordering are documented.
+# Reviewed 2026-09-27: Persisted generation summaries retain ordered representation
+# timings and shared work; progress labels no longer imply CFF-only generation.
+digest = "8c134aff3180b8dadd1fb324b408902ebb6694e1"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -68,7 +72,14 @@ anchor = "pub struct EvaluationResult {"
 # cross-section phase checks retain their documented meaning.
 # Reviewed 2026-09-25: sampling files now share process::sampling ownership;
 # only module/import paths changed, with numerical and persistence contracts unchanged.
-digest = "c8f88a5d709900a7f5c45dd5061e27be80238904"
+# Reviewed 2026-09-27: Stability results retain the resolved representation
+# beside precision and timing; accepted-attempt event ownership is unchanged.
+# Reviewed 2026-09-27: Native narrowing jointly bounds original components when
+# a complex normalization mixes phases, preserving meaningful completed weights.
+# Reviewed 2026-09-27: Full three_dimensional_representations and
+# three_dimensional_representation names now identify generation settings,
+# stability choices and diagnostics in configuration, Python and the manual.
+digest = "647490b8f2fb2d229a1c332b2e42a4611319b7e8"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/process/mod.rs"
@@ -89,7 +100,18 @@ anchor = "pub fn warm_up(&mut self, model"
 # warm-up and numerical preparation retain their existing ownership.
 # Reviewed 2026-09-25: sampling files now share process::sampling ownership;
 # only module/import paths changed, with numerical and persistence contracts unchanged.
-digest = "175b2d6e4d117b737887425692af2a433ff748b5"
+# Reviewed 2026-09-27: Ordered representation dispatch, same-precision retries,
+# forced Arb selection, complete-sum restrictions and shared sampling are documented.
+# The note compares complete physical higher-pole contributions, while retaining
+# separate simple-pole, cut, threshold, channel and observable identities.
+# Reviewed 2026-09-27: Compilation returns per-representation timing reports;
+# numerical warm-up and runtime dispatch are unchanged.
+# No architecture impact 2026-09-27: native narrowing regressions cover coherent
+# complex promotion and safe underflow; warm-up and dispatch remain unchanged.
+# Reviewed 2026-09-27: Full three_dimensional_representations and
+# three_dimensional_representation names now identify generation settings,
+# stability choices and diagnostics in configuration, Python and the manual.
+digest = "b2d9d7cc295e852bc11ab634ec0018efd7890d38"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -123,7 +145,16 @@ anchor = "struct GammaLoopAPI {"
 # absolute-result classes; runtime Python registration and behavior are unchanged.
 # Reviewed 2026-09-23: Getter prose distinguishes physical contributions from
 # outer-grid weights; the typed integration entrypoint remains disabled.
-digest = "c64cf7ed332416136a0a570965ea8a77c099eac7"
+# Reviewed 2026-09-27: Python settings snapshots preserve representation order,
+# and stability results expose the evaluated mode through the shared runtime.
+# No architecture impact 2026-09-27: the overlap-objective regression exercises
+# the existing settings snapshot and TOML conversion without a new binding path.
+# Reviewed 2026-09-27: Structured generated-integrand metadata exposes stored
+# representation order, native map sizes and complete-sum execution layout.
+# Reviewed 2026-09-27: Full three_dimensional_representations and
+# three_dimensional_representation names now identify generation settings,
+# stability choices and diagnostics in configuration, Python and the manual.
+digest = "6ba66f9ee6405b34d5de60a2f249e61d17bbe08b"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
@@ -190,7 +221,9 @@ anchor = "mod render_ratatui;"
 # status flow and test assertions are unchanged.
 # Reviewed 2026-09-17: Documented stability medians, interrupted diagnostic previews, version-checked resume, and read-only output paths; completed-iteration checkpoint ownership is preserved.
 # Reviewed 2026-09-23: The dashboard documents signed/absolute view ownership, unchanged sampling/RNG behavior, and version-3 completed-iteration resume.
-digest = "99898153512e499c10534bb5bd31e2e42b63c662"
+# Reviewed 2026-09-27: the dashboard note distinguishes ordered precision/representation
+# attempts from precision-wide histograms. Renderer and terminal ownership are unchanged.
+digest = "1d4230b3bc2bb5ec2689178e9d7609c885783cbb"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -214,7 +247,14 @@ anchor = "impl UVOrchestrator {"
 # Reviewed 2026-09-14: comparison propagates canonicalization errors;
 # backend selection, returned legacy result, and UV invariants are unchanged.
 # Reviewed 2026-09-17: Documented factorized numerator mapping, consumed measures, integrated mass ownership, and direct versus projected UV composition.
-digest = "584255e4a7b014c585988265f946c730605e861a"
+# Reviewed 2026-09-27: Both forest backends reuse local 4D Taylor/Vakint results across
+# requested representations, then extract each mode's cut projection independently.
+# Documented cache/assignment ownership, LTD's projected-4D requirement and local
+# equivalence of complete physical higher-pole contributions.
+# No UV architecture impact 2026-09-27: Timing instrumentation separates shared
+# four-dimensional work from representation projections; forest ownership and
+# numerical expressions are unchanged.
+digest = "96ebb6a63d2c8c5dbdf3165d6441486069749a42"
 
 [[section.note]]
 id = "spenso-parsing-flow"

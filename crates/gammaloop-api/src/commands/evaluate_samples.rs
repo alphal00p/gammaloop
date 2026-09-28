@@ -272,8 +272,8 @@ impl<'a> EvaluateSamplesPrecise<'a> {
                         || orientations.iter().any(Option::is_some))
                 {
                     return Err(eyre!(
-                    "Graph and orientation selection are only supported in momentum-space evaluation."
-                ));
+                        "Graph and orientation selection are only supported in momentum-space evaluation."
+                    ));
                 }
 
                 if let Some(discrete_dims) = &self.discrete_dims {

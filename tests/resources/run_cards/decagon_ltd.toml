@@ -1,0 +1,106 @@
+# https://arxiv.org/pdf/1906.06138, Eq. (1), Table I and Appendix B.1.
+# Unit scalar numerator: integral d^4k/(2pi)^4 product_i 1/(q_i^2-m_i^2+i0).
+# Published reference: +i * 4.31638e-7. No UV or E-surface subtraction is needed.
+commands = []
+
+[cli_settings.state]
+folder = "./tests/artifacts/decagon_ltd"
+name = "decagon_ltd"
+
+[[command_blocks]]
+name = "generate"
+commands = [
+    "import model scalars-default.json",
+    "remove processes",
+    "import graphs tests/resources/graphs/decagon_ltd.dot -p decagon -i scalar",
+    "generate existing -p decagon -i scalar",
+    "save state -o",
+]
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+    "integrate -p decagon -i scalar --n-cores 1 --restart",
+]
+
+[cli_settings.global.generation]
+"three_dimensional_representations" = ["ltd"]
+
+[cli_settings.global.generation.evaluator]
+compile = false
+store_atom = true
+summed = false
+summed_function_map = true
+iterative_orientation_optimization = false
+
+[cli_settings.global.generation.uv]
+local_uv_cts_from_expanded_4d_integrands = true
+subtract_uv = false
+generate_integrated = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+integral_unit = "none"
+disable_flux_factor = true
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+# Center each channel on a propagator momentum. This resolves the narrow
+# nearly-collinear peak without sampling the individual LTD residues.
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 0.1
+
+# Dual H-surface cancellation becomes severe with many nearly collinear legs.
+# Use double precision with quad and arbitrary-precision LTD rescue; rotating
+# the complete sum detects precision loss without introducing a CFF evaluator.
+[default_runtime_settings.stability]
+rotation_axis = [{ type = "euler_angles", alpha = 0.1, beta = 0.2, gamma = 0.3 }]
+levels = [
+    { precision = "Double", "three_dimensional_representation" = "ltd", required_precision_for_re = 1e-7, required_precision_for_im = 1e-7, escalate_for_large_weight_threshold = -1.0 },
+    { precision = "Quad", "three_dimensional_representation" = "ltd", required_precision_for_re = 1e-7, required_precision_for_im = 1e-7, escalate_for_large_weight_threshold = -1.0 },
+    { precision = "Arb", "three_dimensional_representation" = "ltd", required_precision_for_re = 1e-7, required_precision_for_im = 1e-7, escalate_for_large_weight_threshold = -1.0 },
+]
+
+[default_runtime_settings.kinematics]
+# Sampling scale; the spacelike benchmark momenta below define the kinematics.
+e_cm = 5.0
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+[default_runtime_settings.kinematics.externals.data]
+# Momenta p_1,...,p_9 from Appendix B.1, in GeV, all incoming.
+# Momentum conservation fixes p_10; this removes rounding in its printed value.
+momenta = [
+    [0.499974999375, 0, 0, 2.5],
+    [-0.499974999375, 0, 0, 2.5],
+    [0.0531926942124, 0.007630500824806, -0.04191452656443, -0.3416692405504],
+    [-0.007418366402852, 0.04793330102618, 0.1092200259939, -0.5980519957635],
+    [-0.01031283270712, 0.05274052562103, 0.02694089739963, -0.3016094127313],
+    [0.08744382631133, -0.1439660680884, -0.2900615690572, -1.677299655434],
+    [-0.03863445525253, 0.0250303781488, -0.001989872023809, -0.2317380284719],
+    [-0.1638609443119, 0.02388016861962, 0.04606322903831, -0.8597600332874],
+    [0.0633960908573, -0.05151857367263, 0.07732066709885, -0.5629545569995],
+    "dependent",
+]
+helicities = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+[default_runtime_settings.integrator]
+integrated_phase = "imag"
+n_start = 5000
+n_increase = 5000
+n_max = 1000000
+min_samples_for_update = 1000
+seed = 190606138
+target_relative_accuracy = 0.005

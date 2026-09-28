@@ -115,7 +115,11 @@ connected workflows rather than forty unrelated entry points:
 - *Generated-integrand structure:* start at
   #link("reference/python/gammaloop-python/IntegrandInfo/")[`IntegrandInfo`], then follow its
   graph groups into graph, orientation, loop-momentum-basis, cut, and threshold records. These
-  objects describe compiled structure; they do not mutate it.
+  objects describe compiled structure; they do not mutate it. `generated_representations` keeps
+  the stored generation order. Each graph's `native_residue_counts` records the native map size
+  for those modes; a group's `complete_residue_sum` distinguishes a full physical sum from
+  individual orientation execution. The `orientations` list describes runtime slots, which can
+  contain one complete-sum slot even when the native LTD map has many keys.
 - *Events and observables:* evaluation records lead to
   #link("reference/python/gammaloop-python/EventGroup/")[`EventGroup`] and
   #link("reference/python/gammaloop-python/Event/")[`Event`]. For caller-owned aggregation,
@@ -259,7 +263,11 @@ precision. Setting `use_arb_prec=true` forces arbitrary-precision (Arb) internal
 using the configured Arb stability level when available and a default Arb level otherwise.
 The `-f` CLI shorthand has the same behavior. CLI output, Python numeric fields,
 and ordinary Rust `EvaluateSamples` results remain `f64`. Only Rust `EvaluateSamplesPrecise`
-retains the numeric type used by the selected stability level.
+retains the numeric type used by the selected stability level. Each stability level can also set
+`three_dimensional_representation` to a generated `cff` or `ltd` representation; omission selects the first entry of the
+generation-time `three_dimensional_representations` list. Stability diagnostics report both precision and representation.
+When forcing Arb without a configured Arb level, the fallback inherits the first stability
+level's representation choice.
 
 #link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-evaluate-sample-method")[`evaluate_sample`]
 returns one sample result and the observable bundle for that one-sample batch.

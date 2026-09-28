@@ -2270,6 +2270,7 @@ dependencies = [
  "statrs",
  "symbolica",
  "symbolica-utils",
+ "symjit",
  "tabled",
  "thiserror 2.0.18",
  "three-dimensional-reps",
@@ -6374,9 +6375,9 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.25.6"
+version = "2.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97114f6aba423d7a6a1336992ce0e5140e56a5176cce1a72ab252b5560ede2fe"
+checksum = "0694c799bdf19b1fd0ffa3c84c325c89d93970431c74630b7c238320c7bb8ad4"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
@@ -6736,9 +6737,12 @@ version = "0.1.0"
 dependencies = [
  "bincode 2.0.1",
  "bincode-trait-derive",
+ "clap",
  "itertools 0.14.0",
  "linnet",
  "nu-ansi-term",
+ "pyo3",
+ "schemars",
  "serde",
  "serde_json",
  "symbolica",

@@ -767,7 +767,11 @@ fn amplitude_standalone_export_reloads_and_evaluates() -> Result<()> {
     let input = (0..graph_term.param_builder_params.len())
         .map(|index| Complex::new(0.625 + index as f64 * 0.173, 0.031 + index as f64 * 0.007))
         .collect::<Vec<_>>();
-    let (_, _, evaluator, result) = &mut graph_term.original_integrand.parametric;
+    let (_, _, evaluator, result) = &mut graph_term
+        .original_integrand
+        .get_mut("cff")
+        .ok_or_else(|| eyre!("standalone amplitude archive has no CFF evaluator"))?
+        .parametric;
     evaluator.evaluate(&input, result);
     assert!(!result.is_empty());
     assert!(
@@ -832,6 +836,7 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
         .ok_or_else(|| eyre!("standalone cross-section archive has no graph terms"))?;
     let cut_group_integrands = graph_term
         .get("cut_group_integrands")
+        .and_then(|representations| representations.get("cff"))
         .and_then(serde_json::Value::as_array)
         .ok_or_else(|| eyre!("standalone graph term has no cut-group integrands"))?;
     assert!(!cut_group_integrands.is_empty());
@@ -857,7 +862,8 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
             .collect::<Vec<_>>();
         let stack = graph_term
             .cut_group_integrands
-            .first_mut()
+            .get_mut("cff")
+            .and_then(|cuts| cuts.first_mut())
             .and_then(|integrands| integrands.values_mut().next())
             .ok_or_else(|| {
                 eyre!("{format} standalone graph term has no indexed cut-group evaluator")

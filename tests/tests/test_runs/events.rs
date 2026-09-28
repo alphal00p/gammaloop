@@ -5,7 +5,7 @@ use super::*;
 #[serial]
 fn amplitude_events_surface_threshold_counterterms_and_reproduce_weight() -> Result<()> {
     let test_name = "amplitude_events_surface_threshold_counterterms";
-    let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name)?;
+    let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name, None)?;
     let process_ref = ProcessRef::Unqualified("gg_hhh".to_string());
     let integrand_name = "1L".to_string();
     let (process_id, resolved_integrand_name) = cli
@@ -127,7 +127,7 @@ fn amplitude_events_surface_threshold_counterterms_and_reproduce_weight() -> Res
 #[serial]
 fn amplitude_threshold_counterterms_follow_lmb_channel_normalization() -> Result<()> {
     let test_name = "amplitude_threshold_counterterms_follow_lmb_channel_normalization";
-    let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name)?;
+    let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name, None)?;
     cli.run_command(
         "set process kv general.generate_events=true general.store_additional_weights_in_event=true stability.rotation_axis=[]",
     )?;
@@ -384,7 +384,7 @@ lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 #[serial]
 fn amplitude_selectors_generate_internal_events_without_surfacing_them() -> Result<()> {
     let test_name = "amplitude_selectors_generate_internal_events_without_surfacing_them";
-    let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name)?;
+    let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name, None)?;
     cli.run_command(
         r#"set process -p gg_hhh -i 1L kv general.generate_events=false general.store_additional_weights_in_event=false"#,
     )?;
@@ -451,7 +451,7 @@ max = 4
 #[serial]
 fn amplitude_observables_accumulate_without_returning_events() -> Result<()> {
     let test_name = "amplitude_observables_accumulate_without_returning_events";
-    let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name)?;
+    let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name, None)?;
     cli.run_command(
         r#"set process -p gg_hhh -i 1L kv general.generate_events=false general.store_additional_weights_in_event=false"#,
     )?;
@@ -545,6 +545,102 @@ domain = { type = "explicit_range", min = 0, max = 64 }
         assert_eq!(histogram.sample_count, 1);
     }
 
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn gg_hhh_ltd_matches_cff_threshold_weights_in_each_lmb_channel() -> Result<()> {
+    use gammalooprs::settings::global::{GenerationSettings, RepresentationMode};
+
+    let mut generation = GenerationSettings {
+        three_dimensional_representations: vec![RepresentationMode::Cff, RepresentationMode::Ltd],
+        explicit_orientation_sum_only: true,
+        ..Default::default()
+    };
+    generation.uv.local_uv_cts_from_expanded_4d_integrands = true;
+    let mut cli =
+        setup_gg_hhh_threshold_amplitude_cli("gg_hhh_ltd_threshold_lmb_parity", Some(generation))?;
+    let info = cli.state.get_integrand_info(None, None)?;
+    let group = info
+        .graph_groups
+        .iter()
+        .find(|group| {
+            group.loop_momentum_bases.len() >= 2 && !group.threshold_esurface_ids.is_empty()
+        })
+        .expect("gg->hhh parity fixture needs thresholds and two LMB channels");
+    let group_id = group.group_id;
+    let graph_name = &group
+        .graphs
+        .iter()
+        .find(|graph| graph.is_master)
+        .unwrap()
+        .name;
+    let bases = group
+        .loop_momentum_bases
+        .iter()
+        .take(2)
+        .map(|basis| basis.basis_id)
+        .collect_vec();
+    let mut saw_nonzero_threshold = false;
+    for channel_weight in ["ose", "inverse_jacobian"] {
+        cli.run_command(&format!(
+            r#"set process -p gg_hhh -i 1L string '
+[sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+sampling_multichanneling = true
+sampling_channels = "monte_carlo"
+sampling_channel_weight = "{channel_weight}"
+lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
+'"#,
+            bases[0], bases[1]
+        ))?;
+        for channel_id in 0..2 {
+            for point in [[0.23, 0.41, 0.67], [0.37, 0.29, 0.53]] {
+                let mut results = Vec::new();
+                for representation in ["cff", "ltd"] {
+                    cli.run_command(&format!(r#"set process -p gg_hhh -i 1L string '
+[stability]
+rotation_axis = []
+levels = [{{ precision = "Quad", three_dimensional_representation = "{representation}", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 }}]
+'"#))?;
+                    results.push(evaluate_xspace_process_with_events(
+                        &mut cli,
+                        "gg_hhh",
+                        "1L",
+                        &point,
+                        &[group_id, channel_id],
+                    )?);
+                }
+                for event in results[0]
+                    .sample
+                    .evaluation
+                    .event_groups
+                    .iter()
+                    .flat_map(|group| group.iter())
+                {
+                    saw_nonzero_threshold |= event.additional_weights.weights.iter().any(|(key, value)| {
+                        matches!(key, gammalooprs::observables::events::AdditionalWeightKey::AmplitudeThresholdCounterterm { .. })
+                            && (value.re.0 != 0.0 || value.im.0 != 0.0)
+                    });
+                }
+                assert_evaluation_outputs_match(
+                    &results[1].sample.evaluation,
+                    &results[0].sample.evaluation,
+                    &format!(
+                        "gg->hhh LTD/CFF {channel_weight} LMB channel {channel_id} at {point:?}"
+                    ),
+                    EventWeightComparison::PhysicalResidues,
+                );
+            }
+        }
+    }
+    assert!(
+        saw_nonzero_threshold,
+        "gg->hhh parity must exercise nonzero threshold weights"
+    );
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }

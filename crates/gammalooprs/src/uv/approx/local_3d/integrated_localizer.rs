@@ -100,17 +100,13 @@ impl Localizer<'_> {
                 active_ct
             });
         }
-        let frozen_integrands = self
-            .cutset
-            .residue_selector
-            .generate_allowed_keys()
-            .into_iter()
-            .map(|index| (index, localizing_integrand.clone()))
-            .collect();
-
-        Ok(FrozenActiveCt {
-            active,
-            frozen_integrands,
-        })
+        // A localized LTD cograph can have higher residue orders than its
+        // parent's cut selector. The smooth localization factor multiplies
+        // every order of this actual source, with its numerator maps intact.
+        let mut localized = FrozenActiveCt::from(active);
+        localized.frozen_integrands = localized
+            .frozen_integrands
+            .map(|_| localizing_integrand.clone());
+        Ok(localized)
     }
 }

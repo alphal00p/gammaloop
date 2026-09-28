@@ -580,7 +580,7 @@ fn approach_momentum_space_reports_incomplete_triplet_cleanly() -> Result<()> {
 #[serial]
 fn approach_amplitude_json_has_synthetic_cut_and_threshold_weights() -> Result<()> {
     let test_name = "gg_hhh_approach_amplitude";
-    let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name)?;
+    let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name, None)?;
     let point = vec![0.23, 0.41, 0.67];
     let axis = first_axis(point.len(), 0.01);
     let output_path = get_tests_workspace_path()

@@ -3,7 +3,7 @@ name = "three-dimensional-reps"
 version = "0.1.0"
 edition = "2024"
 
-description = "Generation of generalized CFF three-dimensional loop-energy representations."
+description = "Generation of CFF and LTD three-dimensional loop-energy representations."
 license = "MIT OR Apache-2.0"
 
 [lib]
@@ -13,9 +13,12 @@ bench = false
 [dependencies]
 bincode = { workspace = true, features = ["serde"] }
 bincode-trait-derive = { workspace = true }
+clap = { workspace = true, features = ["derive"], optional = true }
 itertools = { workspace = true }
 linnet = { workspace = true, features = ["bincode", "serde", "symbolica"] }
 nu-ansi-term = { workspace = true, optional = true }
+pyo3 = { workspace = true, optional = true }
+schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, optional = true }
 symbolica = { workspace = true, features = ["bincode", "serde"] }
@@ -32,3 +35,5 @@ default = ["serde"]
 serde = []
 display = ["dep:tabled", "dep:nu-ansi-term"]
 eval = ["dep:serde_json"]
+python_api = ["dep:pyo3"]
+cli = ["dep:clap"]

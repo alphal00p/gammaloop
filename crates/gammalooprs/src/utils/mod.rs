@@ -2862,7 +2862,7 @@ impl<T: FloatLike> F<T> {
     pub(crate) fn square(&self) -> Self {
         F(self.0.square())
     }
-    pub(crate) fn powi(&self, n: i32) -> Self {
+    pub fn powi(&self, n: i32) -> Self {
         F(self.0.powi(n))
     }
     pub(crate) fn epsilon(&self) -> Self {
