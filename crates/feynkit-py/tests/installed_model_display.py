@@ -2,6 +2,7 @@
 
 import html
 import json
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -58,6 +59,55 @@ assert "prefers-color-scheme:dark" in svg
 assert "vertex_allow=[V_98]" in html.unescape(process._repr_html_())
 assert ET.fromstring(process._repr_svg_()).tag == root.tag
 assert ET.fromstring(process.render(config=linnet.RenderConfig())).tag == root.tag
+
+# A large process blob must leave four visible legs, with incoming legs left of
+# outgoing ones, without inheriting the much wider amplitude centroid target.
+width, height = map(float, root.attrib["viewBox"].split()[2:])
+assert width / height < 1.5
+carriers = [
+    path
+    for path in root.iter("{http://www.w3.org/2000/svg}path")
+    if path.get("fill") == "none"
+    and path.get("stroke-linecap") == "round"
+    and not path.get("d", "").rstrip().lower().endswith("z")
+]
+assert len(carriers) == 4
+edge_x = [
+    float(re.search(r"translate\(([-\d.]+)", p.attrib["transform"])[1])
+    for p in carriers
+]
+assert max(edge_x[:2]) < min(edge_x[2:])
+
+# Radius changes retain visible external legs, and explicit layout settings win.
+for config in (
+    linnet.RenderConfig(drawing=linnet.DrawOptions(node_radius=5)),
+    linnet.RenderConfig(
+        drawing=linnet.DrawOptions(node_radius=linnet.AUTO, node_min_radius=5)
+    ),
+    linnet.RenderConfig(layouts=linnet.LayoutOptions(length_scale=0.3)),
+):
+    larger = ET.fromstring(process.render(config=config))
+    assert float(larger.attrib["viewBox"].split()[2]) > width
+    assert (
+        sum(
+            path.get("fill") == "none"
+            and path.get("stroke-linecap") == "round"
+            and not path.get("d", "").rstrip().lower().endswith("z")
+            and any(
+                abs(float(n)) > 1e-6
+                for n in re.findall(r"-?\d+(?:\.\d+)?", path.attrib["d"])
+            )
+            for path in larger.iter("{http://www.w3.org/2000/svg}path")
+        )
+        == 4
+    )
+
+# A single flow has no preferred side: its external legs spread around the blob.
+for incoming, outgoing in ((["a"] * 4, []), ([], ["a"] * 4)):
+    radial = ET.fromstring(model.process(incoming, outgoing).render())
+    radial_width, radial_height = map(float, radial.attrib["viewBox"].split()[2:])
+    assert 0.7 < radial_width / radial_height < 1.5
+
 for other in (
     model.process(["H"], ["b", "b~"]),
     model.process([], []),
@@ -74,9 +124,7 @@ scalar = hep.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 definition = json.loads(scalar.to_json())
 definition["vertex_rules"][0]["name"] = 'V_<tag>&"quoted"'
 definition["functions"] = [{"name": "square", "arguments": ["z"], "expression": "z^2"}]
-definition["form_factors"] = [
-    {"name": "FF", "type": "scalar", "value": "1/(1+z^2)"}
-]
+definition["form_factors"] = [{"name": "FF", "type": "scalar", "value": "1/(1+z^2)"}]
 escaped = hep.Model.from_json(json.dumps(definition))
 for member in (escaped.functions[0], escaped.form_factors[0]):
     assert member.name in member._repr_html_()

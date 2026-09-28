@@ -3152,6 +3152,22 @@ class TestTypedTypstSurface(unittest.TestCase):
 
 
 class TestRendering(unittest.TestCase):
+    def test_single_ended_outset_reaches_large_node_boundary(self):
+        prepared = lp.PreparedRender.from_sources(
+            {
+                "main.typ": b"""
+#import "crates/kurvst/typst/src/lib.typ": outset-point
+#assert.eq(outset-point((0, 0), (4, 0), distance: 3), (3, 0))
+#assert.eq(outset-point((0, 0), (4, 0), distance: 5), (4, 0))
+#assert.eq(outset-point((2, 1), (2, 5), distance: 3), (2, 4))
+#assert.eq(outset-point((2, 1), (2, 1), distance: 3), (2, 1))
+#assert.eq(outset-point((0, 0), (4, 0)), (0, 0))
+[ok]
+"""
+            }
+        )
+        self.assertIn("<svg", prepared.to_svg())
+
     def test_subgraph_rendering_highlights_exact_halves_without_mutating_owner(self):
         graph, _, _, _ = sample_graph(codec=lp.DotCodec.topology())
         selected = graph.subgraph(half_edges=[graph.edge("propagator").source.index])
