@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "https://inspirehep.net",
-  "updated": "2026-09-26",
+  "updated": "2026-09-28",
   "api_url": "https://inspirehep.net/api/literature?sort=mostrecent&q=%28a+V.Hirschi.1+or+a+M.Fraaije.1+or+a+L.Huber.1+or+a+B.Ruijl.1+or+a+Kaapo.Seppanen.1+or+a+Zeno.Capatti.1%29",
   "authors": [
     {
@@ -211,7 +211,7 @@
       "venue": "JHEP 01 (2026) 113",
       "doi": "10.1007/JHEP01(2026)113",
       "arxiv": "2507.07014",
-      "citations": 24,
+      "citations": 25,
       "types": [
         "article"
       ],
@@ -2031,7 +2031,7 @@
       "venue": "CERN Yellow Rep.Monogr. 7 (2019) 221",
       "doi": "10.23731/CYRM-2019-007.221",
       "arxiv": "1902.00134",
-      "citations": 1029,
+      "citations": 1031,
       "types": [
         "book chapter"
       ],
@@ -3066,7 +3066,7 @@
       "venue": "CERN Yellow Rep.Monogr. 2 (2017) 1",
       "doi": "10.23731/CYRM-2017-002",
       "arxiv": "1610.07922",
-      "citations": 2919,
+      "citations": 2920,
       "types": [
         "article"
       ],
@@ -3746,7 +3746,7 @@
       "venue": "JHEP 07 (2014) 079",
       "doi": "10.1007/JHEP07(2014)079",
       "arxiv": "1405.0301",
-      "citations": 10836,
+      "citations": 10839,
       "types": [
         "article"
       ],
