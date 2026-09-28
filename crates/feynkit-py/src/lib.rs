@@ -45,6 +45,8 @@ pub use tensor::PyTensorReducer;
 #[cfg(feature = "ufo")]
 pub use ufo::{PyLoadedModel, PyUfoLoadDiagnostics, PyUfoLoader};
 
+mod symbols;
+
 pub struct FeynkitModule;
 
 impl SymbolicaCommunityModule for FeynkitModule {
@@ -63,6 +65,7 @@ impl SymbolicaCommunityModule for FeynkitModule {
 
 /// Register FeynKit classes in an existing Symbolica community module.
 pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<symbols::PySymbols>()?;
     error::register(module)?;
     amplitude::register(module)?;
     model::register(module)?;

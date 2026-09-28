@@ -7,7 +7,7 @@ use std::{
 use pyo3::{
     exceptions::{PyImportError, PyRuntimeError, PyValueError},
     prelude::*,
-    types::PyDict,
+    types::{PyBytes, PyDict},
 };
 use spenso::{
     algebra::complex::RealOrComplexRef,
@@ -1094,6 +1094,37 @@ fn notebook_html_fragment(document: &str) -> PyResult<String> {
     ))
 }
 
+/// Return a style element containing the bundled math font for offline HTML.
+///
+/// Normal expression HTML references a pinned CDN font, preferring a locally
+/// installed STIX Two Math. Display this setup once before your expressions to
+/// avoid font downloads, or insert it once into an exported HTML document's
+/// head. Keep the setup output when saving a notebook. It applies to expressions
+/// in the same HTML document; isolated output frames need their own setup.
+/// The returned HTML includes the font's redistribution license.
+///
+/// Examples
+/// --------
+/// >>> from IPython.display import HTML, display
+/// >>> from symbolica.community import spenso
+/// >>> display(HTML(spenso.load_math_font()))
+#[cfg_attr(
+    feature = "python_stubgen",
+    gen_stub_pyfunction(module = "symbolica.community.spenso")
+)]
+#[pyfunction]
+fn load_math_font(py: Python<'_>) -> PyResult<String> {
+    let font = PyBytes::new(py, include_bytes!("../typst/STIXTwoMath-Regular.woff2"));
+    let encoded: String = PyModule::import(py, "base64")?
+        .call_method1("b64encode", (font,))?
+        .call_method1("decode", ("ascii",))?
+        .extract()?;
+    let license = include_str!("../typst/STIX-Two-OFL.txt");
+    Ok(format!(
+        "<style>/* {license} */\n@font-face{{font-family:\"Spenso Offline Math\";src:url(\"data:font/woff2;base64,{encoded}\") format(\"woff2\");font-display:swap}}</style>"
+    ))
+}
+
 pub(crate) fn atom_to_svg(
     py: Python<'_>,
     atom: &Atom,
@@ -2172,6 +2203,7 @@ fn formatted(
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DisplaySettings>()?;
+    m.add_function(wrap_pyfunction!(load_math_font, m)?)?;
     m.add_function(wrap_pyfunction!(format_tensor, m)?)?;
     m.add_function(wrap_pyfunction!(to_typst, m)?)?;
     m.add_function(wrap_pyfunction!(to_html, m)?)?;

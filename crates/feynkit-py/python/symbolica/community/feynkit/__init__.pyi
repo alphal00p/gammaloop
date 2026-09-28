@@ -1207,6 +1207,19 @@ class Coupling:
     >>> formula = coupling.expression
     """
     @property
+    def symbol(self) -> Expression:
+        r"""
+        Return the symbolic reference used by this model's expressions.
+        This preserves the parameter or function identity without substituting
+        its defining expression or numerical value.
+
+        Examples
+        --------
+        >>> from symbolica.community import hep
+        >>> model = hep.Model.standard_model()
+        >>> reference = model.couplings[0].symbol
+        """
+    @property
     def name(self) -> builtins.str:
         r"""
         Return the coupling name.
@@ -6686,6 +6699,23 @@ class ModelFunction:
     >>> functions = {function.name: function.arguments for function in model.functions}
     """
     @property
+    def symbol(self) -> Expression:
+        r"""
+        Return the symbolic reference used by this model's expressions.
+        This preserves the parameter or function identity without substituting
+        its defining expression or numerical value.
+
+        Examples
+        --------
+        >>> from symbolica.community import hep
+        >>> model = hep.Model.standard_model()
+        >>> import json
+        >>> definition = json.loads(model.to_json())
+        >>> definition["functions"] = [{"name": "square", "arguments": ["x"], "expression": "x^2"}]
+        >>> custom = hep.Model.from_json(json.dumps(definition))
+        >>> reference = custom.function("square").symbol
+        """
+    @property
     def name(self) -> builtins.str:
         r"""
         Return the function name.
@@ -6941,6 +6971,19 @@ class Parameter:
     >>> mass = model.parameter("MM")
     >>> assert mass.nature == hep.ParameterNature.EXTERNAL
     """
+    @property
+    def symbol(self) -> Expression:
+        r"""
+        Return the symbolic reference used by this model's expressions.
+        This preserves the parameter or function identity without substituting
+        its defining expression or numerical value.
+
+        Examples
+        --------
+        >>> from symbolica.community import hep
+        >>> model = hep.Model.standard_model()
+        >>> reference = model.parameter("ee").symbol
+        """
     @property
     def name(self) -> builtins.str:
         r"""
@@ -10194,3 +10237,329 @@ class ParameterType(enum.Enum):
     """
     REAL = ...
     COMPLEX = ...
+
+
+@typing.final
+class Symbols:
+    r"""
+    Canonical expression heads for diagram and tensor algebra.
+
+    Use these references for pattern matching and momentum construction without
+    depending on internal namespaces. Model parameters and couplings belong to
+    their model; obtain those through ``model.parameter(name).symbol`` or
+    ``model.coupling(name).symbol`` instead.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> P = hep.Symbols.external_momentum
+    >>> incoming = [P(0), P(1)]
+    >>> mass = hep.Model.standard_model().particle("e-").mass_expression
+    """
+    external_momentum: typing.ClassVar[Expression]
+    r"""
+    External momentum family indexed by physical leg.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.external_momentum
+    """
+    loop_momentum: typing.ClassVar[Expression]
+    r"""
+    Loop momentum family indexed by loop basis position.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.loop_momentum
+    """
+    edge_momentum: typing.ClassVar[Expression]
+    r"""
+    Momentum family indexed by graph edge.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.edge_momentum
+    """
+    denominator: typing.ClassVar[Expression]
+    r"""
+    Tagged propagator denominator head; its fourth argument is the inverse denominator.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.denominator
+    """
+    dimension: typing.ClassVar[Expression]
+    r"""
+    Lorentz dimension used by generated diagram expressions.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.dimension
+    """
+    half_edge: typing.ClassVar[Expression]
+    r"""
+    Half-edge index family used to match external tensor slots.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.half_edge
+    """
+    polarization: typing.ClassVar[Expression]
+    r"""
+    Vector polarization wavefunction head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.polarization
+    """
+    polarization_conjugate: typing.ClassVar[Expression]
+    r"""
+    Conjugated vector polarization wavefunction head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.polarization_conjugate
+    """
+    metric: typing.ClassVar[Expression]
+    r"""
+    Metric tensor head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.metric
+    """
+    gamma: typing.ClassVar[Expression]
+    r"""
+    Dirac gamma tensor head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.gamma
+    """
+    color_f: typing.ClassVar[Expression]
+    r"""
+    Antisymmetric color tensor head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.color_f
+    """
+    lorentz: typing.ClassVar[Expression]
+    r"""
+    Lorentz representation head, accepting dimension and optionally index.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.lorentz
+    """
+    spinor: typing.ClassVar[Expression]
+    r"""
+    Bispinor representation head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.spinor
+    """
+    color_fundamental: typing.ClassVar[Expression]
+    r"""
+    Fundamental color representation head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.color_fundamental
+    """
+    color_adjoint: typing.ClassVar[Expression]
+    r"""
+    Adjoint color representation head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.color_adjoint
+    """
+    color_number: typing.ClassVar[Expression]
+    r"""
+    Number of colors used by symbolic color simplification.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.color_number
+    """
+    conjugate: typing.ClassVar[Expression]
+    r"""
+    Conjugation wrapper used in tensor expressions.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.conjugate
+    """
+    dot: typing.ClassVar[Expression]
+    r"""
+    Scalar product head used by contracted tensor expressions.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.dot
+    """
+    casimir: typing.ClassVar[Expression]
+    r"""
+    Color Casimir invariant head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.casimir
+    """
+    color_index: typing.ClassVar[Expression]
+    r"""
+    Color representation index invariant head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.color_index
+    """
+    ufo_metric: typing.ClassVar[Expression]
+    r"""
+    Metric head in model propagator definitions.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.ufo_metric
+    """
+    ufo_index: typing.ClassVar[Expression]
+    r"""
+    Index placeholder head in model propagator definitions.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.ufo_index
+    """
+    ufo_momentum: typing.ClassVar[Expression]
+    r"""
+    Momentum head in model propagator definitions.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.ufo_momentum
+    """
+    chain_in: typing.ClassVar[Expression]
+    r"""
+    Incoming placeholder for an open gamma chain.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.chain_in
+    """
+    chain_out: typing.ClassVar[Expression]
+    r"""
+    Outgoing placeholder for an open gamma chain.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.chain_out
+    """
+    gamma_chain: typing.ClassVar[Expression]
+    r"""
+    Compact gamma-chain wrapper.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.gamma_chain
+    """
+    levi_civita: typing.ClassVar[Expression]
+    r"""
+    Antisymmetric Levi-Civita tensor head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.levi_civita
+    """
+    charge_conjugation: typing.ClassVar[Expression]
+    r"""
+    Dirac charge-conjugation matrix head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.charge_conjugation
+    """
+    cyclic: typing.ClassVar[Expression]
+    r"""
+    Cyclic symmetry wrapper.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.cyclic
+    """
+    symmetric: typing.ClassVar[Expression]
+    r"""
+    Symmetric tensor wrapper.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.symmetric
+    """
+    antisymmetric: typing.ClassVar[Expression]
+    r"""
+    Antisymmetric tensor wrapper.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.antisymmetric
+    """
+    gamma_zero: typing.ClassVar[Expression]
+    r"""
+    Time-component gamma matrix head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.gamma_zero
+    """
+    trace: typing.ClassVar[Expression]
+    r"""
+    Compact tensor trace wrapper.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.trace
+    """
+    model_conjugate: typing.ClassVar[Expression]
+    r"""
+    Complex-conjugation helper used in imported model formulas.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
+    >>> conjugate = hep.Symbols.model_conjugate(model.parameter("CKM1x1").symbol)
+    """

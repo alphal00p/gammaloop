@@ -233,6 +233,7 @@ define_spenso_python_surface! {
         ],
         display => [
             "DisplaySettings", "format_tensor", "to_typst", "to_html", "to_svg", "formatted",
+            "load_math_font",
         ],
         pattern => ["PortPattern", "TensorPattern"],
         expression => [

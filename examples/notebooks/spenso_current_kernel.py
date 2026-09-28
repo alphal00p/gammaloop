@@ -131,7 +131,7 @@ def _():
     Jbar, J = TensorName("Jbar"), TensorName("J")
     lib.register(LibraryTensor.dense(Jbar(S), Jbar_components))
     lib.register(LibraryTensor.dense(J(S), J_components))
-    gamma = lib["spenso::gamma"]
+    gamma = lib[TensorName.gamma()]
     expr = (Jbar(s1).to_expression() *
             gamma("s2", "s1", "mu") * J(s2).to_expression())
     expr = simplify_metrics(simplify_gamma(expr))

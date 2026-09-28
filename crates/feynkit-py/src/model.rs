@@ -776,6 +776,20 @@ impl PyParameter {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyParameter {
+    /// Return the symbolic reference used by this model's expressions.
+    /// This preserves the parameter or function identity without substituting
+    /// its defining expression or numerical value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hep
+    /// >>> model = hep.Model.standard_model()
+    /// >>> reference = model.parameter("ee").symbol
+    #[getter]
+    fn symbol(&self) -> PythonExpression {
+        Atom::var(symbol!(&format!("UFO::{}", self.inner().name))).into()
+    }
+
     /// Return the parameter name.
     ///
     /// Examples
@@ -1030,6 +1044,20 @@ impl PyCoupling {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyCoupling {
+    /// Return the symbolic reference used by this model's expressions.
+    /// This preserves the parameter or function identity without substituting
+    /// its defining expression or numerical value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hep
+    /// >>> model = hep.Model.standard_model()
+    /// >>> reference = model.couplings[0].symbol
+    #[getter]
+    fn symbol(&self) -> PythonExpression {
+        Atom::var(symbol!(&format!("UFO::{}", self.inner().name))).into()
+    }
+
     /// Return the coupling name.
     ///
     /// Examples
@@ -1806,6 +1834,24 @@ impl PyModelFunction {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyModelFunction {
+    /// Return the symbolic reference used by this model's expressions.
+    /// This preserves the parameter or function identity without substituting
+    /// its defining expression or numerical value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hep
+    /// >>> model = hep.Model.standard_model()
+    /// >>> import json
+    /// >>> definition = json.loads(model.to_json())
+    /// >>> definition["functions"] = [{"name": "square", "arguments": ["x"], "expression": "x^2"}]
+    /// >>> custom = hep.Model.from_json(json.dumps(definition))
+    /// >>> reference = custom.function("square").symbol
+    #[getter]
+    fn symbol(&self) -> PythonExpression {
+        Atom::var(symbol!(&format!("UFO::{}", self.inner().name))).into()
+    }
+
     /// Return the function name.
     ///
     /// Examples

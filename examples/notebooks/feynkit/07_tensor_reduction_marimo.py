@@ -29,6 +29,13 @@ def _():
     return mo, table
 
 
+@app.cell
+def _():
+    from symbolica.community.hep import Symbols
+
+    return (Symbols,)
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -55,7 +62,7 @@ def _(mo):
 
 
 @app.cell
-def _():
+def _(Symbols):
     import math
     import time
 
@@ -63,9 +70,9 @@ def _():
     from symbolica import E, S
 
     D = S("D")
-    momentum = S("gammalooprs::Q")
+    momentum = Symbols.edge_momentum
     external = S("TensorTutorial::p")
-    mink = S("spenso::mink")
+    mink = Symbols.lorentz
     return (D, E, Model, S, TensorReducer, external, math, mink, momentum, time)
 
 

@@ -982,7 +982,7 @@
     "lhablock": "MASS",
     "lhacode": [23],
     "name": "MZ",
-    "texname": "\\text{MZ}",
+    "texname": "m_Z",
     "nature": "external",
     "parameter_type": "real",
     "value": [91.188, 0.0]
@@ -991,7 +991,7 @@
     "lhablock": "MASS",
     "lhacode": [4],
     "name": "MC",
-    "texname": "\\text{MC}",
+    "texname": "m_c",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -1000,7 +1000,7 @@
     "lhablock": "MASS",
     "lhacode": [6],
     "name": "MT",
-    "texname": "\\text{MT}",
+    "texname": "m_t",
     "nature": "external",
     "parameter_type": "real",
     "value": [173.0, 0.0]
@@ -1009,7 +1009,7 @@
     "lhablock": "MASS",
     "lhacode": [5],
     "name": "MB",
-    "texname": "\\text{MB}",
+    "texname": "m_b",
     "nature": "external",
     "parameter_type": "real",
     "value": [4.9, 0.0]
@@ -1018,7 +1018,7 @@
     "lhablock": "MASS",
     "lhacode": [25],
     "name": "MH",
-    "texname": "\\text{MH}",
+    "texname": "m_H",
     "nature": "external",
     "parameter_type": "real",
     "value": [125.0, 0.0]
@@ -1027,7 +1027,7 @@
     "lhablock": "MASS",
     "lhacode": [11],
     "name": "Me",
-    "texname": "\\text{Me}",
+    "texname": "m_e",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -1036,7 +1036,7 @@
     "lhablock": "MASS",
     "lhacode": [13],
     "name": "MM",
-    "texname": "\\text{MM}",
+    "texname": "m_{\\mu}",
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
@@ -1045,7 +1045,7 @@
     "lhablock": "MASS",
     "lhacode": [15],
     "name": "MTA",
-    "texname": "\\text{MTA}",
+    "texname": "m_{\\tau}",
     "nature": "external",
     "parameter_type": "real",
     "value": [1.777, 0.0]
@@ -1207,7 +1207,7 @@
     "lhablock": null,
     "lhacode": null,
     "name": "MW",
-    "texname": "M_W",
+    "texname": "m_W",
     "nature": "internal",
     "parameter_type": "real",
     "value": [80.41900244575616, 0.0]

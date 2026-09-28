@@ -21,6 +21,13 @@ def _():
     return (mo,)
 
 
+@app.cell
+def _():
+    from symbolica.community.hep import Symbols
+
+    return (Symbols,)
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -186,7 +193,7 @@ def _(mo):
 
 
 @app.cell
-def _(Representation, TensorExpression, TensorName, sy):
+def _(Symbols, Representation, TensorExpression, TensorName, sy):
     # `raw` keeps compact rank-one vectors in their contextual form. That is
     # what lets a vector appear inside a tensor port or a gamma factor, just as
     # it does in the Typst notation examples.
@@ -219,15 +226,15 @@ def _(Representation, TensorExpression, TensorName, sy):
     atlas_chi = TensorName.vector("chi", is_linear=True)
 
     atlas_gamma = TensorName.gamma().to_expression()
-    atlas_gamma0 = sy.S("spenso::gamma0")
+    atlas_gamma0 = Symbols.gamma_zero
     atlas_gamma5 = TensorName.gamma5().to_expression()
     atlas_projp = TensorName.projp().to_expression()
-    atlas_in = sy.S("spenso::in")
-    atlas_out = sy.S("spenso::out")
+    atlas_in = Symbols.chain_in
+    atlas_out = Symbols.chain_out
 
     atlas_p1 = raw(atlas_p, 1, atlas_mink)
     atlas_q2 = raw(atlas_q, 2, atlas_mink)
-    atlas_dot = raw(sy.S("spenso::dot"), atlas_p1, atlas_q2)
+    atlas_dot = raw(Symbols.dot, atlas_p1, atlas_q2)
     atlas_interleaved = atlas_T(atlas_mu, atlas_a, atlas_nu, atlas_b)
     atlas_layout_expression = raw(
         atlas_A,
@@ -265,21 +272,21 @@ def _(Representation, TensorExpression, TensorName, sy):
         raw(atlas_gamma, atlas_in, atlas_out, atlas_nu),
     )
     atlas_open_chain = raw(
-        sy.S("spenso::chain"),
+        Symbols.gamma_chain,
         atlas_bis("u"),
         atlas_bis("v"),
         *atlas_chain_factors,
     )
     atlas_explicit_chain = raw(
-        sy.S("spenso::chain"),
+        Symbols.gamma_chain,
         atlas_bis("a"),
         atlas_bis("b"),
         *atlas_chain_factors,
     )
     atlas_trace = raw(
-        sy.S("spenso::trace"),
+        Symbols.trace,
         atlas_bis,
-        raw(sy.S("spenso::cyclic"), *atlas_chain_factors),
+        raw(Symbols.cyclic, *atlas_chain_factors),
     )
 
     atlas_colour = TensorExpression.t(8, 3)(
