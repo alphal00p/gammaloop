@@ -22,6 +22,7 @@ use std::{
 };
 
 use crate::integrands::process::retained_dual::{RetainedFunctionDefinition, build_dual_evaluator};
+pub use crate::integrands::process::standalone::StandaloneParametricResidueRows;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
@@ -271,32 +272,6 @@ pub struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
 pub struct StandaloneIndexedGenericEvaluatorArchive<A = Vec<u8>> {
     pub(crate) cut_cff_index: StandaloneCutCFFIndex,
     pub(crate) evaluator: StandaloneGenericEvaluatorArchive<A>,
-}
-
-#[derive(Clone, Encode, Decode, Serialize, Deserialize)]
-pub struct StandaloneParametricResidueRows<A> {
-    pub(crate) parameters: Vec<A>,
-    pub(crate) rows: Vec<Vec<Rational>>,
-}
-
-impl<A> StandaloneParametricResidueRows<A> {
-    pub(crate) fn validate(&self) -> Result<()> {
-        if self.rows.is_empty() {
-            return Err(eyre!(
-                "Standalone parametric residue catalog must contain at least one row"
-            ));
-        }
-        if self
-            .rows
-            .iter()
-            .any(|row| row.len() != self.parameters.len())
-        {
-            return Err(eyre!(
-                "Standalone parametric residue row width differs from its parameter count"
-            ));
-        }
-        Ok(())
-    }
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -585,16 +560,13 @@ fn build_stack<A: ImportWithMap>(
     }
     let timed_build = |payload: StandaloneGenericEvaluatorArchive<A>,
                        iterate: bool,
-                       component: &str|
+                       component: &str,
+                       parameters: &[Atom]|
      -> Result<LoadedGenericEvaluator> {
         let started = Instant::now();
         let evaluator = build_evaluator(
             payload,
-            if component == "single_parametric" {
-                &parametric_parameters
-            } else {
-                params
-            },
+            parameters,
             parsed_fn_map_entries.clone(),
             state_map,
             iterate,
@@ -619,18 +591,23 @@ fn build_stack<A: ImportWithMap>(
         orientation_start: stack.start,
         residue_map_id_start: stack.residue_map_id_start,
         mult_offset: stack.mult_offset,
-        single_parametric: timed_build(stack.single_parametric, false, "single_parametric")?,
+        single_parametric: timed_build(
+            stack.single_parametric,
+            false,
+            "single_parametric",
+            &parametric_parameters,
+        )?,
         iterative: stack
             .iterative
-            .map(|payload| timed_build(payload, true, "iterative"))
+            .map(|payload| timed_build(payload, true, "iterative", params))
             .transpose()?,
         summed_function_map: stack
             .summed_function_map
-            .map(|payload| timed_build(payload, false, "summed_function_map"))
+            .map(|payload| timed_build(payload, false, "summed_function_map", params))
             .transpose()?,
         summed: stack
             .summed
-            .map(|payload| timed_build(payload, false, "summed"))
+            .map(|payload| timed_build(payload, false, "summed", params))
             .transpose()?,
     })
 }

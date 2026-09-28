@@ -24,6 +24,7 @@ use crate::{
     integrands::process::{
         GenericEvaluator,
         amplitude::export::ExportAtomTo,
+        standalone::StandaloneParametricResidueRows,
         threshold_multiplier::{
             ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierInput,
             ThresholdMultiplierPoint,
@@ -103,7 +104,7 @@ fn export_evaluator_stack<T: ExportAtomTo>(
             .parametric_rows
             .as_ref()
             .map(|catalog| -> Result<_> {
-                Ok(super::load::StandaloneParametricResidueRows {
+                Ok(StandaloneParametricResidueRows {
                     parameters: catalog
                         .parameters
                         .iter()
@@ -469,6 +470,12 @@ fn standalone_rust_script() -> String {
         &format!(
             "mod retained_dual {{\n{}\n}}\nuse retained_dual::{{RetainedFunctionDefinition, build_dual_evaluator}};",
             include_str!("../retained_dual.rs"),
+        ),
+    ).replace(
+        "pub use crate::integrands::process::standalone::StandaloneParametricResidueRows;",
+        &format!(
+            "mod standalone {{\n{}\n}}\npub use standalone::StandaloneParametricResidueRows;",
+            include_str!("../standalone.rs"),
         ),
     );
     if let Some(rest) = script.strip_prefix("//#!/usr/bin/env -S rust-script\n") {

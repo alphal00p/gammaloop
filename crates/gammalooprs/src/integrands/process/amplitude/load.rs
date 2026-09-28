@@ -34,10 +34,10 @@ use symbolica::{
 };
 
 use crate::integrands::process::cross_section::load::{
-    LoadedStandaloneThresholdMultiplierCollection, StandaloneParametricResidueRows,
-    StandaloneThresholdMultiplierCollectionArchive, build_threshold_multiplier_collection,
-    validate_threshold_multiplier_archive,
+    LoadedStandaloneThresholdMultiplierCollection, StandaloneThresholdMultiplierCollectionArchive,
+    build_threshold_multiplier_collection, validate_threshold_multiplier_archive,
 };
+use crate::integrands::process::standalone::StandaloneParametricResidueRows;
 use crate::processes::{
     StandaloneNumericTarget, ThresholdCountertermComponentKind,
     ThresholdCountertermMetadataRegistry, ThresholdCountertermOrigin, ThresholdCountertermSide,

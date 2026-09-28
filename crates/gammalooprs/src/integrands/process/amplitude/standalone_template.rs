@@ -22,6 +22,7 @@ use std::{
 };
 
 use crate::integrands::process::retained_dual::{RetainedFunctionDefinition, build_dual_evaluator};
+use crate::integrands::process::standalone::StandaloneParametricResidueRows;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
@@ -94,32 +95,6 @@ struct StandaloneCutCFFIndex {
 struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
     cut_cff_index: StandaloneCutCFFIndex,
     evaluator_stack: StandaloneEvaluatorStackArchive<A>,
-}
-
-#[derive(Clone, Encode, Decode, Serialize, Deserialize)]
-struct StandaloneParametricResidueRows<A> {
-    parameters: Vec<A>,
-    rows: Vec<Vec<Rational>>,
-}
-
-impl<A> StandaloneParametricResidueRows<A> {
-    fn validate(&self) -> Result<()> {
-        if self.rows.is_empty() {
-            return Err(eyre!(
-                "Standalone parametric residue catalog must contain at least one row"
-            ));
-        }
-        if self
-            .rows
-            .iter()
-            .any(|row| row.len() != self.parameters.len())
-        {
-            return Err(eyre!(
-                "Standalone parametric residue row width differs from its parameter count"
-            ));
-        }
-        Ok(())
-    }
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]

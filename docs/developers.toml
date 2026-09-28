@@ -113,7 +113,9 @@ anchor = "pub fn warm_up(&mut self, model"
 # Reviewed 2026-09-27: Full three_dimensional_representations and
 # three_dimensional_representation names now identify generation settings,
 # stability choices and diagnostics in configuration, Python and the manual.
-digest = "b2d9d7cc295e852bc11ab634ec0018efd7890d38"
+# No architecture impact 2026-09-28: standalone row schema has one process-level
+# owner shared by native and generated loaders; archive layouts are unchanged.
+digest = "9454195924d6f5fa9fbbb3f9b734f874c25bd1f3"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -181,7 +183,7 @@ anchor = "pub fn generate("
 digest = "8fe09278dad3daca6cf5f47453b984daba9dead3"
 
 [[section.note.scope]]
-path = "crates/gammalooprs/src/integrands/process/evaluators.rs"
+path = "crates/gammalooprs/src/integrands/process/evaluators/parametric_rows.rs"
 symbol = "gammalooprs::integrands::process::evaluators::ParametricResidueRows"
 anchor = "pub(crate) struct ParametricResidueRows {"
 # Reviewed 2026-09-27: The architecture note documents evaluator-owned constant
@@ -189,7 +191,9 @@ anchor = "pub(crate) struct ParametricResidueRows {"
 # tensor-generated formal pruning does not trigger another row merge.
 # Reviewed 2026-09-28: Reused private-index freshening before generic products;
 # declared free interfaces and opaque scalar arguments retain their scopes.
-digest = "e63b2deaac588126faab958f0d73f9d46df27ae8"
+# No architecture impact 2026-09-28: extracted evaluator row lowering and
+# execution into a private child module without changing either algorithm.
+digest = "2f25c398b8c58a86d6903181a0d34eefc1926f64"
 
 [[section.note]]
 id = "integration-dashboard"
