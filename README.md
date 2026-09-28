@@ -1,7 +1,7 @@
 <div align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/alphal00p/gammaloop/blob/2ee2ec575fa575c26bdaf89a3e7df41428b879dc/assets/gammalooplogo-dark.svg">
-  <img src="https://github.com/alphal00p/gammaloop/blob/2ee2ec575fa575c26bdaf89a3e7df41428b879dc/assets/gammalooplogo-light.svg" width="300">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/alphal00p/gammaloop/main/assets/gammalooplogo-dark.svg">
+  <img src="https://raw.githubusercontent.com/alphal00p/gammaloop/main/assets/gammalooplogo-light.svg" width="300">
 </picture>
 
 <a href="https://nix-ci.com/gh:alphal00p:gammaloop/main"><img src="https://nix-ci.com/badge/gh:alphal00p:gammaloop/main?v=2" alt="Nix-CI" height="20"></a>

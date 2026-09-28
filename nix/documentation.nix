@@ -98,6 +98,8 @@ let
         (workspaceRoot + "/docs")
         (workspaceRoot + "/scripts/check-docs-html.py")
         (workspaceRoot + "/scripts/render-docs-svg-assets.sh")
+        # The GammaLoop marks import the logo geometry from this Kurvst example.
+        (workspaceRoot + "/crates/kurvst/typst/examples/knot-logo.typ")
         (workspaceRoot + "/scripts/update-docs-pages.sh")
         (workspaceRoot + "/examples/api/python")
         (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL00.dot")
@@ -355,6 +357,7 @@ let
       docs/assets/about-*.svg
       docs/assets/graphs/portal-*.svg
       docs/assets/local-unitarity-*.svg
+      docs/assets/gammaloop-construction-*.svg
       docs/assets/spensologo.svg
       assets/gammalooplogo*.svg
     )
@@ -362,11 +365,12 @@ let
       "$svg_assets"/docs/assets/about-*.svg
       "$svg_assets"/docs/assets/graphs/portal-*.svg
       "$svg_assets"/docs/assets/local-unitarity-*.svg
+      "$svg_assets"/docs/assets/gammaloop-construction-*.svg
       "$svg_assets"/docs/assets/spensologo.svg
       "$svg_assets"/assets/gammalooplogo*.svg
     )
-    test "''${#checked_assets[@]}" -eq 32
-    test "''${#generated_assets[@]}" -eq 32
+    test "''${#checked_assets[@]}" -eq 34
+    test "''${#generated_assets[@]}" -eq 34
     for checked_asset in "''${checked_assets[@]}"; do
       cmp "$checked_asset" "$svg_assets/$checked_asset"
     done

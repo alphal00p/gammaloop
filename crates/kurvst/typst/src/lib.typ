@@ -36,10 +36,22 @@
   samples-per-period: 16,
   /// Horizontal scale of the coil before it is mapped onto a path. -> int | float
   longitudinal-scale: 1.25,
+  /// Fit a complete coil between inward-facing natural endpoints, without tapering.
+  /// A positive path length fits half-integer periods using wavelength as nominal spacing.
+  /// Apply once with pattern wavelength equal to fit-length, phase zero, and
+  /// samples-per-period equal to the returned points.len() - 1. -> none | int | float
+  fit-length: none,
+  /// Amplitude used for longitudinal fitting; pass the same amplitude to pattern. -> int | float
+  amplitude: 0.1,
+  /// Requested coil spacing when fit-length is set. -> int | float
+  wavelength: 1.0,
 ) = {
   _impl.coil(
     samples-per-period: samples-per-period,
     longitudinal-scale: longitudinal-scale,
+    fit-length: fit-length,
+    amplitude: amplitude,
+    wavelength: wavelength,
   )
 }
 
@@ -150,6 +162,19 @@
   /// Endpoint. -> array
   end,
 ) = _impl.cubic(start, control-start, control-end, end)
+
+/// Build a circular arc path fragment from cubic segments.
+/// -> dictionary
+#let arc(
+  /// Arc center. -> array
+  center,
+  /// Positive arc radius. -> int | float
+  radius,
+  /// Start angle, measured counterclockwise from the positive x axis. -> angle
+  start,
+  /// Stop angle; `stop < start` runs clockwise. -> angle
+  stop,
+) = _impl.arc(center, radius, start, stop)
 
 /// Build a path fragment from a cubic segment dictionary.
 /// -> dictionary
@@ -331,9 +356,9 @@
   amplitude: 0.1,
   /// Arc length of one pattern period. -> int | float
   wavelength: 1.0,
-  /// Initial phase offset in pattern periods. -> int | float
+  /// Initial phase offset in radians. -> int | float
   phase: 0,
-  /// Samples per period for string-resolved smooth patterns. -> int
+  /// Samples per period for string-resolved patterns and smooth point-pattern mapping. -> int
   samples-per-period: 16,
   /// Longitudinal scale used when resolving the built-in coil pattern. -> int | float
   coil-longitudinal-scale: 1.25,
@@ -341,8 +366,16 @@
   anchor-start: true,
   /// Force the generated path to end on the base path. -> bool
   anchor-end: true,
+  /// Initial slope of an anchored taper envelope, from 0 to 3. Zero keeps
+  /// tangential ends; positive values allow angled ends when the pattern's
+  /// lateral offset is nonzero at its endpoint phase. This is not an angle.
+  /// Ignored for unanchored ends and patterns without endpoint ramping, including fitted coils. -> int | float
+  endpoint-slope: 0,
   /// Geometry approximation accuracy passed to the Rust geometry engine. -> float
   accuracy: 0.001,
+  /// Arc distances along `path` at which to cut the result into `parts`, one
+  /// patterned path split into independently stylable pieces. -> array
+  split-at: (),
 ) = _impl.pattern(
   path,
   pattern: pattern,
@@ -353,7 +386,9 @@
   coil-longitudinal-scale: coil-longitudinal-scale,
   anchor-start: anchor-start,
   anchor-end: anchor-end,
+  endpoint-slope: endpoint-slope,
   accuracy: accuracy,
+  split-at: split-at,
 )
 
 /// Generate a parallel path for a path.
@@ -381,6 +416,36 @@
     optimize: optimize,
   )
 }
+
+/// Expand a stroked path into a closed outline that can be filled.
+/// -> dictionary
+#let outline(
+  /// Kurvst path dictionary to stroke. -> dictionary
+  path,
+  /// Stroke width in path units. -> int | float
+  width: 0.1,
+  /// Corner join: `"miter"`, `"round"`, or `"bevel"`. -> string
+  join: "miter",
+  /// Miter length limit as a multiple of the width; longer miters are beveled. -> int | float
+  miter-limit: 4,
+  /// End cap for both ends: `"butt"`, `"square"`, or `"round"`. -> string
+  cap: "butt",
+  /// Cap at each subpath start; `auto` uses `cap`. -> auto | string
+  start-cap: auto,
+  /// Cap at each subpath end; `auto` uses `cap`. -> auto | string
+  end-cap: auto,
+  /// Curve fitting tolerance passed to the Rust geometry engine. -> float
+  accuracy: 0.001,
+) = _impl.outline(
+  path,
+  width: width,
+  join: join,
+  miter-limit: miter-limit,
+  cap: cap,
+  start-cap: start-cap,
+  end-cap: end-cap,
+  accuracy: accuracy,
+)
 
 /// Build a derived visible path layer.
 /// -> dictionary

@@ -107,16 +107,51 @@
 /// ```
 ///
 /// -> dictionary
-#let coil(samples-per-period: 16, longitudinal-scale: 1.25) = (
-  kind: "points",
-  name: "coil",
-  interpolation: "smooth",
-  endpoint-ramp: true,
-  points: _sampled-pattern(
-    samples-per-period,
-    theta => (longitudinal-scale * calc.cos(theta), calc.sin(theta)),
-  ),
-)
+#let coil(
+  samples-per-period: 16,
+  longitudinal-scale: 1.25,
+  fit-length: none,
+  amplitude: 0.1,
+  wavelength: 1.0,
+) = {
+  let pattern = (
+    kind: "points",
+    name: "coil",
+    interpolation: "smooth",
+    endpoint-ramp: true,
+    points: _sampled-pattern(
+      samples-per-period,
+      theta => (longitudinal-scale * calc.cos(theta), calc.sin(theta)),
+    ),
+  )
+  if fit-length == none { return pattern }
+  for (name, value) in (
+    ("fit-length", fit-length), ("amplitude", amplitude),
+    ("wavelength", wavelength), ("longitudinal-scale", longitudinal-scale),
+  ) {
+    assert(
+      type(value) in (int, float) and value == value and calc.abs(value) < calc.inf,
+      message: "coil: " + name + " must be finite",
+    )
+  }
+  assert(fit-length > 0 and wavelength > 0, message: "coil: fit-length and wavelength must be positive")
+  assert(longitudinal-scale >= 0, message: "coil: fitted longitudinal-scale must be non-negative")
+  let span = fit-length + calc.abs(amplitude) * longitudinal-scale * 2
+  assert(span < calc.inf, message: "coil: fitted span must be finite")
+  // Removing half a turn preserves the visible-loop count of integer-fitted tapered coils.
+  let periods = calc.max(1, calc.round(fit-length / wavelength)) - 0.5
+  let samples = calc.max(2, int(calc.ceil(periods * calc.max(1, samples-per-period))))
+  let scale = longitudinal-scale * (fit-length / span) * if amplitude < 0 { -1 } else { 1 }
+  pattern.endpoint-ramp = false
+  pattern.points = _sampled-pattern(samples, theta => {
+    let at = theta / (2 * calc.pi)
+    if at == 0 or at == 1 { return (0, 0) }
+    let phase = calc.pi + periods * theta
+    // Normalize offsets so the ordinary pattern API still applies amplitude once.
+    (scale * (1 + calc.cos(phase) - 2 * at), calc.sin(phase))
+  })
+  pattern
+}
 
 #let _resolve-pattern(
   pattern,
@@ -165,7 +200,12 @@
   }
 }
 
-#let _same-point(a, b) = _point-pair(a) == _point-pair(b)
+// Treat points that differ only by floating-point noise as the same point.
+#let _same-point(a, b) = {
+  let ((ax, ay), (bx, by)) = (_point-pair(a), _point-pair(b))
+  let tolerance = 1e-9 * calc.max(1, calc.abs(ax), calc.abs(ay))
+  calc.abs(ax - bx) <= tolerance and calc.abs(ay - by) <= tolerance
+}
 
 #let _origin = (0, 0)
 
@@ -308,8 +348,9 @@
 
 /// Return a path with additional fragments or elements appended.
 ///
-/// If an appended fragment starts with a `move` at the current endpoint, the
-/// `move` is skipped. If it starts elsewhere, the `move` begins a new subpath.
+/// If an appended fragment starts with a `move` at the current endpoint (up to
+/// floating-point noise), the `move` is skipped. If it starts elsewhere, the
+/// `move` begins a new subpath.
 ///
 /// -> dictionary
 #let append(path, ..parts) = from-elements(_append-elements(
@@ -334,6 +375,38 @@
   move-to(start),
   cubic-to(control-start, control-end, end),
 )
+
+/// Build a circular arc path fragment from cubic segments.
+///
+/// The arc runs from `start` to `stop` counterclockwise (in y-up coordinates)
+/// when `stop > start` and clockwise otherwise, split into pieces of at most 90°.
+///
+/// -> dictionary
+#let arc(center, radius, start, stop) = {
+  assert(radius > 0, message: "arc radius must be positive")
+  let (cx, cy) = _point-pair(center)
+  let direction(a) = (calc.cos(a), calc.sin(a))
+  let at(a) = {
+    let (dx, dy) = direction(a)
+    (cx + radius * dx, cy + radius * dy)
+  }
+  let pieces = calc.max(1, calc.ceil(calc.abs((stop - start) / 90deg)))
+  let step = (stop - start) / pieces
+  // Control-point distance for a cubic approximating a circular arc of `step`.
+  let k = 4 / 3 * calc.tan(step / 4) * radius
+  path(..range(pieces).map(i => {
+    let a0 = start + i * step
+    let a1 = a0 + step
+    let (p0, p3) = (at(a0), at(a1))
+    let (d0, d3) = (direction(a0), direction(a1))
+    cubic(
+      p0,
+      (p0.at(0) - k * d0.at(1), p0.at(1) + k * d0.at(0)),
+      (p3.at(0) + k * d3.at(1), p3.at(1) - k * d3.at(0)),
+      p3,
+    )
+  }))
+}
 
 /// Build a path fragment from a cubic segment dictionary.
 ///
@@ -748,7 +821,9 @@
 /// or a point pattern:
 /// `(kind: "points", interpolation: "linear" or "smooth", points: ((at: 0, x: 0, y: 0), ...))`.
 /// The whole input path is sampled continuously, so pattern phase does not
-/// restart at cubic segment boundaries.
+/// restart at cubic segment boundaries. `split-at` lists arc distances along
+/// the input path; the result's `parts` holds the one patterned path cut there,
+/// so pieces can be styled independently while following a single pattern.
 ///
 /// ```example
 /// #let spline = kurvst.hobby-spline((
@@ -780,7 +855,9 @@
   coil-longitudinal-scale: 1.25,
   anchor-start: true,
   anchor-end: true,
+  endpoint-slope: 0,
   accuracy: 0.001,
+  split-at: (),
 ) = {
   let pattern = _resolve-pattern(
     pattern,
@@ -797,7 +874,9 @@
     coil-longitudinal-scale: coil-longitudinal-scale,
     anchor-start: anchor-start,
     anchor-end: anchor-end,
+    endpoint-slope: endpoint-slope,
     accuracy: accuracy,
+    split-at: split-at.map(float),
   ))))
 }
 
@@ -837,6 +916,34 @@
     end-outset: end-outset,
     accuracy: accuracy,
     optimize: optimize,
+  ))))
+}
+
+/// Expand a stroked path into a closed outline that can be filled.
+///
+/// Uses Kurbo's stroker: each open subpath becomes one closed contour with
+/// joins at corners and caps at both ends; each closed subpath becomes an outer
+/// and an inner contour. Fill the result with the default non-zero rule.
+///
+/// -> dictionary
+#let outline(
+  path,
+  width: 0.1,
+  join: "miter",
+  miter-limit: 4,
+  cap: "butt",
+  start-cap: auto,
+  end-cap: auto,
+  accuracy: 0.001,
+) = {
+  cbor(_plugin.curve_stroke_outline(cbor.encode((
+    path: _path-value(path),
+    width: width,
+    join: join,
+    miter-limit: miter-limit,
+    start-cap: if start-cap == auto { cap } else { start-cap },
+    end-cap: if end-cap == auto { cap } else { end-cap },
+    accuracy: accuracy,
   ))))
 }
 

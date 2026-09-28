@@ -1,6 +1,6 @@
 use kurbo::{
-    BezPath, CubicBez, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathEl, PathSeg, Point,
-    Vec2, offset::offset_cubic,
+    BezPath, Cap, CubicBez, Join, Line, ParamCurve, ParamCurveArclen, ParamCurveDeriv, PathEl,
+    PathSeg, Point, Stroke, StrokeOpts, Vec2, offset::offset_cubic,
 };
 use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
@@ -130,6 +130,36 @@ pub struct PatternPathSpec {
     pub anchor_start: bool,
     #[serde(default = "default_anchor_endpoint")]
     pub anchor_end: bool,
+    #[serde(default, deserialize_with = "deserialize_f64")]
+    pub endpoint_slope: f64,
+    #[serde(
+        default = "default_arclen_accuracy",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub accuracy: f64,
+    /// Arc distances along the base path at which to cut the patterned path.
+    #[serde(default)]
+    pub split_at: Vec<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub struct StrokeOutlineSpec {
+    #[serde(deserialize_with = "deserialize_bez_path")]
+    pub path: BezPath,
+    #[serde(deserialize_with = "deserialize_f64")]
+    pub width: f64,
+    #[serde(default = "default_stroke_join")]
+    pub join: String,
+    #[serde(
+        default = "default_stroke_miter_limit",
+        deserialize_with = "deserialize_f64"
+    )]
+    pub miter_limit: f64,
+    #[serde(default = "default_stroke_cap")]
+    pub start_cap: String,
+    #[serde(default = "default_stroke_cap")]
+    pub end_cap: String,
     #[serde(
         default = "default_arclen_accuracy",
         deserialize_with = "deserialize_f64"
@@ -259,6 +289,8 @@ pub struct PatternPathOutput {
     )]
     pub path: BezPath,
     pub pattern: String,
+    /// `path` cut at the requested `split_at` distances, in order.
+    pub parts: Vec<CurvePathOutput>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -337,6 +369,18 @@ fn default_coil_longitudinal_scale() -> f64 {
 
 fn default_anchor_endpoint() -> bool {
     true
+}
+
+fn default_stroke_join() -> String {
+    "miter".to_string()
+}
+
+fn default_stroke_cap() -> String {
+    "butt".to_string()
+}
+
+fn default_stroke_miter_limit() -> f64 {
+    4.0
 }
 
 fn default_parallel_optimize() -> bool {
@@ -584,6 +628,13 @@ pub fn curve_parallel_path_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let spec: ParallelPathSpec = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize parallel path spec: {err}"))?;
     let output = parallel_path(spec)?;
+    encode_cbor(&output)
+}
+
+pub fn curve_stroke_outline_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    let spec: StrokeOutlineSpec = ciborium::de::from_reader(arg)
+        .map_err(|err| format!("Failed to deserialize stroke outline spec: {err}"))?;
+    let output = stroke_outline(spec)?;
     encode_cbor(&output)
 }
 
@@ -864,6 +915,10 @@ fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
     let wavelength = validate_positive(spec.wavelength, "pattern wavelength")?;
     let phase = validate_finite(spec.phase, "pattern phase")?;
     validate_finite(spec.coil_longitudinal_scale, "coil longitudinal scale")?;
+    let endpoint_slope = validate_finite(spec.endpoint_slope, "pattern endpoint-slope")?;
+    if !(0.0..=3.0).contains(&endpoint_slope) {
+        return Err("pattern endpoint-slope must be between 0 and 3".to_string());
+    }
     let accuracy = validate_positive_accuracy(spec.accuracy)?;
     if spec.samples_per_period == 0 {
         return Err("pattern samples-per-period must be positive".to_string());
@@ -878,12 +933,16 @@ fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
     let length: f64 = segment_lengths.iter().sum();
     if length <= f64::EPSILON {
         return Ok(PatternPathOutput {
+            parts: vec![CurvePathOutput {
+                path: spec.path.clone(),
+            }],
             path: spec.path,
             pattern: pattern.name.clone(),
         });
     }
 
-    let distances = pattern.distances(length, wavelength, spec.samples_per_period);
+    let mut distances = pattern.distances(length, wavelength, spec.samples_per_period);
+    let split_indices = insert_split_distances(&mut distances, &spec.split_at, length)?;
     let mut points = Vec::with_capacity(distances.len());
     for distance in distances {
         let (segment, segment_distance) =
@@ -897,17 +956,18 @@ fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
         );
         let normal = Vec2::new(-tangent.y, tangent.x);
         let pattern_point = pattern.evaluate(distance / wavelength + phase / std::f64::consts::TAU);
-        let tapered_amplitude = amplitude
-            * pattern_endpoint_envelope(
-                &pattern,
-                distance,
-                length,
-                wavelength,
-                spec.anchor_start,
-                spec.anchor_end,
-            );
-        let longitudinal = tapered_amplitude * pattern_point.x;
-        let lateral = tapered_amplitude * pattern_point.y;
+        let envelope = pattern_endpoint_envelope(
+            &pattern,
+            distance,
+            length,
+            wavelength,
+            spec.anchor_start,
+            spec.anchor_end,
+            endpoint_slope,
+        );
+        // Delay the doubling-back motion until the coil has opened sideways.
+        let longitudinal = amplitude * envelope * envelope * pattern_point.x;
+        let lateral = amplitude * envelope * pattern_point.y;
         points.push((base + tangent * longitudinal + normal * lateral).into());
     }
     if !pattern.endpoint_ramp && spec.anchor_start {
@@ -926,23 +986,59 @@ fn pattern_path(spec: PatternPathSpec) -> Result<PatternPathOutput, String> {
             .into();
     }
 
-    let path = match pattern.interpolation {
-        PatternInterpolation::Linear => BezPath::from_path_segments(
-            points
-                .windows(2)
-                .map(|window| PathSeg::Line(Line::new(window[0], window[1]))),
-        ),
-        PatternInterpolation::Smooth => BezPath::from_path_segments(
-            cubic_spline_through_points(&points)
-                .into_iter()
-                .map(PathSeg::from),
-        ),
+    // One segment per pair of adjacent samples, so sample indices are cut points.
+    let segments: Vec<PathSeg> = match pattern.interpolation {
+        PatternInterpolation::Linear => points
+            .windows(2)
+            .map(|window| PathSeg::Line(Line::new(window[0], window[1])))
+            .collect(),
+        PatternInterpolation::Smooth => cubic_spline_through_points(&points)
+            .into_iter()
+            .map(PathSeg::from)
+            .collect(),
     };
+    let parts = [0]
+        .into_iter()
+        .chain(split_indices.iter().copied())
+        .zip(split_indices.iter().copied().chain([segments.len()]))
+        .map(|(start, end)| CurvePathOutput {
+            path: BezPath::from_path_segments(segments[start..end].iter().copied()),
+        })
+        .collect();
 
     Ok(PatternPathOutput {
-        path,
+        path: BezPath::from_path_segments(segments.into_iter()),
         pattern: pattern.name,
+        parts,
     })
+}
+
+/// Insert interior split distances as samples, returning their sorted indices.
+fn insert_split_distances(
+    distances: &mut Vec<f64>,
+    split_at: &[f64],
+    length: f64,
+) -> Result<Vec<usize>, String> {
+    let tolerance = 1e-9 * length.max(1.0);
+    let mut splits = split_at
+        .iter()
+        .map(|&split| validate_finite(split, "pattern split distance"))
+        .collect::<Result<Vec<_>, _>>()?;
+    splits.retain(|&split| split > tolerance && split < length - tolerance);
+    splits.sort_by(f64::total_cmp);
+    splits.dedup_by(|a, b| (*a - *b).abs() <= tolerance);
+    let mut indices = Vec::with_capacity(splits.len());
+    for split in splits {
+        let index = distances.partition_point(|&distance| distance < split - tolerance);
+        if distances
+            .get(index)
+            .is_none_or(|&distance| (distance - split).abs() > tolerance)
+        {
+            distances.insert(index, split);
+        }
+        indices.push(index);
+    }
+    Ok(indices)
 }
 
 fn parallel_path(spec: ParallelPathSpec) -> Result<CurvePathOutput, String> {
@@ -967,6 +1063,43 @@ fn parallel_path(spec: ParallelPathSpec) -> Result<CurvePathOutput, String> {
         .collect::<Vec<_>>();
     let segments = trim_path_segments(offset_segments, start_outset, end_outset, accuracy)?;
     curve_path_from_segments(segments)
+}
+
+/// Expand a stroked path into a closed fill outline with joins and caps.
+///
+/// Open subpaths become one closed contour; closed subpaths become an outer and
+/// an inner contour of opposite winding, so fill the result with the non-zero rule.
+fn stroke_outline(spec: StrokeOutlineSpec) -> Result<CurvePathOutput, String> {
+    let width = validate_positive(spec.width, "stroke outline width")?;
+    let accuracy = validate_positive_accuracy(spec.accuracy)?;
+    let miter_limit = validate_positive(spec.miter_limit, "stroke outline miter limit")?;
+    let style = Stroke {
+        join: parse_stroke_join(&spec.join)?,
+        miter_limit,
+        start_cap: parse_stroke_cap(&spec.start_cap)?,
+        end_cap: parse_stroke_cap(&spec.end_cap)?,
+        ..Stroke::new(width)
+    };
+    let path = kurbo::stroke(spec.path, &style, &StrokeOpts::default(), accuracy);
+    Ok(CurvePathOutput { path })
+}
+
+fn parse_stroke_join(value: &str) -> Result<Join, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "miter" => Ok(Join::Miter),
+        "round" => Ok(Join::Round),
+        "bevel" => Ok(Join::Bevel),
+        other => Err(format!("Unsupported stroke join: {other}")),
+    }
+}
+
+fn parse_stroke_cap(value: &str) -> Result<Cap, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "butt" => Ok(Cap::Butt),
+        "square" => Ok(Cap::Square),
+        "round" => Ok(Cap::Round),
+        other => Err(format!("Unsupported stroke cap: {other}")),
+    }
 }
 
 fn offset_path_segment(segment: PathSeg, distance: f64, accuracy: f64) -> Vec<PathSeg> {
@@ -1161,22 +1294,26 @@ fn pattern_endpoint_envelope(
     wavelength: f64,
     anchor_start: bool,
     anchor_end: bool,
+    endpoint_slope: f64,
 ) -> f64 {
     if !pattern.endpoint_ramp {
         return 1.0;
     }
 
-    let ramp = (wavelength * 0.5).min(length * 0.5);
+    // Ease in over three quarters of a turn; the longitudinal offset ramps more slowly.
+    let ramp = (wavelength * 0.75).min(length * 0.5);
     if ramp <= f64::EPSILON {
         return 1.0;
     }
 
     let mut envelope: f64 = 1.0;
     if anchor_start {
-        envelope = envelope.min(smoothstep((distance / ramp).clamp(0.0, 1.0)));
+        let t = (distance / ramp).clamp(0.0, 1.0);
+        envelope = envelope.min(smoothstep(t) + endpoint_slope * t * (1.0 - t).powi(2));
     }
     if anchor_end {
-        envelope = envelope.min(smoothstep(((length - distance) / ramp).clamp(0.0, 1.0)));
+        let t = ((length - distance) / ramp).clamp(0.0, 1.0);
+        envelope = envelope.min(smoothstep(t) + endpoint_slope * t * (1.0 - t).powi(2));
     }
     envelope
 }
@@ -1195,16 +1332,16 @@ fn sampled_distances(length: f64, wavelength: f64, samples_per_period: usize) ->
     let step = wavelength / samples_per_period as f64;
     let count = (length / step).ceil().max(1.0) as usize;
     let mut distances = Vec::with_capacity(count + 1);
-    for i in 0..=count {
-        distances.push((i as f64 * step).min(length));
+    // Coalesce terminal roundoff at the path's scale, keeping the exact endpoint below.
+    let end_tolerance = 4.0 * f64::EPSILON * length;
+    for i in 0..count {
+        let distance = i as f64 * step;
+        if length - distance <= end_tolerance {
+            break;
+        }
+        distances.push(distance);
     }
-    if distances
-        .last()
-        .is_none_or(|last| (length - last).abs() > f64::EPSILON)
-    {
-        distances.push(length);
-    }
-    distances.dedup_by(|a, b| (*a - *b).abs() <= f64::EPSILON);
+    distances.push(length);
     distances
 }
 
@@ -1929,6 +2066,110 @@ mod tests {
         assert!((path_length_value(&output.path, 1e-6) - 2.0).abs() < 1e-6);
     }
 
+    #[test]
+    fn pattern_split_at_cuts_one_patterned_path_into_joined_parts() {
+        let spec = |amplitude: f64, split_at: Vec<f64>| PatternPathSpec {
+            path: straight_path(3.0),
+            pattern: wave_pattern(16),
+            amplitude,
+            wavelength: 0.7,
+            phase: 0.0,
+            samples_per_period: 16,
+            coil_longitudinal_scale: default_coil_longitudinal_scale(),
+            anchor_start: true,
+            anchor_end: true,
+            endpoint_slope: 0.0,
+            accuracy: 1e-9,
+            split_at,
+        };
+
+        let whole = pattern_path(spec(0.2, Vec::new())).unwrap();
+        assert_eq!(whole.parts.len(), 1);
+        assert_eq!(whole.parts[0].path, whole.path);
+
+        // Out-of-range and duplicate splits are ignored; the rest cut in order.
+        let split = pattern_path(spec(0.2, vec![2.1, 1.3, 1.3, 0.0, 3.0, 7.0])).unwrap();
+        assert_eq!(split.parts.len(), 3);
+        let joined: Vec<_> = split
+            .parts
+            .iter()
+            .flat_map(|part| part.path.segments())
+            .collect();
+        assert_eq!(joined, split.path.segments().collect::<Vec<_>>());
+        for pair in split.parts.windows(2) {
+            let end = pair[0].path.segments().last().unwrap().end();
+            let start = pair[1].path.segments().next().unwrap().start();
+            assert_eq!(end, start);
+        }
+
+        // With zero amplitude the cut points sit exactly at the base distances.
+        let flat = pattern_path(spec(0.0, vec![1.3, 2.1])).unwrap();
+        let ends: Vec<_> = flat
+            .parts
+            .iter()
+            .map(|part| part.path.segments().last().unwrap().end())
+            .collect();
+        assert!((ends[0].x - 1.3).abs() < 1e-9 && ends[0].y.abs() < 1e-9);
+        assert!((ends[1].x - 2.1).abs() < 1e-9 && ends[1].y.abs() < 1e-9);
+    }
+
+    fn outline_spec(path: BezPath, width: f64, cap: &str) -> StrokeOutlineSpec {
+        StrokeOutlineSpec {
+            path,
+            width,
+            join: "miter".to_string(),
+            miter_limit: 4.0,
+            start_cap: cap.to_string(),
+            end_cap: cap.to_string(),
+            accuracy: 1e-6,
+        }
+    }
+
+    #[test]
+    fn stroke_outline_of_open_line_is_closed_rectangle() {
+        use kurbo::Shape;
+
+        let butt = stroke_outline(outline_spec(straight_path(3.0), 0.5, "butt")).unwrap();
+        let bbox = butt.path.bounding_box();
+        assert_close(bbox.x0, 0.0);
+        assert_close(bbox.x1, 3.0);
+        assert_close(bbox.y0, -0.25);
+        assert_close(bbox.y1, 0.25);
+        assert_close(butt.path.area().abs(), 1.5);
+        assert_eq!(butt.path.elements().last(), Some(&PathEl::ClosePath));
+
+        let square = stroke_outline(outline_spec(straight_path(3.0), 0.5, "square")).unwrap();
+        let bbox = square.path.bounding_box();
+        assert_close(bbox.x0, -0.25);
+        assert_close(bbox.x1, 3.25);
+    }
+
+    #[test]
+    fn stroke_outline_miters_sharp_corners() {
+        use kurbo::Shape;
+
+        let mut corner = BezPath::new();
+        corner.move_to((0.0, 2.0));
+        corner.line_to((0.0, 0.0));
+        corner.line_to((2.0, 0.0));
+        let output = stroke_outline(outline_spec(corner, 0.5, "butt")).unwrap();
+        let bbox = output.path.bounding_box();
+        assert_close(bbox.x0, -0.25);
+        assert_close(bbox.y0, -0.25);
+        assert_ne!(output.path.winding(Point::new(-0.2, -0.2)), 0);
+        assert_ne!(output.path.winding(Point::new(0.1, 1.0)), 0);
+        assert_eq!(output.path.winding(Point::new(1.0, 1.0)), 0);
+    }
+
+    #[test]
+    fn stroke_outline_rejects_unknown_styles() {
+        let mut spec = outline_spec(straight_path(1.0), 0.5, "butt");
+        spec.join = "sharp".to_string();
+        assert!(stroke_outline(spec).is_err());
+        assert!(stroke_outline(outline_spec(straight_path(1.0), 0.5, "flat")).is_err());
+        assert!(stroke_outline(outline_spec(straight_path(1.0), 0.0, "butt")).is_err());
+    }
+
     fn straight_curve(length: f64) -> CubicBezierSpec {
         CubicBezierSpec {
             start: point(0.0, 0.0),
@@ -2042,7 +2283,9 @@ mod tests {
             coil_longitudinal_scale: default_coil_longitudinal_scale(),
             anchor_start: default_anchor_endpoint(),
             anchor_end: default_anchor_endpoint(),
+            endpoint_slope: 0.0,
             accuracy: 1e-6,
+            split_at: Vec::new(),
         })
         .unwrap();
         let points = path_points(&output.path);
@@ -2074,7 +2317,9 @@ mod tests {
             coil_longitudinal_scale: default_coil_longitudinal_scale(),
             anchor_start: default_anchor_endpoint(),
             anchor_end: default_anchor_endpoint(),
+            endpoint_slope: 0.0,
             accuracy: 1e-6,
+            split_at: Vec::new(),
         })
         .unwrap();
         let points = path_points(&output.path);
@@ -2125,7 +2370,9 @@ mod tests {
             coil_longitudinal_scale: default_coil_longitudinal_scale(),
             anchor_start: true,
             anchor_end: true,
+            endpoint_slope: 0.0,
             accuracy: 1e-6,
+            split_at: Vec::new(),
         })
         .unwrap();
         let points = path_points(&output.path);
@@ -2152,7 +2399,9 @@ mod tests {
             coil_longitudinal_scale: 0.5,
             anchor_start: false,
             anchor_end: false,
+            endpoint_slope: 0.0,
             accuracy: 1e-6,
+            split_at: Vec::new(),
         })
         .unwrap();
         let points = path_points(&output.path);
@@ -2177,12 +2426,68 @@ mod tests {
             coil_longitudinal_scale: default_coil_longitudinal_scale(),
             anchor_start: default_anchor_endpoint(),
             anchor_end: default_anchor_endpoint(),
+            endpoint_slope: 0.0,
             accuracy: 1e-6,
+            split_at: Vec::new(),
         })
         .unwrap();
         let points = path_points(&output.path);
 
         assert!(points.windows(2).any(|window| window[1].x < window[0].x));
+    }
+
+    #[test]
+    fn coil_endpoint_taper_spans_three_quarters_of_a_turn() {
+        let pattern = PointPattern::from_input(coil_pattern(16, 1.4)).unwrap();
+        for distance in [0.0, 0.0625, 0.125, 0.25, 0.375, 0.5, 1.0] {
+            let expected = smoothstep((distance / 0.375_f64).min(1.0));
+            assert_eq!(
+                pattern_endpoint_envelope(&pattern, distance, 2.0, 0.5, true, true, 0.0),
+                expected,
+            );
+            assert_eq!(
+                pattern_endpoint_envelope(&pattern, 2.0 - distance, 2.0, 0.5, true, true, 0.0),
+                expected,
+            );
+        }
+        assert_eq!(
+            pattern_endpoint_envelope(&pattern, 0.0, 2.0, 0.5, false, true, 0.0),
+            1.0,
+        );
+        assert_eq!(
+            pattern_endpoint_envelope(&pattern, 2.0, 2.0, 0.5, true, false, 0.0),
+            1.0,
+        );
+        assert_eq!(
+            pattern_endpoint_envelope(&pattern, 0.125, 0.25, 0.5, true, true, 0.0),
+            1.0,
+        );
+    }
+
+    #[test]
+    fn coil_endpoint_taper_delays_longitudinal_motion() {
+        let output = pattern_path(PatternPathSpec {
+            path: straight_path(2.0),
+            pattern: coil_pattern(16, 1.4),
+            amplitude: 0.15,
+            wavelength: 0.5,
+            phase: 0.0,
+            samples_per_period: 16,
+            coil_longitudinal_scale: 1.4,
+            anchor_start: true,
+            anchor_end: true,
+            endpoint_slope: 0.0,
+            accuracy: 1e-6,
+            split_at: Vec::new(),
+        })
+        .unwrap();
+        let points = path_points(&output.path);
+        let offset = 0.15 * 1.4 * smoothstep(1.0 / 6.0).powi(2) * std::f64::consts::FRAC_1_SQRT_2;
+        for (index, distance) in [(2, 0.0625), (62, 1.9375)] {
+            assert!((points[index].x - (distance + offset)).abs() < 1e-6);
+        }
+        assert!((points[4].y - 0.15 * smoothstep(1.0 / 3.0)).abs() < 1e-6);
+        assert!((points[32].x - (1.0 + 0.15 * 1.4)).abs() < 1e-6);
     }
 
     #[test]
@@ -2198,7 +2503,9 @@ mod tests {
             coil_longitudinal_scale: default_coil_longitudinal_scale(),
             anchor_start: true,
             anchor_end: true,
+            endpoint_slope: 0.0,
             accuracy: 1e-6,
+            split_at: Vec::new(),
         })
         .unwrap();
         let points = path_points(&output.path);
@@ -2206,6 +2513,376 @@ mod tests {
         assert_eq!(points[0], curve.start);
         assert_eq!(*points.last().unwrap(), curve.end);
         assert!(points[1].y.abs() < 0.08);
+    }
+
+    #[test]
+    fn sampled_distances_coalesce_terminal_roundoff_but_keep_partial_steps() {
+        for grid_end in [0.5_f64, 2.0, 2048.0] {
+            let step = grid_end / 4.0;
+            for length in [grid_end.next_down(), grid_end, grid_end.next_up()] {
+                assert_eq!(
+                    sampled_distances(length, grid_end, 4),
+                    vec![0.0, step, 2.0 * step, 3.0 * step, length],
+                );
+            }
+            let length = grid_end + step * 0.25;
+            assert_eq!(
+                sampled_distances(length, grid_end, 4),
+                vec![0.0, step, 2.0 * step, 3.0 * step, grid_end, length],
+            );
+        }
+    }
+
+    #[test]
+    fn pattern_endpoint_slopes_preserve_anchors_and_flatten_into_the_interior() {
+        let pattern = PointPattern::from_input(coil_pattern(16, 1.4)).unwrap();
+        for slope in [0.0, 1.0, 2.0, 3.0] {
+            for length in [2.0, 0.25] {
+                let ramp = 0.375_f64.min(length * 0.5);
+                for t in [-0.25_f64, 0.0, 0.25, 0.5, 1.0, 1.25] {
+                    let distance = t * ramp;
+                    let t = t.clamp(0.0, 1.0);
+                    let expected = smoothstep(t) + slope * t * (1.0 - t).powi(2);
+                    for (distance, start) in [(distance, true), (length - distance, false)] {
+                        let envelope = pattern_endpoint_envelope(
+                            &pattern, distance, length, 0.5, start, !start, slope,
+                        );
+                        assert_close(envelope, expected);
+                    }
+                }
+                let step = ramp * 1e-6;
+                for distance in [step, length - step] {
+                    let envelope = pattern_endpoint_envelope(
+                        &pattern, distance, length, 0.5, true, true, slope,
+                    );
+                    assert_close(envelope / 1e-6, slope);
+                }
+                for distance in [ramp - step, length - ramp + step] {
+                    let envelope = pattern_endpoint_envelope(
+                        &pattern, distance, length, 0.5, true, true, slope,
+                    );
+                    assert_close((1.0 - envelope) / 1e-6, 0.0);
+                }
+            }
+            assert_eq!(
+                pattern_endpoint_envelope(&pattern, 0.0, 0.0, 0.5, true, true, slope),
+                1.0,
+            );
+        }
+    }
+
+    #[test]
+    fn coil_endpoint_slopes_allow_nonzero_transverse_approach() {
+        for endpoint_slope in [0.0, 1.0, 2.0, 3.0] {
+            let output = pattern_path(PatternPathSpec {
+                path: straight_path(2.0),
+                pattern: coil_pattern(16, 1.4),
+                amplitude: 0.15,
+                wavelength: 0.5,
+                phase: std::f64::consts::FRAC_PI_2,
+                samples_per_period: 4096,
+                coil_longitudinal_scale: 1.4,
+                anchor_start: true,
+                anchor_end: true,
+                endpoint_slope,
+                accuracy: 1e-6,
+                split_at: Vec::new(),
+            })
+            .unwrap();
+            let curves = path_cubics(&output.path);
+            let first = curves.first().unwrap();
+            let last = curves.last().unwrap();
+            assert_eq!(first.start, point(0.0, 0.0));
+            assert_eq!(last.end, point(2.0, 0.0));
+            let outgoing = Point::from(first.control_start) - Point::from(first.start);
+            let incoming = Point::from(last.end) - Point::from(last.control_end);
+            let expected = 0.15 * endpoint_slope / 0.375;
+            // Endpoint spline tangents use sampled chords, so allow discretization error.
+            assert!((outgoing.y / outgoing.x - expected).abs() < 1e-3);
+            assert!((incoming.y / incoming.x + expected).abs() < 1e-3);
+        }
+    }
+
+    #[test]
+    fn endpoint_slope_leaves_unanchored_and_unramped_paths_unchanged() {
+        for (endpoint_ramp, anchor_start, anchor_end) in [
+            (true, false, false),
+            (false, false, false),
+            (false, true, false),
+            (false, false, true),
+            (false, true, true),
+        ] {
+            let mut spec = PatternPathSpec {
+                path: straight_path(2.0),
+                pattern: sampled_pattern(
+                    "coil",
+                    16,
+                    |theta| (1.4 * theta.cos(), theta.sin()),
+                    endpoint_ramp,
+                ),
+                amplitude: 0.15,
+                wavelength: 0.5,
+                phase: std::f64::consts::FRAC_PI_2,
+                samples_per_period: 16,
+                coil_longitudinal_scale: 1.4,
+                anchor_start,
+                anchor_end,
+                endpoint_slope: 0.0,
+                accuracy: 1e-6,
+                split_at: Vec::new(),
+            };
+            let expected = pattern_path(spec.clone()).unwrap();
+            for endpoint_slope in [1.0, 2.0, 3.0] {
+                spec.endpoint_slope = endpoint_slope;
+                assert_eq!(pattern_path(spec.clone()).unwrap(), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn pattern_path_rejects_invalid_endpoint_slopes() {
+        for endpoint_slope in [-1.0, 3.01, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let error = pattern_path(PatternPathSpec {
+                path: straight_path(2.0),
+                pattern: coil_pattern(16, 1.4),
+                amplitude: 0.15,
+                wavelength: 0.5,
+                phase: 0.0,
+                samples_per_period: 16,
+                coil_longitudinal_scale: 1.4,
+                anchor_start: true,
+                anchor_end: true,
+                endpoint_slope,
+                accuracy: 1e-6,
+                split_at: Vec::new(),
+            })
+            .unwrap_err();
+            assert!(
+                error.contains("endpoint-slope"),
+                "{endpoint_slope}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn pattern_endpoint_slope_deserializes_default_and_kebab_case_numbers() {
+        let bytes = encode_cbor(&CurvePathOutput {
+            path: straight_path(2.0),
+        })
+        .unwrap();
+        let default: PatternPathSpec = ciborium::de::from_reader(&bytes[..]).unwrap();
+        assert_eq!(default.endpoint_slope, 0.0);
+        let mut input: std::collections::BTreeMap<String, ciborium::Value> =
+            ciborium::de::from_reader(&bytes[..]).unwrap();
+        for (value, endpoint_slope) in [
+            (ciborium::Value::Float(1.5), 1.5),
+            (ciborium::Value::Integer(2.into()), 2.0),
+        ] {
+            input.insert("endpoint-slope".to_string(), value);
+            let bytes = encode_cbor(&input).unwrap();
+            let spec: PatternPathSpec = ciborium::de::from_reader(&bytes[..]).unwrap();
+            assert_eq!(
+                spec,
+                PatternPathSpec {
+                    endpoint_slope,
+                    ..default.clone()
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn fitted_point_pattern_matches_straight_formula_and_endpoints() {
+        for (length, wavelength) in [(2.0_f64, 0.4), (2.0, 0.43), (0.1, 1.0)] {
+            let periods = (length / wavelength).round().max(1.0) - 0.5;
+            let samples_per_period = (periods * 16.0) as usize;
+            for amplitude in [-0.15_f64, 0.0, 0.15] {
+                let pattern = sampled_pattern(
+                    "fitted",
+                    samples_per_period,
+                    |position| {
+                        let u = position / std::f64::consts::TAU;
+                        let theta = std::f64::consts::PI + periods * position;
+                        if u == 0.0 || u == 1.0 {
+                            (0.0, 0.0)
+                        } else {
+                            (
+                                amplitude.signum() * 1.4 * length
+                                    / (length + 2.0 * amplitude.abs() * 1.4)
+                                    * (1.0 + theta.cos() - 2.0 * u),
+                                theta.sin(),
+                            )
+                        }
+                    },
+                    false,
+                );
+                let output = pattern_path(PatternPathSpec {
+                    path: straight_path(length),
+                    pattern,
+                    amplitude,
+                    wavelength: length,
+                    phase: 0.0,
+                    samples_per_period,
+                    coil_longitudinal_scale: default_coil_longitudinal_scale(),
+                    anchor_start: true,
+                    anchor_end: true,
+                    endpoint_slope: 3.0,
+                    accuracy: 1e-9,
+                    split_at: Vec::new(),
+                })
+                .unwrap();
+                let points = path_points(&output.path);
+                assert_eq!(output.pattern, "fitted");
+                assert_eq!(points.len(), samples_per_period + 1);
+                assert_eq!(points[0], point(0.0, 0.0));
+                assert_eq!(*points.last().unwrap(), point(length, 0.0));
+                for (index, actual) in points.iter().enumerate() {
+                    let distance = length * index as f64 / samples_per_period as f64;
+                    let theta = std::f64::consts::PI + std::f64::consts::TAU * index as f64 / 16.0;
+                    let x = (distance + amplitude.abs() * 1.4 * (theta.cos() + 1.0)) * length
+                        / (length + 2.0 * amplitude.abs() * 1.4);
+                    assert_point_close(*actual, point(x, amplitude * theta.sin()));
+                }
+                let curves = path_cubics(&output.path);
+                let first = curves.first().unwrap().control_start;
+                let last = curves.last().unwrap().control_end;
+                assert!(first.x > 0.0 && last.x < length);
+                if amplitude != 0.0 {
+                    assert!(amplitude * first.y < 0.0 && amplitude * last.y < 0.0);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fitted_point_pattern_uses_local_tangents_and_normals_on_curves() {
+        let curve = CubicBez::new((0.0, 0.0), (0.0, 2.0), (2.0, 2.0), (2.0, 0.0));
+        let length = curve.arclen(1e-9);
+        for amplitude in [-0.12_f64, 0.0, 0.12] {
+            let scale =
+                amplitude.signum() * 1.25 * length / (length + 2.0 * amplitude.abs() * 1.25);
+            let spec = PatternPathSpec {
+                path: segment_path(curve),
+                pattern: sampled_pattern(
+                    "fitted",
+                    144,
+                    |position| {
+                        let u = position / std::f64::consts::TAU;
+                        let theta = std::f64::consts::PI + 4.5 * position;
+                        if u == 0.0 || u == 1.0 {
+                            (0.0, 0.0)
+                        } else {
+                            (scale * (1.0 + theta.cos() - 2.0 * u), theta.sin())
+                        }
+                    },
+                    false,
+                ),
+                amplitude,
+                wavelength: length,
+                phase: 0.0,
+                samples_per_period: 144,
+                coil_longitudinal_scale: default_coil_longitudinal_scale(),
+                anchor_start: true,
+                anchor_end: true,
+                endpoint_slope: 3.0,
+                accuracy: 1e-9,
+                split_at: Vec::new(),
+            };
+            for (anchor_start, anchor_end) in
+                [(true, true), (false, false), (false, true), (true, false)]
+            {
+                let output = pattern_path(PatternPathSpec {
+                    anchor_start,
+                    anchor_end,
+                    ..spec.clone()
+                })
+                .unwrap();
+                let points = path_points(&output.path);
+                assert_eq!(output.pattern, "fitted");
+                assert_eq!(points.len(), 145);
+                assert_eq!(points[0], point(0.0, 0.0));
+                assert_eq!(*points.last().unwrap(), point(2.0, 0.0));
+                for (index, actual) in points.iter().enumerate() {
+                    let u = index as f64 / 144.0;
+                    let theta = std::f64::consts::PI + std::f64::consts::TAU * index as f64 / 32.0;
+                    let t = curve.inv_arclen(length * u, 1e-9);
+                    let tangent = curve.deriv().eval(t).to_vec2().normalize();
+                    let expected = curve.eval(t)
+                        + tangent * (amplitude * scale * (1.0 + theta.cos() - 2.0 * u))
+                        + Vec2::new(-tangent.y, tangent.x) * (amplitude * theta.sin());
+                    assert_point_close(*actual, expected.into());
+                }
+                let segments = output.path.segments().collect::<Vec<_>>();
+                for segment in &segments {
+                    let midpoint = segment.eval(0.5);
+                    assert!(midpoint.x.is_finite() && midpoint.y.is_finite());
+                }
+                for pair in segments.windows(2) {
+                    assert_eq!(pair[0].end(), pair[1].start());
+                    assert!(
+                        (path_seg_tangent(&pair[0], 1.0) - path_seg_tangent(&pair[1], 0.0)).hypot()
+                            < 1e-8
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn point_patterns_handle_short_and_degenerate_paths() {
+        let mut move_only = BezPath::new();
+        move_only.move_to((3.0, 4.0));
+        for path in [
+            BezPath::new(),
+            move_only,
+            straight_path(0.0),
+            segment_path(Line::new((1.0, 2.0), (1.0, 2.0))),
+            straight_path(f64::EPSILON * 0.5),
+            straight_path(1e-8),
+        ] {
+            let length = path_length_value(&path, 1e-9);
+            for amplitude in [-0.12, 0.0, 0.12] {
+                let output = pattern_path(PatternPathSpec {
+                    path: path.clone(),
+                    pattern: sampled_pattern(
+                        "custom",
+                        16,
+                        |theta| (theta.cos(), theta.sin()),
+                        false,
+                    ),
+                    amplitude,
+                    wavelength: length.max(f64::EPSILON),
+                    phase: 0.37,
+                    samples_per_period: 16,
+                    coil_longitudinal_scale: default_coil_longitudinal_scale(),
+                    anchor_start: true,
+                    anchor_end: true,
+                    endpoint_slope: 3.0,
+                    accuracy: 1e-9,
+                    split_at: Vec::new(),
+                })
+                .unwrap();
+                assert_eq!(output.pattern, "custom");
+                if length <= f64::EPSILON {
+                    assert_eq!(output.path, path);
+                } else {
+                    let points = path_points(&output.path);
+                    assert_eq!(points.len(), 17);
+                    assert_eq!(points[0], point(0.0, 0.0));
+                    assert_eq!(*points.last().unwrap(), point(length, 0.0));
+                }
+                for curve in path_cubics(&output.path) {
+                    for point in [
+                        curve.start,
+                        curve.control_start,
+                        curve.control_end,
+                        curve.end,
+                    ] {
+                        assert!(point.x.is_finite() && point.y.is_finite());
+                    }
+                }
+            }
+        }
     }
 
     #[test]
