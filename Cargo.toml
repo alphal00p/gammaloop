@@ -80,14 +80,16 @@ tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-indicatif = "0.3.13"
 tracing-subscriber = "0.3.23"
-symbolica-typst-atom-payload = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "cf7b9fe59ba3fc7fe9ea70b875f5660ee2addd7a", default-features = false }
+symbolica-typst-atom-payload = { version = "0.1.0", default-features = false }
 typed-index-collections = "3.5.0"
 vakint = { path = "crates/vakint/" }
 walkdir = "2.5.0"
 
 which = "8.0.0"
 
+# Consuming workspaces choose these sources through their own root patches.
 [patch.crates-io]
+symbolica-typst-atom-payload = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "cf7b9fe59ba3fc7fe9ea70b875f5660ee2addd7a" }
 symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "06906976bca24fefc5203aee699d90d62ebe08cd" }
 
 # Reuse optimized Symbolica while keeping workspace debug builds inexpensive.

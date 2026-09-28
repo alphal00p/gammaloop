@@ -87,6 +87,10 @@ workspace-members = [
 third-party = [
     { name = "arrayvec", version = "0.7" },
     { name = "indenter", version = "0.3" },
+    # Keep patched sources under the consuming workspace's control. Symbolica's
+    # feature anchors are declared manually using the registry dependency.
+    { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica", rev = "06906976bca24fefc5203aee699d90d62ebe08cd" },
+    { name = "symbolica-typst-atom-payload", git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "cf7b9fe59ba3fc7fe9ea70b875f5660ee2addd7a" },
     # Stub generation is opt-in and must not leak into ordinary abi3 builds.
     { name = "pyo3-stub-gen" },
 ]
