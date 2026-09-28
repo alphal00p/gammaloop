@@ -298,7 +298,8 @@ class EvaluationResult:
     @property
     def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:
         r"""
-        Per-precision stability attempts, or ``None`` when metadata was omitted.
+        Ordered stability-level attempts, or ``None`` when metadata was omitted.
+        Each attempt records its precision and representation; precision may repeat.
         """
     @property
     def event_groups(self) -> builtins.list[EventGroup]:
@@ -698,11 +699,13 @@ class GammaLoopAPI:
         """
     def get_orientations(self, graph_name: builtins.str, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> builtins.list[builtins.dict[builtins.int, builtins.int]]:
         r"""
-        Return the causal-flow orientations generated for one graph.
+        Return native edge directions for one graph's first generated 3D representation.
 
         Each returned dictionary maps an edge id to ``1`` (default), ``-1``
         (reversed), or ``0`` (undirected). Supply process and integrand selectors when
         the active state does not identify a unique integrand.
+        The entries describe native orientation data, not runtime execution slots.
+        They do not encode LTD's full affine energy maps.
 
         Parameters
         ----------
@@ -716,7 +719,7 @@ class GammaLoopAPI:
         Returns
         -------
         list[dict[int, int]]
-            One edge-direction mapping per generated orientation.
+            One edge-direction mapping per native orientation entry.
         """
     def get_model(self) -> builtins.str:
         r"""
@@ -1829,7 +1832,8 @@ class SampleEvaluationResult:
     @property
     def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:
         r"""
-        Per-precision stability attempts, or ``None`` when metadata was omitted.
+        Ordered stability-level attempts, or ``None`` when metadata was omitted.
+        Each attempt records its precision and representation; precision may repeat.
         """
     @property
     def event_groups(self) -> builtins.list[EventGroup]:

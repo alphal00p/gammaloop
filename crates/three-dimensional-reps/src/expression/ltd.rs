@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 
 use super::*;
 use crate::{
-    generation::{GenerationError, lagrange_basis},
-    surface::{LinearSurface, LinearSurfaceID, LinearSurfaceKind, SurfaceOrigin},
+    generation::{GenerationError, classify_surface_kind, lagrange_basis},
+    surface::{LinearSurface, LinearSurfaceID, SurfaceOrigin},
     utils::{RationalExt, solve_rational_system},
 };
 
@@ -116,20 +116,8 @@ impl<E: Clone, H: Clone> ThreeDExpression<OrientationID, E, H> {
         let mut intern = |expression: LinearEnergyExpr| {
             *surface_ids.entry(expression.clone()).or_insert_with(|| {
                 let id = LinearSurfaceID(surfaces.linear_surface_cache.len());
-                let all_positive = expression
-                    .internal_terms
-                    .iter()
-                    .all(|(_, coefficient)| !coefficient.is_negative());
-                let all_negative = expression
-                    .internal_terms
-                    .iter()
-                    .all(|(_, coefficient)| coefficient.is_negative());
                 surfaces.linear_surface_cache.push(LinearSurface {
-                    kind: if all_positive || all_negative {
-                        LinearSurfaceKind::Esurface
-                    } else {
-                        LinearSurfaceKind::Hsurface
-                    },
+                    kind: classify_surface_kind(&expression),
                     expression,
                     origin: SurfaceOrigin::Physical,
                     numerator_only: false,
@@ -362,7 +350,7 @@ impl<E: Clone, H: Clone> ThreeDExpression<OrientationID, E, H> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::symbols::numerator_sampling_scale;
+    use crate::{surface::LinearSurfaceKind, symbols::numerator_sampling_scale};
 
     #[test]
     fn laurent_selection_retains_numerator_and_denominator_jets_exactly() {

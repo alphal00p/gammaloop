@@ -1766,8 +1766,7 @@ impl SiteBuilder {
             if !matches!(
                 source.file_name().and_then(|name| name.to_str()),
                 Some("AGENTS.md" | "README.md")
-            ) && source != Path::new("LTD_SUPPORT_PLAN.md")
-            {
+            ) {
                 actual.insert(source);
             }
         }
@@ -10385,38 +10384,6 @@ mod tests {
         assert!(builder.check_prose_sources().is_err());
         builder.legacy_prose.source.clear();
         fs::write(temporary.path().join("new-note.typ"), "= New prose").unwrap();
-        assert!(builder.check_prose_sources().is_err());
-    }
-
-    #[test]
-    fn prose_source_gate_allows_only_the_requested_root_ltd_plan() {
-        let temporary = tempfile::tempdir().unwrap();
-        fs::write(
-            temporary.path().join("LTD_SUPPORT_PLAN.md"),
-            "Approved plan",
-        )
-        .unwrap();
-        let mut builder = SiteBuilder::discover().unwrap();
-        builder.root = temporary.path().to_path_buf();
-        builder.legacy_prose = LegacyProseConfig {
-            schema: LEGACY_PROSE_SCHEMA_VERSION,
-            source: Vec::new(),
-        };
-        builder.check_prose_sources().unwrap();
-
-        fs::create_dir(temporary.path().join("notes")).unwrap();
-        fs::write(
-            temporary.path().join("notes/LTD_SUPPORT_PLAN.md"),
-            "Other plan",
-        )
-        .unwrap();
-        assert!(builder.check_prose_sources().is_err());
-        fs::remove_file(temporary.path().join("notes/LTD_SUPPORT_PLAN.md")).unwrap();
-        fs::write(
-            temporary.path().join("LTD_SUPPORT_PLAN.typ"),
-            "= Parallel plan",
-        )
-        .unwrap();
         assert!(builder.check_prose_sources().is_err());
     }
 

@@ -2054,7 +2054,8 @@ impl PySampleEvaluationResult {
             .map(|metadata| metadata.is_nan)
     }
 
-    /// Per-precision stability attempts, or ``None`` when metadata was omitted.
+    /// Ordered stability-level attempts, or ``None`` when metadata was omitted.
+    /// Each attempt records its precision and representation; precision may repeat.
     #[getter]
     fn stability_results(&self) -> Option<Vec<PyStabilityResult>> {
         self.inner
@@ -2175,7 +2176,8 @@ impl PyEvaluationResult {
         self.sample().is_nan()
     }
 
-    /// Per-precision stability attempts, or ``None`` when metadata was omitted.
+    /// Ordered stability-level attempts, or ``None`` when metadata was omitted.
+    /// Each attempt records its precision and representation; precision may repeat.
     #[getter]
     fn stability_results(&self) -> Option<Vec<PyStabilityResult>> {
         self.sample().stability_results()
@@ -4280,11 +4282,13 @@ impl GammaLoopAPI {
             .collect())
     }
 
-    /// Return the causal-flow orientations generated for one graph.
+    /// Return native edge directions for one graph's first generated 3D representation.
     ///
     /// Each returned dictionary maps an edge id to ``1`` (default), ``-1``
     /// (reversed), or ``0`` (undirected). Supply process and integrand selectors when
     /// the active state does not identify a unique integrand.
+    /// The entries describe native orientation data, not runtime execution slots.
+    /// They do not encode LTD's full affine energy maps.
     ///
     /// Parameters
     /// ----------
@@ -4298,7 +4302,7 @@ impl GammaLoopAPI {
     /// Returns
     /// -------
     /// list[dict[int, int]]
-    ///     One edge-direction mapping per generated orientation.
+    ///     One edge-direction mapping per native orientation entry.
     #[pyo3(name="get_orientations", signature = (graph_name, process_id=None, integrand_name=None))]
     pub(crate) fn get_orientations(
         &self,
