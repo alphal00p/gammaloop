@@ -10,6 +10,39 @@ import linnet as lp
     importlib.util.find_spec("playwright"), "Playwright is not installed"
 )
 class SvgBrowserTests(unittest.TestCase):
+    def test_collection_viewport_keeps_hover_and_pinned_details_inside_graph(self):
+        from playwright.sync_api import sync_playwright
+
+        left, right = lp.node("left"), lp.node("right")
+        graph = lp.build(left, right, lp.edge(lp.source(left), "p", lp.sink(right)))
+        drawing = graph.to_svg().replace(
+            'data-linnet-interactive="true"',
+            'data-linnet-interactive="true" data-linnet-viewport-height="360"',
+            1,
+        )
+        with sync_playwright() as playwright:
+            for engine in (playwright.chromium, playwright.webkit):
+                with self.subTest(browser=engine.name):
+                    browser = engine.launch()
+                    try:
+                        page = browser.new_page(viewport={"width": 420, "height": 800})
+                        page.set_content('<meta charset="utf-8">' + drawing)
+                        svg = page.locator("svg[data-linnet-interactive]")
+                        target = page.locator('[data-linnet-kind="node"]').first
+                        self.assertEqual(svg.bounding_box()["height"], 400)
+                        target.dispatch_event("pointerover")
+                        self.assertEqual(svg.bounding_box()["height"], 400)
+                        panel = page.locator(".linnet-inspector")
+                        self.assertTrue(panel.is_visible())
+                        target.dispatch_event("click")
+                        target.dispatch_event("pointerout")
+                        self.assertIn("Pinned", panel.inner_text())
+                        self.assertEqual(svg.bounding_box()["height"], 400)
+                        page.get_by_role("button", name="Close graph details").click()
+                        self.assertFalse(panel.is_visible())
+                    finally:
+                        browser.close()
+
     def test_preview_only_while_hovered_or_focused_unless_pinned(self):
         from playwright.sync_api import sync_playwright
 

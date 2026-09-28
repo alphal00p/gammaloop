@@ -3,6 +3,20 @@
 #let notebooks = [
 = Notebook figures and symbolic output
 
+Displaying an `Amplitude` shows compact rows pairing each diagram with its
+weighted tensor contribution. Open a row to inspect the graph with Linnet's
+pan, zoom, selection, and hover controls. `amplitude.expression()` remains the
+full symbolic operator and uses Spenso's tensor printer.
+
+Generated collections use a thumbnail strip and one shared graph viewer.
+For `process.generate_cross_section(...)`, these are the actual cut
+forward-scattering diagrams. Selecting a thumbnail changes the inspected graph;
+it does not alter the diagrams or their momentum routing. Expanded collection
+graphs keep a fixed viewport height, with hover previews overlaid and click-to-pin
+details. Displays preview at most six diagrams; `.diagrams` exposes the full
+collection. Single-diagram SVG and Typst exports remain available independently.
+
+
 For complete executable examples, open the #link("guides/showcases/")[FeynKit showcase gallery].
 
 Loading a model registers its parameter `texname` labels with Spenso's display
