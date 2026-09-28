@@ -3539,13 +3539,55 @@ mod tests {
     use super::*;
 
     const STATE_LOAD_ORDER_CHILD: &str = "GAMMALOOP_STATE_LOAD_ORDER_CHILD";
-    const STATE_LOAD_ORDER_TEST: &str = "state::tests::state_load_preserves_ufo_custom_printer";
+    const STATE_LOAD_ORDER_TEST: &str =
+        "state::tests::state_load_preserves_ufo_symbols_and_model_values";
 
     #[test]
-    fn state_load_preserves_ufo_custom_printer() {
+    fn state_load_preserves_ufo_symbols_and_model_values() {
         if let Some(state_path) = std::env::var_os(STATE_LOAD_ORDER_CHILD) {
             for _ in 0..2 {
-                let _state = State::load(PathBuf::from(&state_path), None, None).unwrap();
+                let state = State::load(PathBuf::from(&state_path), None, None).unwrap();
+                let ProcessCollection::Amplitudes(amplitudes) =
+                    &state.process_list.processes[0].collection
+                else {
+                    panic!("expected an amplitude");
+                };
+                let mut params = amplitudes["default"].graphs[0].graph.param_builder.clone();
+                let saved_values = params.values.clone();
+                assert_eq!(saved_values.len(), 3);
+                assert!(!params.pairs.model_parameters.params.is_empty());
+                params.update_model_values(&state.model);
+                for (actual, expected) in params.values.iter().zip(&saved_values) {
+                    for (actual, expected) in actual.iter().zip(expected) {
+                        for (actual, expected) in
+                            [(actual.re.0, expected.re.0), (actual.im.0, expected.im.0)]
+                        {
+                            assert!(
+                                (actual - expected).abs() <= 1e-13 * expected.abs().max(1.0),
+                                "model value changed after reload: {actual} != {expected}"
+                            );
+                        }
+                    }
+                }
+                let mut model = state.model.clone();
+                model.get_parameter_mut("aS").unwrap().value = Some(Complex::new_re(F(1.0)));
+                model.recompute_dependents().unwrap();
+                params.update_model_values(&model);
+                let coupling = model.get_coupling("GC_12");
+                let position = params.pairs.model_parameters.value_range.start
+                    + params
+                        .pairs
+                        .model_parameters
+                        .params
+                        .iter()
+                        .position(|param| *param == Atom::from(coupling.name))
+                        .unwrap();
+                for (value_index, values) in params.values.iter().enumerate() {
+                    assert_eq!(
+                        values[position * (value_index + 1)],
+                        coupling.value.unwrap().map(F)
+                    );
+                }
                 for name in ["G", "orphan_ufo_printer"] {
                     let symbol = UFOSymbol::from(name);
                     assert!(symbol.0.get_print_function().is_some(), "{name}");
@@ -3570,8 +3612,29 @@ mod tests {
 
         let temp = tempdir().unwrap();
         let mut state = State::new(temp.path(), None);
+        // Force a different registration order from the alphabetical manifest replay.
+        let _ = UFOSymbol::from("GC_12");
         state.model = load_generic_model("sm");
         state.model_parameters = InputParamCard::default_from_model(&state.model);
+        let mut graphs = Graph::from_string(
+            "digraph model_values { node [num=1]; edge [num=1, mass=0]; A -> A; }",
+            &state.model,
+        )
+        .unwrap();
+        graphs[0].param_builder.initialize_duals(3);
+        state
+            .import_graphs(
+                graphs,
+                GraphImportOptions {
+                    process_name: Some("model_values".into()),
+                    process_id: None,
+                    process_definition: None,
+                    integrand_name: Some("default".into()),
+                    overwrite: false,
+                    append: false,
+                },
+            )
+            .unwrap();
         // Reproduce a coupling removed by a restriction: it survives in Symbolica's
         // global registry but has no declaration in the saved model.
         let _ = UFOSymbol::from("orphan_ufo_printer");

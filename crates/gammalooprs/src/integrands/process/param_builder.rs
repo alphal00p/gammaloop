@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap},
     fmt::Display,
     ops::{Deref, Range},
 };
@@ -1498,29 +1498,41 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     /// Refresh model-dependent parameter slots while preserving the builder's graph layout.
     pub fn update_model_values(&mut self, model: &Model) {
-        for (value_index, values) in self.values.iter_mut().enumerate() {
-            let multiplicative_offset = value_index + 1;
-            let mut pos = self.pairs.model_parameters.value_range.start * multiplicative_offset;
-            let _value_index = multiplicative_offset - 1;
-            for cpl in model.couplings.values().filter(|c| c.value.is_some()) {
-                if let Some(value) = cpl.value {
-                    values[pos] = value.map(F::from_f64);
-                    pos += multiplicative_offset;
-                }
+        // Loading a state can remap symbol IDs and change the model's iteration order.
+        // The evaluator still expects the parameter order stored in this builder.
+        let model_values: HashMap<Atom, Complex<F<T>>> = model
+            .couplings
+            .values()
+            .filter_map(|coupling| {
+                coupling
+                    .value
+                    .map(|value| (coupling.name.into(), value.map(F::from_f64)))
+            })
+            .chain(model.parameters.values().filter_map(|parameter| {
+                parameter.value.map(|value| {
+                    (
+                        parameter.name.into(),
+                        Complex::new(F::from_ff64(value.re), F::from_ff64(value.im)),
+                    )
+                })
+            }))
+            .collect();
+        for (param, position) in self
+            .pairs
+            .model_parameters
+            .params
+            .iter()
+            .zip_eq(self.pairs.model_parameters.value_range.clone())
+        {
+            let value = model_values.get(param).unwrap_or_else(|| {
+                panic!(
+                    "Model parameter {param} has no value in model {}",
+                    model.name
+                )
+            });
+            for (value_index, values) in self.values.iter_mut().enumerate() {
+                values[position * (value_index + 1)] = value.clone();
             }
-            for param in model.parameters.values().filter(|p| p.value.is_some()) {
-                if let Some(value) = param.value {
-                    let value =
-                        Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
-                    values[pos] = value.clone();
-                    pos += multiplicative_offset;
-                }
-            }
-
-            debug_assert_eq!(
-                pos,
-                self.pairs.model_parameters.value_range.end * multiplicative_offset
-            );
         }
     }
 
