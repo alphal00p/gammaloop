@@ -1,4 +1,7 @@
-use std::ops::Deref;
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+};
 
 use color_eyre::eyre::{bail, ensure};
 use idenso::{
@@ -6,8 +9,15 @@ use idenso::{
     representations::{ColorAdjoint, ColorFundamental},
 };
 use spenso::{
-    network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
-    structure::representation::{Minkowski, RepName},
+    network::parsing::{
+        AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShorthandParsing,
+        StrictTensorFilter,
+    },
+    shadowing::{ANTISYM, CYCLIC, SYM},
+    structure::{
+        representation::{LibraryRep, Minkowski, RepName},
+        slot::{IsAbstractSlot, Slot},
+    },
 };
 
 use symbolica::{
@@ -18,7 +28,7 @@ use symbolica::{
 
 use crate::utils::{GS, TENSORLIB, W_};
 
-use super::ParsingNet;
+use super::{ParsingNet, aind::Aind};
 pub type ParsingNetError = spenso::network::TensorNetworkError<
     spenso::structure::IndexlessNamedStructure<
         Symbol,
@@ -30,6 +40,15 @@ pub type ParsingNetError = spenso::network::TensorNetworkError<
 >;
 
 pub trait NumeratorAtomExt {
+    /// Rename each private contraction while preserving the supplied free
+    /// interface. Scalar function payloads remain opaque; tensor wrappers keep
+    /// their nested slot structure. The caller owns collision-free fresh names.
+    fn freshen_private_indices(
+        &self,
+        interface: &HashSet<Atom>,
+        fresh_index: impl FnMut() -> Atom,
+    ) -> Atom;
+
     /// Truncate through an absolute integer order, preserving an existing root
     /// product's variable-independent factors outside the coefficient sum.
     /// Other roots retain native series behavior, including additive zeros.
@@ -59,6 +78,15 @@ pub trait NumeratorAtomExt {
 }
 
 impl NumeratorAtomExt for Atom {
+    fn freshen_private_indices(
+        &self,
+        interface: &HashSet<Atom>,
+        fresh_index: impl FnMut() -> Atom,
+    ) -> Atom {
+        self.as_view()
+            .freshen_private_indices(interface, fresh_index)
+    }
+
     fn series_preserving_factors(
         &self,
         variable: Symbol,
@@ -98,6 +126,35 @@ impl NumeratorAtomExt for Atom {
 }
 
 impl NumeratorAtomExt for AtomView<'_> {
+    fn freshen_private_indices(
+        &self,
+        interface: &HashSet<Atom>,
+        mut fresh_index: impl FnMut() -> Atom,
+    ) -> Atom {
+        let mut private_indices = HashMap::new();
+        self.replace_map(|part, _, output| {
+            if let Ok(slot) = Slot::<LibraryRep, Aind>::try_from(part) {
+                if !interface.contains(&part.to_owned()) {
+                    let fresh = private_indices
+                        .entry(slot.aind())
+                        .or_insert_with(&mut fresh_index);
+                    **output = slot.rep().to_symbolic([fresh.clone()]);
+                } else {
+                    // A dual slot owns its inner representation; do not revisit
+                    // that as a separate base slot.
+                    output.set_from_view(&part);
+                }
+            } else if let AtomView::Fun(function) = part
+                && !part.is_tensorial(StrictTensorFilter::Tagged)
+                && ![*SYM, *ANTISYM, *CYCLIC].contains(&function.get_symbol())
+            {
+                // Scalar function payloads are opaque to the tensor interface,
+                // including parameter aliases.
+                output.set_from_view(&part);
+            }
+        })
+    }
+
     fn series_preserving_factors(
         &self,
         variable: Symbol,

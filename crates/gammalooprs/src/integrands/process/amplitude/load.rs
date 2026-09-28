@@ -34,15 +34,16 @@ use symbolica::{
 };
 
 use crate::integrands::process::cross_section::load::{
-    LoadedStandaloneThresholdMultiplierCollection, StandaloneThresholdMultiplierCollectionArchive,
-    build_threshold_multiplier_collection, validate_threshold_multiplier_archive,
+    LoadedStandaloneThresholdMultiplierCollection, StandaloneParametricResidueRows,
+    StandaloneThresholdMultiplierCollectionArchive, build_threshold_multiplier_collection,
+    validate_threshold_multiplier_archive,
 };
 use crate::processes::{
     StandaloneNumericTarget, ThresholdCountertermComponentKind,
     ThresholdCountertermMetadataRegistry, ThresholdCountertermOrigin, ThresholdCountertermSide,
 };
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 11;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 12;
 pub const STANDALONE_MODE_RUST: u8 = 0;
 
 #[derive(
@@ -142,11 +143,17 @@ where
             let replacements = parse_fn_map_entries(&graph.fn_map_entries, state_map)?;
             let timed_build = |label: &str,
                                payload: StandaloneGenericEvaluatorArchive<A>,
-                               iterate: bool|
+                               iterate: bool,
+                               parameters: &[Atom]|
              -> Result<LoadedGenericEvaluator> {
                 let started = Instant::now();
-                let evaluator =
-                    build_evaluator(payload, &params, replacements.clone(), state_map, iterate)?;
+                let evaluator = build_evaluator(
+                    payload,
+                    parameters,
+                    replacements.clone(),
+                    state_map,
+                    iterate,
+                )?;
                 println!(
                     "[timing] build_evaluator {}::{} took {:?}",
                     graph_name,
@@ -159,13 +166,31 @@ where
             let load_stack = |label: &str,
                               stack: StandaloneEvaluatorStackArchive<A>|
              -> Result<LoadedStandaloneEvaluatorStack> {
+                let mut parametric_parameters = params.clone();
+                if let Some(catalog) = &stack.parametric_rows {
+                    catalog.validate()?;
+                    parametric_parameters.extend(
+                        catalog
+                            .parameters
+                            .iter()
+                            .map(|parameter| ImportWithMap::import_with_map(parameter, state_map))
+                            .collect::<Result<Vec<_>>>()?,
+                    );
+                }
                 Ok(LoadedStandaloneEvaluatorStack {
+                    parametric_rows: stack.parametric_rows.map(|catalog| {
+                        StandaloneParametricResidueRows {
+                            parameters: parametric_parameters[params.len()..].to_vec(),
+                            rows: catalog.rows,
+                        }
+                    }),
                     explicit_orientation_sum_only: stack.explicit_orientation_sum_only,
                     production_orientation_ids: stack.production_orientation_ids,
                     parametric: timed_build(
                         &format!("{label}.parametric"),
                         stack.single_parametric,
                         false,
+                        &parametric_parameters,
                     )?,
                     orientation_start: stack.start,
                     residue_map_id_start: stack.residue_map_id_start,
@@ -177,16 +202,20 @@ where
                         .collect::<Result<Vec<_>>>()?,
                     iterative: stack
                         .iterative
-                        .map(|payload| timed_build(&format!("{label}.iterative"), payload, true))
+                        .map(|payload| {
+                            timed_build(&format!("{label}.iterative"), payload, true, &params)
+                        })
                         .transpose()?,
                     summed: stack
                         .summed
-                        .map(|payload| timed_build(&format!("{label}.summed"), payload, false))
+                        .map(|payload| {
+                            timed_build(&format!("{label}.summed"), payload, false, &params)
+                        })
                         .transpose()?,
                     summed_fnmap: stack
                         .summed_function_map
                         .map(|payload| {
-                            timed_build(&format!("{label}.summed_fnmap"), payload, false)
+                            timed_build(&format!("{label}.summed_fnmap"), payload, false, &params)
                         })
                         .transpose()?,
                 })
@@ -816,6 +845,7 @@ pub struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
 pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     pub(crate) explicit_orientation_sum_only: bool,
     pub(crate) production_orientation_ids: Vec<usize>,
+    pub(crate) parametric_rows: Option<StandaloneParametricResidueRows<A>>,
     pub(crate) single_parametric: StandaloneGenericEvaluatorArchive<A>,
     pub(crate) iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
@@ -1329,6 +1359,7 @@ pub struct LoadedStandaloneGraphTerm {
 
 #[allow(clippy::type_complexity)]
 pub struct LoadedStandaloneEvaluatorStack {
+    pub(crate) parametric_rows: Option<StandaloneParametricResidueRows<Atom>>,
     pub(crate) explicit_orientation_sum_only: bool,
     pub(crate) production_orientation_ids: Vec<usize>,
     pub(crate) representative_input: Vec<Complex<f64>>,
@@ -1672,6 +1703,14 @@ impl LoadedStandaloneEvaluatorStack {
             }
         };
 
+        let rows = if request.method == StandaloneMethod::SingleParametric {
+            self.parametric_rows
+                .as_ref()
+                .map(|catalog| catalog.rows.clone())
+        } else {
+            None
+        };
+        let multiplicity = self.mult_offset;
         let evaluator = self.selected_evaluator_mut(request.method)?;
         let (_, _, eval, result_template) = evaluator;
         let mut runtime = StandaloneRuntimeEvaluator::build(
@@ -1682,21 +1721,24 @@ impl LoadedStandaloneEvaluatorStack {
         )?;
         let mut accumulated = vec![Complex::new(0.0, 0.0); result_template.len()];
 
-        for input in inputs {
-            let mut current = vec![Complex::new(0.0, 0.0); result_template.len()];
-            runtime.evaluate(&input, &mut current);
-            for (accumulated_value, current_value) in accumulated.iter_mut().zip(current) {
-                *accumulated_value += current_value;
+        for physical_input in inputs {
+            for row in rows.as_deref().unwrap_or(&[Vec::new()]) {
+                let mut input = physical_input.clone();
+                for coefficient in row {
+                    input.push(Complex::new(coefficient.to_f64(), 0.0));
+                    input.extend((1..multiplicity).map(|_| Complex::new(0.0, 0.0)));
+                }
+                let mut current = vec![Complex::new(0.0, 0.0); result_template.len()];
+                runtime.evaluate(&input, &mut current);
+                for (accumulated_value, current_value) in accumulated.iter_mut().zip(current) {
+                    *accumulated_value += current_value;
+                }
             }
         }
 
         Ok(accumulated)
     }
 
-    // fn benchmark_parametric(&self){
-    //     self.parametric.evaluate_single(params)
-    // }
-    //
     fn benchmark_summed<R: Rng + ?Sized>(
         &mut self,
         rng: &mut R,
@@ -1819,60 +1861,6 @@ impl LoadedStandaloneEvaluatorStack {
             }
         }
         Some((sum / (n_samples as u32), max, orientation_sum))
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn benchmark_parametric<R: Rng + ?Sized>(
-        &mut self,
-        orientations: &[Vec<i8>],
-        rng: &mut R,
-        n_samples: usize,
-    ) -> (
-        Vec<Vec<Complex<f64>>>,
-        Vec<Vec<Complex<f64>>>,
-        Duration,
-        Duration,
-    ) {
-        let samples: Vec<_> = (0..n_samples)
-            .map(|_| {
-                let mut samples = vec![];
-                for (index, o) in orientations.iter().enumerate() {
-                    samples.push(self.scramble_input_with_orientation(index, o, rng))
-                }
-                samples
-            })
-            .collect();
-        let (_, _, eval, result) = &mut self.parametric;
-        let mut result_per_orientation =
-            vec![vec![Complex::new_zero(); result.len()]; orientations.len()];
-
-        let mut sum = Duration::ZERO;
-        let mut max = Duration::ZERO;
-        for s in &samples {
-            for r in result.iter_mut() {
-                *r = Complex::new(0.0, 0.0);
-            }
-            let instant = Instant::now();
-            for (i, o) in s.iter().enumerate() {
-                eval.evaluate(o, &mut result_per_orientation[i]);
-
-                for (r, a) in result.iter_mut().zip(&result_per_orientation[i]) {
-                    *r += a
-                }
-            }
-            let duration = instant.elapsed();
-            if max < duration {
-                max = duration;
-            }
-            sum += duration;
-        }
-
-        (
-            result_per_orientation,
-            samples.last().unwrap().clone(),
-            sum / (n_samples as u32),
-            max,
-        )
     }
 
     fn benchmark_summed_fnmap<R: Rng + ?Sized>(
@@ -2792,6 +2780,7 @@ mod tests {
                     StandaloneEvaluatorStackArchive {
                         explicit_orientation_sum_only: false,
                         production_orientation_ids: vec![4, 9],
+                        parametric_rows: None,
                         single_parametric: generic,
                         iterative: None,
                         summed_function_map: None,
@@ -2847,22 +2836,49 @@ mod tests {
 
     #[test]
     fn standalone_roundtrip_keeps_representation_order_and_selects_each_program() -> Result<()> {
-        let stack = |value: i64| StandaloneEvaluatorStackArchive {
-            explicit_orientation_sum_only: true,
-            production_orientation_ids: Vec::new(),
-            single_parametric: StandaloneGenericEvaluatorArchive {
-                exprs: vec![value.to_string()],
-                additional_fn_map_entries: Vec::new(),
-                dual_shape: None,
-                zero_components: Vec::new(),
-            },
-            iterative: None,
-            summed_function_map: None,
-            summed: None,
-            representative_input: Vec::new(),
-            start: 0,
-            residue_map_id_start: 0,
-            mult_offset: 1,
+        let stack = |value: i64| {
+            let parametric = StandaloneGenericEvaluatorArchive {
+                exprs: vec![format!("{value}*standalone_joint_numerator(x+c)")],
+                additional_fn_map_entries: vec![(
+                    "standalone_joint_numerator(u)".to_owned(),
+                    "u^2".to_owned(),
+                    Vec::new(),
+                    vec!["u".to_owned()],
+                    true,
+                )],
+                dual_shape: Some(vec![vec![0], vec![1]]),
+                zero_components: vec![(1, 1)],
+            };
+            let mut summed = parametric.clone();
+            summed.exprs = vec![format!(
+                "{value}*(standalone_joint_numerator(x+1)+standalone_joint_numerator(x+3))"
+            )];
+            summed.zero_components.clear();
+            StandaloneEvaluatorStackArchive {
+                explicit_orientation_sum_only: true,
+                production_orientation_ids: Vec::new(),
+                parametric_rows: Some(StandaloneParametricResidueRows {
+                    parameters: vec!["c".to_owned()],
+                    rows: vec![vec![Rational::from(1)], vec![Rational::from(3)]],
+                }),
+                single_parametric: parametric,
+                iterative: None,
+                summed_function_map: Some(summed),
+                summed: None,
+                representative_input: vec![
+                    StandaloneComplexInput {
+                        re: "2".to_owned(),
+                        im: "0".to_owned(),
+                    },
+                    StandaloneComplexInput {
+                        re: "1".to_owned(),
+                        im: "0".to_owned(),
+                    },
+                ],
+                start: 0,
+                residue_map_id_start: 0,
+                mult_offset: 2,
+            }
         };
         let archive = StandaloneEvaluatorArchive {
             version: STANDALONE_EVALUATORS_VERSION,
@@ -2872,7 +2888,7 @@ mod tests {
             graph_terms: vec![StandaloneGraphTermArchive {
                 graph_name: "representation_dispatch".to_owned(),
                 orientations: Vec::new(),
-                param_builder_params: Vec::<String>::new(),
+                param_builder_params: vec!["x".to_owned()],
                 fn_map_entries: Vec::new(),
                 original_integrand: BTreeMap::from([
                     ("cff".to_owned(), stack(3)),
@@ -2886,29 +2902,50 @@ mod tests {
             }],
         };
         let encoded = bincode::encode_to_vec(&archive, bincode::config::standard())?;
-        let (restored, _): (StandaloneEvaluatorArchive<(), String>, _) =
+        let (binary, _): (StandaloneEvaluatorArchive<(), String>, _) =
             bincode::decode_from_slice(&encoded, bincode::config::standard())?;
-        let mut loaded = restored.load()?;
-        assert_eq!(loaded.three_d_representations, ["ltd", "cff"]);
-        for (representation, expected) in [("cff", 3.0), ("ltd", 7.0)] {
-            let result = loaded.graph_terms[0]
-                .stack_mut(representation, &StandaloneStackSelection::Original)?
-                .evaluate_with_backend(StandaloneEvaluationRequest {
-                    backend: StandaloneBackend::Eager,
-                    method: StandaloneMethod::SingleParametric,
-                    orientations: &[],
-                    orientation_index: None,
-                    custom_input: None,
-                    artifact_root: Path::new("."),
-                    label: "representation_dispatch",
-                })?;
-            assert_eq!(result, vec![Complex::new(expected, 0.0)]);
+        let json = serde_json::from_slice::<StandaloneEvaluatorArchive<(), String>>(
+            &serde_json::to_vec(&archive)?,
+        )?;
+        for restored in [binary, json] {
+            let mut loaded = restored.load()?;
+            assert_eq!(loaded.three_d_representations, ["ltd", "cff"]);
+            for (representation, coefficient) in [("cff", 3.0), ("ltd", 7.0)] {
+                let stack = loaded.graph_terms[0]
+                    .stack_mut(representation, &StandaloneStackSelection::Original)?;
+                for method in [
+                    StandaloneMethod::SingleParametric,
+                    StandaloneMethod::SummedFunctionMap,
+                ] {
+                    for (custom_input, expected) in [
+                        (None, [34.0, 16.0]),
+                        (
+                            Some([Complex::new(3.0, 0.0), Complex::new(1.0, 0.0)]),
+                            [52.0, 20.0],
+                        ),
+                    ] {
+                        let result = stack.evaluate_with_backend(StandaloneEvaluationRequest {
+                            backend: StandaloneBackend::Eager,
+                            method,
+                            orientations: &[],
+                            orientation_index: None,
+                            custom_input: custom_input.as_ref().map(|input| input.as_slice()),
+                            artifact_root: Path::new("."),
+                            label: "representation_dispatch",
+                        })?;
+                        assert_eq!(
+                            result,
+                            expected.map(|value| Complex::new(coefficient * value, 0.0))
+                        );
+                    }
+                }
+            }
+            assert!(
+                loaded.graph_terms[0]
+                    .stack_mut("unavailable", &StandaloneStackSelection::Original)
+                    .is_err()
+            );
         }
-        assert!(
-            loaded.graph_terms[0]
-                .stack_mut("unavailable", &StandaloneStackSelection::Original)
-                .is_err()
-        );
         let mut inconsistent = archive;
         inconsistent.three_d_representations = vec!["cff".to_owned()];
         assert!(inconsistent.load().is_err());

@@ -606,15 +606,25 @@ lmb_basis_ids = {{ "{graph_name}" = [{}, {}] }}
 rotation_axis = []
 levels = [{{ precision = "Quad", three_dimensional_representation = "{representation}", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 }}]
 '"#))?;
-                    results.push(evaluate_xspace_process_with_events(
-                        &mut cli,
-                        "gg_hhh",
-                        "1L",
-                        &point,
-                        &[group_id, channel_id],
-                    )?);
+                    for method in ["SingleParametric", "SummedFunctionMap"] {
+                        cli.run_command(&format!(
+                            "set process -p gg_hhh -i 1L kv general.evaluator_method={method}"
+                        ))?;
+                        results.push((
+                            representation,
+                            method,
+                            evaluate_xspace_process_with_events(
+                                &mut cli,
+                                "gg_hhh",
+                                "1L",
+                                &point,
+                                &[group_id, channel_id],
+                            )?,
+                        ));
+                    }
                 }
                 for event in results[0]
+                    .2
                     .sample
                     .evaluation
                     .event_groups
@@ -626,13 +636,27 @@ levels = [{{ precision = "Quad", three_dimensional_representation = "{representa
                             && (value.re.0 != 0.0 || value.im.0 != 0.0)
                     });
                 }
+                for (representation, method, result) in &results[1..] {
+                    assert_evaluation_outputs_match(
+                        &result.sample.evaluation,
+                        &results[0].2.sample.evaluation,
+                        &format!(
+                            "gg->hhh {representation}/{method} {channel_weight} LMB channel {channel_id} at {point:?}"
+                        ),
+                        if *representation == "cff" {
+                            EventWeightComparison::IndividualOrders
+                        } else {
+                            EventWeightComparison::PhysicalResidues
+                        },
+                    );
+                }
                 assert_evaluation_outputs_match(
-                    &results[1].sample.evaluation,
-                    &results[0].sample.evaluation,
+                    &results[3].2.sample.evaluation,
+                    &results[2].2.sample.evaluation,
                     &format!(
-                        "gg->hhh LTD/CFF {channel_weight} LMB channel {channel_id} at {point:?}"
+                        "gg->hhh LTD evaluator methods {channel_weight} LMB channel {channel_id} at {point:?}"
                     ),
-                    EventWeightComparison::PhysicalResidues,
+                    EventWeightComparison::IndividualOrders,
                 );
             }
         }

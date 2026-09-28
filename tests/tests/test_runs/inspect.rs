@@ -3,6 +3,7 @@ use super::*;
 use std::fs;
 
 use gammaloop_api::commands::Commands;
+use gammalooprs::integrands::process::evaluators::EvaluatorMethod;
 use gammalooprs::settings::global::RepresentationMode;
 use gammalooprs::settings::runtime::{
     RotationSetting, StabilityLevelSetting, StabilityRecordingSettings,
@@ -34,6 +35,13 @@ fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Re
             .generation
             .uv
             .local_uv_cts_from_expanded_4d_integrands = project_local_4d;
+        if project_local_4d {
+            cli.cli_settings
+                .global
+                .generation
+                .evaluator
+                .summed_function_map = true;
+        }
         run_commands(
             &mut cli,
             &[
@@ -72,37 +80,57 @@ fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Re
             ],
         )?;
 
-        let mut results = Vec::new();
-        for point in points {
-            let powered =
-                inspect_xspace_process(&mut cli, "raised_cut_powered", "compare", &point)?;
-            let lower = inspect_xspace_process(&mut cli, "raised_cut_lower", "compare", &point)?;
-            let combined =
-                inspect_xspace_process(&mut cli, "raised_cut_cancellation", "compare", &point)?;
-            let scale = powered.re.hypot(powered.im).max(lower.re.hypot(lower.im));
-            let direct_difference = powered + lower;
+        let methods: &[&str] = if project_local_4d {
+            &["SingleParametric", "SummedFunctionMap"]
+        } else {
+            &["SingleParametric"]
+        };
+        for method in methods {
+            for process in [
+                "raised_cut_powered",
+                "raised_cut_lower",
+                "raised_cut_cancellation",
+            ] {
+                cli.run_command(&format!(
+                    "set process -p {process} -i compare kv general.evaluator_method={method}"
+                ))?;
+            }
+            let mut results = Vec::new();
+            for point in points {
+                let powered =
+                    inspect_xspace_process(&mut cli, "raised_cut_powered", "compare", &point)?;
+                let lower =
+                    inspect_xspace_process(&mut cli, "raised_cut_lower", "compare", &point)?;
+                let combined =
+                    inspect_xspace_process(&mut cli, "raised_cut_cancellation", "compare", &point)?;
+                let scale = powered.re.hypot(powered.im).max(lower.re.hypot(lower.im));
+                let direct_difference = powered + lower;
 
-            assert!(
-                scale > 0.0,
-                "the raised-cut cancellation oracle is trivial at {point:?} in {mode} mode"
-            );
-            assert!(
-                direct_difference.re.hypot(direct_difference.im) <= 1.0e-12 * scale,
-                "the q^2-m^2 numerator did not cancel one raised propagator at {point:?} in {mode} mode: powered={powered:e}, lower={lower:e}"
-            );
-            assert!(
-                combined.re.hypot(combined.im) <= 1.0e-12 * scale,
-                "the summed LU graph did not preserve the raised-propagator cancellation at {point:?} in {mode} mode: combined={combined:e}, scale={scale:e}"
-            );
-            results.push([powered, lower, combined]);
+                assert!(
+                    scale > 0.0,
+                    "the raised-cut cancellation oracle is trivial at {point:?} in {mode} mode"
+                );
+                assert!(
+                    direct_difference.re.hypot(direct_difference.im) <= 1.0e-12 * scale,
+                    "the q^2-m^2 numerator did not cancel one raised propagator at {point:?} in {mode} mode: powered={powered:e}, lower={lower:e}"
+                );
+                assert!(
+                    combined.re.hypot(combined.im) <= 1.0e-12 * scale,
+                    "the summed LU graph did not preserve the raised-propagator cancellation at {point:?} in {mode} mode: combined={combined:e}, scale={scale:e}"
+                );
+                results.push([powered, lower, combined]);
+            }
+
+            route_results.push((format!("{mode}/{method}"), results));
         }
-
-        route_results.push((mode, results));
         clean_test(test_root);
     }
 
     let explicit_reference = &route_results[1].1;
-    for (mode, results) in [&route_results[0], &route_results[2], &route_results[3]] {
+    for (index, (mode, results)) in route_results.iter().enumerate() {
+        if index == 1 {
+            continue;
+        }
         for (point, (actual, expected)) in points
             .iter()
             .zip(results.iter().zip(explicit_reference.iter()))
@@ -1742,6 +1770,13 @@ fn mass_approach_threshold_cut_weights_match_cff_and_ltd() -> Result<()> {
                 .generation
                 .uv
                 .local_uv_cts_from_expanded_4d_integrands = local_4d;
+            if local_4d {
+                cli.cli_settings
+                    .global
+                    .generation
+                    .evaluator
+                    .summed_function_map = true;
+            }
             cli.cli_settings.sync_settings()?;
             cli.default_runtime_settings = history.default_runtime_settings.clone();
             cli.run_command(r#"set default-runtime string '
@@ -1775,52 +1810,76 @@ lmb_channels = "summed"
 [stability]
 levels = [{{ precision = "Quad", three_dimensional_representation = "{representation}", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 }}]
 '"#))?;
-                let mut results = Vec::new();
-                for mass in [2.1, 2.01, 2.0001] {
-                    cli.run_command(&format!("set model mass_scalar_2={mass}"))?;
-                    for point in [
-                        [0.1, 0.2, 0.3, 0.3, 0.4, 0.5],
-                        [0.17, 0.29, 0.41, 0.37, 0.23, 0.61],
-                    ] {
-                        let result = evaluate_xspace_process_with_events(
-                            &mut cli,
-                            &info.process_name,
-                            &info.integrand_name,
-                            &point,
-                            &[],
-                        )?;
-                        assert!(
-                            !result.sample.evaluation.event_groups.is_empty(),
-                            "{fixture} parity requires physical cut events"
-                        );
-                        assert!(
-                            result
-                                .sample
-                                .evaluation
-                                .event_groups
-                                .iter()
-                                .flat_map(|group| group.iter())
-                                .any(|event| {
-                                    event
-                                        .additional_weights
-                                        .threshold_counterterms
-                                        .as_ref()
-                                        .is_some_and(|decomposition| {
-                                            !decomposition.components.is_empty()
-                                        })
-                                }),
-                            "{fixture} parity requires detailed threshold components"
-                        );
-                        saw_nonzero_threshold |= result.sample.evaluation.event_groups.iter().flat_map(|group| group.iter()).any(|event| {
-                            event.additional_weights.weights.iter().any(|(key, value)| {
-                                matches!(key, gammalooprs::observables::events::AdditionalWeightKey::ThresholdCounterterm { .. })
-                                    && (value.re.0 != 0.0 || value.im.0 != 0.0)
-                            })
-                        });
-                        results.push(result);
+                let default_method = cli
+                    .state
+                    .process_list
+                    .get_integrand_mut(info.process_id, &info.integrand_name)?
+                    .get_settings()
+                    .general
+                    .evaluator_method
+                    .clone();
+                let methods = if local_4d {
+                    vec![
+                        EvaluatorMethod::SingleParametric,
+                        EvaluatorMethod::SummedFunctionMap,
+                    ]
+                } else {
+                    vec![default_method]
+                };
+                for method in methods {
+                    cli.state
+                        .process_list
+                        .get_integrand_mut(info.process_id, &info.integrand_name)?
+                        .get_mut_settings()
+                        .general
+                        .evaluator_method = method.clone();
+                    let mut results = Vec::new();
+                    for mass in [2.1, 2.01, 2.0001] {
+                        cli.run_command(&format!("set model mass_scalar_2={mass}"))?;
+                        for point in [
+                            [0.1, 0.2, 0.3, 0.3, 0.4, 0.5],
+                            [0.17, 0.29, 0.41, 0.37, 0.23, 0.61],
+                        ] {
+                            let result = evaluate_xspace_process_with_events(
+                                &mut cli,
+                                &info.process_name,
+                                &info.integrand_name,
+                                &point,
+                                &[],
+                            )?;
+                            assert!(
+                                !result.sample.evaluation.event_groups.is_empty(),
+                                "{fixture} parity requires physical cut events"
+                            );
+                            assert!(
+                                result
+                                    .sample
+                                    .evaluation
+                                    .event_groups
+                                    .iter()
+                                    .flat_map(|group| group.iter())
+                                    .any(|event| {
+                                        event
+                                            .additional_weights
+                                            .threshold_counterterms
+                                            .as_ref()
+                                            .is_some_and(|decomposition| {
+                                                !decomposition.components.is_empty()
+                                            })
+                                    }),
+                                "{fixture} parity requires detailed threshold components"
+                            );
+                            saw_nonzero_threshold |= result.sample.evaluation.event_groups.iter().flat_map(|group| group.iter()).any(|event| {
+                                event.additional_weights.weights.iter().any(|(key, value)| {
+                                    matches!(key, gammalooprs::observables::events::AdditionalWeightKey::ThresholdCounterterm { .. })
+                                        && (value.re.0 != 0.0 || value.im.0 != 0.0)
+                                })
+                            });
+                            results.push(result);
+                        }
                     }
+                    route_results.push((local_4d, representation, method, results));
                 }
-                route_results.push((local_4d, representation, results));
             }
             clean_test(&state_path);
         }
@@ -1828,20 +1887,36 @@ levels = [{{ precision = "Quad", three_dimensional_representation = "{representa
             saw_nonzero_threshold,
             "{fixture} parity must exercise threshold subtraction"
         );
-        for (local_4d, representation, results) in &route_results[1..] {
-            for (sample, (actual, expected)) in results.iter().zip(&route_results[0].2).enumerate()
+        for (local_4d, representation, method, results) in &route_results[1..] {
+            for (sample, (actual, expected)) in results.iter().zip(&route_results[0].3).enumerate()
             {
                 assert_evaluation_outputs_match(
                     &actual.sample.evaluation,
                     &expected.sample.evaluation,
                     &format!(
-                        "{fixture} threshold {representation} local4d={local_4d} sample {sample}"
+                        "{fixture} threshold {representation} local4d={local_4d} {method:?} sample {sample}"
                     ),
                     if *representation == "ltd" {
                         EventWeightComparison::PhysicalResidues
                     } else {
                         EventWeightComparison::IndividualOrders
                     },
+                );
+            }
+        }
+        for methods in route_results
+            .windows(2)
+            .filter(|pair| pair[0].0 == pair[1].0 && pair[0].1 == pair[1].1)
+        {
+            for (sample, (actual, expected)) in methods[1].3.iter().zip(&methods[0].3).enumerate() {
+                assert_evaluation_outputs_match(
+                    &actual.sample.evaluation,
+                    &expected.sample.evaluation,
+                    &format!(
+                        "{fixture} {} evaluator methods sample {sample}",
+                        methods[0].1
+                    ),
+                    EventWeightComparison::IndividualOrders,
                 );
             }
         }
@@ -1936,78 +2011,102 @@ lmb_channels = "summed"
             ],
         )?;
         let info = cli.state.get_integrand_info(None, None)?;
-        let mut results = Vec::new();
-        for sample_index in 0..2 {
-            let point = (0..9)
-                .map(|axis| 0.12 + ((axis * 7 + sample_index * 5) % 17) as f64 * 0.043)
-                .collect_vec();
-            let result = evaluate_xspace_process_with_events(
-                &mut cli,
-                &info.process_name,
-                &info.integrand_name,
-                &point,
-                &[],
-            )?;
-            let mut orders = std::collections::BTreeSet::new();
-            let mut nonzero_iterated = false;
-            for component in result
-                .sample
-                .evaluation
-                .event_groups
-                .iter()
-                .flat_map(|group| group.iter())
-                .filter_map(|event| event.additional_weights.threshold_counterterms.as_ref())
-                .flat_map(|decomposition| &decomposition.components)
-            {
-                if let ThresholdCountertermComponentOccurrence::LocalUnitarity {
-                    left_threshold_order: Some(left),
-                    right_threshold_order: Some(right),
-                    lu_cut_order: Some(lu),
-                    ..
-                } = component.occurrence
+        let methods: &[&str] = if local_4d {
+            &["SingleParametric", "SummedFunctionMap"]
+        } else {
+            &["SummedFunctionMap"]
+        };
+        for method in methods {
+            cli.run_command(&format!("set process kv general.evaluator_method={method}"))?;
+            let mut results = Vec::new();
+            for sample_index in 0..2 {
+                let point = (0..9)
+                    .map(|axis| 0.12 + ((axis * 7 + sample_index * 5) % 17) as f64 * 0.043)
+                    .collect_vec();
+                let result = evaluate_xspace_process_with_events(
+                    &mut cli,
+                    &info.process_name,
+                    &info.integrand_name,
+                    &point,
+                    &[],
+                )?;
+                let mut orders = std::collections::BTreeSet::new();
+                let mut nonzero_iterated = false;
+                for component in result
+                    .sample
+                    .evaluation
+                    .event_groups
+                    .iter()
+                    .flat_map(|group| group.iter())
+                    .filter_map(|event| event.additional_weights.threshold_counterterms.as_ref())
+                    .flat_map(|decomposition| &decomposition.components)
                 {
-                    orders.insert((left, right, lu));
-                    assert!(!component.evaluation_skipped);
-                    assert_eq!(component.effective_multiplier.0, 4.0);
-                    nonzero_iterated |=
-                        component.weighted.re.0 != 0.0 || component.weighted.im.0 != 0.0;
+                    if let ThresholdCountertermComponentOccurrence::LocalUnitarity {
+                        left_threshold_order: Some(left),
+                        right_threshold_order: Some(right),
+                        lu_cut_order: Some(lu),
+                        ..
+                    } = component.occurrence
+                    {
+                        orders.insert((left, right, lu));
+                        assert!(!component.evaluation_skipped);
+                        assert_eq!(component.effective_multiplier.0, 4.0);
+                        nonzero_iterated |=
+                            component.weighted.re.0 != 0.0 || component.weighted.im.0 != 0.0;
+                    }
                 }
-            }
-            if representation == RepresentationMode::Cff {
-                assert_eq!(
-                    orders,
-                    (1..=2)
-                        .cartesian_product(1..=2)
-                        .cartesian_product(1..=2)
-                        .map(|((left, right), lu)| (left, right, lu))
-                        .collect::<std::collections::BTreeSet<(usize, usize, usize)>>()
-                );
-            } else {
+                if representation == RepresentationMode::Cff {
+                    assert_eq!(
+                        orders,
+                        (1..=2)
+                            .cartesian_product(1..=2)
+                            .cartesian_product(1..=2)
+                            .map(|((left, right), lu)| (left, right, lu))
+                            .collect::<std::collections::BTreeSet<(usize, usize, usize)>>()
+                    );
+                } else {
+                    assert!(
+                        !orders.is_empty(),
+                        "LTD must retain the iterated physical residue"
+                    );
+                }
                 assert!(
-                    !orders.is_empty(),
-                    "LTD must retain the iterated physical residue"
+                    nonzero_iterated,
+                    "{route} must exercise nonzero iterated subtraction"
                 );
+                results.push(result);
             }
-            assert!(
-                nonzero_iterated,
-                "{route} must exercise nonzero iterated subtraction"
-            );
-            results.push(result);
+            route_results.push((route, method, results));
         }
-        route_results.push((route, results));
         clean_test(&state_path);
     }
-    for (route, results) in &route_results[1..] {
-        for (sample, (actual, expected)) in results.iter().zip(&route_results[0].1).enumerate() {
+    for (route, method, results) in &route_results[1..] {
+        for (sample, (actual, expected)) in results.iter().zip(&route_results[0].2).enumerate() {
             assert_evaluation_outputs_match(
                 &actual.sample.evaluation,
                 &expected.sample.evaluation,
-                &format!("raised iterated thresholds {route} sample {sample}"),
+                &format!("raised iterated thresholds {route} {method} sample {sample}"),
                 if *route == "ltd4d" {
                     EventWeightComparison::PhysicalResidues
                 } else {
                     EventWeightComparison::IndividualOrders
                 },
+            );
+        }
+    }
+    for methods in route_results
+        .windows(2)
+        .filter(|pair| pair[0].0 == pair[1].0)
+    {
+        for (sample, (actual, expected)) in methods[1].2.iter().zip(&methods[0].2).enumerate() {
+            assert_evaluation_outputs_match(
+                &actual.sample.evaluation,
+                &expected.sample.evaluation,
+                &format!(
+                    "iterated {} evaluator methods sample {sample}",
+                    methods[0].0
+                ),
+                EventWeightComparison::IndividualOrders,
             );
         }
     }

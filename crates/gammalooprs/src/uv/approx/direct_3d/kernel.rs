@@ -263,7 +263,8 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         });
     let scope = DirectResidueBranches::numerator_scope();
     let numerator_tag = scope.1.clone();
-    let integrands = integrands.multiply_key_mapped(orientation, ctx.graph, &numerator, scope)?;
+    let integrands =
+        integrands.multiply_key_mapped(orientation, ctx.graph, &numerator, scope, false)?;
     debug_tags!(#generation, #profile, #uv, #local, #direct, #trace;
         stage = "direct_3d_taylor_family",
         current = %current.log_display(),

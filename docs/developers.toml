@@ -46,7 +46,9 @@ anchor = "load_state_manifest(&save_path)?"
 # numerator programs; regeneration and semantic parameter ordering are documented.
 # Reviewed 2026-09-27: Persisted generation summaries retain ordered representation
 # timings and shared work; progress labels no longer imply CFF-only generation.
-digest = "8c134aff3180b8dadd1fb324b408902ebb6694e1"
+# Reviewed 2026-09-27: State v12 stores authoritative generic numerator terms and
+# exact residue rows; the updated architecture note documents regeneration.
+digest = "fa6fd5b0fe94a99325d30490eb8446bec2172785"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -178,6 +180,17 @@ anchor = "pub fn generate("
 # filtering behavior, including the strict function policy, are unchanged.
 digest = "8fe09278dad3daca6cf5f47453b984daba9dead3"
 
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/process/evaluators.rs"
+symbol = "gammalooprs::integrands::process::evaluators::ParametricResidueRows"
+anchor = "pub(crate) struct ParametricResidueRows {"
+# Reviewed 2026-09-27: The architecture note documents evaluator-owned constant
+# ports, final physical-row coalescing, lazy guards and late specialization;
+# tensor-generated formal pruning does not trigger another row merge.
+# Reviewed 2026-09-28: Reused private-index freshening before generic products;
+# declared free interfaces and opaque scalar arguments retain their scopes.
+digest = "e63b2deaac588126faab958f0d73f9d46df27ae8"
+
 [[section.note]]
 id = "integration-dashboard"
 title = "Integration dashboard architecture"
@@ -255,6 +268,66 @@ anchor = "impl UVOrchestrator {"
 # four-dimensional work from representation projections; forest ownership and
 # numerical expressions are unchanged.
 digest = "96ebb6a63d2c8c5dbdf3165d6441486069749a42"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/mod.rs"
+symbol = "gammalooprs::uv::Integrands"
+anchor = "pub struct Integrands {"
+# Reviewed 2026-09-27: Scalar addbacks and generic numerator row terms are
+# separate authoritative lanes. Cartesian multiplication preserves source keys;
+# additive template grouping concatenates rows without coefficient coalescing.
+# Reviewed 2026-09-28: Reused private-index freshening before generic products;
+# declared free interfaces and opaque scalar arguments retain their scopes.
+digest = "545328d740c3f04c1147c0a450e3f6cf3dc3474c"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/projected_4d.rs"
+symbol = "gammalooprs::uv::approx::projected_4d::Local4dProjectionContext"
+anchor = "pub(crate) struct Local4dProjectionContext {"
+# Reviewed 2026-09-27: Exact post-Taylor projection retains one generic product
+# with Rational coefficient rows and full source-map tuples for each local-4D
+# representation; reconstruction certificates and source ownership are unchanged.
+digest = "7102e8c385a3b809315bc2d08afd25a55f00d46e"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/final_integrand.rs"
+symbol = "gammalooprs::uv::approx::final_integrand::FinalIntegrandBuilder"
+anchor = "pub(crate) struct FinalIntegrandBuilder<'a> {"
+# Reviewed 2026-09-27: Final composition combines generic child/cograph bodies
+# and scalar carriers with Cartesian rows, preserving independent addbacks and
+# cut-indexed sparse LTD orders until evaluator lowering.
+# Reviewed 2026-09-28: Reused private-index freshening before generic products;
+# declared free interfaces and opaque scalar arguments retain their scopes.
+# Reviewed 2026-09-28: Complete final integrated numerator products are retained
+# during localization and never receive a second cograph multiplication.
+digest = "0e993c10b7788399f72195fc33f89b4af72aac3a"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/direct_3d/branches.rs"
+symbol = "gammalooprs::uv::approx::direct_3d::DirectResidueBranches::series_preserving_numerators"
+anchor = "    pub(crate) fn series_preserving_numerators("
+# Reviewed 2026-09-27: Direct CFF3D retains its existing Taylor path; projected
+# local-4D rows are created afterwards and are explicitly rejected by that
+# scalar-family series API instead of silently losing their separate lane.
+digest = "cd315d916904e70fbfa68ad3dc6afe1469ce7ec3"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/numerator/symbolica_ext.rs"
+symbol = "gammalooprs::numerator::symbolica_ext::NumeratorAtomExt::freshen_private_indices"
+anchor = "pub trait NumeratorAtomExt {"
+# Reviewed 2026-09-28: The shared private-index walker preserves free tensor
+# interfaces and opaque scalar functions; UV composition and evaluator family
+# fusion use this one implementation before joining independently scoped bodies.
+digest = "8b186e9379a5be0d2d2166273a8828fe60f3ec0b"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs"
+symbol = "gammalooprs::uv::approx::local_3d::Localizer::localize"
+anchor = "    pub(crate) fn localize<S: ForestNodeLike>("
+# Reviewed 2026-09-28: Final local-4D addbacks retain the analytic finite
+# coefficient together with the supplied cograph/global numerator in exact rows.
+# Direct CFF3D localization remains Taylor-visible and attaches its cograph later.
+digest = "f4c589fe5a6a5fd06fa5e8ec6314b7aa029d7e3b"
 
 [[section.note]]
 id = "spenso-parsing-flow"

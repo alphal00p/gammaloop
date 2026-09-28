@@ -5,7 +5,6 @@ use std::{
     io::Write,
     iter,
     path::Path,
-    sync::Arc,
 };
 
 use ahash::AHashSet;
@@ -41,7 +40,6 @@ use crate::{
         GenericEvaluator, LmbMultiChannelingSetup,
         amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
         graph_to_group_id_for_group_structure,
-        param_builder::FnMapEntry,
     },
     model::ArcParticle,
     momentum::{
@@ -1053,8 +1051,10 @@ impl AmplitudeGraph {
                 representation,
                 AmplitudeRepresentationData {
                     expression,
-                    all_mighty_integrand: Atom::Zero,
-                    all_mighty_numerators: Vec::new(),
+                    all_mighty_integrand: Integrands::from_iter([(
+                        CutCFFIndex::new_all_none(),
+                        Atom::Zero,
+                    )]),
                     threshold_counterterms: TiVec::new(),
                     threshold_counterterm_variants: TiVec::new(),
                 },
@@ -1512,8 +1512,8 @@ impl AmplitudeGraph {
                     expressions.len()
                 ));
             };
-            let mut roots = expr.integrands.iter();
-            let (index, integrand) = roots
+            let mut roots = expr.integrands.cut_indices();
+            let index = roots
                 .next()
                 .ok_or_else(|| eyre!("amplitude UV integrand has no root residue"))?;
             if *index != CutCFFIndex::new_all_none() || roots.next().is_some() {
@@ -1526,8 +1526,7 @@ impl AmplitudeGraph {
                 .representations
                 .get_mut(&representation)
                 .unwrap();
-            data.all_mighty_integrand = integrand.clone();
-            data.all_mighty_numerators = expr.integrands.numerators().to_vec();
+            data.all_mighty_integrand = expr.integrands.clone();
             stats.representation_mut(representation).total_time += representation_started.elapsed();
         }
         crate::debug_tags!(#generation, #profile, #graph, #summary;
@@ -2542,8 +2541,7 @@ pub struct AmplitudeDerivedData {
 pub struct AmplitudeRepresentationData {
     pub expression:
         GeneratedThreeDExpression<crate::cff::esurface::Esurface, crate::cff::hsurface::Hsurface>,
-    pub all_mighty_integrand: Atom,
-    pub all_mighty_numerators: Vec<Arc<FnMapEntry>>,
+    pub all_mighty_integrand: Integrands,
     /// Compatibility storage used by the current homogeneous amplitude runtime.
     pub threshold_counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
     /// Canonical variant-indexed symbolic storage. Duplicate geometric thresholds remain distinct.
@@ -2553,12 +2551,7 @@ pub struct AmplitudeRepresentationData {
 
 impl AmplitudeRepresentationData {
     pub(crate) fn resolved_integrand(&self) -> Result<Atom> {
-        let integrands = Integrands::from_iter([(
-            CutCFFIndex::new_all_none(),
-            self.all_mighty_integrand.clone(),
-        )])
-        .with_numerators(self.all_mighty_numerators.iter().cloned())?
-        .resolved()?;
+        let integrands = self.all_mighty_integrand.resolved()?;
         Ok(integrands
             .iter()
             .next()

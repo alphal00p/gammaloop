@@ -211,6 +211,146 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
 }
 
 #[test]
+fn parametric_integrands_preserve_cartesian_products_and_additive_source_identity()
+-> Result<(), eyre::Report> {
+    use crate::{
+        GammaLoopContextContainer,
+        cff::CutCFFIndex,
+        integrands::process::param_builder::FnMapEntry,
+        uv::{
+            Integrands, ParametricIntegrandRow, ParametricIntegrandTerm,
+            approx::direct_3d::{DirectResidueBranches, DirectResidueKey},
+        },
+    };
+    use std::{io::Cursor, sync::Arc};
+    use symbolica::{domains::rational::Rational, state::State};
+    test_initialise()?;
+    let cut = CutCFFIndex::new_all_none();
+    let x = Atom::var(symbol!("parametric_integrands_test::x"));
+    let parameter = symbol!("parametric_integrands_test::coefficient");
+    // Reusing the same formal key in independent factors must not identify
+    // their row values when the product introduces a Cartesian row table.
+    let make = |samples: &[i64], offset: i64| -> color_eyre::Result<Integrands> {
+        let (_, tag) = DirectResidueBranches::numerator_scope();
+        let entry = Arc::new(FnMapEntry {
+            lhs: function!(
+                symbol!("gammalooprs::uv::numerator_family"),
+                &tag,
+                parameter
+            ),
+            rhs: (Atom::var(parameter) * &x + Atom::num(offset)).pow(3),
+            args: vec![parameter.into()],
+            tags: vec![tag],
+            inlining: Default::default(),
+        });
+        let rows = samples
+            .iter()
+            .enumerate()
+            .map(|(index, value)| ParametricIntegrandRow {
+                coefficients: vec![Rational::from(*value)],
+                carrier: Atom::num(index + 1),
+                source_keys: vec![DirectResidueKey::production(OrientationID(index))],
+            })
+            .collect();
+        Integrands::from_iter([(cut, Atom::Zero)])
+            .with_parametric_terms([(cut, ParametricIntegrandTerm::new(entry, rows)?)])
+    };
+    let left = make(&[1, 2], 3)?;
+    let right = make(&[4, 5, 6], 7)?;
+    let product = left.zip_mul(&right)?;
+    assert!(product.atom(&cut).unwrap().is_zero());
+    assert!(!product.is_zero());
+    assert_eq!(product.parametric_terms(&cut).len(), 1);
+    let term = &product.parametric_terms(&cut)[0];
+    assert_eq!(term.rows.len(), 6);
+    assert_eq!(term.numerator.args.len(), 2);
+    assert!(term.rows.iter().all(|row| row.source_keys.len() == 2));
+    let expected = left.resolved()?.atom(&cut).unwrap() * right.resolved()?.atom(&cut).unwrap();
+    assert!(
+        (product.resolved()?.atom(&cut).unwrap() - expected)
+            .expand()
+            .is_zero()
+    );
+    let third = make(&[7, 8, 9, 10], 11)?;
+    let triple = product.zip_mul(&third)?;
+    assert_eq!(triple.parametric_terms(&cut).len(), 1);
+    assert_eq!(triple.parametric_terms(&cut)[0].rows.len(), 24);
+    assert_eq!(triple.parametric_terms(&cut)[0].numerator.args.len(), 3);
+    assert!(
+        triple.parametric_terms(&cut)[0]
+            .rows
+            .iter()
+            .all(|row| row.source_keys.len() == 3)
+    );
+    let triple_with_addback = triple.zip_add([Integrands::from_iter([(cut, Atom::num(17))])])?;
+    let expected =
+        product.resolved()?.atom(&cut).unwrap() * third.resolved()?.atom(&cut).unwrap() + 17;
+    assert!(
+        (triple_with_addback.resolved()?.atom(&cut).unwrap() - expected)
+            .expand()
+            .is_zero()
+    );
+    assert_eq!(triple_with_addback.atom(&cut), Some(&Atom::num(17)));
+    assert_eq!(triple_with_addback.parametric_terms(&cut)[0].rows.len(), 24);
+    let sum = left.clone().zip_add([right.clone()])?;
+    assert_eq!(sum.parametric_terms(&cut).len(), 2);
+    assert_eq!(
+        sum.parametric_terms(&cut)
+            .iter()
+            .map(|term| term.rows.len())
+            .sum::<usize>(),
+        5
+    );
+    let scalar = Integrands::from_iter([(cut, Atom::num(13))]);
+    let added = scalar.zip_add([sum.clone()])?;
+    assert_eq!(added.atom(&cut), Some(&Atom::num(13)));
+    assert_eq!(added.parametric_terms(&cut).len(), 2);
+    let doubled = left.clone().zip_add([left.clone()])?;
+    assert_eq!(doubled.parametric_terms(&cut).len(), 1);
+    assert_eq!(doubled.parametric_terms(&cut)[0].rows.len(), 4);
+    assert!(
+        doubled.parametric_terms(&cut)[0]
+            .rows
+            .iter()
+            .all(|row| row.source_keys.len() == 1)
+    );
+    let mapped = product
+        .map(|carrier| carrier * &x)
+        .map_numerators(|body| Ok(body.replace(x.to_pattern()).with(Atom::num(2))))?;
+    assert!(
+        (mapped.resolved()?.atom(&cut).unwrap()
+            - product
+                .resolved()?
+                .atom(&cut)
+                .unwrap()
+                .replace(x.to_pattern())
+                .with(Atom::num(2))
+                * &x)
+            .expand()
+            .is_zero()
+    );
+    assert!(product.zero_like().is_zero());
+    assert!(product.zero_like().parametric_terms(&cut).is_empty());
+    assert!(product.checked_zip(&product, |_, a, b| Ok(a + b)).is_err());
+    let encoded = bincode::encode_to_vec(&product, bincode::config::standard())?;
+    let mut state = Vec::new();
+    State::export(&mut state)?;
+    let state_map = State::import(&mut Cursor::new(state), None)?;
+    let model = Model::default();
+    let (decoded, consumed): (Integrands, _) = bincode::decode_from_slice_with_context(
+        &encoded,
+        bincode::config::standard(),
+        GammaLoopContextContainer {
+            state_map: &state_map,
+            model: &model,
+        },
+    )?;
+    assert_eq!(consumed, encoded.len());
+    assert_eq!(decoded, product);
+    Ok(())
+}
+
+#[test]
 fn integrands_reject_conflicting_dependent_and_unregistered_numerator_families()
 -> Result<(), eyre::Report> {
     use std::sync::Arc;
@@ -2302,7 +2442,8 @@ mod failing {
             "{}",
             amp.derived_data.representations
                 [&three_dimensional_reps::generation::RepresentationMode::Cff]
-                .all_mighty_integrand
+                .resolved_integrand()
+                .unwrap()
         );
     }
 
@@ -2349,7 +2490,8 @@ mod failing {
             "{}",
             amp.derived_data.representations
                 [&three_dimensional_reps::generation::RepresentationMode::Cff]
-                .all_mighty_integrand
+                .resolved_integrand()
+                .unwrap()
         );
     }
 

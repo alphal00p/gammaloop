@@ -7,6 +7,8 @@ use std::{
     },
 };
 
+use crate::GammaLoopContext;
+use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::{ensure, eyre};
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
@@ -28,7 +30,7 @@ use crate::{
     numerator::symbolica_ext::NumeratorAtomExt,
     utils::{GS, external_energy_atom_from_index, ose_atom_from_index},
     uv::{
-        Integrands,
+        Integrands, ParametricIntegrandRow, ParametricIntegrandTerm,
         approx::{OrientationProjection, local_3d::OrientationIntegrands},
     },
 };
@@ -41,13 +43,15 @@ static NUMERATOR_SCOPE: AtomicUsize = AtomicUsize::new(0);
 /// sources retain their explicit map because it is part of their residue key,
 /// not temporary projection metadata. Every factor in a branch is mapped with
 /// this one authority; the Taylor operator only changes its rescaling series.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub(crate) enum DirectEnergyMap {
     Production,
     Source(Vec<LinearEnergyExpr>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub(crate) struct DirectResidueKey {
     pub(crate) selector_host: OrientationID,
     pub(crate) energy_map: DirectEnergyMap,
@@ -153,9 +157,9 @@ impl DirectResidueBranches {
         }
         let fallback_zero = branches
             .iter()
-            .find(|(_, integrands)| integrands.iter().all(|(_, atom)| atom.is_zero()))
+            .find(|(_, integrands)| integrands.is_zero())
             .cloned();
-        branches.retain(|(_, integrands)| !integrands.iter().all(|(_, atom)| atom.is_zero()));
+        branches.retain(|(_, integrands)| !integrands.is_zero());
         if branches.is_empty() {
             branches.extend(fallback_zero);
         }
@@ -440,6 +444,7 @@ impl DirectResidueBranches {
         graph: &Graph,
         factor: &Atom,
         scope: (usize, Atom),
+        retain_rows: bool,
     ) -> Result<Self> {
         if matches!(factor.as_view(), AtomView::Num(_)) || factor.is_zero() {
             return Ok(self.map(|atom| atom * factor));
@@ -467,6 +472,36 @@ impl DirectResidueBranches {
                     // The complete branch key owns one energy substitution;
                     // every selected cut order reuses that same mapped factor.
                     ensure!(*key == row_key, "prepared numerator residue order changed");
+                    if retain_rows {
+                        let coefficients: Vec<Rational> = arguments
+                            .iter()
+                            .map(|argument| {
+                                Rational::try_from(argument.as_view()).map_err(|error| eyre!(error))
+                            })
+                            .collect::<Result<_>>()?;
+                        let rows = Integrands::from_iter(
+                            integrands.cut_indices().map(|index| (*index, Atom::Zero)),
+                        )
+                        .with_parametric_terms(
+                            integrands
+                                .cut_indices()
+                                .map(|index| {
+                                    Ok((
+                                        *index,
+                                        ParametricIntegrandTerm::new(
+                                            Arc::clone(&entry),
+                                            vec![ParametricIntegrandRow {
+                                                coefficients: coefficients.clone(),
+                                                carrier: Atom::one(),
+                                                source_keys: vec![key.clone()],
+                                            }],
+                                        )?,
+                                    ))
+                                })
+                                .collect::<Result<Vec<_>>>()?,
+                        )?;
+                        return Ok((key.clone(), integrands.zip_mul(&rows)?));
+                    }
                     let call =
                         entry
                             .lhs
@@ -500,6 +535,16 @@ impl DirectResidueBranches {
         depth: i64,
         scope: Atom,
     ) -> Result<Self> {
+        // Projected local-4D rows are constructed after Taylor expansion. This
+        // scalar-family series must never silently discard their separate lane.
+        ensure!(
+            self.iter_keys().all(|(_, integrands)| {
+                integrands
+                    .cut_indices()
+                    .all(|cut| integrands.parametric_terms(cut).is_empty())
+            }),
+            "shared numerator Taylor series does not support projected parametric rows"
+        );
         let all_definitions = self.0[0].1.clone().with_numerators(
             self.iter_keys()
                 .flat_map(|(_, integrands)| integrands.numerators().iter().cloned()),
@@ -1409,6 +1454,45 @@ mod tests {
     }
 
     #[test]
+    fn shared_numerator_series_rejects_projected_parametric_rows() -> Result<()> {
+        test_initialise()?;
+        let variable = symbol!("direct_parametric_series_test::t");
+        let parameter = symbol!("direct_parametric_series_test::z");
+        let tag = DirectResidueBranches::numerator_scope().1;
+        let numerator = Arc::new(FnMapEntry {
+            lhs: symbol!("gammalooprs::uv::numerator_family")
+                .call_args([tag.clone(), Atom::var(parameter)]),
+            rhs: Atom::var(parameter) + Atom::var(variable),
+            args: vec![parameter.into()],
+            tags: vec![tag],
+            inlining: Default::default(),
+        });
+        let key = DirectResidueKey::production(OrientationID(0));
+        let integrands = Integrands::from_iter([]).with_parametric_terms([(
+            CutCFFIndex::new_all_none(),
+            ParametricIntegrandTerm::new(
+                numerator,
+                vec![ParametricIntegrandRow {
+                    coefficients: vec![Rational::from(2)],
+                    carrier: Atom::num(3),
+                    source_keys: vec![key.clone()],
+                }],
+            )?,
+        )])?;
+        let branches = DirectResidueBranches::from_keyed([(key, integrands)])?;
+        let error = branches
+            .series_preserving_numerators(
+                variable,
+                Atom::Zero.as_view(),
+                1,
+                DirectResidueBranches::numerator_scope().1,
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("projected parametric rows"));
+        Ok(())
+    }
+
+    #[test]
     fn prepared_numerator_keeps_full_affine_rows_and_independent_sampling_nodes() -> Result<()> {
         test_initialise()?;
         let graph: Graph = dot!(
@@ -1706,7 +1790,27 @@ mod tests {
             &graph,
             &factor,
             DirectResidueBranches::numerator_scope(),
+            false,
         )?;
+        let parametric = branches.multiply_key_mapped(
+            orientation,
+            &graph,
+            &factor,
+            DirectResidueBranches::numerator_scope(),
+            true,
+        )?;
+        let parametric_sum = parametric.materialize(false)?;
+        for cut in [index, raised] {
+            assert!(parametric_sum.atom(&cut).unwrap().is_zero());
+            let terms = parametric_sum.parametric_terms(&cut);
+            assert_eq!(
+                terms.len(),
+                1,
+                "native rows must not duplicate the generic root"
+            );
+            assert_eq!(terms[0].rows.len(), 2);
+            assert!(terms[0].rows.iter().all(|row| row.source_keys.len() == 1));
+        }
         let expected_sum = [2, 3].into_iter().fold(Atom::Zero, |sum, scale| {
             let energy = Atom::num(scale) * Atom::var(GS.numerator_sampling_scale);
             sum + (&energy + &a) * (&energy + &b)
@@ -1721,6 +1825,11 @@ mod tests {
         for actual in [
             mapped.materialize(false)?.resolved()?,
             localized.map(|atom| host.select(atom.as_view())),
+            parametric_sum.resolved()?,
+            parametric
+                .materialize(true)?
+                .resolved()?
+                .map(|atom| host.select(atom.as_view())),
         ] {
             let difference = actual.checked_zip(&expected, |_, actual, expected| {
                 Ok((actual - expected).expand())
@@ -1851,6 +1960,7 @@ mod tests {
             &graph,
             &numerator,
             DirectResidueBranches::numerator_scope(),
+            false,
         )?;
         let definition = &shared.0[0].1.numerators()[0];
         assert_eq!(definition.args.len(), 5);

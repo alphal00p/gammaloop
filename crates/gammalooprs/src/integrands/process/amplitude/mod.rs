@@ -300,10 +300,15 @@ impl AmplitudeGraphTerm {
         for (representation, source) in &graph.derived_data.representations {
             let representation_started = std::time::Instant::now();
             let (ids, directions) = &orientation_catalogues[representation];
+            let cut = crate::cff::CutCFFIndex::new_all_none();
             let (evaluator, evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
-                &source.all_mighty_integrand,
+                source
+                    .all_mighty_integrand
+                    .atom(&cut)
+                    .expect("every integrand cut has a registered scalar lane"),
                 &graph.graph.param_builder,
-                &source.all_mighty_numerators,
+                source.all_mighty_integrand.numerators(),
+                source.all_mighty_integrand.parametric_terms(&cut),
                 (!settings.generation.requires_complete_orientation_sum())
                     .then_some((directions.as_slice().as_ref(), ids.as_slice())),
                 None,

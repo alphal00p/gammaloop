@@ -574,3 +574,300 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
     );
     Ok(())
 }
+
+/// Inventory and activate the existing numerical programs without rebuilding them.
+/// `GL_PARAMETRIC_BACKEND_REQUEST` names a JSON file containing `states` (the
+/// eight fixture/method/state/process/integrand records) and an external `report`.
+#[test]
+#[ignore = "requires authenticated generated states for four fixtures and both evaluator methods"]
+fn parametric_rows_saved_state_symjit_inventory() -> Result<()> {
+    use crate::integrands::process::evaluators::{
+        ActiveF64Backend, EvaluatorBackendPolicy, EvaluatorStack, GenericEvaluator,
+    };
+    use crate::settings::global::{CompilationOptimizationLevel, FrozenCompilationMode};
+    use linnet::half_edge::subgraph::SubSetLike;
+    use std::{collections::BTreeMap, ptr};
+    use symbolica::evaluate::Instruction;
+
+    let request: Value = serde_json::from_reader(fs::File::open(std::env::var(
+        "GL_PARAMETRIC_BACKEND_REQUEST",
+    )?)?)?;
+    let states = request["states"]
+        .as_array()
+        .ok_or_else(|| eyre!("missing states array"))?;
+    let combinations = states
+        .iter()
+        .map(|entry| (entry["fixture"].as_str(), entry["method"].as_str()))
+        .collect::<std::collections::BTreeSet<_>>();
+    let expected: std::collections::BTreeSet<_> = ["gl638", "gl04", "dotted", "iterated"]
+        .into_iter()
+        .flat_map(|fixture| {
+            ["SingleParametric", "SummedFunctionMap"]
+                .into_iter()
+                .map(move |method| (Some(fixture), Some(method)))
+        })
+        .collect();
+    ensure!(
+        states.len() == 8 && combinations == expected,
+        "request all eight states"
+    );
+    let report_path = Path::new(
+        request["report"]
+            .as_str()
+            .ok_or_else(|| eyre!("missing report path"))?,
+    );
+    ensure!(
+        !report_path.exists(),
+        "refusing to overwrite backend evidence"
+    );
+    let mut report = json!({"status": "running", "states": []});
+    let mut failures = Vec::new();
+    initialise()?;
+    for entry in states {
+        let text = |key: &str| {
+            entry[key]
+                .as_str()
+                .ok_or_else(|| eyre!("missing state field {key}"))
+        };
+        let state = Path::new(text("state")?);
+        ensure!(
+            !report_path
+                .parent()
+                .unwrap()
+                .canonicalize()?
+                .starts_with(state.canonicalize()?),
+            "report must be outside the saved state"
+        );
+        // Restore the same custom-printer ownership and model values as State::load.
+        let manifest: toml::Value =
+            toml::from_str(&fs::read_to_string(state.join("state_manifest.toml"))?)?;
+        for name in manifest["ufo_print_symbols"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            let _ = crate::model::UFOSymbol::from(name.as_str().unwrap());
+        }
+        for label in manifest["linnet_subgraph_print_labels"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            let _ = linnet::half_edge::subgraph::SuBitGraph::symbol_from_label(
+                label.as_str().unwrap().to_owned(),
+            );
+        }
+        let mut model = Model::from_file(state.join("model.json"))?;
+        model.apply_param_card(&InputParamCard::from_file(
+            state.join("model_parameters.json"),
+        )?)?;
+        let state_map = symbolica::state::State::import(
+            &mut fs::File::open(state.join("symbolica_state.bin"))?,
+            None,
+        )?;
+        let mut processes = ProcessList::load(
+            state,
+            GammaLoopContextContainer {
+                state_map: &state_map,
+                model: &model,
+            },
+        )?;
+        let process_id = processes
+            .processes
+            .iter()
+            .position(|process| process.definition.folder_name == text("process").unwrap())
+            .ok_or_else(|| eyre!("requested process is absent"))?;
+        let integrand = processes.get_integrand_mut(process_id, text("integrand")?)?;
+        let ProcessIntegrand::CrossSection(integrand) = integrand else {
+            return Err(eyre!("backend inventory requires cross-section fixtures"));
+        };
+        let mut programs = Vec::new();
+        for graph in &mut integrand.data.graph_terms {
+            let physical_ports = (&graph.param_builder.pairs)
+                .into_iter()
+                .map(|pair| pair.params.len())
+                .sum::<usize>();
+            let mut layout = BTreeMap::new();
+            let mut register = |location: String, stack: &EvaluatorStack| -> Result<()> {
+                let coefficient_ports = stack
+                    .parametric_rows
+                    .as_ref()
+                    .map_or(0, |rows| rows.parameters.len());
+                let row_count = stack
+                    .parametric_rows
+                    .as_ref()
+                    .map_or(0, |rows| rows.rows.len());
+                if let Some(rows) = &stack.parametric_rows {
+                    ensure!(
+                        !rows.rows.is_empty()
+                            && rows.rows.iter().all(|row| row.len() == coefficient_ports),
+                        "malformed coefficient rows"
+                    );
+                }
+                for (method, evaluator) in [
+                    ("SingleParametric", Some(&stack.single_parametric)),
+                    (
+                        "Iterative",
+                        stack.iterative.as_ref().map(|(evaluator, _)| evaluator),
+                    ),
+                    ("SummedFunctionMap", stack.summed_function_map.as_ref()),
+                    ("Summed", stack.summed.as_ref()),
+                ] {
+                    if let Some(evaluator) = evaluator {
+                        let width = evaluator.dual_shape.as_ref().map_or(1, Vec::len);
+                        let ports = if method == "SingleParametric" {
+                            coefficient_ports
+                        } else {
+                            0
+                        };
+                        ensure!(
+                            evaluator.f64_eager.get_input_len() == (physical_ports + ports) * width,
+                            "physical/coefficient/dual layout disagrees in {location}/{method}"
+                        );
+                        layout.insert(ptr::from_ref(evaluator), json!({
+                            "location": location, "method": method, "physical_ports": physical_ports,
+                            "coefficient_ports": ports, "row_count": row_count, "dual_width": width,
+                        }));
+                    }
+                }
+                Ok(())
+            };
+            for (representation, cuts) in &graph.integrand {
+                for (cut, orders) in cuts.iter().enumerate() {
+                    for (order, stack) in orders {
+                        register(format!("cut/{representation:?}/{cut}/{order:?}"), stack)?;
+                    }
+                }
+            }
+            for (cut, counterterm) in graph.counterterm.evaluators.iter().enumerate() {
+                for (representation, payload) in &counterterm.integrands {
+                    for (side, thresholds) in [
+                        (
+                            "left",
+                            payload.left_thresholds_evaluator.iter().collect::<Vec<_>>(),
+                        ),
+                        ("right", payload.right_thresholds_evaluator.iter().collect()),
+                        ("iterated", payload.iterated_evaluator.iter().collect()),
+                    ] {
+                        for (threshold, orders) in thresholds.into_iter().enumerate() {
+                            for (order, stack) in orders {
+                                register(
+                                    format!(
+                                        "threshold/{representation:?}/{cut}/{side}/{threshold}/{order:?}"
+                                    ),
+                                    stack,
+                                )?;
+                            }
+                        }
+                    }
+                }
+            }
+            let graph_name = graph.graph.name.clone();
+            graph.for_each_generic_evaluator_mut(|representation, evaluator| {
+                let mut record = layout.get(&ptr::from_ref::<GenericEvaluator>(evaluator))
+                    .cloned().unwrap_or_else(|| json!({"location": "shared_helper"}));
+                ensure!(representation.is_none() || record["method"].is_string(), "missing physical program layout");
+                let exported = evaluator.f64_eager.export_instructions();
+                ensure!(exported.input_count == evaluator.f64_eager.get_input_len(), "exported input count changed");
+                let mut pending = vec![("root".to_owned(), &exported)];
+                let mut nested = Vec::new();
+                while let Some((path, instructions)) = pending.pop() {
+                    let call_arity = instructions.instructions.iter().filter_map(|instruction| match instruction {
+                        Instruction::Fun(_, function, _) => Some(function.2.len()),
+                        _ => None,
+                    }).max().unwrap_or(0);
+                    nested.push(json!({"path": path, "input_count": instructions.input_count,
+                        "instruction_count": instructions.instructions.len(), "max_call_arity": call_arity}));
+                    for (index, sub) in instructions.sub_evaluators.iter().enumerate() {
+                        pending.push((format!("{path}/{index}"), &sub.instructions));
+                    }
+                }
+                record["graph"] = json!(graph_name);
+                record["representation"] = json!(representation);
+                record["input_count"] = json!(evaluator.f64_eager.get_input_len());
+                record["dual_shape"] = json!(evaluator.dual_shape);
+                record["backend_policy"] = json!(format!("{:?}", evaluator.backend_policy));
+                record["before_backend"] = json!(evaluator.active_f64_backend());
+                record["instruction_trees"] = json!(nested);
+                programs.push(record);
+                Ok(())
+            })?;
+        }
+        ensure!(!programs.is_empty(), "no generated evaluator programs");
+        integrand.data.compilation =
+            FrozenCompilationMode::Symjit(CompilationOptimizationLevel::O3);
+        let mut record = json!({"request": entry, "state_manifest_version": manifest["version"].as_integer(),
+            "programs": programs, "activation": "pending"});
+        report["states"]
+            .as_array_mut()
+            .unwrap()
+            .push(record.clone());
+        fs::write(report_path, serde_json::to_vec_pretty(&report)?)?;
+        let activation_error = processes
+            .activate_loaded_integrand_backends(false)
+            .err()
+            .map(|error| format!("{error:#}"));
+        let mut state_failures = activation_error.iter().cloned().collect::<Vec<_>>();
+        let integrand = processes.get_integrand_mut(process_id, text("integrand")?)?;
+        record["after_integrand_backend"] = json!(integrand.active_f64_backend());
+        if activation_error.is_none() && integrand.active_f64_backend() != ActiveF64Backend::Symjit
+        {
+            state_failures.push("integrand backend is not SymJIT".to_owned());
+        }
+        let ProcessIntegrand::CrossSection(integrand) = integrand else {
+            unreachable!()
+        };
+        let mut index = 0;
+        for graph in &mut integrand.data.graph_terms {
+            graph.for_each_generic_evaluator_mut(|_, evaluator| {
+                let expected = match evaluator.backend_policy {
+                    EvaluatorBackendPolicy::FollowIntegrand => ActiveF64Backend::Symjit,
+                    EvaluatorBackendPolicy::EagerOnly => ActiveF64Backend::Eager,
+                };
+                let active = evaluator.active_f64_backend();
+                record["programs"][index]["after_backend"] = json!(active);
+                record["programs"][index]["expected_backend"] = json!(expected);
+                record["programs"][index]["matches_expected_backend"] = json!(active == expected);
+                if activation_error.is_none() && active != expected {
+                    state_failures.push(format!(
+                        "program {index} has backend {active}, expected {expected}"
+                    ));
+                }
+                index += 1;
+                Ok(())
+            })?;
+        }
+        ensure!(
+            index == programs.len(),
+            "activation changed the program inventory"
+        );
+        record["activation"] = json!(if state_failures.is_empty() {
+            "passed"
+        } else {
+            "failed"
+        });
+        record["activation_errors"] = json!(state_failures);
+        failures.extend(state_failures.into_iter().map(|error| {
+            format!(
+                "{}/{}: {error}",
+                text("fixture").unwrap(),
+                text("method").unwrap()
+            )
+        }));
+        *report["states"].as_array_mut().unwrap().last_mut().unwrap() = record;
+        fs::write(report_path, serde_json::to_vec_pretty(&report)?)?;
+    }
+    report["status"] = json!(if failures.is_empty() {
+        "passed"
+    } else {
+        "failed"
+    });
+    report["failures"] = json!(failures);
+    fs::write(report_path, serde_json::to_vec_pretty(&report)?)?;
+    ensure!(
+        failures.is_empty(),
+        "SymJIT activation failed; no eager fallback was used:\n{}",
+        failures.join("\n")
+    );
+    Ok(())
+}

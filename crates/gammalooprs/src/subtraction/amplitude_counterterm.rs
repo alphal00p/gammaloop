@@ -544,15 +544,18 @@ impl AmplitudeCountertermAtom {
         let mut evaluator_stacks = BTreeMap::new();
         let mut timings = EvaluatorBuildTimings::default();
 
-        for (index, integrand) in self.parametric.iter() {
+        for index in self.parametric.cut_indices() {
             let dual_shape = shape_from_cut_cff_index(index);
 
             // In explicit mode the atom already contains the complete
             // orientation sum, so selecting orientations again would double count it.
             let (evaluator_stack, evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
-                integrand,
+                self.parametric
+                    .atom(index)
+                    .expect("every integrand cut has a registered scalar lane"),
                 param_builder,
                 self.parametric.numerators(),
+                self.parametric.parametric_terms(index),
                 (!global_settings
                     .generation
                     .requires_complete_orientation_sum())

@@ -181,6 +181,54 @@ not special-cased for a two-component spectacles graph.
 
 The projected local-4D route is separate: it completes the Taylor expansion in four dimensions, reconstructs the exact source occurrence graph, and certifies the signed numerator mapping and denominator reconstruction before projecting that completed term to the requested representation. CFF selects a factorized EMR capacity assignment. Ordinary LTD retains the certified physical affine assignment without numerator-degree analysis; repeated LTD poles require bounds for exact finite sampling. Canonical denominator classes also gate the raw physical degree report, so diagnostic reporting does not reintroduce degree analysis for ordinary LTD. That reconstruction machinery is exclusive to projected local4D and is not a replacement for the direct replay above.
 
+For both CFF and LTD with local UV counterterms from four dimensions,
+`Integrands` owns two disjoint additive payloads per cut order: ordinary scalar
+contributions and `ParametricIntegrandTerm` values. Each term retains one
+factorized `FnMapEntry` numerator product, ordered coefficient formals, and
+`ParametricIntegrandRow` values containing exact rational coefficients, a scalar
+carrier and the source-map keys which produced it. There is no concrete copy of
+those numerator rows in the scalar payload.
+
+Multiplying independent factors creates Cartesian rows within one term. Each
+factor keeps its own private tensor contractions: the existing numerator index
+walker freshens private labels before joining generic bodies, while preserving
+free slots at the physical child/cograph interface and opaque scalar payloads.
+Adding forests or independent counterterm sources concatenates additive terms; an
+independent scalar addback is included once. Identical generic templates may
+share a term, but each row keeps its own carrier and native source provenance
+through physical mapping and cut selection. In particular, equal coefficient
+vectors do not authorize merging different source maps at that stage. The
+outer cograph maps the child numerator and scalar carrier with the same
+certified affine map. Markers and frozen localizers multiply carriers, while
+semantic numerator transformations visit each shared body explicitly.
+
+Final integrated addbacks use the same storage: the analytic finite coefficient
+and the exact final cograph/global numerator form one generic product before
+source-map substitution. Its scalar carrier contains the reduced denominator
+and smooth localization factors. Final assembly does not multiply the cograph
+again. Direct CFF3D replay retains its existing mapped finite coefficient because
+subsequent Taylor operations must still see that expression.
+
+The evaluator receives the generic products and their completed row tables.
+It performs the shared tensor preprocessing before specializing coefficients.
+For `SingleParametric`, a balanced lazy dispatch chooses one additive term and
+its scalar carrier; a Rust loop supplies the exact coefficient row and sums the
+results. Evaluator-local coefficient and selector ports are appended to the
+unchanged physical parameter prefix and use a reusable input buffer. Inactive
+terms guard the complete numerator/carrier product. The summed methods bind
+the same completed table only at evaluator assembly. After physical localization
+and source-level formal pruning, equal complete coefficient vectors may share a
+summed scalar carrier. Tensor preprocessing can later discard further formals;
+this does not trigger another row-coalescing pass. This does not change the native residue inventory or independent-source
+counting.
+
+This storage applies to the complete production term and integrated addbacks
+when the local-4D option is enabled, as well as proper projected UV sectors. The
+direct CFF/from3D Taylor path retains its existing keyed-family representation.
+Diagnostic expression exports explicitly materialize the typed payload; saved
+amplitude data retains `Integrands` as its sole symbolic authority. Earlier saved
+states and standalone archives must be regenerated after the layout change.
+
 Requesting LTD requires local UV counterterms from expanded four-dimensional integrands and a complete orientation sum. Mixed CFF/LTD generation uses that same UV setting for both representations. Individual raised threshold residue-order coefficients may differ between CFF and LTD. Their complete contribution for each physical degenerate cut/residue must agree locally, with all pieces multiplying the same observable function grouped together. LTD threshold localization uses its own denominator factors and never reconstructs CFF to fix those individual coefficients.
 
 == Marker Representation

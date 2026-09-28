@@ -16,7 +16,7 @@ use crate::{
     uv::{
         ApproximationType, Spinney, UltravioletGraph,
         approx::{
-            OrientationProjection,
+            ForestNodeLike, OrientationProjection,
             direct_3d::{Direct3dCts, DirectResidueBranches},
             local_3d::Localizer,
         },
@@ -467,6 +467,7 @@ fn direct_root_preserves_powered_production_entries() -> Result<()> {
             &graph,
             &numerator,
             DirectResidueBranches::numerator_scope(),
+            false,
         )?;
         let actual = completed
             .materialize(!explicit_orientation_sum_only)?
@@ -1546,7 +1547,7 @@ fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<(
         topo_order: 0,
     };
 
-    let localized = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
+    let localized = localizer.localize(&Atom::one(), &mut graph, &integrated_node, None)?;
 
     assert!(localized.active.iter().any(|(_, atom)| !atom.is_zero()));
     Ok(())
@@ -1618,8 +1619,8 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
         topo_order: 0,
     };
 
-    let baseline = localizer.localize(&Atom::one(), &mut graph, &integrated_node)?;
-    let localized = localizer.localize(&finite_ct, &mut graph, &integrated_node)?;
+    let baseline = localizer.localize(&Atom::one(), &mut graph, &integrated_node, None)?;
+    let localized = localizer.localize(&finite_ct, &mut graph, &integrated_node, None)?;
     let baseline = baseline
         .active
         .iter_orientations()
@@ -1633,6 +1634,73 @@ fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<
 
     assert_eq!(localized, &baseline.map(|atom| atom * &mapped_finite_ct));
     assert_ne!(localized, &baseline.map(|atom| atom * &finite_ct));
+
+    // Final local-4D assembly supplies this exact cograph/global product. Its
+    // factor seven deliberately differs from graph.global_atom(), while both
+    // numerator factors retain nontrivial energy dependence before mapping.
+    let cograph_numerator = (GS.emr_mom(EdgeIndex(0), GS.cind(0)) + 3).pow(2) * 7;
+    let complete_numerator = &finite_ct * &cograph_numerator;
+    let pattern = OrientationPattern::default();
+    let localizer = Localizer::new(
+        &cutset,
+        OrientationProjection::exact(&production, &options, &pattern, false),
+    );
+    let retained = localizer.localize(
+        &finite_ct,
+        &mut graph,
+        &integrated_node,
+        Some(&cograph_numerator),
+    )?;
+    // Independent oracle: project the scalar source using the same complete
+    // capacity, then apply its literal affine map directly to the full product.
+    let carriers = localizer.with_independent_source_sum().projected_cff(
+        &mut graph,
+        integrated_node.subgraph(),
+        [&complete_numerator],
+        CffGenerationContext::Standalone,
+    )?;
+    let tree_denominators = GS.wrap_tree_denoms(
+        graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
+    );
+    let mut retained_rows = 0;
+    for (id, source_map, integrands) in retained.active.iter_orientations() {
+        let baseline = carriers
+            .iter_orientations()
+            .find_map(|(other_id, other_map, integrands)| {
+                (other_id == id && other_map == source_map).then_some(integrands)
+            })
+            .expect("the independently projected source retains each full affine map");
+        let mapped =
+            localizer
+                .orientation
+                .map_numerator(&graph, id, source_map, &complete_numerator)?;
+        let expected = baseline.map(|carrier| carrier * &tree_denominators * &mapped);
+        let difference = integrands
+            .resolved()?
+            .checked_zip(&expected, |_, actual, expected| {
+                Ok((actual - expected).cancel())
+            })?;
+        assert!(difference.is_zero());
+        for index in integrands.cut_indices() {
+            assert!(integrands.atom(index).unwrap().is_zero());
+            let terms = integrands.parametric_terms(index);
+            assert_eq!(terms.len(), 1);
+            retained_rows += terms[0].rows.len();
+            assert!(terms[0].rows.iter().all(|row| row.source_keys.len() == 1));
+        }
+    }
+    assert!(
+        retained_rows > 1,
+        "the finite-CT oracle must exercise several affine rows"
+    );
+    let combined = DirectResidueBranches::from_transient(&retained.active)?.materialize(false)?;
+    let terms = combined.parametric_terms(&CutCFFIndex::new_all_none());
+    assert_eq!(
+        terms.len(),
+        1,
+        "all addback rows share one complete numerator"
+    );
+    assert_eq!(terms[0].rows.len(), retained_rows);
     Ok(())
 }
 

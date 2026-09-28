@@ -100,6 +100,22 @@ fn export_evaluator_stack<T: ExportAtomTo>(
 ) -> Result<StandaloneEvaluatorStackArchive<T>> {
     Ok(StandaloneEvaluatorStackArchive {
         explicit_orientation_sum_only: evaluator_stack.explicit_orientation_sum_only,
+        parametric_rows: evaluator_stack
+            .parametric_rows
+            .as_ref()
+            .map(|catalog| -> Result<_> {
+                Ok(
+                    super::super::cross_section::load::StandaloneParametricResidueRows {
+                        parameters: catalog
+                            .parameters
+                            .iter()
+                            .map(T::export_atom_to)
+                            .collect::<Result<Vec<_>>>()?,
+                        rows: catalog.rows.clone(),
+                    },
+                )
+            })
+            .transpose()?,
         production_orientation_ids: evaluator_stack
             .production_orientation_ids()
             .iter()
