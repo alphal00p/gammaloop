@@ -76,7 +76,7 @@
     }
     try {
       const frame = window.frameElement;
-      if (frame && document.body) {
+      if (frame && document.body && !svg.closest('[data-linnet-frame-owner]')) {
         /* Measure content rather than the viewport: Marimo's own iframe
            observer grows outputs but deliberately does not shrink them. */
         document.documentElement.style.overflow = 'hidden';
