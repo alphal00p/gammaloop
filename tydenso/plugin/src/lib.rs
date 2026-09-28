@@ -24,7 +24,7 @@ use symbolica::atom::{
     Atom, AtomCore, AtomView, DefaultNamespace, NamespacedSymbol, Symbol, SymbolAttribute,
     SymbolBuilder,
 };
-use symbolica_typst_atom_payload::{
+use symbolica_typst_plugin::payload::{
     AttachmentSet, ParsedPayload, encode_atom_from_set, encode_atom_render_tree, parse_payload,
 };
 use wasm_minimal_protocol::*;
@@ -36,7 +36,7 @@ use spenso::portable_payload::REPRESENTATION_ATTACHMENT_VERSION;
 #[cfg(test)]
 use spenso::portable_payload::math_display_symbol_name;
 #[cfg(test)]
-use symbolica_typst_atom_payload::{Attachment, AttachmentKey};
+use symbolica_typst_plugin::payload::{Attachment, AttachmentKey};
 
 initiate_protocol!();
 
@@ -1357,12 +1357,11 @@ pub fn from_ast(ast: &[u8], namespace: &[u8]) -> Result<Vec<u8>, String> {
         other => return Err(format!("namespace must be text, got {other:?}")),
     };
     let mut context = InputContext::default();
-    let preflight =
-        symbolica_typst_atom_payload::typst_ast::preflight_payloads_from_ast(ast, "ast")?;
+    let preflight = symbolica_typst_plugin::typst_ast::preflight_payloads_from_ast(ast, "ast")?;
     context.absorb_attachment_set(&preflight.attachments)?;
     context.register_representations()?;
     let attached =
-        symbolica_typst_atom_payload::typst_ast::attached_atom_from_ast(ast, &namespace, "ast")?;
+        symbolica_typst_plugin::typst_ast::attached_atom_from_ast(ast, &namespace, "ast")?;
     debug_assert_eq!(attached.attachments, preflight.attachments);
     encode_atom_with_context(&attached.atom, &context)
 }
@@ -1769,7 +1768,7 @@ mod tests {
         assert!(Symbol::get_symbol(NamespacedSymbol::parse(&display_name)).is_none());
 
         let atom = Atom::var(parse_symbol("x", namespace, None).unwrap());
-        let payload = symbolica_typst_atom_payload::encode_atom_with_attachments(
+        let payload = symbolica_typst_plugin::payload::encode_atom_with_attachments(
             &atom,
             [
                 representation_attachment(&representation_name, &representation),
@@ -2393,12 +2392,12 @@ mod tests {
         };
         let x = Atom::var(parse_symbol("x", "tydenso_sidecar_raw_conflict_test", None).unwrap());
         let h = Atom::var(parse_symbol("h", "tydenso_sidecar_raw_conflict_test", None).unwrap());
-        let first = symbolica_typst_atom_payload::encode_atom_with_attachments(
+        let first = symbolica_typst_plugin::payload::encode_atom_with_attachments(
             &x,
             [representation_attachment(name, &numeric)],
         )
         .unwrap();
-        let second = symbolica_typst_atom_payload::encode_atom_with_attachments(
+        let second = symbolica_typst_plugin::payload::encode_atom_with_attachments(
             &h,
             [representation_attachment(name, &dual)],
         )
@@ -2435,7 +2434,7 @@ mod tests {
 
         let display = MathDisplayDeclaration::new(expected_display).unwrap();
         let atom = Atom::var(parse_symbol("x", namespace, None).unwrap());
-        let payload = symbolica_typst_atom_payload::encode_atom_with_attachments(
+        let payload = symbolica_typst_plugin::payload::encode_atom_with_attachments(
             &atom,
             [
                 representation_attachment(&representation_name, &representation),
@@ -2499,7 +2498,7 @@ mod tests {
         let atom =
             Atom::var(parse_symbol("x", "tydenso_sidecar_future_version_test", None).unwrap());
         let payload =
-            symbolica_typst_atom_payload::encode_atom_with_attachments(&atom, [attachment])
+            symbolica_typst_plugin::payload::encode_atom_with_attachments(&atom, [attachment])
                 .unwrap();
 
         let error = decode_atom(&payload, "future representation payload").unwrap_err();

@@ -1,4 +1,4 @@
-// Synced from symbolica-typst-plugin 7f869adc14dcf2758bab16aaa25e06eb10ffbfad.
+// Synced from symbolica-typst-plugin 57b7455b37c30f4f87353c0073e49f5225e937ab.
 // Local extensions preserve tensor/complex grouping, signs, and rational coefficients.
 // Generic, document-side rendering for a `symbolica` Atom render tree.
 // Rust owns algebra and exact payloads; Typst owns presentation.
