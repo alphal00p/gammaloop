@@ -239,7 +239,7 @@ Each finite-precision ray is first fitted over its complete scale range. A missi
 - Local four-dimensional and integrated counterterm generation currently
   support only `MUV` and `PolePart`. The local three-dimensional kernel
   has an `IR` branch, but integrated `IR` generation is not implemented;
-  `VaccuumLimit` and `OS` are also unsupported, while `Unsubtracted` is
+  `VacuumLimit` and `OS` are also unsupported, while `Unsubtracted` is
   expected to be filtered out before these operations.
 - Parametric integrand generation currently supports final 3D output
   only. `FourD` is used by integrated renormalization internally but is

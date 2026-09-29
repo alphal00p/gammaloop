@@ -129,9 +129,9 @@ Keep these settings distinct:
 - `mu_r` is the renormalization scale and enters the parameter set as its square;
 - `m_uv` is a UV reference mass;
 - `renormalization_localization_scale` controls localization of local UV counterterms;
-- MUV, PolePart, OS, IR, Unsubtracted, and VaccuumLimit are accepted local-counterterm
+- MUV, PolePart, OS, IR, Unsubtracted, and VacuumLimit are accepted local-counterterm
   prescription names whose full physical definitions still require a method-author contract;
-  OS, IR, and VaccuumLimit reach explicit unimplemented paths in at least one current
+  OS, IR, and VacuumLimit reach explicit unimplemented paths in at least one current
   counterterm evaluator; and
 - Vakint's default `MSbar` choice describes its vacuum-integral normalization and must not be
   used as a synonym for GammaLoop's MUV prescription.
