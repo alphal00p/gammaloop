@@ -1,7 +1,7 @@
 """Scoped tensor copies preserve interfaces, contractions, and alphabet display."""
 
-import unittest
 import unicodedata
+import unittest
 import xml.etree.ElementTree as ET
 
 from symbolica import E, S
@@ -9,6 +9,27 @@ from symbolica.community.spenso import Representation, TensorExpression, TensorN
 
 
 class ScopedIndicesTests(unittest.TestCase):
+    def test_dummy_only_scopes_keep_free_and_unresolved_ports(self):
+        rep = Representation.euc(3)
+        metric = TensorExpression.g(rep)
+        p, q = TensorName.vector("scope_dummy::p"), TensorName.vector("scope_dummy::q")
+        lhs, rhs = S("scope_dummy::lhs", "scope_dummy::rhs")
+        left = metric("a", "b") * p(rep("a"))
+        right = metric("a", "c") * q(rep("a"))
+        scoped = left.wrap_indices(lhs, dummies_only=True)
+        self.assertEqual(scoped.structure.slots, left.structure.slots)
+        self.assertEqual(scoped.wrap_indices(lhs, dummies_only=True), scoped)
+        result = (
+            (scoped * right.wrap_indices(rhs, dummies_only=True))
+            .contract(rank_one=False)
+            .to_expression()
+        )
+        self.assertEqual(result, p(rep("b")) * q(rep("c")))
+        for dummies_only in (False, True):
+            self.assertEqual(
+                metric.wrap_indices(lhs, dummies_only=dummies_only), metric
+            )
+
     def test_scopes_preserve_indices_and_contractions(self):
         rep = Representation.mink(4)
         p = TensorName("scope_test::p")(rep)

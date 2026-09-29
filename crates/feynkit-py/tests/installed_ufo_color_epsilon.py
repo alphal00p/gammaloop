@@ -63,8 +63,8 @@ for sign in (1, -1):
         .replace(S("UFO::GC_69"), E("1"))
     )
     assert len(color.structure.slots) == 3
-    conjugate = color.spenso_conjugate()
-    assert conjugate.spenso_conjugate().to_expression() == color.to_expression()
+    conjugate = color.dirac_adjoint()
+    assert conjugate.dirac_adjoint().to_expression() == color.to_expression()
     norm = (
         TensorExpression(color.to_expression() * conjugate.to_expression())
         .simplify_epsilon()

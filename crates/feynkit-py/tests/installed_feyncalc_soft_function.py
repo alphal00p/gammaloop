@@ -9,6 +9,7 @@ integrated or dimensionally regulated real-emission phase-space calculation.
 from symbolica import E, S, Symbol
 from symbolica.community import hep
 from symbolica.community.spenso import (
+    ColorSimplifySettings,
     GammaChainOrdering,
     GammaSimplifySettings,
     Representation,
@@ -222,7 +223,7 @@ colors = []
 for tensor in (color_born, color_real):
     norm = (
         TensorExpression(
-            tensor.to_expression() * tensor.spenso_conjugate().to_expression()
+            tensor.to_expression() * tensor.dirac_adjoint().to_expression()
         )
         .simplify_color()
         .to_expression()
@@ -230,7 +231,8 @@ for tensor in (color_born, color_real):
     )
     colors.append(
         TensorExpression(norm.replace(dA, Nc**2 - 1))
-        .to_cof_dimension_invariants()
+        .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
+        .to_expression()
         .to_expression()
     )
 assert colors == [Nc, (Nc**2 - 1) / 2]

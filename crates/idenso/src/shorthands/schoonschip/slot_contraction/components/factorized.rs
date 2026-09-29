@@ -48,11 +48,180 @@ pub(crate) enum ContractionStatus {
 
 /// Exact output may retain pending contractions when a frontier budget is met.
 /// Algebraic validity and completion are separate facts.
+#[derive(Clone)]
 pub(crate) struct FactorizedContraction<Root = Atom> {
     pub(crate) root: Root,
     pub(crate) aliases: Vec<(Atom, Atom)>,
     pub(crate) status: ContractionStatus,
     pub(crate) literal_relabellings: Vec<(Atom, Atom)>,
+}
+
+// A parse belongs to one arithmetic scope. Opening an occurrence is cached on
+// that scope, so borrowed payloads and its port atoms outlive every DP state.
+// This is parser scratch, not another symbolic tensor representation.
+struct ContractionScope<'src> {
+    source: AtomView<'src>,
+    network: SymbolicNet<AbstractIndex, AtomOrView<'src>>,
+    tree: SimpleTraversalTree<ChildVecStore<()>>,
+    root: NodeIndex,
+    ports: AHashMap<NodeIndex, (Vec<Atom>, PartialStructure)>,
+    opened: AHashMap<NodeIndex, std::cell::OnceCell<Option<Box<Self>>>>,
+    powers: AHashMap<NodeIndex, std::cell::OnceCell<Option<FactorizedContraction>>>,
+    work: AHashMap<NodeIndex, std::cell::OnceCell<bool>>,
+}
+
+impl<'src> ContractionScope<'src> {
+    fn parse(source: AtomView<'src>) -> Option<Self> {
+        let settings = ParseSettings {
+            precontract_scalars: true,
+            depth_limit: Some(1),
+            shorthand_parsing: ShorthandParsing::Opaque,
+            parse_composite_scalars_as_tensors: true,
+            ..ParseSettings::default()
+        };
+        type Tensor<'src> = SymbolicTensor<OrderedStructure, AtomOrView<'src>>;
+        let network = SymbolicNet::<AbstractIndex, AtomOrView<'src>>::try_from_view::<
+            OrderedStructure,
+            _,
+        >(source, &DummyLibrary::<Tensor<'src>>::new(), &settings)
+        .ok()?;
+        let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = network.graph.graph.node_id(network.graph.head());
+        let nodes = tree
+            .iter_preorder_tree_nodes(&network.graph.graph, root)
+            .collect::<Vec<_>>();
+        let external: SuBitGraph = network.graph.graph.external_filter();
+        let mut ports = AHashMap::new();
+        for &node in &nodes {
+            let members = tree
+                .iter_preorder_tree_nodes(&network.graph.graph, node)
+                .collect::<std::collections::BTreeSet<_>>();
+            let mut boundary = Vec::new();
+            for &member in &members {
+                for hedge in network.graph.graph.iter_crown(member) {
+                    let NetworkEdge::Slot(slot) = network.graph.graph[[&hedge]] else {
+                        continue;
+                    };
+                    if !external.includes(&hedge)
+                        && members
+                            .contains(&network.graph.graph.node_id(network.graph.graph.inv(hedge)))
+                    {
+                        continue;
+                    }
+                    // Sewing shares one edge label; the occurrence's storage
+                    // axis still owns this endpoint's variance.
+                    let slot = match &network.graph.graph[member] {
+                        NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                            *network.store.tensors[*index]
+                                .structure
+                                .external_structure()
+                                .get(usize::from(network.graph.slot_order[hedge.0]))?
+                        }
+                        _ => slot,
+                    };
+                    boundary.push(slot);
+                }
+            }
+            boundary.sort();
+            ports.insert(
+                node,
+                (
+                    boundary.iter().map(|slot| slot.to_atom()).collect(),
+                    PartialStructure::from_logical_slots(
+                        boundary
+                            .into_iter()
+                            .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind()))),
+                    ),
+                ),
+            );
+        }
+        Some(Self {
+            source,
+            network,
+            tree,
+            root,
+            ports,
+            opened: nodes
+                .iter()
+                .map(|&node| (node, Default::default()))
+                .collect(),
+            powers: nodes
+                .iter()
+                .map(|&node| (node, Default::default()))
+                .collect(),
+            work: nodes
+                .iter()
+                .map(|&node| (node, Default::default()))
+                .collect(),
+        })
+    }
+
+    fn payload(&self, node: NodeIndex) -> Option<&AtomOrView<'src>> {
+        match self.network.graph.graph[node] {
+            NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                Some(&self.network.store.tensors[index].expression)
+            }
+            NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
+                Some(self.network.store.get_scalar_ref(index))
+            }
+            _ => None,
+        }
+    }
+
+    fn literal(&self, node: NodeIndex) -> Option<AtomView<'_>> {
+        self.payload(node)
+            .map(AtomOrView::as_view)
+            .or_else(|| (node == self.root).then_some(self.source))
+    }
+
+    fn open(&self, node: NodeIndex) -> Option<&Self> {
+        self.opened[&node]
+            .get_or_init(|| {
+                // Composite arithmetic leaves retain their original view. The
+                // parser's owned scalar coefficients contain no tensor interior.
+                let AtomOrView::View(value) = self.payload(node)? else {
+                    return None;
+                };
+                let opened = Self::parse(*value)?;
+                if matches!(
+                    opened.network.graph.graph[opened.root],
+                    NetworkNode::Leaf(_)
+                ) && opened.literal(opened.root)? == *value
+                {
+                    // Unsupported powers and opaque scalar syntax do not expose
+                    // arithmetic. Decline instead of reopening the same leaf.
+                    return None;
+                }
+                Some(Box::new(opened))
+            })
+            .as_deref()
+    }
+
+    fn contains_work(&self, node: NodeIndex, contractor: &SlotContraction) -> bool {
+        *self.work[&node].get_or_init(|| {
+            let Some(value) = self.literal(node) else {
+                return false;
+            };
+            let observed = SimplificationCandidates::scan(value, [contractor.metric], || true);
+            observed.symbols[0] || observed.dots || observed.repeated_indices
+        })
+    }
+
+    fn factors(&self, root: NodeIndex) -> Vec<NodeIndex> {
+        if matches!(
+            self.network.graph.graph[root],
+            NetworkNode::Op(NetworkOp::Product)
+        ) {
+            let mut nodes = self
+                .tree
+                .iter_children(root, &self.network.graph.graph)
+                .collect::<Vec<_>>();
+            nodes.reverse();
+            nodes
+        } else {
+            vec![root]
+        }
+    }
 }
 
 impl SlotContraction {
@@ -69,377 +238,251 @@ impl SlotContraction {
         {
             return None;
         }
-        // The existing partial parser is the topology and layout owner. A
-        // product exposes its immediate factors. Arithmetic is parsed once;
-        // the term tape opens only the selected factor, retaining other
-        // subtrees as occurrence-local graph leaves.
-        let settings = ParseSettings {
-            precontract_scalars: false,
-            depth_limit: None,
-            shorthand_parsing: ShorthandParsing::Opaque,
-            parse_composite_scalars_as_tensors: true,
-            ..ParseSettings::default()
-        };
-        type Tensor<'src> = SymbolicTensor<OrderedStructure, AtomOrView<'src>>;
-        let network = SymbolicNet::<AbstractIndex, AtomOrView<'_>>::try_from_view::<
-            OrderedStructure,
-            _,
-        >(source, &DummyLibrary::<Tensor<'_>>::new(), &settings)
-        .ok()?;
-        let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
-        let root = network.graph.graph.node_id(network.graph.head());
-        self.contract_graph(&network, &tree, root, order, Some(source), rank_one)
+        let scope = ContractionScope::parse(source)?;
+        self.contract_graph(&scope, scope.root, order, rank_one)
     }
 
     fn power_scope(
         &self,
-        network: &SymbolicNet<AbstractIndex, AtomOrView<'_>>,
-        tree: &SimpleTraversalTree<ChildVecStore<()>>,
+        scope: &ContractionScope<'_>,
         node: NodeIndex,
     ) -> Option<(NodeIndex, i8, bool)> {
-        let NetworkNode::Op(NetworkOp::Power(power)) = network.graph.graph[node] else {
+        let NetworkNode::Op(NetworkOp::Power(power)) = scope.network.graph.graph[node] else {
             return None;
         };
-        let mut children = tree.iter_children(node, &network.graph.graph);
+        let mut children = scope.tree.iter_children(node, &scope.network.graph.graph);
         let child = children.next()?;
-        if children.next().is_some() {
+        if children.next().is_some() || !scope.ports[&child].0.is_empty() {
             return None;
         }
-        if power <= 0 {
-            return Some((child, power, true));
-        }
-        let members = tree
-            .iter_preorder_tree_nodes(&network.graph.graph, child)
-            .collect::<std::collections::BTreeSet<_>>();
-        let mut internal = false;
-        for &member in &members {
-            for hedge in network.graph.graph.iter_crown(member) {
-                if !network.graph.graph[[&hedge]].is_slot() {
-                    continue;
-                }
-                if network.graph.graph.inv(hedge) == hedge
-                    || !members
-                        .contains(&network.graph.graph.node_id(network.graph.graph.inv(hedge)))
-                {
-                    return None;
-                }
-                internal = true;
-            }
-        }
-        // Already compact scalar coefficients keep their existing tape keys,
-        // so equal coefficients still merge across alpha-equivalent terms.
-        (internal || matches!(network.graph.graph[child], NetworkNode::Op(_)))
-            .then_some((child, power, internal))
+        let source = scope.literal(child)?;
+        use spenso::network::parsing::AtomStructureExt;
+        Some((child, power, source.has_repeated_explicit_indices()))
     }
 
-    fn emit_graph(
+    fn scoped_power<'a>(
         &self,
-        network: &SymbolicNet<AbstractIndex, AtomOrView<'_>>,
-        tree: &SimpleTraversalTree<ChildVecStore<()>>,
-        root: NodeIndex,
-        scoped: &AHashMap<NodeIndex, FactorizedContraction>,
-    ) -> Option<Atom> {
-        network
-            .graph
-            .to_expression_at(tree, root, &mut |node, value| {
-                if let Some(result) = scoped.get(&node) {
-                    return Ok(Some(result.root.clone()));
-                }
-                match value {
-                    NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => Ok(Some(
-                        network.store.tensors[*index]
-                            .expression
-                            .as_view()
-                            .to_owned(),
-                    )),
-                    NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => Ok(Some(
-                        network.store.get_scalar_ref(*index).as_view().to_owned(),
-                    )),
-                    NetworkNode::Op(_) => Ok(None),
-                    _ => Err(spenso::network::TensorNetworkError::Other(eyre::eyre!(
-                        "symbolic contraction requires a stored occurrence"
-                    ))),
-                }
-            })
-            .ok()
-    }
-
-    fn contract_graph(
-        &self,
-        network: &SymbolicNet<AbstractIndex, AtomOrView<'_>>,
-        tree: &SimpleTraversalTree<ChildVecStore<()>>,
-        root: NodeIndex,
-        order: Option<&[usize]>,
-        original: Option<AtomView<'_>>,
+        scope: &'a ContractionScope<'_>,
+        node: NodeIndex,
         rank_one: bool,
-    ) -> Option<FactorizedContraction> {
-        // A scalar base owns its internal dummy pairs independently of the
-        // exponent. Reduce it once before applying the power: distributing
-        // first would identify pairs from different copies. Open positive
-        // powers retain the existing cross-copy slot contraction.
-        if let Some((child, power, internal)) = self.power_scope(network, tree, root) {
-            if !internal {
-                return Some(FactorizedContraction {
-                    root: match original {
-                        Some(source) => source.to_owned(),
-                        None => self.emit_graph(network, tree, root, &AHashMap::new())?,
-                    },
-                    aliases: Vec::new(),
-                    status: ContractionStatus::Complete,
-                    literal_relabellings: Vec::new(),
-                });
-            }
-            let mut result = self.contract_graph(network, tree, child, None, None, rank_one)?;
-            result.root = result.root.pow(power);
-            return Some(result);
-        }
-        let nodes = if matches!(
-            network.graph.graph[root],
-            NetworkNode::Op(NetworkOp::Product)
-        ) {
-            // Product input heads were connected from the end by the existing
-            // parser. Public factor ordinals follow the normalized source.
-            let mut children = tree
-                .iter_children(root, &network.graph.graph)
-                .collect::<Vec<_>>();
-            children.reverse();
-            children
-        } else {
-            vec![root]
-        };
-        let traversal = tree
-            .iter_preorder_tree_nodes(&network.graph.graph, root)
-            .collect::<Vec<_>>();
-        let mut owned = AHashMap::new();
-        for &node in traversal.iter().rev() {
-            let contains = match &network.graph.graph[node] {
-                NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
-                    matches!(network.store.tensors[*index].expression.as_view(), AtomView::Fun(function)
-                        if function.get_symbol() == self.metric || function.get_symbol().has_tag(&self.tags.rank1))
-                        || network.graph.graph.iter_crown(node).any(|hedge| {
-                            network.graph.graph[[&hedge]].is_slot()
-                                && network.graph.graph.inv(hedge) != hedge
-                                && network.graph.graph.node_id(network.graph.graph.inv(hedge))
-                                    == node
-                        })
+    ) -> Option<&'a FactorizedContraction> {
+        let (child, power, internal) = self.power_scope(scope, node)?;
+        scope.powers[&node]
+            .get_or_init(|| {
+                if !internal {
+                    // A transparent bracket can remain after local dot pairing
+                    // has removed its last explicit index. Lower just that
+                    // selected wrapper, retaining ordinary scalar powers verbatim.
+                    if matches!(scope.literal(child)?, AtomView::Fun(function)
+                        if function.get_symbol() == self.tags.bracket)
+                        && scope.contains_work(child, self)
+                    {
+                        let opened = scope.open(child)?;
+                        let mut result =
+                            self.contract_graph(opened, opened.root, None, rank_one)?;
+                        result.root = result.root.pow(power);
+                        return Some(result);
+                    }
+                    return Some(FactorizedContraction {
+                        root: scope.literal(node)?.to_owned(),
+                        aliases: Vec::new(),
+                        status: ContractionStatus::Complete,
+                        literal_relabellings: Vec::new(),
+                    });
                 }
-                NetworkNode::Op(NetworkOp::Sum | NetworkOp::Product | NetworkOp::Power(_)) => {
-                    let children = tree
-                        .iter_children(node, &network.graph.graph)
-                        .collect::<Vec<_>>();
-                    children.iter().any(|child| owned[child])
-                        || (matches!(
-                            network.graph.graph[node],
-                            NetworkNode::Op(NetworkOp::Product)
-                        ) && network
-                            .graph
-                            .slot_components(tree, &children)
-                            .iter()
-                            .any(|part| part.len() > 1))
-                }
-                _ => false,
-            };
-            owned.insert(node, contains);
-        }
-        let mut scoped = AHashMap::new();
-        let mut pending = vec![root];
-        while let Some(node) = pending.pop() {
-            if !owned[&node] {
-                continue;
-            }
-            if self.power_scope(network, tree, node).is_some() {
-                scoped.insert(
-                    node,
-                    self.contract_graph(network, tree, node, None, None, rank_one)?,
-                );
-            } else {
-                pending.extend(tree.iter_children(node, &network.graph.graph));
-            }
-        }
-        let mut selected = nodes
-            .iter()
-            .enumerate()
-            .filter_map(|(i, node)| owned[node].then_some(i))
-            .collect::<Vec<_>>();
+                // Contract a closed base once in its own scope before applying the
+                // exponent. Copies must never share their internal dummy pairs.
+                let mut result = self.contract_graph(scope, child, None, rank_one)?;
+                result.root = result.root.pow(power);
+                Some(result)
+            })
+            .as_ref()
+    }
+
+    fn factor_order(
+        &self,
+        scope: &ContractionScope<'_>,
+        nodes: &[NodeIndex],
+        mut selected: Vec<usize>,
+        order: Option<&[usize]>,
+    ) -> Option<Vec<usize>> {
         if let Some(order) = order {
-            let mut seen = vec![false; nodes.len()];
-            for &position in order {
-                if *seen.get(position)? {
-                    return None;
-                }
-                seen[position] = true;
-            }
-            if seen.iter().any(|entry| !entry) {
+            let factors = match scope.source {
+                AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                value => vec![value],
+            };
+            let mut positions = order.to_vec();
+            positions.sort_unstable();
+            if positions != (0..factors.len()).collect::<Vec<_>>() {
                 return None;
             }
-            selected
-                .sort_by_key(|position| order.iter().position(|entry| entry == position).unwrap());
+            let ranks = selected
+                .iter()
+                .map(|&position| {
+                    let literal = scope.literal(nodes[position])?;
+                    let ordinal = factors.iter().position(|&factor| factor == literal)?;
+                    Some((position, order.iter().position(|&entry| entry == ordinal)?))
+                })
+                .collect::<Option<AHashMap<_, _>>>()?;
+            selected.sort_by_key(|position| ranks[position]);
+            return Some(selected);
         }
-        // Top-level factors and maximal unselected composite subtrees share
-        // one occurrence table. Leaves keep their existing borrowed payload.
-        let mut opaque_nodes = nodes.clone();
-        let mut opaque_positions = nodes
+        // Minimize the live boundary of the accumulated factor set. Incidence
+        // comes entirely from the depth-one graph; scoring never opens a leaf.
+        let graph = &scope.network.graph.graph;
+        let edges = nodes
             .iter()
-            .copied()
-            .enumerate()
-            .map(|(i, n)| (n, i))
-            .collect::<AHashMap<_, _>>();
-        let mut pending = selected.iter().map(|i| nodes[*i]).collect::<Vec<_>>();
-        while let Some(node) = pending.pop() {
-            if !owned[&node] || scoped.contains_key(&node) {
-                if matches!(network.graph.graph[node], NetworkNode::Op(_))
-                    && !opaque_positions.contains_key(&node)
-                {
-                    opaque_positions.insert(node, opaque_nodes.len());
-                    opaque_nodes.push(node);
-                }
-            } else {
-                pending.extend(tree.iter_children(node, &network.graph.graph));
-            }
+            .map(|&node| {
+                scope
+                    .tree
+                    .iter_preorder_tree_nodes(graph, node)
+                    .flat_map(|member| graph.iter_crown(member))
+                    .filter(|hedge| scope.network.graph.graph[[hedge]].is_slot())
+                    .filter(|&hedge| {
+                        graph.inv(hedge) == hedge || graph.node_id(graph.inv(hedge)) != node
+                    })
+                    .map(|hedge| hedge.0.min(graph.inv(hedge).0))
+                    .collect::<std::collections::BTreeSet<_>>()
+            })
+            .collect::<Vec<_>>();
+        let mut boundary = std::collections::BTreeSet::new();
+        let mut planned = Vec::with_capacity(selected.len());
+        while !selected.is_empty() {
+            let best = (0..selected.len()).min_by_key(|&i| {
+                let position = selected[i];
+                (
+                    boundary.symmetric_difference(&edges[position]).count(),
+                    std::cmp::Reverse(boundary.intersection(&edges[position]).count()),
+                    position,
+                )
+            })?;
+            let position = selected.remove(best);
+            boundary = boundary
+                .symmetric_difference(&edges[position])
+                .copied()
+                .collect();
+            planned.push(position);
         }
-        let external: SuBitGraph = network.graph.graph.external_filter();
-        let mut port_atoms = Vec::new();
-        let mut interfaces = Vec::new();
-        for &node in &opaque_nodes {
-            let members = tree
-                .iter_preorder_tree_nodes(&network.graph.graph, node)
-                .collect::<std::collections::BTreeSet<_>>();
-            let mut ports = Vec::new();
-            for &member in &members {
-                for hedge in network.graph.graph.iter_crown(member) {
-                    let NetworkEdge::Slot(slot) = network.graph.graph[[&hedge]] else {
-                        continue;
-                    };
-                    if !external.includes(&hedge)
-                        && members
-                            .contains(&network.graph.graph.node_id(network.graph.graph.inv(hedge)))
-                    {
-                        continue;
+        Some(planned)
+    }
+
+    fn compile_scope<'a>(
+        &self,
+        scope: &'a ContractionScope<'_>,
+        node: NodeIndex,
+        tape: &mut TermTape<InputLeaf<'a>>,
+        sum: &mut ComponentSum<'a, '_>,
+        positions: &mut AHashMap<(usize, NodeIndex), usize>,
+        scoped: &mut AHashMap<(usize, NodeIndex), &'a FactorizedContraction>,
+    ) -> Option<(usize, (usize, usize))> {
+        tape.compile_graph(
+            &scope.network.graph,
+            &scope.tree,
+            node,
+            &mut |tape, node, value| {
+                if self.power_scope(scope, node).is_some() {
+                    let result = self.scoped_power(scope, node, sum.rank_one)?;
+                    scoped.insert((scope as *const _ as usize, node), result);
+                    return Some(TermLeaf::Value(InputLeaf::Scalar(result.root.as_view())));
+                }
+                if !matches!(value, NetworkNode::Leaf(_)) {
+                    return None;
+                }
+                let literal = scope.literal(node)?;
+                if matches!(
+                    literal,
+                    AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
+                ) || matches!(literal, AtomView::Fun(function) if function.get_symbol() == self.tags.bracket) {
+                    if scope.contains_work(node, self) {
+                        let opened = scope.open(node)?;
+                        let (node, size) =
+                            self.compile_scope(opened, opened.root, tape, sum, positions, scoped)?;
+                        Some(TermLeaf::Reference(node, size))
+                    } else {
+                        let position = sum.register_factor(scope, node, positions)?;
+                        Some(TermLeaf::Value(InputLeaf::Subtree(position)))
                     }
-                    // A sewn directed edge stores one shared label. The leaf's
-                    // existing storage axis retains this endpoint's variance.
-                    let slot = match &network.graph.graph[member] {
-                        NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
-                            *network.store.tensors[*index]
-                                .structure
-                                .external_structure()
-                                .get(usize::from(network.graph.slot_order[hedge.0]))?
-                        }
-                        _ => slot,
-                    };
-                    ports.push(slot);
+                } else if let AtomView::Num(number) = literal {
+                    if let Ok(coefficient) = Rational::try_from(literal) {
+                        Some(TermLeaf::Number(InputLeaf::Atom(literal), coefficient))
+                    } else if matches!(
+                        number.get_coeff_view(),
+                        CoefficientView::Natural(..) | CoefficientView::Large(..)
+                    ) {
+                        Some(TermLeaf::Value(InputLeaf::Scalar(literal)))
+                    } else {
+                        None
+                    }
+                } else {
+                    Some(TermLeaf::Value(InputLeaf::Atom(literal)))
                 }
-            }
-            // These are fully explicit internal factor interfaces. Port
-            // bindings use the matching literal slot, not a fresh Atom scan.
-            ports.sort();
-            port_atoms.push(ports.iter().map(|slot| slot.to_atom()).collect::<Vec<_>>());
-            interfaces.push(PartialStructure::from_logical_slots(
-                ports
-                    .into_iter()
-                    .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind()))),
-            ));
+            },
+        )
+    }
+
+    fn contract_graph<'a>(
+        &self,
+        scope: &'a ContractionScope<'_>,
+        root: NodeIndex,
+        order: Option<&[usize]>,
+        rank_one: bool,
+    ) -> Option<FactorizedContraction> {
+        if self.power_scope(scope, root).is_some() {
+            return self.scoped_power(scope, root, rank_one).cloned();
         }
-        let emit = |node: usize| self.emit_graph(network, tree, NodeIndex(node), &scoped);
-        let positions = nodes
+        let nodes = scope.factors(root);
+        let selected = nodes
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &node)| scope.contains_work(node, self).then_some(i))
+            .collect();
+        let selected = self.factor_order(scope, &nodes, selected, order)?;
+        let components = scope.network.graph.slot_components(&scope.tree, &nodes);
+        let node_positions = nodes
             .iter()
             .copied()
             .enumerate()
             .map(|(i, n)| (n, i))
             .collect::<AHashMap<_, _>>();
-        let components = network.graph.slot_components(tree, &nodes);
         let mut slots = SlotMatcher::default();
         let mut sum = ComponentSum::new(self, Intake::Contraction, &mut slots);
         sum.rank_one = rank_one;
-        sum.factor_emission = Some(&emit);
-        sum.factor_roots.resize(opaque_nodes.len(), None);
+        let mut positions = AHashMap::new();
         let mut remaining = Vec::new();
-        for (position, &node) in opaque_nodes.iter().enumerate() {
-            let ports = port_atoms[position]
-                .iter()
-                .map(Atom::as_view)
-                .collect::<Vec<_>>();
+        for &node in &nodes {
+            let position = sum.register_factor(scope, node, &mut positions)?;
             remaining.push((
                 position,
-                ports
+                sum.opaque_factors[position]
+                    .1
                     .iter()
                     .copied()
                     .map(Argument::Original)
                     .collect::<Vec<_>>(),
             ));
-            sum.opaque_factors
-                .push((node.0, ports, interfaces[position].clone()));
         }
-        // Complete admission precedes distribution/cancellation. Foreign and
-        // scalar subtrees remain graph occurrences until an output is emitted.
-        for &position in &selected {
-            let (tape, _) = sum.input.compile_graph(
-                &network.graph,
-                tree,
+        let mut scoped = AHashMap::new();
+        let mut compile = |sum: &mut ComponentSum<'a, '_>, position: usize| {
+            let mut tape = std::mem::take(&mut sum.input);
+            let result = self.compile_scope(
+                scope,
                 nodes[position],
-                &mut |_, node, value| {
-                    if let Some(result) = scoped.get(&node)
-                        && let Some(&position) = opaque_positions.get(&node)
-                        && port_atoms[position].is_empty()
-                    {
-                        return Some(TermLeaf::Value(InputLeaf::Scalar(result.root.as_view())));
-                    }
-                    let literal = match value {
-                        NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
-                            Some(network.store.tensors[*index].expression.as_view())
-                        }
-                        NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
-                            Some(network.store.get_scalar_ref(*index).as_view())
-                        }
-                        _ => None,
-                    };
-                    if let Some(value) = literal {
-                        if let AtomView::Num(number) = value {
-                            if let Ok(coefficient) = Rational::try_from(value) {
-                                Some(TermLeaf::Number(InputLeaf::Atom(value), coefficient))
-                            } else if matches!(
-                                number.get_coeff_view(),
-                                CoefficientView::Natural(..) | CoefficientView::Large(..)
-                            ) {
-                                // The tape's numeric field is real rational. Exact
-                                // Gaussian coefficients remain opaque scalar leaves.
-                                Some(TermLeaf::Value(InputLeaf::Scalar(value)))
-                            } else {
-                                None
-                            }
-                        } else {
-                            Some(TermLeaf::Value(InputLeaf::Atom(value)))
-                        }
-                    } else if !owned[&node] || scoped.contains_key(&node) {
-                        opaque_positions
-                            .get(&node)
-                            .map(|&position| TermLeaf::Value(InputLeaf::Subtree(position)))
-                    } else {
-                        None
-                    }
-                },
-            )?;
-            sum.factor_roots[position] = Some(tape);
-        }
-        // Scalar spectators and disconnected foreign sums never enter
-        // another component's states. Connectivity comes from the same graph
-        // that owns the parsed occurrences, not a second map of Atom labels.
+                &mut tape,
+                sum,
+                &mut positions,
+                &mut scoped,
+            );
+            sum.input = tape;
+            result.map(|(node, _)| node)
+        };
         let mut roots = Vec::new();
-        let mut definitions = scoped
-            .values()
-            .flat_map(|value| value.aliases.iter().cloned())
-            .collect::<Vec<_>>();
-        let mut complete = scoped
-            .values()
-            .all(|value| value.status == ContractionStatus::Complete);
+        let mut definitions = Vec::new();
+        let mut status = ContractionStatus::Complete;
         for component in components {
-            // Alpha representatives carry literal dummy labels. They may merge
-            // alternatives of this component, but cannot be reused in another
-            // disconnected component whose contractions have independent labels.
             sum.alpha_terms.clear();
             let component = component
                 .into_iter()
-                .map(|node| positions[&node])
+                .map(|node| node_positions[&node])
                 .collect::<Vec<_>>();
             let selected = selected
                 .iter()
@@ -464,16 +507,17 @@ impl SlotContraction {
                     residual: Vec::new(),
                 },
                 &selected,
+                &mut compile,
             )?;
             roots.push(result.root);
             definitions.extend(result.aliases);
-            complete &= result.status == ContractionStatus::Complete;
+            status = status.max(result.status);
         }
-        // Admission and the component reducer still run, but an already
-        // contracted expression must not gain another layer of weight aliases.
-        // `contracted` accumulates across all states; resetting incidence scratch
-        // deliberately does not reset it. Scoped powers retain their own results.
-        if complete
+        for result in scoped.values() {
+            definitions.extend(result.aliases.iter().cloned());
+            status = status.max(result.status);
+        }
+        if status == ContractionStatus::Complete
             && scoped.is_empty()
             && !sum.contracted
             && sum
@@ -482,26 +526,27 @@ impl SlotContraction {
                 .iter()
                 .all(|(source, target)| source == target)
         {
+            let source = scope.literal(root)?;
+            // The bracket normalizer owns whether a product can be exposed:
+            // closed scalar wrappers disappear, while AUTO operand order stays.
+            let root = if matches!(source, AtomView::Fun(function)
+                if function.get_symbol() == self.tags.bracket)
+            {
+                crate::shorthands::bracket::BracketNormalizer::normalize(source)
+            } else {
+                source.to_owned()
+            };
             return Some(FactorizedContraction {
-                // Graph product emission may sort anonymous bracket factors.
-                // The existing no-work proof permits retaining exact source syntax.
-                root: match original {
-                    Some(source) => source.to_owned(),
-                    None => self.emit_graph(network, tree, root, &scoped)?,
-                },
+                root,
                 aliases: Vec::new(),
-                status: ContractionStatus::Complete,
+                status,
                 literal_relabellings: Vec::new(),
             });
         }
         Some(FactorizedContraction {
             root: Atom::mul_many(roots),
             aliases: definitions,
-            status: if complete {
-                ContractionStatus::Complete
-            } else {
-                ContractionStatus::Capped
-            },
+            status,
             literal_relabellings: scoped
                 .values()
                 .flat_map(|value| value.literal_relabellings.iter().cloned())
@@ -512,6 +557,28 @@ impl SlotContraction {
 }
 
 impl<'a> ComponentSum<'a, '_> {
+    fn register_factor(
+        &mut self,
+        scope: &'a ContractionScope<'_>,
+        node: NodeIndex,
+        positions: &mut AHashMap<(usize, NodeIndex), usize>,
+    ) -> Option<usize> {
+        let key = (scope as *const _ as usize, node);
+        if let Some(&position) = positions.get(&key) {
+            return Some(position);
+        }
+        let position = self.opaque_factors.len();
+        let (ports, interface) = &scope.ports[&node];
+        self.opaque_factors.push((
+            scope.literal(node)?,
+            ports.iter().map(Atom::as_view).collect(),
+            interface.clone(),
+        ));
+        self.factor_roots.push(None);
+        positions.insert(key, position);
+        Some(position)
+    }
+
     fn opaque_factor(&mut self, position: usize, arguments: &[Argument<'a>]) -> Option<()> {
         let tensor = self.tensors.len();
         self.tensors
@@ -591,6 +658,7 @@ impl<'a> ComponentSum<'a, '_> {
         &mut self,
         remaining: Remaining<'a>,
         order: &[usize],
+        compile: &mut impl FnMut(&mut Self, usize) -> Option<usize>,
     ) -> Option<FactorizedContraction> {
         let mut states = vec![(remaining, Atom::num(1))];
         let mut definitions = Vec::new();
@@ -600,6 +668,9 @@ impl<'a> ComponentSum<'a, '_> {
         let mut definition_bytes = 0usize;
         let mut complete = true;
         for &selected in order {
+            if self.factor_roots[selected].is_none() {
+                self.factor_roots[selected] = Some(compile(self, selected)?);
+            }
             let terms = self.factor_terms(selected)?;
             // Predict growth of the whole frontier, not just the local
             // template's term iterator. This includes graph-state storage and
@@ -805,8 +876,8 @@ impl<'a> ComponentSum<'a, '_> {
     }
 
     pub(super) fn emit_factor(&self, position: usize, arguments: &[Argument<'a>]) -> Option<Atom> {
-        let (node, ports, interface) = &self.opaque_factors[position];
-        let source = (self.factor_emission?)(*node)?;
+        let (source, ports, interface) = &self.opaque_factors[position];
+        let source = source.to_owned();
         let replacements = ports
             .iter()
             .zip(arguments)
@@ -1058,5 +1129,127 @@ mod tests {
         assert!(result.status == ContractionStatus::Complete);
         assert!(result.aliases.is_empty());
         assert_eq!(result.root, source);
+    }
+}
+
+#[cfg(test)]
+mod lazy_tests {
+    use super::*;
+    use spenso::network::tags::SPENSO_TAG;
+
+    #[test]
+    fn partial_arithmetic_scopes_have_only_one_level() {
+        let _contractor = super::super::tests::setup();
+        for (source, nodes) in [
+            ("p(spenso::mink(4,a))*q(spenso::mink(4,a))+x*y", 3),
+            ("(p(spenso::mink(4,a))*q(spenso::mink(4,a))+x)^2", 2),
+            (
+                "spenso::bracket(p(spenso::mink(4,a))*q(spenso::mink(4,a)))^-1",
+                2,
+            ),
+        ] {
+            let source = super::super::tests::input(source);
+            let scope = ContractionScope::parse(source.as_view()).unwrap();
+            assert_eq!(scope.ports.len(), nodes, "{source}");
+            assert_eq!(scope.network.graph.graph.n_nodes(), nodes, "{source}");
+            assert!(scope.opened.values().all(|entry| entry.get().is_none()));
+        }
+    }
+
+    #[test]
+    fn graph_order_starts_with_a_small_boundary_and_accepts_an_override() {
+        let contractor = super::super::tests::setup();
+        let source = super::super::tests::input(
+            "spenso::g(spenso::mink(4,a),spenso::mink(4,b))*p(spenso::mink(4,a))*q(spenso::mink(4,b))",
+        );
+        let scope = ContractionScope::parse(source.as_view()).unwrap();
+        let nodes = scope.factors(scope.root);
+        let selected = (0..nodes.len()).collect::<Vec<_>>();
+        let order = contractor
+            .factor_order(&scope, &nodes, selected.clone(), None)
+            .unwrap();
+        assert_eq!(scope.ports[&nodes[order[0]]].0.len(), 1);
+        let explicit = selected.iter().rev().copied().collect::<Vec<_>>();
+        assert_eq!(
+            contractor
+                .factor_order(&scope, &nodes, selected, Some(&explicit))
+                .unwrap(),
+            explicit
+        );
+        let expected =
+            super::super::tests::input("spenso::g(p(spenso::mink(4)),q(spenso::mink(4)))");
+        for order in [None, Some(explicit.as_slice())] {
+            let result = contractor
+                .contract_graph(&scope, scope.root, order, true)
+                .unwrap();
+            assert!(result.status == ContractionStatus::Complete);
+            let mut resolved = symbolica::atom::AliasedAtom::from(result.root);
+            for (handle, body) in result.aliases {
+                resolved.register_alias(handle, body);
+            }
+            assert_eq!(resolved.into_inner(), expected);
+        }
+    }
+
+    #[test]
+    fn unselected_thousand_term_factors_stay_closed() {
+        crate::test_support::test_initialize();
+        SPENSO_TAG.rank_one_tensor_symbol("lazy_contraction::p");
+        SPENSO_TAG.tensor_symbol("lazy_contraction::t");
+        SPENSO_TAG.tensor_symbol("lazy_contraction::u");
+        let parse = |source: &str| {
+            Atom::parse(
+                source,
+                "lazy_contraction",
+                symbolica::parser::ParseSettings::symbolica(),
+            )
+            .unwrap()
+        };
+        for foreign in [false, true] {
+            let first = Atom::add_many((0..1000).map(|i| {
+                parse(&if foreign {
+                    format!("t({i},spenso::mink(4,c))")
+                } else {
+                    format!("x({i})")
+                })
+            }));
+            let second = Atom::add_many((0..1000).map(|i| {
+                parse(&if foreign {
+                    format!("u({i},spenso::mink(4,d))")
+                } else {
+                    format!("y({i})")
+                })
+            }));
+            let core = parse("spenso::g(spenso::mink(4,a),spenso::mink(4,b))*p(spenso::mink(4,a))");
+            let source = Atom::mul_many([core, first.clone(), second.clone()]);
+            let scope = ContractionScope::parse(source.as_view()).unwrap();
+            assert_eq!(scope.ports.len(), 5, "one product and four factor leaves");
+            assert_eq!(scope.network.graph.graph.n_nodes(), 5);
+            let protected = scope
+                .factors(scope.root)
+                .into_iter()
+                .filter(|&node| {
+                    let value = scope.literal(node).unwrap();
+                    value == first.as_view() || value == second.as_view()
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(protected.len(), 2);
+            let result = SlotContraction::new()
+                .contract_graph(&scope, scope.root, None, true)
+                .unwrap();
+            assert!(result.status == ContractionStatus::Complete);
+            assert!(result.aliases.is_empty());
+            assert_eq!(
+                result.root,
+                Atom::mul_many([parse("p(spenso::mink(4,b))"), first, second])
+            );
+            for node in protected {
+                assert!(
+                    scope.opened[&node].get().is_none(),
+                    "unselected factor was opened"
+                );
+            }
+            assert!(scope.opened.values().all(|opened| opened.get().is_none()));
+        }
     }
 }

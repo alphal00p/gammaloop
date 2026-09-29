@@ -20,8 +20,6 @@ from symbolica import E, Matrix, Replacement, S, Symbol
 from symbolica.community import hep
 from symbolica.community.hep import oneloop
 from symbolica.community.spenso import (
-    ColorCasimirSettings,
-    Representation,
     TensorExpression,
 )
 
@@ -152,7 +150,7 @@ for kind, incoming, outgoing, loops, vertices, count in [
             # Conjugate the tree's color tensor; the generated tree fixes the norm.
             color_projector = (
                 TensorExpression.t(dA, Nc)(ports[1], ports[0], ports[2])
-                .spenso_conjugate()
+                .dirac_adjoint()
                 .to_expression()
             )
             numerator = (
@@ -161,7 +159,7 @@ for kind, incoming, outgoing, loops, vertices, count in [
                 )
                 * color_projector
             )
-            settings = ColorCasimirSettings(rewrite_fundamental_dimension=False)
+            fundamental_dimension = Nc
         else:
             particle = incoming[0]
             rep, numeric_dim, symbolic_dim = (
@@ -188,17 +186,9 @@ for kind, incoming, outgoing, loops, vertices, count in [
                 .replace(cof(3, index), cof(Nc, index))
                 .replace(coad(8, index), coad(dA, index))
             )
-            settings = ColorCasimirSettings()
+            fundamental_dimension = CA
         numerator = (
-            TensorExpression(numerator)
-            .simplify_color()
-            .to_expression()
-            .to_color_casimir(
-                fundamental=Representation.cof(Nc),
-                adjoint=Representation.coad(dA),
-                settings=settings,
-            )
-            .to_expression()
+            TensorExpression(numerator).simplify_color().to_expression().to_expression()
         )
         # CF and CA are display names for shared representation-aware invariants;
         # the quark-loop trace uses the conventional fundamental index TR=1/2.
@@ -206,6 +196,8 @@ for kind, incoming, outgoing, loops, vertices, count in [
             numerator.replace(cas(2, cof(Nc)), CF)
             .replace(cas(2, coad(dA)), CA)
             .replace(trace_index(2, cof(Nc)), one / 2)
+            .replace(dA, 2 * fundamental_dimension * CF)
+            .replace(Nc, fundamental_dimension)
         )
         # Keep the unexpanded graph numerator for the independent direct IRR path.
         raw_numerator = numerator
@@ -541,7 +533,7 @@ for kind, incoming, outgoing, count, qcd_order in [
         if kind == "vertex":
             color_projector = (
                 TensorExpression.t(dA, Nc)(ports[1], ports[0], ports[2])
-                .spenso_conjugate()
+                .dirac_adjoint()
                 .to_expression()
             )
             numerator = (
@@ -550,7 +542,7 @@ for kind, incoming, outgoing, count, qcd_order in [
                 )
                 * color_projector
             )
-            settings = ColorCasimirSettings(rewrite_fundamental_dimension=False)
+            fundamental_dimension = Nc
         else:
             particle = incoming[0]
             rep, numeric_dim, symbolic_dim = (
@@ -577,22 +569,16 @@ for kind, incoming, outgoing, count, qcd_order in [
                 .replace(cof(3, index), cof(Nc, index))
                 .replace(coad(8, index), coad(dA, index))
             )
-            settings = ColorCasimirSettings()
+            fundamental_dimension = CA
         numerator = (
-            TensorExpression(numerator)
-            .simplify_color()
-            .to_expression()
-            .to_color_casimir(
-                fundamental=Representation.cof(Nc),
-                adjoint=Representation.coad(dA),
-                settings=settings,
-            )
-            .to_expression()
+            TensorExpression(numerator).simplify_color().to_expression().to_expression()
         )
         numerator = (
             numerator.replace(cas(2, cof(Nc)), CF)
             .replace(cas(2, coad(dA)), CA)
             .replace(trace_index(2, cof(Nc)), one / 2)
+            .replace(dA, 2 * fundamental_dimension * CF)
+            .replace(Nc, fundamental_dimension)
             .replace(mink(dim, index), mink(D, index))
             .replace(mink(dim), mink(D))
         )

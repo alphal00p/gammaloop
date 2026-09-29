@@ -257,8 +257,8 @@ What this plan takes from their work:
   the owned right-hand-side arena) with a port list from the fast syntactic
   inference and an incidence table; the graph is arena-allocated and reused
   across terms and operations. Parse settings are the existing partial ones
-  (`depth_limit`, `ShorthandParsing::Opaque`, pre-contracted
-  scalars); the strict tensor filter decides which heads are leaves.
+  (`depth_limit: Some(1)`, `ShorthandParsing::Opaque`,
+  `precontract_scalars: true`); the strict tensor filter decides which heads are leaves.
 - Two kinds of leaves. Library leaves (metric, identity, tagged vectors) have
   algebra; every other leaf, including gammas and colour structures in a
   metric pass and alias handles everywhere, is opaque. Contraction rewrites
@@ -333,14 +333,14 @@ land in one change together with every caller.
   [`simplify_color(settings)`], [unchanged algebra, aliases foreign structure], [remove unused coefficient-splitting helpers; retain required local colour algebra in this owner],
   [`simplify_epsilon()`], [unchanged], [—],
   [`canonize()`], [graph canonization on the shared graph], [`wrap_dummies`, `wrap_indices` where they only served canonization],
-  [`to_dots()` / `undo_dots()`], [representation toggles; distinct paths by design], [`normalize_dots`, `metric_shorthand_to_dot`; `undo_schoonschip` belongs to the undo family],
+  [`to_dots()` / `undo_dots()`], [representation toggles; distinct paths by design], [`normalize_dots`, `metric_shorthand_to_dot`; unused undo wrappers are removed],
   [`expand()` / `evaluator()`], [materialization, explicit], [—],
 )
 
 Binary positional contraction is `contract_ports`; it is not an overload of
 unary index contraction. The unused `expand_metrics`, `expand_mink`,
 `expand_bis`, `expand_mink_bis` and `expand_in_patterns` coefficient-list
-methods are removed. `undo_schoonschip` belongs to the explicit undo family.
+methods are removed. Python keeps only `undo_dots` from the undo family.
 Production callers that relied on `to_dots` to contract rank-one tensors use
 `contract()` before `to_dots()`. `canonize`, `simplify_epsilon` and
 `undo_dots` are target verbs even if their current callers are tests only.
@@ -359,7 +359,9 @@ contraction; the bulk collector and the callback-sensitive fallback; sparse
 and factored trace outputs (the sparse trace emitter is a test oracle); a network's semantic expression, materialized
 indices and component data. Verbs with no caller outside tests and the
 notebook (about a quarter of the current ninety-odd methods) are removed in
-the same change unless a product doc claims them. The target verbs `canonize`,
+the same change unless a product doc deliberately specifies their semantics. A generated stub,
+a historical performance report, or a bare name inventory is not such a claim. The supported
+construction/indexing/presentation operations are explicitly specified in the Idenso API page. The target verbs `canonize`,
 `simplify_epsilon` and `undo_dots` are retained regardless of current caller
 counts. The unused `expand_metrics`, `expand_mink`, `expand_bis`,
 `expand_mink_bis` and `expand_in_patterns` return structure/coefficient lists;
@@ -496,16 +498,11 @@ Taken on 2026-09-27 unless marked open.
   `simplify_color` 6 plus nine settings calls, `schoonschip_net` 1, and the
   tensor-leaf uses among 96 `replace_multiple`), the notebooks, tests, and
   generated stubs and docs. Nothing is kept for compatibility.
-- #strong[D2 — `TensorNetwork` in Python: retained for execution and display.] Facts for the call: no
-  production Python caller (`gammaloop-api` and `feynkit-py`: none); 12
-  notebook and 13 product-doc mentions and 26 test uses, all for execution and
-  display (`to_network`, `execute`, `step`, `result_tensor`, `to_tensor`,
-  `result_scalar`, `to_dot`, `render`, `to_linnest`); `gammalooprs` uses
-  networks in Rust in six files, for execution. Keep it as the execution and
-  rendering object. `TensorNetwork` has no simplification method:
-  `schoonschip_net` belongs to `TensorExpression` and is retired there.
-  Removing the network type would only move its execution and display methods
-  onto `TensorExpression`.
+- #strong[D2 — `TensorNetwork` retains component graphs.] Execution and rendering
+  remain its primary use. Keep graph composition, indexing, and permutation because these
+  operate on stored component data and library bindings; a symbolic descriptor cannot replace
+  them. Rename its binary `contract` to `contract_ports`, matching `TensorExpression`.
+  There is no network simplification method and no compatibility alias.
 - #strong[D3 — separate changes on a fixed base.] Every register item is its
   own jj change created with `jj new default@-` when the item starts: its
   parent is the second agent's last completed change, not their working copy,
@@ -609,3 +606,105 @@ scratchpad into the repository as the M0 harness.
   changes.
 - #link("api-documentation-debt-register.typ")[API documentation debt register]
   — documentation obligations for the renamed surface.
+
+== Checkpoint review amendment
+
+R5 starts each scope with one depth-one opaque parse and scalar pre-contraction. Arithmetic
+sum and power depth limits now apply consistently; transparent brackets respect the same
+boundary. DP-selected leaves are opened on demand and cached by occurrence. Closed powered
+bases with internal pairs contract in their own scope before exponentiation. Unselected
+scalar/foreign factors retain their literal payloads. The 1,000-term spectator regression
+asserts five parsed nodes for four factors plus their product, no leaf opening, and exact
+retention of the two spectator sums. This bounds graph allocation; fast interface inference
+and the conservative candidate scan still inspect slot syntax and are not constant-time.
+
+Default factor order greedily minimizes the accumulated graph boundary, then prefers more
+closed edges. It uses the shallow graph's incidence, without opening factors for scoring.
+An explicit normalized-factor permutation still overrides it. This is a heuristic, not an
+optimality claim. Occurrence-local bindings and Complete/Deferred/Capped remain unchanged.
+
+D1 removes the unused Python alias, raw undo, cooking, unchecked construction/reinference,
+chain normalization, color-basis, and alternate conjugation wrappers. Aliasing belongs to
+`AliasedTensorExpression`; cooking belongs at construction/indexing; typed
+`wrap_indices(scope, dummies_only=True)` replaces raw dummy wrapping. The unused Python
+`ColorCasimirSettings` class is removed with its consumer. Rust retains cooking and local
+algebra needed by production. The evaluator's invariant-only branch runs when `do_algebra`
+is false, whereas `simplify_color` runs when it is true: these are mutually exclusive, so
+removing the Rust-only invariant pass there would change behavior.
+
+Retain `simplify(settings)` as the documented shared Rust orchestrator returning aliases.
+Retain the deliberately documented construction, indexing, composition, and presentation
+surface. D2 adopts the binary-method rename, preserving network component data operations.
+
+=== Revalidation and measurements, 29 September 2026
+
+The saved baseline is `78a0a22f`; both release hosts use Symbolica `6a96c9d77b21`.
+The compact record `examples/notebooks/tensor_benchmark_review_amendment.json` retains
+core/source hashes, raw supplementary samples and probe sources, FORM batch observations,
+all case summaries and validation receipts. The full raw report is referenced by path and hash.
+
+The main cohort uses three alternating fresh-process rounds on CPU 8, one fixed warmup,
+and identical explicit ladder orders on both sides. The following CPU milliseconds include
+the complete requested reduction and materialization from prepared input. The wider fresh
+algebra column also constructs the input and rules inside one continuous clock. FORM uses
+its amortized body CPU clock, excluding process startup and input declarations. These are
+shared-host measurements; three samples do not establish a confidence interval.
+
+#table(
+  columns: (2fr, 1fr, 1fr, 1fr, 1fr),
+  table.header([*Case*], [*Checkpoint*], [*Amendment*], [*Amendment, fresh algebra*], [*FORM body*]),
+  [Fermion 3L, 4D], [3.464], [3.452], [5.128], [0.320],
+  [Fermion 3L, D], [25.111], [26.254], [28.567], [1.530],
+  [Fermion 4L, 4D], [41.908], [41.635], [45.526], [5.552],
+  [Fermion 4L, D], [287.949], [289.598], [294.023], [47.800],
+  [Gluon 4L, 4D], [280.889], [283.349], [285.299], [595.000],
+  [Gluon 4L, D], [367.664], [389.005], [370.443], [874.000],
+  [Historical gluon, original order], [407.960], [397.304], [398.085], [712.000],
+  [Historical gluon, early order], [85.761], [86.005], [91.061], [155.000],
+  [Free trace, length 14, 4D], [1758.566], [1728.813], [1735.876], [19.800],
+  [Free trace, length 14, D], [1346.818], [1351.704], [1347.288], [57.250],
+  [Axial trace, length 12, 4D], [1276.025], [1263.279], [1268.125], [0.630],
+  [Captured production numerator], [4054.227], [4129.670], [4111.149], [—],
+)
+
+The shallow parse helps when work stays opaque. With two 1,000-term scalar spectators,
+contract-and-resolve decreases from 3.902 to 1.372 ms; with foreign tensor spectators it
+decreases from 10.128 to 3.321 ms. Both cases retain the original factors exactly. The small
+metric/vector core changes from 0.056 to 0.061 ms. Graph allocation stays at five nodes;
+syntax inspection for inference and candidate detection still scales with payload size.
+
+The supplementary order comparison prepares the same local vertex factors before timing.
+It measures `contract(order=None)` followed by explicit materialization and final routing,
+alternates explicit/default schedules, and verifies exact equality of their outputs. Its
+default-to-default CPU comparison is:
+
+#table(
+  columns: (2fr, 1fr, 1fr, 1fr),
+  table.header([*Case*], [*Checkpoint default*], [*Graph default*], [*Speedup*]),
+  [Historical gluon], [441.105], [82.679], [5.34×],
+  [Gluon 4L, 4D], [689.085], [226.801], [3.04×],
+  [Gluon 4L, D], [824.257], [290.094], [2.84×],
+)
+
+For the historical case, stored coefficient definitions decrease from 1,327 to 163. These
+are alias definitions, a different quantity from FORM intermediate-term counts. With the
+same explicit order, whole-route timings stay close to the checkpoint. The default graph
+order therefore supplies the main ladder gain; the amendment does not improve the gamma
+engine. Under the fixed 4L gluon order, separate diagnostic calls attribute about 156/158 ms
+to contraction and 124/209 ms to materialization in 4D/D. Free and axial traces remain far
+slower than FORM. Additional performance work is deferred.
+
+Validation passed: 1,262 native tests on the final source, 65 targeted power/bracket/AUTO/
+scoping regressions, 28 installed Python test files, 23 documentation catalog tests, Clippy,
+Rust/Python formatting and generated-stub verification. The two exhaustive axial tests
+also passed in the optimized run before the final bracket-only correction; they were
+excluded from the subsequent native run. All 34 benchmark check processes and the final
+cross-release comparisons completed successfully. Polynomial equality is used where bases
+agree; finite exact HEP component checks cover the different 4D epsilon/Schouten bases.
+Those component samples are not general symbolic proofs. The production capture has
+cross-release and staged checks but no independent FORM program in this suite.
+
+One installed test remains uncompleted: gluon-scattering color contraction exceeded 600 s
+on the amendment, and the checkpoint remained at the same stage after 1,038 s. The original
+checkpoint test, migrated checkpoint test, and amendment have byte-identical inputs at
+that first color pass. No assertion or physics oracle was relaxed.

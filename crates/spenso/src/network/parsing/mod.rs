@@ -207,7 +207,8 @@ pub struct ParseSettings {
     /// dangling indices without building a full sum network.
     pub take_first_term_from_sum: bool,
 
-    /// Stop recursive parsing once product nesting reaches this depth.
+    /// Stop recursive parsing once arithmetic nesting reaches this depth.
+    /// Products, sums, and powers each consume one level.
     ///
     /// At the limit, the current expression is handed to the opaque tensor
     /// expression boundary as a leaf. `None` means there is no depth limit.
@@ -849,6 +850,20 @@ where
         if symbol == state.matcher.borrow().tags().bracket
             || symbol.has_tag(&state.matcher.borrow().tags().broadcast)
         {
+            if settings
+                .depth_limit
+                .is_some_and(|limit| state.depth >= limit)
+            {
+                return Self::as_leaf::<S, Lib, FunLib>(
+                    construction,
+                    value.as_view(),
+                    &state,
+                    library,
+                    function_library,
+                    settings,
+                    retain,
+                );
+            }
             return Self::parse_expanded_function::<S, Lib, FunLib>(
                 construction,
                 value,
@@ -1098,7 +1113,7 @@ where
     fn try_from_pow<'node, S, Lib, FunLib>(
         construction: &mut Construction<Str, K, Aind>,
         value: PowView<'node>,
-        state: ParseState<Aind, AtomView<'node>>,
+        mut state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
@@ -1127,6 +1142,7 @@ where
             );
         }
 
+        state.depth += 1;
         let (base_expression, exp) = value.get_base_exp();
 
         if let Ok(n) = i8::try_from(exp) {
@@ -1215,7 +1231,7 @@ where
     fn try_from_add<'node, S, Lib, FunLib>(
         construction: &mut Construction<Str, K, Aind>,
         value: AddView<'node>,
-        state: ParseState<Aind, AtomView<'node>>,
+        mut state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
         function_library: &FunLib,
         settings: &ParseSettings,
@@ -1244,6 +1260,7 @@ where
             );
         }
 
+        state.depth += 1;
         let mut iter = value.iter();
 
         let first_atom = iter.next().unwrap();

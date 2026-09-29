@@ -1,5 +1,5 @@
 use idenso::{
-    color::{ColorCasimirSettings, ColorSimplifySettings},
+    color::ColorSimplifySettings,
     dirac::{GammaChainOrdering, GammaOutput, GammaSimplifySettings},
 };
 use pyo3::{
@@ -303,83 +303,10 @@ impl PyColorSimplifySettings {
     }
 }
 
-/// Immutable configuration for rewriting color invariants into a Casimir basis.
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(
-    frozen,
-    from_py_object,
-    name = "ColorCasimirSettings",
-    module = "symbolica.community.spenso"
-)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct PyColorCasimirSettings {
-    inner: ColorCasimirSettings,
-}
-
-impl PyColorCasimirSettings {
-    pub(crate) fn rust(&self) -> ColorCasimirSettings {
-        self.inner
-    }
-}
-
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[pymethods]
-impl PyColorCasimirSettings {
-    fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {
-        let py = self_.py();
-        let object = pyo3::IntoPyObject::into_pyobject(self_, py)?;
-        crate::display::constructor_repr(
-            object.as_any(),
-            &[
-                (
-                    "rewrite_fundamental_dimension",
-                    "rewrite_fundamental_dimension",
-                ),
-                (
-                    "substitute_fundamental_index",
-                    "substitute_fundamental_index",
-                ),
-            ],
-        )
-    }
-
-    /// Configure the SU(N) dimension and fundamental-index normalizations used by Casimir rewriting.
-    #[new]
-    #[pyo3(signature = (
-        *,
-        rewrite_fundamental_dimension = true,
-        substitute_fundamental_index = false
-    ))]
-    pub(crate) fn new(
-        rewrite_fundamental_dimension: bool,
-        substitute_fundamental_index: bool,
-    ) -> Self {
-        Self {
-            inner: ColorCasimirSettings {
-                rewrite_fundamental_dimension,
-                substitute_fundamental_index,
-            },
-        }
-    }
-
-    /// Whether the fundamental dimension is rewritten with the SU(N) relation `d_F = C_A`.
-    #[getter]
-    pub(crate) fn rewrite_fundamental_dimension(&self) -> bool {
-        self.inner.rewrite_fundamental_dimension
-    }
-
-    /// Whether the fundamental Dynkin index is replaced by `T_F = 1/2`.
-    #[getter]
-    pub(crate) fn substitute_fundamental_index(&self) -> bool {
-        self.inner.substitute_fundamental_index
-    }
-}
-
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyGammaChainOrdering>()?;
     module.add_class::<PyGammaSimplifySettings>()?;
     module.add_class::<PyColorSimplifySettings>()?;
-    module.add_class::<PyColorCasimirSettings>()?;
 
     Ok(())
 }
@@ -416,10 +343,6 @@ mod tests {
         assert_eq!(
             PyColorSimplifySettings::new(true, true, false).rust(),
             ColorSimplifySettings::default()
-        );
-        assert_eq!(
-            PyColorCasimirSettings::new(true, false).rust(),
-            ColorCasimirSettings::default()
         );
     }
 }

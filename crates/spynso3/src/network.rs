@@ -1558,7 +1558,7 @@ impl SpensoNet {
 
     /// Contract one selected pair of public interface positions.
     #[pyo3(signature = (rhs, *, left, right))]
-    pub fn contract(
+    pub fn contract_ports(
         &self,
         rhs: ConvertibleToSpensoNet,
         left: usize,
@@ -1602,7 +1602,7 @@ impl SpensoNet {
                 rhs.0.structure.rank()
             )));
         }
-        self.contract(rhs, 0, 0)
+        self.contract_ports(rhs, 0, 0)
     }
 
     /// Close a selected or uniquely inferred propagation channel.
@@ -1963,7 +1963,7 @@ mod tests {
             let vector = SpensoNet::from_expression(vector.bind(py).as_any(), Some(&library))?;
             assert!(matrix.network.store.tensors.is_empty());
             assert!(vector.network.store.tensors.is_empty());
-            let mut product = matrix.contract(ConvertibleToSpensoNet(vector), 1, 0)?;
+            let mut product = matrix.contract_ports(ConvertibleToSpensoNet(vector), 1, 0)?;
 
             product.execute(Some(&library), None, None, ExecutionMode::All)?;
             let result = Py::new(py, product.result_tensor(Some(&library))?)?;

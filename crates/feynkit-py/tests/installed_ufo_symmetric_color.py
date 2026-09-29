@@ -10,7 +10,7 @@ from pathlib import Path
 
 from symbolica import E, S
 from symbolica.community import hep as fk
-from symbolica.community.spenso import TensorExpression
+from symbolica.community.spenso import ColorSimplifySettings, TensorExpression
 
 source = json.loads(
     (Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json").read_text()
@@ -35,13 +35,12 @@ color = TensorExpression(
     diagram.numerator_expression().to_expression().replace(S("UFO::GC_69"), E("1"))
 )
 assert len(color.structure.slots) == 3
-assert color.spenso_conjugate().to_expression() == color.to_expression()
+assert color.dirac_adjoint().to_expression() == color.to_expression()
 # The Symbolica product contracts all three matching explicit adjoint indices.
 norm = (
-    TensorExpression(color.to_expression() * color.spenso_conjugate().to_expression())
-    .simplify_color()
+    TensorExpression(color.to_expression() * color.dirac_adjoint().to_expression())
+    .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
     .to_expression()
-    .to_cof_dimension_invariants()
 )
 assert norm.is_scalar
 assert norm.to_expression() == E("40/3")

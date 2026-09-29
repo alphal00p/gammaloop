@@ -122,6 +122,13 @@ class TypedSurfaceTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             left.contract(right, left=1, right=0)
 
+    def test_network_binary_contraction_uses_contract_ports(self):
+        left = self.P(self.rep("i"), self.rep("j")).to_network()
+        right = self.Q(self.rep("k"), self.rep("i")).to_network()
+        result = left.contract_ports(right, left=0, right=1)
+        self.assertEqual(result.rank, 2)
+        self.assertFalse(hasattr(left, "contract"))
+
     def test_typed_powers_and_reflected_scalar_power(self):
         scalar = sp.TensorExpression(self.x + 1)
         for exponent in (0, 1, 2, -1, E("1/2"), self.y):

@@ -66,6 +66,14 @@ operations are `TensorExpression` methods, so symbolic pipelines can chain
 tensor interface and literal aliases. Resolve the result with `to_expression()`;
 `expand()` explicitly requests polynomial materialization.
 
+`TensorNetwork` retains component data and library bindings while composing and executing a
+graph. Its binary positional contraction is `contract_ports(rhs, left=..., right=...)`,
+matching `TensorExpression.contract_ports`; `TensorExpression.contract()` instead performs
+unary symbolic index contraction. Graph composition, indexing, and axis permutation remain
+available because converting a network to a symbolic descriptor would lose stored components.
+Execution and rendering use `execute`, `step`, `status`, `result_tensor`, `result_scalar`,
+`expression`, `to_dot`, `to_html`, `render`, and `to_linnest`.
+
 `Tensor`, `TensorNetwork`, and `TensorExpression` expose an immutable
 `TensorStructure` through the `.structure` property. It records an optional
 `TensorName`, scalar `.arguments`, and the ordered `.slots`, `.rank`, and `.shape`.

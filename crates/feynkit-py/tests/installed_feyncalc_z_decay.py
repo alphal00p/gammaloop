@@ -39,7 +39,7 @@ for matrix in matrices:
     numeric_matrices.append([complex(value) for value in network.result_tensor()[:]])
 gamma0 = numeric_matrices[0]
 for matrix, values in zip(matrices, numeric_matrices, strict=True):
-    adjoint = matrix.dirac_adjoint().simplify_gamma().to_expression().undo_chain()
+    adjoint = matrix.dirac_adjoint().simplify_gamma().to_expression()
     network = adjoint.to_network()
     network.execute()
     actual = [complex(value) for value in network.result_tensor()[:]]

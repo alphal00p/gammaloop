@@ -149,12 +149,6 @@ def example_specification():
             "color_settings",
         ),
         (
-            "ColorCasimirSettings",
-            "Controls conversion to a Casimir basis, including the fundamental dimension and Dynkin-index normalization.",
-            "casimir_settings = sp.ColorCasimirSettings(substitute_fundamental_index=True)",
-            "casimir_settings",
-        ),
-        (
             "CookTagFilter",
             "Selects function heads by tags: any, all, or the output tags of the associated CookSettings.",
             'tag_filter = sp.CookTagFilter.any(["spenso_api_tour::edge"])',
@@ -345,7 +339,7 @@ def _(mo):
     - Materialization is explicit: `expand` emits a polynomial result and `evaluator` builds numerical evaluation.
     - An `AliasedTensorExpression` retains definitions separately. Its `to_expression()` resolves them to a `TensorExpression`; a second `to_expression()` crosses to ordinary Symbolica algebra. Reconstruct with `TensorExpression(raw, structure=source.structure)` to validate and retain a logical layout.
     - Dirac algebra: `simplify_gamma`, with `GammaSimplifySettings(output="chains")` for collected words, gamma conjugation and `dirac_adjoint`.
-    - Color algebra: `simplify_color`, `to_color_casimir` and dimension-invariant substitution.
+    - Color algebra: `simplify_color`, with dimension-invariant substitution selected in `ColorSimplifySettings`.
     - Index algebra: `contract`, `simplify_epsilon`, `with_lorentz_dimension`, cooking and canonicalization.
     - Compact notation: `to_dots`, `undo_dots` and gamma-chain collection. Shared `contract` handles metric and vector contractions.
     - `format_tensor`, `to_typst`, `to_html`, `to_svg` and `formatted` also accept ordinary Symbolica expressions.

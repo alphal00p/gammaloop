@@ -143,27 +143,6 @@ class CanonicalizationError(builtins.ValueError):
     ...
 
 @typing.final
-class ColorCasimirSettings:
-    r"""
-    Immutable configuration for rewriting color invariants into a Casimir basis.
-    """
-    @property
-    def rewrite_fundamental_dimension(self) -> builtins.bool:
-        r"""
-        Whether the fundamental dimension is rewritten with the SU(N) relation `d_F = C_A`.
-        """
-    @property
-    def substitute_fundamental_index(self) -> builtins.bool:
-        r"""
-        Whether the fundamental Dynkin index is replaced by `T_F = 1/2`.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, rewrite_fundamental_dimension: builtins.bool = True, substitute_fundamental_index: builtins.bool = False) -> ColorCasimirSettings:
-        r"""
-        Configure the SU(N) dimension and fundamental-index normalizations used by Casimir rewriting.
-        """
-
-@typing.final
 class ColorSimplifySettings:
     r"""
     Immutable configuration for color simplification.
@@ -1599,16 +1578,6 @@ class TensorExpression:
         retains declared logical order and the interface of a symbolic zero.
         """
     @staticmethod
-    def unsafe_from_expression(expression: _ScalarInput, *, structure: TensorStructure) -> TensorExpression:
-        r"""
-        Construct without tensor inference, validation, or contraction normalization.
-
-        Copy the supplied TensorStructure exactly, including logical slot order,
-        identity, and arguments. The caller must ensure it matches the expression;
-        subsequent tensor operations trust it. Prefer TensorExpression(expression)
-        when that correspondence has not already been established.
-        """
-    @staticmethod
     def g(rep: Representation, other: typing.Optional[Representation] = None) -> TensorExpression:
         r"""
         Create an unresolved metric with ports in `rep` and `other`.
@@ -1691,10 +1660,6 @@ class TensorExpression:
     def to_expression(self) -> Expression:
         r"""
         Drop the structured interface and return an ordinary Symbolica `Expression`.
-        """
-    def reinfer(self) -> TensorExpression:
-        r"""
-        Re-parse the underlying symbolic expression and rebuild its ordered tensor interface.
         """
     def replace(self, rules: TensorRule | list[TensorRule]) -> TensorExpression:
         r"""
@@ -1843,160 +1808,16 @@ class TensorExpression:
         Only representation-aware Spenso color forms are recognized. Plain Symbolica functions with
         similar names are left unchanged.
         """
-    def to_color_casimir(self, *, fundamental: Representation, adjoint: Representation, settings: typing.Optional[ColorCasimirSettings] = None) -> TensorExpression:
-        r"""
-        Rewrite supplied color dimensions and invariants into a representation-aware Casimir basis.
-
-        Rewrite the supplied color-representation dimensions and invariants into a Casimir basis.
-
-        `fundamental` and `adjoint` are registered Spenso representations supplied by the
-        tensor-construction API. Only scalar coefficient positions are rewritten.
-        """
-    def to_cof_dimension_invariants(self) -> TensorExpression:
-        r"""
-        Replace supported `cof(N)` invariants by explicit dimension formulas.
-
-        Replace supported `cof(N)` Casimir, Dynkin-index, and Gram invariants by dimension formulas.
-        """
-    def wrap_indices(self, header: Expression) -> TensorExpression:
+    def wrap_indices(self, header: Expression, *, dummies_only: builtins.bool = False) -> TensorExpression:
         r"""
         Put all explicit indices in a named scope, preserving the tensor interface.
 
         Scoped copies contract internally as before, but their indices are distinct
         from the original. Alphabet display uses primed labels for scoped indices.
         Applying the same outer scope twice is idempotent; different scopes nest.
+        Set `dummies_only=True` to retain external indices while separating local contractions.
 
         >>> conjugate = tensor.dirac_adjoint().wrap_indices(S("bra"))
-        """
-    def cook_indices(self, settings: typing.Optional[CookSettings] = None) -> TensorExpression:
-        r"""
-        Flatten nested representation-index payloads using index cooking by default.
-
-        Transform both the expression and its stored explicit slots, retaining logical order.
-
-        Transforms hierarchical index expressions within tensor function arguments
-        into simplified, flat symbolic representations. This "cooking" process is
-        essential for pattern matching, simplification, and computational efficiency
-        when dealing with complex tensor expressions.
-
-        **Index Cooking Transformation:**
-        - Nested structure: `mink(4, f(g(h(μ))))` → `mink(4, f_g_h_mu)`
-        - Function chains: `lorentz(up(mu))` → `lorentz(up_mu)`
-        - Complex arguments: `tensor(rep(dim,type(idx)))` → `tensor(rep(dim,type_idx))`
-
-        **Scope:**
-        - Only affects indices appearing as function arguments
-        - Preserves top-level function structure
-        # Arguments
-        - `self`: expression containing complex nested index structures
-
-        # Returns
-        Expression with flattened, simplified index names.
-
-        # Examples:
-        ```python
-        from symbolica import S
-        from symbolica.community.spenso import CookSettings, Representation, TensorName
-
-        rep = Representation.euc(3)
-        template = TensorName("T")(rep, rep)
-        nested = S("outer")(S("mu"))
-        # Cook an arbitrary payload when filling the tensor's open ports.
-        tensor = template(nested, "nu", cook_indices=CookSettings.indices())
-        ```
-        """
-    def cook_function(self, settings: typing.Optional[CookSettings] = None) -> Expression:
-        r"""
-        Encode one function call as an ordinary Symbolica expression.
-
-        Convert a single function call into a flattened variable symbol.
-
-        Transforms a function expression with arguments into a single symbolic variable
-        whose name encodes both the function name and its arguments. This is the
-        atomic version of `cook_indices()`, operating on individual function calls
-        rather than complete expressions.
-
-        **Function Cooking Transform:**
-        - Simple function: `f(a, b)` → `f_a_b`
-        - Nested arguments: `tensor(rep(mu))` → `tensor_rep_mu`
-        - Multiple arguments: `gamma(alpha, beta, mu)` → `gamma_alpha_beta_mu`
-        - Complex names: `my_function(x, y)` → `my_function_x_y`
-
-
-        **Constraints:**
-        - Input must be a single function call (not sum, product, etc.)
-        - Arguments must be cookable (symbols, numbers, simple functions)
-        - Cannot cook expressions containing polynomials or complex structures
-
-        # Arguments
-        - `self`: expression representing a single function call to cook
-
-        # Returns
-        Expression containing the flattened variable symbol.
-
-        # Raises
-        `TypeError` if input is not a cookable function or contains invalid argument types.
-
-        # Examples:
-        ```python
-        import symbolica as sp
-        from symbolica.community.spenso import TensorExpression
-
-        # Simple function cooking
-        f = sp.S('f')
-        a, b = sp.S('a','b')
-
-        cooked = TensorExpression(f(a, b)).cook_function()
-        print(cooked)  # Outputs: f_a_b
-        ```
-        """
-    def wrap_dummies(self, header: Expression) -> Expression:
-        r"""
-        Wrap only contracted-index payloads with `header` and return an ordinary expression.
-
-        Wrapped payloads remain available for symbolic matching and custom cooking. Restore
-        tensor inference with `TensorExpression(result, cook_indices=CookSettings.indices())`.
-        Raises `ValueError` when the expression cannot be parsed as a tensor network.
-
-        Wraps only the dummy (contracted) indices within the expression using a header symbol.
-
-        Similar to `wrap_indices`, but selectively identifies and wraps only contracted
-        indices (those appearing once upstairs and once downstairs, or twice in a
-        self-dual representation), leaving external (dangling) indices untouched.
-        This is crucial for proper index management in tensor calculations.
-
-        Contracted indices are those that:
-        - Appear in both upper and lower positions (for dualizable reps)
-        - Appear twice in the same position (for self-dual reps)
-        - Are summed over (Einstein summation convention)
-
-        # Arguments
-        - `self`: input expression containing both dummy and free indices
-        - `header`: symbol to use as wrapper function name for dummy indices only
-
-        # Returns
-        A new expression with only contracted indices wrapped.
-
-        # Raises
-        `ValueError` when the expression cannot be parsed as a tensor network.
-
-        # Examples:
-        ```python
-        from symbolica.community.spenso import TensorName, Slot, Representation
-        import symbolica as sp
-        from symbolica.community.spenso import TensorExpression
-
-        T = TensorName("T")
-        rep = Representation.euc(3)
-        # With slots (creates TensorExpression)
-        mu = rep("mu")
-        nu = rep("nu")
-        x = sp.S("x")
-        tensor_with_args = T(x, mu, nu, nu)  # T(x; mu, nu, nu)
-        # print(tensor_with_args)
-        print(tensor_with_args.wrap_dummies(sp.S('wrap')))
-
-        ```
         """
     def list_dangling(self) -> builtins.list[Expression]:
         r"""
@@ -2048,26 +1869,6 @@ class TensorExpression:
 
         Raises `CanonicalizationError` when the expression cannot be parsed or canonicalized.
         """
-    def alias_subtensors(self, tensor_name: builtins.str) -> tuple[Expression, builtins.list[tuple[Expression, Expression]]]:
-        r"""
-        Replace nested tensor subexpressions by aliases and return the root plus alias mappings.
-
-        Replace nested tensor subexpressions by generated aliases.
-
-        Returns the rewritten root followed by sorted `(alias, original)` pairs.
-        """
-    def spenso_conjugate(self) -> TensorExpression:
-        r"""
-        Complex-conjugate this tensor expression and re-infer its interface.
-
-        Complex-conjugate an expression while keeping unevaluated conjugations explicit.
-        """
-    def conjugate_transpose(self, representation: Representation) -> TensorExpression:
-        r"""
-        Complex-conjugate this expression and transpose slots in `representation`.
-
-        Complex-conjugate an expression and transpose tensor slots in `representation`.
-        """
     def dirac_adjoint(self, *, preserve_indices: builtins.bool = False) -> TensorExpression:
         r"""
         Construct the physics-aware Dirac adjoint and re-infer the tensor interface.
@@ -2105,53 +1906,15 @@ class TensorExpression:
         # Returns
         The representation-aware Dirac adjoint.
         """
-    def cook(self, settings: typing.Optional[CookSettings] = None) -> Expression:
-        r"""
-        Encode this expression using Idenso's reversible cooking format.
-
-        Encode selected functions as symbols using reversible cooking by default.
-
-        Raises `CookingError` when a selected function payload cannot be encoded.
-        """
-    def uncook(self, settings: typing.Optional[CookSettings] = None) -> TensorExpression:
-        r"""
-        Restore a reversibly cooked expression and re-infer its tensor interface.
-
-        Restore symbols produced by matching reversible cooking settings.
-        """
     def to_dots(self) -> TensorExpression:
         r"""
         Render compact metric products as dots without contracting indexed factors.
         Use `contract()` first when explicit vector indices should be contracted.
         """
-    def undo_all(self) -> TensorExpression:
-        r"""
-        Expand every Idenso tensor shorthand into explicit tensor syntax.
-
-        Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
-        """
-    def undo_schoonschip(self) -> TensorExpression:
-        r"""
-        Expand Schoonschip shorthands while leaving dots, chains, and traces compact.
-
-        Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
-        """
     def undo_dots(self) -> TensorExpression:
         r"""
         Open dots into symbolic indexed contractions, retaining other shorthands.
         This does not expand the numerator or evaluate finite tensor components.
-        """
-    def undo_chain(self) -> TensorExpression:
-        r"""
-        Expand open-chain shorthands while leaving other shorthands compact.
-
-        Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
-        """
-    def undo_trace(self) -> TensorExpression:
-        r"""
-        Expand trace shorthands while leaving other shorthands compact.
-
-        Raises `NetworkToolingError` when the expression is not a valid tensor network or evaluation fails.
         """
     def chainify(self, representation: Representation) -> TensorExpression:
         r"""
@@ -2160,14 +1923,6 @@ class TensorExpression:
         Rewrite tensors with two `representation` slots as open-chain factors.
 
         Rewrite tensors with two slots in `representation` as explicit open-chain factors.
-        """
-    def normalize_chains(self) -> TensorExpression:
-        r"""
-        Convert chains whose endpoints coincide into trace shorthands.
-        """
-    def undo_single_length(self) -> TensorExpression:
-        r"""
-        Replace one-factor chain shorthands by their underlying tensor factor.
         """
     def to_network(self, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:
         r"""
@@ -3209,7 +2964,7 @@ class TensorNetwork:
         r"""
         Form an outer tensor product without contracting compatible ports.
         """
-    def contract(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
+    def contract_ports(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
         r"""
         Contract one selected pair of public interface positions.
         """

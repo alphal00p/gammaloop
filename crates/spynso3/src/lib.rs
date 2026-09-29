@@ -224,7 +224,7 @@ define_spenso_python_surface! {
     ],
     registered_modules: [
         simplification => [
-            "CanonicalizationError", "ColorCasimirSettings", "ColorSimplifySettings",
+            "CanonicalizationError", "ColorSimplifySettings",
             "CookMode", "CookSettings", "CookSourceFilter", "CookTagFilter", "CookingError",
             "DiracAdjointError", "GammaChainOrdering",
             "GammaSimplifySettings", "NetworkToolingError",
@@ -1236,7 +1236,7 @@ impl Spensor {
         left: usize,
         right: usize,
     ) -> PyResult<SpensoNet> {
-        SpensoNet::from_tensor(self.clone())?.contract(rhs, left, right)
+        SpensoNet::from_tensor(self.clone())?.contract_ports(rhs, left, right)
     }
 
     /// Compose two selected `(input, output)` matrix channels.
