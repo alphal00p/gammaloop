@@ -76,6 +76,7 @@ impl PyCffSurface {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCffSurface {
     /// Return the surface category: energy, h, unit, or infinite.
@@ -260,6 +261,7 @@ pub struct PyCffOrientation {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCffOrientation {
     /// Return this orientation's stable index within the CFF result.
@@ -350,6 +352,7 @@ pub struct PyCffReport {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCffReport {
     /// Return the number of candidate edge orientations considered.
@@ -498,6 +501,7 @@ pub struct PyCffResult {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCffResult {
     /// Return generation statistics for this CFF result.
@@ -918,6 +922,7 @@ pub struct PyCffGenerator {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCffGenerator {
     /// Create a configurable Cross-Free Family generator.
@@ -1171,6 +1176,7 @@ pub struct PyCffSurfaceGroup {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCffSurfaceGroup {
     /// Highest inverse surface power occurring on one CFF branch.
@@ -1236,6 +1242,7 @@ pub struct PyCutPropagator {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCutPropagator {
     /// Construct a reciprocal-propagator cut with explicit orientation and i0 sign.

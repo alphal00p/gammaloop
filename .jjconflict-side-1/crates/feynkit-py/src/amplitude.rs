@@ -42,6 +42,7 @@ pub struct PyAmplitudeLeg {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyAmplitudeLeg {
     /// Stable external-leg label shared by every diagram.
@@ -173,6 +174,7 @@ pub struct PyAmplitude {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyAmplitude {
     /// Sum weighted diagram operators with matching graph external indices.
@@ -440,6 +442,7 @@ pub struct PySquaredAmplitude {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PySquaredAmplitude {
     /// Construct the coherent square of a single unsewn diagram.

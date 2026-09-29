@@ -108,13 +108,12 @@ check-symbolica-feature-isolation:
         exit 1
       fi
     done
-    version="3.0.0"
-    symbolica_rev="06906976bca24fefc5203aee699d90d62ebe08cd"
     for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock" "$root/examples/notebooks/symbolica-host/Cargo.lock"; do
       for package in symbolica numerica graphica; do
         source="registry+https://github.com/rust-lang/crates.io-index"
-        if [ "$package" = symbolica ]; then
-          source="git+https://github.com/symbolica-dev/symbolica?rev=$symbolica_rev#$symbolica_rev"
+        version="3.0.1"
+        if [ "$package" = graphica ]; then
+          version="3.0.0"
         fi
         expected="$(printf 'version = "%s"\nsource = "%s"\n' "$version" "$source")"
         resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"

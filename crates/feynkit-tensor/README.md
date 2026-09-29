@@ -127,14 +127,14 @@ pure vacuum numerators.
 - B. Collins and S. Matsumoto,
   [On some properties of orthogonal Weingarten functions](https://arxiv.org/abs/0903.5143).
 - B. Collins and S. Matsumoto,
-  [Weingarten calculus via orthogonality relations](https://arxiv.org/abs/1701.04493).
-- F. Herzog *et al.*,
-  [The five-loop beta function of Yang--Mills theory with fermions](https://arxiv.org/abs/1801.06084),
+  [Weingarten calculus via orthogonality relations: new applications](https://arxiv.org/abs/1701.04493).
+- B. Ruijl *et al.*,
+  [R*-operation and five-loop calculations](https://arxiv.org/abs/1801.06084),
   for symmetry-reduced tensor projectors in the R* operation.
-- M. Goode *et al.*,
-  [Tensor reduction of vacuum integrals](https://arxiv.org/abs/2408.05137),
+- J. Goode *et al.*,
+  [Tensor Reduction for Feynman Integrals with Lorentz and Spinor Indices](https://arxiv.org/abs/2408.05137),
   for the modern orbit-partition formulation and high-rank projectors.
-- J. Davies *et al.*,
+- J. Goode, F. Herzog, and S. Teale,
   [OPITeR](https://arxiv.org/abs/2411.02233), for integrand-symmetry-aware
   tensor reduction.
 

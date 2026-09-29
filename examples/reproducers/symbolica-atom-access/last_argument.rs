@@ -1,6 +1,6 @@
 //! MRE: locating the end of a function's final argument can be unnecessary.
 //!
-//! Dependency: symbolica = "=3.0.0". No Spenso, private encoding constants, or
+//! Dependency: symbolica = "=3.0.1". No Spenso, private encoding constants, or
 //! cached argument boundaries. Both routines check arity and decode argument 0.
 //! The span variant borrows the rest of the exact function bytes as argument 1.
 //! AtomView::from requires valid complete atom bytes; that follows here from a

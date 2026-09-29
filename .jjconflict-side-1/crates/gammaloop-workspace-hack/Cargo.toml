@@ -133,8 +133,8 @@ features = ["std"]
 version = "0.3"
 features = ["std"]
 
-# Preserve native feature unification without hard-coding the resolved Git
-# source: the consuming workspace owns the Symbolica and Numerica patches.
+# Preserve native feature unification with the workspace Symbolica and
+# Numerica versions.
 [dependencies.symbolica]
 workspace = true
 features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"]

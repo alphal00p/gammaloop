@@ -674,6 +674,7 @@ impl SpensoNet {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoNet {
     #[new]

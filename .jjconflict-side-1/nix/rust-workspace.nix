@@ -61,8 +61,8 @@
         drv.overrideAttrs (old: {
           # The pinned incremental baseline still uses registry Symbolica 3.0.0,
           # whose build script watches the omitted .git/HEAD. Keep its artifacts
-          # reusable. Current Git Symbolica watches only existing metadata and
-          # bypasses this registry-package hook.
+          # reusable. Symbolica 3.0.1 watches only existing metadata and
+          # bypasses this version-specific hook.
           postInstall = (old.postInstall or "") + ''
             mkdir -p "$out/.git"
             printf 'ref: refs/heads/nix-vendor\n' > "$out/.git/HEAD"

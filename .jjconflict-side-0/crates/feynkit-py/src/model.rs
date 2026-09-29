@@ -85,6 +85,7 @@ impl PyParticle {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyParticle {
     /// Construct the identity on this particle's color space.
@@ -803,6 +804,7 @@ impl PyParameter {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyParameter {
     /// Return the symbolic reference used by this model's expressions.
@@ -1073,6 +1075,7 @@ impl PyCoupling {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCoupling {
     /// Return the symbolic reference used by this model's expressions.
@@ -1255,6 +1258,7 @@ impl PyVertexRule {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyVertexRule {
     /// Return the vertex-rule name.
@@ -1558,6 +1562,7 @@ impl PyLorentzStructure {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyLorentzStructure {
     /// Return the Lorentz-structure name.
@@ -1701,6 +1706,7 @@ impl PyPropagator {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyPropagator {
     /// Return the propagator name.
@@ -1863,6 +1869,7 @@ impl PyModelFunction {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyModelFunction {
     /// Return the symbolic reference used by this model's expressions.
@@ -2028,6 +2035,7 @@ impl PyFormFactor {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyFormFactor {
     /// Return the form-factor name.
@@ -2184,6 +2192,7 @@ impl From<ModelExpression> for PyModelExpression {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyModelExpression {
     /// Return the name assigned to the expression.
@@ -2255,6 +2264,7 @@ impl PyEvaluationRequest {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyEvaluationRequest {
     /// Return the known parameter values keyed by name.
@@ -2381,6 +2391,7 @@ pub struct PyEvaluatedValues {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyEvaluatedValues {
     /// Create values returned by a custom model evaluator.
@@ -2502,6 +2513,7 @@ impl From<ParameterCard> for PyParameterCard {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyParameterCard {
     /// Create an empty parameter card.
@@ -2735,6 +2747,7 @@ impl From<Arc<Model>> for PyModel {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyModel {
     /// Load the complete embedded Standard Model with default parameters.

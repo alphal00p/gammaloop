@@ -8,7 +8,7 @@ import importlib
 import sys
 
 from symbolica import Expression, S
-from symbolica.community.spenso import TensorName
+from symbolica.community.tensor import TensorName
 
 frontend = sys.argv[1] if len(sys.argv) > 1 else "feynkit"
 feynkit = importlib.import_module(f"symbolica.community.{frontend}")

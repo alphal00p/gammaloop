@@ -50,7 +50,9 @@ use spenso::{
     },
 };
 use symbolica::{
-    api::python::SymbolicaCommunityModule, domains::float::Complex as SymComplex, prelude::*,
+    api::python::{Citation, SymbolicaCommunityModule},
+    domains::float::Complex as SymComplex,
+    prelude::*,
 };
 
 use symbolica::api::python::{PythonExpression, PythonFormattedOutput};
@@ -174,6 +176,7 @@ impl From<SymbolicParallelism> for spenso::symbolic_parallelism::SymbolicParalle
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 fn set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> bool {
     spenso::symbolic_parallelism::set_symbolica_rayon_enabled(policy.into());
@@ -181,6 +184,49 @@ fn set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> bool {
 }
 
 impl SymbolicaCommunityModule for SpensoModule {
+    fn get_citations() -> Vec<Citation> {
+        if !CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed) {
+            return Vec::new();
+        }
+        // Authorship and software DOIs: docs/products/registry.toml.
+        vec![
+            Citation {
+                id: "10.5281/zenodo.18248388".into(),
+                reference:
+                    "Lucien Huber, Valentin Hirschi, Ben Ruijl, Mathijs Fraaije. Spenso (2026)."
+                        .into(),
+                bibtex: r#"@software{spenso,
+  author = {Lucien Huber and Valentin Hirschi and Ben Ruijl and Mathijs Fraaije},
+  title = {Spenso},
+  year = {2026},
+  url = {https://github.com/alphal00p/spenso},
+  doi = {10.5281/zenodo.18248388}
+}"#
+                .into(),
+                reasons: vec!["Provides the Spenso functionality in this community module.".into()],
+                description: "".into(),
+                relevance: None,
+            },
+            Citation {
+                id: "10.5281/zenodo.18248409".into(),
+                reference:
+                    "Lucien Huber, Valentin Hirschi, Ben Ruijl, Mathijs Fraaije. Idenso (2026)."
+                        .into(),
+                bibtex: r#"@software{idenso,
+  author = {Lucien Huber and Valentin Hirschi and Ben Ruijl and Mathijs Fraaije},
+  title = {Idenso},
+  year = {2026},
+  url = {https://github.com/alphal00p/spenso},
+  doi = {10.5281/zenodo.18248409}
+}"#
+                .into(),
+                reasons: vec!["Provides the Idenso functionality in this community module.".into()],
+                description: "".into(),
+                relevance: None,
+            },
+        ]
+    }
+
     fn get_name() -> String {
         "tensor".to_string()
     }
@@ -489,6 +535,7 @@ impl From<ConcreteOrParam<RealOrComplex<f64>>> for TensorElements {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl Spensor {
     /// Return the symbolic descriptor of this tensor, independently of its component data.
@@ -1309,6 +1356,7 @@ impl SpensoExpressionEvaluator {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoExpressionEvaluator {
     /// Parameters in the exact order expected by each evaluation input row.
@@ -1410,6 +1458,7 @@ impl SpensoExpressionEvaluator {
 
 #[cfg(feature = "native")]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoExpressionEvaluator {
     /// Compile the evaluator to a shared library using C++ for maximum performance.
@@ -1579,6 +1628,7 @@ pub struct SpensoCompiledExpressionEvaluator {
 
 #[cfg(feature = "native")]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoCompiledExpressionEvaluator {
     /// Parameters in the exact order expected by each evaluation input row.
@@ -2147,5 +2197,23 @@ mod tests {
                 .contains("canonical storage-axis order is not exposed")
         );
         assert!(setitem[0].doc.contains("complex for complex storage"));
+    }
+}
+
+static CITATIONS_USED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[inline]
+pub(crate) fn record_usage() {
+    use std::sync::atomic::Ordering;
+    if !CITATIONS_USED.load(Ordering::Relaxed) {
+        CITATIONS_USED.store(true, Ordering::Relaxed);
+    }
+}
+
+impl SpensoModule {
+    /// Record tensor operations performed through another community binding.
+    #[inline]
+    pub fn record_usage() {
+        record_usage();
     }
 }

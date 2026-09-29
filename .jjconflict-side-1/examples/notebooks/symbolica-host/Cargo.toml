@@ -13,7 +13,7 @@ crate-type = ["cdylib"]
 [dependencies]
 feynkit-py = { path = "../../../crates/feynkit-py", default-features = false, features = ["ufo"] }
 spynso3 = { path = "../../../crates/spynso3", default-features = false }
-symbolica = { version = "=3.0.0", default-features = false, features = ["python_export", "python_abi3"] }
+symbolica = { version = "=3.0.1", default-features = false, features = ["python_export", "python_abi3"] }
 pyo3 = { version = "0.28", features = ["abi3", "extension-module"] }
 
 [features]
@@ -22,7 +22,7 @@ native = ["feynkit-py/native", "spynso3/native"]
 wasm = ["feynkit-py/wasm", "spynso3/wasm"]
 
 [patch.crates-io]
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "06906976bca24fefc5203aee699d90d62ebe08cd" }
+symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
 
 [profile.dev]
 debug = 0

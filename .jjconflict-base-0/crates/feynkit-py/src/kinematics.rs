@@ -53,6 +53,7 @@ pub struct PyKinematics {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyKinematics {
     /// Mandelstam invariant ``s=(p1+p2)^2`` for ``p1 + p2 -> p3 + p4``.
@@ -498,6 +499,7 @@ pub struct PyHelicity {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyHelicity {
     /// Construct a physical helicity from -1, 0, or 1.
@@ -761,6 +763,7 @@ impl From<ThreeMomentum<f64>> for PyThreeMomentum {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyThreeMomentum {
     /// Construct a Cartesian three-momentum.
@@ -1141,6 +1144,7 @@ impl From<FourMomentum<f64>> for PyFourMomentum {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyFourMomentum {
     /// Construct a four-momentum from energy and Cartesian spatial components.
@@ -1532,6 +1536,7 @@ pub struct PyRotation {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyRotation {
     /// Construct the identity rotation.
@@ -1690,6 +1695,7 @@ pub struct PyBoost {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyBoost {
     /// Construct a Lorentz boost from a dimensionless three-velocity.
@@ -1784,6 +1790,7 @@ pub struct PyJet {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyJet {
     /// Return the recombined four-momentum of this jet.
@@ -1942,6 +1949,7 @@ pub struct PyClusteringResult {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyClusteringResult {
     /// Return inclusive jets ordered by decreasing transverse momentum.
@@ -2139,6 +2147,7 @@ pub struct PyJetDefinition {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyJetDefinition {
     /// Construct a generalized-kT jet definition.

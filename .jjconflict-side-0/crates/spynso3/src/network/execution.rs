@@ -35,6 +35,7 @@ pub(crate) struct ExecutionStatus {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl ExecutionStatus {
     /// Operations whose children are leaves, in the native scheduler's traversal order.
@@ -59,6 +60,7 @@ impl ExecutionStatus {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoNet {
     /// Number of external axes in the semantic source interface.

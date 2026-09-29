@@ -24,22 +24,21 @@ PyO3, and the other community modules compatible with this checkout. The `ufo` f
 by default in the Python adapter; disable default features if the host intentionally omits UFO
 loading. The pure Rust facade has different defaults.
 
-Symbolica and the Typst atom payload use versioned dependencies. Select their
-Git revisions in the consuming host's root manifest, so those choices apply to
-FeynKit, Spenso, and the native Typst payload transitively:
+Use the released Symbolica and Numerica 3.0.1 dependencies. The Typst atom
+payload still requires a Git revision selected in the consuming host's root
+manifest, so that choice applies to FeynKit and Spenso transitively:
 
 // docs-example: syntax
 ```toml
 [patch.crates-io]
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "939c4de8b8da5546101b937a425eda443f409e8a" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "939c4de8b8da5546101b937a425eda443f409e8a" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
 ```
 
 Only the top-level workspace's patches apply; dependency workspaces do not
 forward their patch tables. The standalone repository and the nested `tydenso/`
 WASM workspace therefore each keep their own defaults. To align native and WASM
-builds, select the same revisions in both build roots and rebuild both artifacts.
+builds, select the same versions and payload revision in both build roots and
+rebuild both artifacts.
 Changing a Cargo patch does not update an already compiled Typst plugin or its
 bundled Typst renderer sources.
 

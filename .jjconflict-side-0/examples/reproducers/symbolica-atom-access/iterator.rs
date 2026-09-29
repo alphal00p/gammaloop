@@ -1,4 +1,4 @@
-//! Reproduce second-argument access costs with Symbolica 3.0.0 and std only.
+//! Reproduce second-argument access costs with Symbolica 3.0.1 and std only.
 //! Parsing and equality checks are outside timing. Both readers receive the
 //! same opaque, copied iterator and their returned AtomViews are consumed equally.
 use std::{hint::black_box, time::Instant};

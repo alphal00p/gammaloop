@@ -1,5 +1,8 @@
 """Coherent amplitudes close physical ports and reproduce a massive QED result."""
 
+import re
+import xml.etree.ElementTree as ET
+
 from symbolica import E, S
 from symbolica.community import hep
 from symbolica.community.tensor import TensorExpression
@@ -37,6 +40,15 @@ squared = amplitude.squared()
 assert squared.expression().rank == 8
 assert "index_scope" in str(squared.expression().to_expression())
 assert "′" in squared._repr_html_()
+# Conjugation allocates fresh internal dummy indices; their IDs are not labels.
+expression = squared.expression()
+exact = expression.to_expression()
+assert re.search(r"d_\d+", str(exact))
+assert not re.search(r"d_\d+", expression.to_typst())
+html = squared._repr_html_()
+math = ET.fromstring(html[html.index("<math") : html.index("</math>") + 7])
+assert not re.search(r"d_\d+", "".join(math.itertext()))
+assert expression.to_expression() == exact
 assert squared.spin_summed == []
 fermions = squared.sum_spins([0, 1], average_initial=True)
 assert fermions.expression().rank == 4

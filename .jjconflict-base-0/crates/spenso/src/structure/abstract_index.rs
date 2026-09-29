@@ -44,6 +44,9 @@ mod scoped;
 #[cfg(feature = "shadowing")]
 pub use scoped::ScopedIndex;
 
+/// Marks generated dummy symbols whose visible names may use an index palette.
+pub const DUMMY_INDEX_TAG: &str = "spenso::dummy-index";
+
 pub const ABSTRACTIND: &str = "aind";
 
 pub const UPIND: &str = "uind";
@@ -725,7 +728,9 @@ impl From<AbstractIndex> for Atom {
             AbstractIndex::Normal(v) => Atom::num(v as i64),
             AbstractIndex::Dualize(v) => Atom::num(-(v as i64)),
             AbstractIndex::Added(v) => Atom::num(v as i64),
-            AbstractIndex::Dummy(v) => Atom::var(symbol!(format!("d_{}", v))),
+            AbstractIndex::Dummy(v) => {
+                Atom::var(symbol!(format!("d_{}", v), tag = DUMMY_INDEX_TAG))
+            }
             AbstractIndex::Symbol(v) => Atom::var(v.into()),
             AbstractIndex::Named(name, owner, local) => {
                 symbolica::function!(Symbol::from(name), Atom::num(owner), Atom::num(local))

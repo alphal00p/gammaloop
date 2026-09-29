@@ -48,3 +48,13 @@
 #assert.eq(annotated, actual)
 
 $ #actual quad #linked-visual $
+
+// Generated symbolic indices use aliases; same-named calls and user indices do not.
+#let dummy = (kind: "variable", source: "d_812", symbol: (name: "spenso::d_812", tags: ("spenso::dummy-index",)))
+#let dummy-alias = notation.notation(settings: (
+  index-aliases: (("spenso::mink", "spenso::d_812", none, 1),),
+))
+#assert.eq(notation.render(tree(tensor(dummy)), notation: dummy-alias), actual)
+#assert.ne(notation.render(tree(tensor(call("spenso::d_812", ()))), notation: dummy-alias), actual)
+#let user-index = (kind: "variable", source: "d_812", symbol: (name: "user::d_812", tags: ()))
+#assert.ne(notation.render(tree(tensor(user-index)), notation: dummy-alias), actual)

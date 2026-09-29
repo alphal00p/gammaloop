@@ -43,6 +43,7 @@ pub struct PyUfoLoadDiagnostics {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyUfoLoadDiagnostics {
     /// Return the UFO source directory.
@@ -321,6 +322,7 @@ pub struct PyLoadedModel {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyLoadedModel {
     /// Return the normalized HEP model.
@@ -471,6 +473,7 @@ pub struct PyUfoLoader {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyUfoLoader {
     /// Construct a UFO loader with normalization options.

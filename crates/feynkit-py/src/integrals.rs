@@ -64,6 +64,7 @@ impl PyIntegralFamily {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyIntegralFamily {
     /// Build a complete family from the diagram's routed internal propagators.
@@ -890,6 +891,7 @@ pub struct PyIntegralMapping {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyIntegralMapping {
     /// Source loop momentum names paired with their target-coordinate images.
@@ -993,6 +995,7 @@ pub struct PyPropagatorMapping {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyPropagatorMapping {
     /// Zero-based target denominator index for each source denominator.

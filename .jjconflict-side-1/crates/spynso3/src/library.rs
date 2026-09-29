@@ -136,6 +136,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSymbol {
 #[allow(clippy::new_without_default)]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensorFunctionLibrary {
     fn __repr__(&self) -> String {
@@ -522,6 +523,7 @@ impl SpensorLibrary {
 #[allow(clippy::new_without_default)]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensorLibrary {
     fn __repr__(&self) -> String {

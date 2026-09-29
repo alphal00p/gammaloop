@@ -449,6 +449,7 @@ impl Vakint {
             })
             .unwrap();
 
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Fmft);
         let form_result = self.run_form(
             settings,
             &["fmft.frm".into()],

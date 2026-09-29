@@ -96,6 +96,7 @@ impl PyGammaSimplifySettings {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyGammaSimplifySettings {
     fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {
@@ -243,6 +244,7 @@ impl PyColorSimplifySettings {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyColorSimplifySettings {
     fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {

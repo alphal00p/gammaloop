@@ -309,6 +309,12 @@
   let label = _display-node(labels.at(position))
   if cycle == 0 { label } else { math.attach(label, b: $ #cycle $) }
 }
+#let _index-key(node) = {
+  if _is-variable(node) { return ("var", _name(node)) }
+  if _is-function(node) { return ("fun", _name(node), node.arguments.map(_index-key)) }
+  let natural = _natural-index(node)
+  if natural != none { natural } else { node.at("text", default: "?") }
+}
 #let _slot-index(slot, ctx, settings) = {
   let index = _natural-index(slot.index)
   if index != none {
@@ -317,9 +323,12 @@
   }
   // Aliases affect only the visible slot. The complete tensor call keeps its
   // original Atom annotation, including its named graph-index identities.
-  if _is-function(slot.index) {
-    let arguments = slot.index.arguments.map(_natural-index)
-    if none not in arguments {
+  if _is-function(slot.index) or _is-variable(slot.index) {
+    // `none` distinguishes symbolic indices from zero-argument index calls.
+    let arguments = if _is-variable(slot.index) { none } else {
+      slot.index.arguments.map(_index-key)
+    }
+    if arguments == none or none not in arguments {
       for alias in settings.at("index-aliases", default: ()) {
         if (
           alias.at(0) == slot.identity

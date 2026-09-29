@@ -91,6 +91,7 @@ pub struct PyDiagramVertex {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyDiagramVertex {
     /// Return the stable vertex label stored in the diagram.
@@ -281,6 +282,7 @@ impl PyDiagramEdge {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyDiagramEdge {
     /// The model particle, including symbolic mass, width parameter, spin and charge.
@@ -731,6 +733,7 @@ pub struct PyDiagramCutSide {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyDiagramCutSide {
     /// Return a physics view of this amplitude side, retaining its original diagram.
@@ -796,6 +799,7 @@ pub struct PyDiagramCut {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyDiagramCut {
     /// Return the left amplitude and its generation metadata.
@@ -1016,6 +1020,7 @@ pub struct PyDiagramThresholdCandidate {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyDiagramThresholdCandidate {
     /// Return the left topology selection.
@@ -1157,6 +1162,7 @@ fn components_close<const N: usize>(left: [f64; N], right: [f64; N]) -> bool {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyMomentumSignature {
     /// Return the integer coefficients of the independent loop momenta.
@@ -1302,6 +1308,7 @@ impl PyLoopMomentumBasis {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyLoopMomentumBasis {
     /// Return the edge identifiers belonging to the spanning tree.
@@ -2098,6 +2105,7 @@ impl PyFeynmanDiagram {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyFeynmanDiagram {
     /// Return the canonical installed Linnet graph with physics objects as payloads.
@@ -3829,6 +3837,7 @@ pub struct PySubgraph {}
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PySubgraph {
     /// Return a full view of the immutable original diagram, sharing the same underlying diagram.

@@ -66,6 +66,7 @@ impl From<ParticleSelector> for PyParticleSelector {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyParticleSelector {
     /// Select a particle by its model name.
@@ -538,6 +539,7 @@ impl PyProcess {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyProcess {
     /// The particle model supplying this process's Feynman rules.
@@ -1497,6 +1499,7 @@ pub struct PyCancellationToken {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCancellationToken {
     /// Create an independent token that can cancel a generation request.
@@ -1567,6 +1570,7 @@ pub struct PySelfEnergyFilterOptions {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PySelfEnergyFilterOptions {
     /// Configure rejection of self-energy subgraphs by mass category.
@@ -1627,6 +1631,7 @@ pub struct PyTadpoleFilterOptions {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyTadpoleFilterOptions {
     /// Configure rejection of tadpoles by the mass of their attachment.
@@ -1691,6 +1696,7 @@ pub struct PySnailFilterOptions {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PySnailFilterOptions {
     /// Configure rejection of zero-momentum snail subgraphs.
@@ -1764,6 +1770,7 @@ pub struct PyNumeratorGrouping {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyNumeratorGrouping {
     /// Choose numerator zero detection and cross-diagram grouping.
@@ -2086,6 +2093,7 @@ pub struct PyGenerationProgress {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyGenerationProgress {
     /// Pipeline stage: topologies, topology_filters, interactions,
@@ -2165,6 +2173,7 @@ pub struct PyGenerationReport {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyGenerationReport {
     /// Return the number of distinct topologies considered during generation.
@@ -2329,6 +2338,7 @@ pub struct PyGroupMember {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyGroupMember {
     /// Return the generated-order index from before zero-numerator removal.
@@ -2448,6 +2458,7 @@ pub struct PyDiagramGroup {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyDiagramGroup {
     /// Return the retained-diagram index used as the numerator reference.
@@ -2509,6 +2520,7 @@ pub struct PyGenerationResult {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyGenerationResult {
     /// Return every retained diagram in generated order.

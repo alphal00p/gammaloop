@@ -1,4 +1,4 @@
-use symbolica::api::python::SymbolicaCommunityModule;
+use symbolica::api::python::{Citation, SymbolicaCommunityModule};
 
 use std::collections::HashMap;
 use std::env;
@@ -23,6 +23,10 @@ use crate::{
 use pyo3_stub_gen::derive::*;
 
 impl SymbolicaCommunityModule for VakintWrapper {
+    fn get_citations() -> Vec<Citation> {
+        crate::citations::USED_CITATIONS.get_citations()
+    }
+
     fn get_name() -> String {
         "hep.vakint".to_string()
     }
@@ -108,6 +112,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for NumericalEvaluationResultWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(record_usage)]
 #[pymethods]
 impl NumericalEvaluationResultWrapper {
     /// String representation of the numerical result.
@@ -264,6 +269,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for VakintExpressionWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(record_usage)]
 #[pymethods]
 impl VakintExpressionWrapper {
     /// String representation of the VakintExpression.
@@ -356,6 +362,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for VakintEvaluationMethodWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(record_usage)]
 #[pymethods]
 impl VakintEvaluationMethodWrapper {
     /// String representation of the evaluation method.
@@ -552,6 +559,7 @@ impl VakintEvaluationMethodWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(record_usage)]
 #[pymethods]
 impl VakintWrapper {
     #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None))]
@@ -1035,4 +1043,9 @@ mod tests {
         })
         .unwrap();
     }
+}
+
+#[inline]
+fn record_usage() {
+    crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Vakint);
 }

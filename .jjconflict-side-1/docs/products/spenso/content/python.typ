@@ -556,11 +556,12 @@ sandboxed frame and requires no live Python callbacks or external assets.
 commas, symbol scripts, component notation, and index/factor spacing. Positional calls such as `to_typst(True)`
 and `formatted(True)` still request dimensions. Rich Typst output collects inverse factors
 at the same product level into a single fraction, including rational coefficients.
-Compound graph indices use each representation's alphabet by default: Lorentz indices
+Compound graph indices and generated dummy indices use each representation's alphabet by default: Lorentz indices
 render as $mu, nu, rho, sigma$, fundamental color as $i, j, k, l$, and bispinor or adjoint
 color as $a, b, c, d$. The alphabet repeats with subscripts when needed. Repeated indices
 share a label throughout an expression, and existing numeric or manually named labels are
-reserved to prevent collisions.
+reserved to prevent collisions. Scoped copies keep the same base letters with primes;
+internal dummy identifiers never become alphabet labels.
 
 Choose `DisplaySettings(index_style="graph")` to retain graph identifiers, for example
 $mu_(upright("h4"))$ for `hedge(4,1)`, $mu_(upright("e4"))$ for `edge(4,1)`, or $mu_(upright("v4"))$ for `vertex(4,1)`.

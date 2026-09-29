@@ -2,7 +2,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "linnet==0.1.0",
-#     "symbolica==3.0.0",
+#     "symbolica==3.0.1",
 #     "marimo==0.24.0",
 #     "typst==0.15.0",
 # ]

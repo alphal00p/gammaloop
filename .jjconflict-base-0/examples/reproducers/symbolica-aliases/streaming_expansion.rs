@@ -16,7 +16,7 @@
 //!
 //! ```cargo
 //! [dependencies]
-//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "06906976bca24fefc5203aee699d90d62ebe08cd", default-features = false, features = ["float-mpfr", "integer-gmp", "native_code_generation"] }
+//! symbolica = { version = "3.0.1", default-features = false, features = ["float-mpfr", "integer-gmp", "native_code_generation"] }
 //! ```
 use std::time::Instant;
 

@@ -583,6 +583,7 @@ impl Vakint {
             })
             .unwrap();
 
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Matad);
         let form_result = self.run_form(
             settings,
             &["matad-ng.hh".into()],

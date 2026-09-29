@@ -1,5 +1,6 @@
 #![allow(mixed_script_confusables)]
 pub mod alphaloop_numerics;
+mod citations;
 pub mod fmft;
 pub mod fmft_numerics;
 pub mod graph;
@@ -11,6 +12,7 @@ pub mod symbols;
 pub mod topologies;
 pub mod utils;
 
+use crate::citations::{CitationSource, USED_CITATIONS};
 use crate::utils::set_precision_in_polynomial_atom;
 use ahash::RandomState;
 use colored::Colorize;
@@ -4354,6 +4356,7 @@ impl Vakint {
     }
 
     pub fn new() -> Result<Self, VakintError> {
+        citations::USED_CITATIONS.record(citations::CitationSource::Vakint);
         // Force initialization of symbolica symbols with proper attributes
         LazyLock::force(&S);
 
@@ -6492,6 +6495,7 @@ Evaluated (n_loops=1, mu_r=1) :
             }
         }
 
+        USED_CITATIONS.record(CitationSource::PySecDec);
         let mut cmd = Command::new(settings.python_exe_path.as_str());
         cmd.arg(input[0].clone().0);
         for opt in options {
@@ -6565,6 +6569,7 @@ Evaluated (n_loops=1, mu_r=1) :
             fs::write(tmp_dir.join(resource), FORM_SRC.get(resource).unwrap())?;
         }
         fs::write(tmp_dir.join(&input.0), &input.1)?;
+        USED_CITATIONS.record(CitationSource::Form);
         let mut cmd = Command::new(settings.form_exe_path.as_str());
         for opt in options {
             cmd.arg(opt);

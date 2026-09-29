@@ -50,7 +50,10 @@ use tabled::{
 
 use crate::Spensor;
 use idenso::tensor::{SymbolicTensor, composition};
-use spenso::structure::{abstract_index::AbstractIndex, partial::PartialStructure};
+use spenso::structure::{
+    abstract_index::{AbstractIndex, DUMMY_INDEX_TAG},
+    partial::PartialStructure,
+};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pymethods};
@@ -69,7 +72,7 @@ pub(crate) mod network;
 /// Presentation settings shared by Typst source, HTML, and SVG rendering.
 ///
 /// ``index_style="alphabet"`` assigns representation-specific letters to graph
-/// indices within each displayed expression. ``"graph"`` keeps graph identities
+/// and generated dummy indices within each displayed expression. ``"graph"`` keeps graph identities
 /// in their subscripts; ``"raw"`` preserves the original index notation. All
 /// styles leave the underlying expression and tensor interface unchanged.
 /// ``component_style="superscript"`` displays concrete components as A(x,7)^{0,1}.
@@ -142,6 +145,7 @@ fn validate_typst_length(value: &str, field: &str) -> PyResult<()> {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl DisplaySettings {
     #[new]
@@ -440,7 +444,13 @@ impl IndexAliases {
             let IndexPalette::Cyclic { .. } = metadata.index_palette else {
                 continue;
             };
-            if Self::compound(index.as_view()).is_some() {
+            if Self::compound(index.as_view()).is_some()
+                || (style == "alphabet"
+                    && index
+                        .as_view()
+                        .get_symbol()
+                        .is_some_and(|symbol| symbol.has_tag(DUMMY_INDEX_TAG)))
+            {
                 pending.insert(
                     (
                         representation.get_name().to_owned(),
@@ -723,21 +733,24 @@ impl IndexAliases {
             .entries
             .iter()
             .map(|((representation, index), (position, display))| {
-                let AtomView::Fun(function) = index.as_view() else {
-                    unreachable!()
+                let (head, arguments) = match index.as_view() {
+                    AtomView::Fun(function) => {
+                        let arguments = function
+                            .iter()
+                            .map(|argument| format!("{},", Self::argument_key(argument)))
+                            .collect::<String>();
+                        (function.get_symbol(), format!("({arguments})"))
+                    }
+                    AtomView::Var(variable) => (variable.get_symbol(), "none".to_owned()),
+                    _ => unreachable!(),
                 };
-                let head = function.get_symbol();
-                let arguments = function
-                    .iter()
-                    .map(|argument| format!("{},", Self::argument_key(argument)))
-                    .collect::<String>();
                 let label = if style == "graph" || position.is_none() {
                     format!("${}$", display.to_typst_source())
                 } else {
                     position.unwrap().to_string()
                 };
                 format!(
-                    "({:?},{:?},({arguments}),{label}),",
+                    "({:?},{:?},{arguments},{label}),",
                     representation.get_name(),
                     head.get_name()
                 )
@@ -1123,6 +1136,7 @@ fn notebook_html_fragment(document: &str) -> PyResult<String> {
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 fn load_math_font(py: Python<'_>) -> PyResult<String> {
     let font = PyBytes::new(py, include_bytes!("../typst/STIXTwoMath-Regular.woff2"));
@@ -2121,6 +2135,7 @@ pub(crate) fn format_concrete_tensor_output_rich(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None))]
 fn format_tensor(
@@ -2142,6 +2157,7 @@ fn format_tensor(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None))]
 fn to_typst(
@@ -2163,6 +2179,7 @@ fn to_typst(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None, notation_source = None))]
 fn to_html(
@@ -2181,6 +2198,7 @@ fn to_html(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None, notation_source = None))]
 fn to_svg(
@@ -2199,6 +2217,7 @@ fn to_svg(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None, notation_source = None))]
 fn formatted(
@@ -2407,6 +2426,56 @@ mod tests {
         assert_eq!(atom.to_canonical_string(), original);
         assert_eq!(render_atom_tree(&atom).unwrap(), exact_tree);
         assert_ne!(render_atom_tree(&presentation).unwrap(), exact_tree);
+    }
+
+    #[test]
+    fn generated_dummy_aliases_preserve_scopes_and_user_symbols() {
+        let dummy = Atom::from(AbstractIndex::Dummy(918_273));
+        let scoped =
+            Atom::from(AbstractIndex::Dummy(918_273).scoped(symbol!("display_index_tests::bra")));
+        let manual = Atom::var(symbol!("display_index_tests::d_918273"));
+        let reserved = Atom::var(symbol!("display_index_tests::mu"));
+        let tensor = indexed_test_tensor([dummy.clone(), scoped.clone(), manual.clone(), reserved]);
+        let original = tensor.clone();
+        let exact_tree = render_atom_tree(&tensor).unwrap();
+        let aliases = IndexAliases::for_atom(&tensor, "alphabet");
+        let rep = ExtendibleReps::MINKOWSKI.symbol();
+        assert_eq!(aliases.entries.len(), 2);
+        let base = &aliases.entries[&(rep, dummy.clone())].1;
+        assert_ne!(
+            IndexAliases::label_key(base),
+            IndexAliases::label_key(&IndexDisplay::symbol("mu").unwrap())
+        );
+        assert_eq!(
+            aliases.entries[&(rep, scoped)].1,
+            base.clone().with_top(IndexDisplay::text("′").unwrap())
+        );
+        assert!(!aliases.entries.contains_key(&(rep, manual.clone())));
+        let presentation = aliases.presentation_atom(&tensor, "alphabet");
+        assert!(
+            presentation
+                .to_canonical_string()
+                .contains("display_index_tests::d_918273")
+        );
+        assert!(
+            !presentation
+                .to_canonical_string()
+                .contains("spenso::d_918273")
+        );
+        assert!(
+            aliases
+                .typst_source("alphabet")
+                .contains("\"spenso::d_918273\",none,")
+        );
+        assert_eq!(tensor, original);
+        assert_eq!(render_atom_tree(&tensor).unwrap(), exact_tree);
+        for style in ["raw", "graph"] {
+            assert!(
+                !IndexAliases::for_atom(&tensor, style)
+                    .entries
+                    .contains_key(&(rep, dummy.clone()))
+            );
+        }
     }
 
     #[test]

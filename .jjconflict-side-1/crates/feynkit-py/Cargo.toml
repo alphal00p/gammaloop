@@ -15,6 +15,7 @@ path = "src/bin/stubgen.rs"
 required-features = ["python_stubgen"]
 
 [dependencies]
+spenso-macros = { workspace = true }
 feynkit-amplitude = { version = "0.1.0", path = "../feynkit-amplitude", default-features = false }
 feynkit-cff = { version = "0.1.0", path = "../feynkit-cff", default-features = false }
 feynkit-generator = { version = "0.1.0", path = "../feynkit-generator", default-features = false }

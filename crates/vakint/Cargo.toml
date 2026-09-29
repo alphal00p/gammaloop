@@ -11,6 +11,7 @@ keywords = ["QFT", "integral", "physics", "vaccuum"]
 categories = ["science"]
 
 [dependencies]
+spenso-macros = { workspace = true }
 pyo3 = { workspace = true, features = ["anyhow"], optional = true }
 pyo3-stub-gen = { workspace = true, default-features = false, optional = true }
 

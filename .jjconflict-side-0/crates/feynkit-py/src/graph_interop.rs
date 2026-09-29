@@ -110,6 +110,7 @@ impl LinnetCache {
     }
 }
 
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl LinnetCacheHolder {
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {

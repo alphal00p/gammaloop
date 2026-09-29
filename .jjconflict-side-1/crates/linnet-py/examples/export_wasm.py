@@ -29,7 +29,7 @@ from pathlib import Path
 EXAMPLES_DIR = Path(__file__).resolve().parent
 PUBLISHED_REQUIREMENTS = {
     "linnet": '#     "linnet==0.1.0",',
-    "symbolica": '#     "symbolica==3.0.0",',
+    "symbolica": '#     "symbolica==3.0.1",',
     "ufo-model-loader": '#     "ufo-model-loader @ git+https://github.com/alphal00p/ufo_model_loader.git@70ddee6b416f8c8b340e0d087646d77095c5d24b",',
 }
 

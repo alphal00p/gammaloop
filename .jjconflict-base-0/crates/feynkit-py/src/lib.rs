@@ -15,7 +15,7 @@ mod tensor;
 mod ufo;
 
 use pyo3::{prelude::*, types::PyModule};
-use symbolica::api::python::SymbolicaCommunityModule;
+use symbolica::api::python::{Citation, SymbolicaCommunityModule};
 
 pub use amplitude::{PyAmplitude, PyAmplitudeLeg, PySquaredAmplitude};
 pub use cff::{
@@ -50,6 +50,102 @@ mod symbols;
 pub struct FeynkitModule;
 
 impl SymbolicaCommunityModule for FeynkitModule {
+    fn get_citations() -> Vec<Citation> {
+        if !CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed) {
+            return Vec::new();
+        }
+        // The product registry credits FeynKit contributors collectively.
+        let mut citations = vec![
+            Citation {
+                id: "https://github.com/alphal00p/gammaloop#feynkit".into(),
+                reference: "FeynKit contributors. FeynKit (2026).".into(),
+                bibtex: r#"@software{feynkit,
+  author = {{FeynKit contributors}},
+  title = {FeynKit},
+  year = {2026},
+  url = {https://github.com/alphal00p/gammaloop}
+}"#.into(),
+                reasons: vec!["Provides the FeynKit functionality in this community module.".into()],
+                description: "".into(),
+                relevance: None,
+            },
+            Citation {
+                id: "arXiv:0903.5143".into(),
+                reference: "Benoît Collins and Sho Matsumoto. On some properties of orthogonal Weingarten functions (2009).".into(),
+                bibtex: r#"@article{feynkit_0903.5143,
+  author = {Benoît Collins and Sho Matsumoto},
+  title = {{On some properties of orthogonal Weingarten functions}},
+  year = {2009},
+  eprint = {0903.5143},
+  archivePrefix = {arXiv}
+}"#.into(),
+                reasons: vec!["Orthogonal Weingarten functions used by FeynKit tensor reduction.".into()],
+                description: "Method and validation source listed in crates/feynkit-tensor/README.md.".into(),
+                relevance: None,
+            },
+            Citation {
+                id: "arXiv:1701.04493".into(),
+                reference: "Benoît Collins and Sho Matsumoto. Weingarten calculus via orthogonality relations: new applications (2017).".into(),
+                bibtex: r#"@article{feynkit_1701.04493,
+  author = {Benoît Collins and Sho Matsumoto},
+  title = {{Weingarten calculus via orthogonality relations: new applications}},
+  year = {2017},
+  eprint = {1701.04493},
+  archivePrefix = {arXiv}
+}"#.into(),
+                reasons: vec!["Orthogonality relations underlying FeynKit tensor projectors.".into()],
+                description: "Method and validation source listed in crates/feynkit-tensor/README.md.".into(),
+                relevance: None,
+            },
+            Citation {
+                id: "arXiv:1801.06084".into(),
+                reference: "B. Ruijl and F. Herzog and T. Ueda and J. A. M. Vermaseren and A. Vogt. R*-operation and five-loop calculations (2018).".into(),
+                bibtex: r#"@article{feynkit_1801.06084,
+  author = {B. Ruijl and F. Herzog and T. Ueda and J. A. M. Vermaseren and A. Vogt},
+  title = {{R*-operation and five-loop calculations}},
+  year = {2018},
+  eprint = {1801.06084},
+  archivePrefix = {arXiv}
+}"#.into(),
+                reasons: vec!["Symmetry-reduced tensor projectors in the R* operation.".into()],
+                description: "Method and validation source listed in crates/feynkit-tensor/README.md.".into(),
+                relevance: None,
+            },
+            Citation {
+                id: "arXiv:2408.05137".into(),
+                reference: "Jae Goode and Franz Herzog and Anthony Kennedy and Sam Teale and Jos Vermaseren. Tensor Reduction for Feynman Integrals with Lorentz and Spinor Indices (2024).".into(),
+                bibtex: r#"@article{feynkit_2408.05137,
+  author = {Jae Goode and Franz Herzog and Anthony Kennedy and Sam Teale and Jos Vermaseren},
+  title = {{Tensor Reduction for Feynman Integrals with Lorentz and Spinor Indices}},
+  year = {2024},
+  eprint = {2408.05137},
+  archivePrefix = {arXiv}
+}"#.into(),
+                reasons: vec!["Orbit-partition formulation and high-rank tensor projectors.".into()],
+                description: "Method and validation source listed in crates/feynkit-tensor/README.md.".into(),
+                relevance: None,
+            },
+            Citation {
+                id: "arXiv:2411.02233".into(),
+                reference: "Jae Goode and Franz Herzog and Sam Teale. OPITeR: A program for tensor reduction of multi-loop Feynman Integrals (2024).".into(),
+                bibtex: r#"@article{feynkit_2411.02233,
+  author = {Jae Goode and Franz Herzog and Sam Teale},
+  title = {{OPITeR: A program for tensor reduction of multi-loop Feynman Integrals}},
+  year = {2024},
+  eprint = {2411.02233},
+  archivePrefix = {arXiv}
+}"#.into(),
+                reasons: vec!["Method reference for integrand-symmetry-aware tensor reduction.".into()],
+                description: "Method and validation source listed in crates/feynkit-tensor/README.md.".into(),
+                relevance: None,
+            }
+        ];
+        if !TENSOR_CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed) {
+            citations.truncate(1);
+        }
+        citations
+    }
+
     fn get_name() -> String {
         "feynkit".to_owned()
     }
@@ -712,5 +808,27 @@ class Generator:
                 .to_string()
                 .contains("callable generate omits parameters: options")
         );
+    }
+}
+
+static CITATIONS_USED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[inline]
+pub(crate) fn record_usage() {
+    use std::sync::atomic::Ordering;
+    if !CITATIONS_USED.load(Ordering::Relaxed) {
+        CITATIONS_USED.store(true, Ordering::Relaxed);
+    }
+}
+
+static TENSOR_CITATIONS_USED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[inline]
+fn record_tensor_usage() {
+    record_usage();
+    spynso3::SpensoModule::record_usage();
+    if !TENSOR_CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed) {
+        TENSOR_CITATIONS_USED.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }

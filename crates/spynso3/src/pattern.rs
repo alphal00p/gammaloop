@@ -306,6 +306,7 @@ impl PortPattern {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PortPattern {
     /// Match one exact representation, optionally carrying `index`.
@@ -462,6 +463,7 @@ impl TensorPattern {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl TensorPattern {
     /// Create a pattern for the fixed tensor `head`.

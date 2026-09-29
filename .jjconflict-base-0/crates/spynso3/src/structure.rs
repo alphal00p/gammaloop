@@ -286,6 +286,7 @@ impl SpensoName {
 }
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoName {
     fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
@@ -968,6 +969,7 @@ impl PyStubType for ConvertibleToInvariantDegree {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoRepresentation {
     fn _repr_html_(&self) -> String {
@@ -1349,6 +1351,7 @@ pub struct SpensoSlot {
 impl ModuleInit for SpensoSlot {}
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoSlot {
     /// Slots are immutable typed index values and can be dictionary keys.

@@ -36,6 +36,7 @@ impl PyTensorRule {
 }
 
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyTensorRule {
     fn __repr__(&self) -> String {

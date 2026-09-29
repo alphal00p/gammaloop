@@ -99,6 +99,7 @@ impl PyCookTagFilter {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCookTagFilter {
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -160,6 +161,7 @@ impl PyCookSourceFilter {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCookSourceFilter {
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -258,6 +260,7 @@ impl PyCookSettings {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCookSettings {
     fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {

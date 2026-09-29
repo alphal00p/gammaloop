@@ -58,6 +58,7 @@ pub struct PyTensorReducer {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_tensor_usage)]
 #[pymethods]
 impl PyTensorReducer {
     /// Construct a reducer without selecting an integrated momentum.

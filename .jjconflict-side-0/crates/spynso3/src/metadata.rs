@@ -56,6 +56,7 @@ impl SpensoRepresentationName {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoRepresentationName {
     /// Exact registered symbol name, without dimension or index arguments.
@@ -145,6 +146,7 @@ pub(crate) fn validate_axis_permutation(rank: usize, axes: &[usize]) -> PyResult
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl SpensoTensorStructure {
     #[new]

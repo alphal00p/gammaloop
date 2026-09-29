@@ -23,6 +23,7 @@ cargo new idenso-quickstart
 cd idenso-quickstart
 cargo add idenso --path /path/to/gammaloop/crates/idenso
 cargo add spenso --path /path/to/gammaloop/crates/spenso
+cargo add symbolica@3.0.1 --no-default-features
 ```
 
 Copy the checkout’s `[patch.crates-io]` dependency overrides into your `Cargo.toml`

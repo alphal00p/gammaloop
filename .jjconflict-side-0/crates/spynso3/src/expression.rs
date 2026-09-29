@@ -73,6 +73,7 @@ pyo3_stub_gen::module_variable!("symbolica.community.tensor", "AUTO", AutoIndex)
 #[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::module_variable!("symbolica.community.tensor", "_", AutoIndex);
 
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl AutoIndex {
     fn __repr__(&self) -> &'static str {
@@ -690,6 +691,7 @@ fn inferred_descriptor(atom: AtomView<'_>) -> (Option<Symbol>, Vec<Atom>) {
 
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl TensorExpression {
     /// Construct a tensor expression, preserving existing tensor metadata or inferring it.
@@ -2142,6 +2144,7 @@ impl TensorExpression {
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.tensor")
 )]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 pub fn as_tensor(py: Python<'_>, expression: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
     if let Ok(expression) = expression.extract::<PyRef<'_, TensorExpression>>() {
@@ -2215,6 +2218,7 @@ symbolic_function_overload!("dot", "Contract two rank-one tensors into the canon
         "#,
     )
 )]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 fn dot(
     py: Python<'_>,
@@ -2261,6 +2265,7 @@ symbolic_function_overload!("chain", "Build an explicitly-ended ordered tensor c
         "#,
     )
 )]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 #[pyo3(signature = (start_slot, end_slot, *factors))]
 fn chain(
@@ -2340,6 +2345,7 @@ symbolic_function_overload!("trace", "Close an ordered factor sequence into a ca
         "#,
     )
 )]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pyfunction]
 #[pyo3(signature = (representation, *factors))]
 fn trace(

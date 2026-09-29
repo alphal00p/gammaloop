@@ -1068,8 +1068,9 @@ dependencies = [
 
 [[package]]
 name = "numerica"
-version = "3.0.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=6a96c9d77b217ea394770524c119e0613d4d9ef5#6a96c9d77b217ea394770524c119e0613d4d9ef5"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "836accdb415b7667573bd12676e0b2eb4440e3f60b110038d96a9086f5651c15"
 dependencies = [
  "ahash",
  "astro-float",
@@ -1633,8 +1634,9 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "symbolica"
-version = "3.0.0"
-source = "git+https://github.com/symbolica-dev/symbolica?rev=6a96c9d77b217ea394770524c119e0613d4d9ef5#6a96c9d77b217ea394770524c119e0613d4d9ef5"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0965398bbe5063c00b3a0d078d7d3dc57b61819b97e960b73e9a7e9602662795"
 dependencies = [
  "ahash",
  "append-only-vec",

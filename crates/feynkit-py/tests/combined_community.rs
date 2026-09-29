@@ -41,6 +41,11 @@ where
             M::initialize(args.py())
         })?;
     native.add("initialize_module", initialize_module)?;
+    let get_citations =
+        PyCFunction::new_closure(py, Some(c"get_citations"), None, |_args, _kwargs| {
+            Ok::<_, PyErr>(M::get_citations())
+        })?;
+    native.add("get_citations", get_citations)?;
     M::register_module(&native)?;
     core.add_submodule(&native)?;
     py.import("sys")?
@@ -129,6 +134,14 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
 
             let feynkit = PyModule::import(py, "symbolica.community.feynkit")?;
             let spenso = PyModule::import(py, "symbolica.community.tensor")?;
+            for module in [&feynkit, &spenso] {
+                let citations = module.call_method0("get_citations")?;
+                assert!(!citations.is_empty()?);
+                for citation in citations.try_iter()? {
+                    let bibtex: String = citation?.call_method0("to_bibtex")?.extract()?;
+                    assert!(bibtex.starts_with('@'));
+                }
+            }
             let model = Model::from_json(MODEL_JSON).expect("fixture is a valid model");
             let tensor_numerator = Atom::parse(
                 "k(spenso::mink(D,mu))*k(spenso::mink(D,nu))",
