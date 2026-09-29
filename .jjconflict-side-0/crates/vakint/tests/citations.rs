@@ -5,6 +5,7 @@ use vakint::{Vakint, VakintSettings, symbolica_community_module::VakintWrapper};
 
 #[test]
 fn backend_execution_updates_community_citations() {
+    assert!(VakintWrapper::get_citations().is_empty());
     let vakint = Vakint::new().unwrap();
     let settings = VakintSettings {
         python_exe_path: "sh".into(),

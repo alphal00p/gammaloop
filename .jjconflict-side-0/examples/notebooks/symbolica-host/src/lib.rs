@@ -17,7 +17,6 @@ macro_rules! register_module {
         let child_module = PyModule::new($m.py(), &native_name)?;
         child_module.add_function(wrap_pyfunction!(initialize_module, &child_module)?)?;
 
-
         <$module_type>::register_module(&child_module)?;
         $m.add_submodule(&child_module)?;
 
@@ -49,7 +48,8 @@ fn get_citations() -> Vec<Citation> {
   version = {0.18.0},
   doi = {10.5281/zenodo.17054381},
   url = {https://zenodo.org/records/17054381}
-}"#.into(),
+}"#
+        .into(),
         reasons: vec!["Symbolic and numerical computation with Symbolica.".into()],
         description: String::new(),
         relevance: None,

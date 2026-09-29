@@ -177,10 +177,11 @@ versions available here. Their Rust definitions begin in
 
 == Methods and software to cite
 
-The community module's `get_citations()` always credits Vakint's authors and adds backend
-papers once their evaluation path is used. Usage is cumulative across all Vakint instances
+`symbolica.get_citations()` credits Vakint's authors after Vakint is used and adds
+backend papers once their evaluation path is used. Usage is cumulative across all Vakint instances
 in the process, including Rust calls and reused pySecDec output; constructing settings or
-checking backend availability does not add citations.
+checking backend availability does not add backend citations. Importing the module alone
+does not add the package citation.
 
 Vakint combines distinct methods rather than treating every backend as interchangeable. Cite the
 software version and the method actually selected for the reported result:

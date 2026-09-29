@@ -306,6 +306,7 @@
       "packages.x86_64-linux.crate-test-dependencies-feynkit-ufo"
       "packages.x86_64-linux.crate-test-dependencies-linnet"
       "packages.x86_64-linux.crate-test-dependencies-linnet-py"
+      "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
       "packages.x86_64-linux.crate-test-dependencies-spynso3"
     ];
     "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor" = [
@@ -450,6 +451,7 @@
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-tensor"
       "packages.x86_64-linux.crate-test-dependencies-spenso"
+      "packages.x86_64-linux.crate-test-dependencies-spenso-macros"
     ];
     "packages.x86_64-linux.gammaloop-python-module" = [
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"

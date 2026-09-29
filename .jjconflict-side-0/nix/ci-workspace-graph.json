@@ -95,6 +95,7 @@
       "feynkit-ufo",
       "linnet",
       "linnet-py",
+      "spenso-macros",
       "spynso3"
     ],
     "feynkit-tensor": [
@@ -202,7 +203,8 @@
     ],
     "vakint": [
       "feynkit-tensor",
-      "spenso"
+      "spenso",
+      "spenso-macros"
     ]
   },
   "normal_dependency_features": {
@@ -346,6 +348,7 @@
       "feynkit-ufo": [],
       "linnet": [],
       "linnet-py": [],
+      "spenso-macros": [],
       "spynso3": []
     },
     "feynkit-tensor": {
@@ -523,7 +526,8 @@
     },
     "vakint": {
       "feynkit-tensor": [],
-      "spenso": []
+      "spenso": [],
+      "spenso-macros": []
     }
   },
   "package_dirs": {
@@ -1311,6 +1315,7 @@
       "feynkit-ufo",
       "linnet",
       "linnet-py",
+      "spenso-macros",
       "spynso3"
     ],
     "feynkit-tensor": [
@@ -1420,7 +1425,8 @@
     ],
     "vakint": [
       "feynkit-tensor",
-      "spenso"
+      "spenso",
+      "spenso-macros"
     ]
   },
   "test_dependency_features": {
@@ -1567,6 +1573,7 @@
       "feynkit-ufo": [],
       "linnet": [],
       "linnet-py": [],
+      "spenso-macros": [],
       "spynso3": []
     },
     "feynkit-tensor": {
@@ -1752,7 +1759,8 @@
     },
     "vakint": {
       "feynkit-tensor": [],
-      "spenso": []
+      "spenso": [],
+      "spenso-macros": []
     }
   },
   "workspace_root": "."

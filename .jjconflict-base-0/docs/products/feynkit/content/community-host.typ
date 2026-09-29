@@ -146,4 +146,11 @@ python crates/feynkit-py/tests/installed_import_smoke.py
 It checks imports, representative classes, kinematics, and tensor reduction against the installed
 Symbolica kernel. The repository also tests FeynKit/Spenso interoperability in both import orders,
 but an in-process registration test does not replace this installed-wheel check.
+== Citations
+
+Call `symbolica.get_citations()` after a calculation to collect Symbolica's citation
+and references from the community packages used in that process. Each entry is a
+`Citation`; `entry.to_bibtex()` exports its bibliography record. Importing a package
+alone does not count as use. The collection is cumulative, deduplicates references,
+and does not reset usage. Individual HEP entry points do not expose separate getters.
 ]
