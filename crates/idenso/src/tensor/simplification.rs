@@ -88,6 +88,7 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         settings: &SimplifySettings,
     ) -> Result<Arc<SymbolicTensor<AliasInterfaces, AliasedAtom>>, TensorInferenceError> {
+        self.ensure_validated()?;
         Arc::new(self.clone().with_aliases([])?).simplify(settings)
     }
 
@@ -167,7 +168,7 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                     if settings.metrics && (!observed.complete || observed.symbols[5]) {
                         let expression = domain.expression.normalize_chains();
                         if expression != domain.expression {
-                            domain = domain.with_rewritten_expression(expression)?;
+                            domain = domain.with_identity_result(expression)?;
                             observed = SimplificationCandidates::scan(
                                 domain.expression.as_view(),
                                 *DOMAIN_HEADS,
@@ -232,7 +233,7 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                                             matches!(slots.classify(argument), SlotMatch::Explicit(_))))),
                             |selected, _, _| {
                                 let expression = EpsilonSimplifierPass::step(selected.expression.as_view());
-                                Ok((selected.with_rewritten_expression(expression)?, Vec::new()))
+                                Ok((selected.with_identity_result(expression)?, Vec::new()))
                             },
                         )?;
                         domain = rewritten;
@@ -242,7 +243,7 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                         // Retain the conservative primitive visit without opening
                         // unrelated metric/vector definitions into a selected tape.
                         let expression = EpsilonSimplifierPass::step(domain.expression.as_view());
-                        domain = domain.with_rewritten_expression(expression)?;
+                        domain = domain.with_identity_result(expression)?;
                     }
                     Ok((domain, definitions))
                 })?;
@@ -306,6 +307,57 @@ mod tests {
         atom::{Atom, AtomCore},
         symbol,
     };
+
+    #[test]
+    fn admitted_gamma_traces_do_not_revalidate_generated_results() {
+        use super::super::inference::tests::{INFERENCE_CALLS, SCOPE_VALIDATIONS};
+        use crate::gamma;
+        use spenso::shadowing;
+        use spenso::structure::{
+            dimension::Dimension,
+            representation::{Minkowski, RepName},
+        };
+
+        let reps = crate::test_support::test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        for dimension in [
+            Dimension::Concrete(4),
+            Dimension::from(symbol!("trusted_trace_dimension")),
+        ] {
+            let representation = Minkowski {}.new_rep(dimension);
+            for length in [4, 6, 8] {
+                let indices = (0..length)
+                    .map(|i| representation.to_symbolic([Atom::num(98400 + i)]))
+                    .collect::<Vec<_>>();
+                let source = SymbolicTensor::infer(shadowing::trace(
+                    &spin,
+                    indices.iter().map(|index| gamma!(index)),
+                ))
+                .unwrap();
+                assert_eq!(source.proofs.validated.get(), Some(&true));
+                INFERENCE_CALLS.with(|count| count.set(0));
+                SCOPE_VALIDATIONS.with(|count| count.set(0));
+                let result = source
+                    .simplify_gamma(GammaSimplifySettings::default())
+                    .unwrap();
+                assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+                assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+                assert_eq!(result.root().structure, source.structure);
+                let repeated = result
+                    .simplify_gamma(GammaSimplifySettings::default())
+                    .unwrap();
+                assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+                assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+                assert!(Arc::ptr_eq(&result, &repeated));
+
+                // Independent validation is a test oracle, outside the algebra.
+                let resolved = result.resolved().unwrap();
+                SymbolicTensor::validate_interface(&resolved.expression, &source.structure)
+                    .unwrap();
+                SymbolicTensor::validate_atom(&resolved.expression).unwrap();
+            }
+        }
+    }
 
     #[test]
     fn compact_inner_product_gamma_reduces_both_raw_and_chain_operands() {

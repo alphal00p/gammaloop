@@ -1,0 +1,11 @@
+{
+  "measured_driver_sha256": "c9fa974b6a38a40dbbafd4edf6030b0e7ec600623cb9a916ee49988222f8817d",
+  "reproducer_driver_sha256": "8f538f947e35e9df37bc4e4ad1af611894f0dcc0b24d793736c53c32182b00c3",
+  "change": "rustfmt only; measured original retained beside full raw records",
+  "command": [
+    "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03/bin/rustfmt",
+    "--edition",
+    "2024",
+    "/tmp/feynkit-trusted-algebra-benchmark/reproducer/driver.rs"
+  ]
+}

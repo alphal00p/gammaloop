@@ -14,7 +14,8 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
     /// disconnected definitions are preserved without invoking the operation.
     /// The operation preserves each domain's logical order. Literal observations
     /// refer to existing registry entries; generated definitions are appended
-    /// after those rewrites. All literals are checked before publication.
+    /// after those rewrites. Certified results reuse the admitted associations;
+    /// new literals still pass interface and registry checks before publication.
     pub(crate) fn map_domains(
         self: &Arc<Self>,
         mut map: impl FnMut(
@@ -70,7 +71,8 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
             }
             definitions.insert(pair.0.expression.clone(), pair);
         }
-        root.with_aliases(definitions.into_values()).map(Arc::new)
+        root.attach_aliases(definitions.into_values(), Some(self))
+            .map(Arc::new)
     }
 
     pub(in crate::tensor) fn register_literal_use(
@@ -329,6 +331,176 @@ mod tests {
                         domain.structure.logical_slots().into_iter().rev(),
                     );
                     Ok((domain, Vec::new()))
+                })
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn domain_pass_retains_admission_without_reobserving_bodies() {
+        use crate::tensor::inference::tests::{INFERENCE_CALLS, SCOPE_VALIDATIONS};
+
+        crate::test_support::test_initialize();
+        let body =
+            SymbolicTensor::infer((Atom::var(symbol!("domain_proof_x")) + Atom::one()).pow(7))
+                .unwrap();
+        body.ensure_validated().unwrap();
+        let handle = body.alias_handle().unwrap();
+        let disconnected = scalar(Atom::var(symbol!("domain_proof_unused")));
+        let disconnected_handle = disconnected.alias_handle().unwrap();
+        let value = Arc::new(
+            handle
+                .clone()
+                .with_aliases([
+                    (handle, body),
+                    (disconnected_handle.clone(), disconnected.clone()),
+                ])
+                .unwrap(),
+        );
+        assert_eq!(value.root().proofs.validated.get(), Some(&true));
+        for (handle, body) in value.aliases().unwrap() {
+            assert_eq!(handle.proofs.validated.get(), Some(&true));
+            assert_eq!(body.proofs.validated.get(), Some(&true));
+        }
+        INFERENCE_CALLS.with(|count| count.set(0));
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        let mapped = value
+            .map_domains(|domain, _| {
+                let expression = &domain.expression * Atom::num(2);
+                Ok((domain.with_identity_result(expression)?, Vec::new()))
+            })
+            .unwrap();
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+        assert_eq!(mapped.root().proofs.validated.get(), Some(&true));
+        assert!(
+            mapped
+                .aliases()
+                .unwrap()
+                .contains(&(disconnected_handle, disconnected,))
+        );
+        assert_eq!(
+            mapped.resolved().unwrap().expression,
+            Atom::num(4) * value.resolved().unwrap().expression,
+        );
+    }
+
+    #[test]
+    fn domain_pass_admits_certified_new_scalar_definitions_without_reparsing() {
+        use crate::tensor::inference::tests::{INFERENCE_CALLS, SCOPE_VALIDATIONS};
+
+        crate::test_support::test_initialize();
+        let body =
+            SymbolicTensor::infer((Atom::var(symbol!("domain_generated_x")) + Atom::one()).pow(9))
+                .unwrap();
+        body.ensure_validated().unwrap();
+        let handle = body.alias_handle().unwrap();
+        let value = Arc::new(handle.clone().with_aliases([(handle, body)]).unwrap());
+        INFERENCE_CALLS.with(|count| count.set(0));
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        let mapped = value
+            .map_domains(|domain, _| {
+                let handle = domain.alias_handle()?;
+                Ok((handle.clone(), vec![(handle, domain)]))
+            })
+            .unwrap();
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+        assert_eq!(mapped.aliases().unwrap().len(), 3);
+        assert_eq!(mapped.resolved().unwrap(), value.resolved().unwrap());
+    }
+
+    #[test]
+    fn domain_pass_preserves_unresolved_layout_when_a_body_becomes_zero() {
+        crate::test_support::test_initialize();
+        let ports = [spenso::mink!(4), spenso::euc!(6)];
+        // AUTO ports are positional: reverse the written tensor arguments too,
+        // then derive a handle with that same valid logical layout.
+        let body = SymbolicTensor::infer(
+            FunctionBuilder::new(spenso::tensor_symbol!("domain_zero_tensor"))
+                .add_args(ports.iter().rev())
+                .finish(),
+        )
+        .unwrap();
+        body.ensure_validated().unwrap();
+        let handle = body.alias_handle().unwrap();
+        assert_eq!(handle.structure, body.structure);
+        assert_eq!(body.structure.open_positions(), vec![0, 1]);
+        let value = Arc::new(
+            handle
+                .clone()
+                .with_aliases([(handle, body.clone())])
+                .unwrap(),
+        );
+        let mapped = value
+            .map_domains(|domain, _| {
+                if domain.expression == body.expression {
+                    Ok((domain.with_identity_result(Atom::Zero)?, Vec::new()))
+                } else {
+                    Ok((domain, Vec::new()))
+                }
+            })
+            .unwrap();
+        assert_eq!(mapped.root(), value.root());
+        let aliases = mapped.aliases().unwrap();
+        assert!(aliases[0].1.expression.is_zero());
+        assert_eq!(aliases[0].1.structure, body.structure);
+        assert_eq!(aliases[0].1.proofs.validated.get(), Some(&true));
+        let resolved = mapped.resolved().unwrap();
+        assert!(resolved.expression.is_zero());
+        assert_eq!(resolved.structure, value.root().structure);
+    }
+
+    #[test]
+    fn domain_pass_checks_uncertified_changes_and_callback_rank_loss() {
+        use crate::shorthands::schoonschip::Schoonschip;
+
+        crate::test_support::test_initialize();
+        let a = spenso::mink!(4, 99701);
+        let b = spenso::mink!(4, 99703);
+        let target = b.clone();
+        let head = spenso::tensor_symbol!(
+            "domain_callback_tensor",
+            norm = move |node, output| {
+                if let AtomView::Fun(function) = node
+                    && function.iter().any(|argument| argument == target.as_view())
+                {
+                    **output = Atom::one();
+                }
+            }
+        );
+        let leaf = FunctionBuilder::new(head).add_arg(&a).finish();
+        let body = SymbolicTensor::infer(spenso::g!(&a, &b) * leaf).unwrap();
+        let handle = body.alias_handle().unwrap();
+        let value = Arc::new(
+            handle
+                .clone()
+                .with_aliases([(handle, body.clone())])
+                .unwrap(),
+        );
+        assert!(
+            value
+                .map_domains(|domain, _| {
+                    if domain.expression == body.expression {
+                        let expression = domain.expression.schoonschip();
+                        Ok((domain.with_identity_result(expression)?, Vec::new()))
+                    } else {
+                        Ok((domain, Vec::new()))
+                    }
+                })
+                .is_err()
+        );
+        assert!(
+            value
+                .map_domains(|domain, _| {
+                    if domain.expression == body.expression {
+                        Ok((
+                            SymbolicTensor::from_normalized_parts(Atom::one(), domain.structure),
+                            Vec::new(),
+                        ))
+                    } else {
+                        Ok((domain, Vec::new()))
+                    }
                 })
                 .is_err()
         );

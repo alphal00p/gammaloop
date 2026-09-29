@@ -94,9 +94,9 @@ impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
             state: SymbolicTensor::reserved_dummies(
                 std::iter::once(source).chain(definitions.iter().flat_map(|(a, b)| [a, b])),
             ),
-            definitions_intrinsic: definitions.iter().all(|(_, body)| {
-                InterfaceInference::normalization_is_intrinsic(body.expression.as_atom_view())
-            }),
+            definitions_intrinsic: definitions
+                .iter()
+                .all(|(_, body)| body.normalization_is_intrinsic()),
             select,
             values: Vec::new(),
             positions: HashMap::new(),
@@ -331,7 +331,7 @@ impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
                 slot.rep().slot(index)
             }),
         );
-        let body = SymbolicTensor::from_normalized_parts(self.emit(network, tree, node)?, logical);
+        let body = SymbolicTensor::from_validated_parts(self.emit(network, tree, node)?, logical);
         if !self.definitions_intrinsic
             || !InterfaceInference::normalization_is_intrinsic(body.expression.as_atom_view())
         {
@@ -355,6 +355,8 @@ impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
         let literal =
             super::composition::rewrite_interface_ports(&handle, &replacements, &mut |_, _| {})
                 .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
+        // This is graph scratch: encoded occurrence owners are not its public
+        // AUTO interface. The collection product publishes the declared layout.
         let current = SymbolicTensor::from_normalized_parts(literal, interface.clone());
         let definition = (handle, body);
         let mut subset: SuBitGraph = network.graph.graph.empty_subgraph();
@@ -698,6 +700,7 @@ impl SymbolicTensor<PartialStructure> {
         mut select: impl FnMut(AtomView<'_>) -> bool,
         mut step: impl FnMut(Self, &[Definition], bool) -> Result<(Self, Vec<Definition>)>,
     ) -> Result<(Self, Vec<Definition>)> {
+        self.ensure_validated()?;
         let mut input = CollectionInput::new(self, definitions, &mut select);
         let network = input.parse(self.expression.as_atom_view())?;
         let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
@@ -705,7 +708,7 @@ impl SymbolicTensor<PartialStructure> {
         let (owned, interfaces) = input.analyze(&network, &tree, root, 0)?;
         if !owned[&root] {
             if let Some(visit) = coefficients.as_mut() {
-                let one = Self::from_normalized_parts(
+                let one = Self::from_validated_parts(
                     Atom::one(),
                     PartialStructure::from_logical_slots([]),
                 );
@@ -778,7 +781,7 @@ impl SymbolicTensor<PartialStructure> {
         }
         let values = &input.values;
         let scalar = PartialStructure::from_logical_slots([]);
-        let one = Self::from_normalized_parts(Atom::one(), scalar);
+        let one = Self::from_validated_parts(Atom::one(), scalar);
         let mut states = vec![(one.clone(), one)];
         let mut additional = input
             .registry
@@ -891,13 +894,15 @@ impl SymbolicTensor<PartialStructure> {
                             value.structure.clone()
                         };
                         let expression = value.expression.pow(power);
-                        if !InterfaceInference::normalization_is_intrinsic(
-                            value.expression.as_atom_view(),
-                        ) {
+                        let intrinsic = value.normalization_is_intrinsic();
+                        if !intrinsic {
                             Self::validate_interface(&expression, &interface)?;
                             Self::validate_atom(&expression)?;
                         }
                         let value = Self::from_normalized_parts(expression, interface);
+                        if intrinsic {
+                            let _ = value.proofs.intrinsic.set(true);
+                        }
                         if *owned {
                             selected_factors.push(value);
                         } else {
@@ -907,10 +912,16 @@ impl SymbolicTensor<PartialStructure> {
                     let monomial = Self::collection_product(&selected_factors)?;
                     let (mapped, emitted) =
                         step(monomial.clone(), &available, level + 1 == factors.len())?;
-                    // The callback owns a domain identity, but its returned carrier
-                    // may carry stale metadata. Check its payload against the trusted
-                    // input, including encoded AUTO order, before retaining any result.
-                    let mut mapped = if monomial.structure.open_positions().is_empty() {
+                    // Internal domain owners publish certified typed results. Only
+                    // unchecked callbacks need to have their payload observed again.
+                    if mapped.structure != monomial.structure {
+                        return Err(TensorInferenceError::invalid(
+                            "selected domain changes its established logical interface",
+                        ));
+                    }
+                    let mut mapped = if mapped.proofs.validated.get() == Some(&true) {
+                        mapped
+                    } else if monomial.structure.open_positions().is_empty() {
                         monomial.with_checked_expression(mapped.expression)?
                     } else {
                         monomial.with_rewritten_expression(mapped.expression)?
@@ -927,8 +938,9 @@ impl SymbolicTensor<PartialStructure> {
                         mapped = handle;
                     }
                     let coefficient = Self::collection_product(&coefficient_factors)?;
-                    let coefficient = coefficient
-                        .with_algebra_result(Atom::num(number.clone()) * &coefficient.expression)?;
+                    let coefficient = coefficient.with_identity_result(
+                        Atom::num(number.clone()) * &coefficient.expression,
+                    )?;
                     let key = (mapped.expression.clone(), mapped.structure.logical_slots());
                     if let Some(&position) = keys.get(&key) {
                         let (_, coefficients): &mut (Self, Vec<Self>) = &mut next[position];
@@ -953,7 +965,7 @@ impl SymbolicTensor<PartialStructure> {
                             "collected coefficients have different interfaces",
                         ));
                     }
-                    let body = first.with_algebra_result(Atom::add_many(
+                    let body = first.with_identity_result(Atom::add_many(
                         coefficients.iter().map(|value| &value.expression),
                     ))?;
                     if coefficients.len() == 1
@@ -1002,14 +1014,19 @@ impl SymbolicTensor<PartialStructure> {
                     _ => unreachable!("stored symbolic leaves checked at admission"),
                 })
                 .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
-            let body = Self::from_normalized_parts(expression, interfaces[&node].clone());
+            // Convert the graph's occurrence-local ports before publishing a
+            // remaining factor as a public typed alias definition.
+            let body = Self::collection_product(&[Self::from_normalized_parts(
+                expression,
+                interfaces[&node].clone(),
+            )])?;
             let handle = body.alias_handle()?;
             output.push(handle.expression.clone());
             register((handle, body), &mut available, &mut additional)?;
         }
         output.extend(spectators.into_iter().map(|value| value.expression));
         let expression = Atom::mul_many(output);
-        let root = self.with_rewritten_expression(expression)?;
+        let root = self.with_identity_result(expression)?;
         Ok((root, additional))
     }
 
@@ -1034,15 +1051,17 @@ impl SymbolicTensor<PartialStructure> {
                 slot.rep().slot(index)
             }),
         );
-        let intrinsic = values.iter().all(|value| {
-            InterfaceInference::normalization_is_intrinsic(value.expression.as_atom_view())
-        });
+        let intrinsic = values.iter().all(Self::normalization_is_intrinsic);
         let expression = Atom::mul_many(values.iter().map(|value| &value.expression));
         if !intrinsic {
             Self::validate_interface(&expression, &interface)?;
             Self::validate_atom(&expression)?;
         }
-        Ok(Self::from_normalized_parts(expression, interface))
+        let value = Self::from_validated_parts(expression, interface);
+        if intrinsic {
+            let _ = value.proofs.intrinsic.set(true);
+        }
+        Ok(value)
     }
 }
 
@@ -1658,6 +1677,53 @@ mod tests {
                 .unwrap(),
             ConditionResult::Inconclusive,
         );
+    }
+
+    #[test]
+    fn encoded_auto_scratch_is_converted_before_certified_alias_publication() {
+        crate::test_support::test_initialize();
+        let source = SymbolicTensor::<PartialStructure>::from_signature(
+            &crate::dirac::AGS.gamma_strct::<AbstractIndex>(4),
+        )
+        .unwrap()
+        .reindex_interface_ports(&HashMap::from([(2, AbstractIndex::Normal(99513))]))
+        .unwrap();
+        let mut input = CollectionInput::new(&source, &[], |_| true);
+        let network = input.parse(source.expression.as_atom_view()).unwrap();
+        let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = network.graph.graph.node_id(network.graph.head());
+        let mut tape = TermTape::<usize>::default();
+        assert!(
+            input
+                .compile(&mut tape, &network, &tree, root, false, 0)
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(input.values.len(), 1);
+        let scratch = &input.values[0].0;
+        assert_eq!(scratch.expression, source.expression);
+        assert!(scratch.structure.logical_slots().iter().any(|slot| {
+            matches!(
+                slot.aind,
+                PartialIndex::Explicit(AbstractIndex::Open { .. })
+            )
+        }));
+        assert_ne!(scratch.proofs.validated.get(), Some(&true));
+        // Encoded graph incidences are not the public logical AUTO interface.
+        assert!(
+            SymbolicTensor::validate_interface(&scratch.expression, &scratch.structure).is_err()
+        );
+
+        // This is also the publication boundary for an unprocessed tape factor.
+        let body = SymbolicTensor::collection_product(std::slice::from_ref(scratch)).unwrap();
+        assert_eq!(body.expression, source.expression);
+        assert_eq!(body.structure, source.structure);
+        assert_eq!(body.structure.open_positions(), vec![0, 1]);
+        assert_eq!(body.proofs.validated.get(), Some(&true));
+        SymbolicTensor::validate_interface(&body.expression, &body.structure).unwrap();
+        let handle = body.alias_handle().unwrap();
+        let aliased = handle.clone().with_aliases([(handle, body)]).unwrap();
+        assert_eq!(aliased.resolved().unwrap(), source);
     }
 
     #[test]

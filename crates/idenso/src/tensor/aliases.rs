@@ -22,8 +22,8 @@ use symbolica::{
 };
 
 use super::{
-    SymbolicTensor,
-    inference::{InterfaceInference, TensorInferenceError},
+    SymbolicTensor, TensorProofs,
+    inference::{InterfaceInference, LeafInference, TensorInferenceError},
 };
 
 mod components;
@@ -50,6 +50,8 @@ pub(crate) type Definition = (
 pub struct AliasInterfaces {
     root: PartialStructure,
     definitions: HashMap<Atom, (PartialStructure, PartialStructure)>,
+    // Facts travel with the exact stored handle/body, not just their layouts.
+    definition_proofs: HashMap<Atom, (TensorProofs, TensorProofs)>,
 }
 
 impl AliasInterfaces {
@@ -66,8 +68,11 @@ impl SymbolicTensor<PartialStructure> {
     /// Create an opaque handle with this tensor's physical ports and logical order.
     /// Each use with different labels needs its own literal alias definition.
     pub fn alias_handle(&self) -> Result<Self> {
+        let certified = self.proofs.validated.get() == Some(&true);
         let owner = AbstractIndex::fresh_open_owner();
-        let interface = if self.expression.is_zero() {
+        let interface = if self.expression.is_zero()
+            || (certified && self.structure.open_positions().is_empty())
+        {
             self.structure.clone()
         } else {
             InterfaceInference::replacement_interface(self.expression.as_view())?
@@ -85,10 +90,11 @@ impl SymbolicTensor<PartialStructure> {
             .add_arg(Atom::num(owner))
             .add_args(slots)
             .finish();
-        Ok(Self::from_normalized_parts(
-            expression,
-            self.structure.clone(),
-        ))
+        Ok(if certified {
+            Self::from_validated_parts(expression, self.structure.clone())
+        } else {
+            Self::from_normalized_parts(expression, self.structure.clone())
+        })
     }
 
     /// Attach checked literal definitions without resolving or expanding them.
@@ -96,8 +102,19 @@ impl SymbolicTensor<PartialStructure> {
         self,
         definitions: impl IntoIterator<Item = (Self, Self)>,
     ) -> Result<SymbolicTensor<AliasInterfaces, AliasedAtom>> {
+        self.attach_aliases(definitions, None)
+    }
+
+    /// Reuse admitted literal associations after a typed domain operation.
+    /// New or unchecked definitions still enter through ordinary admission.
+    fn attach_aliases(
+        self,
+        definitions: impl IntoIterator<Item = (Self, Self)>,
+        admitted: Option<&SymbolicTensor<AliasInterfaces, AliasedAtom>>,
+    ) -> Result<SymbolicTensor<AliasInterfaces, AliasedAtom>> {
         let mut expression = AliasedAtom::from(self.expression);
         let mut interfaces = HashMap::new();
+        let mut definition_proofs = HashMap::new();
         for (handle, body) in definitions {
             let valid_handle = match handle.expression.as_view() {
                 AtomView::Var(variable) => {
@@ -122,9 +139,51 @@ impl SymbolicTensor<PartialStructure> {
                     "alias handle and body have different logical interfaces",
                 ));
             }
-            let encoded = InterfaceInference::replacement_interface(handle.expression.as_view())?;
-            Self::validate_encoded_interface(&body.expression, &encoded)?;
-            Self::validate_atom(&body.expression)?;
+            let retained = admitted.is_some_and(|registry| {
+                registry
+                    .structure
+                    .definitions
+                    .get(&handle.expression)
+                    .is_some_and(|(old_handle, old_body)| {
+                        old_handle == &handle.structure
+                            && old_body == &body.structure
+                            && body.proofs.validated.get() == Some(&true)
+                    })
+            });
+            if !retained {
+                // The handle is a small literal. A certified explicit body
+                // already carries its complete physical boundary; unresolved
+                // ports still need the encoded owner/axis association check.
+                let encoded = if handle.proofs.validated.get() == Some(&true)
+                    && handle.structure.open_positions().is_empty()
+                {
+                    handle.structure.clone()
+                } else {
+                    InterfaceInference::replacement_interface(handle.expression.as_view())?
+                };
+                if body.proofs.validated.get() == Some(&true)
+                    && body.structure.open_positions().is_empty()
+                {
+                    if !body.expression.is_zero()
+                        && !InterfaceInference::additive_interfaces_match(&encoded, &body.structure)
+                    {
+                        return Err(TensorInferenceError::invalid(
+                            "alias handle and body have different physical interfaces",
+                        ));
+                    }
+                } else {
+                    let (_, occurrences) = Self::validate_observed_interface(
+                        &body.expression,
+                        &encoded,
+                        LeafInference::ObserveEncoded,
+                    )?;
+                    if let Some(occurrences) = occurrences {
+                        occurrences.validate()?;
+                    }
+                    let _ = body.proofs.validated.set(true);
+                }
+            }
+            handle.ensure_validated()?;
             if let Some(previous) = expression.get_aliases().get(&handle.expression) {
                 if previous != &body.expression
                     || interfaces.get(&handle.expression)
@@ -136,18 +195,24 @@ impl SymbolicTensor<PartialStructure> {
                 }
                 continue;
             }
+            definition_proofs.insert(handle.expression.clone(), (handle.proofs, body.proofs));
             interfaces.insert(
                 handle.expression.clone(),
                 (handle.structure, body.structure),
             );
             expression.register_alias(handle.expression, body.expression);
         }
+        // Interface/algebra facts describe the unresolved root. Contraction
+        // completion instead describes the whole DAG and must be re-established.
+        let mut proofs = self.proofs;
+        proofs.contracted = false;
         let value = SymbolicTensor {
-            proofs: Default::default(),
+            proofs,
             expression,
             structure: AliasInterfaces {
                 root: self.structure,
                 definitions: interfaces,
+                definition_proofs,
             },
             is_metric: self.is_metric,
             is_composite: self.is_composite,
@@ -177,8 +242,10 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
 
     /// The unresolved root, with its established public port order.
     pub fn root(&self) -> SymbolicTensor<PartialStructure> {
+        let mut proofs = self.proofs.clone();
+        proofs.contracted = false;
         SymbolicTensor {
-            proofs: Default::default(),
+            proofs,
             expression: self.expression.get_root().clone(),
             structure: self.structure.root.clone(),
             is_metric: self.is_metric,
@@ -202,13 +269,16 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                     self.structure.definitions.get(handle).ok_or_else(|| {
                         TensorInferenceError::invalid("alias registry has no logical interface")
                     })?;
-                Ok((
-                    SymbolicTensor::from_normalized_parts(handle.clone(), interface.clone()),
-                    SymbolicTensor::from_normalized_parts(
-                        self.expression.get_aliases()[handle].clone(),
-                        body_interface.clone(),
-                    ),
-                ))
+                let (handle_proofs, body_proofs) = &self.structure.definition_proofs[handle];
+                let mut typed_handle =
+                    SymbolicTensor::from_normalized_parts(handle.clone(), interface.clone());
+                typed_handle.proofs = handle_proofs.clone();
+                let mut body = SymbolicTensor::from_normalized_parts(
+                    self.expression.get_aliases()[handle].clone(),
+                    body_interface.clone(),
+                );
+                body.proofs = body_proofs.clone();
+                Ok((typed_handle, body))
             })
             .collect()
     }
@@ -282,9 +352,11 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
     fn dependency_order(&self) -> Result<Vec<&Atom>> {
         let definitions = self.expression.get_aliases();
         if definitions.len() != self.structure.definitions.len()
-            || definitions
-                .keys()
-                .any(|key| !self.structure.definitions.contains_key(key))
+            || definitions.len() != self.structure.definition_proofs.len()
+            || definitions.keys().any(|key| {
+                !self.structure.definitions.contains_key(key)
+                    || !self.structure.definition_proofs.contains_key(key)
+            })
         {
             return Err(TensorInferenceError::invalid(
                 "alias registry and interfaces disagree",

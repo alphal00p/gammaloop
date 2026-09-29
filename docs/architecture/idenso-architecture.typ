@@ -322,6 +322,28 @@ queries report `IndexToolingError`. A raw-expression escape hatch does not
 retain a separately declared logical layout automatically. Callers restoring
 that layout must supply the original structure.
 
+Admission records validation for the exact payload and logical interface.
+Gamma identities preserve this certificate instead of inferring and validating
+their generated results again. Generated homogeneous trace sums read the
+interface of one representative term through Spenso's existing syntactic
+structure reader. This relies on the trace recipe's algebraic invariant;
+arbitrary user rewrites cannot claim it. Callback-sensitive results retain
+their checked boundary, and unresolved positional ports retain their identity
+checks.
+
+Alias roots and definitions carry the same certificates through domain passes.
+An unchanged registered association is not readmitted merely because another
+domain changed. New definitions still check their literal association, and the
+registry still rejects missing definitions, conflicts and cycles. Validation
+does not imply contraction completion or absence of user normalizers: those
+are separate facts, and mutable payload or interface access invalidates them.
+Graph scratch interfaces containing encoded open-port identities are converted
+to public logical ports before acquiring a validation certificate.
+
+The #link("../../examples/reproducers/trusted-gamma-algebra/report.typ")[gamma
+and alias-domain measurement] records the before/after public-call timings and
+the exact-output qualification protocol.
+
 Domain simplifiers usually leave unmatched syntax unchanged rather than diagnosing it as an
 error. A successful return therefore means the configured rewrite reached its fixed point, not
 that every physics object was recognized or eliminated. Verification should inspect residual

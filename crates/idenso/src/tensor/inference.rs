@@ -68,6 +68,61 @@ mod observation;
 pub(super) use observation::ObservationScope;
 
 impl SymbolicTensor<PartialStructure> {
+    /// Admit an unchecked carrier once at an algebra boundary. Derived tensors
+    /// retain this fact; it is invalidated with mutable payload/interface access.
+    pub(crate) fn ensure_validated(&self) -> InferenceResult<()> {
+        if self.proofs.validated.get() == Some(&true) {
+            return Ok(());
+        }
+        let (_, occurrences) = Self::validate_observed_interface(
+            &self.expression,
+            &self.structure,
+            LeafInference::Observe,
+        )?;
+        let occurrences = match occurrences {
+            Some(occurrences) => occurrences,
+            None => InterfaceInference::scoped_occurrences(
+                self.expression.as_view(),
+                &mut SlotMatcher::default(),
+            )?,
+        };
+        occurrences.validate()?;
+        let _ = self.proofs.validated.set(true);
+        Ok(())
+    }
+
+    /// Construct parts whose algebra owner has established their interface.
+    /// This performs no inference, validation, or normalization. Callers must
+    /// account for callbacks before publishing a derived tensor through it.
+    pub(crate) fn from_validated_parts(expression: Atom, structure: PartialStructure) -> Self {
+        let value = Self::from_normalized_parts(expression, structure);
+        let _ = value.proofs.validated.set(true);
+        value
+    }
+
+    pub(crate) fn normalization_is_intrinsic(&self) -> bool {
+        *self.proofs.intrinsic.get_or_init(|| {
+            !self.expression.as_view().needs_normalization()
+                && InterfaceInference::normalization_is_intrinsic(self.expression.as_view())
+        })
+    }
+
+    /// Publish an identity implemented by our algebra, preserving its proven
+    /// logical interface. User callbacks remain a checked result boundary.
+    pub(crate) fn with_identity_result(&self, expression: Atom) -> InferenceResult<Self> {
+        self.ensure_validated()?;
+        if expression == self.expression {
+            return Ok(self.clone());
+        }
+        if expression.is_zero() || self.normalization_is_intrinsic() {
+            return Ok(Self::from_validated_parts(
+                expression,
+                self.structure.clone(),
+            ));
+        }
+        self.with_rewritten_expression(expression)
+    }
+
     /// Cached facts belong to this exact payload/interface pair. Unchecked
     /// storage construction starts with no facts; mutable trait access clears them.
     pub(super) fn established_interface_is_valid(&self) -> bool {
@@ -196,7 +251,7 @@ impl SymbolicTensor<PartialStructure> {
     fn infer_with_contractions(atom: Atom) -> InferenceResult<(Self, bool)> {
         let atom = InterfaceInference::lower_tensor_powers(atom.as_view())?.unwrap_or(atom);
         let mut inference = InterfaceInference::default();
-        let (structure, occurrences) = inference.infer_observed(atom.as_view())?;
+        let (structure, _) = inference.infer_observed(atom.as_view())?;
         let raw_rank = structure.canonical().order();
         let structure = InterfaceInference::merge_explicit_interface_sequence(&[structure])?
             .canonicalize_open_ports();
@@ -206,24 +261,24 @@ impl SymbolicTensor<PartialStructure> {
             normalized => (normalized.into_owned(), false),
         };
         let value = Self::from_normalized_parts(atom, structure);
-        // Materialization-sensitive inference alone is not a syntax proof.
-        // Retain its result only when the existing intrinsic leaf proof also
-        // certifies the unchanged payload, including opaque scalar metadata.
+        // Admission already checked signatures, placeholder scopes and index
+        // multiplicities. With intrinsic normalization its inferred interface
+        // belongs to this unchanged payload, including chains and traces.
+        // Callback-sensitive materialization can observe a different interface
+        // and therefore cannot supply this certificate.
         if unchanged
-            && value.structure.open_positions().is_empty()
             && !value.expression.as_view().needs_normalization()
-            && inference.rewrites_preserve_leaf_interfaces(value.expression.as_view())
-            && occurrences.validate().is_ok()
-            && InterfaceInference::merge_explicit_interface_sequence(std::slice::from_ref(
-                &value.structure,
-            ))
-            .is_ok_and(|physical| {
-                InterfaceInference::additive_interfaces_match(&value.structure, &physical)
-            })
+            && inference.normalization_is_intrinsic_cached(value.expression.as_view())
         {
             let _ = value.proofs.validated.set(true);
-            let _ = value.proofs.rewrite.set(true);
-            let _ = value.proofs.algebra.set(true);
+            let _ = value.proofs.intrinsic.set(true);
+            if value.structure.open_positions().is_empty()
+                && inference
+                    .algebra_preserves_leaf_interfaces_impl(value.expression.as_view(), true)
+            {
+                let _ = value.proofs.rewrite.set(true);
+                let _ = value.proofs.algebra.set(true);
+            }
         }
         Ok((value, contracted))
     }
@@ -451,7 +506,7 @@ impl SymbolicTensor<PartialStructure> {
             });
         }
         if expression.as_view().is_zero() || self.algebra_preserves_interface() {
-            return Ok(Self::from_normalized_parts(
+            return Ok(Self::from_validated_parts(
                 expression,
                 self.structure.clone(),
             ));
@@ -489,7 +544,7 @@ impl SymbolicTensor<PartialStructure> {
                             ))
                 })
         {
-            return Ok(Self::from_normalized_parts(
+            return Ok(Self::from_validated_parts(
                 expression,
                 self.structure.clone(),
             ));
@@ -2613,7 +2668,7 @@ impl InterfaceInference {
 }
 
 #[cfg(test)]
-pub(super) mod tests {
+pub(crate) mod tests {
     mod auto_axis;
     mod builtin_words;
     use super::*;
@@ -2623,9 +2678,26 @@ pub(super) mod tests {
     thread_local! {
         pub(in crate::tensor) static OCCURRENCE_FUNCTION_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
         pub(super) static INTRINSIC_HEAD_CHECKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-        pub(super) static INFERENCE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+        pub(crate) static INFERENCE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
         pub(super) static LEAF_PROOF_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-        pub(in crate::tensor) static SCOPE_VALIDATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+        pub(crate) static SCOPE_VALIDATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
+    #[test]
+    fn certified_identity_does_not_certify_new_callback_heads() {
+        crate::test_support::test_initialize();
+        let source = SymbolicTensor::infer(Atom::one()).unwrap();
+        let callback = symbolica::symbol!("trusted_identity_new_callback"; Scalar;
+            norm = |_value, _out| {});
+        let result = source
+            .with_identity_result(FunctionBuilder::new(callback).add_arg(7).finish())
+            .unwrap();
+        assert_eq!(result.proofs.validated.get(), Some(&true));
+        assert!(!result.normalization_is_intrinsic());
+        let tensor = FunctionBuilder::new(spenso::tensor_symbol!("trusted_identity_added_port"))
+            .add_arg(spenso::mink!(4, 98491))
+            .finish();
+        assert!(result.with_identity_result(tensor).is_err());
     }
 
     #[test]
