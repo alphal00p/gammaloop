@@ -5,6 +5,7 @@ use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
     rank1_, self_dual_,
     structure::{
+        abstract_index::AbstractIndex,
         representation::RepName,
         slot::{IsAbstractSlot, SlotMatch, SlotMatcher},
     },
@@ -190,6 +191,9 @@ impl DotNormalizer {
         // vectors have one final argument carrying their tensor structure;
         // preceding scalar parameters and slot payloads remain opaque.
         match atom {
+            AtomView::Fun(function) if function.get_symbol() == T.dot => self
+                .normalize_weighted_dot(function)
+                .map_or(DotRewrite::Descend, DotRewrite::Rewritten),
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
                 self.normalize_power(base, exponent)
@@ -206,6 +210,41 @@ impl DotNormalizer {
             }
             _ => DotRewrite::Descend,
         }
+    }
+
+    fn normalize_weighted_dot(&mut self, function: FunView<'_>) -> Option<Atom> {
+        if !function
+            .iter()
+            .any(|argument| matches!(argument, AtomView::Mul(_)))
+        {
+            return None;
+        }
+        // Reuse the materializer's compatibility and scalar-interface proofs.
+        // This only moves coefficients out of an already explicit inner product;
+        // it neither pairs indices nor distributes sums inside either operand.
+        let (left, right, _, _) = self
+            .slots
+            .compact_inner_product_parts::<AbstractIndex>(function)?;
+        let mut scalar_factors = Vec::new();
+        let mut operands = Vec::with_capacity(2);
+        for argument in [left, right] {
+            if let AtomView::Mul(product) = argument {
+                let (position, _) = self
+                    .slots
+                    .compact_vector_sequence::<AbstractIndex>(product.iter().enumerate(), false)?;
+                for (index, factor) in product.iter().enumerate() {
+                    if index == position {
+                        operands.push(self.apply(factor));
+                    } else {
+                        scalar_factors.push(self.apply(factor));
+                    }
+                }
+            } else {
+                operands.push(self.apply(argument));
+            }
+        }
+        scalar_factors.push(FunctionBuilder::new(T.dot).add_args(operands).finish());
+        Some(Atom::mul_many(scalar_factors))
     }
 
     fn normalize_nested_vector(&mut self, function: FunView<'_>) -> Option<Atom> {
@@ -315,6 +354,40 @@ mod tests {
     use spenso::{dualizable_dual_, rep_, structure::abstract_index::AIND_SYMBOLS};
     use symbolica::{function, symbol};
     use symbolica_utils::PatternReplacement;
+
+    #[test]
+    fn weighted_dot_notation_extracts_only_scalar_coefficients() {
+        crate::test_support::test_initialize();
+        let p = T.rank_one_tensor_symbol("weighted_dot_p");
+        let q = T.rank_one_tensor_symbol("weighted_dot_q");
+        let p = function!(p, spenso::mink!(4));
+        let q = function!(q, spenso::mink!(4));
+        let scalar = (Atom::var(symbol!("weighted_dot_x")) + Atom::one()).pow(20);
+        let inner = dot!(&p, &q);
+        let input = dot!(&scalar * &inner * &p, Atom::num(3) * &q);
+        let expected = Atom::num(3) * &scalar * inner.pow(2);
+        assert_eq!(DotNormalizer::notation(input.as_view()), expected);
+        assert_eq!(DotNormalizer::notation(expected.as_view()), expected);
+
+        // An explicit tensor factor is not a scalar coefficient, and notation
+        // conversion must not contract it against a repeated index elsewhere.
+        let indexed = function!(
+            T.rank_one_tensor_symbol("weighted_dot_r"),
+            spenso::mink!(4, 1)
+        );
+        let other = function!(
+            T.rank_one_tensor_symbol("weighted_dot_s"),
+            spenso::mink!(4, 1)
+        );
+        let coefficient = &indexed * &other;
+        let input = dot!(&coefficient * &p, &q);
+        assert_eq!(
+            DotNormalizer::notation(input.as_view()),
+            &coefficient * dot!(&p, &q)
+        );
+        let input = dot!(&indexed * &p, &q) * &indexed;
+        assert_eq!(DotNormalizer::notation(input.as_view()), input);
+    }
 
     #[test]
     fn first_dot_rewrite_is_constructed_once_per_occurrence() {

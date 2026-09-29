@@ -33,12 +33,12 @@ use crate::error;
 ///
 /// >>> from symbolica import S, E
 /// >>> from symbolica.community import hep
-/// >>> from symbolica.community.tensor import TensorName
+/// >>> from symbolica.community.tensor import TensorName, Representation, PortPattern, TensorPattern
 /// >>> D, mu, nu = S("D", "mu", "nu")
-/// >>> k, p = (TensorName.vector(name).to_expression() for name in ("k", "p"))
-/// >>> mink = S("spenso::mink")
-/// >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
-/// >>> numerator = k(mink(D, mu)) * k(mink(D, nu))
+/// >>> k, p = (TensorName.vector("hep_reducer_docs::" + name).to_expression() for name in ("k", "p"))
+/// >>> lorentz = Representation.mink(D)
+/// >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(PortPattern.exact(lorentz)))
+/// >>> numerator = k(PortPattern.exact(lorentz, mu)) * k(PortPattern.exact(lorentz, nu))
 /// >>> projected = reducer.reduce(numerator)
 ///
 /// Parameters
@@ -104,7 +104,7 @@ impl PyTensorReducer {
     /// >>> model = hep.Model.phi4()
     /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
     /// >>> reducer = hep.TensorReducer(E("4")).with_integrated_head("gammalooprs::Q")
-    /// >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression())
+    /// >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression().to_expression())
     ///
     /// Parameters
     /// ----------
@@ -154,15 +154,15 @@ impl PyTensorReducer {
     /// Select one exact compact Spenso vector.
     ///
     /// A compact vector has a representation but no explicit index, for
-    /// example ``K(1, spenso::mink(D))``. This distinguishes different loop
+    /// example ``K(1, PortPattern.exact(lorentz))``. This distinguishes different loop
     /// momenta that share one tensor head.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``TensorReducer`` class example:
     ///
-    /// >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
-    /// >>> projected = reducer.reduce(k(mink(D, mu)) * k(mink(D, nu)))
+    /// >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(PortPattern.exact(lorentz)))
+    /// >>> projected = reducer.reduce(k(PortPattern.exact(lorentz, mu)) * k(PortPattern.exact(lorentz, nu)))
     ///
     /// Parameters
     /// ----------
@@ -188,14 +188,14 @@ impl PyTensorReducer {
     /// --------
     /// Using the setup in the ``TensorReducer`` class example:
     ///
-    /// >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
-    /// >>> reducer = reducer.with_external_vector(p(mink(D)))
-    /// >>> reduced = reducer.reduce(k(mink(D, mu)))
+    /// >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(PortPattern.exact(lorentz)))
+    /// >>> reducer = reducer.with_external_vector(p(PortPattern.exact(lorentz)))
+    /// >>> reduced = reducer.reduce(k(PortPattern.exact(lorentz, mu)))
     ///
     /// Parameters
     /// ----------
     /// vector : Expression
-    ///     Compact Spenso vector, for example ``p(spenso::mink(D))``.
+    ///     Compact Spenso vector, for example ``p(PortPattern.exact(lorentz))``.
     fn with_external_vector(&self, vector: &PythonExpression) -> Self {
         Self {
             inner: self.inner.clone().with_external_vector(vector.expr.clone()),
@@ -280,14 +280,14 @@ impl PyTensorReducer {
     /// >>> from symbolica import S
     /// >>> from symbolica.community import hep
     /// >>> D, mu, nu = S("hep_docs::D", "hep_docs::mu", "hep_docs::nu")
-    /// >>> from symbolica.community.tensor import TensorName
-    /// >>> k, p = (TensorName.vector("hep_docs::" + name).to_expression() for name in ("k", "p"))
-    /// >>> mink, dot = S("spenso::mink", "spenso::dot")
-    /// >>> k_compact = k(mink(D))
-    /// >>> p_compact = p(mink(D))
+    /// >>> from symbolica.community.tensor import TensorName, Representation, PortPattern, TensorPattern
+    /// >>> k, p = (TensorName.vector("hep_reducer_docs::" + name).to_expression() for name in ("k", "p"))
+    /// >>> lorentz, dot = Representation.mink(D), TensorPattern.dot
+    /// >>> k_compact = k(PortPattern.exact(lorentz))
+    /// >>> p_compact = p(PortPattern.exact(lorentz))
     /// >>> numerator = (
-    /// ...     k(mink(D, mu)) * k(mink(D, nu))
-    /// ...     * p(mink(D, mu)) * p(mink(D, nu))
+    /// ...     k(PortPattern.exact(lorentz, mu)) * k(PortPattern.exact(lorentz, nu))
+    /// ...     * p(PortPattern.exact(lorentz, mu)) * p(PortPattern.exact(lorentz, nu))
     /// ... )
     /// >>> reducer = hep.TensorReducer(D).with_integrated_vector(k_compact)
     /// >>> reduced = reducer.reduce(numerator)

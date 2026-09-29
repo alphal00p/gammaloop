@@ -526,7 +526,8 @@ impl SlotMatcher {
     /// Tensor-tagged functions expose a compact representation through exactly
     /// one direct representation argument. Scalar products, unary broadcasts,
     /// projectors, and sums preserve it when they contain one compatible vector.
-    /// Every other product factor must be syntactically scalar.
+    /// The remaining product must have a scalar interface; its factors may
+    /// carry internal contractions.
     fn compact_vector_rep<Aind: AbsInd + ParseableAind>(
         &mut self,
         value: AtomView<'_>,
@@ -596,14 +597,16 @@ impl SlotMatcher {
     /// Failure to identify a compact vector does not prove that a factor is
     /// scalar: explicit-slot tensors also have no compact representation. The
     /// ordinary syntactic structure inference is therefore the authority for
-    /// every remaining factor. Chain/trace words may expose explicit spectator
+    /// the product of remaining factors, which can contain internal contractions.
+    /// Chain/trace words may expose explicit spectator
     /// ports; ordinary weighted products still require scalar coefficients.
-    fn compact_vector_sequence<'node, Aind: AbsInd + ParseableAind>(
+    pub fn compact_vector_sequence<'node, Aind: AbsInd + ParseableAind>(
         &mut self,
         factors: impl Iterator<Item = (usize, AtomView<'node>)>,
         allow_spectators: bool,
     ) -> Option<(usize, Representation<LibraryRep>)> {
         let mut compact_vector = None;
+        let mut coefficient = Vec::new();
 
         for (position, factor) in factors {
             if let Some(representation) = self.compact_vector_rep::<Aind>(factor) {
@@ -612,17 +615,18 @@ impl SlotMatcher {
                 }
                 compact_vector = Some((position, representation));
             } else {
-                let structure =
-                    OrderedStructure::<LibraryRep, Aind>::syntactic_structure_from_atom(
-                        factor, self,
-                    )
-                    .ok()?;
-                if !allow_spectators && !structure.canonical().is_scalar() {
-                    return None;
-                }
+                coefficient.push(factor);
             }
         }
 
+        let structure = OrderedStructure::<LibraryRep, Aind>::syntactic_structure_from_atom(
+            Atom::mul_many(coefficient).as_view(),
+            self,
+        )
+        .ok()?;
+        if !allow_spectators && !structure.canonical().is_scalar() {
+            return None;
+        }
         compact_vector
     }
 

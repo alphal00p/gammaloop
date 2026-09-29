@@ -409,6 +409,12 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                         let observed = &plan.observed;
                         let (prerequisites, additions) = before.contract_prerequisites(structural, definitions, |value| {
                             if alias_candidates.get(value.get_data()).is_some_and(|mask| mask & operation != 0) { return true; }
+                            // A metric is a prerequisite, not the identity's seed.
+                            // Nested leaves may lack individual regional records;
+                            // the representation fallback must not select their
+                            // metrics and hide the incident connection from the
+                            // prerequisite contractor.
+                            if matches!(value, AtomView::Fun(function) if function.get_symbol() == spenso::network::library::symbolic::ETS.metric) { return false; }
                             if let Some(region) = observed.region(value) {
                                 return region.identity_candidates() & operation != 0;
                             }
@@ -937,6 +943,38 @@ mod tests {
         let source = Arc::new(root.with_aliases([(handle, body)]).unwrap());
         assert!(source.contract(ContractSettings::default()).is_err());
     }
+    #[test]
+    fn nested_compact_odd_trace_reduces_without_expanding_spectators() {
+        use crate::gamma;
+        use spenso::chain;
+
+        let reps = crate::test_support::test_initialize();
+        let left = reps.bis4.to_symbolic([Atom::num(93911)]);
+        let right = reps.bis4.to_symbolic([Atom::num(93912)]);
+        let momentum = p!(reps.mink4.to_symbolic([]));
+        let spectator = (Atom::var(symbol!("nested_chain_spectator")) + Atom::one()).pow(20);
+        let source = SymbolicTensor::<PartialStructure>::infer(
+            &spectator
+                * (Atom::num(3) + chain!(&left, &right, gamma!(&momentum)) * g!(&left, &right)),
+        )
+        .unwrap();
+        let settings = AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::default()),
+            ..Default::default()
+        };
+        let result = source.reduce_algebra(&settings).unwrap();
+        // The trace of one gamma matrix vanishes independently of its momentum.
+        assert_eq!(
+            result.resolved().unwrap().expression,
+            Atom::num(3) * spectator
+        );
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        assert!(Arc::ptr_eq(
+            &result,
+            &result.reduce_algebra(&settings).unwrap()
+        ));
+    }
+
     #[test]
     fn shared_gamma_collection_combines_an_owned_alias_with_an_adjacent_word() {
         use crate::gamma;

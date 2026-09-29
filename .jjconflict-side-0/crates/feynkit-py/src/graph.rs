@@ -1398,7 +1398,7 @@ impl PyLoopMomentumBasis {
     /// Using the setup in the ``LoopMomentumBasis`` class example:
     ///
     /// >>> rules = diagram.loop_momentum_basis.momentum_replacements()
-    /// >>> routed = diagram.numerator_expression().replace_multiple(rules)
+    /// >>> routed = diagram.numerator_expression().to_expression().replace_multiple(rules)
     fn momentum_replacements(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
         let constructor = py.import("symbolica.core")?.getattr("Replacement")?;
         self.inner

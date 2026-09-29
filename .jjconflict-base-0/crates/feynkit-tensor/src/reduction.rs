@@ -1804,6 +1804,27 @@ mod tests {
             .finish()
     }
 
+    #[test]
+    fn weighted_compact_dots_use_the_isotropic_second_moment() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("weighted_dot_D"));
+        let k_vector = compact(k, 1, &dimension);
+        let p_vector = compact(p, 1, &dimension);
+        let inner = dot(&k_vector, &p_vector);
+        let coefficient = (Atom::var(symbol!("weighted_dot_coefficient")) + Atom::one()).pow(20);
+        let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
+        // Rotational invariance gives <k_mu k_nu> = k^2 g_mu_nu / D.
+        let expected =
+            &coefficient * dot(&k_vector, &k_vector) * dot(&p_vector, &p_vector) / &dimension;
+        let mu = Atom::var(symbol!("weighted_dot_mu"));
+        let components = indexed(k, 1, &dimension, &mu) * indexed(p, 1, &dimension, &mu);
+        for scalar in [inner, components] {
+            let input = dot(&(&coefficient * scalar * &k_vector), &p_vector);
+            let result = reducer.reduce(input.as_view()).unwrap().into_expression();
+            assert_eq!(result, expected);
+        }
+    }
+
     fn diagram_with_numerator(name: &str, numerator: Atom) -> FeynmanDiagram {
         diagram_with_payload(name, numerator, Atom::one(), Atom::one())
     }
