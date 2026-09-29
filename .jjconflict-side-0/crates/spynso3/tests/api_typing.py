@@ -134,9 +134,19 @@ def check_types(
     assert_type(network.permute_axes([1, 0]), sp.TensorNetwork)
     assert_type(network.contract_ports(expression, left=0, right=0), sp.TensorNetwork)
     assert_type(tensor.rename_indices({representation("mu"): "nu"}), sp.Tensor)
-    assert_type(
-        expression("mu", cook_indices=sp.CookSettings.indices()), sp.TensorExpression
-    )
+    assert_type(expression("mu", intern="flattened"), sp.TensorExpression)
+    intern_indices: Literal["indices"] = "indices"
+    intern_flattened: Literal["flattened"] = "flattened"
+    for intern in (None, intern_indices, intern_flattened):
+        assert_type(sp.TensorExpression(expression, intern=intern), sp.TensorExpression)
+        assert_type(expression("mu", intern=intern), sp.TensorExpression)
+        assert_type(expression.index("mu", intern=intern), sp.TensorExpression)
+        assert_type(expression.reindex("mu", intern=intern), sp.TensorExpression)
+        assert_type(
+            expression.rename_indices({"mu": "nu"}, intern=intern), sp.TensorExpression
+        )
+        assert_type(tensor("mu", intern=intern), sp.TensorNetwork)
+        assert_type(network("mu", intern=intern), sp.TensorNetwork)
     assert_type(expression.to_tensor(library), sp.Tensor)
     assert_type(network.to_tensor(library), sp.Tensor)
     assert_type(network.step(library), sp.TensorNetwork)
@@ -153,9 +163,7 @@ def check_types(
     assert_type(network.shape, tuple[int | Expression, ...])
     assert_type(tensor.shape, tuple[int, ...])
     assert_type(
-        sp.TensorExpression(
-            expression.to_expression(), cook_indices=sp.CookSettings.indices()
-        ),
+        sp.TensorExpression(expression.to_expression(), intern="flattened"),
         sp.TensorExpression,
     )
     assert_type(library["A"], sp.Tensor)

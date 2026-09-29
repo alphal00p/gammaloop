@@ -332,9 +332,11 @@ Unresolved expression/network ports acquire fresh labels to keep their occurrenc
 distinct. Use `reindex(...)` afterwards to choose displayed labels. The immutable
 `TensorStructure.permute_axes(...)` method changes metadata alone.
 
-Nested index payloads use `cook_indices=CookSettings.indices()` consistently on
-constructors, calls, `index`, `reindex`, and `rename_indices`. Pass custom `CookSettings`
-for reversible encoding or filters; this parameter no longer accepts a boolean.
+Nested index payloads use `intern="indices"` for reversible encoding or
+`intern="flattened"` for readable flattened names. Both modes affect only indices,
+leaving tensor heads, scalar arguments, and dimensions intact. The default `intern=None`
+leaves indices unchanged. Constructors, calls, `index`, `reindex`, and `rename_indices`
+accept the same literal choices.
 
 == Component operations
 

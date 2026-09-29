@@ -640,12 +640,22 @@ def validate(runtime_module, stub_source):
 
         for signature in [
             "def __new__(cls, expr: typing.Any, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:",
-            "def __call__(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:",
-            "def index(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:",
-            "def __call__(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:",
-            "def index(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:",
+            "def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:",
+            "def index(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:",
+            "def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:",
+            "def index(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:",
         ] {
             assert!(rendered.contains(signature), "missing `{signature}`");
+        }
+        assert!(rendered.contains("def __new__(cls, expression: TensorExpression | _ScalarInput, *, structure: typing.Optional[TensorStructure] = None, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:"));
+        for retired in [
+            "CookSettings",
+            "CookMode",
+            "CookSourceFilter",
+            "CookTagFilter",
+            "cook_indices",
+        ] {
+            assert!(!rendered.contains(retired), "retired Python API {retired}");
         }
         assert!(rendered.contains(
             "Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains"

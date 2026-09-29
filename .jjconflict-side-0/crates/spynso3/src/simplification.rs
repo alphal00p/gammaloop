@@ -11,7 +11,7 @@ pub(crate) use pipeline::{PyAlgebraSettings, PyContractSettings, PyReductionStat
 
 pub(crate) use algebra::{PyColorSimplifySettings, PyGammaSimplifySettings};
 pub(crate) use tooling::{
-    CanonicalizationError, CookingError, DiracAdjointError, NetworkToolingError, PyCookSettings,
+    CanonicalizationError, CookingError, DiracAdjointError, Intern, NetworkToolingError,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -42,10 +42,6 @@ mod tests {
     const PUBLIC_API: &[&str] = &[
         "CanonicalizationError",
         "ColorSimplifySettings",
-        "CookMode",
-        "CookSettings",
-        "CookSourceFilter",
-        "CookTagFilter",
         "CookingError",
         "DiracAdjointError",
         "GammaChainOrdering",
@@ -87,6 +83,14 @@ mod tests {
             actual.sort();
             expected.sort();
             assert_eq!(actual, expected);
+            for name in [
+                "CookSettings",
+                "CookMode",
+                "CookSourceFilter",
+                "CookTagFilter",
+            ] {
+                assert!(!module.hasattr(name).unwrap(), "retired class {name}");
+            }
             let tensor_expression = py.get_type::<TensorExpression>();
             for name in [
                 "alias_subtensors",
@@ -281,7 +285,7 @@ assert hasattr(sp.Tensor, 'contract_ports')
                 ),
                 (
                     py.get_type::<TensorExpression>().into_any(),
-                    "(expression, *, structure=None, cook_indices=None)",
+                    "(expression, *, structure=None, intern=None)",
                 ),
             ] {
                 let name = class.getattr("__name__").unwrap();

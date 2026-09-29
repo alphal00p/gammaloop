@@ -302,7 +302,7 @@ define_spenso_python_surface! {
     registered_modules: [
         simplification => [
             "CanonicalizationError", "ColorSimplifySettings",
-            "CookMode", "CookSettings", "CookSourceFilter", "CookTagFilter", "CookingError",
+            "CookingError",
             "DiracAdjointError", "GammaChainOrdering",
             "GammaSimplifySettings", "NetworkToolingError",
             "AlgebraSettings", "ContractSettings", "ReductionStatus",
@@ -1453,9 +1453,11 @@ impl Spensor {
     ///     One label per unresolved axis, in logical order. AUTO leaves the
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
-    /// cook_indices : CookSettings, optional
-    ///     Encode compound index labels as symbols. Use CookSettings.indices()
-    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
     ///
     /// Returns
     /// -------
@@ -1476,13 +1478,13 @@ impl Spensor {
     /// >>> indexed = tensor.index("i", "j")
     /// >>> indexed.rank
     /// 2
-    #[pyo3(signature = (*indices, cook_indices = None))]
+    #[pyo3(signature = (*indices, intern = None))]
     fn index(
         &self,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: Option<&crate::simplification::PyCookSettings>,
+        intern: Option<crate::simplification::Intern>,
     ) -> PyResult<SpensoNet> {
-        SpensoNet::from_tensor_reference(self.clone())?.index_network(indices, cook_indices)
+        SpensoNet::from_tensor_reference(self.clone())?.index_network(indices, intern)
     }
 
     /// Assign labels to all external axes.
@@ -1493,9 +1495,11 @@ impl Spensor {
     ///     One label per external axis, in logical order. AUTO leaves the
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
-    /// cook_indices : CookSettings, optional
-    ///     Encode compound index labels as symbols. Use CookSettings.indices()
-    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
     ///
     /// Returns
     /// -------
@@ -1516,13 +1520,13 @@ impl Spensor {
     /// >>> indexed = tensor.reindex("i", "j")
     /// >>> indexed.rank
     /// 2
-    #[pyo3(signature = (*indices, cook_indices=None))]
+    #[pyo3(signature = (*indices, intern=None))]
     fn reindex(
         &self,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: Option<&crate::simplification::PyCookSettings>,
+        intern: Option<crate::simplification::Intern>,
     ) -> PyResult<SpensoNet> {
-        SpensoNet::from_tensor_reference(self.clone())?.reindex(indices, cook_indices)
+        SpensoNet::from_tensor_reference(self.clone())?.reindex(indices, intern)
     }
 
     /// Rename selected external labels without changing the tensor rank.
@@ -1533,9 +1537,11 @@ impl Spensor {
     ///     Old label to new label. A Slot key also restricts the representation.
     ///     Keys must identify existing external axes. Each axis may be renamed
     ///     once; renaming must preserve the external interface.
-    /// cook_indices : CookSettings, optional
-    ///     Encode compound index labels as symbols. Use CookSettings.indices()
-    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
     ///
     /// Returns
     /// -------
@@ -1552,14 +1558,14 @@ impl Spensor {
     /// >>> indexed = Tensor.dense(A("i", "j"), [1.0, 2.0, 3.0, 4.0])
     /// >>> indexed.rename_indices({"i": "k"}).rank
     /// 2
-    #[pyo3(signature = (mapping, *, cook_indices=None))]
+    #[pyo3(signature = (mapping, *, intern=None))]
     fn rename_indices(
         &self,
         mapping: &Bound<'_, PyDict>,
-        cook_indices: Option<&crate::simplification::PyCookSettings>,
+        intern: Option<crate::simplification::Intern>,
     ) -> PyResult<Self> {
         SpensoNet::from_tensor_reference(self.clone())?
-            .rename_indices(mapping, cook_indices)?
+            .rename_indices(mapping, intern)?
             .result_tensor(None)
     }
 
@@ -1625,9 +1631,11 @@ impl Spensor {
     ///     One label per unresolved axis, in logical order. AUTO leaves the
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
-    /// cook_indices : CookSettings, optional
-    ///     Encode compound index labels as symbols. Use CookSettings.indices()
-    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
     ///
     /// Returns
     /// -------
@@ -1648,13 +1656,13 @@ impl Spensor {
     /// >>> indexed = tensor("i", "j")
     /// >>> indexed.rank
     /// 2
-    #[pyo3(signature = (*indices, cook_indices = None))]
+    #[pyo3(signature = (*indices, intern = None))]
     fn __call__(
         &self,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: Option<&crate::simplification::PyCookSettings>,
+        intern: Option<crate::simplification::Intern>,
     ) -> PyResult<SpensoNet> {
-        self.index(indices, cook_indices)
+        self.index(indices, intern)
     }
 
     /// Negate every tensor component.

@@ -42,7 +42,7 @@ inventory is:
   `crates/idenso/tests/fixtures/aa_aa_2l_gl16_integrated_uv_start_after_simplify_metrics.sym`.
 
 The production capture is used verbatim. Its nested `hedge` and `edge` index
-payloads use the existing `cook_indices=CookSettings.indices()` input adapter, outside the
+payloads use the existing `intern="flattened"` input adapter, outside the
 clock. Its measured pipeline is gamma, colour, then metric simplification. It
 is a captured post-metric production numerator, not a newly generated process
 or a full UV computation. Its bytes and path are recorded. Its check is exact

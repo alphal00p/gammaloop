@@ -1418,342 +1418,9 @@ class ContractSettings:
         >>> text = repr(settings)
         """
 
-@typing.final
-class CookMode:
-    r"""
-    Encoding used when compound index labels become symbols.
-
-    ``FlattenedSymbol`` creates readable names from the function and arguments.
-    ``ReversibleEncoding`` retains the payload in a stable encoding. These are
-    encoding choices; the Python API does not currently expose an uncook method.
-
-    Examples
-    --------
-    >>> from symbolica.community.tensor import CookMode, CookSettings
-    >>> settings = CookSettings(mode=CookMode.ReversibleEncoding)
-    """
-    FlattenedSymbol: typing.ClassVar[CookMode]
-    r"""
-    Build a readable symbol name from the function name and its arguments.
-    """
-    ReversibleEncoding: typing.ClassVar[CookMode]
-    r"""
-    Retain the original payload in a stable symbol encoding.
-    """
-    def __int__(self) -> builtins.int:
-        r"""
-        Return the underlying integer discriminant.
-        """
-
-@typing.final
-class CookSettings:
-    r"""
-    Encoding options for compound tensor index labels.
-
-    Instances are immutable. Pass a configured instance to the corresponding
-    tensor operation; its properties expose the selected values.
-
-    Examples
-    --------
-    >>> from symbolica.community.tensor import CookSettings
-    >>> settings = CookSettings()
-    """
-    @property
-    def mode(self) -> CookMode:
-        r"""
-        FlattenedSymbol makes readable names. ReversibleEncoding stores the
-
-        Returns
-        -------
-        CookMode
-            FlattenedSymbol makes readable names. ReversibleEncoding stores the
-            original payload in a stable encoding. None selects FlattenedSymbol.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookSettings
-        >>> settings = CookSettings()
-        >>> value = settings.mode
-        """
-    @property
-    def source_filter(self) -> CookSourceFilter:
-        r"""
-        Predicate selecting function payloads to encode. None selects any function.
-
-        Returns
-        -------
-        CookSourceFilter
-            Predicate selecting function payloads to encode. None selects any function.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookSettings
-        >>> settings = CookSettings()
-        >>> value = settings.source_filter
-        """
-    @property
-    def output_tags(self) -> builtins.list[builtins.str]:
-        r"""
-        Fully namespaced tags for encoded symbols. None uses the mode factory
-
-        Returns
-        -------
-        list of str
-            Fully namespaced tags for encoded symbols. The generic constructor starts with no explicit output tags.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookSettings
-        >>> settings = CookSettings()
-        >>> value = settings.output_tags
-        """
-    @property
-    def preserve_tags(self) -> builtins.bool:
-        r"""
-        Preserve matching input tags on newly encoded symbols.
-
-        Returns
-        -------
-        bool
-            Preserve matching input tags on newly encoded symbols.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookSettings
-        >>> settings = CookSettings()
-        >>> value = settings.preserve_tags
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, mode: typing.Optional[CookMode] = None, source: typing.Optional[CookSourceFilter] = None, output_tags: typing.Optional[typing.Sequence[builtins.str]] = None, preserve_tags: builtins.bool = False) -> CookSettings:
-        r"""
-        Configure encoding options for compound tensor index labels.
-
-        Parameters
-        ----------
-        mode : CookMode or None, default None
-            FlattenedSymbol makes readable names. ReversibleEncoding stores the
-            original payload in a stable encoding. None selects FlattenedSymbol.
-        source : CookSourceFilter or None, default None
-            Predicate selecting function payloads to encode. None selects any function.
-        output_tags : sequence of str or None, default None
-            Fully namespaced tags for encoded symbols. None uses the mode factory
-            defaults; the generic constructor starts with no explicit output tags.
-        preserve_tags : bool, default False
-            Preserve matching input tags on newly encoded symbols.
-
-        Returns
-        -------
-        CookSettings
-            Immutable settings with the requested options.
-
-        Notes
-        -----
-        Pass these settings through cook_indices in tensor constructors or indexing.
-        Cooking replaces compound labels by symbols; it is not tensor simplification.
-        The Python API currently exposes no uncook method.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookSettings
-        >>> settings = CookSettings()
-        """
-    @staticmethod
-    def flattened() -> CookSettings:
-        r"""
-        Use readable names for selected compound labels.
-
-        Returns
-        -------
-        CookSettings
-            Immutable configuration for index cooking.
-
-        Notes
-        -----
-        Selects any function payload, without explicit output tags or tag preservation.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookSettings
-        >>> settings = CookSettings.flattened()
-        """
-    @staticmethod
-    def indices() -> CookSettings:
-        r"""
-        Encode nested function payloads in indices while preserving tags.
-
-        Returns
-        -------
-        CookSettings
-            Immutable configuration for index cooking.
-
-        Notes
-        -----
-        Uses readable flattened names and selects representation index payloads,
-        not representation dimensions. This is the usual cook_indices setting.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookSettings
-        >>> settings = CookSettings.indices()
-        """
-    @staticmethod
-    def reversible() -> CookSettings:
-        r"""
-        Use a stable encoding that retains the original function payload.
-
-        Returns
-        -------
-        CookSettings
-            Immutable configuration for index cooking.
-
-        Notes
-        -----
-        Selects any function and applies the idenso::cooked output tag. The name
-        refers to the encoding format; there is no public Python uncook method.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookSettings
-        >>> settings = CookSettings.reversible()
-        """
-
-@typing.final
-class CookSourceFilter:
-    r"""
-    Choose which function payloads are eligible for index cooking.
-
-    Examples
-    --------
-    >>> from symbolica.community.tensor import CookSourceFilter
-    >>> selection = CookSourceFilter.representation_index_payload()
-    """
-    def __repr__(self) -> builtins.str: ...
-    @staticmethod
-    def any_function() -> CookSourceFilter:
-        r"""
-        Allow every function-like payload encountered by the cooking operation.
-
-        Returns
-        -------
-        CookSourceFilter
-            Unrestricted function selection.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookSourceFilter
-        >>> selection = CookSourceFilter.any_function()
-        """
-    @staticmethod
-    def function_tags(filter: CookTagFilter) -> CookSourceFilter:
-        r"""
-        Select function payloads whose heads satisfy a tag filter.
-
-        Parameters
-        ----------
-        filter : CookTagFilter
-            Required tag predicate.
-
-        Returns
-        -------
-        CookSourceFilter
-            Function-head selection for CookSettings.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookSourceFilter, CookTagFilter
-        >>> selection = CookSourceFilter.function_tags(CookTagFilter.any(["example::index_label"]))
-        """
-    @staticmethod
-    def representation_index_payload(filter: typing.Optional[CookTagFilter] = None) -> CookSourceFilter:
-        r"""
-        Select compound index labels inside representation syntax.
-
-        Parameters
-        ----------
-        filter : CookTagFilter, optional
-            Additional predicate on the index payload's function head.
-
-        Returns
-        -------
-        CookSourceFilter
-            Selection restricted to index payloads, excluding dimensions.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookSourceFilter
-        >>> selection = CookSourceFilter.representation_index_payload()
-        """
-
-@typing.final
-class CookTagFilter:
-    r"""
-    Select function heads for index cooking by their Symbolica tags.
-
-    Examples
-    --------
-    >>> from symbolica.community.tensor import CookTagFilter
-    >>> selection = CookTagFilter.any(["example::index_label"])
-    """
-    def __repr__(self) -> builtins.str: ...
-    @staticmethod
-    def any(tags: typing.Sequence[builtins.str]) -> CookTagFilter:
-        r"""
-        Select function heads carrying at least one listed tag.
-
-        Parameters
-        ----------
-        tags : sequence of str
-            Fully namespaced Symbolica tags to test.
-
-        Returns
-        -------
-        CookTagFilter
-            Tag predicate for a CookSourceFilter.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookTagFilter
-        >>> selection = CookTagFilter.any(["example::index_label"])
-        """
-    @staticmethod
-    def all(tags: typing.Sequence[builtins.str]) -> CookTagFilter:
-        r"""
-        Select function heads carrying every listed tag.
-
-        Parameters
-        ----------
-        tags : sequence of str
-            Fully namespaced Symbolica tags to test.
-
-        Returns
-        -------
-        CookTagFilter
-            Tag predicate for a CookSourceFilter.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookTagFilter
-        >>> selection = CookTagFilter.all(["example::index_label"])
-        """
-    @staticmethod
-    def matched_output_tags() -> CookTagFilter:
-        r"""
-        Select function heads using the associated settings' output tags.
-
-        Returns
-        -------
-        CookTagFilter
-            Predicate resolved against CookSettings.output_tags.
-
-        Examples
-        --------
-        >>> from symbolica.community.tensor import CookTagFilter
-        >>> selection = CookTagFilter.matched_output_tags()
-        """
-
 class CookingError(builtins.TypeError):
     r"""
-    Raised when a compound index label cannot be encoded according to CookSettings.
+    Raised when a compound index label cannot be encoded by the selected interning mode.
 
     Notes
     -----
@@ -3104,7 +2771,7 @@ class Representation:
         aind : int, str, or Expression
             An index label, not a component coordinate. A string, integer, or single
             symbol creates a Slot. A compound Expression creates raw representation
-            syntax, which can be used with ``cook_indices`` when constructing a tensor.
+            syntax, which can be used with ``intern="indices"`` when constructing a tensor.
 
         Returns
         -------
@@ -3129,7 +2796,7 @@ class Representation:
         aind : int, str, or Expression
             An index label, not a component coordinate. A string, integer, or single
             symbol creates a Slot. A compound Expression creates raw representation
-            syntax, which can be used with ``cook_indices`` when constructing a tensor.
+            syntax, which can be used with ``intern="indices"`` when constructing a tensor.
 
         Returns
         -------
@@ -4559,7 +4226,7 @@ class Tensor:
         >>> TensorExpression(3).to_tensor().scalar() == 3
         True
         """
-    def index(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
+    def index(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:
         r"""
         Assign labels to the unresolved external axes.
 
@@ -4569,9 +4236,11 @@ class Tensor:
             One label per unresolved axis, in logical order. AUTO leaves the
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols. Use CookSettings.indices()
-            for nested labels; omit it for ordinary integers, strings, or symbols.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------
@@ -4593,7 +4262,7 @@ class Tensor:
         >>> indexed.rank
         2
         """
-    def reindex(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
+    def reindex(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:
         r"""
         Assign labels to all external axes.
 
@@ -4603,9 +4272,11 @@ class Tensor:
             One label per external axis, in logical order. AUTO leaves the
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols. Use CookSettings.indices()
-            for nested labels; omit it for ordinary integers, strings, or symbols.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------
@@ -4627,7 +4298,7 @@ class Tensor:
         >>> indexed.rank
         2
         """
-    def rename_indices(self, mapping: dict[int | str | Expression | Slot, _IndexInput], *, cook_indices: typing.Optional[CookSettings] = None) -> Tensor:
+    def rename_indices(self, mapping: dict[int | str | Expression | Slot, _IndexInput], *, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> Tensor:
         r"""
         Rename selected external labels without changing the tensor rank.
 
@@ -4637,9 +4308,11 @@ class Tensor:
             Old label to new label. A Slot key also restricts the representation.
             Keys must identify existing external axes. Each axis may be renamed
             once; renaming must preserve the external interface.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols. Use CookSettings.indices()
-            for nested labels; omit it for ordinary integers, strings, or symbols.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------
@@ -4707,7 +4380,7 @@ class Tensor:
         >>> import copy
         >>> copied = copy.copy(tensor)
         """
-    def __call__(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
+    def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:
         r"""
         Assign labels to the unresolved external axes.
 
@@ -4717,9 +4390,11 @@ class Tensor:
             One label per unresolved axis, in logical order. AUTO leaves the
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols. Use CookSettings.indices()
-            for nested labels; omit it for ordinary integers, strings, or symbols.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------
@@ -5513,13 +5188,10 @@ class TensorExpression:
     Simplification may retain shared subexpressions in an AliasedTensorExpression;
     its ``to_expression()`` returns a TensorExpression when materialization is needed.
 
-    Construct a tensor expression, preserving existing tensor metadata or inferring it.
-
-    Pass `cook_indices=sp.CookSettings.reversible()` to reversibly encode nested index payloads before
-    inferring the tensor interface for arbitrary nested index expressions.
-    Custom CookSettings control the index encoding, source filters, and output tags.
-    An explicit `structure` is checked against the resulting expression and
-    retains declared logical order and the interface of a symbolic zero.
+    Pass ``intern="indices"`` to reversibly encode compound index labels, or
+    ``intern="flattened"`` to create readable names. Both modes operate only on
+    index payloads. An explicit ``structure`` retains the declared axis order
+    and can describe the interface of a symbolic zero.
 
     Examples
     --------
@@ -5620,7 +5292,7 @@ class TensorExpression:
         >>> A = TensorName("A")(space, space)
         >>> name = A.name
         """
-    def __new__(cls, expression: TensorExpression | _ScalarInput, *, structure: typing.Optional[TensorStructure] = None, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:
+    def __new__(cls, expression: TensorExpression | _ScalarInput, *, structure: typing.Optional[TensorStructure] = None, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:
         r"""
         Wrap symbolic algebra as a tensor and check its external axes.
 
@@ -5632,9 +5304,11 @@ class TensorExpression:
         structure : TensorStructure, optional
             Explicit external axes to check against the expression. This retains
             logical axis order and can specify the rank of a symbolic zero.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols before checking structure.
-            ``CookSettings.indices()`` is suitable for nested labels.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------
@@ -5646,6 +5320,13 @@ class TensorExpression:
         >>> from symbolica.community.tensor import TensorExpression, TensorStructure, Representation
         >>> zero = TensorExpression(0, structure=TensorStructure([Representation.euc(3)]))
         >>> zero.rank
+        1
+        >>> from symbolica import S
+        >>> from symbolica.community.tensor import TensorName
+        >>> vector = TensorName.vector("v")(Representation.euc(3))
+        >>> label, payload = S("i"), S("edge")(7, 2)
+        >>> raw = vector(label).to_expression().replace(label, payload)
+        >>> TensorExpression(raw, intern="indices").rank
         1
         """
     @staticmethod
@@ -6539,7 +6220,7 @@ class TensorExpression:
         >>> len(A.components())
         4
         """
-    def index(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:
+    def index(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:
         r"""
         Assign labels to the unresolved external axes.
 
@@ -6549,9 +6230,11 @@ class TensorExpression:
             One label per unresolved axis, in logical order. AUTO leaves the
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols. Use CookSettings.indices()
-            for nested labels; omit it for ordinary integers, strings, or symbols.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------
@@ -6571,7 +6254,7 @@ class TensorExpression:
         >>> indexed.rank
         2
         """
-    def reindex(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:
+    def reindex(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:
         r"""
         Assign labels to all external axes.
 
@@ -6581,9 +6264,11 @@ class TensorExpression:
             One label per external axis, in logical order. AUTO leaves the
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols. Use CookSettings.indices()
-            for nested labels; omit it for ordinary integers, strings, or symbols.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------
@@ -6603,7 +6288,7 @@ class TensorExpression:
         >>> indexed.rank
         2
         """
-    def rename_indices(self, mapping: dict[int | str | Expression | Slot, _IndexInput], *, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:
+    def rename_indices(self, mapping: dict[int | str | Expression | Slot, _IndexInput], *, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:
         r"""
         Rename selected external labels without changing the tensor rank.
 
@@ -6613,9 +6298,11 @@ class TensorExpression:
             Old label to new label. A Slot key also restricts the representation.
             Keys must identify existing external axes. Each axis may be renamed
             once; renaming must preserve the external interface.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols. Use CookSettings.indices()
-            for nested labels; omit it for ordinary integers, strings, or symbols.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------
@@ -6660,7 +6347,7 @@ class TensorExpression:
         >>> transposed.shape
         (2, 2)
         """
-    def __call__(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:
+    def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorExpression:
         r"""
         Assign labels to the unresolved external axes.
 
@@ -6670,9 +6357,11 @@ class TensorExpression:
             One label per unresolved axis, in logical order. AUTO leaves the
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols. Use CookSettings.indices()
-            for nested labels; omit it for ordinary integers, strings, or symbols.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------
@@ -9596,7 +9285,7 @@ class TensorNetwork:
         >>> network.expression().rank
         2
         """
-    def index(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
+    def index(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:
         r"""
         Assign labels to the unresolved external axes.
 
@@ -9606,9 +9295,11 @@ class TensorNetwork:
             One label per unresolved axis, in logical order. AUTO leaves the
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols. Use CookSettings.indices()
-            for nested labels; omit it for ordinary integers, strings, or symbols.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------
@@ -9632,7 +9323,7 @@ class TensorNetwork:
         >>> indexed.rank
         2
         """
-    def reindex(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
+    def reindex(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:
         r"""
         Assign labels to all external axes.
 
@@ -9642,9 +9333,11 @@ class TensorNetwork:
             One label per external axis, in logical order. AUTO leaves the
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols. Use CookSettings.indices()
-            for nested labels; omit it for ordinary integers, strings, or symbols.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------
@@ -9668,7 +9361,7 @@ class TensorNetwork:
         >>> indexed.rank
         2
         """
-    def rename_indices(self, mapping: dict[int | str | Expression | Slot, _IndexInput], *, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
+    def rename_indices(self, mapping: dict[int | str | Expression | Slot, _IndexInput], *, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:
         r"""
         Rename selected external labels without changing the tensor rank.
 
@@ -9678,9 +9371,11 @@ class TensorNetwork:
             Old label to new label. A Slot key also restricts the representation.
             Keys must identify existing external axes. Each axis may be renamed
             once; renaming must preserve the external interface.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols. Use CookSettings.indices()
-            for nested labels; omit it for ordinary integers, strings, or symbols.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------
@@ -9755,7 +9450,7 @@ class TensorNetwork:
         >>> import copy
         >>> copied = copy.copy(network)
         """
-    def __call__(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:
+    def __call__(self, *indices: _IndexInput, intern: typing.Optional[typing.Literal['indices', 'flattened']] = None) -> TensorNetwork:
         r"""
         Assign labels to the unresolved external axes.
 
@@ -9765,9 +9460,11 @@ class TensorNetwork:
             One label per unresolved axis, in logical order. AUTO leaves the
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
-        cook_indices : CookSettings, optional
-            Encode compound index labels as symbols. Use CookSettings.indices()
-            for nested labels; omit it for ordinary integers, strings, or symbols.
+        intern : {"indices", "flattened"} or None, optional
+            Encode compound index labels before checking the tensor structure.
+            "indices" retains reversible payloads; "flattened" creates readable names.
+            Both preserve index tags and leave scalar arguments and tensor heads intact.
+            None leaves labels unchanged and requires ordinary atomic index labels.
 
         Returns
         -------

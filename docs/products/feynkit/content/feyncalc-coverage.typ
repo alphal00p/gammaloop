@@ -276,7 +276,7 @@ External ports are aligned by matching generated wavefunctions with Symbolica;
 the calculation does not assume internal half-edge numbers. Idenso retains
 conjugation of scalar quantities explicitly, so the example declares its
 physical momenta, charge, mass and invariants real before contracting the
-adjoint. `wrap_indices` and `CookSettings.indices()` keep the adjoint's summed
+adjoint. `wrap_indices` and `intern="flattened"` keep the adjoint's summed
 indices separate. Dirac adjunction exchanges the input/output matrix roles;
 fermion completeness tensors connect ket and Dirac-adjoint indices accordingly.
 The physical completeness relation remains the one shared with GammaLoop.

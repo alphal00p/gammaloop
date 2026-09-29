@@ -167,24 +167,6 @@ def example_specification():
             "color_settings",
         ),
         (
-            "CookTagFilter",
-            "Selects function heads by tags: any, all, or the output tags of the associated CookSettings.",
-            'tag_filter = sp.CookTagFilter.any(["spenso_api_tour::edge"])',
-            "tag_filter",
-        ),
-        (
-            "CookSourceFilter",
-            "Selects whole function occurrences or only payloads nested inside representation indices.",
-            "source_filter = sp.CookSourceFilter.representation_index_payload(tag_filter)",
-            "source_filter",
-        ),
-        (
-            "CookSettings",
-            "Configures flattening or reversible encoding of function payloads. indices() is the preset for readable graph-based tensor indices; reversible() supports uncook.",
-            "cook_settings = sp.CookSettings.indices()",
-            "cook_settings",
-        ),
-        (
             "ExecutionMode",
             "Network execution policy: All performs every possible contraction, Single selects one smallest-degree rewrite per step, Scalar only contracts scalar operations.",
             "execution_mode = sp.ExecutionMode.All",
@@ -201,12 +183,6 @@ def example_specification():
             "RepeatedPairs moves matching gamma matrices together; Canonical orders the whole open chain.",
             "gamma_order = sp.GammaChainOrdering.Canonical",
             "gamma_order",
-        ),
-        (
-            "CookMode",
-            "FlattenedSymbol gives readable cooked names; ReversibleEncoding retains the information required by uncook.",
-            "cook_mode = sp.CookMode.ReversibleEncoding",
-            "cook_mode",
         ),
     ]
 

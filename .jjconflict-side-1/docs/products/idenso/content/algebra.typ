@@ -14,9 +14,9 @@ Free indices describe the result; repeated compatible indices describe contracti
 combining independently built expressions, wrap or rename dummy-index namespaces so equal
 printed names do not create accidental contractions. Cooking temporarily replaces selected
 index payloads or function subexpressions with compact symbols. Rust `CookSettings::uncook`
-restores reversible encodings. Python accepts a `CookSettings` policy through the
-`cook_indices` keyword when constructing or indexing a tensor; it has no separate cooking
-pass on `TensorExpression`.
+restores reversible encodings. Python uses `intern="indices"` for reversible index encoding or
+`intern="flattened"` for readable index names when constructing or indexing a tensor.
+The default `intern=None` leaves indices unchanged; neither mode hides tensor heads.
 
 Cooking changes what downstream matchers can see. Retain the original expression when a later
 identity needs the hidden function head or index payload. Typed dummy scoping below does not

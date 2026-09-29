@@ -16,7 +16,6 @@ from symbolica.community.tensor import (
     AliasedTensorExpression,
     ColorSimplifySettings,
     ContractSettings,
-    CookSettings,
     GammaSimplifySettings,
     ReductionStatus,
     Representation,
@@ -754,14 +753,12 @@ class ProductionNumerator:
         Representation.bis(4)
         Representation.cof(3)
         Representation.coad(8)
-        self.source = TensorExpression(
-            E(self.path.read_text()), cook_indices=CookSettings.indices()
-        )
+        self.source = TensorExpression(E(self.path.read_text()), intern="flattened")
         self.strategy = {
             "fixture": str(self.path.relative_to(REPO)),
             "sha256": hashlib.sha256(self.path.read_bytes()).hexdigest(),
             "scope": "Captured post-metric numerator: enabled gamma and colour identities in one planner, then ambient structural contraction",
-            "input_adapter": "Existing CookSettings.indices() for nested hedge/edge index payloads; setup excluded",
+            "input_adapter": "intern='flattened' for nested hedge/edge index payloads; setup excluded",
         }
 
     def reduce(self):

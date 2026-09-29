@@ -54,7 +54,7 @@ use crate::{
     library::SpensorLibrary,
     network::{ConvertibleToSpensoNet, ExecutionMode, SpensoNet},
     simplification::{
-        CanonicalizationError, CookingError, DiracAdjointError, NetworkToolingError, PyCookSettings,
+        CanonicalizationError, CookingError, DiracAdjointError, Intern, NetworkToolingError,
     },
     structure::{
         ArithmeticStructure, ConvertibleToAbstractIndex, ConvertibleToDimension,
@@ -114,13 +114,10 @@ impl AutoIndex {
 /// Simplification may retain shared subexpressions in an AliasedTensorExpression;
 /// its ``to_expression()`` returns a TensorExpression when materialization is needed.
 ///
-/// Construct a tensor expression, preserving existing tensor metadata or inferring it.
-///
-/// Pass `cook_indices=sp.CookSettings.reversible()` to reversibly encode nested index payloads before
-/// inferring the tensor interface for arbitrary nested index expressions.
-/// Custom CookSettings control the index encoding, source filters, and output tags.
-/// An explicit `structure` is checked against the resulting expression and
-/// retains declared logical order and the interface of a symbolic zero.
+/// Pass ``intern="indices"`` to reversibly encode compound index labels, or
+/// ``intern="flattened"`` to create readable names. Both modes operate only on
+/// index payloads. An explicit ``structure`` retains the declared axis order
+/// and can describe the interface of a symbolic zero.
 ///
 /// Examples
 /// --------
@@ -386,17 +383,17 @@ impl TensorExpression {
     pub(crate) fn index_replacements(
         interface: &PartialStructure,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: Option<&PyCookSettings>,
+        intern: Option<Intern>,
     ) -> PyResult<HashMap<usize, AbstractIndex>> {
         let open_positions = interface.open_positions();
-        Self::port_replacements(interface, &open_positions, indices, cook_indices)
+        Self::port_replacements(interface, &open_positions, indices, intern)
     }
 
     pub(crate) fn port_replacements(
         interface: &PartialStructure,
         positions: &[usize],
         indices: &Bound<'_, PyTuple>,
-        cook_indices: Option<&PyCookSettings>,
+        intern: Option<Intern>,
     ) -> PyResult<HashMap<usize, AbstractIndex>> {
         if indices.len() != positions.len() {
             return Err(PyValueError::new_err(format!(
@@ -420,7 +417,7 @@ impl TensorExpression {
                 }
                 slot.slot.aind()
             } else {
-                index_value(argument.extract()?, cook_indices)?
+                index_value(argument.extract()?, intern)?
             };
             replacements.insert(position, index);
         }
@@ -430,7 +427,7 @@ impl TensorExpression {
     pub(crate) fn named_replacements(
         interface: &PartialStructure,
         mapping: &Bound<'_, PyDict>,
-        cook_indices: Option<&PyCookSettings>,
+        intern: Option<Intern>,
     ) -> PyResult<HashMap<usize, AbstractIndex>> {
         let slots = interface.logical_slots();
         let mut result = HashMap::new();
@@ -439,7 +436,7 @@ impl TensorExpression {
             let index = if let Some(slot) = &typed {
                 slot.slot.aind()
             } else {
-                index_value(key.extract()?, cook_indices)?
+                index_value(key.extract()?, intern)?
             };
             let positions = slots
                 .iter()
@@ -459,7 +456,7 @@ impl TensorExpression {
             }
             let arguments = PyTuple::new(mapping.py(), positions.iter().map(|_| value.clone()))?;
             for (position, index) in
-                Self::port_replacements(interface, &positions, &arguments, cook_indices)?
+                Self::port_replacements(interface, &positions, &arguments, intern)?
             {
                 if result.insert(position, index).is_some() {
                     return Err(PyValueError::new_err(format!(
@@ -607,12 +604,12 @@ impl TensorOperand {
 
 pub(crate) fn index_value(
     value: ConvertibleToAbstractIndex,
-    cook_indices: Option<&PyCookSettings>,
+    intern: Option<Intern>,
 ) -> PyResult<AbstractIndex> {
     match value {
         ConvertibleToAbstractIndex::Aind(index) => Ok(index),
         ConvertibleToAbstractIndex::Atom(expression) => {
-            let atom = match (cook_indices, expression.expr.as_view()) {
+            let atom = match (intern, expression.expr.as_view()) {
                 (Some(settings), AtomView::Fun(fun)) => {
                     settings.rust().cook_function(fun).map_err(|error| {
                         CookingError::new_err(format!("cannot cook index: {error:?}"))
@@ -621,10 +618,10 @@ pub(crate) fn index_value(
                 _ => expression.expr,
             };
             atom.as_view().try_into().map_err(|error| {
-                let hint = if cook_indices.is_some() {
+                let hint = if intern.is_some() {
                     ""
                 } else {
-                    " Try passing cook_indices=CookSettings.indices()."
+                    " Try passing intern=\"indices\"."
                 };
                 PyValueError::new_err(format!(
                     "cannot convert `{atom}` to an abstract index: {error}.{hint}"
@@ -740,9 +737,11 @@ impl TensorExpression {
     /// structure : TensorStructure, optional
     ///     Explicit external axes to check against the expression. This retains
     ///     logical axis order and can specify the rank of a symbolic zero.
-    /// cook_indices : CookSettings, optional
-    ///     Encode compound index labels as symbols before checking structure.
-    ///     ``CookSettings.indices()`` is suitable for nested labels.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
     ///
     /// Returns
     /// -------
@@ -755,14 +754,21 @@ impl TensorExpression {
     /// >>> zero = TensorExpression(0, structure=TensorStructure([Representation.euc(3)]))
     /// >>> zero.rank
     /// 1
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community.tensor import TensorName
+    /// >>> vector = TensorName.vector("v")(Representation.euc(3))
+    /// >>> label, payload = S("i"), S("edge")(7, 2)
+    /// >>> raw = vector(label).to_expression().replace(label, payload)
+    /// >>> TensorExpression(raw, intern="indices").rank
+    /// 1
     #[new]
-    #[pyo3(signature = (expression, *, structure = None, cook_indices = None))]
+    #[pyo3(signature = (expression, *, structure = None, intern = None))]
     #[gen_stub(override_return_type(type_repr = "TensorExpression"))]
     fn new(
         py: Python<'_>,
         expression: &Bound<'_, PyAny>,
         structure: Option<&crate::metadata::SpensoTensorStructure>,
-        cook_indices: Option<&PyCookSettings>,
+        intern: Option<Intern>,
     ) -> PyResult<Self> {
         if let Some(structure) = structure {
             let atom = if let Ok(value) = expression.extract::<PyRef<'_, Self>>() {
@@ -773,7 +779,7 @@ impl TensorExpression {
                     .to_expression()
                     .expr
             };
-            let atom = if let Some(settings) = cook_indices {
+            let atom = if let Some(settings) = intern {
                 settings
                     .rust()
                     .try_cook_indices(atom.as_view())
@@ -786,7 +792,7 @@ impl TensorExpression {
             let checked = Self::from_atom_interface(py, atom, Some(structure.interface.clone()))?;
             return Ok(checked.borrow(py).clone());
         }
-        let tensor = if let Some(settings) = cook_indices {
+        let tensor = if let Some(settings) = intern {
             if let Ok(expression) = expression.extract::<PyRef<'_, Self>>() {
                 Self::with_cooked_indices(&expression, py, &settings.rust())?
             } else {
@@ -2083,9 +2089,11 @@ impl TensorExpression {
     ///     One label per unresolved axis, in logical order. AUTO leaves the
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
-    /// cook_indices : CookSettings, optional
-    ///     Encode compound index labels as symbols. Use CookSettings.indices()
-    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
     ///
     /// Returns
     /// -------
@@ -2104,14 +2112,14 @@ impl TensorExpression {
     /// >>> indexed = A.index("i", "j")
     /// >>> indexed.rank
     /// 2
-    #[pyo3(signature = (*indices, cook_indices = None))]
+    #[pyo3(signature = (*indices, intern = None))]
     fn index(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: Option<&PyCookSettings>,
+        intern: Option<Intern>,
     ) -> PyResult<Py<Self>> {
-        let replacements = Self::index_replacements(self_.interface(), indices, cook_indices)?;
+        let replacements = Self::index_replacements(self_.interface(), indices, intern)?;
         let value = Self::structured(&self_)
             .indexed(&replacements)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
@@ -2131,9 +2139,11 @@ impl TensorExpression {
     ///     One label per external axis, in logical order. AUTO leaves the
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
-    /// cook_indices : CookSettings, optional
-    ///     Encode compound index labels as symbols. Use CookSettings.indices()
-    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
     ///
     /// Returns
     /// -------
@@ -2152,16 +2162,15 @@ impl TensorExpression {
     /// >>> indexed = A.reindex("i", "j")
     /// >>> indexed.rank
     /// 2
-    #[pyo3(signature = (*indices, cook_indices=None))]
+    #[pyo3(signature = (*indices, intern=None))]
     fn reindex(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: Option<&PyCookSettings>,
+        intern: Option<Intern>,
     ) -> PyResult<Py<Self>> {
         let positions = (0..self_.interface().canonical().order()).collect::<Vec<_>>();
-        let replacements =
-            Self::port_replacements(self_.interface(), &positions, indices, cook_indices)?;
+        let replacements = Self::port_replacements(self_.interface(), &positions, indices, intern)?;
         let value = Self::structured(&self_)
             .reindex_interface_ports(&replacements)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -2177,9 +2186,11 @@ impl TensorExpression {
     ///     Old label to new label. A Slot key also restricts the representation.
     ///     Keys must identify existing external axes. Each axis may be renamed
     ///     once; renaming must preserve the external interface.
-    /// cook_indices : CookSettings, optional
-    ///     Encode compound index labels as symbols. Use CookSettings.indices()
-    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
     ///
     /// Returns
     /// -------
@@ -2195,14 +2206,14 @@ impl TensorExpression {
     /// >>> renamed = indexed.rename_indices({"i": "k"})
     /// >>> renamed.rank
     /// 2
-    #[pyo3(signature = (mapping, *, cook_indices=None))]
+    #[pyo3(signature = (mapping, *, intern=None))]
     fn rename_indices(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         mapping: &Bound<'_, PyDict>,
-        cook_indices: Option<&PyCookSettings>,
+        intern: Option<Intern>,
     ) -> PyResult<Py<Self>> {
-        let replacements = Self::named_replacements(self_.interface(), mapping, cook_indices)?;
+        let replacements = Self::named_replacements(self_.interface(), mapping, intern)?;
         let value = Self::structured(&self_)
             .reindex_interface_ports(&replacements)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -2264,9 +2275,11 @@ impl TensorExpression {
     ///     One label per unresolved axis, in logical order. AUTO leaves the
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
-    /// cook_indices : CookSettings, optional
-    ///     Encode compound index labels as symbols. Use CookSettings.indices()
-    ///     for nested labels; omit it for ordinary integers, strings, or symbols.
+    /// intern : {"indices", "flattened"} or None, optional
+    ///     Encode compound index labels before checking the tensor structure.
+    ///     "indices" retains reversible payloads; "flattened" creates readable names.
+    ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
+    ///     None leaves labels unchanged and requires ordinary atomic index labels.
     ///
     /// Returns
     /// -------
@@ -2285,14 +2298,14 @@ impl TensorExpression {
     /// >>> indexed = A("i", "j")
     /// >>> indexed.rank
     /// 2
-    #[pyo3(signature = (*indices, cook_indices = None))]
+    #[pyo3(signature = (*indices, intern = None))]
     fn __call__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: Option<&PyCookSettings>,
+        intern: Option<Intern>,
     ) -> PyResult<Py<Self>> {
-        Self::index(self_, py, indices, cook_indices)
+        Self::index(self_, py, indices, intern)
     }
 
     /// Negate every tensor component.
@@ -4984,7 +4997,7 @@ mod tests {
             let metric = TensorExpression::g(py, &representation, None)?;
             let tensor_type = py.get_type::<TensorExpression>();
             let kwargs = pyo3::types::PyDict::new(py);
-            kwargs.set_item("cook_indices", PyCookSettings::indices())?;
+            kwargs.set_item("intern", "indices")?;
             for (right, rank) in [("mu", 0), ("nu", 2)] {
                 let indexed = metric.bind(py).call1(("mu", right))?;
                 let wrapped = indexed.call_method1(
@@ -5075,6 +5088,62 @@ mod tests {
                 atoms.push(indexed.atom().clone());
             }
             assert_ne!(atoms[0], atoms[1]);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn tensor_constructor_interns_only_indices_and_preserves_tags() {
+        use symbolica::atom::UserData;
+
+        idenso::representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let payload = FunctionBuilder::new(symbol!(
+                "constructor_index_source",
+                tags = ["idenso::constructor_input_index"]
+            ))
+            .add_arg(Atom::num(7))
+            .finish();
+            let argument = FunctionBuilder::new(symbol!("constructor_scalar_argument"))
+                .add_arg(Atom::num(9))
+                .finish();
+            let representation = Minkowski {}.new_rep(4).cast::<LibraryRep>();
+            let raw = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("constructor_interned_tensor"))
+                .add_arg(argument.clone())
+                .add_arg(representation.to_symbolic([payload.clone()]))
+                .finish();
+            let expression = PythonExpression { expr: raw.clone() }.into_pyobject(py)?;
+            let tensor_type = py.get_type::<TensorExpression>();
+            for (mode, policy) in [
+                ("indices", Intern::Indices),
+                ("flattened", Intern::Flattened),
+            ] {
+                let kwargs = PyDict::new(py);
+                kwargs.set_item("intern", mode)?;
+                let result = tensor_type.call((&expression,), Some(&kwargs))?;
+                let result = result.extract::<PyRef<'_, TensorExpression>>()?;
+                let slots = result.interface().logical_slots();
+                assert_eq!(slots.len(), 1);
+                assert_eq!(slots[0].rep(), representation);
+                assert_eq!(result.name_args, vec![argument.clone()]);
+                let PartialIndex::Explicit(AbstractIndex::Symbol(symbol)) = slots[0].aind else {
+                    panic!("interning must retain an explicit external index");
+                };
+                let symbol: Symbol = symbol.into();
+                assert!(symbol.has_tag("idenso::constructor_input_index"));
+                if mode == "indices" {
+                    assert_eq!(symbol.get_data(), &UserData::Atom(payload.clone()));
+                    assert_eq!(policy.rust().uncook(result.atom().as_view()), raw);
+                } else {
+                    assert_ne!(symbol.get_data(), &UserData::Atom(payload.clone()));
+                    assert_eq!(
+                        *result.atom(),
+                        policy.rust().try_cook_indices(raw.as_view()).unwrap()
+                    );
+                }
+            }
             Ok(())
         })
         .unwrap();
@@ -5657,7 +5726,7 @@ mod tests {
                 atom.clone(),
                 PartialStructure::from_logical_slots(slots.into_iter().rev()),
             )?;
-            let settings = PyCookSettings::indices();
+            let settings = Intern::Flattened;
             let expected = slots
                 .into_iter()
                 .rev()
@@ -5669,7 +5738,7 @@ mod tests {
                 })
                 .collect::<Vec<_>>();
             let kwargs = PyDict::new(py);
-            kwargs.set_item("cook_indices", settings.clone())?;
+            kwargs.set_item("intern", "flattened")?;
             let result = py
                 .get_type::<TensorExpression>()
                 .call((&original,), Some(&kwargs))?;
@@ -5695,7 +5764,7 @@ mod tests {
             )?;
             let cooked_zero = Py::new(
                 py,
-                TensorExpression::new(py, zero.bind(py).as_any(), None, Some(&settings))?,
+                TensorExpression::new(py, zero.bind(py).as_any(), None, Some(settings))?,
             )?;
             let cooked_zero = cooked_zero.borrow(py);
             assert!(cooked_zero.atom().is_zero());
@@ -5723,7 +5792,7 @@ mod tests {
             assert_eq!(metric.borrow(py).interface().canonical().order(), 2);
             let cooked = Py::new(
                 py,
-                TensorExpression::new(py, metric.bind(py).as_any(), None, Some(&settings))?,
+                TensorExpression::new(py, metric.bind(py).as_any(), None, Some(settings))?,
             )?;
             assert!(cooked.borrow(py).interface().canonical().is_scalar());
             let contraction = PyDict::new(py);

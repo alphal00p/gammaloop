@@ -312,28 +312,69 @@ class TensorOperationsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.matrix().permute_axes([0, 0])
 
-    def test_cooking_is_shared_by_all_indexing_entry_points(self):
+    def test_interning_is_shared_by_all_indexing_entry_points(self):
         payload = S("api_operations::edge")(7, 2)
-        settings = sp.CookSettings.reversible()
         a = self.A(self.rep)
         tensor = sp.Tensor.dense(a, [1.0, 2.0])
-        expected = a(payload, cook_indices=settings).to_expression()
-        for value in (a, tensor, a.to_network()):
-            indexed = value(payload, cook_indices=settings)
-            expression = (
-                indexed
-                if isinstance(indexed, sp.TensorExpression)
-                else indexed.expression()
-            )
-            self.assertEqual(expression.to_expression(), expected)
-            self.assertEqual(
-                expression.structure.slots[0].index,
-                a(payload, cook_indices=settings).structure.slots[0].index,
-            )
+        label = S("api_operations::raw_index")
+        raw = a(label).to_expression().replace(label, payload)
+        for mode in ("indices", "flattened"):
+            expected = a(payload, intern=mode)
+            self.assertEqual(sp.TensorExpression(raw, intern=mode), expected)
+            for value in (a, tensor, a.to_network()):
+                for indexed in (
+                    value(payload, intern=mode),
+                    value.index(payload, intern=mode),
+                    value.reindex(payload, intern=mode),
+                    value("i").rename_indices({"i": payload}, intern=mode),
+                ):
+                    expression = (
+                        indexed
+                        if isinstance(indexed, sp.TensorExpression)
+                        else indexed.expression()
+                    )
+                    self.assertEqual(
+                        expression.to_expression(), expected.to_expression()
+                    )
+                    self.assertEqual(
+                        expression.structure.slots, expected.structure.slots
+                    )
+            self.assertEqual(sp.TensorExpression(expected, intern=mode), expected)
+        self.assertNotEqual(
+            a(payload, intern="indices"), a(payload, intern="flattened")
+        )
         with self.assertRaises(ValueError):
             a(payload)
+
+    def test_intern_defaults_validation_and_retired_cooking_surface(self):
+        a = self.A(self.rep("i"))
+        for source in (a, a.to_expression()):
+            self.assertEqual(sp.TensorExpression(source), a)
+            self.assertEqual(sp.TensorExpression(source, intern=None), a)
+            self.assertEqual(
+                sp.TensorExpression(source, structure=a.structure, intern=None), a
+            )
+        for invalid, error in (
+            ("invalid", ValueError),
+            (True, TypeError),
+            (1, TypeError),
+        ):
+            with self.assertRaises(error):
+                sp.TensorExpression(a, intern=invalid)
+            with self.assertRaises(error):
+                a.reindex("j", intern=invalid)
+            # Reject invalid policies even when there are no indices to traverse.
+            with self.assertRaises(error):
+                sp.TensorExpression(1).index(intern=invalid)
+            with self.assertRaises(error):
+                a.rename_indices({}, intern=invalid)
+        for name in ("CookSettings", "CookMode", "CookSourceFilter", "CookTagFilter"):
+            self.assertFalse(hasattr(sp, name))
+        self.assertFalse(
+            any(name.startswith("cook") for name in dir(sp.TensorExpression))
+        )
         with self.assertRaises(TypeError):
-            a(payload, cook_indices=True)
+            sp.TensorExpression(a, cook_indices=None)
 
     def test_component_slices_and_independent_storage_conversions(self):
         tensor = self.matrix()

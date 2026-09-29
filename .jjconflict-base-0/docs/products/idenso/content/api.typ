@@ -44,7 +44,7 @@ operations cover:
 - collection and materialization: `collect` preserves factored sectors; `expand` explicitly
   materializes an expanded result;
 - index preparation: typed `wrap_indices`, `list_dangling`, and the explicit
-  `cook_indices=CookSettings(...)` construction/indexing policy;
+  `intern="indices"` or `intern="flattened"` construction/indexing policy;
 - reduction: `contract(ContractSettings(...))` and `reduce_algebra(AlgebraSettings(...))`;
 - notation: `to_dots`, `undo_dots`, `undo_chain`, and `undo_trace`;
 - canonical labels: `canonize`;

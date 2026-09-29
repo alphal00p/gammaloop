@@ -12,7 +12,7 @@ Parameters
 aind : int, str, or Expression
     An index label, not a component coordinate. A string, integer, or single
     symbol creates a Slot. A compound Expression creates raw representation
-    syntax, which can be used with ``cook_indices`` when constructing a tensor.
+    syntax, which can be used with ``intern="indices"`` when constructing a tensor.
 
 Returns
 -------
@@ -588,7 +588,7 @@ Examples
 True"###
     };
     ("CookingError") => {
-        r###"Raised when a compound index label cannot be encoded according to CookSettings.
+        r###"Raised when a compound index label cannot be encoded by the selected interning mode.
 
 Notes
 -----
