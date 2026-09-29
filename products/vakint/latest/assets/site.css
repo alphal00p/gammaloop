@@ -281,10 +281,13 @@ body[data-has-toc="false"] .docs-shell { grid-template-columns: var(--sidebar-wi
   box-shadow: 0.45rem 0.45rem 0 var(--accent-soft);
 }
 .product-hero-logo { display: block; width: min(18rem, 70%); height: auto; margin-bottom: 1.25rem; background-position: left center; background-repeat: no-repeat; background-size: contain; }
-.product-logo-gammaloop { aspect-ratio: 2.016 / 1; background-image: url("gammalooplogo-light.svg"); background-position: center; background-size: contain; }
+.product-logo-gammaloop { aspect-ratio: 1.888 / 1; background-image: url("gammalooplogo-light.svg"); background-position: center; background-size: contain; }
 :root[data-theme="dark"] .product-logo-gammaloop { background-image: url("gammalooplogo-dark.svg"); }
+.developer-hero-logo { display: block; width: min(18rem, 70%); aspect-ratio: 1.888 / 1; margin-bottom: 1.25rem; background: url("gammaloop-construction-light.svg") left center / contain no-repeat; }
+:root[data-theme="dark"] .developer-hero-logo { background-image: url("gammaloop-construction-dark.svg"); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) .product-logo-gammaloop { background-image: url("gammalooplogo-dark.svg"); }
+  :root:not([data-theme]) .developer-hero-logo { background-image: url("gammaloop-construction-dark.svg"); }
 }
 .product-logo-spenso { aspect-ratio: 637 / 189; border-radius: 1rem; background-image: url("spensologo.svg"); }
 .product-hero h1 { max-width: 12ch; margin: 0.25rem 0 0.7rem; }
