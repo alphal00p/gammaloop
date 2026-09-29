@@ -610,6 +610,36 @@ impl SymbolicTensor<PartialStructure> {
         Ok(value)
     }
 
+    /// Scope explicit indices and their logical ports; AUTO identities are unchanged.
+    /// With `dummies_only`, protect the established external slots from scoping.
+    pub fn wrap_indices(&self, scope: Symbol, dummies_only: bool) -> InferenceResult<Self> {
+        let mut structure = self.structure.logical_slots();
+        let external = structure
+            .iter()
+            .filter_map(|slot| match slot.aind {
+                PartialIndex::Explicit(index) => Some(slot.rep().slot(index)),
+                PartialIndex::Open(_) => None,
+            })
+            .collect::<std::collections::HashSet<_>>();
+        let expression = AbstractIndex::wrap_expression(self.expression.as_view(), scope, |slot| {
+            !dummies_only || !external.contains(slot)
+        });
+        if !dummies_only {
+            for slot in &mut structure {
+                if let PartialIndex::Explicit(index) = slot.aind {
+                    slot.aind = PartialIndex::Explicit(index.scoped(scope));
+                }
+            }
+        }
+        let structure = PartialStructure::from_logical_slots(structure);
+        if !InterfaceInference::normalization_is_intrinsic(self.expression.as_view()) {
+            // A user callback can erase or introduce a port when its scoped
+            // argument is rebuilt. Such output cannot inherit the old interface.
+            Self::validate_interface(&expression, &structure)?;
+        }
+        Self::checked_parts(expression, structure)
+    }
+
     /// Cook both encoded indices and their logical interface, contracting collisions.
     pub fn with_cooked_indices(&self, settings: &crate::CookSettings) -> InferenceResult<Self> {
         let cook = |atom: &Atom| {
@@ -4057,6 +4087,51 @@ pub(super) mod tests {
             PartialStructure::from_logical_slots([slots[1]]),
         );
         assert!(value.with_cooked_indices(&settings).is_err());
+    }
+
+    #[test]
+    fn typed_scoping_checks_callback_output_and_preserves_zero_ports() {
+        let rep = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let scope = symbolica::symbol!("shared_scope_test");
+        let index = AbstractIndex::Normal(73201);
+        let slot = rep.slot(PartialIndex::Explicit(index));
+        let target = rep.slot::<AbstractIndex, _>(index.scoped(scope)).to_atom();
+        let callback = spenso::tensor_symbol!(
+            "scope_callback_strips_ports",
+            norm = move |node, output| {
+                if let AtomView::Fun(function) = node
+                    && function.iter().any(|arg| arg == target.as_view())
+                {
+                    **output = Atom::one();
+                }
+            }
+        );
+        let value = SymbolicTensor::<PartialStructure>::new(
+            FunctionBuilder::new(callback)
+                .add_arg(composition::port_atom(slot))
+                .finish(),
+            PartialStructure::from_logical_slots([slot]),
+        );
+        assert!(value.wrap_indices(scope, false).is_err());
+        assert_eq!(
+            value.wrap_indices(scope, true).unwrap().expression(),
+            value.expression()
+        );
+        let zero = SymbolicTensor::<PartialStructure>::new(
+            Atom::Zero,
+            PartialStructure::from_logical_slots([slot, rep.slot(PartialIndex::open(1))]),
+        );
+        let scoped = zero.wrap_indices(scope, false).unwrap();
+        assert!(scoped.expression().is_zero());
+        assert_eq!(
+            scoped.structure.logical_slots()[0].aind,
+            PartialIndex::Explicit(index.scoped(scope))
+        );
+        assert_eq!(scoped.structure.open_positions(), vec![1]);
+        assert_eq!(
+            zero.wrap_indices(scope, true).unwrap().structure,
+            zero.structure
+        );
     }
 
     #[test]

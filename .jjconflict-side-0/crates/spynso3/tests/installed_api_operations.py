@@ -275,10 +275,10 @@ class TensorOperationsTests(unittest.TestCase):
                 else indexed.expression()
             )
             self.assertEqual(expression.to_expression(), expected)
-            decoded_index = sp.TensorExpression(
-                expression.structure.slots[0].index
-            ).uncook(settings)
-            self.assertEqual(decoded_index.to_expression(), payload)
+            self.assertEqual(
+                expression.structure.slots[0].index,
+                a(payload, cook_indices=settings).structure.slots[0].index,
+            )
         with self.assertRaises(ValueError):
             a(payload)
         with self.assertRaises(TypeError):

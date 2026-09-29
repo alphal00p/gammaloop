@@ -284,7 +284,7 @@ remain opaque. Alias definitions are handled by the typed alias owner rather
 than guessed by the raw chain walker.
 
 Index wrapping is an ownership operation. `list_dangling` discovers external slots through the
-shared parser's structure-only construction; `wrap_dummies` changes only non-external index payloads; `wrap_indices` changes explicit index payloads while leaving unresolved
+shared parser's structure-only construction; `wrap_indices(scope, dummies_only=True)` scopes non-external explicit indices; its default scopes all explicit indices while leaving unresolved
 open-port markers intact. Independently created expressions should be wrapped before multiplication when
 same-spelled dummy names must not contract.
 

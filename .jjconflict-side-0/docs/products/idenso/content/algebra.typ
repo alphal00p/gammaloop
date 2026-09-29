@@ -13,12 +13,14 @@ representations are registered in one deterministic order.
 Free indices describe the result; repeated compatible indices describe contractions. Before
 combining independently built expressions, wrap or rename dummy-index namespaces so equal
 printed names do not create accidental contractions. Cooking temporarily replaces selected
-index payloads or function subexpressions with compact symbols. Retain the generated map and
-settings whenever uncooking is required.
+index payloads or function subexpressions with compact symbols. Rust `CookSettings::uncook`
+restores reversible encodings. Python accepts a `CookSettings` policy through the
+`cook_indices` keyword when constructing or indexing a tensor; it has no separate cooking
+or uncooking pass.
 
-Cooking is especially useful before expensive canonicalization, but it changes what downstream
-matchers can see. Uncook before applying an identity whose pattern depends on the hidden tensor
-head or index structure.
+Cooking changes what downstream matchers can see. Retain the original expression when a later
+identity needs the hidden function head or index payload. Typed dummy scoping below does not
+hide those tensor structures.
 
 == Keep independent dummy namespaces independent
 
@@ -29,7 +31,6 @@ each factor with a distinct header first, while leaving its external indices unt
 ```python
 import symbolica as sp
 from symbolica.community.spenso import (
-    CookSettings,
     Representation,
     TensorExpression,
     TensorName,
@@ -45,9 +46,9 @@ q = TensorName.vector("q")
 
 left = TensorExpression(g(mu, nu).to_expression() * p(mu).to_expression())
 right = TensorExpression(g(mu, rho).to_expression() * q(mu).to_expression())
-safe_product = TensorExpression(
-    left.wrap_dummies(sp.S("lhs")) * right.wrap_dummies(sp.S("rhs")),
-    cook_indices=CookSettings.indices(),
+safe_product = (
+    left.wrap_indices(sp.S("lhs"), dummies_only=True)
+    * right.wrap_indices(sp.S("rhs"), dummies_only=True)
 )
 
 assert len(safe_product.list_dangling()) == 2
@@ -58,13 +59,12 @@ assert (
 ```
 
 The stable invariant is two free indices, `nu` and `rho`; the two occurrences of local `mu`
-belong to separate contractions after wrapping. `wrap_dummies` returns an ordinary Symbolica
-expression with nested index payloads. The constructor cooks those payloads using the explicit
-`CookSettings.indices()` policy before validating the tensor interface. The generated
-#link("reference/python/spynso3/TensorExpression/#exports-tensorexpression-wrap-dummies-method")[`wrap_dummies` reference] records the
-Python signature, while the exact
-#link("reference/rust/idenso/trait.IndexTooling.html")[`IndexTooling` Rustdoc] covers
-the underlying Rust boundary.
+belong to separate contractions after wrapping. `wrap_indices(..., dummies_only=True)`
+returns a typed tensor with scoped dummy indices and the original external ports. Its default
+scopes every explicit index; unresolved ports remain unresolved in either mode. No cooking
+roundtrip is required. The generated
+#link("reference/python/spynso3/TensorExpression/#exports-tensorexpression-wrap-indices-method")[`wrap_indices` reference]
+records the signature; the shared Rust `SymbolicTensor` owns the transformation.
 
 #callout("Interpret index failures before simplifying", [
   More or fewer than two dangling indices means a name collided or a slot's representation or
@@ -94,8 +94,8 @@ passes handle fundamental/adjoint deltas, generators, structure constants, and r
 group parameters. Apply one algebra family at a time and inspect the intermediate expression;
 an all-at-once fixed-point loop can obscure which convention produced a sign or normalization.
 
-For explicit color generators, `spenso_conjugate` and `dirac_adjoint` exchange
-fundamental and antifundamental slots and transpose the generator ports. This
+For explicit color generators, `dirac_adjoint` exchanges
+fundamental and antifundamental slots and transposes the generator ports. This
 uses the Hermiticity of the SU(N) generators. Scalar representation labels in
 Casimir and index invariants are preserved. Real momenta and couplings still
 need explicit assumptions or substitutions for unevaluated conjugations.

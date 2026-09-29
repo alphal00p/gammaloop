@@ -43,11 +43,11 @@ operations cover:
 - setup: importing the community module registers its symbols;
 - collection and materialization: `collect` preserves factored sectors; `expand` explicitly
   materializes an expanded result;
-- index preparation: `wrap_indices`, `wrap_dummies`, `list_dangling`, `cook_indices`, and
-  `cook_function`;
+- index preparation: typed `wrap_indices`, `list_dangling`, and the explicit
+  `cook_indices=CookSettings(...)` construction/indexing policy;
 - algebra: `contract`, `simplify`, `simplify_gamma`, `simplify_color`, and `simplify_epsilon`;
 - notation and canonical labels: `to_dots`, `undo_dots`, and `canonize`;
-- conjugation: `dirac_adjoint` and `spenso_conjugate`.
+- conjugation: `dirac_adjoint`.
 
 ```python
 from symbolica.community.spenso import Representation, TensorExpression, TensorName
@@ -71,6 +71,19 @@ Use `contract(rank_one=False)` for metrics only. `contract_ports(rhs, left=..., 
 is the separate binary operation on selected logical ports. `to_dots()` changes notation;
 request `contract()` first when repeated explicit indices need contraction.
 Resolve aliases with `to_expression()`, or explicitly distribute the result with `expand()`.
+
+`simplify(settings)` is the shared orchestrator: it applies the configured algebra passes
+and returns an `AliasedTensorExpression`, without implicit expansion. Color dimension
+invariants are selected with `ColorSimplifySettings(substitute_cof_dimension_invariants=True)`.
+There is no separate Python invariant-conversion or Casimir-basis pass.
+
+The construction and indexing surface is intentionally retained: `flat`, `sigma`, and `f`
+construct tensors; `rank` and `shape` inspect their interface; `index`, `reindex`, and
+`rename_indices` assign or change indices; `permute_axes` changes logical axis order;
+`compose`, `outer`, and `trace` build tensor operations. `format_tensor` and `to_latex`
+control presentation. These are supported tensor operations even when a current application
+has no call site. Arbitrary unchecked construction and post-hoc `reinfer` are not public
+escape hatches: reconstruct through the checked `TensorExpression` constructor.
 
 Idenso does not define a second parser syntax: the example constructs a Spenso-compatible
 `TensorExpression` and then applies one Idenso transformation through its methods. Keep transformations separate

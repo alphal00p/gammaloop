@@ -9,6 +9,7 @@ from pathlib import Path
 from symbolica import E, Replacement, S
 from symbolica.community import hep as fk
 from symbolica.community.spenso import (
+    ColorSimplifySettings,
     CookSettings,
     GammaSimplifySettings,
     TensorExpression,
@@ -132,7 +133,11 @@ for outgoing, vertices, count in (
         .to_expression()
         .replace(dA, Nc**2 - 1)
     )
-    colored = TensorExpression(colored).to_cof_dimension_invariants()
+    colored = (
+        TensorExpression(colored)
+        .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
+        .to_expression()
+    )
 
     # Dirac adjunction exchanges the two endpoints of the open fermion chain.
     # Reduce the fermion trace before introducing the physical gluon projectors.

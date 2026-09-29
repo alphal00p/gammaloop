@@ -103,6 +103,7 @@ def check_types(
     assert_type(expression.permute_axes([1, 0]), sp.TensorExpression)
     assert_type(tensor.permute_axes([1, 0]), sp.Tensor)
     assert_type(network.permute_axes([1, 0]), sp.TensorNetwork)
+    assert_type(network.contract_ports(expression, left=0, right=0), sp.TensorNetwork)
     assert_type(tensor.rename_indices({representation("mu"): "nu"}), sp.Tensor)
     assert_type(
         expression("mu", cook_indices=sp.CookSettings.indices()), sp.TensorExpression
@@ -122,7 +123,12 @@ def check_types(
     assert_type(expression.shape, tuple[int | Expression, ...])
     assert_type(network.shape, tuple[int | Expression, ...])
     assert_type(tensor.shape, tuple[int, ...])
-    assert_type(expression.cook_indices(sp.CookSettings.indices()), sp.TensorExpression)
+    assert_type(
+        sp.TensorExpression(
+            expression.to_expression(), cook_indices=sp.CookSettings.indices()
+        ),
+        sp.TensorExpression,
+    )
     assert_type(library["A"], sp.Tensor)
     assert_type(library[expression], sp.Tensor)
     assert_type(expression in library, bool)

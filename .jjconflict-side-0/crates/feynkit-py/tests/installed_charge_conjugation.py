@@ -34,7 +34,7 @@ c_head, g_head, chain_head, incoming, outgoing = S(
     "spenso::out",
 )
 charge = TensorExpression(c_head(bis_i, bis_j))
-assert charge.spenso_conjugate().to_expression() == charge.to_expression()
+assert charge.to_expression().conj() == charge.to_expression()
 assert c_head(bis_j, bis_i) == -charge.to_expression()
 identity = TensorExpression.g(spin)(i, j)
 square = TensorExpression(c_head(bis_i, bis_k) * c_head(bis_k, bis_j))

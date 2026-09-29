@@ -10,6 +10,7 @@ import numpy as np
 from symbolica import E, S, Symbol
 from symbolica.community import hep
 from symbolica.community.spenso import (
+    ColorSimplifySettings,
     CookSettings,
     GammaSimplifySettings,
     TensorExpression,
@@ -136,7 +137,11 @@ def calculate(names, photon_position, gluon_position, fermion_ports):
         .to_expression()
         .replace(dA, Nc**2 - 1)
     )
-    colored = TensorExpression(colored).to_cof_dimension_invariants()
+    colored = (
+        TensorExpression(colored)
+        .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
+        .to_expression()
+    )
     print("COLOR PASS", flush=True)
     # Adjoint reverses the single open fermion chain. The explicit endpoint
     # pairing distinguishes pair creation, annihilation and Compton scattering.

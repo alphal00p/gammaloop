@@ -258,10 +258,10 @@ mod test {
             rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(74801).scoped(scope))
                 .to_atom()
         );
-        let wrapped = AbstractIndex::wrap_expression(value.as_view(), scope);
+        let wrapped = AbstractIndex::wrap_expression(value.as_view(), scope, |_| true);
         assert_eq!(wrapped, expected);
         assert_eq!(
-            AbstractIndex::wrap_expression(wrapped.as_view(), scope),
+            AbstractIndex::wrap_expression(wrapped.as_view(), scope, |_| true),
             wrapped
         );
     }
@@ -565,13 +565,17 @@ impl AbstractIndex {
 
     /// Scope explicit tensor slots, leaving scalar function arguments opaque.
     #[cfg(feature = "shadowing")]
-    pub fn wrap_expression(expression: AtomView<'_>, scope: Symbol) -> Atom {
+    pub fn wrap_expression(
+        expression: AtomView<'_>,
+        scope: Symbol,
+        mut select: impl FnMut(&super::representation::LibrarySlot<Self>) -> bool,
+    ) -> Atom {
         use super::{representation::LibrarySlot, slot::IsAbstractSlot};
         expression.replace_map(|value, _, output| {
             if value.get_symbol().is_some_and(|symbol| symbol.is_scalar()) {
                 **output = value.to_owned();
             } else if let Ok(mut slot) = LibrarySlot::<Self>::try_from(value) {
-                if matches!(slot.aind, Self::Open { .. }) {
+                if matches!(slot.aind, Self::Open { .. }) || !select(&slot) {
                     // AUTO markers identify unresolved axes, not explicit names.
                     **output = value.to_owned();
                     return;

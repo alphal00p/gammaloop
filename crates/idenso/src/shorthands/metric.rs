@@ -43,7 +43,7 @@ use eyre::Result;
 use crate::rep_symbols::RS;
 
 pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
-    AbstractIndex::wrap_expression(view, header)
+    AbstractIndex::wrap_expression(view, header, |_| true)
 }
 
 fn dangling_indices<Aind: ParseableAind + AbsInd + DummyAind>(

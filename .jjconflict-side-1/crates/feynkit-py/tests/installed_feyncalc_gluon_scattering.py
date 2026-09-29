@@ -8,7 +8,11 @@ The gallery uses fixed 1/2 incoming spin factors; dimensional averages use 1/(D-
 import numpy as np
 from symbolica import E, S, Symbol
 from symbolica.community import hep
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.spenso import (
+    ColorSimplifySettings,
+    CookSettings,
+    TensorExpression,
+)
 
 index_scope = S("spenso::index_scope")
 
@@ -80,7 +84,7 @@ amplitude = sum(terms, E("0"))
 operator = kin.apply(TensorExpression(amplitude).contract().to_expression().to_dots())
 amplitude = operator.to_expression()
 assert len(operator.structure.slots) == 8
-adjoint = operator.spenso_conjugate().to_expression().replace(conj(P(a, b)), P(a, b))
+adjoint = operator.dirac_adjoint().to_expression().replace(conj(P(a, b)), P(a, b))
 for real in (s, t, u, D, gs):
     adjoint = adjoint.replace(conj(real), real)
 adjoint = TensorExpression(adjoint).wrap_indices(wrapped).to_expression()
@@ -100,7 +104,12 @@ colored = (
     .to_expression()
     .replace(dA, N**2 - 1)
 )
-colored = TensorExpression(colored).to_cof_dimension_invariants().to_expression()
+colored = (
+    TensorExpression(colored)
+    .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
+    .to_expression()
+    .to_expression()
+)
 # Physical axial references pair the two incoming and the two outgoing gluons.
 result = colored
 for i, j in enumerate((1, 0, 3, 2)):

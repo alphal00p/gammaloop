@@ -8,7 +8,11 @@ interference terms and massless limits are checked before phase-space integratio
 import numpy as np
 from symbolica import E, Replacement, S, Symbol
 from symbolica.community import hep
-from symbolica.community.spenso import CookSettings, TensorExpression
+from symbolica.community.spenso import (
+    ColorSimplifySettings,
+    CookSettings,
+    TensorExpression,
+)
 
 index_scope = S("spenso::index_scope")
 
@@ -130,7 +134,12 @@ for name, pdgs in [
             .replace(dA, Nc**2 - 1)
         )
         colored = (
-            TensorExpression(colored).to_cof_dimension_invariants().to_expression()
+            TensorExpression(colored)
+            .simplify_color(
+                ColorSimplifySettings(substitute_cof_dimension_invariants=True)
+            )
+            .to_expression()
+            .to_expression()
         )
         scalar = (
             TensorExpression(colored * spins, cook_indices=CookSettings.indices())

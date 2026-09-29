@@ -1187,7 +1187,7 @@ def run(value: str, strict: bool = False) -> str:
                 .iter()
                 .map(|member| member.name.as_str())
                 .collect::<Vec<_>>(),
-            ["Auto", "Serial", "Parallel"]
+            ["Auto", "Serial", "Parallel", "__int__"]
         );
     }
 }

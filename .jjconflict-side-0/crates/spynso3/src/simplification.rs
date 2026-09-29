@@ -9,9 +9,7 @@ mod tooling;
 
 pub(crate) use pipeline::PySimplifySettings;
 
-pub(crate) use algebra::{
-    PyColorCasimirSettings, PyColorSimplifySettings, PyGammaSimplifySettings,
-};
+pub(crate) use algebra::{PyColorSimplifySettings, PyGammaSimplifySettings};
 pub(crate) use tooling::{
     CanonicalizationError, CookingError, DiracAdjointError, NetworkToolingError, PyCookSettings,
 };
@@ -41,7 +39,6 @@ mod tests {
 
     const PUBLIC_API: &[&str] = &[
         "CanonicalizationError",
-        "ColorCasimirSettings",
         "ColorSimplifySettings",
         "CookMode",
         "CookSettings",
@@ -53,32 +50,16 @@ mod tests {
         "GammaSimplifySettings",
         "NetworkToolingError",
         "SimplifySettings",
-        "alias_subtensors",
         "canonize",
         "chainify",
-        "conjugate_transpose",
-        "cook",
-        "cook_function",
-        "cook_indices",
         "dirac_adjoint",
         "list_dangling",
-        "normalize_chains",
         "simplify_color",
         "simplify",
         "simplify_epsilon",
         "simplify_gamma",
-        "spenso_conjugate",
-        "to_cof_dimension_invariants",
-        "to_color_casimir",
         "to_dots",
-        "uncook",
-        "undo_all",
-        "undo_schoonschip",
-        "undo_chain",
         "undo_dots",
-        "undo_single_length",
-        "undo_trace",
-        "wrap_dummies",
         "wrap_indices",
     ];
 
@@ -105,6 +86,31 @@ mod tests {
             expected.sort();
             assert_eq!(actual, expected);
             let tensor_expression = py.get_type::<TensorExpression>();
+            for name in [
+                "alias_subtensors",
+                "undo_all",
+                "undo_chain",
+                "undo_trace",
+                "undo_schoonschip",
+                "undo_single_length",
+                "normalize_chains",
+                "reinfer",
+                "unsafe_from_expression",
+                "to_color_casimir",
+                "conjugate_transpose",
+                "spenso_conjugate",
+                "to_cof_dimension_invariants",
+                "wrap_dummies",
+                "cook",
+                "uncook",
+                "cook_function",
+                "cook_indices",
+            ] {
+                assert!(
+                    !tensor_expression.hasattr(name).unwrap(),
+                    "retired method {name}"
+                );
+            }
             for name in PUBLIC_API {
                 if name.starts_with(char::is_lowercase) {
                     assert!(
@@ -251,14 +257,11 @@ mod tests {
             }
 
             for name in [
-                "cook_function",
-                "cook_indices",
                 "dirac_adjoint",
                 "list_dangling",
                 "simplify_color",
                 "simplify_gamma",
                 "to_dots",
-                "wrap_dummies",
                 "wrap_indices",
             ] {
                 let signature = py

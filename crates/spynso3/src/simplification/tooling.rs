@@ -255,24 +255,6 @@ impl PyCookSettings {
     pub(crate) fn rust(&self) -> RustCookSettings {
         self.inner.clone()
     }
-
-    pub(crate) fn indices_or(settings: Option<&Self>) -> RustCookSettings {
-        settings
-            .map(Self::rust)
-            .unwrap_or_else(RustCookSettings::indices)
-    }
-
-    pub(crate) fn flattened_or(settings: Option<&Self>) -> RustCookSettings {
-        settings
-            .map(Self::rust)
-            .unwrap_or_else(RustCookSettings::flattened)
-    }
-
-    pub(crate) fn reversible_or(settings: Option<&Self>) -> RustCookSettings {
-        settings
-            .map(Self::rust)
-            .unwrap_or_else(RustCookSettings::reversible)
-    }
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]

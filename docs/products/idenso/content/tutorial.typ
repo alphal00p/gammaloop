@@ -81,7 +81,7 @@ version; inspect the expression structure instead of comparing exact text.
 Keep transformations observable while developing:
 
 - call `list_dangling` before and after a pass to catch accidental contractions;
-- use `wrap_dummies` before multiplying expressions built in independent index namespaces;
+- use `wrap_indices(scope, dummies_only=True)` before multiplying expressions built in independent index namespaces;
 - use typed `collect` to select the Minkowski, bispinor, or color sector needed by the next pass;
 - apply `contract`, `simplify_gamma`, and `simplify_color` as distinct phases;
 - canonicalize only after the physics-specific identities required by the calculation are
@@ -94,7 +94,7 @@ Keep transformations observable while developing:
 - If the metric remains unchanged, construct its slots with the same `Representation` and
   abstract index objects as the vector. Plain Symbolica functions do not automatically carry
   Spenso tensor structure.
-- If a free index disappears unexpectedly, inspect repeated names and use `wrap_dummies` before
+- If a free index disappears unexpectedly, inspect repeated names and use `wrap_indices(scope, dummies_only=True)` before
   combining separately constructed expressions.
 - Continue with the syntax-and-algebra manual, then use the Python and Rust API references for
   signatures and feature gates.

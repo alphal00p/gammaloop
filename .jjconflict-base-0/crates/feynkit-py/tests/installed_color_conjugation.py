@@ -3,6 +3,7 @@
 from symbolica import E, S
 from symbolica.community.spenso import (
     AUTO,
+    ColorSimplifySettings,
     Representation,
     TensorExpression,
     chain,
@@ -21,7 +22,7 @@ for colors in (2, 3, 5):
         generator("a", AUTO, AUTO),
         generator("b", AUTO, AUTO),
     )
-    conjugate = word.spenso_conjugate()
+    conjugate = word.dirac_adjoint()
     expected = chain(
         fundamental("j"),
         fundamental.dual()("i"),
@@ -29,16 +30,15 @@ for colors in (2, 3, 5):
         generator("a", AUTO, AUTO),
     )
     assert conjugate.to_expression() == expected.to_expression()
-    assert conjugate.spenso_conjugate().to_expression() == word.to_expression()
+    assert conjugate.dirac_adjoint().to_expression() == word.to_expression()
     assert word.dirac_adjoint().to_expression() == conjugate.to_expression()
     assert conjugate.simplify_color().to_expression().to_expression() == (
-        explicit.spenso_conjugate().simplify_color().to_expression().to_expression()
+        explicit.dirac_adjoint().simplify_color().to_expression().to_expression()
     )
     norm = (
         (word * conjugate)
-        .simplify_color()
+        .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
         .to_expression()
-        .to_cof_dimension_invariants()
         .contract()
         .to_expression()
     )
@@ -51,10 +51,10 @@ for colors in (2, 3, 5):
     trace = tensor_trace(
         fundamental, *(generator(a, AUTO, AUTO) for a in ("a", "b", "c"))
     )
-    conjugate_trace = trace.spenso_conjugate()
-    assert conjugate_trace.spenso_conjugate().to_expression() == trace.to_expression()
+    conjugate_trace = trace.dirac_adjoint()
+    assert conjugate_trace.dirac_adjoint().to_expression() == trace.to_expression()
     assert conjugate_trace.simplify_color().to_expression().to_expression() == (
-        loop.spenso_conjugate().simplify_color().to_expression().to_expression()
+        loop.dirac_adjoint().simplify_color().to_expression().to_expression()
     )
     print(f"SU({colors}): compact/explicit color conjugation and norm passed")
 
@@ -70,11 +70,11 @@ for colors in (2, 3, 5):
     # Cyclic invariance reduces the six permutations of three generators to
     # two orientations. Their half-sum is real and half-difference imaginary.
     assert (
-        symmetric_trace.spenso_conjugate().to_expression()
+        symmetric_trace.dirac_adjoint().to_expression()
         == symmetric_trace.to_expression()
     )
     assert (
-        antisymmetric_trace.spenso_conjugate() + antisymmetric_trace
+        antisymmetric_trace.dirac_adjoint() + antisymmetric_trace
     ).simplify_color().to_expression().to_expression() == E("0")
     assert (
         symmetric_trace.simplify_color().to_expression().to_expression()

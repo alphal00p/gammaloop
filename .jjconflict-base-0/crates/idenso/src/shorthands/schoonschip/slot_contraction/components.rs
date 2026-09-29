@@ -125,9 +125,8 @@ struct ComponentSum<'a, 'b> {
     tensor_ports: AHashMap<AtomView<'a>, Vec<(usize, AtomView<'a>)>>,
     tensors: Vec<(TensorSource<'a>, Vec<Argument<'a>>)>,
     literal_relabellings: std::cell::RefCell<Vec<(Atom, Atom)>>,
-    opaque_factors: Vec<(usize, Vec<AtomView<'a>>, PartialStructure)>,
+    opaque_factors: Vec<(AtomView<'a>, Vec<AtomView<'a>>, PartialStructure)>,
     factor_roots: Vec<Option<usize>>,
-    factor_emission: Option<&'b dyn Fn(usize) -> Option<Atom>>,
     overrides: Vec<(AtomView<'a>, Argument<'a>)>,
     metrics: usize,
     alpha_tensors: AHashMap<TensorKey<'a>, usize>,
@@ -369,7 +368,6 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             literal_relabellings: Default::default(),
             opaque_factors: Vec::new(),
             factor_roots: Vec::new(),
-            factor_emission: None,
             overrides: Vec::new(),
             metrics: 0,
             alpha_tensors: AHashMap::new(),
@@ -385,9 +383,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
     fn emit_variable(&self, variable: &Variable<'a>) -> Option<Atom> {
         Some(match variable {
             Variable::Scalar(value) => (*value).to_owned(),
-            Variable::Subtree(position) => {
-                (self.factor_emission?)(self.opaque_factors[*position].0)?
-            }
+            Variable::Subtree(position) => self.opaque_factors[*position].0.to_owned(),
             Variable::Vector(vector, slot) => self.emit_vector(*vector, *slot),
             Variable::Metric([first, second]) => FunctionBuilder::new(self.contractor.metric)
                 .add_arg(*first)

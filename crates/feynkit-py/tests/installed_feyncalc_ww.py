@@ -158,10 +158,9 @@ for left, left_operator in operators.items():
             .replace(cw, (1 - sw**2).sqrt())
             .together()
         )
-        # Scalar-product substitutions alone do not impose the dependence of
-        # four vectors inside epsilon. Explicitly expose compact tensor bindings
-        # with the shared shorthand materializer before replacing the momentum.
-        conserved = TensorExpression(result).undo_all().to_expression()
+        # Impose momentum conservation inside compact epsilon vector bindings;
+        # the same replacement covers explicit indexed vector components.
+        conserved = result
         conserved = conserved.replace(P(3, a), P(0, a) + P(1, a) - P(2, a))
         result = (
             kin.apply(

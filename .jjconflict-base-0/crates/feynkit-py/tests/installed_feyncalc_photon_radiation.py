@@ -10,6 +10,7 @@ import numpy as np
 from symbolica import E, S, Symbol
 from symbolica.community import hep
 from symbolica.community.spenso import (
+    ColorSimplifySettings,
     CookSettings,
     GammaSimplifySettings,
     TensorExpression,
@@ -116,7 +117,11 @@ def calculate(outgoing, kin):
         .to_expression()
         .replace(dA, Nc**2 - 1)
     )
-    colored = TensorExpression(colored).to_cof_dimension_invariants()
+    colored = (
+        TensorExpression(colored)
+        .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
+        .to_expression()
+    )
     print("COLOR PASS", flush=True)
     spins = model.particle(outgoing[0]).spin_sum(
         P(1), index_scope(wrap, ports[2]), ports[1]
