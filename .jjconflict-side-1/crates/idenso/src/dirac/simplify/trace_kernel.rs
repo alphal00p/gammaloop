@@ -10,7 +10,16 @@ use std::{
 };
 
 use itertools::Itertools;
-use spenso::{g, structure::partial::PartialStructure};
+use spenso::{
+    g,
+    structure::{
+        OrderedStructure, TensorStructure,
+        abstract_index::AbstractIndex,
+        partial::{PartialIndex, PartialStructure, PartialStructureExt},
+        representation::LibraryRep,
+        slot::{IsAbstractSlot, SlotMatcher},
+    },
+};
 #[cfg(test)]
 use symbolica::atom::AtomCore;
 use symbolica::atom::{Atom, AtomView};
@@ -48,9 +57,19 @@ pub(super) struct TraceDefinitions {
     definitions: Vec<Definition>,
     handles: HashMap<Atom, Atom>,
     error: Option<TensorInferenceError>,
+    intrinsic: bool,
 }
 
 impl TraceDefinitions {
+    pub(super) fn new(intrinsic: bool) -> Self {
+        // Trace algebra only introduces known intrinsic metric, epsilon and
+        // alias heads, so an intrinsic source certifies its generated bodies.
+        Self {
+            intrinsic,
+            ..Self::default()
+        }
+    }
+
     pub(super) fn into_definitions(self) -> Result<Vec<Definition>, TensorInferenceError> {
         match self.error {
             Some(error) => Err(error),
@@ -63,15 +82,48 @@ impl TraceDefinitions {
         // bounded, and atomic values need no additional definition.
         if self.error.is_some()
             || !matches!(expression.as_view(), AtomView::Add(_))
-            || !InterfaceInference::normalization_is_intrinsic(expression.as_view())
+            || (!self.intrinsic
+                && !InterfaceInference::normalization_is_intrinsic(expression.as_view()))
         {
             return expression;
         }
         if let Some(handle) = self.handles.get(&expression) {
             return handle.clone();
         }
-        let admitted = SymbolicTensor::<PartialStructure>::infer(expression.clone())
-            .and_then(|body| body.alias_handle().map(|handle| (handle, body)));
+        let admitted = (|| {
+            let AtomView::Add(sum) = expression.as_view() else {
+                unreachable!("only generated sums need trace aliases");
+            };
+            let first = sum.iter().next().unwrap();
+            let body = if InterfaceInference::default().rewrites_preserve_leaf_interfaces(first) {
+                // Every trace-recipe summand has the same external ports. Read
+                // one surviving term with the existing syntactic walker; the
+                // kernel owns homogeneity, so the generated sum needs no parse.
+                let inferred =
+                    OrderedStructure::<LibraryRep, AbstractIndex>::syntactic_structure_from_atom(
+                        first,
+                        &mut SlotMatcher::default(),
+                    )
+                    .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?;
+                let logical = inferred
+                    .layout()
+                    .canonical_to_logical(&inferred.canonical().external_structure());
+                let interface = PartialStructure::from_logical_slots(
+                    logical
+                        .into_iter()
+                        .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind()))),
+                );
+                let interface =
+                    InterfaceInference::merge_explicit_interface_sequence(&[interface])?;
+                SymbolicTensor::from_validated_parts(expression.clone(), interface)
+            } else {
+                // Unresolved or unsupported leaves retain the checked boundary;
+                // a declared shape alone cannot certify their positional identity.
+                SymbolicTensor::<PartialStructure>::infer(expression.clone())?
+            };
+            let _ = body.proofs.intrinsic.set(true);
+            body.alias_handle().map(|handle| (handle, body))
+        })();
         match admitted {
             Ok((handle, body)) => {
                 let atom = handle.expression.clone();
@@ -851,6 +903,126 @@ short_trace_dispatch!(2, 4, 6, 8, 10, 12, 14);
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+
+    #[test]
+    fn generated_trace_alias_interfaces_match_checked_inference() {
+        use crate::tensor::inference::tests::INFERENCE_CALLS;
+        use symbolica::atom::FunctionBuilder;
+
+        let reps = crate::test_support::test_initialize();
+        let vector = spenso::vector_symbol!("trace_interface_vector");
+        let mut cases = Vec::new();
+        for representation in [&reps.mink4, &reps.mink_d] {
+            let slots = (0..10)
+                .map(|position| representation.to_symbolic([Atom::num(93800 + position)]))
+                .collect::<Vec<_>>();
+            let vectors = (0..6)
+                .map(|position| {
+                    FunctionBuilder::new(vector)
+                        .add_arg(Atom::num(position))
+                        .add_arg(representation.to_symbolic([]))
+                        .finish()
+                })
+                .collect::<Vec<_>>();
+            // The repeated pair gives (2-D) times a six-slot trace, which
+            // retains a nonzero sum alias in both four and generic dimensions.
+            for word in [vec![2, 0, 5, 1, 4, 3], vec![0, 1, 0, 2, 3, 4, 5, 6]] {
+                cases.push((word.into_iter().map(|i| slots[i].clone()).collect(), None));
+            }
+            cases.push((vectors.clone(), None));
+            cases.push((
+                (0..6)
+                    .map(|i| {
+                        if i % 2 == 0 {
+                            slots[i].clone()
+                        } else {
+                            vectors[i].clone()
+                        }
+                    })
+                    .collect(),
+                None,
+            ));
+            if representation == &reps.mink4 {
+                for length in [6, 10] {
+                    for axial in [false, true] {
+                        cases.push((slots[..length].to_vec(), Some(axial)));
+                    }
+                }
+            }
+        }
+        let unit = Atom::num(4);
+        for (arguments, axial) in cases {
+            let indices = arguments.iter().map(Atom::as_view).collect::<Vec<_>>();
+            let definitions = RefCell::new(TraceDefinitions::new(true));
+            let output = TraceOutput::Aliased(&definitions);
+            INFERENCE_CALLS.with(|count| count.set(0));
+            let _root = if let Some(axial) = axial {
+                evaluate(&indices, axial, output).unwrap()
+            } else {
+                evaluate_generic(&indices, unit.as_view(), true, output)
+            };
+            let definitions = definitions.into_inner().into_definitions().unwrap();
+            assert!(!definitions.is_empty(), "{arguments:?}, axial={axial:?}");
+            assert_eq!(
+                INFERENCE_CALLS.with(|count| count.get()),
+                0,
+                "generated homogeneous sums must not re-enter checked inference"
+            );
+            for (handle, body) in definitions {
+                assert_eq!(body.proofs.intrinsic.get(), Some(&true));
+                let checked = SymbolicTensor::infer(body.expression.clone()).unwrap();
+                assert_eq!(
+                    body.structure.logical_slots(),
+                    checked.structure.logical_slots()
+                );
+                assert_eq!(
+                    handle.structure.logical_slots(),
+                    checked.structure.logical_slots()
+                );
+                SymbolicTensor::validate_encoded_interface(&body.expression, &handle.structure)
+                    .unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn trace_alias_retention_keeps_callback_and_unresolved_boundaries() {
+        use crate::tensor::inference::tests::INFERENCE_CALLS;
+        use symbolica::atom::FunctionBuilder;
+
+        crate::test_support::test_initialize();
+        let callback = spenso::vector_symbol!("trace_interface_callback", norm = |_, _| {});
+        let value = FunctionBuilder::new(callback)
+            .add_arg(spenso::mink!(4, 93821))
+            .finish();
+        let x = Atom::var(symbolica::symbol!("trace_interface_x"));
+        let y = Atom::var(symbolica::symbol!("trace_interface_y"));
+        let expression = &x * &value + &y * &value;
+        let mut definitions = TraceDefinitions::new(false);
+        assert_eq!(definitions.retain(expression.clone()), expression);
+        assert!(definitions.into_definitions().unwrap().is_empty());
+
+        let metric = g!(spenso::mink!(4), spenso::mink!(4));
+        let expression = &x * &metric + &y * &metric;
+        let mut definitions = TraceDefinitions::new(true);
+        INFERENCE_CALLS.with(|count| count.set(0));
+        let _ = definitions.retain(expression.clone());
+        let definitions = definitions.into_definitions().unwrap();
+        assert!(INFERENCE_CALLS.with(|count| count.get()) > 0);
+        let [(handle, body)] = definitions.as_slice() else {
+            panic!("the checked unresolved sum must retain its literal definition");
+        };
+        let checked = SymbolicTensor::infer(expression).unwrap();
+        assert!(!checked.structure.open_positions().is_empty());
+        assert_eq!(
+            body.structure.logical_slots(),
+            checked.structure.logical_slots()
+        );
+        assert_eq!(
+            handle.structure.logical_slots(),
+            checked.structure.logical_slots()
+        );
+    }
 
     #[test]
     fn alias_materialization_matches_the_explicit_sparse_trace_oracle() {

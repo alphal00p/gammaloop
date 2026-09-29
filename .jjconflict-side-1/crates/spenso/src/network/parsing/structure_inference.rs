@@ -434,7 +434,14 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         }
     }
 
-    pub(super) fn syntactic_structure_from_atom(
+    /// Infer ordinary tensor syntax whose scope and leaf conventions are already admitted.
+    ///
+    /// Only the first summand determines a sum's structure. The caller must
+    /// establish compatible additive branches and account for unresolved ports;
+    /// this does not validate placeholder scopes or materialize compact ports.
+    /// Algebra owners can reuse it for homogeneous expressions they generate.
+    /// General input should use [`StructureFromAtom::structure_from_atom`].
+    pub fn syntactic_structure_from_atom(
         value: AtomView<'_>,
         matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {

@@ -456,89 +456,108 @@ impl SymbolicTensor<PartialStructure> {
         registry: &[Definition],
         settings: GammaSimplifySettings,
     ) -> Result<(Self, Vec<Definition>), TensorInferenceError> {
+        self.ensure_validated()?;
         let representation = Bispinor {}.into();
         let standalone_trace = matches!(self.expression.as_view(), AtomView::Fun(function)
             if function.get_symbol() == T.trace);
-        self.collect_with_map(
-            None,
-            registry,
-            |atom| TensorCollectFilter::Reps([representation]).matches(atom),
-            |selected, _registry, complete| {
-                let definitions = RefCell::new(trace_kernel::TraceDefinitions::default());
-                let mut scalar_callback = false;
-                let mut component_callback = false;
-                selected.expression.visitor(&mut |node| {
-                    if let AtomView::Fun(function) = node {
-                        let symbol = function.get_symbol();
-                        let callback = symbol.get_normalization_function().is_some()
-                            || symbol.get_evaluation_info().is_some();
-                        scalar_callback |= symbol.is_scalar() && callback;
-                        component_callback |= symbol.has_tag(&T.rank1) && callback;
-                    }
-                    true
-                });
-                let contextual_callback = !standalone_trace && (scalar_callback || component_callback);
-                if contextual_callback && !complete {
-                    return Ok((selected, Vec::new()));
+        let simplify = |selected: Self, _registry: &[Definition], complete: bool| {
+            let definitions = RefCell::new(trace_kernel::TraceDefinitions::new(
+                selected.normalization_is_intrinsic(),
+            ));
+            let mut scalar_callback = false;
+            let mut component_callback = false;
+            selected.expression.visitor(&mut |node| {
+                if let AtomView::Fun(function) = node {
+                    let symbol = function.get_symbol();
+                    let callback = symbol.get_normalization_function().is_some()
+                        || symbol.get_evaluation_info().is_some();
+                    scalar_callback |= symbol.is_scalar() && callback;
+                    component_callback |= symbol.has_tag(&T.rank1) && callback;
                 }
-                // A scalar normalizer observes the actual child result, as in
-                // the former local Factored rewrite. Literal aliases cannot be
-                // substituted for that callback input. Ordinary cyclic trace
-                // wrappers retain the aliased emission path.
-                let output = if scalar_callback || contextual_callback {
-                    trace_kernel::TraceOutput::Factored
-                } else {
-                    trace_kernel::TraceOutput::Aliased(&definitions)
+                true
+            });
+            let contextual_callback = !standalone_trace && (scalar_callback || component_callback);
+            if contextual_callback && !complete {
+                return Ok((selected, Vec::new()));
+            }
+            // A scalar normalizer observes the actual child result, as in
+            // the former local Factored rewrite. Literal aliases cannot be
+            // substituted for that callback input. Ordinary cyclic trace
+            // wrappers retain the aliased emission path.
+            let output = if scalar_callback || contextual_callback {
+                trace_kernel::TraceOutput::Factored
+            } else {
+                trace_kernel::TraceOutput::Aliased(&definitions)
+            };
+            let prepared = DiracSimplifier::new(&settings).prepare(selected.expression.as_view());
+            let expression = BracketNormalizer::normalize(prepared.as_view())
+                .chainify(representation)
+                .join_chains(representation);
+            let expression = BracketNormalizer::normalize(expression.as_view());
+            // Finish joining the selected spinor factors before Clifford
+            // reduction can turn an open prefix into a sum of chains. Such
+            // a sum can hide the cycle closed by a later selected factor.
+            let expression = if settings.output == GammaOutput::Chains || !complete {
+                expression
+            } else if contextual_callback {
+                // Component normalizers can temporarily remove one port
+                // before the next local trace identity removes its partner.
+                // Finish this original selected atom context before typed
+                // publication. The shared scheduler remains the only owner
+                // of contractions and cross-domain fixed points.
+                let limit = crate::tensor::simplification::SimplifySettings::default().max_passes;
+                let mut current = expression;
+                let mut finished = false;
+                for _ in 0..limit {
+                    let next = settings.rewrite_expression(current.clone(), output);
+                    if next == current {
+                        finished = true;
+                        break;
+                    }
+                    current = next;
+                }
+                if !finished {
+                    return Err(TensorInferenceError::Invalid(format!(
+                        "callback-sensitive gamma kernel did not stabilize within {limit} passes"
+                    )));
+                }
+                current
+            } else {
+                let simplifier = DiracSimplifier {
+                    settings: &settings,
+                    output,
                 };
-                let prepared =
-                    DiracSimplifier::new(&settings).prepare(selected.expression.as_view());
-                let expression = BracketNormalizer::normalize(prepared.as_view())
-                    .chainify(representation)
-                    .join_chains(representation);
-                let expression = BracketNormalizer::normalize(expression.as_view());
-                // Finish joining the selected spinor factors before Clifford
-                // reduction can turn an open prefix into a sum of chains. Such
-                // a sum can hide the cycle closed by a later selected factor.
-                let expression = if settings.output == GammaOutput::Chains || !complete {
-                    expression
-                } else if contextual_callback {
-                    // Component normalizers can temporarily remove one port
-                    // before the next local trace identity removes its partner.
-                    // Finish this original selected atom context before typed
-                    // publication. The shared scheduler remains the only owner
-                    // of contractions and cross-domain fixed points.
-                    let limit = crate::tensor::simplification::SimplifySettings::default().max_passes;
-                    let mut current = expression;
-                    let mut finished = false;
-                    for _ in 0..limit {
-                        let next = settings.rewrite_expression(current.clone(), output);
-                        if next == current {
-                            finished = true;
-                            break;
-                        }
-                        current = next;
-                    }
-                    if !finished {
-                        return Err(TensorInferenceError::Invalid(format!(
-                            "callback-sensitive gamma kernel did not stabilize within {limit} passes"
-                        )));
-                    }
-                    current
-                } else {
-                    let simplifier = DiracSimplifier { settings: &settings, output };
-                    let terminal = settings.evaluate_traces.then(|| {
+                let terminal = settings
+                    .evaluate_traces
+                    .then(|| {
                         if standalone_trace {
                             simplifier.evaluate_terminal_trace::<false>(expression.as_view())
                         } else {
                             simplifier.evaluate_terminal_trace::<true>(expression.as_view())
                         }
-                    }).flatten();
-                    terminal.unwrap_or_else(|| settings.rewrite_expression(expression, output))
-                };
-                let definitions = definitions.into_inner().into_definitions()?;
-                Ok((selected.with_rewritten_expression(expression)?, definitions))
-            },
-        )
+                    })
+                    .flatten();
+                terminal.unwrap_or_else(|| settings.rewrite_expression(expression, output))
+            };
+            let definitions = definitions.into_inner().into_definitions()?;
+            Ok((selected.with_identity_result(expression)?, definitions))
+        };
+        // A trace without external definitions is already one selected Dirac
+        // domain. No collection graph is needed to establish its interface.
+        // Registered factors still need the collector's alias exposure.
+        if standalone_trace
+            && registry.is_empty()
+            && TensorCollectFilter::Reps([representation]).matches(self.expression.as_view())
+        {
+            simplify(self.clone(), registry, true)
+        } else {
+            self.collect_with_map(
+                None,
+                registry,
+                |atom| TensorCollectFilter::Reps([representation]).matches(atom),
+                simplify,
+            )
+        }
     }
 }
 

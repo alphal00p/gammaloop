@@ -187,6 +187,7 @@ pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = A
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TensorProofs {
     pub(super) validated: OnceLock<bool>,
+    pub(super) intrinsic: OnceLock<bool>,
     pub(super) algebra: OnceLock<bool>,
     pub(super) rewrite: OnceLock<bool>,
     pub(super) contracted: bool,
