@@ -32,7 +32,7 @@ pi = Expression.PI
 # Compare symbolic Dirac adjoints against the existing numerical Weyl matrices,
 # independently multiplying gamma0 * matrix.conjugate().transpose() * gamma0.
 matrices = (
-    TensorExpression(E("spenso::gamma0(spenso::bis(4,i),spenso::bis(4,j))")),
+    TensorExpression.gamma0(4)("i", "j"),
     TensorExpression.gamma5(4)("i", "j"),
     TensorExpression.projm(4)("i", "j"),
     TensorExpression.projp(4)("i", "j"),

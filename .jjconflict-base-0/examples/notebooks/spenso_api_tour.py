@@ -143,6 +143,12 @@ def example_specification():
             "pattern",
         ),
         (
+            "FactorProjector",
+            "A normalized group of matrix factors for chain or trace; symbolic groups stay compact and component groups retain their data.",
+            'factor_projector = sp.FactorProjector.symmetric(sp.TensorExpression.dirac_gamma(4)(sp.AUTO, sp.AUTO, "mu"), sp.TensorExpression.dirac_gamma(4)(sp.AUTO, sp.AUTO, "nu"))',
+            "factor_projector",
+        ),
+        (
             "DisplaySettings",
             "Controls presentation: ports/schoonschip/call layouts, alphabet/graph/raw index labels, and superscript/array component coordinates. It does not change the tensor.",
             'display_settings = sp.DisplaySettings(component_style="array", show_dimensions=True)',

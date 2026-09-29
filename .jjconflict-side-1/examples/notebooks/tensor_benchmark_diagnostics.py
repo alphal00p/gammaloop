@@ -10,13 +10,13 @@ from collections import defaultdict
 from math import prod
 from time import process_time_ns
 
-from symbolica.community.feynkit import Symbols
 from symbolica import E, Replacement, S, T
 from symbolica.community.tensor import (
     AUTO,
     Representation,
     TensorExpression,
     TensorName,
+    TensorPattern,
     TensorRule,
 )
 from tensor_benchmark_cases import atom, describe
@@ -280,7 +280,7 @@ class FactorProbe:
         self.rep = Representation.mink(4).to_expression()
         self.dot_fix = (
             S("f_")(S("h_")(self.rep)),
-            Symbols.metric(S("f_")(self.rep), S("h_")(self.rep)),
+            TensorPattern(TensorName.g(), ports=[S("f_")(self.rep), S("h_")(self.rep)]),
         )
         self.internal, self.replaces = 0, 0
 
@@ -291,7 +291,9 @@ class FactorProbe:
     def kind(self, value):
         if self.typename(value) == "Fn":
             return (
-                "slot" if value.get_name() == Symbols.lorentz.get_name() else "vector"
+                "slot"
+                if value.get_name() == Representation.mink(4).name.name
+                else "vector"
             )
         return "other"
 
@@ -328,7 +330,7 @@ class FactorProbe:
                 base = next(iter(child))
                 if (
                     self.typename(base) == "Fn"
-                    and base.get_name() == Symbols.metric.get_name()
+                    and base.get_name() == TensorName.g().to_expression().get_name()
                     and all(self.kind(a) != "slot" for a in base)
                 ):
                     coefficient *= child
@@ -336,7 +338,7 @@ class FactorProbe:
                 raise ValueError(f"Prototype unsupported power: {child}")
             if kind != "Fn":
                 raise ValueError(f"Prototype unsupported factor: {child}")
-            if child.get_name() != Symbols.metric.get_name():
+            if child.get_name() != TensorName.g().to_expression().get_name():
                 args = list(child)
                 if len(args) != 1 or self.kind(args[0]) != "slot":
                     raise ValueError(f"Prototype unsupported leaf: {child}")

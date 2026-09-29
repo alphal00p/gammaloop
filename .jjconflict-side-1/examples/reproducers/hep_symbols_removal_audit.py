@@ -1,16 +1,11 @@
-"""Report tensor API removal gaps without asserting that bugs should persist.
-
-Run in the same combined community host as hep_symbols_primitives.py. Positive
-checks exercise existing replacements; observations describe missing surfaces.
-"""
-
-import json
+"""Verify tensor-owned replacements, also usable in a tensor-only host."""
 
 from symbolica import E, S
-from symbolica.community.hep import Symbols
 from symbolica.community.tensor import (
     AUTO,
     BroadcastFunction,
+    FactorProjector,
+    Nc,
     PortPattern,
     Representation,
     TensorExpression,
@@ -33,6 +28,7 @@ def main():
         "removal_audit::y_",
         "removal_audit::factors___",
     )
+    arbitrary_rep = S("removal_audit::rep_")
     fundamental = Representation.cof(3)
     fundamental_pattern = Representation.cof(dimension)
     replacements = (
@@ -42,6 +38,8 @@ def main():
         ),
         (fundamental.casimir(), fundamental_pattern.casimir(degree)),
         (fundamental.dynkin_index(), fundamental_pattern.dynkin_index(degree)),
+        (fundamental.casimir(), TensorPattern.casimir(degree, arbitrary_rep)),
+        (fundamental.dynkin_index(), TensorPattern.dynkin_index(degree, arbitrary_rep)),
         (BroadcastFunction.conj()(S("removal_audit::z")), BroadcastFunction.conj()(x)),
         (
             TensorExpression.g(mink)("mu", "nu").to_expression(),
@@ -51,10 +49,11 @@ def main():
     for target, pattern in replacements:
         assert target.replace(pattern, E("7")) == E("7"), (target, pattern)
 
-    assert mink.to_expression().get_head() == Symbols.lorentz
-    assert fundamental.casimir().get_head() == Symbols.casimir
-    assert fundamental.dynkin_index().get_head() == Symbols.color_index
-    assert Symbols.color_number.evaluate({}) == 3
+    assert mink.to_expression().get_head() == S("spenso::mink")
+    assert fundamental.casimir().get_head() == S("spenso::cas")
+    assert fundamental.dynkin_index().get_head() == S("spenso::idx")
+    assert Nc == S("spenso::Nc")
+    assert Nc.evaluate({}) == 3
 
     p = TensorName.vector("removal_audit::p")(mink)
     slash = (
@@ -63,65 +62,54 @@ def main():
         .to_expression()
     )
     word = chain(spin("i"), spin("j"), slash)
-    expected = Symbols.gamma_chain(
+    expected = S("spenso::chain")(
         spin("i").to_expression(),
         spin("j").to_expression(),
-        Symbols.dirac_gamma(Symbols.chain_in, Symbols.chain_out, p.to_expression()),
+        S("spenso::gamma")(S("spenso::in"), S("spenso::out"), p.to_expression()),
     )
     assert word.to_expression() == expected
 
-    observations = {}
-
-    def observe(label, operation):
-        try:
-            value = operation()
-            result = {"type": type(value).__name__, "value": str(value)}
-            if isinstance(value, TensorExpression):
-                result.update(rank=value.rank, is_zero=value.to_expression() == E("0"))
-            observations[label] = result
-        except (TypeError, ValueError, AttributeError) as error:
-            observations[label] = {"error": type(error).__name__, "message": str(error)}
-
-    observe("dot_operand_wildcards", lambda: dot(x, y))
-    observe("chain_sequence_wildcard", lambda: chain(spin("i"), spin("j"), factors))
-    observe("trace_sequence_wildcard", lambda: trace(spin, factors))
-    observe(
-        "pattern_auto_ports",
-        lambda: TensorPattern.dirac_gamma(dimension, AUTO, AUTO, index),
-    )
-    observe(
-        "generic_unresolved_charge_conjugation",
-        lambda: TensorName("spenso::charge_conjugation")(spin, spin),
-    )
-    observe(
-        "generic_unresolved_epsilon",
-        lambda: TensorName("spenso::epsilon")(mink, mink, mink, mink),
-    )
-    observe(
-        "library_unresolved_charge_conjugation",
-        lambda: TensorLibrary.hep_lib_atom()["spenso::charge_conjugation"].expression(),
-    )
-    raw_factors = [
-        Symbols.dirac_gamma(
-            Symbols.chain_in, Symbols.chain_out, mink(label).to_expression()
-        )
-        for label in ("mu", "nu")
-    ]
-    projector = Symbols.symmetric(*raw_factors)
-    observe("standalone_projector", lambda: TensorExpression(projector))
-    observe("projector_in_typed_chain", lambda: chain(spin("i"), spin("j"), projector))
-    projected_trace = TensorExpression(Symbols.trace(spin.to_expression(), projector))
-    observe("complete_projected_trace", lambda: projected_trace)
-    observe(
-        "ordinary_expand_preserves_projector",
-        lambda: (
-            projected_trace.expand().to_expression() == projected_trace.to_expression()
+    gamma = TensorExpression.dirac_gamma(4)
+    gamma_factors = [gamma(AUTO, AUTO, label) for label in ("mu", "nu")]
+    projected_trace = trace(spin, FactorProjector.symmetric(*gamma_factors))
+    compact = (
+        (dot(p, p), TensorPattern.dot(x, y)),
+        (word, TensorPattern.chain(x, y, factors)),
+        (trace(spin, *gamma_factors), TensorPattern.trace(arbitrary_rep, factors)),
+        (
+            projected_trace,
+            TensorPattern.trace(arbitrary_rep, TensorPattern.symmetric(factors)),
+        ),
+        (TensorExpression.gamma0(4)("i", "j"), TensorPattern.gamma0(dimension, x, y)),
+        (
+            TensorExpression.charge_conjugation(4)("i", "j"),
+            TensorPattern.charge_conjugation(dimension, x, y),
+        ),
+        (
+            TensorExpression.levi_civita(mink)("i", "j", "k", "l"),
+            TensorPattern(TensorName.levi_civita(), ports=[factors]),
         ),
     )
-    print(
-        "10 existing replacement, wildcard, metadata, and compact-chain checks passed"
+    for target, pattern in compact:
+        assert target.to_expression().replace(pattern, E("7")) == E("7"), (
+            target,
+            pattern,
+        )
+    assert TensorName.charge_conjugation()(spin, spin).to_expression() == E("0")
+    assert TensorName.levi_civita()(mink, mink, mink, mink).to_expression() == E("0")
+    assert TensorExpression.charge_conjugation(4)(
+        "i", "j"
+    ) == TensorLibrary.hep_lib_atom()["spenso::charge_conjugation"].expression()(
+        "i", "j"
     )
-    print(json.dumps(observations, indent=2))
+    assert projected_trace.expand().to_expression() == projected_trace.to_expression()
+    assert (
+        projected_trace.expand_projectors().expand_projectors()
+        == projected_trace.expand_projectors()
+    )
+    print(
+        "Tensor-owned construction, wildcard patterns, metadata and projector checks passed"
+    )
 
 
 if __name__ == "__main__":

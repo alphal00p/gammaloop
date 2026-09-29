@@ -72,7 +72,9 @@ def _(Symbols):
     D = S("D")
     momentum = Symbols.edge_momentum
     external = S("TensorTutorial::p")
-    mink = Symbols.lorentz
+    from symbolica.community.tensor import Representation
+
+    mink = Representation.mink(4).to_expression().get_head()
     return (D, E, Model, S, TensorReducer, external, math, mink, momentum, time)
 
 

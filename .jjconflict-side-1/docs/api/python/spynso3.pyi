@@ -12,10 +12,12 @@ from symbolica import ComplexFloat, Float
 from symbolica.core import Condition, Evaluator, Expression, FormattedOutput, HeldExpression, PatternRestriction
 
 AUTO: _AutoIndex
+Nc: Expression
 _: _AutoIndex
 _Components: typing.TypeAlias = "Expression | float | complex | list[_Components]"
 _IndexInput: typing.TypeAlias = "int | str | Expression | Slot | _AutoIndex"
 _LibraryDefault = typing.TypeVar("_LibraryDefault")
+_Projected = typing.TypeVar("_Projected", "TensorExpression", "TensorNetwork", covariant=True)
 _RealInput: typing.TypeAlias = "Float | int | float | str | decimal.Decimal"
 _ReplacementInput: typing.TypeAlias = "_ScalarInput | HeldExpression | typing.Callable[[dict[Expression, Expression]], Expression]"
 _ScalarInput: typing.TypeAlias = "Expression | int | float | complex | str | decimal.Decimal | Float | ComplexFloat | tuple[_RealInput, _RealInput]"
@@ -1614,6 +1616,102 @@ class ExecutionStatus:
         """
 
 @typing.final
+class FactorProjector(typing.Generic[_Projected]):
+    r"""
+    A normalized group of matrix factors for insertion into a chain or trace.
+
+    Symbolic groups stay compact. Groups containing component tensors or networks
+    retain their data and produce a TensorNetwork when used by chain or trace.
+    This object is a factor group, not a standalone tensor expression.
+    Supply individual matrix factors or nested projector groups. To project a
+    precomposed chain's factors, pass those factors separately.
+
+    Examples
+    --------
+    >>> from symbolica.community.tensor import FactorProjector, TensorExpression, Representation, AUTO, trace
+    >>> gamma = TensorExpression.dirac_gamma(4)
+    >>> group = FactorProjector.symmetric(gamma(AUTO, AUTO, "mu"), gamma(AUTO, AUTO, "nu"))
+    >>> result = trace(Representation.bis(4), group)
+    """
+    @typing.overload
+    @staticmethod
+    def symmetric(*factors: TensorExpression | Expression | FactorProjector[TensorExpression]) -> FactorProjector[TensorExpression]:
+        r"""
+        Average all permutations of compatible matrix factors with weight 1/n!.
+        """
+    @typing.overload
+    @staticmethod
+    def symmetric(*factors: typing.Unpack[tuple[Tensor | TensorNetwork | FactorProjector[TensorNetwork], *tuple[TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], ...]]]) -> FactorProjector[TensorNetwork]:
+        r"""
+        Average all permutations of compatible matrix factors with weight 1/n!.
+        """
+    @typing.overload
+    @staticmethod
+    def symmetric(*factors: typing.Unpack[tuple[TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], Tensor | TensorNetwork | FactorProjector[TensorNetwork], *tuple[TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], ...]]]) -> FactorProjector[TensorNetwork]:
+        r"""
+        Average all permutations of compatible matrix factors with weight 1/n!.
+        """
+    @typing.overload
+    @staticmethod
+    def symmetric(*factors: TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]:
+        r"""
+        Average all permutations of compatible matrix factors with weight 1/n!.
+        """
+    @typing.overload
+    @staticmethod
+    def antisymmetric(*factors: TensorExpression | Expression | FactorProjector[TensorExpression]) -> FactorProjector[TensorExpression]:
+        r"""
+        Average all permutations with their signs and weight 1/n!.
+        """
+    @typing.overload
+    @staticmethod
+    def antisymmetric(*factors: typing.Unpack[tuple[Tensor | TensorNetwork | FactorProjector[TensorNetwork], *tuple[TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], ...]]]) -> FactorProjector[TensorNetwork]:
+        r"""
+        Average all permutations with their signs and weight 1/n!.
+        """
+    @typing.overload
+    @staticmethod
+    def antisymmetric(*factors: typing.Unpack[tuple[TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], Tensor | TensorNetwork | FactorProjector[TensorNetwork], *tuple[TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], ...]]]) -> FactorProjector[TensorNetwork]:
+        r"""
+        Average all permutations with their signs and weight 1/n!.
+        """
+    @typing.overload
+    @staticmethod
+    def antisymmetric(*factors: TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]:
+        r"""
+        Average all permutations with their signs and weight 1/n!.
+        """
+    @typing.overload
+    @staticmethod
+    def cyclic(*factors: TensorExpression | Expression | FactorProjector[TensorExpression]) -> FactorProjector[TensorExpression]:
+        r"""
+        Average cyclic rotations of compatible matrix factors with weight 1/n.
+        """
+    @typing.overload
+    @staticmethod
+    def cyclic(*factors: typing.Unpack[tuple[Tensor | TensorNetwork | FactorProjector[TensorNetwork], *tuple[TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], ...]]]) -> FactorProjector[TensorNetwork]:
+        r"""
+        Average cyclic rotations of compatible matrix factors with weight 1/n.
+        """
+    @typing.overload
+    @staticmethod
+    def cyclic(*factors: typing.Unpack[tuple[TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], Tensor | TensorNetwork | FactorProjector[TensorNetwork], *tuple[TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], ...]]]) -> FactorProjector[TensorNetwork]:
+        r"""
+        Average cyclic rotations of compatible matrix factors with weight 1/n.
+        """
+    @typing.overload
+    @staticmethod
+    def cyclic(*factors: TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]:
+        r"""
+        Average cyclic rotations of compatible matrix factors with weight 1/n.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Show the checked factor group using the tensor index printer.
+        """
+
+@typing.final
 class GammaChainOrdering:
     r"""
     Controls how open gamma chains are reordered during simplification.
@@ -1813,6 +1911,17 @@ class PortPattern(Expression):
     >>> D, i = S("docs::D_", "docs::i_")
     >>> port = sp.PortPattern.any("docs::R_any_", D, i)
     """
+    @staticmethod
+    def chain_in() -> PortPattern:
+        r"""
+        Match the contextual input port of a factor inside a chain or trace.
+        Swap input and output in a factor pattern to match its transpose.
+        """
+    @staticmethod
+    def chain_out() -> PortPattern:
+        r"""
+        Match the contextual output port of a factor inside a chain or trace.
+        """
     @staticmethod
     def exact(rep: Representation, index: typing.Optional[_ScalarInput] = None) -> PortPattern:
         r"""
@@ -3161,7 +3270,7 @@ class Tensor:
         >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
         >>> negative = -tensor
         """
-    def __add__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __add__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Add compatible tensors, preserving their logical external axes.
 
@@ -3178,7 +3287,7 @@ class Tensor:
         rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
         """
-    def __radd__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __radd__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Add compatible tensors, preserving their logical external axes.
 
@@ -3195,7 +3304,7 @@ class Tensor:
         lhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Left operand. Addition and subtraction require compatible tensor interfaces.
         """
-    def __sub__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __sub__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Subtract compatible tensors, preserving their logical external axes.
 
@@ -3212,7 +3321,7 @@ class Tensor:
         rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
         """
-    def __rsub__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __rsub__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Subtract compatible tensors, preserving their logical external axes.
 
@@ -3229,7 +3338,7 @@ class Tensor:
         lhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Left operand. Addition and subtraction require compatible tensor interfaces.
         """
-    def __mul__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __mul__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Multiply tensor operands, contracting repeated compatible explicit indices.
 
@@ -3246,7 +3355,7 @@ class Tensor:
         rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
         """
-    def __rmul__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __rmul__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Multiply tensor operands, contracting repeated compatible explicit indices.
 
@@ -3263,7 +3372,7 @@ class Tensor:
         lhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Left operand. Addition and subtraction require compatible tensor interfaces.
         """
-    def __truediv__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __truediv__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Divide tensor coefficients by a scalar denominator.
 
@@ -3280,7 +3389,7 @@ class Tensor:
         rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
         """
-    def __rtruediv__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __rtruediv__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Divide a scalar by a rank-zero tensor, returning a TensorNetwork.
         Call `.to_tensor().scalar()` to obtain its component value.
@@ -3296,7 +3405,7 @@ class Tensor:
         lhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Left operand. Addition and subtraction require compatible tensor interfaces.
         """
-    def outer(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def outer(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Form a lazy outer product without contracting compatible ports.
 
@@ -3313,7 +3422,7 @@ class Tensor:
         rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
         """
-    def contract_ports(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
+    def contract_ports(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], *, left: builtins.int, right: builtins.int) -> TensorNetwork:
         r"""
         Contract one selected pair of ordered interface positions.
 
@@ -3334,7 +3443,7 @@ class Tensor:
         right : int
             Zero-based axis position in rhs to contract with the selected left axis.
         """
-    def compose(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
+    def compose(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
         r"""
         Compose two selected `(input, output)` matrix channels.
 
@@ -3355,7 +3464,7 @@ class Tensor:
         right : tuple[int, int]
             (input_axis, output_axis) channel in rhs. The selected connecting ports must have compatible representations.
         """
-    def dot(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def dot(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Contract two rank-one operands into the canonical dot form.
 
@@ -3901,6 +4010,33 @@ class TensorExpression:
             Dimension of the Lorentz representation. The bispinor ports remain four-dimensional; a symbolic Lorentz dimension is allowed.
         """
     @staticmethod
+    def gamma0(spinor_dimension: builtins.int | Expression | str) -> TensorExpression:
+        r"""
+        Create a time-component gamma matrix with distinct unresolved bispinor ports.
+
+        Concrete HEP library components are available for spinor dimension four.
+        """
+    @staticmethod
+    def charge_conjugation(spinor_dimension: builtins.int | Expression | str) -> TensorExpression:
+        r"""
+        Create a charge-conjugation matrix with distinct unresolved bispinor ports.
+
+        The registered antisymmetric head and four-dimensional Weyl convention are retained.
+        """
+    @staticmethod
+    def levi_civita(rep: Representation, rank: builtins.int = 4) -> TensorExpression:
+        r"""
+        Create a Levi-Civita tensor with `rank` distinct unresolved ports.
+
+        Rank is independent of the representation dimension. This declares symbolic
+        structure; it does not register numerical component values.
+        """
+    def expand_projectors(self) -> TensorExpression:
+        r"""
+        Expand normalized symmetric, antisymmetric, and cyclic factor projectors.
+        Other products and sums stay factored, and the tensor interface is retained.
+        """
+    @staticmethod
     def gamma5(spinor_dimension: builtins.int | Expression | str) -> TensorExpression:
         r"""
         Construct gamma-five with two bispinor ports. Call the result as `gamma5(i, j)`.
@@ -4133,7 +4269,7 @@ class TensorExpression:
         >>> from symbolica.community import tensor as sp
         >>> from symbolica import E, S
         >>> D = S("docs::D")
-        >>> gamma = sp.TensorExpression.dirac_gamma(4).with_lorentz_dimension(D)
+        >>> gamma = sp.TensorExpression.gamma(4).with_lorentz_dimension(D)
 
         Parameters
         ----------
@@ -4149,7 +4285,7 @@ class TensorExpression:
         Examples
         --------
         >>> from symbolica.community import tensor as sp
-        >>> gamma = sp.TensorExpression.dirac_gamma(4)
+        >>> gamma = sp.TensorExpression.gamma(4)
         >>> trace = gamma("a", "b", "mu") * gamma("b", "a", "nu")
         >>> reduced = trace.reduce_algebra(sp.AlgebraSettings.hep())
         >>> expanded = reduced.expand()
@@ -5647,6 +5783,12 @@ class TensorName:
     With only a name, an existing symbol keeps its attributes, callbacks, and printers.
     Use a fresh namespaced name when registering a different tensor convention.
 
+    The predefined accessors such as `TensorName.dirac_gamma()` and `TensorName.color_t()`
+    return raw fixed heads for introspection and pattern construction; those
+    reserved names cannot be called directly. Use the matching
+    `TensorExpression` factory for concrete tensors or `TensorPattern` shortcut
+    for rewrite patterns.
+
     Examples
     --------
     >>> from symbolica.community import tensor as sp
@@ -5911,6 +6053,21 @@ class TensorName:
         >>> from symbolica.community import tensor as sp
         >>> head = sp.TensorName.gamma()
         >>> tags = head.get_tags()
+        """
+    @staticmethod
+    def gamma0() -> TensorName:
+        r"""
+        Registered time-component gamma matrix head.
+        """
+    @staticmethod
+    def charge_conjugation() -> TensorName:
+        r"""
+        Registered antisymmetric charge-conjugation matrix head.
+        """
+    @staticmethod
+    def levi_civita() -> TensorName:
+        r"""
+        Registered Levi-Civita tensor head, with its antisymmetric normalization.
         """
     @staticmethod
     def gamma5() -> TensorName:
@@ -6672,7 +6829,7 @@ class TensorNetwork:
         >>> network = tensor("i", "j") * tensor("j", "k")
         >>> negative = -network
         """
-    def __add__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __add__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Add compatible tensors, preserving their logical external axes.
 
@@ -6695,7 +6852,7 @@ class TensorNetwork:
         TensorNetwork
             A new TensorNetwork representing the sum
         """
-    def __radd__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __radd__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Add compatible tensors, preserving their logical external axes.
 
@@ -6713,7 +6870,7 @@ class TensorNetwork:
         rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
         """
-    def __sub__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __sub__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Subtract compatible tensors, preserving their logical external axes.
 
@@ -6736,7 +6893,7 @@ class TensorNetwork:
         TensorNetwork
             A new TensorNetwork representing the difference
         """
-    def __rsub__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __rsub__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Subtract compatible tensors, preserving their logical external axes.
 
@@ -6754,7 +6911,7 @@ class TensorNetwork:
         rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
         """
-    def __mul__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __mul__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Multiply tensor operands, contracting repeated compatible explicit indices.
 
@@ -6777,7 +6934,7 @@ class TensorNetwork:
         TensorNetwork
             A new TensorNetwork representing the product
         """
-    def __rmul__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __rmul__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Multiply tensor operands, contracting repeated compatible explicit indices.
 
@@ -6795,7 +6952,7 @@ class TensorNetwork:
         rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
         """
-    def __truediv__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __truediv__(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Divide tensor coefficients by a scalar denominator.
 
@@ -6813,7 +6970,7 @@ class TensorNetwork:
         rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
         """
-    def __rtruediv__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def __rtruediv__(self, lhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Divide a scalar by a rank-zero tensor, returning a TensorNetwork.
         Call `.to_tensor().scalar()` to obtain its component value.
@@ -6830,7 +6987,7 @@ class TensorNetwork:
         lhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Left operand. Addition and subtraction require compatible tensor interfaces.
         """
-    def outer(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def outer(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Form an outer tensor product without contracting compatible ports.
 
@@ -6848,7 +7005,7 @@ class TensorNetwork:
         rhs : Expression or scalar | TensorExpression | TensorNetwork | Tensor
             Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
         """
-    def contract_ports(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor, *, left: builtins.int, right: builtins.int) -> TensorNetwork:
+    def contract_ports(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], *, left: builtins.int, right: builtins.int) -> TensorNetwork:
         r"""
         Contract one selected pair of public interface positions.
 
@@ -6870,7 +7027,7 @@ class TensorNetwork:
         right : int
             Zero-based axis position in rhs to contract with the selected left axis.
         """
-    def compose(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor, *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
+    def compose(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], *, left: tuple[builtins.int, builtins.int], right: tuple[builtins.int, builtins.int]) -> TensorNetwork:
         r"""
         Compose two explicitly selected matrix channels.
 
@@ -6892,7 +7049,7 @@ class TensorNetwork:
         right : tuple[int, int]
             (input_axis, output_axis) channel in rhs. The selected connecting ports must have compatible representations.
         """
-    def dot(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+    def dot(self, rhs: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
         r"""
         Contract two rank-one operands into the canonical dot form.
 
@@ -7084,6 +7241,64 @@ class TensorPattern(Expression):
             Scalar-argument patterns, kept separate from the structural ports. The default empty list matches no scalar arguments.
         ports : Sequence[Slot | Representation | Expression or scalar]
             Ordered structural ports to match. Use Slots for concrete labels, Representations for unresolved ports, or PortPattern expressions for wildcard representations.
+        """
+    @staticmethod
+    def dot(left: _ScalarInput, right: _ScalarInput) -> TensorPattern:
+        r"""
+        Match a compact dot product, including unrestricted operand wildcards.
+        """
+    @staticmethod
+    def chain(start: Slot | Representation | _ScalarInput, end: Slot | Representation | _ScalarInput, *factors: _ScalarInput) -> TensorPattern:
+        r"""
+        Match an ordered chain with endpoint and factor-sequence patterns.
+        Use `PortPattern.chain_in()` and `.chain_out()` within selected factor patterns.
+        """
+    @staticmethod
+    def trace(representation: Representation | Expression, *factors: _ScalarInput) -> TensorPattern:
+        r"""
+        Match a trace with its canonical cyclic factor wrapper.
+        Sequence wildcards remain patterns and require no concrete tensor interface.
+        """
+    @staticmethod
+    def casimir(degree: _ScalarInput, representation: Representation | Expression) -> TensorPattern:
+        r"""
+        Match a Casimir invariant with arbitrary degree and representation patterns.
+        """
+    @staticmethod
+    def dynkin_index(degree: _ScalarInput, representation: Representation | Expression) -> TensorPattern:
+        r"""
+        Match a Dynkin index with arbitrary degree and representation patterns.
+        """
+    @staticmethod
+    def symmetric(*factors: _ScalarInput) -> TensorPattern:
+        r"""
+        Match a normalized symmetric group of chain or trace factors.
+        """
+    @staticmethod
+    def antisymmetric(*factors: _ScalarInput) -> TensorPattern:
+        r"""
+        Match a normalized antisymmetric group of chain or trace factors.
+        """
+    @staticmethod
+    def cyclic(*factors: _ScalarInput) -> TensorPattern:
+        r"""
+        Match a cyclic group of chain or trace factors.
+        """
+    @staticmethod
+    def gamma0(spinor_dimension: _ScalarInput, i: _ScalarInput, j: _ScalarInput) -> TensorPattern:
+        r"""
+        Match gamma-zero with ordinary indices or contextual chain ports.
+        """
+    @staticmethod
+    def charge_conjugation(spinor_dimension: _ScalarInput, i: _ScalarInput, j: _ScalarInput) -> TensorPattern:
+        r"""
+        Match charge conjugation, retaining its registered antisymmetry.
+        """
+    @staticmethod
+    def levi_civita(rep_pattern: Representation | Expression, *indices: _ScalarInput) -> TensorPattern:
+        r"""
+        Match a Levi-Civita tensor in one representation, at any fixed rank.
+        For an unrestricted port sequence use `TensorPattern(TensorName.levi_civita(), ports=[ports___])`.
         """
     @staticmethod
     def g(rep_pattern: Representation | Expression, i: _ScalarInput, j: _ScalarInput) -> TensorPattern:
@@ -7547,7 +7762,7 @@ def as_tensor(expression: typing.Any) -> TensorExpression:
     """
 
 @typing.overload
-def chain(start_slot: Slot, end_slot: Slot, *factors: TensorExpression | Expression) -> TensorExpression:
+def chain(start_slot: Slot, end_slot: Slot, *factors: TensorExpression | Expression | FactorProjector[TensorExpression]) -> TensorExpression:
     r"""
     Build an explicitly-ended ordered tensor chain.
 
@@ -7569,7 +7784,7 @@ def chain(start_slot: Slot, end_slot: Slot, *factors: TensorExpression | Express
     """
 
 @typing.overload
-def chain(start_slot: Slot, end_slot: Slot, factor: typing.Union[Tensor, TensorNetwork], /, *factors: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+def chain(start_slot: Slot, end_slot: Slot, factor: Tensor | TensorNetwork | FactorProjector[TensorNetwork], /, *factors: TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
     r"""
     Build an explicitly-ended ordered tensor chain.
 
@@ -7593,7 +7808,7 @@ def chain(start_slot: Slot, end_slot: Slot, factor: typing.Union[Tensor, TensorN
     """
 
 @typing.overload
-def chain(start_slot: Slot, end_slot: Slot, first: _ScalarInput | TensorExpression | TensorNetwork | Tensor, second: typing.Union[Tensor, TensorNetwork], /, *factors: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+def chain(start_slot: Slot, end_slot: Slot, first: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], second: Tensor | TensorNetwork | FactorProjector[TensorNetwork], /, *factors: TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
     r"""
     Build an explicitly-ended ordered tensor chain.
 
@@ -7619,7 +7834,7 @@ def chain(start_slot: Slot, end_slot: Slot, first: _ScalarInput | TensorExpressi
     """
 
 @typing.overload
-def chain(start_slot: Slot, end_slot: Slot, *factors: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork:
+def chain(start_slot: Slot, end_slot: Slot, *factors: TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorExpression | TensorNetwork:
     r"""
     Build an explicitly-ended ordered tensor chain.
 
@@ -7662,7 +7877,7 @@ def dot(left: TensorExpression | Expression, right: TensorExpression | Expressio
     """
 
 @typing.overload
-def dot(left: typing.Union[Tensor, TensorNetwork], right: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+def dot(left: typing.Union[Tensor, TensorNetwork], right: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
     r"""
     Contract two rank-one tensors into the canonical dot form.
 
@@ -7683,7 +7898,7 @@ def dot(left: typing.Union[Tensor, TensorNetwork], right: _ScalarInput | TensorE
     """
 
 @typing.overload
-def dot(left: _ScalarInput | TensorExpression | TensorNetwork | Tensor, right: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork:
+def dot(left: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], right: typing.Union[Tensor, TensorNetwork]) -> TensorNetwork:
     r"""
     Contract two rank-one tensors into the canonical dot form.
 
@@ -7860,7 +8075,7 @@ def to_typst(expression: Expression, show_dimensions: typing.Optional[builtins.b
     """
 
 @typing.overload
-def trace(representation: Representation, *factors: TensorExpression | Expression) -> TensorExpression:
+def trace(representation: Representation, *factors: TensorExpression | Expression | FactorProjector[TensorExpression]) -> TensorExpression:
     r"""
     Close an ordered factor sequence into a canonical cyclic trace.
 
@@ -7880,7 +8095,7 @@ def trace(representation: Representation, *factors: TensorExpression | Expressio
     """
 
 @typing.overload
-def trace(representation: Representation, factor: typing.Union[Tensor, TensorNetwork], /, *factors: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+def trace(representation: Representation, factor: Tensor | TensorNetwork | FactorProjector[TensorNetwork], /, *factors: TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
     r"""
     Close an ordered factor sequence into a canonical cyclic trace.
 
@@ -7902,7 +8117,7 @@ def trace(representation: Representation, factor: typing.Union[Tensor, TensorNet
     """
 
 @typing.overload
-def trace(representation: Representation, first: _ScalarInput | TensorExpression | TensorNetwork | Tensor, second: typing.Union[Tensor, TensorNetwork], /, *factors: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorNetwork:
+def trace(representation: Representation, first: _ScalarInput | TensorExpression | TensorNetwork | Tensor | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork], second: Tensor | TensorNetwork | FactorProjector[TensorNetwork], /, *factors: TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorNetwork:
     r"""
     Close an ordered factor sequence into a canonical cyclic trace.
 
@@ -7926,7 +8141,7 @@ def trace(representation: Representation, first: _ScalarInput | TensorExpression
     """
 
 @typing.overload
-def trace(representation: Representation, *factors: _ScalarInput | TensorExpression | TensorNetwork | Tensor) -> TensorExpression | TensorNetwork:
+def trace(representation: Representation, *factors: TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]) -> TensorExpression | TensorNetwork:
     r"""
     Close an ordered factor sequence into a canonical cyclic trace.
 
@@ -7944,3 +8159,4 @@ def trace(representation: Representation, *factors: _ScalarInput | TensorExpress
     factors : pyo3_stub_gen.RustType['ConvertibleToSpensoNet']
         Ordered tensor factors. Symbolic operands produce a TensorExpression; any component tensor or network promotes the result to a TensorNetwork.
     """
+

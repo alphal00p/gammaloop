@@ -9168,9 +9168,10 @@ class Subgraph(FeynmanDiagram):
 @typing.final
 class Symbols:
     r"""
-    Canonical expression heads for diagram and tensor algebra.
+    Canonical expression heads owned by diagrams and imported models.
 
-    Use these references for pattern matching and momentum construction without
+    Tensor and representation vocabulary belongs to `symbolica.community.tensor`.
+    Use these references for diagram patterns and momentum construction without
     depending on internal namespaces. External and loop momenta belong to
     ``Kinematics``. Model parameters and couplings belong to
     their model; obtain those through ``model.parameter(name).symbol`` or
@@ -9237,114 +9238,6 @@ class Symbols:
     >>> from symbolica.community import hep
     >>> reference = hep.Symbols.polarization_conjugate
     """
-    metric: Expression
-    r"""
-    Metric tensor head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.metric
-    """
-    gamma: Expression
-    r"""
-    Dirac gamma tensor head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.gamma
-    """
-    color_f: Expression
-    r"""
-    Antisymmetric color tensor head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.color_f
-    """
-    lorentz: Expression
-    r"""
-    Lorentz representation head, accepting dimension and optionally index.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.lorentz
-    """
-    spinor: Expression
-    r"""
-    Bispinor representation head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.spinor
-    """
-    color_fundamental: Expression
-    r"""
-    Fundamental color representation head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.color_fundamental
-    """
-    color_adjoint: Expression
-    r"""
-    Adjoint color representation head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.color_adjoint
-    """
-    color_number: Expression
-    r"""
-    Number of colors used by symbolic color simplification.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.color_number
-    """
-    conjugate: Expression
-    r"""
-    Conjugation wrapper used in tensor expressions.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.conjugate
-    """
-    dot: Expression
-    r"""
-    Scalar product head used by contracted tensor expressions.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.dot
-    """
-    casimir: Expression
-    r"""
-    Color Casimir invariant head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.casimir
-    """
-    color_index: Expression
-    r"""
-    Color representation index invariant head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.color_index
-    """
     ufo_metric: Expression
     r"""
     Metric head in model propagator definitions.
@@ -9371,96 +9264,6 @@ class Symbols:
     --------
     >>> from symbolica.community import hep
     >>> reference = hep.Symbols.ufo_momentum
-    """
-    chain_in: Expression
-    r"""
-    Incoming placeholder for an open gamma chain.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.chain_in
-    """
-    chain_out: Expression
-    r"""
-    Outgoing placeholder for an open gamma chain.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.chain_out
-    """
-    gamma_chain: Expression
-    r"""
-    Compact gamma-chain wrapper.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.gamma_chain
-    """
-    levi_civita: Expression
-    r"""
-    Antisymmetric Levi-Civita tensor head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.levi_civita
-    """
-    charge_conjugation: Expression
-    r"""
-    Dirac charge-conjugation matrix head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.charge_conjugation
-    """
-    cyclic: Expression
-    r"""
-    Cyclic symmetry wrapper.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.cyclic
-    """
-    symmetric: Expression
-    r"""
-    Symmetric tensor wrapper.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.symmetric
-    """
-    antisymmetric: Expression
-    r"""
-    Antisymmetric tensor wrapper.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.antisymmetric
-    """
-    gamma_zero: Expression
-    r"""
-    Time-component gamma matrix head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.gamma_zero
-    """
-    trace: Expression
-    r"""
-    Compact tensor trace wrapper.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.trace
     """
     model_conjugate: Expression
     r"""
@@ -10657,3 +10460,4 @@ class ParameterType(enum.Enum):
     """
     REAL = ...
     COMPLEX = ...
+

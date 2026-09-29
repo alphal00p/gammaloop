@@ -3,10 +3,10 @@
 from symbolica.community.tensor import AlgebraSettings, ContractSettings
 
 from symbolica import E, S
-from symbolica.community.feynkit import Symbols  # noqa: F401 (register SU(3) components)
 from symbolica.community.tensor import (
     AUTO,
     ColorSimplifySettings,
+    FactorProjector,
     Representation,
     TensorExpression,
     chain,
@@ -112,14 +112,12 @@ for colors in (2, 3, 5):
     )
     print(f"SU({colors}): compact/explicit color conjugation and norm passed")
 
-    cyclic, sym, antisym, factors = S(
-        "spenso::cyclic", "spenso::sym", "spenso::antisym", "factors__"
+    word_factors = [generator(a, AUTO, AUTO) for a in ("a", "b", "c")]
+    symmetric_trace = tensor_trace(
+        fundamental, FactorProjector.symmetric(*word_factors)
     )
-    symmetric_trace = TensorExpression(
-        trace.to_expression().replace(cyclic(factors), sym(factors))
-    )
-    antisymmetric_trace = TensorExpression(
-        trace.to_expression().replace(cyclic(factors), antisym(factors))
+    antisymmetric_trace = tensor_trace(
+        fundamental, FactorProjector.antisymmetric(*word_factors)
     )
     # Cyclic invariance reduces the six permutations of three generators to
     # two orientations. Their half-sum is real and half-difference imaginary.

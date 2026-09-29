@@ -3,7 +3,8 @@ use std::{collections::HashMap, sync::Arc};
 use idenso::{
     IndexTooling,
     color::CS,
-    dirac::AGS,
+    dirac::{AGS, spinor_matrix_structure},
+    epsilon::EPSILON_SYMBOL,
     tensor::{
         SymbolicTensor, composition,
         inference::{InterfaceInference, TensorInferenceError},
@@ -70,6 +71,8 @@ pub struct AutoIndex;
 pyo3_stub_gen::module_variable!("symbolica.community.tensor", "AUTO", AutoIndex);
 #[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::module_variable!("symbolica.community.tensor", "_", AutoIndex);
+#[cfg(feature = "python_stubgen")]
+pyo3_stub_gen::module_variable!("symbolica.community.tensor", "Nc", PythonExpression);
 
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
@@ -537,7 +540,11 @@ impl PyStubType for TensorDispatch {
 }
 
 fn is_concrete_network(value: &Bound<'_, PyAny>) -> bool {
-    value.is_instance_of::<SpensoNet>() || value.is_instance_of::<Spensor>()
+    value.is_instance_of::<SpensoNet>()
+        || value.is_instance_of::<Spensor>()
+        || value
+            .extract::<crate::projectors::PyFactorProjector>()
+            .is_ok_and(|group| group.network.is_some())
 }
 
 fn concrete_network(value: &Bound<'_, PyAny>) -> PyResult<Option<SpensoNet>> {
@@ -545,13 +552,15 @@ fn concrete_network(value: &Bound<'_, PyAny>) -> PyResult<Option<SpensoNet>> {
         Ok(Some(network))
     } else if let Ok(tensor) = value.extract::<Spensor>() {
         SpensoNet::from_tensor(tensor).map(Some)
+    } else if let Ok(group) = value.extract::<crate::projectors::PyFactorProjector>() {
+        Ok(group.network)
     } else {
         Ok(None)
     }
 }
 
 impl TensorOperand {
-    fn into_structured(self) -> PyResult<SymbolicTensor<PartialStructure>> {
+    pub(crate) fn into_structured(self) -> PyResult<SymbolicTensor<PartialStructure>> {
         match self {
             Self::Structured(value) => Ok(value),
             Self::Scalar(atom) => {
@@ -562,6 +571,14 @@ impl TensorOperand {
     }
 
     pub(crate) fn extract(value: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(group) = value.extract::<crate::projectors::PyFactorProjector>() {
+            if group.network.is_none() {
+                return Ok(Self::Structured(group.structure));
+            }
+            return Err(PyTypeError::new_err(
+                "component factor projectors require tensor-network dispatch",
+            ));
+        }
         if let Ok(value) = value.extract::<PyRef<'_, TensorExpression>>() {
             return Ok(Self::Structured(
                 TensorExpression::structured(&value).clone(),
@@ -870,6 +887,59 @@ impl TensorExpression {
         minkowski_dimension: ConvertibleToDimension,
     ) -> PyResult<Py<TensorExpression>> {
         Self::from_structure(py, &AGS.gamma_strct::<AbstractIndex>(minkowski_dimension.0))
+    }
+
+    /// Create a time-component gamma matrix with distinct unresolved bispinor ports.
+    ///
+    /// Concrete HEP library components are available for spinor dimension four.
+    #[staticmethod]
+    fn gamma0(
+        py: Python<'_>,
+        spinor_dimension: ConvertibleToDimension,
+    ) -> PyResult<Py<TensorExpression>> {
+        Self::from_structure(py, &AGS.gamma0_strct::<AbstractIndex>(spinor_dimension.0))
+    }
+
+    /// Create a charge-conjugation matrix with distinct unresolved bispinor ports.
+    ///
+    /// The registered antisymmetric head and four-dimensional Weyl convention are retained.
+    #[staticmethod]
+    fn charge_conjugation(
+        py: Python<'_>,
+        spinor_dimension: ConvertibleToDimension,
+    ) -> PyResult<Py<TensorExpression>> {
+        Self::from_structure(
+            py,
+            &spinor_matrix_structure::<AbstractIndex>(AGS.charge_conjugation, spinor_dimension.0),
+        )
+    }
+
+    /// Create a Levi-Civita tensor with `rank` distinct unresolved ports.
+    ///
+    /// Rank is independent of the representation dimension. This declares symbolic
+    /// structure; it does not register numerical component values.
+    #[staticmethod]
+    #[pyo3(signature = (rep, rank=4))]
+    fn levi_civita(
+        py: Python<'_>,
+        rep: &SpensoRepresentation,
+        rank: usize,
+    ) -> PyResult<Py<TensorExpression>> {
+        let structure = ExplicitKey::<AbstractIndex>::from_iter(
+            std::iter::repeat_n(rep.representation, rank),
+            *EPSILON_SYMBOL,
+            None,
+        );
+        Self::from_structure(py, &structure)
+    }
+
+    /// Expand normalized symmetric, antisymmetric, and cyclic factor projectors.
+    /// Other products and sums stay factored, and the tensor interface is retained.
+    fn expand_projectors(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let value = Self::structured(&self_)
+            .expand_projectors()
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Self::from_structured(py, value)
     }
 
     /// Construct gamma-five with two bispinor ports. Call the result as `gamma5(i, j)`.
@@ -3258,6 +3328,7 @@ fn trace(
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     TensorExpression::init(m)?;
+    m.add("Nc", PythonExpression::from(Atom::var(CS.nc)))?;
     m.add_class::<AutoIndex>()?;
     m.add_function(wrap_pyfunction!(as_tensor, m)?)?;
     m.add_function(wrap_pyfunction!(dot, m)?)?;

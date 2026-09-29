@@ -72,6 +72,7 @@ pub mod library;
 pub mod metadata;
 pub mod network;
 pub mod pattern;
+pub mod projectors;
 mod simplification;
 pub mod structure;
 pub mod tensor_rule;
@@ -275,6 +276,7 @@ define_spenso_python_surface! {
         SpensorLibrary,
         SpensorFunctionLibrary,
         SpensoBroadcastFunction,
+        projectors::PyFactorProjector,
     ],
     registered_functions: [
         set_symbolica_rayon_enabled => "set_symbolica_rayon_enabled",
@@ -293,7 +295,7 @@ define_spenso_python_surface! {
         ],
         pattern => ["PortPattern", "TensorPattern"],
         expression => [
-            "TensorExpression", "_AutoIndex", "AUTO", "_",
+            "TensorExpression", "_AutoIndex", "AUTO", "_", "Nc",
             "as_tensor", "dot", "chain", "trace",
         ],
     ],
@@ -2640,8 +2642,8 @@ impl SpensoModule {
             .map(|line| {
                 // Legacy TypeVars require an unannotated assignment; the upstream
                 // variable generator currently always emits an annotation.
-                if let Some(value) = line.strip_prefix("_LibraryDefault: typing.TypeVar = ") {
-                    return format!("_LibraryDefault = {value}");
+                if let Some((name, value)) = line.split_once(": typing.TypeVar = ") {
+                    return format!("{name} = {value}");
                 }
                 // These methods deliberately specialize Expression's scalar API. Keep
                 // both checkers' narrowly scoped override annotations on the definition.

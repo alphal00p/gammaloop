@@ -28,6 +28,10 @@ fn named(name: &str) -> TypeInfo {
     }
 }
 
+const SYMBOLIC_FACTORS: &str = "TensorExpression | Expression | FactorProjector[TensorExpression]";
+const CONCRETE_FACTORS: &str = "Tensor | TensorNetwork | FactorProjector[TensorNetwork]";
+const ALL_FACTORS: &str = "TensorExpression | _ScalarInput | Tensor | TensorNetwork | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]";
+
 pub(crate) fn refine(module: &mut Module) {
     let replacements = [
         (
@@ -44,6 +48,12 @@ pub(crate) fn refine(module: &mut Module) {
         for (original, alias) in &replacements {
             info.name = info.name.replace(original, alias);
         }
+        if info.name.ends_with(" | FactorProjector") {
+            info.name
+                .truncate(info.name.len() - " | FactorProjector".len());
+            info.name
+                .push_str(" | FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]");
+        }
     };
     let display_type = |name: &str| match name {
         "tensor_layout" => Some("typing.Literal['ports', 'schoonschip', 'call']"),
@@ -53,6 +63,36 @@ pub(crate) fn refine(module: &mut Module) {
         _ => None,
     };
     for class in module.class.values_mut() {
+        if class.name == "FactorProjector" {
+            class.bases = vec![named("typing.Generic[_Projected]")];
+            for name in ["symmetric", "antisymmetric", "cyclic"] {
+                let overloads = class
+                    .methods
+                    .get_mut(name)
+                    .expect("factor projector constructor");
+                if overloads.len() != 1 {
+                    continue;
+                }
+                let mut symbolic = overloads[0].clone();
+                symbolic.is_overload = true;
+                symbolic.parameters.varargs.as_mut().unwrap().type_info = named(SYMBOLIC_FACTORS);
+                symbolic.r#return = named("FactorProjector[TensorExpression]");
+                let mut mixed = symbolic.clone();
+                mixed.parameters.varargs.as_mut().unwrap().type_info = named(ALL_FACTORS);
+                mixed.r#return =
+                    named("FactorProjector[TensorExpression] | FactorProjector[TensorNetwork]");
+                let mut concrete = mixed.clone();
+                concrete.parameters.varargs.as_mut().unwrap().type_info = named(&format!(
+                    "typing.Unpack[tuple[{CONCRETE_FACTORS}, *tuple[{ALL_FACTORS}, ...]]]"
+                ));
+                concrete.r#return = named("FactorProjector[TensorNetwork]");
+                let mut second = concrete.clone();
+                second.parameters.varargs.as_mut().unwrap().type_info = named(&format!(
+                    "typing.Unpack[tuple[{ALL_FACTORS}, {CONCRETE_FACTORS}, *tuple[{ALL_FACTORS}, ...]]]"
+                ));
+                *overloads = vec![symbolic, concrete, second, mixed];
+            }
+        }
         for member in &mut class.attrs {
             simplify(&mut member.r#type);
         }
@@ -75,6 +115,10 @@ pub(crate) fn refine(module: &mut Module) {
             simplify(&mut method.r#return);
             parameters(&mut method.parameters, |parameter| {
                 simplify(&mut parameter.type_info);
+                if class.name == "TensorPattern" && matches!(parameter.name, "factors" | "indices")
+                {
+                    parameter.type_info = named("_ScalarInput");
+                }
                 if matches!(class.name, "TensorExpression" | "Tensor" | "TensorNetwork") {
                     if parameter.name == "indices" {
                         parameter.type_info = named("_IndexInput");
@@ -181,11 +225,30 @@ float, complex, Expression, or nested list
     for function in module.function.values_mut().flatten() {
         simplify(&mut function.r#return);
         parameters(&mut function.parameters, |parameter| {
-            simplify(&mut parameter.type_info)
+            simplify(&mut parameter.type_info);
+            if matches!(function.name, "chain" | "trace") {
+                if parameter.name == "factors" {
+                    parameter.type_info = named(if function.r#return.name == "TensorExpression" {
+                        SYMBOLIC_FACTORS
+                    } else {
+                        ALL_FACTORS
+                    });
+                } else if matches!(parameter.name, "factor" | "second") {
+                    parameter.type_info = named(CONCRETE_FACTORS);
+                }
+            }
         });
     }
     // Module variables are emitted after actual imports by the upstream generator.
     // Quoted aliases support forward references without scanning Python docstrings.
+    module.variables.insert(
+        "_Projected",
+        VariableDef {
+            name: "_Projected",
+            type_: named("typing.TypeVar"),
+            default: Some("typing.TypeVar(\"_Projected\", \"TensorExpression\", \"TensorNetwork\", covariant=True)".to_owned()),
+        },
+    );
     module.variables.insert(
         "_LibraryDefault",
         VariableDef {

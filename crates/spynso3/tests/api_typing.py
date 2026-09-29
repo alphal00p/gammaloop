@@ -25,6 +25,25 @@ def check_types(
     assert_type(representation(1), sp.Slot)
     assert_type(representation(scalar), Expression | sp.Slot)
     assert_type(expression.structure.slots, tuple[sp.Representation | sp.Slot, ...])
+    symbolic_group = sp.FactorProjector.symmetric(expression, expression)
+    component_group = sp.FactorProjector.antisymmetric(expression, tensor)
+    assert_type(symbolic_group, sp.FactorProjector[sp.TensorExpression])
+    assert_type(component_group, sp.FactorProjector[sp.TensorNetwork])
+    assert_type(
+        sp.chain(representation("i"), representation("j"), symbolic_group),
+        sp.TensorExpression,
+    )
+    assert_type(sp.trace(representation, component_group), sp.TensorNetwork)
+    assert_type(
+        sp.FactorProjector.cyclic(symbolic_group, component_group),
+        sp.FactorProjector[sp.TensorNetwork],
+    )
+    assert_type(expression.expand_projectors(), sp.TensorExpression)
+    assert_type(sp.TensorExpression.gamma0(4), sp.TensorExpression)
+    assert_type(sp.TensorExpression.charge_conjugation(4), sp.TensorExpression)
+    assert_type(sp.TensorExpression.levi_civita(representation), sp.TensorExpression)
+    assert_type(sp.TensorPattern.chain(S("a_"), S("b_"), S("fs___")), sp.TensorPattern)
+    assert_type(sp.Nc, Expression)
     assert_type(expression.structure, sp.TensorStructure)
     assert_type(tensor.structure, sp.TensorStructure)
     assert_type(network.structure, sp.TensorStructure)

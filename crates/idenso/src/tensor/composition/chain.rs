@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use spenso::{
     network::tags::SPENSO_TAG,
+    shadowing::{FactorProjector, ProjectorExpander},
     structure::{
         abstract_index::AbstractIndex,
         partial::{PartialIndex, PartialStructure, PartialStructureExt},
@@ -16,6 +17,54 @@ use symbolica::atom::Atom;
 use super::{MatrixChannel, PortPair, SymbolicTensor, TensorCompositionError, port_atom};
 
 impl SymbolicTensor<PartialStructure> {
+    /// Project an ordered group of compatible matrix factors, retaining an open
+    /// channel so the group can be embedded in a larger chain or trace.
+    pub fn project_factors(
+        factors: &[Self],
+        projector: FactorProjector,
+    ) -> Result<Self, TensorCompositionError> {
+        let Some((first, rest)) = factors.split_first() else {
+            return Err(TensorCompositionError::NoMatrixChannel);
+        };
+        for factor in factors {
+            let channel = factor
+                .matrix_channel()
+                .ok_or(TensorCompositionError::NoMatrixChannel)?;
+            if factor.chain_factors(channel)?.len() != 1 {
+                return Err(TensorCompositionError::InvalidResultInterface(
+                    "a factor projector takes individual matrix factors or projector groups; pass a chain's factors separately".to_owned(),
+                ));
+            }
+        }
+        let first_channel = first
+            .matrix_channel()
+            .ok_or(TensorCompositionError::NoMatrixChannel)?;
+        let mut value = first.chain_form(first_channel)?;
+        let channel = MatrixChannel {
+            input: 0,
+            output: 1,
+        };
+        for factor in rest {
+            let other = factor
+                .matrix_channel()
+                .ok_or(TensorCompositionError::NoMatrixChannel)?;
+            value = value.compose(factor, channel, other)?;
+        }
+        let slots = value.structure.logical_slots();
+        let (coefficient, payload) = value.chain_parts(channel)?;
+        let projected = projector.apply(payload);
+        let expression =
+            coefficient * SPENSO_TAG.chain(port_atom(slots[0]), port_atom(slots[1]), [projected]);
+        Self::new(expression, value.structure).validate_rewrite(&factors.iter().collect::<Vec<_>>())
+    }
+
+    /// Expand only normalized factor projectors, preserving the tensor interface
+    /// and leaving unrelated products and sums factored.
+    pub fn expand_projectors(&self) -> Result<Self, TensorCompositionError> {
+        Self::new(self.expression.expand_projectors(), self.structure.clone())
+            .validate_rewrite(&[self])
+    }
+
     /// Choose the explicit index shared by a contracted pair, avoiding dummy capture.
     pub fn contraction_index(
         &self,
@@ -79,11 +128,8 @@ impl SymbolicTensor<PartialStructure> {
         let expression = if self.expression.as_view().is_zero() {
             Atom::Zero
         } else {
-            SPENSO_TAG.chain(
-                port_atom(input),
-                port_atom(output),
-                self.chain_factors(channel)?,
-            )
+            let (coefficient, factors) = self.chain_parts(channel)?;
+            coefficient * SPENSO_TAG.chain(port_atom(input), port_atom(output), factors)
         };
         let structure = PartialStructure::from_logical_slots(
             [input, output].into_iter().chain(

@@ -1,12 +1,11 @@
 """Audit HEP symbol construction against the existing typed tensor API.
 
-Run with a combined Symbolica community host exposing community.tensor and hep.
+Run with a Symbolica community host exposing community.tensor.
 Conversions below are equality-oracle boundaries, not construction requirements.
-The accompanying architecture note records unsupported cases separately.
+Canonical raw heads below serve as independent expression oracles.
 """
 
 from symbolica import S
-from symbolica.community.hep import Symbols
 from symbolica.community.tensor import (
     AUTO,
     BroadcastFunction,
@@ -38,78 +37,78 @@ def main():
     adj = Representation.coad(8)
     index = S("hep_symbols_audit::i")
     for representation, head, dimension in (
-        (mink, Symbols.lorentz, 4),
-        (spin, Symbols.spinor, 4),
-        (fund, Symbols.color_fundamental, 3),
-        (adj, Symbols.color_adjoint, 8),
+        (mink, S("spenso::mink"), 4),
+        (spin, S("spenso::bis"), 4),
+        (fund, S("spenso::cof"), 3),
+        (adj, S("spenso::coad"), 8),
     ):
         same(representation.to_expression(), head(dimension))
         same(representation(index).to_expression(), head(dimension, index))
 
     mu, nu = (mink(index).to_expression() for index in ("mu", "nu"))
     a, b = (spin(index).to_expression() for index in ("a", "b"))
-    same(TensorExpression.g(mink)("mu", "nu"), Symbols.metric(mu, nu), rank=2)
+    same(TensorExpression.g(mink)("mu", "nu"), S("spenso::g")(mu, nu), rank=2)
     same(
         TensorExpression.dirac_gamma(4)("a", "b", "mu"),
-        Symbols.dirac_gamma(a, b, mu),
+        S("spenso::gamma")(a, b, mu),
         rank=3,
     )
     same(
         TensorExpression.color_f(8)("a", "b", "c"),
-        Symbols.color_f(*(adj(index).to_expression() for index in ("a", "b", "c"))),
+        S("spenso::f")(*(adj(index).to_expression() for index in ("a", "b", "c"))),
         rank=3,
     )
-    same(fund.casimir(), Symbols.casimir(2, fund.to_expression()))
-    same(fund.dynkin_index(), Symbols.color_index(2, fund.to_expression()))
+    same(fund.casimir(), S("spenso::cas")(2, fund.to_expression()))
+    same(fund.dynkin_index(), S("spenso::idx")(2, fund.to_expression()))
 
     p = TensorName.vector("hep_symbols_audit::p")(mink)
     q = TensorName.vector("hep_symbols_audit::q")(mink)
-    same(dot(p, q), Symbols.dot(p.to_expression(), q.to_expression()), rank=0)
-    same(BroadcastFunction.conj()(p), Symbols.conjugate(p.to_expression()), rank=1)
+    same(dot(p, q), S("spenso::dot")(p.to_expression(), q.to_expression()), rank=0)
+    same(BroadcastFunction.conj()(p), S("spenso::conj")(p.to_expression()), rank=1)
 
     factors = (
         TensorExpression.dirac_gamma(4)(AUTO, AUTO, "mu"),
         TensorExpression.dirac_gamma(4)(AUTO, AUTO, "nu"),
     )
     raw_factors = (
-        Symbols.dirac_gamma(Symbols.chain_in, Symbols.chain_out, mu),
-        Symbols.dirac_gamma(Symbols.chain_in, Symbols.chain_out, nu),
+        S("spenso::gamma")(S("spenso::in"), S("spenso::out"), mu),
+        S("spenso::gamma")(S("spenso::in"), S("spenso::out"), nu),
     )
     same(
         chain(spin("a"), spin("b"), *factors),
-        Symbols.gamma_chain(a, b, *raw_factors),
+        S("spenso::chain")(a, b, *raw_factors),
         rank=4,
     )
     same(
         trace(spin, *factors),
-        Symbols.trace(spin.to_expression(), Symbols.cyclic(*raw_factors)),
+        S("spenso::trace")(spin.to_expression(), S("spenso::cyclic")(*raw_factors)),
         rank=2,
     )
 
     library = TensorLibrary.hep_lib_atom()
     for key, head in (
-        ("spenso::gamma0", Symbols.gamma_zero),
-        ("spenso::charge_conjugation", Symbols.charge_conjugation),
+        ("spenso::gamma0", S("spenso::gamma0")),
+        ("spenso::charge_conjugation", S("spenso::charge_conjugation")),
     ):
         reference = library[key].expression()
         same(reference("a", "b"), head(a, b), rank=2)
 
     # An explicitly indexed epsilon works through the generic tensor primitive.
-    # A named epsilon factory and safe unresolved construction are still missing.
+    # The named factory additionally supplies distinct unresolved ports.
     slots = [mink(index) for index in ("mu", "nu", "rho", "sigma")]
     epsilon = TensorName("spenso::epsilon")(*slots)
     same(
-        epsilon, Symbols.levi_civita(*(slot.to_expression() for slot in slots)), rank=4
+        epsilon, S("spenso::epsilon")(*(slot.to_expression() for slot in slots)), rank=4
     )
 
     # Introspection and raw patterns have a different boundary from construction.
     for name, head in (
-        (TensorName.g(), Symbols.metric),
-        (TensorName.dirac_gamma(), Symbols.dirac_gamma),
-        (TensorName.color_f(), Symbols.color_f),
+        (TensorName.g(), S("spenso::g")),
+        (TensorName.dirac_gamma(), S("spenso::gamma")),
+        (TensorName.color_f(), S("spenso::f")),
     ):
         same(name.to_expression(), head)
-    same(BroadcastFunction.conj().to_expression(), Symbols.conjugate)
+    same(BroadcastFunction.conj().to_expression(), S("spenso::conj"))
 
     print(f"{checks} typed construction, interface, and head comparisons passed")
 

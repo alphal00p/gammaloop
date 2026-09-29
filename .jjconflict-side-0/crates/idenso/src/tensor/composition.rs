@@ -18,7 +18,9 @@ use spenso::{
         slot::{IsAbstractSlot, Slot, SlotMatch, SlotMatcher},
     },
 };
-use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
+use symbolica::atom::{
+    Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol, representation::FunView,
+};
 use symbolica::coefficient::CoefficientView;
 use thiserror::Error;
 
@@ -468,6 +470,37 @@ fn contains_chain_like(value: AtomView<'_>) -> bool {
     }
 }
 
+/// A scalar coefficient does not bind contextual ports. Preserve it while
+/// extending or closing the one root chain; other wrappers retain their scope.
+fn root_chain_parts(value: AtomView<'_>) -> Option<(Atom, FunView<'_>)> {
+    match value {
+        AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.chain => {
+            Some((Atom::num(1), function))
+        }
+        AtomView::Mul(product) => {
+            let mut chain = None;
+            let mut coefficient = Atom::num(1);
+            for factor in product.iter() {
+                if let AtomView::Fun(function) = factor
+                    && function.get_symbol() == SPENSO_TAG.chain
+                    && chain.is_none()
+                {
+                    chain = Some(function);
+                } else if !contains_chain_like(factor)
+                    && (!factor.is_tensorial(StrictTensorFilter::Tagged)
+                        || is_structured_scalar(factor))
+                {
+                    coefficient *= factor;
+                } else {
+                    return None;
+                }
+            }
+            chain.map(|chain| (coefficient, chain))
+        }
+        _ => None,
+    }
+}
+
 fn root_chain_channel_is_live(
     value: &SymbolicTensor<PartialStructure>,
     channel: MatrixChannel,
@@ -481,7 +514,10 @@ fn root_chain_channel_is_live(
         return false;
     }
     let slots = value.structure.logical_slots();
-    slots.len() >= 2 && chain_endpoints_match(value.expression.as_view(), slots[0], slots[1])
+    slots.len() >= 2
+        && root_chain_parts(value.expression.as_view()).is_some_and(|(_, function)| {
+            chain_endpoints_match(AtomView::Fun(function), slots[0], slots[1])
+        })
 }
 
 fn validate_position(
@@ -1641,12 +1677,9 @@ impl SymbolicTensor<PartialStructure> {
     pub fn normalize_closed_root_chain(
         self,
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
-        let AtomView::Fun(function) = self.expression.as_view() else {
+        let Some((coefficient, function)) = root_chain_parts(self.expression.as_view()) else {
             return Ok(self);
         };
-        if function.get_symbol() != SPENSO_TAG.chain {
-            return Ok(self);
-        }
         let arguments = function.iter().collect::<Vec<_>>();
         let [start, end, factors @ ..] = arguments.as_slice() else {
             return Ok(self);
@@ -1675,10 +1708,11 @@ impl SymbolicTensor<PartialStructure> {
         } else {
             self.structure.clone()
         };
-        let atom = shadowing::trace(
-            start_rep.to_symbolic([]),
-            factors.iter().map(|factor| factor.to_owned()),
-        );
+        let atom = coefficient
+            * shadowing::trace(
+                start_rep.to_symbolic([]),
+                factors.iter().map(|factor| factor.to_owned()),
+            );
         let interface = interface_in_atom_order(&atom, &interface)?;
         SymbolicTensor::new(atom, interface).validate_rewrite(&[&self])
     }
@@ -1830,21 +1864,37 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         channel: MatrixChannel,
     ) -> Result<Vec<Atom>, TensorCompositionError> {
+        let (coefficient, mut factors) = self.chain_parts(channel)?;
+        if coefficient != Atom::num(1) {
+            if let Some(first) = factors.first_mut() {
+                *first *= coefficient;
+            } else {
+                factors.push(coefficient);
+            }
+        }
+        Ok(factors)
+    }
+
+    fn chain_parts(
+        &self,
+        channel: MatrixChannel,
+    ) -> Result<(Atom, Vec<Atom>), TensorCompositionError> {
         self.expression.validate_chain_like_nesting()?;
         if root_chain_channel_is_live(self, channel) {
-            let AtomView::Fun(function) = self.expression.as_view() else {
+            let Some((coefficient, function)) = root_chain_parts(self.expression.as_view()) else {
                 unreachable!("a live root chain channel requires a chain function")
             };
-            return Ok(function
+            let factors = function
                 .iter()
                 .skip(2)
                 .map(|factor| factor.to_owned())
-                .collect());
+                .collect::<Vec<_>>();
+            return Ok((coefficient, factors));
         }
         if contains_chain_like(self.expression.as_view()) {
             return Err(TensorCompositionError::NestedChainLike);
         }
-        Ok(vec![channel_factor(self, channel)?])
+        Ok((Atom::num(1), vec![channel_factor(self, channel)?]))
     }
 
     pub fn compose(
@@ -2009,11 +2059,15 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(SymbolicTensor::new(Atom::Zero, interface));
         }
 
-        let factors = self
-            .chain_factors(left_channel)?
-            .into_iter()
-            .chain(right.chain_factors(right_channel)?);
-        let atom = SPENSO_TAG.chain(port_atom(left_input), port_atom(right_output), factors);
+        let (coefficient, factors) = self.chain_parts(left_channel)?;
+        let (right_coefficient, right_factors) = right.chain_parts(right_channel)?;
+        let atom = coefficient
+            * right_coefficient
+            * SPENSO_TAG.chain(
+                port_atom(left_input),
+                port_atom(right_output),
+                factors.into_iter().chain(right_factors),
+            );
         validate_explicit_index_occurrences(&atom)?;
         SymbolicTensor::new(atom, interface)
             .normalize_closed_root_chain()?
@@ -2211,8 +2265,8 @@ impl SymbolicTensor<PartialStructure> {
             return Err(TensorCompositionError::NestedChainLike);
         }
 
-        let factors = self.chain_factors(channel)?;
-        let atom = shadowing::trace(input.rep().to_symbolic([]), factors);
+        let (coefficient, factors) = self.chain_parts(channel)?;
+        let atom = coefficient * shadowing::trace(input.rep().to_symbolic([]), factors);
         let interface = interface_in_atom_order(&atom, &interface)?;
         SymbolicTensor::new(atom, interface).validate_rewrite(&[self])
     }
@@ -3251,7 +3305,7 @@ mod tests {
     }
 
     #[test]
-    fn transparent_chain_wrappers_expose_but_cannot_extend_the_chain_channel() {
+    fn scalar_chain_wrappers_compose_and_trace_but_broadcasts_remain_scoped() {
         let first = tensor("wrapped_chain_first", &[rep(), rep()]);
         let second = tensor("wrapped_chain_second", &[rep(), rep()]);
         let third = tensor("wrapped_chain_third", &[rep(), rep()]);
@@ -3261,7 +3315,10 @@ mod tests {
             .add_arg(&chain.expression)
             .finish();
 
-        for atom in [scalar * chain.expression.as_ref(), broadcast] {
+        for (atom, can_extend) in [
+            (scalar.clone() * chain.expression.as_ref(), true),
+            (broadcast, false),
+        ] {
             let wrapped = SymbolicTensor::new(atom, chain.structure.clone());
             assert_eq!(
                 SymbolicTensor::matrix_channel(&wrapped),
@@ -3271,20 +3328,29 @@ mod tests {
                 })
             );
 
-            assert!(matches!(
-                SymbolicTensor::multiply(&wrapped, &third),
-                Err(TensorCompositionError::NestedChainLike)
-            ));
-            assert!(matches!(
-                SymbolicTensor::trace_ports(
-                    &wrapped,
-                    MatrixChannel {
-                        input: 0,
-                        output: 1,
-                    },
-                ),
-                Err(TensorCompositionError::NestedChainLike)
-            ));
+            let product = SymbolicTensor::multiply(&wrapped, &third);
+            let traced = SymbolicTensor::trace_unique(&wrapped);
+            if can_extend {
+                let expected = SymbolicTensor::multiply(&chain, &third).unwrap();
+                assert_eq!(
+                    product.unwrap().expression,
+                    scalar.clone() * expected.expression
+                );
+                let expected = SymbolicTensor::trace_unique(&chain).unwrap();
+                assert_eq!(
+                    traced.unwrap().expression,
+                    scalar.clone() * expected.expression
+                );
+            } else {
+                assert!(matches!(
+                    product,
+                    Err(TensorCompositionError::NestedChainLike)
+                ));
+                assert!(matches!(
+                    traced,
+                    Err(TensorCompositionError::NestedChainLike)
+                ));
+            }
         }
     }
 

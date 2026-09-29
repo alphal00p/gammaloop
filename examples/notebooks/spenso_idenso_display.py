@@ -21,13 +21,6 @@ def _():
     return (mo,)
 
 
-@app.cell
-def _():
-    from symbolica.community.feynkit import Symbols
-
-    return (Symbols,)
-
-
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -52,11 +45,13 @@ def _():
     from symbolica.community.tensor import (
         AUTO,
         DisplaySettings,
+        PortPattern,
         Representation,
         Tensor,
         TensorExpression,
         TensorName,
         as_tensor,
+        chain,
         dot,
         trace,
     )
@@ -68,6 +63,8 @@ def _():
         Tensor,
         TensorExpression,
         TensorName,
+        PortPattern,
+        chain,
         as_tensor,
         dot,
         lp,
@@ -193,7 +190,17 @@ def _(mo):
 
 
 @app.cell
-def _(Symbols, Representation, TensorExpression, TensorName, sy):
+def _(
+    AUTO,
+    Representation,
+    TensorExpression,
+    TensorName,
+    PortPattern,
+    chain,
+    dot,
+    trace,
+    sy,
+):
     # `raw` keeps compact rank-one vectors in their contextual form. That is
     # what lets a vector appear inside a tensor port or a gamma factor, just as
     # it does in the Typst notation examples.
@@ -226,15 +233,15 @@ def _(Symbols, Representation, TensorExpression, TensorName, sy):
     atlas_chi = TensorName.vector("chi", is_linear=True)
 
     atlas_gamma = TensorName.dirac_gamma().to_expression()
-    atlas_gamma0 = Symbols.gamma_zero
+    atlas_gamma0 = TensorName.gamma0().to_expression()
     atlas_gamma5 = TensorName.gamma5().to_expression()
     atlas_projp = TensorName.projp().to_expression()
-    atlas_in = Symbols.chain_in
-    atlas_out = Symbols.chain_out
+    atlas_in = PortPattern.chain_in()
+    atlas_out = PortPattern.chain_out()
 
     atlas_p1 = raw(atlas_p, 1, atlas_mink)
     atlas_q2 = raw(atlas_q, 2, atlas_mink)
-    atlas_dot = raw(Symbols.dot, atlas_p1, atlas_q2)
+    atlas_dot = dot(atlas_p(1, atlas_mink), atlas_q(2, atlas_mink))
     atlas_interleaved = atlas_T(atlas_mu, atlas_a, atlas_nu, atlas_b)
     atlas_layout_expression = raw(
         atlas_A,
@@ -266,28 +273,20 @@ def _(Symbols, Representation, TensorExpression, TensorName, sy):
         raw(atlas_q, 2, atlas_lor.dual()),
     )
 
+    atlas_gamma_tensor = TensorExpression.dirac_gamma(4)
+    atlas_slash = (
+        (atlas_gamma_tensor(AUTO, AUTO, "lambda") * atlas_p(1, atlas_mink("lambda")))
+        .contract()
+        .to_expression()
+    )
     atlas_chain_factors = (
-        raw(atlas_gamma, atlas_in, atlas_out, atlas_mu),
-        raw(atlas_gamma, atlas_in, atlas_out, atlas_p1),
-        raw(atlas_gamma, atlas_in, atlas_out, atlas_nu),
+        atlas_gamma_tensor(AUTO, AUTO, "mu"),
+        atlas_slash,
+        atlas_gamma_tensor(AUTO, AUTO, "nu"),
     )
-    atlas_open_chain = raw(
-        Symbols.gamma_chain,
-        atlas_bis("u"),
-        atlas_bis("v"),
-        *atlas_chain_factors,
-    )
-    atlas_explicit_chain = raw(
-        Symbols.gamma_chain,
-        atlas_bis("a"),
-        atlas_bis("b"),
-        *atlas_chain_factors,
-    )
-    atlas_trace = raw(
-        Symbols.trace,
-        atlas_bis,
-        raw(Symbols.cyclic, *atlas_chain_factors),
-    )
+    atlas_open_chain = chain(atlas_bis("u"), atlas_bis("v"), *atlas_chain_factors)
+    atlas_explicit_chain = chain(atlas_bis("a"), atlas_bis("b"), *atlas_chain_factors)
+    atlas_trace = trace(atlas_bis, *atlas_chain_factors)
 
     atlas_colour = TensorExpression.color_t(8, 3)(
         atlas_coad("A"),
@@ -412,11 +411,11 @@ def _(
             ),
             mo.accordion(
                 {
-                    "Why the compact examples are raw atoms": mo.md(
+                    "Typed construction and contextual notation": mo.md(
                         "A compact vector is contextual notation: it lives inside a "
                         "tensor or gamma factor rather than exposing its own port. "
-                        "The cell above constructs those exact Symbolica atoms and "
-                        "sends them straight to the same renderer."
+                        "Dots, chains and traces use the typed API. The remaining raw samples illustrate contextual ports and go "
+                        "straight to the same renderer."
                     )
                 }
             ),

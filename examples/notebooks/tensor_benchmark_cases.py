@@ -22,6 +22,7 @@ from symbolica.community.tensor import (
     Representation,
     TensorExpression,
     TensorName,
+    TensorPattern,
     trace,
 )
 
@@ -227,6 +228,7 @@ class HistoricalLadder:
     def native_fixture(
         S,
         TensorName,
+        TensorPattern,
         ladder_patterns,
         ladder_vertex_rule,
         ladder_vertices,
@@ -600,7 +602,7 @@ class FreeTrace:
             library = TensorLibrary.hep_lib_atom()
             # Same explicit epsilon components as gamma_simplification.py's HEP check.
             epsilon = Tensor.sparse(
-                TensorName(Symbols.levi_civita.get_name())(*[rep] * 4),
+                TensorExpression.levi_civita(rep),
                 Expression,
             )
             for permutation, sign in signed_permutations:
@@ -624,7 +626,7 @@ class FreeTrace:
                 "r3components::d_",
             )
             metric_pattern = TensorName.g().to_expression()(*wildcards[:2])
-            epsilon_pattern = Symbols.levi_civita(*wildcards)
+            epsilon_pattern = TensorPattern(TensorName.levi_civita(), ports=wildcards)
             results = {}
             for label, expression in expressions.items():
                 if label == "source":
@@ -724,7 +726,7 @@ class AxialTrace(FreeTrace):
 
     def import_form(self, text):
         text = re.sub(r"\s+", "", text)
-        epsilon = Symbols.levi_civita
+        epsilon = TensorName.levi_civita().to_expression()
 
         def convert(match):
             return epsilon(

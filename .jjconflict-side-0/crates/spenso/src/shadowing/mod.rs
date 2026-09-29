@@ -33,7 +33,9 @@ pub use collect::{
     COLLECT, Collectable, TensorCollectExt, TensorCollectFilter, TermLeaf, TermTape,
 };
 pub(crate) use projectors::expand_chain_like_projector;
-pub use projectors::{ANTISYM, CYCLIC, ProjectorExpander, SYM, antisym, cyclic, sym};
+pub use projectors::{
+    ANTISYM, CYCLIC, FactorProjector, ProjectorExpander, SYM, antisym, cyclic, sym,
+};
 pub use trace::{trace, trace_factor_views, trace_parts, trace_sym};
 
 initialize!(|| {

@@ -30,8 +30,8 @@ i, j, k, mu, nu, dimension = S(
 )
 bis_i, bis_j, bis_k = (spin(index).to_expression() for index in (i, j, k))
 mink_mu, mink_nu = (mink(index).to_expression() for index in (mu, nu))
-# Construct C through the existing generic expression boundary. Its registered
-# symbol owns real/antisymmetric normalization and the shared numerical data.
+# Construct C through its typed factory. Raw heads below are independent
+# rewrite oracles and exercise contextual slash parsing.
 c_head, g_head, chain_head, incoming, outgoing = S(
     "spenso::charge_conjugation",
     "spenso::gamma",
@@ -39,11 +39,13 @@ c_head, g_head, chain_head, incoming, outgoing = S(
     "spenso::in",
     "spenso::out",
 )
-charge = TensorExpression(c_head(bis_i, bis_j))
+charge = TensorExpression.charge_conjugation(4)(i, j)
 assert charge.to_expression().conj() == charge.to_expression()
 assert c_head(bis_j, bis_i) == -charge.to_expression()
 identity = TensorExpression.g(spin)(i, j)
-square = TensorExpression(c_head(bis_i, bis_k) * c_head(bis_k, bis_j))
+square = TensorExpression.charge_conjugation(4)(
+    i, k
+) * TensorExpression.charge_conjugation(4)(k, j)
 assert (
     square.reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
     .contract(ContractSettings(collect_chains=False, collect_traces=False))
@@ -72,9 +74,7 @@ assert transposed_sandwich.reduce_algebra(
 # The public chain builder selects each matrix channel; no sewing indices are
 # manufactured here. A product of transposes retains the original factor order.
 scalar = E("2+3𝑖")
-open_charge = TensorExpression(
-    chain_head(spin.to_expression(), spin.to_expression(), c)
-)
+open_charge = TensorExpression.charge_conjugation(4)
 word = scalar * chain(
     spin(i),
     spin(j),

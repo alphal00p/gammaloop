@@ -312,6 +312,123 @@ impl ConvertibleToSpensoNet {
 }
 
 impl SpensoNet {
+    pub(crate) fn project_factors(
+        py: Python<'_>,
+        mut factors: Vec<Self>,
+        kind: spenso::shadowing::FactorProjector,
+    ) -> PyResult<Self> {
+        let sources = factors
+            .iter()
+            .map(|factor| factor.structure.clone())
+            .collect::<Vec<_>>();
+        let structure =
+            SymbolicTensor::project_factors(&sources, kind).map_err(composition_error)?;
+        // Give spectator ports stable identities across permutations. Aligning
+        // anonymous axes by position would exchange the spectator data as well.
+        let indices = SymbolicTensor::reserved_dummies(
+            factors
+                .iter()
+                .flat_map(|factor| [&factor.structure, &factor.materialized]),
+        );
+        for factor in &mut factors {
+            let channel = factor.structure.matrix_channel().ok_or_else(|| {
+                composition_error(composition::TensorCompositionError::NoMatrixChannel)
+            })?;
+            let replacements = factor
+                .structure
+                .structure()
+                .logical_slots()
+                .iter()
+                .enumerate()
+                .filter(|(position, slot)| {
+                    *position != channel.input
+                        && *position != channel.output
+                        && matches!(slot.aind, PartialIndex::Open(_))
+                })
+                .map(|(position, _)| (position, indices.fresh_index()))
+                .collect();
+            *factor = factor.set_port_indices(&replacements)?;
+        }
+        let terms = kind
+            .permutations(factors.len())
+            .ok_or_else(|| PyValueError::new_err("factor projector normalization is too large"))?;
+        let endpoints = HashMap::from([(0, indices.fresh_index()), (1, indices.fresh_index())]);
+        let mut result: Option<Self> = None;
+        for (coefficient, order) in terms {
+            let first = factors[order[0]].clone();
+            let channel = first.structure.matrix_channel().ok_or_else(|| {
+                composition_error(composition::TensorCompositionError::NoMatrixChannel)
+            })?;
+            let mut term = first.chain_form(channel)?;
+            for index in &order[1..] {
+                let factor = factors[*index].clone();
+                let channel = factor.structure.matrix_channel().ok_or_else(|| {
+                    composition_error(composition::TensorCompositionError::NoMatrixChannel)
+                })?;
+                term = term.compose(
+                    ConvertibleToSpensoNet(factor),
+                    (0, 1),
+                    (channel.input, channel.output),
+                )?;
+            }
+            term = term.set_port_indices(&endpoints)?;
+            let scalar = TensorExpression::from_structured(
+                py,
+                SymbolicTensor::new(coefficient, PartialStructure::from_logical_slots([])),
+            )?;
+            term = term.multiply_network(Self::from_arithmetic(
+                ArithmeticStructure::Tensor(scalar),
+                None,
+            )?)?;
+            result = Some(match result {
+                Some(sum) => {
+                    // Permuting matrix factors must not permute the public
+                    // spectator axes. Their explicit identities determine the
+                    // alignment before the component networks are added.
+                    let slots = term.structure.structure().logical_slots();
+                    let axes = sum
+                        .structure
+                        .structure()
+                        .logical_slots()
+                        .iter()
+                        .map(|slot| {
+                            slots.iter().position(|other| other == slot).ok_or_else(|| {
+                                PyValueError::new_err(
+                                    "projected factors have incompatible spectator ports",
+                                )
+                            })
+                        })
+                        .collect::<PyResult<Vec<_>>>()?;
+                    sum.add_network(term.permute_axes(axes)?, false)?
+                }
+                None => term,
+            });
+        }
+        let mut result = result.expect("a nonempty factor group has at least one permutation");
+        // Computation is a sum of networks, while both semantic descriptions
+        // retain a single projected channel that can be composed again.
+        let replacements = result
+            .materialized
+            .structure()
+            .logical_slots()
+            .iter()
+            .enumerate()
+            .map(|(position, slot)| {
+                let PartialIndex::Explicit(index) = slot.aind else {
+                    unreachable!("network-facing ports are explicit")
+                };
+                (position, index)
+            })
+            .collect();
+        result.materialized = structure
+            .reindex_interface_ports(&replacements)
+            .map_err(composition_error)?;
+        result.structure = structure;
+        result.descriptor = None;
+        result.validate_graph_interface()?;
+        Ok(result)
+    }
+
     pub(crate) fn from_tensor(value: Spensor) -> PyResult<Self> {
         let canonical = value.tensor.external_structure();
         let logical = value
@@ -372,6 +489,8 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSpensoNet {
     fn extract(ob: pyo3::Borrowed<'a, 'py, pyo3::PyAny>) -> Result<Self, Self::Error> {
         if let Ok(a) = ob.extract::<SpensoNet>() {
             Ok(ConvertibleToSpensoNet(a))
+        } else if let Ok(group) = ob.extract::<crate::projectors::PyFactorProjector>() {
+            group.to_network(ob.py()).map(ConvertibleToSpensoNet)
         } else if let Ok(num) = ob.extract::<Spensor>() {
             Ok(ConvertibleToSpensoNet(SpensoNet::from_tensor(num)?))
         } else if let Ok(a) = ob.extract::<ArithmeticStructure>() {
@@ -387,7 +506,10 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSpensoNet {
 #[cfg(feature = "python_stubgen")]
 impl PyStubType for ConvertibleToSpensoNet {
     fn type_output() -> pyo3_stub_gen::TypeInfo {
-        ArithmeticStructure::type_output() | SpensoNet::type_output() | Spensor::type_output()
+        ArithmeticStructure::type_output()
+            | SpensoNet::type_output()
+            | Spensor::type_output()
+            | crate::projectors::PyFactorProjector::type_output()
     }
 }
 

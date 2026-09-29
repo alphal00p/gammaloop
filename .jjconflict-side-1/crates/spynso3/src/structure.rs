@@ -853,6 +853,28 @@ impl SpensoName {
         SpensoName { name: AGS.gamma }
     }
 
+    /// Registered time-component gamma matrix head.
+    #[staticmethod]
+    fn gamma0() -> SpensoName {
+        SpensoName { name: AGS.gamma0 }
+    }
+
+    /// Registered antisymmetric charge-conjugation matrix head.
+    #[staticmethod]
+    fn charge_conjugation() -> SpensoName {
+        SpensoName {
+            name: AGS.charge_conjugation,
+        }
+    }
+
+    /// Registered Levi-Civita tensor head, with its antisymmetric normalization.
+    #[staticmethod]
+    fn levi_civita() -> SpensoName {
+        SpensoName {
+            name: *idenso::epsilon::EPSILON_SYMBOL,
+        }
+    }
+
     /// Predefined gamma5 matrix name.
     ///
     /// Examples

@@ -5,7 +5,8 @@ use pyo3_stub_gen_derive::remove_gen_stub;
 
 use idenso::{
     color::CS,
-    dirac::AGS,
+    dirac::{AGS, spinor_matrix_structure},
+    epsilon::EPSILON_SYMBOL,
     representations::{Bispinor, ColorAdjoint, ColorAntiFundamental, ColorFundamental},
 };
 use pyo3::{
@@ -19,6 +20,7 @@ use spenso::{
         library::symbolic::{ETS, ExplicitKey},
         tags::{SPENSO_TAG, SymbolAtomExt},
     },
+    shadowing,
     structure::{
         Canonicalized,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
@@ -206,6 +208,9 @@ fn append_index(representation: AtomView<'_>, index: &Atom) -> PyResult<Atom> {
 }
 
 fn index_representation(representation: Atom, index: Atom) -> PyResult<Atom> {
+    if contextual_port(&index) {
+        return Ok(index);
+    }
     let AtomView::Fun(function) = representation.as_view() else {
         return Err(PyValueError::new_err(
             "expected a stripped representation pattern",
@@ -239,23 +244,53 @@ fn built_in_pattern(
 }
 
 fn minkowski_port(dimension: &Atom, index: &Atom) -> Atom {
-    Minkowski {}.to_symbolic([dimension, index])
+    if contextual_port(index) {
+        index.clone()
+    } else {
+        Minkowski {}.to_symbolic([dimension, index])
+    }
 }
 
 fn bispinor_port(dimension: &Atom, index: &Atom) -> Atom {
-    Bispinor {}.to_symbolic([dimension, index])
+    if contextual_port(index) {
+        index.clone()
+    } else {
+        Bispinor {}.to_symbolic([dimension, index])
+    }
+}
+
+fn contextual_port(index: &Atom) -> bool {
+    match index.as_view() {
+        AtomView::Var(var) => {
+            var.get_symbol() == SPENSO_TAG.chain_in || var.get_symbol() == SPENSO_TAG.chain_out
+        }
+        AtomView::Fun(fun) => fun.get_symbol().has_tag(&SPENSO_TAG.rank1),
+        _ => false,
+    }
 }
 
 fn adjoint_port(dimension: &Atom, index: &Atom) -> Atom {
-    ColorAdjoint {}.to_symbolic([dimension, index])
+    if contextual_port(index) {
+        index.clone()
+    } else {
+        ColorAdjoint {}.to_symbolic([dimension, index])
+    }
 }
 
 fn fundamental_port(dimension: &Atom, index: &Atom) -> Atom {
-    ColorFundamental {}.to_symbolic([dimension, index])
+    if contextual_port(index) {
+        index.clone()
+    } else {
+        ColorFundamental {}.to_symbolic([dimension, index])
+    }
 }
 
 fn antifundamental_port(dimension: &Atom, index: &Atom) -> Atom {
-    ColorAntiFundamental {}.to_symbolic([dimension, index])
+    if contextual_port(index) {
+        index.clone()
+    } else {
+        ColorAntiFundamental {}.to_symbolic([dimension, index])
+    }
 }
 
 /// A Symbolica expression representing one tensor port in a rewrite pattern.
@@ -308,6 +343,19 @@ impl PortPattern {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PortPattern {
+    /// Match the contextual input port of a factor inside a chain or trace.
+    /// Swap input and output in a factor pattern to match its transpose.
+    #[staticmethod]
+    fn chain_in(py: Python<'_>) -> PyResult<Py<Self>> {
+        Self::from_atom(py, Atom::var(SPENSO_TAG.chain_in))
+    }
+
+    /// Match the contextual output port of a factor inside a chain or trace.
+    #[staticmethod]
+    fn chain_out(py: Python<'_>) -> PyResult<Py<Self>> {
+        Self::from_atom(py, Atom::var(SPENSO_TAG.chain_out))
+    }
+
     /// Match one exact representation, optionally carrying `index`.
     ///
     /// Examples
@@ -631,6 +679,141 @@ impl TensorPattern {
         Self::wildcard(py, name, args, ports, |name| {
             symbolica::try_symbol!(name, tags = [&SPENSO_TAG.tensor, &SPENSO_TAG.rank1])
         })
+    }
+
+    /// Match a compact dot product, including unrestricted operand wildcards.
+    #[staticmethod]
+    fn dot(py: Python<'_>, left: PatternArgument, right: PatternArgument) -> PyResult<Py<Self>> {
+        Self::from_atom(
+            py,
+            fixed_tensor(SPENSO_TAG.dot, vec![left.0, right.0], Vec::new()),
+        )
+    }
+
+    /// Match an ordered chain with endpoint and factor-sequence patterns.
+    /// Use `PortPattern.chain_in()` and `.chain_out()` within selected factor patterns.
+    #[staticmethod]
+    #[pyo3(signature = (start, end, *factors))]
+    fn chain(
+        py: Python<'_>,
+        start: PatternPort,
+        end: PatternPort,
+        factors: Vec<PatternArgument>,
+    ) -> PyResult<Py<Self>> {
+        Self::from_atom(
+            py,
+            SPENSO_TAG.chain(start.0, end.0, expression_atoms(factors)),
+        )
+    }
+
+    /// Match a trace with its canonical cyclic factor wrapper.
+    /// Sequence wildcards remain patterns and require no concrete tensor interface.
+    #[staticmethod]
+    #[pyo3(signature = (representation, *factors))]
+    fn trace(
+        py: Python<'_>,
+        representation: RepresentationPattern,
+        factors: Vec<PatternArgument>,
+    ) -> PyResult<Py<Self>> {
+        Self::from_atom(
+            py,
+            shadowing::trace(representation.0, expression_atoms(factors)),
+        )
+    }
+
+    /// Match a Casimir invariant with arbitrary degree and representation patterns.
+    #[staticmethod]
+    fn casimir(
+        py: Python<'_>,
+        degree: PatternArgument,
+        representation: RepresentationPattern,
+    ) -> PyResult<Py<Self>> {
+        Self::from_atom(py, CS.cas(degree.0, representation.0))
+    }
+
+    /// Match a Dynkin index with arbitrary degree and representation patterns.
+    #[staticmethod]
+    fn dynkin_index(
+        py: Python<'_>,
+        degree: PatternArgument,
+        representation: RepresentationPattern,
+    ) -> PyResult<Py<Self>> {
+        Self::from_atom(py, CS.idx(degree.0, representation.0))
+    }
+
+    /// Match a normalized symmetric group of chain or trace factors.
+    #[staticmethod]
+    #[pyo3(signature = (*factors))]
+    fn symmetric(py: Python<'_>, factors: Vec<PatternArgument>) -> PyResult<Py<Self>> {
+        Self::from_atom(py, shadowing::sym(expression_atoms(factors)))
+    }
+
+    /// Match a normalized antisymmetric group of chain or trace factors.
+    #[staticmethod]
+    #[pyo3(signature = (*factors))]
+    fn antisymmetric(py: Python<'_>, factors: Vec<PatternArgument>) -> PyResult<Py<Self>> {
+        Self::from_atom(py, shadowing::antisym(expression_atoms(factors)))
+    }
+
+    /// Match a cyclic group of chain or trace factors.
+    #[staticmethod]
+    #[pyo3(signature = (*factors))]
+    fn cyclic(py: Python<'_>, factors: Vec<PatternArgument>) -> PyResult<Py<Self>> {
+        Self::from_atom(py, shadowing::cyclic(expression_atoms(factors)))
+    }
+
+    /// Match gamma-zero with ordinary indices or contextual chain ports.
+    #[staticmethod]
+    fn gamma0(
+        py: Python<'_>,
+        spinor_dimension: ConvertibleToExpression,
+        i: ConvertibleToExpression,
+        j: ConvertibleToExpression,
+    ) -> PyResult<Py<Self>> {
+        let dimension = spinor_dimension.to_expression().expr;
+        Self::built_in(
+            py,
+            &AGS.gamma0_strct::<AbstractIndex>(4),
+            vec![
+                bispinor_port(&dimension, &i.to_expression().expr),
+                bispinor_port(&dimension, &j.to_expression().expr),
+            ],
+        )
+    }
+
+    /// Match charge conjugation, retaining its registered antisymmetry.
+    #[staticmethod]
+    fn charge_conjugation(
+        py: Python<'_>,
+        spinor_dimension: ConvertibleToExpression,
+        i: ConvertibleToExpression,
+        j: ConvertibleToExpression,
+    ) -> PyResult<Py<Self>> {
+        let dimension = spinor_dimension.to_expression().expr;
+        Self::built_in(
+            py,
+            &spinor_matrix_structure::<AbstractIndex>(AGS.charge_conjugation, 4),
+            vec![
+                bispinor_port(&dimension, &i.to_expression().expr),
+                bispinor_port(&dimension, &j.to_expression().expr),
+            ],
+        )
+    }
+
+    /// Match a Levi-Civita tensor in one representation, at any fixed rank.
+    /// For an unrestricted port sequence use `TensorPattern(TensorName.levi_civita(), ports=[ports___])`.
+    #[staticmethod]
+    #[pyo3(signature = (rep_pattern, *indices))]
+    fn levi_civita(
+        py: Python<'_>,
+        rep_pattern: RepresentationPattern,
+        indices: Vec<ConvertibleToExpression>,
+    ) -> PyResult<Py<Self>> {
+        let ports = indices
+            .into_iter()
+            .map(|index| index_representation(rep_pattern.0.clone(), index.to_expression().expr))
+            .collect::<PyResult<Vec<_>>>()?;
+        Self::from_atom(py, fixed_tensor(*EPSILON_SYMBOL, Vec::new(), ports))
     }
 
     /// Match a metric tensor in logical index order.

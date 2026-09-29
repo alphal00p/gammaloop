@@ -114,6 +114,30 @@ Tensor factories, patterns, and name accessors use `dirac_gamma`, `color_f`, and
 The registered Symbolica heads remain `spenso::gamma`, `spenso::f`, and
 `spenso::t`, including in saved expressions and printed mathematics.
 
+The tensor package owns the full tensor vocabulary formerly exposed through
+`hep.Symbols`. Use `TensorExpression.gamma0(d)`, `.charge_conjugation(d)`, and
+`.levi_civita(rep, rank=4)` for open tensors with distinct ports; corresponding
+`TensorPattern` and `TensorName` accessors support rewriting and head inspection.
+Identical arguments to an antisymmetric head still vanish. The named expression
+factories express distinct unresolved ports without changing that normalization.
+
+Use `TensorPattern.dot/chain/trace` for compact syntax with wildcard operands or
+factor sequences, and `PortPattern.chain_in/chain_out` for forward or reversed
+contextual matrix channels. `TensorPattern.casimir/dynkin_index` also accept
+arbitrary representation patterns. `Nc: Expression` exports the canonical real
+colour constant, including its default numerical value 3.
+
+`FactorProjector.symmetric`, `.antisymmetric`, and `.cyclic` group compatible
+matrix factors for `chain` or `trace`. For example,
+`chain(left, right, A, FactorProjector.antisymmetric(B, C), D)` projects just
+the middle pair. Nested projector groups are supported; pass a precomposed
+chain's individual factors separately. Symbolic groups stay compact and yield
+`TensorExpression`; groups containing component tensors retain their data and
+yield `TensorNetwork`. `expr.expand_projectors()` explicitly expands normalized
+factor permutations while retaining the tensor interface and unrelated
+factorization. The weights are `1/n!` for symmetric/antisymmetric permutations
+and `1/n` for cyclic rotations.
+
 - `Representation` and `Slot` define dimensions, duality, and abstract indices.
 - `TensorExpression` carries a symbolic expression and its ordered tensor interface. A
   `Slot` supplies an explicit index; a `Representation` leaves a port open for later indexing.
