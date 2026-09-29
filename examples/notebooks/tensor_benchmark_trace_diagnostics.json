@@ -1,0 +1,299 @@
+{
+  "schema": 1,
+  "date": "2026-09-29",
+  "purpose": "Read-only diagnosis of expanded trace regressions; no production changes or primary end-to-end timing replacement.",
+  "current": {
+    "commit": "73c246d16da9c49062c400229d2d44bb1a538f9c",
+    "core_sha256": "f2b20cc9d87464dae920f5d24e1f65f7c15463c015e16450c082044f87742d67",
+    "symbolica_revision_prefix": "6a96c9d",
+    "source_manifest_path": "/tmp/feynkit-tensor-review-host-v1/source-manifest.json",
+    "source_manifest_sha256": "e989f6f213c6363de38699eada23497e6172ca64a34f5f4253115f3494d87955",
+    "sources": {
+      "crates/idenso/src/dirac/simplify/trace_kernel.rs": "306bd3647ee56a28ab0aef4d907f25dca2c882c5e13b1534f60121bc05e234b9",
+      "crates/idenso/src/tensor/aliases.rs": "6244a8493d1103e1ca24d104d8b84726120cb59c46066c38fa3e3b0068cc824b",
+      "crates/idenso/src/tensor/simplification.rs": "fb09dcd9916351e930e44ce4930fb473f7e404fa26a1a94a912f59562bf39f60",
+      "crates/idenso/src/tensor/collection.rs": "3b22feab0ea9e5d3fb720a4fee73928da1473248483ad895815c0cf8dc5527c0",
+      "crates/idenso/src/tensor/aliases/materialization.rs": "3b14ef64d90b6343790b5024ab7e66f5777b85c6e25016e9ffd5cc16588ad48c"
+    }
+  },
+  "m1": {
+    "source_change": "2543f3059667f3021b85e35c0f94099f1ff32d0f",
+    "core_sha256": "04d201f5588c7a1e05e58fdee15a745a627d07bc974921883ffd08205a2ab380",
+    "symbolica_revision_prefix": "06906976",
+    "frontend_manifest": "/tmp/feynkit-tensor-checkpoint-timing-v1/frontends/m1/frontend.json"
+  },
+  "protocol": {
+    "cpu": 20,
+    "clock": "process_time_ns",
+    "fixed_warmups": 1,
+    "samples": 3,
+    "input": "prepared free12/axial12 source from the matched benchmark frontends",
+    "current_gamma_stage": "source.simplify_gamma or shared simplify with independent metrics/epsilon switches; all return AliasedTensorExpression",
+    "m1_gamma_stage": "source.simplify_gamma(expand_traces=True), including direct expanded trace emission",
+    "exclusions": "Input construction, alias-count inspection, output-equality assertion, and receipt hashing excluded from measured phase clocks. Stage medians are not summed as continuous end-to-end measurements.",
+    "variants": {
+      "default": "simplify_gamma default: metrics=true, epsilon=true",
+      "gamma_only": "simplify(metrics=false,epsilon=false,gamma=settings)",
+      "gamma_metrics": "simplify(metrics=true,epsilon=false,gamma=settings)",
+      "gamma_epsilon": "simplify(metrics=false,epsilon=true,gamma=settings)"
+    },
+    "limitations": "M1 and current have different Symbolica revisions; same-binary option comparisons isolate scheduler work without attributing the full historical difference solely to Idenso.",
+    "current_output_stage": "explicit alias expand and Atom extraction; axial includes constructing trace-only alias interface with scalar spectator removed and restores that literal factor afterward",
+    "m1_output_stage": "Atom extraction only; expansion is already inside gamma stage"
+  },
+  "timings_ms": [
+    {
+      "case": "free12-trace4",
+      "current": {
+        "default": {
+          "gamma_ms": 389.478366,
+          "alias_count": 496,
+          "output_stage_ms": 22.25515
+        },
+        "gamma_only": {
+          "gamma_ms": 222.22826,
+          "alias_count": 496,
+          "output_stage_ms": 22.101169
+        },
+        "gamma_metrics": {
+          "gamma_ms": 388.843715,
+          "alias_count": 496,
+          "output_stage_ms": 21.920052
+        },
+        "gamma_epsilon": {
+          "gamma_ms": 223.082619,
+          "alias_count": 496,
+          "output_stage_ms": 21.799399
+        }
+      },
+      "m1": {
+        "gamma_ms": 5.832145,
+        "alias_count": 0,
+        "output_stage_ms": 0.049191
+      },
+      "checks": {
+        "all_variants_exactly_equal_primary_expression": true,
+        "expression_sha256": "166cf03fc29a41efda87b6d7d5854a1488d3ad9e24f7806c787b99e98f4c2f89",
+        "expression_path": "/tmp/feynkit-full-algebra-timings/graph/report/current-free12-trace4-typed-check.expression"
+      },
+      "receipts": [
+        "/tmp/feynkit-trace-slowdown/current-free12-trace4.json",
+        "/tmp/feynkit-trace-slowdown/m1-free12-trace4.json"
+      ]
+    },
+    {
+      "case": "free12-tracen",
+      "current": {
+        "default": {
+          "gamma_ms": 242.842253,
+          "alias_count": 211,
+          "output_stage_ms": 24.487213
+        },
+        "gamma_only": {
+          "gamma_ms": 138.974015,
+          "alias_count": 211,
+          "output_stage_ms": 24.315823
+        },
+        "gamma_metrics": {
+          "gamma_ms": 240.079733,
+          "alias_count": 211,
+          "output_stage_ms": 24.708121
+        },
+        "gamma_epsilon": {
+          "gamma_ms": 139.429792,
+          "alias_count": 211,
+          "output_stage_ms": 24.546932
+        }
+      },
+      "m1": {
+        "gamma_ms": 14.566371,
+        "alias_count": 0,
+        "output_stage_ms": 0.15865
+      },
+      "checks": {
+        "all_variants_exactly_equal_primary_expression": true,
+        "expression_sha256": "de54cd7cbded03642e0dc14aae0981a7768d927ba1b4da6555e77f0d5d3d508b",
+        "expression_path": "/tmp/feynkit-full-algebra-timings/graph/report/current-free12-tracen-typed-check.expression"
+      },
+      "receipts": [
+        "/tmp/feynkit-trace-slowdown/current-free12-tracen.json",
+        "/tmp/feynkit-trace-slowdown/m1-free12-tracen.json"
+      ]
+    },
+    {
+      "case": "axial12-trace4",
+      "current": {
+        "default": {
+          "gamma_ms": 1192.509962,
+          "alias_count": 103,
+          "output_stage_ms": 181.441232
+        },
+        "gamma_only": {
+          "gamma_ms": 56.46134,
+          "alias_count": 103,
+          "output_stage_ms": 28.933457
+        },
+        "gamma_metrics": {
+          "gamma_ms": 98.099385,
+          "alias_count": 103,
+          "output_stage_ms": 28.670168
+        },
+        "gamma_epsilon": {
+          "gamma_ms": 924.643536,
+          "alias_count": 103,
+          "output_stage_ms": 182.309486
+        }
+      },
+      "m1": {
+        "gamma_ms": 1.577581,
+        "alias_count": 0,
+        "output_stage_ms": 0.010151
+      },
+      "checks": {
+        "all_variants_exactly_equal_primary_expression": true,
+        "expression_sha256": "b9d4952d0a3383afccaeacc1d9d341be185c539b70744b02a00f3332f57079e9",
+        "expression_path": "/tmp/feynkit-full-algebra-timings/graph/report/current-axial12-trace4-typed-check.expression"
+      },
+      "receipts": [
+        "/tmp/feynkit-trace-slowdown/current-axial12-trace4.json",
+        "/tmp/feynkit-trace-slowdown/m1-axial12-trace4.json"
+      ]
+    }
+  ],
+  "alias_shapes": [
+    {
+      "case": "free12-trace4",
+      "mode": "gamma_only",
+      "aliases": 496,
+      "root_bytes": 174,
+      "definition_body_bytes": 184243,
+      "max_definition_bytes": 3184,
+      "total_alias_bytes": 226356
+    },
+    {
+      "case": "free12-trace4",
+      "mode": "default",
+      "aliases": 496,
+      "root_bytes": 174,
+      "definition_body_bytes": 184856,
+      "max_definition_bytes": 3189,
+      "total_alias_bytes": 227224
+    },
+    {
+      "case": "axial12-trace4",
+      "mode": "gamma_only",
+      "aliases": 103,
+      "root_bytes": 190,
+      "definition_body_bytes": 45606,
+      "max_definition_bytes": 2217,
+      "total_alias_bytes": 55041,
+      "spectator_is_literal": true
+    },
+    {
+      "case": "axial12-trace4",
+      "mode": "default",
+      "aliases": 103,
+      "root_bytes": 190,
+      "definition_body_bytes": 481987,
+      "max_definition_bytes": 225866,
+      "total_alias_bytes": 491422,
+      "spectator_is_literal": true
+    }
+  ],
+  "profile": {
+    "tool": "perf record cpu-clock:u,499Hz,dwarf8192",
+    "scope": "Entire short diagnostic processes, including setup, fixed warmup, five measured calls, equality checks, alias-count inspection and final core hashing. Inclusive stack percentages overlap and must not be added; they are diagnostic samples, not primary phase percentages.",
+    "selected_inclusive_stack_percent": {
+      "free12-default": [
+        {
+          "stack": "InterfaceInference::observe_indices",
+          "percent": 36.78
+        },
+        {
+          "stack": "InterfaceInference::infer_view",
+          "percent": 36.27
+        },
+        {
+          "stack": "SymbolicTensor::with_aliases",
+          "percent": 25.41
+        },
+        {
+          "stack": "TraceDefinitions::retain",
+          "percent": 14.34
+        }
+      ],
+      "free12-gamma-only": [
+        {
+          "stack": "InterfaceInference::observe_indices",
+          "percent": 33.38
+        },
+        {
+          "stack": "InterfaceInference::infer_view",
+          "percent": 30.6
+        },
+        {
+          "stack": "TraceDefinitions::retain",
+          "percent": 22.87
+        },
+        {
+          "stack": "SymbolicTensor::with_aliases",
+          "percent": 18.39
+        }
+      ],
+      "axial12-default": [
+        {
+          "stack": "epsilon collect_with_map",
+          "percent": 31.98
+        },
+        {
+          "stack": "InterfaceInference::observe_indices",
+          "percent": 28.13
+        },
+        {
+          "stack": "InterfaceInference::infer_view",
+          "percent": 25.83
+        },
+        {
+          "stack": "SymbolicTensor::with_aliases",
+          "percent": 12.98
+        }
+      ]
+    },
+    "artifact_directory": "/tmp/feynkit-trace-slowdown",
+    "summary_path": "/tmp/feynkit-trace-slowdown/profile-summary.json",
+    "sample_files": [
+      "/tmp/feynkit-trace-slowdown/free12-default.data",
+      "/tmp/feynkit-trace-slowdown/free12-gamma-only.data",
+      "/tmp/feynkit-trace-slowdown/axial12-default.data"
+    ]
+  },
+  "findings": [
+    "Current production emits typed aliases; M1 directly emitted expanded coefficient recipes. TraceDefinitions::retain infers each sum and allocates a typed handle, and with_aliases revalidates definitions.",
+    "Metric scheduling raises free12 gamma time substantially even when the final free-index trace has no metric contraction to perform.",
+    "Axial epsilon scheduling is the largest extra cost. Its registry-wide epsilon flag enters collection for every domain, and collection can open and copy metric-only alias definitions. The shared collection parser still uses depth_limit=None; this is distinct from the shallow contraction planner.",
+    "Default axial definition payload grows from 45,606 to 481,987 bytes versus gamma-only while keeping 103 aliases, the same exact materialized answer and the scalar spectator literal. The later broad output stage is dominated by spectator-interface reconstruction (157 ms in a separate CPU 8 split), not alias expansion (21 ms)."
+  ],
+  "separate_axial_output_breakdown": {
+    "cpu": 8,
+    "source": "/tmp/feynkit-full-algebra-timings/phases/axial12-trace4.json",
+    "source_sha256": "911fe1d10627212a4e06ab518d6e6084b98dc46f633c855ec1e386a4e0e9ff56",
+    "scope": "Separate diagnostic calls on CPU8, prepared input; phase medians are not summed or substituted for continuous main clocks. Exact equality to independently checked primary output after each call.",
+    "medians_ms": {
+      "gamma_reduction_cpu_ns": 1122.862961,
+      "spectator_interface_cpu_ns": 157.22742,
+      "trace_materialization_cpu_ns": 21.01188,
+      "atom_extraction_and_spectator_cpu_ns": 0.10577
+    },
+    "interpretation": "The broad CPU20 output stage includes spectator-interface reconstruction; the finer CPU8 split shows that reconstruction is much larger than actual polynomial materialization. Do not label the broad stage as polynomial conversion."
+  },
+  "frontends": {
+    "current": {
+      "/tmp/feynkit-full-algebra-timings/frontend/tensor_benchmark_cases.py": "fdce8a569e23970e87fa021cd6978fa8a21d50c6e3b54ec989d2a003619b1866",
+      "/tmp/feynkit-full-algebra-timings/frontend/fermion_ladder.py": "0dfbf31f64cde709d8b57d52df5042f9a364023bdefca2f9ab5e7c63a3b0544f"
+    },
+    "m1": {
+      "/tmp/feynkit-tensor-complete-algebra-harness-v2/m1/examples/notebooks/tensor_benchmark_cases.py": "5cd3720b6ea2c277c844fb5f2af06283796442f1ebb66baf07c03e338651760a",
+      "/tmp/feynkit-tensor-complete-algebra-harness-v2/m1/examples/notebooks/fermion_ladder.py": "363e54fa936c4dcdcab227095ae67d4603c370b003c631d878b3acd8b934e95e"
+    }
+  }
+}
