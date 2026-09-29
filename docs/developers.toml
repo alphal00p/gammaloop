@@ -804,6 +804,21 @@ products = ["spenso", "idenso", "gammaloop"]
 topics = ["tensor-network", "validation", "performance", "implementation-history"]
 
 [[section.note]]
+id = "hep-symbols-tensor-primitives"
+title = "HEP symbols and tensor primitives"
+summary = "Audit of all 22 Spenso-owned hep.Symbols entries, their existing typed replacements, and missing constructors or scalar conventions."
+source = "docs/architecture/hep-symbols-tensor-primitives.typ"
+kind = "API inventory"
+status = "Audited at 10a6c180"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-09-29"
+review_ref = "10a6c180"
+products = ["feynkit", "spenso", "idenso"]
+topics = ["python", "tensor-network", "api"]
+review_triggers = ["crates/feynkit-py/src/symbols.rs", "crates/spynso3/src/**"]
+
+[[section.note]]
 id = "tensor-engine-expansion-inventory"
 title = "Tensor engine expansion inventory"
 summary = "Fixed-base M0 inventory of direct and implicit tensor expansion, its existing owners, and the replacements required by the tensor engine consolidation plan."
