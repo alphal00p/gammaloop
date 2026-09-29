@@ -22,7 +22,7 @@ use symbolica::{
 use symbolica_typst_plugin::payload::{encode_atom_from_set, parse_payload};
 
 const SPENSO_WRAPPER: &str = r#"
-from ..spenso_native import *
+from ..tensor_native import *
 
 initialize_module()
 "#;
@@ -39,7 +39,9 @@ fn install_package<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyMo
 
 fn register_spenso<'py>(core: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyModule>> {
     let py = core.py();
-    let native = PyModule::new(py, "spenso_native")?;
+    assert_eq!(SpensoModule::get_name(), "tensor");
+    let native_name = format!("{}_native", SpensoModule::get_name());
+    let native = PyModule::new(py, &native_name)?;
     let initialize_module =
         PyCFunction::new_closure(py, Some(c"initialize_module"), None, |args, _kwargs| {
             SpensoModule::initialize(args.py())
@@ -49,7 +51,7 @@ fn register_spenso<'py>(core: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyMo
     core.add_submodule(&native)?;
     py.import("sys")?
         .getattr("modules")?
-        .set_item("symbolica.community.tensor_native", &native)?;
+        .set_item(format!("symbolica.community.{native_name}"), &native)?;
     Ok(native)
 }
 
@@ -66,7 +68,7 @@ fn import_spenso_wrapper<'py>(
         .set_item(name, &wrapper)?;
     let source = CString::new(SPENSO_WRAPPER).expect("Spenso wrapper contains a null byte");
     py.run(&source, Some(&wrapper.dict()), Some(&wrapper.dict()))?;
-    community.add("spenso", &wrapper)?;
+    community.add("tensor", &wrapper)?;
     PyModule::import(py, name)
 }
 
@@ -86,6 +88,13 @@ fn combined_core_exposes_rich_display_with_one_expression_type() {
         symbolica.add("community", &community)?;
         register_spenso(&core)?;
         let spenso = import_spenso_wrapper(py, &community)?;
+        assert!(!community.hasattr("spenso")?);
+        for name in ["Tensor", "TensorExpression", "Representation", "CookSettings"] {
+            assert_eq!(
+                spenso.getattr(name)?.getattr("__module__")?.extract::<String>()?,
+                "symbolica.community.tensor"
+            );
+        }
 
         let locals = PyDict::new(py);
         locals.set_item("core", &core)?;

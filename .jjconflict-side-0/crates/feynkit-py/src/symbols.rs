@@ -7,15 +7,16 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 /// Canonical expression heads for diagram and tensor algebra.
 ///
 /// Use these references for pattern matching and momentum construction without
-/// depending on internal namespaces. Model parameters and couplings belong to
+/// depending on internal namespaces. External and loop momenta belong to
+/// ``Kinematics``. Model parameters and couplings belong to
 /// their model; obtain those through ``model.parameter(name).symbol`` or
 /// ``model.coupling(name).symbol`` instead.
 ///
 /// Examples
 /// --------
 /// >>> from symbolica.community import hep
-/// >>> P = hep.Symbols.external_momentum
-/// >>> incoming = [P(0), P(1)]
+/// >>> Q = hep.Symbols.edge_momentum
+/// >>> edge_momentum = Q(0)
 /// >>> mass = hep.Model.standard_model().particle("e-").mass
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(name = "Symbols", module = "symbolica.community.feynkit", frozen)]
@@ -24,28 +25,6 @@ pub struct PySymbols;
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PySymbols {
-    /// External momentum family indexed by physical leg.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import hep
-    /// >>> reference = hep.Symbols.external_momentum
-    #[classattr]
-    fn external_momentum() -> PythonExpression {
-        Atom::var(feynkit_graph::symbols::external_momentum()).into()
-    }
-
-    /// Loop momentum family indexed by loop basis position.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica.community import hep
-    /// >>> reference = hep.Symbols.loop_momentum
-    #[classattr]
-    fn loop_momentum() -> PythonExpression {
-        Atom::var(feynkit_graph::symbols::loop_momentum()).into()
-    }
-
     /// Momentum family indexed by graph edge.
     ///
     /// Examples

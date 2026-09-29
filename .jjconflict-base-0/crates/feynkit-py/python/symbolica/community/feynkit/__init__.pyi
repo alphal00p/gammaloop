@@ -5330,10 +5330,56 @@ class Kinematics:
     --------
     >>> from symbolica import S, E
     >>> from symbolica.community import hep
-    >>> from symbolica import S, E
-    >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
+    >>> P = hep.Kinematics.external_momentum
+    >>> p1, p2, p3, p4 = [P(i) for i in range(4)]
+    >>> s, t, u = hep.Kinematics.s, hep.Kinematics.t, hep.Kinematics.u
     >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
     >>> assert kin.scalar_product(p1, p2) == s/2
+    """
+    s: typing.ClassVar[Expression]
+    r"""
+    Mandelstam invariant ``s=(p1+p2)^2`` for ``p1 + p2 -> p3 + p4``.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> s = hep.Kinematics.s
+    """
+    t: typing.ClassVar[Expression]
+    r"""
+    Mandelstam invariant ``t=(p1-p3)^2`` for ``p1 + p2 -> p3 + p4``.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> t = hep.Kinematics.t
+    """
+    u: typing.ClassVar[Expression]
+    r"""
+    Mandelstam invariant ``u=(p1-p4)^2`` for ``p1 + p2 -> p3 + p4``.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> u = hep.Kinematics.u
+    """
+    external_momentum: typing.ClassVar[Expression]
+    r"""
+    External momentum family indexed by physical leg.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Kinematics.external_momentum
+    """
+    loop_momentum: typing.ClassVar[Expression]
+    r"""
+    Loop momentum family indexed by loop basis position.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Kinematics.loop_momentum
     """
     @property
     def dimension(self) -> Expression:
@@ -10272,34 +10318,17 @@ class Symbols:
     Canonical expression heads for diagram and tensor algebra.
 
     Use these references for pattern matching and momentum construction without
-    depending on internal namespaces. Model parameters and couplings belong to
+    depending on internal namespaces. External and loop momenta belong to
+    ``Kinematics``. Model parameters and couplings belong to
     their model; obtain those through ``model.parameter(name).symbol`` or
     ``model.coupling(name).symbol`` instead.
 
     Examples
     --------
     >>> from symbolica.community import hep
-    >>> P = hep.Symbols.external_momentum
-    >>> incoming = [P(0), P(1)]
+    >>> Q = hep.Symbols.edge_momentum
+    >>> edge_momentum = Q(0)
     >>> mass = hep.Model.standard_model().particle("e-").mass
-    """
-    external_momentum: typing.ClassVar[Expression]
-    r"""
-    External momentum family indexed by physical leg.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.external_momentum
-    """
-    loop_momentum: typing.ClassVar[Expression]
-    r"""
-    Loop momentum family indexed by loop basis position.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.loop_momentum
     """
     edge_momentum: typing.ClassVar[Expression]
     r"""

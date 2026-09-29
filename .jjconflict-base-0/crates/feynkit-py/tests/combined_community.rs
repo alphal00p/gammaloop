@@ -16,7 +16,7 @@ use symbolica::{
 
 const FEYNKIT_WRAPPER: &str = include_str!("../python/symbolica/community/feynkit/__init__.py");
 const MODEL_JSON: &str = include_str!("fixtures/scalars_2p_3p.json");
-const SPENSO_WRAPPER: &str = "from ..spenso_native import *\n\ninitialize_module()\n";
+const SPENSO_WRAPPER: &str = "from ..tensor_native import *\n\ninitialize_module()\n";
 
 fn install_package<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyModule>> {
     let package = PyModule::new(py, name)?;
@@ -117,11 +117,11 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
         register_native::<FeynkitModule>(&core)?;
         register_native::<SpensoModule>(&core)?;
 
-        for order in [["feynkit", "spenso"], ["spenso", "feynkit"]] {
+        for order in [["feynkit", "tensor"], ["tensor", "feynkit"]] {
             for name in order {
                 let source = match name {
                     "feynkit" => FEYNKIT_WRAPPER,
-                    "spenso" => SPENSO_WRAPPER,
+                    "tensor" => SPENSO_WRAPPER,
                     _ => unreachable!(),
                 };
                 import_wrapper(py, &community, name, source)?;
@@ -377,7 +377,7 @@ assert type(free_tensor_reduced) is core.Expression
             py.run(&assertions, Some(&locals), Some(&locals))?;
 
             remove_wrapper(py, &community, "feynkit")?;
-            remove_wrapper(py, &community, "spenso")?;
+            remove_wrapper(py, &community, "tensor")?;
         }
         Ok(())
     })

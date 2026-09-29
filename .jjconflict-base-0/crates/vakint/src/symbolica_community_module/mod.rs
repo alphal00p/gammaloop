@@ -24,7 +24,7 @@ use pyo3_stub_gen::derive::*;
 
 impl SymbolicaCommunityModule for VakintWrapper {
     fn get_name() -> String {
-        "vakint".to_string()
+        "hep.vakint".to_string()
     }
 
     fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -82,7 +82,10 @@ pub struct VakintWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "VakintNumericalResult", module = "symbolica.community.hep.vakint")]
+#[pyclass(
+    name = "VakintNumericalResult",
+    module = "symbolica.community.hep.vakint"
+)]
 /// Numerical Laurent series in the dimensional-regularization parameter epsilon.
 pub struct NumericalEvaluationResultWrapper {
     pub value: NumericalEvaluationResult,
@@ -329,7 +332,10 @@ impl VakintExpressionWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "VakintEvaluationMethod", module = "symbolica.community.hep.vakint")]
+#[pyclass(
+    name = "VakintEvaluationMethod",
+    module = "symbolica.community.hep.vakint"
+)]
 /// One configured backend in a `Vakint` instance's evaluation order.
 pub struct VakintEvaluationMethodWrapper {
     pub method: EvaluationMethod,
@@ -953,5 +959,80 @@ impl VakintWrapper {
             .evaluate(&self.settings, integral_expression.expr.as_view())
             .map_err(vakint_to_python_error)?;
         Ok(result.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pyo3::types::{PyAnyMethods, PyCFunction, PyList};
+    use std::ffi::CString;
+    use symbolica::api::python::create_symbolica_module;
+
+    #[test]
+    fn community_wrapper_imports_under_hep() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            assert_eq!(VakintWrapper::get_name(), "hep.vakint");
+            let modules = py.import("sys")?.getattr("modules")?;
+            let mut parent: Option<Bound<'_, PyModule>> = None;
+            for name in [
+                "symbolica",
+                "symbolica.community",
+                "symbolica.community.hep",
+            ] {
+                let package = PyModule::new(py, name)?;
+                package.setattr("__path__", PyList::empty(py))?;
+                modules.set_item(name, &package)?;
+                if let Some(parent) = parent {
+                    parent.add(name.rsplit('.').next().unwrap(), &package)?;
+                }
+                parent = Some(package);
+            }
+            let core = PyModule::new(py, "symbolica.core")?;
+            create_symbolica_module(&core)?;
+            modules.set_item("symbolica.core", &core)?;
+
+            let native_name = format!("symbolica.community.{}_native", VakintWrapper::get_name());
+            let native = PyModule::new(py, &native_name)?;
+            native.add(
+                "initialize_module",
+                PyCFunction::new_closure(py, Some(c"initialize_module"), None, |args, _| {
+                    VakintWrapper::initialize(args.py())
+                })?,
+            )?;
+            VakintWrapper::register_module(&native)?;
+            modules.set_item(&native_name, &native)?;
+
+            let name = "symbolica.community.hep.vakint";
+            let wrapper = PyModule::new(py, name)?;
+            wrapper.setattr("__package__", name)?;
+            modules.set_item(name, &wrapper)?;
+            let source = CString::new(include_str!(
+                "../../python/symbolica/community/hep/vakint/__init__.py"
+            ))
+            .unwrap();
+            py.run(&source, Some(&wrapper.dict()), Some(&wrapper.dict()))?;
+            parent.unwrap().add("vakint", &wrapper)?;
+
+            let imported = py.import(name)?;
+            for class in [
+                "Vakint",
+                "VakintExpression",
+                "VakintNumericalResult",
+                "VakintEvaluationMethod",
+            ] {
+                assert_eq!(
+                    imported
+                        .getattr(class)?
+                        .getattr("__module__")?
+                        .extract::<String>()?,
+                    name
+                );
+            }
+            assert!(!py.import("symbolica.community")?.hasattr("vakint")?);
+            Ok(())
+        })
+        .unwrap();
     }
 }

@@ -4,10 +4,19 @@ from symbolica import E, Expression, S
 from symbolica.community import hep as fk
 from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
-p1, p2, p3, p4 = (
-    TensorName.vector(name).to_expression() for name in ("p1", "p2", "p3", "p4")
-)
-s, t, a = S("s", "t", "a")
+P = fk.Kinematics.external_momentum
+K = fk.Kinematics.loop_momentum
+p1, p2, p3, p4 = [P(i) for i in range(4)]
+s, t, u = fk.Kinematics.s, fk.Kinematics.t, fk.Kinematics.u
+a = S("a")
+assert not hasattr(fk.Symbols, "external_momentum")
+assert not hasattr(fk.Symbols, "loop_momentum")
+kin = fk.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")] * 4, [s, t, u])
+assert kin.scalar_product(p1 + p2, p1 + p2) == s
+assert kin.scalar_product(p1 - p3, p1 - p3) == t
+assert kin.scalar_product(p1 - p4, p1 - p4) == u
+loop_kin = fk.Kinematics(momenta=[K(0)]).with_scalar_product(K(0), K(0), s)
+assert loop_kin.scalar_product(2 * K(0), K(0)) == 2 * s
 masses = list(S("m1sq", "m2sq", "m3sq", "m4sq"))
 u = sum(masses) - s - t
 kin = fk.Kinematics.mandelstam([p1, p2, p3, p4], masses, [s, t, u])

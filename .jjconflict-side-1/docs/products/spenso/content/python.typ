@@ -33,6 +33,9 @@ Spenso, Idenso, and Symbolica core share one native library, one Symbolica kerne
 Python `Expression` type. The community assembly registers `SpensoModule` as
 `symbolica.community.tensor_native`; its public wrapper imports the native exports and calls
 the host-provided `initialize_module`. That initializer must remain in the export list.
+`SpensoModule::get_name()` returns `tensor`; package the public wrapper under
+`python/symbolica/community/tensor/`. Python classes and generated stubs use
+`symbolica.community.tensor`, while Rust crate names and symbolic `spenso::` names remain unchanged.
 Do not link Spynso into `gammaloop._gammaloop` or distribute it as a second native extension.
 
 GammaLoop owns the Spynso source and bundled Tydenso `render.typ` and `notation.typ` assets;

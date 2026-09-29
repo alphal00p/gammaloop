@@ -3960,9 +3960,56 @@ class Kinematics:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
+    >>> P = fk.Kinematics.external_momentum
+    >>> p1, p2, p3, p4 = [P(i) for i in range(4)]
+    >>> s, t, u = fk.Kinematics.s, fk.Kinematics.t, fk.Kinematics.u
     >>> kin = fk.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
     >>> assert kin.scalar_product(p1, p2) == s/2
+    """
+    s: typing.ClassVar[Expression]
+    r"""
+    Mandelstam invariant ``s=(p1+p2)^2`` for ``p1 + p2 -> p3 + p4``.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> s = hep.Kinematics.s
+    """
+    t: typing.ClassVar[Expression]
+    r"""
+    Mandelstam invariant ``t=(p1-p3)^2`` for ``p1 + p2 -> p3 + p4``.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> t = hep.Kinematics.t
+    """
+    u: typing.ClassVar[Expression]
+    r"""
+    Mandelstam invariant ``u=(p1-p4)^2`` for ``p1 + p2 -> p3 + p4``.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> u = hep.Kinematics.u
+    """
+    external_momentum: typing.ClassVar[Expression]
+    r"""
+    External momentum family indexed by physical leg.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Kinematics.external_momentum
+    """
+    loop_momentum: typing.ClassVar[Expression]
+    r"""
+    Loop momentum family indexed by loop basis position.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Kinematics.loop_momentum
     """
     @property
     def dimension(self) -> Expression:

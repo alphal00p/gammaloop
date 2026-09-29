@@ -18,7 +18,11 @@ use pyo3_stub_gen::{
 
 use crate::error;
 use spynso3::expression::TensorExpression;
-use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
+use symbolica::{
+    api::python::{ConvertibleToExpression, PythonExpression},
+    atom::Atom,
+    symbol,
+};
 
 /// Scoped symbolic scalar products and two-to-two Mandelstam kinematics.
 ///
@@ -30,8 +34,9 @@ use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 /// --------
 /// >>> from symbolica import S, E
 /// >>> from symbolica.community import hep
-/// >>> from symbolica import S, E
-/// >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
+/// >>> P = hep.Kinematics.external_momentum
+/// >>> p1, p2, p3, p4 = [P(i) for i in range(4)]
+/// >>> s, t, u = hep.Kinematics.s, hep.Kinematics.t, hep.Kinematics.u
 /// >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
 /// >>> assert kin.scalar_product(p1, p2) == s/2
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -50,6 +55,61 @@ pub struct PyKinematics {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyKinematics {
+    /// Mandelstam invariant ``s=(p1+p2)^2`` for ``p1 + p2 -> p3 + p4``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hep
+    /// >>> s = hep.Kinematics.s
+    #[classattr]
+    fn s() -> PythonExpression {
+        Atom::var(symbol!("feynkit::s")).into()
+    }
+
+    /// Mandelstam invariant ``t=(p1-p3)^2`` for ``p1 + p2 -> p3 + p4``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hep
+    /// >>> t = hep.Kinematics.t
+    #[classattr]
+    fn t() -> PythonExpression {
+        Atom::var(symbol!("feynkit::t")).into()
+    }
+
+    /// Mandelstam invariant ``u=(p1-p4)^2`` for ``p1 + p2 -> p3 + p4``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hep
+    /// >>> u = hep.Kinematics.u
+    #[classattr]
+    fn u() -> PythonExpression {
+        Atom::var(symbol!("feynkit::u")).into()
+    }
+
+    /// External momentum family indexed by physical leg.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hep
+    /// >>> reference = hep.Kinematics.external_momentum
+    #[classattr]
+    fn external_momentum() -> PythonExpression {
+        Atom::var(feynkit_graph::symbols::external_momentum()).into()
+    }
+
+    /// Loop momentum family indexed by loop basis position.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hep
+    /// >>> reference = hep.Kinematics.loop_momentum
+    #[classattr]
+    fn loop_momentum() -> PythonExpression {
+        Atom::var(feynkit_graph::symbols::loop_momentum()).into()
+    }
+
     /// Start with no scalar-product assumptions in the chosen dimension.
     ///
     /// Examples

@@ -182,7 +182,7 @@ fn set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> bool {
 
 impl SymbolicaCommunityModule for SpensoModule {
     fn get_name() -> String {
-        "spenso".to_string()
+        "tensor".to_string()
     }
 
     fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {

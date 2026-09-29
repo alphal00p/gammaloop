@@ -644,7 +644,7 @@ impl PyProcess {
     fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
         let svg = self.render(py, None)?;
         Ok(format!(
-            "<figure class=\"feynkit-process\" style=\"max-width:100%;margin:.5rem 0\"><div style=\"max-width:100%;overflow-x:auto\">{svg}</div><figcaption style=\"font-size:.85em;opacity:.75\">{}</figcaption></figure>",
+            "<figure class=\"feynkit-process\" style=\"max-width:100%;margin:.5rem 0\"><div style=\"width:360px;max-width:100%;overflow-x:auto\">{svg}</div><figcaption style=\"font-size:.85em;opacity:.75\">{}</figcaption></figure>",
             crate::display::escape_html(&self.__repr__())
         ))
     }
