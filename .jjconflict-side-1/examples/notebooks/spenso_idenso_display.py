@@ -171,7 +171,7 @@ def _(AUTO, Representation, TensorExpression, TensorName, dot, trace):
 
     p = TensorName.vector("p", is_linear=True, tags=["kinematics"])
     q = TensorName.vector("q", is_linear=True, tags=["kinematics"])
-    gamma = TensorExpression.gamma(4)
+    gamma = TensorExpression.dirac_gamma(4)
     mass = TensorName("m")()
 
     kinematic_factor = dot(p(1, mink), q(2, mink)) + mass * mass
@@ -225,7 +225,7 @@ def _(Symbols, Representation, TensorExpression, TensorName, sy):
     atlas_q = TensorName.vector("q", is_linear=True, tags=["kinematics"])
     atlas_chi = TensorName.vector("chi", is_linear=True)
 
-    atlas_gamma = TensorName.gamma().to_expression()
+    atlas_gamma = TensorName.dirac_gamma().to_expression()
     atlas_gamma0 = Symbols.gamma_zero
     atlas_gamma5 = TensorName.gamma5().to_expression()
     atlas_projp = TensorName.projp().to_expression()
@@ -289,7 +289,7 @@ def _(Symbols, Representation, TensorExpression, TensorName, sy):
         raw(Symbols.cyclic, *atlas_chain_factors),
     )
 
-    atlas_colour = TensorExpression.t(8, 3)(
+    atlas_colour = TensorExpression.color_t(8, 3)(
         atlas_coad("A"),
         atlas_cof("i"),
         atlas_cof("j").dual(),

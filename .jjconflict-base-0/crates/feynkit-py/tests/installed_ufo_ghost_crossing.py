@@ -132,7 +132,7 @@ for name, (particles, coupling_name) in vertices.items():
             indices = {
                 half["edge"]: hedge(number, 1) for number, half in enumerate(half_edges)
             }
-            color = TensorExpression.f(8)(
+            color = TensorExpression.color_f(8)(
                 *(indices[edges[external].id] for external in slots)
             ).to_expression()
         # External Grassmann states use the canonical (antighost, ghost)

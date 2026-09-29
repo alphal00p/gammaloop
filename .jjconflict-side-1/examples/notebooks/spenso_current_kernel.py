@@ -136,7 +136,7 @@ def _():
     Jbar, J = TensorName("Jbar"), TensorName("J")
     lib.register(LibraryTensor.dense(Jbar(S), Jbar_components))
     lib.register(LibraryTensor.dense(J(S), J_components))
-    gamma = lib[TensorName.gamma()]
+    gamma = lib[TensorName.dirac_gamma()]
     expr = (Jbar(s1).to_expression() *
             gamma("s2", "s1", "mu") * J(s2).to_expression())
     expr = TensorExpression(expr).reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)).contract(ContractSettings(collect_chains=False, collect_traces=False)).to_expression()
@@ -251,7 +251,7 @@ def _():
     spinor = Representation.bis(4)
     Jbar = TensorName("Jbar")(spinor)
     J = TensorName("J")(spinor)
-    gamma = TensorExpression.gamma(4)
+    gamma = TensorExpression.dirac_gamma(4)
 
     # Gamma slots: row, column, Lorentz. Only mu remains open.
     current = Jbar("a") * gamma("a", "b", "mu") * J("b")
@@ -384,7 +384,7 @@ def _():
     spinor = Representation.bis(4)
     Jbar = TensorName("Jbarrr", print={"typst": "macron(J)"})(spinor)
     J = TensorName("J")(spinor)
-    gamma = TensorExpression.gamma(4)
+    gamma = TensorExpression.dirac_gamma(4)
 
     # Gamma slots: row, column, Lorentz. Only mu remains open.
     current = Jbar("a") * gamma("a", "b", "mu") * J("b")
@@ -507,7 +507,7 @@ def _(mo):
 @app.cell
 def _(AUTO, Representation, TensorExpression, mo, trace):
     lorentz = Representation.mink(4)
-    _gamma = TensorExpression.gamma(4)
+    _gamma = TensorExpression.dirac_gamma(4)
     gamma_trace = trace(
         Representation.bis(4),
         _gamma(AUTO, AUTO, lorentz("mu")),

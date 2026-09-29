@@ -49,7 +49,7 @@ class FermionRingComponents:
             raise ValueError("Component assignments support three or four loops")
         assert len(case.routing) == len(case.momenta) == 2 * case.loops
         assert all(len(row) == case.loops + 1 for row in case.routing)
-        components = TensorExpression.gamma(4).components(
+        components = TensorExpression.dirac_gamma(4).components(
             library=TensorLibrary.hep_lib_atom()
         )
         units = (

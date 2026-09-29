@@ -466,7 +466,7 @@ class FreeTrace:
             Representation.bis(4),
         )
         self.indices = [self.lorentz(S(f"r3trace::i{i}")) for i in range(length)]
-        gamma = TensorExpression.gamma(self.dimension)
+        gamma = TensorExpression.dirac_gamma(self.dimension)
         self.source = trace(self.spin, *(gamma(AUTO, AUTO, i) for i in self.indices))
         self.settings = GammaSimplifySettings()
         self.strategy = {
@@ -664,7 +664,7 @@ class FreeTrace:
 class AxialTrace(FreeTrace):
     def __init__(self):
         super().__init__("trace4", 12)
-        gamma = TensorExpression.gamma(4)
+        gamma = TensorExpression.dirac_gamma(4)
         word = trace(
             self.spin,
             TensorExpression.gamma5(4)(AUTO, AUTO),
@@ -746,8 +746,8 @@ class ProductionNumerator:
             / "crates/idenso/tests/fixtures/aa_aa_2l_gl16_integrated_uv_start_after_simplify_metrics.sym"
         )
         # Q is registered by the combined host, including its display metadata.
-        TensorName.gamma()
-        TensorName.t()
+        TensorName.dirac_gamma()
+        TensorName.color_t()
         Representation.mink(Symbols.dimension)
         Representation.bis(4)
         Representation.cof(3)
@@ -960,11 +960,11 @@ class ColourFierz:
     """Closed SU(3) crossed generator word, with Tr(Ta Tb)=delta(a,b)/2."""
 
     def __init__(self):
-        TensorName.t()
+        TensorName.color_t()
         Representation.cof(3)
         Representation.coad(8)
         self.mode, self.loops, self.form_order = "trace4", 0, "trace-first"
-        generator = TensorName.t().to_expression()
+        generator = TensorName.color_t().to_expression()
         adjoint, fundamental = Representation.coad(8), Representation.cof(3)
         a, b = (adjoint(S(f"colour_fierz::{name}")) for name in ("a", "b"))
         i, j, k, l = (S(f"colour_fierz::{name}") for name in ("i", "j", "k", "l"))

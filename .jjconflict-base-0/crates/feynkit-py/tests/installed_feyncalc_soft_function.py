@@ -200,7 +200,7 @@ color_identity = TensorExpression.g(
     Representation.cof(3), Representation.cof(3).dual()
 )(ports[2], ports[1]).to_expression()
 current = (born / color_identity).together()
-generator = TensorExpression.t(8, 3)(ports[3], ports[2], ports[1]).to_expression()
+generator = TensorExpression.color_t(8, 3)(ports[3], ports[2], ports[1]).to_expression()
 gs = S("UFO::G")
 # The generated convention gives a common minus relative to the reference's
 # emission current. Its relative quark/antiquark sign and square agree.
@@ -221,7 +221,7 @@ print(
 Nc, dA = S("soft::Nc", "soft::dA")
 fund = Representation.cof(Nc)
 color_born = TensorExpression.g(fund, fund.dual())(ports[2], ports[1])
-color_real = TensorExpression.t(dA, Nc)(ports[3], ports[2], ports[1])
+color_real = TensorExpression.color_t(dA, Nc)(ports[3], ports[2], ports[1])
 colors = []
 for tensor in (color_born, color_real):
     norm = (

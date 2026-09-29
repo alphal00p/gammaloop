@@ -15,7 +15,7 @@ class ExpandedTraceTests(unittest.TestCase):
 
     def trace_word(self, dimension, labels):
         rep = sp.Representation.mink(dimension)
-        gamma = sp.TensorExpression.gamma(dimension)
+        gamma = sp.TensorExpression.dirac_gamma(dimension)
         return sp.trace(
             self.spin, *(gamma(sp.AUTO, sp.AUTO, rep(label)) for label in labels)
         )
@@ -60,7 +60,7 @@ class ExpandedTraceTests(unittest.TestCase):
         self.assertIn("output='chains'", repr(chains))
         with self.assertRaises(ValueError):
             sp.GammaSimplifySettings(output="expanded")
-        gamma = sp.TensorExpression.gamma(4)
+        gamma = sp.TensorExpression.dirac_gamma(4)
         source = gamma("chain_a", "chain_b", "chain_mu") * gamma(
             "chain_b", "chain_c", "chain_mu"
         )

@@ -51,10 +51,10 @@ class NetworkDisplayTests(unittest.TestCase):
         # A single stored tensor can still have a pending self-contraction.
         self.assertFalse(summary(tensor.reindex("i", "i")).complete)
         # A library leaf is structurally reduced without being materialized by display.
-        self.assertTrue(summary(TensorExpression.gamma(4).to_network()).complete)
+        self.assertTrue(summary(TensorExpression.dirac_gamma(4).to_network()).complete)
 
     def test_edge_slots_use_representation_alphabets(self):
-        gamma = TensorExpression.gamma(4)(1, 2, 1).to_network()
+        gamma = TensorExpression.dirac_gamma(4)(1, 2, 1).to_network()
         labels = re.findall(r'\("label-typst"\): "([^"]*)"', gamma.to_linnest())
         self.assertCountEqual(labels, ["a", "b", "mu", "gamma"])
         ET.fromstring(gamma.render())
@@ -74,7 +74,7 @@ class NetworkDisplayTests(unittest.TestCase):
     def test_registered_names_and_typed_inspection(self):
         spinor = Representation.bis(4)
         jbar = TensorName("network_details::Jbar", print={"typst": "macron(J)"})(spinor)
-        gamma = TensorExpression.gamma(4)
+        gamma = TensorExpression.dirac_gamma(4)
         network = (jbar(1) * gamma(1, 2, 1)).to_network()
         self.assertIn("macron(J)", network.to_linnest())
         root = ET.fromstring(network.render())
@@ -181,7 +181,7 @@ class NetworkDisplayTests(unittest.TestCase):
         for network in (
             TensorNetwork(E("2")),
             (p("mu") + q("mu")).to_network(),
-            TensorExpression.gamma(4)("a", "b", "mu").to_network(),
+            TensorExpression.dirac_gamma(4)("a", "b", "mu").to_network(),
         ):
             with self.subTest(network=repr(network)):
                 svg = network.render()
@@ -190,7 +190,7 @@ class NetworkDisplayTests(unittest.TestCase):
                 self.assertIn("light-dark", svg)
 
     def test_linnet_configuration_and_portable_source(self):
-        network = TensorExpression.gamma(4)("a", "b", "mu").to_network()
+        network = TensorExpression.dirac_gamma(4)("a", "b", "mu").to_network()
         config = linnet.RenderConfig(title="Network preview")
         source = network.to_linnest(config=config)
         self.assertIn("Network preview", source)

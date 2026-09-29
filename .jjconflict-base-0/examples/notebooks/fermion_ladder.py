@@ -62,8 +62,8 @@ class FermionLadder:
         ]
         upper = [tuple(int(i <= j) for i in range(loops)) + (0,) for j in range(loops)]
         self.routing = upper + [row[:-1] + (-1,) for row in reversed(upper)]
-        gamma = TensorExpression.gamma(self.dimension)
-        gamma_head = TensorName.gamma().to_expression()
+        gamma = TensorExpression.dirac_gamma(self.dimension)
+        gamma_head = TensorName.dirac_gamma().to_expression()
         names = ["mu"] + [f"a{i}" for i in range(1, loops)]
         opposite = ["nu"] + [f"b{i}" for i in reversed(range(1, loops))]
         labels = {

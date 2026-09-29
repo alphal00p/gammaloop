@@ -6,7 +6,9 @@ Audit dated 2026-09-29, based on `ppuwtvyu/0` (`10a6c180`), the parent of
 `default@` when this parallel workspace was created. The separate
 `nmkklzpn` reduction-API migration is outside this snapshot. Rust crate names
 and symbolic `spenso::` identities remain unchanged by the Python namespace
-rename to `symbolica.community.tensor`.
+rename to `symbolica.community.tensor`. The follow-up API rename in this
+parallel branch uses `dirac_gamma`, `color_f`, and `color_t` for constructors, patterns,
+and names; the registered symbols remain `spenso::gamma`, `spenso::f`, and `spenso::t`.
 
 `crates/feynkit-py/src/symbols.rs` exposes 22 Spenso-owned heads through
 `hep.Symbols`, each as an ordinary Symbolica `Expression`. Most concrete
@@ -16,8 +18,8 @@ order, duality, and the tensor result type; a raw head also permits patterns
 and incomplete syntax. Replacing every accessor with a callable would hide
 that distinction rather than remove it.
 
-This change records the audit and an executable comparison, without removing
-accessors or changing the running notebook environment. The comparison is
+The audit records an executable comparison; the follow-up changes the API
+spellings above without changing the running notebook environment. The comparison is
 `examples/reproducers/hep_symbols_primitives.py`. It checks 24 exact-expression,
 rank, and raw-head equalities in a combined community host. Its
 `to_expression()` calls are the oracle boundary; the typed examples themselves
@@ -36,8 +38,8 @@ current namespace.
   inset: 5pt,
   table.header([`hep.Symbols`], [Existing tensor primitive], [Boundary or gap]),
   [`metric`], [`TE.g(rep)(i, j)`], [Typed factory; accepts an explicit dual partner.],
-  [`gamma`], [`TE.gamma(D)(i, j, mu)`], [Bispinor, bispinor, Lorentz order.],
-  [`color_f`], [`TE.f(dA)(a, b, c)`], [Argument is adjoint dimension, not number of colours.],
+  [`dirac_gamma`], [`TE.dirac_gamma(D)(i, j, mu)`], [Bispinor, bispinor, Lorentz order.],
+  [`color_f`], [`TE.color_f(dA)(a, b, c)`], [Argument is adjoint dimension, not number of colours.],
   [`lorentz`], [`R.mink(D)` and `rep(index)`], [Representation and slot.],
   [`spinor`], [`R.bis(d)` and `rep(index)`], [Representation and slot.],
   [`color_fundamental`], [`R.cof(Nc)` and `rep(index)`], [Use `rep.dual()` for antifundamental slots.],
@@ -71,7 +73,7 @@ mink = Representation.mink(4)
 spin = Representation.bis(4)
 fund = Representation.cof(3)
 
-gamma = TensorExpression.gamma(4)
+gamma = TensorExpression.dirac_gamma(4)
 g = TensorExpression.g(mink)
 p = TensorName.vector("example::p")(mink)
 q = TensorName.vector("example::q")(mink)
@@ -142,10 +144,10 @@ when that identity is required.
 
 == Patterns, introspection, and ownership
 
-For rewriting, use `TensorPattern.g`, `TensorPattern.gamma`,
-`TensorPattern.f`, `TensorPattern.vector`, and `PortPattern`. For raw head
-introspection, `TensorName.g().to_expression()`, `TensorName.gamma().to_expression()`,
-and `TensorName.f().to_expression()` already reproduce the HEP handles.
+For rewriting, use `TensorPattern.g`, `TensorPattern.dirac_gamma`,
+`TensorPattern.color_f`, `TensorPattern.vector`, and `PortPattern`. For raw head
+introspection, `TensorName.g().to_expression()`, `TensorName.dirac_gamma().to_expression()`,
+and `TensorName.color_f().to_expression()` already reproduce the HEP handles.
 The predefined `TensorName` accessors are intentionally not concrete callable
 factories. Representation identity is available through `rep.name`; do not
 construct a raw `mink(...)` call merely to inspect a port's representation.

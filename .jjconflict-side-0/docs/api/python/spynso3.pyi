@@ -3739,7 +3739,7 @@ class TensorExpression:
     >>> value = sp.TensorExpression(raw, cook_indices=sp.CookSettings.reversible())
     >>> mink = sp.Representation.mink(4)
     >>> metric = sp.TensorExpression.g(mink)("mu", "nu")
-    >>> gamma = sp.TensorExpression.gamma(4)("i", "j", "mu")
+    >>> gamma = sp.TensorExpression.dirac_gamma(4)("i", "j", "mu")
     >>> sigma = sp.TensorExpression.sigma(4)("mu", "nu", "i", "j")
 
     Parameters
@@ -3884,7 +3884,7 @@ class TensorExpression:
             Representation, including its dimension, for the tensor’s ports.
         """
     @staticmethod
-    def gamma(minkowski_dimension: builtins.int | Expression | str) -> TensorExpression:
+    def dirac_gamma(minkowski_dimension: builtins.int | Expression | str) -> TensorExpression:
         r"""
         Construct a gamma matrix with two four-dimensional bispinor ports followed by
         one Lorentz port. Call the result as `gamma(i, j, mu)` to assign its indices.
@@ -3967,7 +3967,7 @@ class TensorExpression:
             Dimension of the Lorentz representation. The bispinor ports remain four-dimensional; a symbolic Lorentz dimension is allowed.
         """
     @staticmethod
-    def f(adjoint_dimension: builtins.int | Expression | str) -> TensorExpression:
+    def color_f(adjoint_dimension: builtins.int | Expression | str) -> TensorExpression:
         r"""
         Create an unresolved color structure constant.
 
@@ -3986,7 +3986,7 @@ class TensorExpression:
             Dimension of the adjoint color representation, such as 8 for SU(3). Symbolic dimensions are also accepted.
         """
     @staticmethod
-    def t(adjoint_dimension: builtins.int | Expression | str, fundamental_dimension: builtins.int | Expression | str) -> TensorExpression:
+    def color_t(adjoint_dimension: builtins.int | Expression | str, fundamental_dimension: builtins.int | Expression | str) -> TensorExpression:
         r"""
         Create an unresolved color generator.
 
@@ -3996,7 +3996,7 @@ class TensorExpression:
         Examples
         --------
         >>> from symbolica.community import tensor as sp
-        >>> tensor = sp.TensorExpression.t(8, 3)
+        >>> tensor = sp.TensorExpression.color_t(8, 3)
         >>> ports = tensor.structure.slots
 
         Parameters
@@ -4133,7 +4133,7 @@ class TensorExpression:
         >>> from symbolica.community import tensor as sp
         >>> from symbolica import E, S
         >>> D = S("docs::D")
-        >>> gamma = sp.TensorExpression.gamma(4).with_lorentz_dimension(D)
+        >>> gamma = sp.TensorExpression.dirac_gamma(4).with_lorentz_dimension(D)
 
         Parameters
         ----------
@@ -4149,7 +4149,7 @@ class TensorExpression:
         Examples
         --------
         >>> from symbolica.community import tensor as sp
-        >>> gamma = sp.TensorExpression.gamma(4)
+        >>> gamma = sp.TensorExpression.dirac_gamma(4)
         >>> trace = gamma("a", "b", "mu") * gamma("b", "a", "nu")
         >>> reduced = trace.reduce_algebra(sp.AlgebraSettings.hep())
         >>> expanded = reduced.expand()
@@ -5899,7 +5899,7 @@ class TensorName:
         >>> tags = head.get_tags()
         """
     @staticmethod
-    def gamma() -> TensorName:
+    def dirac_gamma() -> TensorName:
         r"""
         Predefined gamma matrix name for introspection and pattern construction.
 
@@ -5957,7 +5957,7 @@ class TensorName:
         >>> tags = head.get_tags()
         """
     @staticmethod
-    def f() -> TensorName:
+    def color_f() -> TensorName:
         r"""
         Predefined color structure constant name.
 
@@ -5968,7 +5968,7 @@ class TensorName:
         >>> tags = head.get_tags()
         """
     @staticmethod
-    def t() -> TensorName:
+    def color_t() -> TensorName:
         r"""
         Predefined color generator name.
 
@@ -7130,7 +7130,7 @@ class TensorPattern(Expression):
             Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
         """
     @staticmethod
-    def gamma(minkowski_dimension: _ScalarInput, i: _ScalarInput, j: _ScalarInput, mu: _ScalarInput) -> TensorPattern:  # type: ignore[override]  # ty: ignore[invalid-method-override]
+    def dirac_gamma(minkowski_dimension: _ScalarInput, i: _ScalarInput, j: _ScalarInput, mu: _ScalarInput) -> TensorPattern:
         r"""
         Match a gamma matrix in storage `(i, j, mu)` order.
 
@@ -7241,7 +7241,7 @@ class TensorPattern(Expression):
             Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
         """
     @staticmethod
-    def f(adjoint_dimension: _ScalarInput, a: _ScalarInput, b: _ScalarInput, c: _ScalarInput) -> TensorPattern:
+    def color_f(adjoint_dimension: _ScalarInput, a: _ScalarInput, b: _ScalarInput, c: _ScalarInput) -> TensorPattern:
         r"""
         Match a color structure constant in logical `(a, b, c)` order.
 
@@ -7264,7 +7264,7 @@ class TensorPattern(Expression):
             Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
         """
     @staticmethod
-    def t(adjoint_dimension: _ScalarInput, fundamental_dimension: _ScalarInput, a: _ScalarInput, i: _ScalarInput, j: _ScalarInput) -> TensorPattern:
+    def color_t(adjoint_dimension: _ScalarInput, fundamental_dimension: _ScalarInput, a: _ScalarInput, i: _ScalarInput, j: _ScalarInput) -> TensorPattern:
         r"""
         Match a color generator in logical `(a, i, j)` order.
 

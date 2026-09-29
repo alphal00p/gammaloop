@@ -196,6 +196,12 @@ impl PyStubType for SpensoSlotOrArgOrRep {
 /// With only a name, an existing symbol keeps its attributes, callbacks, and printers.
 /// Use a fresh namespaced name when registering a different tensor convention.
 ///
+/// The predefined accessors such as `TensorName.dirac_gamma()` and `TensorName.color_t()`
+/// return raw fixed heads for introspection and pattern construction; those
+/// reserved names cannot be called directly. Use the matching
+/// `TensorExpression` factory for concrete tensors or `TensorPattern` shortcut
+/// for rewrite patterns.
+///
 /// Examples
 /// --------
 /// >>> from symbolica.community import tensor as sp
@@ -303,7 +309,7 @@ impl SpensoName {
         } else if self.name == ETS.flat {
             Some("flat")
         } else if self.name == AGS.gamma {
-            Some("gamma")
+            Some("dirac_gamma")
         } else if self.name == AGS.gamma5 {
             Some("gamma5")
         } else if self.name == AGS.projm {
@@ -313,9 +319,9 @@ impl SpensoName {
         } else if self.name == AGS.sigma {
             Some("sigma")
         } else if self.name == CS.f {
-            Some("f")
+            Some("color_f")
         } else if self.name == CS.t {
-            Some("t")
+            Some("color_t")
         } else {
             None
         }
@@ -843,7 +849,7 @@ impl SpensoName {
     /// >>> head = sp.TensorName.gamma()
     /// >>> tags = head.get_tags()
     #[staticmethod]
-    fn gamma() -> SpensoName {
+    fn dirac_gamma() -> SpensoName {
         SpensoName { name: AGS.gamma }
     }
 
@@ -903,7 +909,7 @@ impl SpensoName {
     /// >>> head = sp.TensorName.f()
     /// >>> tags = head.get_tags()
     #[staticmethod]
-    fn f() -> SpensoName {
+    fn color_f() -> SpensoName {
         SpensoName { name: CS.f }
     }
 
@@ -915,7 +921,7 @@ impl SpensoName {
     /// >>> head = sp.TensorName.t()
     /// >>> tags = head.get_tags()
     #[staticmethod]
-    fn t() -> SpensoName {
+    fn color_t() -> SpensoName {
         SpensoName { name: CS.t }
     }
 }
@@ -2053,13 +2059,13 @@ mod tests {
             for (name, factory) in [
                 (ETS.metric, "g"),
                 (ETS.flat, "flat"),
-                (AGS.gamma, "gamma"),
+                (AGS.gamma, "dirac_gamma"),
                 (AGS.gamma5, "gamma5"),
                 (AGS.projm, "projm"),
                 (AGS.projp, "projp"),
                 (AGS.sigma, "sigma"),
-                (CS.f, "f"),
-                (CS.t, "t"),
+                (CS.f, "color_f"),
+                (CS.t, "color_t"),
             ] {
                 let error = SpensoName { name }
                     .__call__(py, &PyTuple::empty(py))

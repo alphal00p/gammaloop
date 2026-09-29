@@ -79,8 +79,8 @@ word = scalar * chain(
     spin(i),
     spin(j),
     open_charge,
-    TensorExpression.gamma(4)(AUTO, AUTO, mu),
-    TensorExpression.gamma(4)(AUTO, AUTO, nu),
+    TensorExpression.dirac_gamma(4)(AUTO, AUTO, mu),
+    TensorExpression.dirac_gamma(4)(AUTO, AUTO, nu),
     open_charge,
 )
 expected = -scalar * chain_head(bis_i, bis_j, transposed_mu, transposed_nu)
@@ -146,7 +146,7 @@ for dim in (E("4"), dimension):
 values = {}
 for name, expression, ports in (
     ("C", charge, (bis_i, bis_j)),
-    ("gamma", TensorExpression.gamma(4)(i, j, mu), (bis_i, bis_j, mink_mu)),
+    ("gamma", TensorExpression.dirac_gamma(4)(i, j, mu), (bis_i, bis_j, mink_mu)),
     ("square", square, (bis_i, bis_j)),
     ("sandwich", sandwich, (bis_i, bis_j, mink_mu)),
     ("transposed_sandwich", transposed_sandwich, (bis_i, bis_j, mink_mu)),

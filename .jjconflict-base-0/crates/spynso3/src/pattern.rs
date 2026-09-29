@@ -713,9 +713,7 @@ impl TensorPattern {
     /// mu : Expression or scalar
     ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
     #[staticmethod]
-    // This factory constructs gamma tensor patterns, not the scalar gamma function.
-    #[gen_stub(type_ignore = ["override", "invalid-method-override"])]
-    fn gamma(
+    fn dirac_gamma(
         py: Python<'_>,
         minkowski_dimension: ConvertibleToExpression,
         i: ConvertibleToExpression,
@@ -887,7 +885,7 @@ impl TensorPattern {
     /// c : Expression or scalar
     ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
     #[staticmethod]
-    fn f(
+    fn color_f(
         py: Python<'_>,
         adjoint_dimension: ConvertibleToExpression,
         a: ConvertibleToExpression,
@@ -925,7 +923,7 @@ impl TensorPattern {
     /// j : Expression or scalar
     ///     Index label or Symbolica wildcard expression. Reuse the same wildcard when the indices must match.
     #[staticmethod]
-    fn t(
+    fn color_t(
         py: Python<'_>,
         adjoint_dimension: ConvertibleToExpression,
         fundamental_dimension: ConvertibleToExpression,
@@ -1349,7 +1347,7 @@ mod tests {
                 67
             );
             assert_builtin!(
-                "gamma",
+                "dirac_gamma",
                 (7,),
                 ("pattern_gamma_i", "pattern_gamma_j", "pattern_gamma_mu"),
                 (
@@ -1412,7 +1410,7 @@ mod tests {
                 89
             );
             assert_builtin!(
-                "f",
+                "color_f",
                 (8,),
                 ("pattern_f_a", "pattern_f_b", "pattern_f_c"),
                 (
@@ -1424,7 +1422,7 @@ mod tests {
                 97
             );
             assert_builtin!(
-                "t",
+                "color_t",
                 (8, 3),
                 ("pattern_t_a", "pattern_t_i", "pattern_t_j"),
                 (
@@ -1498,13 +1496,13 @@ mod tests {
         for (method, expected) in [
             ("g", &["rep", "other"][..]),
             ("flat", &["rep"]),
-            ("gamma", &["minkowski_dimension"]),
+            ("dirac_gamma", &["minkowski_dimension"]),
             ("gamma5", &["spinor_dimension"]),
             ("projm", &["spinor_dimension"]),
             ("projp", &["spinor_dimension"]),
             ("sigma", &["minkowski_dimension"]),
-            ("f", &["adjoint_dimension"]),
-            ("t", &["adjoint_dimension", "fundamental_dimension"]),
+            ("color_f", &["adjoint_dimension"]),
+            ("color_t", &["adjoint_dimension", "fundamental_dimension"]),
         ] {
             assert_eq!(parameters::<TensorExpression>(method), expected);
         }
@@ -1512,14 +1510,14 @@ mod tests {
         for (method, expected) in [
             ("g", &["rep_pattern", "i", "j"][..]),
             ("flat", &["rep_pattern", "i", "j"]),
-            ("gamma", &["minkowski_dimension", "i", "j", "mu"]),
+            ("dirac_gamma", &["minkowski_dimension", "i", "j", "mu"]),
             ("gamma5", &["spinor_dimension", "i", "j"]),
             ("projm", &["spinor_dimension", "i", "j"]),
             ("projp", &["spinor_dimension", "i", "j"]),
             ("sigma", &["minkowski_dimension", "mu", "nu", "i", "j"]),
-            ("f", &["adjoint_dimension", "a", "b", "c"]),
+            ("color_f", &["adjoint_dimension", "a", "b", "c"]),
             (
-                "t",
+                "color_t",
                 &["adjoint_dimension", "fundamental_dimension", "a", "i", "j"],
             ),
         ] {
@@ -1543,9 +1541,9 @@ mod tests {
             );
         }
         for signature in [
-            "def gamma(minkowski_dimension:",
+            "def dirac_gamma(minkowski_dimension:",
             "def gamma5(spinor_dimension:",
-            "def t(adjoint_dimension:",
+            "def color_t(adjoint_dimension:",
             "def exact(rep:",
             "def g(rep_pattern:",
         ] {
@@ -1568,8 +1566,17 @@ mod tests {
                 (
                     py.get_type::<TensorPattern>(),
                     &[
-                        "any", "vector", "g", "flat", "gamma", "gamma5", "projm", "projp", "sigma",
-                        "f", "t",
+                        "any",
+                        "vector",
+                        "g",
+                        "flat",
+                        "dirac_gamma",
+                        "gamma5",
+                        "projm",
+                        "projp",
+                        "sigma",
+                        "color_f",
+                        "color_t",
                     ][..],
                 ),
             ] {

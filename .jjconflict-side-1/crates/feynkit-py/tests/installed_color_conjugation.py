@@ -16,7 +16,7 @@ from symbolica.community.tensor import (
 )
 
 for colors in (2, 3, 5):
-    generator = TensorExpression.t(colors**2 - 1, colors)
+    generator = TensorExpression.color_t(colors**2 - 1, colors)
     fundamental = Representation.cof(colors)
     explicit = generator("a", "i", "k") * generator("b", "k", "j")
     explicit_conjugate = explicit.dirac_adjoint()
@@ -168,7 +168,7 @@ for colors in (2, 3, 5):
 
 # Scalar coefficients inside a compact chain conjugate before multiplication.
 z = S("color_weight_z")
-generator = TensorExpression.t(8, 3)
+generator = TensorExpression.color_t(8, 3)
 fundamental = Representation.cof(3)
 weighted = chain(
     fundamental("i"),

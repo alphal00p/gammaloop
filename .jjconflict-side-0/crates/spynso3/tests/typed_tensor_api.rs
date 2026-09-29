@@ -80,11 +80,11 @@ fn typed_factories_expose_logical_interfaces_without_key_arguments() {
             .extract::<SpensoRepresentation>()?
             .representation;
 
-        let f = tensor_expression.call_method1("f", (8,))?;
+        let f = tensor_expression.call_method1("color_f", (8,))?;
         assert_eq!(logical_representations(&f)?, vec![coad8, coad8, coad8]);
         assert_eq!(symbolic_argument_count(&f)?, 3);
 
-        let t = tensor_expression.call_method1("t", (8, 3))?;
+        let t = tensor_expression.call_method1("color_t", (8, 3))?;
         let expected_t = vec![coad8, cof3, coaf3];
         assert_eq!(logical_representations(&t)?, expected_t);
         assert_eq!(symbolic_argument_count(&t)?, 3);
@@ -110,12 +110,12 @@ fn predefined_names_are_heads_and_user_names_remain_constructible() {
             .getattr("Representation")?
             .call_method1("euc", (2,))?;
 
-        let predefined = tensor_name.call_method0("t")?;
+        let predefined = tensor_name.call_method0("color_t")?;
         let error = predefined
             .call1(())
             .expect_err("predefined heads must use their typed factory");
         assert!(error.is_instance_of::<PyTypeError>(py));
-        assert!(error.to_string().contains("TensorExpression.t"));
+        assert!(error.to_string().contains("TensorExpression.color_t"));
 
         let globals = PyDict::new(py);
         globals.set_item("spenso", &module)?;
@@ -140,7 +140,7 @@ fn public_patterns_match_canonicalized_builtin_tensors() {
         let tensor_pattern = module.getattr("TensorPattern")?;
 
         let pattern = tensor_pattern.call_method1(
-            "t",
+            "color_t",
             (
                 PythonExpression::from(Atom::var(symbol!("factory_adjoint_dimension_"))),
                 PythonExpression::from(Atom::var(symbol!("factory_fundamental_dimension_"))),
@@ -150,7 +150,7 @@ fn public_patterns_match_canonicalized_builtin_tensors() {
             ),
         )?;
         let target = tensor_expression
-            .call_method1("t", (8, 3))?
+            .call_method1("color_t", (8, 3))?
             .call1(("a", "i", "j"))?
             .call_method0("to_expression")?;
         let replaced = target
@@ -184,8 +184,8 @@ fn unresolved_factory_ports_survive_composition() {
         let module = spenso_module(py)?;
         let tensor_expression = module.getattr("TensorExpression")?;
 
-        let generator = tensor_expression.call_method1("t", (8, 3))?;
-        let gamma = tensor_expression.call_method1("gamma", (4,))?;
+        let generator = tensor_expression.call_method1("color_t", (8, 3))?;
+        let gamma = tensor_expression.call_method1("dirac_gamma", (4,))?;
         let outer = generator.call_method1("outer", (&gamma,))?;
         let indexed = outer.call1(("a", "i", "j", "r", "s", "mu"))?;
         assert_eq!(indexed.getattr("rank")?.extract::<usize>()?, 6);

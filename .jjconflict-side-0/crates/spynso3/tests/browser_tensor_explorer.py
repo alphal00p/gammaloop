@@ -37,7 +37,7 @@ def main():
             "-c",
             """from symbolica.community.tensor import TensorExpression, TensorLibrary
 library = TensorLibrary.hep_lib_atom()
-print('<section id="standalone">' + library[TensorExpression.gamma(4)].to_html()
+print('<section id="standalone">' + library[TensorExpression.dirac_gamma(4)].to_html()
       + '</section><section id="library">' + library.to_html() + '</section>')
 """,
         ],

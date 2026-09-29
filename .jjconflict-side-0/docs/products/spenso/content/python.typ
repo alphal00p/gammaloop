@@ -108,6 +108,12 @@ rejects native arithmetic or workspace-hack dependencies in its portable graph.
 
 == Choose the right object
 
+Tensor factories, patterns, and name accessors use `dirac_gamma`, `color_f`, and
+`color_t`: for example, `TensorExpression.dirac_gamma(4)`,
+`TensorPattern.color_f(8, a_, b_, c_)`, and `TensorName.color_t()`.
+The registered Symbolica heads remain `spenso::gamma`, `spenso::f`, and
+`spenso::t`, including in saved expressions and printed mathematics.
+
 - `Representation` and `Slot` define dimensions, duality, and abstract indices.
 - `TensorExpression` carries a symbolic expression and its ordered tensor interface. A
   `Slot` supplies an explicit index; a `Representation` leaves a port open for later indexing.
@@ -380,12 +386,12 @@ they are not scalar arguments and do not add fields to tensor-library keys.
 ```python
 from symbolica.community.tensor import _, TensorExpression
 
-gamma = TensorExpression.gamma(4)
+gamma = TensorExpression.dirac_gamma(4)
 gamma_ijmu = gamma("i", "j", "mu")
 line = gamma(_, _, "mu") * gamma(_, _, "nu")
 dirac_trace = line.trace()
 
-generator = TensorExpression.t(8, 3)
+generator = TensorExpression.color_t(8, 3)
 T_aij = generator("a", "i", "j")
 ```
 
@@ -403,7 +409,7 @@ from symbolica import S
 from symbolica.community.tensor import TensorPattern
 
 D_, i_, j_, mu_ = S("D_", "i_", "j_", "mu_")
-gamma_pattern = TensorPattern.gamma(D_, i_, j_, mu_)
+gamma_pattern = TensorPattern.dirac_gamma(D_, i_, j_, mu_)
 ```
 
 `TensorPattern` shortcuts follow the same index order as concrete factories. General patterns
@@ -427,7 +433,7 @@ do not need to find and exchange endpoints separately in each channel.
 from symbolica import E
 from symbolica.community.tensor import TensorExpression
 
-gamma = TensorExpression.gamma(4)
+gamma = TensorExpression.dirac_gamma(4)
 direct = gamma("i", "j", "mu").to_expression() * gamma("k", "l", "mu").to_expression()
 crossed = gamma("i", "l", "nu").to_expression() * gamma("k", "j", "nu").to_expression()
 amplitude = TensorExpression((1 + 2 * E("1𝑖")) * direct + (3 - E("1𝑖")) * crossed)
@@ -673,7 +679,7 @@ from symbolica.community.tensor import (
 
 mink = Representation.mink(4)
 p = TensorName.vector("p")
-indexed = TensorExpression.gamma(4)("a", "b", "mu") * p(mink("mu"))
+indexed = TensorExpression.dirac_gamma(4)("a", "b", "mu") * p(mink("mu"))
 pslash = indexed.contract().reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(output="chains"))).to_expression()
 pslash.formatted()
 ```

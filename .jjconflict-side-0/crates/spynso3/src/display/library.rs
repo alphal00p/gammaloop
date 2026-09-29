@@ -95,13 +95,13 @@ impl Recipe {
             format!("\n    {},\n", arguments.join(",\n    "))
         };
         let constructor = match (name.get_name(), dimensions.as_slice()) {
-            ("spenso::gamma", [_, _, d]) => format!("TensorExpression.gamma({d})"),
+            ("spenso::gamma", [_, _, d]) => format!("TensorExpression.dirac_gamma({d})"),
             ("spenso::gamma5", [d, _]) => format!("TensorExpression.gamma5({d})"),
             ("spenso::projm", [d, _]) => format!("TensorExpression.projm({d})"),
             ("spenso::projp", [d, _]) => format!("TensorExpression.projp({d})"),
             ("spenso::sigma", [d, _, _, _]) => format!("TensorExpression.sigma({d})"),
-            ("spenso::f", [d, _, _]) => format!("TensorExpression.f({d})"),
-            ("spenso::t", [a, f, _]) => format!("TensorExpression.t({a}, {f})"),
+            ("spenso::f", [d, _, _]) => format!("TensorExpression.color_f({d})"),
+            ("spenso::t", [a, f, _]) => format!("TensorExpression.color_t({a}, {f})"),
             ("spenso::g", [_, _]) => {
                 format!("TensorExpression.g({}, {})", arguments[0], arguments[1])
             }

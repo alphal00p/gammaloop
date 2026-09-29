@@ -49,9 +49,13 @@ def main():
     mu, nu = (mink(index).to_expression() for index in ("mu", "nu"))
     a, b = (spin(index).to_expression() for index in ("a", "b"))
     same(TensorExpression.g(mink)("mu", "nu"), Symbols.metric(mu, nu), rank=2)
-    same(TensorExpression.gamma(4)("a", "b", "mu"), Symbols.gamma(a, b, mu), rank=3)
     same(
-        TensorExpression.f(8)("a", "b", "c"),
+        TensorExpression.dirac_gamma(4)("a", "b", "mu"),
+        Symbols.dirac_gamma(a, b, mu),
+        rank=3,
+    )
+    same(
+        TensorExpression.color_f(8)("a", "b", "c"),
         Symbols.color_f(*(adj(index).to_expression() for index in ("a", "b", "c"))),
         rank=3,
     )
@@ -64,12 +68,12 @@ def main():
     same(BroadcastFunction.conj()(p), Symbols.conjugate(p.to_expression()), rank=1)
 
     factors = (
-        TensorExpression.gamma(4)(AUTO, AUTO, "mu"),
-        TensorExpression.gamma(4)(AUTO, AUTO, "nu"),
+        TensorExpression.dirac_gamma(4)(AUTO, AUTO, "mu"),
+        TensorExpression.dirac_gamma(4)(AUTO, AUTO, "nu"),
     )
     raw_factors = (
-        Symbols.gamma(Symbols.chain_in, Symbols.chain_out, mu),
-        Symbols.gamma(Symbols.chain_in, Symbols.chain_out, nu),
+        Symbols.dirac_gamma(Symbols.chain_in, Symbols.chain_out, mu),
+        Symbols.dirac_gamma(Symbols.chain_in, Symbols.chain_out, nu),
     )
     same(
         chain(spin("a"), spin("b"), *factors),
@@ -101,8 +105,8 @@ def main():
     # Introspection and raw patterns have a different boundary from construction.
     for name, head in (
         (TensorName.g(), Symbols.metric),
-        (TensorName.gamma(), Symbols.gamma),
-        (TensorName.f(), Symbols.color_f),
+        (TensorName.dirac_gamma(), Symbols.dirac_gamma),
+        (TensorName.color_f(), Symbols.color_f),
     ):
         same(name.to_expression(), head)
     same(BroadcastFunction.conj().to_expression(), Symbols.conjugate)

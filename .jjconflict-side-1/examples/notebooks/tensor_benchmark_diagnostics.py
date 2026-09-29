@@ -153,10 +153,10 @@ def keep_rest():
     v, p, q = [
         TensorName.vector(f"r3rest::{n}").to_expression() for n in ("V", "p", "q")
     ]
-    gamma = TensorName.gamma().to_expression()
+    gamma = TensorName.dirac_gamma().to_expression()
     a = rep(S("r3rest::a_")).to_expression()
     rule = TensorRule(v(a), p(a) + 2 * q(a))
-    generator = TensorExpression.t(8, 3)
+    generator = TensorExpression.color_t(8, 3)
     color = (
         generator("r3rest::ca", "r3rest::ci", "r3rest::cj")
         * generator("r3rest::ca", "r3rest::cj", "r3rest::ck")
@@ -215,7 +215,7 @@ def keep_rest():
                 == atom(output),
             )
         rows.append(row)
-    gam = TensorExpression.gamma(4)
+    gam = TensorExpression.dirac_gamma(4)
     metric = TensorExpression.g(rep)
     ends = {
         "explicit": (spin(S("r3rest::i")), spin(S("r3rest::j"))),

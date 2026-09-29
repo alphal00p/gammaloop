@@ -96,11 +96,11 @@ print("FeynCalc QED massive and massless squared-current benchmarks passed")
 # external states these select right-handed particles and left-handed antiparticles.
 # The typed gamma pattern leaves the momentum slashes in the spin sums intact.
 a, b, ell = S("polarized::a_", "polarized::b_", "polarized::ell_")
-pattern = TensorExpression.gamma(4)(a, b, ell).to_expression()
+pattern = TensorExpression.dirac_gamma(4)(a, b, ell).to_expression()
 right_current = chain(
     Representation.bis(4)(a),
     Representation.bis(4)(b),
-    TensorExpression.gamma(4)(a, "middle", ell),
+    TensorExpression.dirac_gamma(4)(a, "middle", ell),
     TensorExpression.projp(4)("middle", b),
 ).to_expression()
 projected = (incoming * outgoing).replace(pattern, right_current)

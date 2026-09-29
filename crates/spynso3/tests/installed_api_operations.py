@@ -24,6 +24,41 @@ class TensorOperationsTests(unittest.TestCase):
         )
         return sp.Tensor.dense(self.A(self.rep, self.rep), values)
 
+    def test_named_builtin_factories_preserve_heads_and_patterns(self):
+        for api, dimensions, indices, head in (
+            ("dirac_gamma", (4,), ("i", "j", "mu"), "spenso::gamma"),
+            ("color_f", (8,), ("a", "b", "c"), "spenso::f"),
+            ("color_t", (8, 3), ("a", "i", "j"), "spenso::t"),
+        ):
+            with self.subTest(api=api):
+                name = getattr(sp.TensorName, api)()
+                self.assertEqual(name.to_expression().get_name(), head)
+                factory = getattr(sp.TensorExpression, api)
+                value = factory(*dimensions)(*indices)
+                self.assertEqual(value.rank, len(indices))
+                self.assertEqual(value.to_expression().get_name(), head)
+                wildcards = [S(f"builtin_api::{index}_") for index in indices]
+                dim_patterns = [
+                    S(f"builtin_api::d{k}_") for k in range(len(dimensions))
+                ]
+                pattern = getattr(sp.TensorPattern, api)(*dim_patterns, *wildcards)
+                self.assertEqual(value.to_expression().replace(pattern, E("7")), E("7"))
+                with self.assertRaisesRegex(TypeError, f"TensorExpression\\.{api}"):
+                    name()
+                old_name = head.removeprefix("spenso::")
+                for owner in (sp.TensorName, sp.TensorExpression, sp.TensorPattern):
+                    self.assertNotIn(old_name, owner.__dict__)
+
+        structure_constant = sp.TensorExpression.color_f(8)
+        self.assertEqual(
+            structure_constant("b", "a", "c").to_expression(),
+            -structure_constant("a", "b", "c").to_expression(),
+        )
+        generator = sp.TensorExpression.color_t(8, 3)("a", "i", "j")
+        self.assertEqual(
+            generator.structure.slots[2].representation, sp.Representation.cof(3).dual()
+        )
+
     def test_transforms_preserve_interface_and_refresh_identity(self):
         a = self.A(self.x, self.rep("i"), self.rep("j"))
         replaced = sp.TensorExpression(
@@ -431,7 +466,7 @@ class TensorOperationsTests(unittest.TestCase):
         self.assertEqual(expression.reduce_algebra().expand(), expression.expand())
         metric = sp.TensorExpression.g(self.rep)("i", "j") * a
         self.assertEqual(metric.reduce_algebra().expand(), metric.expand())
-        gamma = sp.TensorExpression.gamma(4)
+        gamma = sp.TensorExpression.dirac_gamma(4)
         chain = gamma("a", "b", "mu") * gamma("b", "a", "nu")
         simplified = chain.reduce_algebra(sp.AlgebraSettings.hep())
         self.assertEqual(

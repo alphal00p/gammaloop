@@ -17,7 +17,7 @@ from symbolica.community.tensor import (
 )
 
 for colors in (2, 3, 5):
-    generator = TensorExpression.t(colors**2 - 1, colors)
+    generator = TensorExpression.color_t(colors**2 - 1, colors)
     fundamental = Representation.cof(colors)
     adjoint = Representation.coad(colors**2 - 1)
     trace = tensor_trace(

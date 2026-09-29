@@ -96,7 +96,7 @@ class TensorPrintTests(unittest.TestCase):
             "tensor_print_tests::CurrentJbar", print={"typst": "macron(J)"}
         )(spinor)
         j = TensorName("tensor_print_tests::J")(spinor)
-        current = jbar("a") * TensorExpression.gamma(4)("a", "b", "mu") * j("b")
+        current = jbar("a") * TensorExpression.dirac_gamma(4)("a", "b", "mu") * j("b")
         original = current.to_expression()
         library = TensorLibrary.hep_lib_atom()
         network = current.to_network(library=library)

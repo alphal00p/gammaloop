@@ -116,7 +116,7 @@ class TensorLibraryTests(unittest.TestCase):
                 self.assertEqual(value.structure, key.structure)
                 # Verify that the enumerated signature can retrieve this value.
                 self.assertEqual(library[key][:], value[:])  # noqa: PLR1733
-            gamma = library[TensorExpression.gamma(4)]
+            gamma = library[TensorExpression.dirac_gamma(4)]
             self.assertEqual(gamma.structure.shape, (4, 4, 4))
             self.assertEqual(gamma[:], library["spenso::gamma"][:])
 

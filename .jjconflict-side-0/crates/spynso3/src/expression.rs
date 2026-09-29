@@ -111,7 +111,7 @@ impl AutoIndex {
 /// >>> value = sp.TensorExpression(raw, cook_indices=sp.CookSettings.reversible())
 /// >>> mink = sp.Representation.mink(4)
 /// >>> metric = sp.TensorExpression.g(mink)("mu", "nu")
-/// >>> gamma = sp.TensorExpression.gamma(4)("i", "j", "mu")
+/// >>> gamma = sp.TensorExpression.dirac_gamma(4)("i", "j", "mu")
 /// >>> sigma = sp.TensorExpression.sigma(4)("mu", "nu", "i", "j")
 ///
 /// Parameters
@@ -149,9 +149,17 @@ impl TensorExpression {
             TensorInferenceError::Network(error) => {
                 return NetworkToolingError::new_err(error.to_string());
             }
-            TensorInferenceError::InvalidBuiltinSignature { factory, signature } => format!(
-                "predefined tensor `{factory}` requires {signature}; use TensorExpression.{factory}(...) to construct it"
-            ),
+            TensorInferenceError::InvalidBuiltinSignature { factory, signature } => {
+                let constructor = match factory {
+                    "gamma" => "dirac_gamma",
+                    "f" => "color_f",
+                    "t" => "color_t",
+                    name => name,
+                };
+                format!(
+                    "predefined tensor `{factory}` requires {signature}; use TensorExpression.{constructor}(...) to construct it"
+                )
+            }
             error => error.to_string(),
         };
         PyValueError::new_err(message)
@@ -857,7 +865,7 @@ impl TensorExpression {
     /// minkowski_dimension : int | Expression | str
     ///     Dimension of the Lorentz representation. The bispinor ports remain four-dimensional; a symbolic Lorentz dimension is allowed.
     #[staticmethod]
-    fn gamma(
+    fn dirac_gamma(
         py: Python<'_>,
         minkowski_dimension: ConvertibleToDimension,
     ) -> PyResult<Py<TensorExpression>> {
@@ -962,7 +970,7 @@ impl TensorExpression {
     /// adjoint_dimension : int | Expression | str
     ///     Dimension of the adjoint color representation, such as 8 for SU(3). Symbolic dimensions are also accepted.
     #[staticmethod]
-    fn f(
+    fn color_f(
         py: Python<'_>,
         adjoint_dimension: ConvertibleToDimension,
     ) -> PyResult<Py<TensorExpression>> {
@@ -977,7 +985,7 @@ impl TensorExpression {
     /// Examples
     /// --------
     /// >>> from symbolica.community import tensor as sp
-    /// >>> tensor = sp.TensorExpression.t(8, 3)
+    /// >>> tensor = sp.TensorExpression.color_t(8, 3)
     /// >>> ports = tensor.structure.slots
     ///
     /// Parameters
@@ -987,7 +995,7 @@ impl TensorExpression {
     /// fundamental_dimension : int | Expression | str
     ///     Dimension of the fundamental color representation, such as 3 for SU(3).
     #[staticmethod]
-    fn t(
+    fn color_t(
         py: Python<'_>,
         adjoint_dimension: ConvertibleToDimension,
         fundamental_dimension: ConvertibleToDimension,
@@ -4276,13 +4284,13 @@ mod tests {
             for name in [
                 "g",
                 "flat",
-                "gamma",
+                "dirac_gamma",
                 "gamma5",
                 "projm",
                 "projp",
                 "sigma",
-                "f",
-                "t",
+                "color_f",
+                "color_t",
                 "rank",
                 "is_scalar",
                 "structure",
@@ -4358,7 +4366,7 @@ mod tests {
                     vec![euc, euc],
                 ),
                 (
-                    expression_type.call_method1("gamma", (4,))?,
+                    expression_type.call_method1("dirac_gamma", (4,))?,
                     vec![bispinor, bispinor, minkowski],
                 ),
                 (
@@ -4378,11 +4386,11 @@ mod tests {
                     vec![minkowski, minkowski, bispinor, bispinor],
                 ),
                 (
-                    expression_type.call_method1("f", (8,))?,
+                    expression_type.call_method1("color_f", (8,))?,
                     vec![adjoint, adjoint, adjoint],
                 ),
                 (
-                    expression_type.call_method1("t", (8, 3))?,
+                    expression_type.call_method1("color_t", (8, 3))?,
                     vec![adjoint, fundamental, antifundamental],
                 ),
             ];
@@ -4501,7 +4509,7 @@ mod tests {
                 ),
                 (TensorExpression::flat(py, &euc_object)?, vec![dimension; 2]),
                 (
-                    TensorExpression::gamma(py, ConvertibleToDimension(dimension))?,
+                    TensorExpression::dirac_gamma(py, ConvertibleToDimension(dimension))?,
                     vec![concrete_four, concrete_four, dimension],
                 ),
                 (
@@ -4521,11 +4529,11 @@ mod tests {
                     vec![dimension, dimension, concrete_four, concrete_four],
                 ),
                 (
-                    TensorExpression::f(py, ConvertibleToDimension(adjoint_dimension))?,
+                    TensorExpression::color_f(py, ConvertibleToDimension(adjoint_dimension))?,
                     vec![adjoint_dimension; 3],
                 ),
                 (
-                    TensorExpression::t(
+                    TensorExpression::color_t(
                         py,
                         ConvertibleToDimension(adjoint_dimension),
                         ConvertibleToDimension(fundamental_dimension),
@@ -4581,7 +4589,7 @@ mod tests {
             ])
             .finish();
         let error = infer_interface(&malformed).expect_err("invalid t ports must be rejected");
-        assert!(error.to_string().contains("TensorExpression.t"));
+        assert!(error.to_string().contains("TensorExpression.color_t"));
 
         let generator_structure = CS.t_strct::<AbstractIndex>(3, 8);
         let expected = generator_structure.layout().canonical_to_logical(
@@ -4618,7 +4626,7 @@ mod tests {
             .finish();
         let error = infer_interface(&gamma)
             .expect_err("raw predefined tensors must use canonical atom ordering");
-        assert!(error.to_string().contains("TensorExpression.gamma"));
+        assert!(error.to_string().contains("TensorExpression.dirac_gamma"));
     }
 
     #[test]
@@ -4886,7 +4894,7 @@ mod tests {
     fn explicit_algebra_preserves_open_indexed_zero_and_scalar_tensors() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
-            let open = TensorExpression::gamma(py, ConvertibleToDimension(4.into()))?;
+            let open = TensorExpression::dirac_gamma(py, ConvertibleToDimension(4.into()))?;
             let indexed = open
                 .bind(py)
                 .call1(("j", "i", "mu"))?
@@ -4971,7 +4979,7 @@ mod tests {
     fn collect_symbol_rejects_callbacks_that_strip_the_tensor_interface() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
-            let tensor = TensorExpression::gamma(py, ConvertibleToDimension(4.into()))?;
+            let tensor = TensorExpression::dirac_gamma(py, ConvertibleToDimension(4.into()))?;
             let x = PythonExpression {
                 expr: Atom::var(symbol!("collect_symbol_x")),
             };
@@ -5002,7 +5010,7 @@ mod tests {
     fn tensor_constructor_factor_collect_and_dimension_preserve_metadata() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
-            let tensor = TensorExpression::gamma(py, ConvertibleToDimension(4.into()))?;
+            let tensor = TensorExpression::dirac_gamma(py, ConvertibleToDimension(4.into()))?;
             let tensor = TensorExpression::with_name(
                 tensor.borrow(py),
                 py,
@@ -5088,7 +5096,7 @@ mod tests {
                 py,
                 ConvertibleToDimension(d),
             )?;
-            let expected = TensorExpression::gamma(py, ConvertibleToDimension(d))?;
+            let expected = TensorExpression::dirac_gamma(py, ConvertibleToDimension(d))?;
             let promoted_indexed = promoted.bind(py).call1(("i", "j", "mu"))?;
             let expected_indexed = expected.bind(py).call1(("i", "j", "mu"))?;
             assert_eq!(
@@ -6291,7 +6299,7 @@ mod tests {
                 Atom::num(-8) * CS.cas(Atom::num(2), adjoint.to_symbolic([]))
             );
 
-            let open = TensorExpression::f(py, ConvertibleToDimension(8.into()))?;
+            let open = TensorExpression::color_f(py, ConvertibleToDimension(8.into()))?;
             let square = open.borrow(py).atom().as_ref().pow(Atom::num(2));
             let error = TensorExpression::from_atom_interface(py, square, None)
                 .expect_err("a bare rank-three square still has ambiguous port pairings");

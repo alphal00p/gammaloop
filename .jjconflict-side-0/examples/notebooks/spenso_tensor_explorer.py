@@ -27,7 +27,7 @@ def _(Representation, TensorExpression, TensorName):
     spinor = Representation.bis(4)
     Jbar = TensorName("Jbar", print={"typst": "macron(J)", "latex": r"\bar{J}"})(spinor)
     J = TensorName("J")(spinor)
-    gamma = TensorExpression.gamma(4)
+    gamma = TensorExpression.dirac_gamma(4)
     current = Jbar(1) * gamma(1, 2, 1) * gamma(2, 3, 2) * gamma(3, 4, 3) * J(4)
     current
     return (current,)
@@ -70,7 +70,7 @@ def _(Representation, mo):
 
 @app.cell
 def _(TensorExpression):
-    TensorExpression.gamma(4)(1, 2, 1).structure
+    TensorExpression.dirac_gamma(4)(1, 2, 1).structure
     return
 
 

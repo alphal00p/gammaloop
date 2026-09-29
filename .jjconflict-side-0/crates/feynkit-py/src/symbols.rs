@@ -108,9 +108,9 @@ impl PySymbols {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hep
-    /// >>> reference = hep.Symbols.gamma
+    /// >>> reference = hep.Symbols.dirac_gamma
     #[classattr]
-    fn gamma() -> PythonExpression {
+    fn dirac_gamma() -> PythonExpression {
         Atom::var(symbol!("spenso::gamma")).into()
     }
 

@@ -16,7 +16,7 @@ coefficients = (
 )
 for colors in (2, 3, 5):
     fundamental = Representation.cof(colors)
-    generator = TensorExpression.t(colors**2 - 1, colors)
+    generator = TensorExpression.color_t(colors**2 - 1, colors)
     for coefficient in coefficients:
         conjugate_coefficient = TensorExpression(coefficient).dirac_adjoint()
         word = chain(
@@ -58,7 +58,7 @@ for colors in (2, 3, 5):
     print(f"SU({colors}): weighted compact chain/trace conjugation and adjoint passed")
 
 fundamental = Representation.cof(3)
-generator = TensorExpression.t(8, 3)
+generator = TensorExpression.color_t(8, 3)
 weighted_word = chain(
     fundamental("i"),
     fundamental.dual()("j"),

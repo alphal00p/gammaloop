@@ -70,7 +70,7 @@ class FactorizedContractionTests(unittest.TestCase):
     def test_independent_reduction_settings_and_notation(self):
         spin = sp.Representation.bis(4)
         lorentz = sp.Representation.mink(4)
-        gamma = sp.TensorExpression.gamma(4)
+        gamma = sp.TensorExpression.dirac_gamma(4)
         source = gamma(spin("i"), spin("j"), lorentz("mu")) * gamma(
             spin("j"), spin("i"), lorentz("nu")
         )

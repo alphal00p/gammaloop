@@ -158,7 +158,7 @@ mod tests {
                 c"
 spin = sp.Representation.bis(4)
 lorentz = sp.Representation.mink(4)
-gamma = sp.TensorExpression.gamma(4)
+gamma = sp.TensorExpression.dirac_gamma(4)
 source = gamma(spin('i'), spin('j'), lorentz('mu')) * gamma(spin('j'), spin('i'), lorentz('nu'))
 assert source.contract(sp.ContractSettings(representations=[])).to_expression() == source
 assert source.reduce_algebra().to_expression() == source

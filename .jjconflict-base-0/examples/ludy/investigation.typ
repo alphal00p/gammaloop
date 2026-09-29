@@ -80,7 +80,7 @@ python examples/ludy/compute.py --process dis --check
 
 For the community host that calls the FeynKit module `hep`, add `--module hep`.
 There is no automatic import fallback. The port uses
-`TensorExpression.gamma(d)` and the current `Expression.solve` API. The pinned
+`TensorExpression.dirac_gamma(d)` and the current `Expression.solve` API. The pinned
 reference uses the older `TensorName.gamma` API, so regenerating its fixtures
 requires its own locked environment, separate from the environment running
 the port. Neither execution nor validation starts Kira or downloads data.

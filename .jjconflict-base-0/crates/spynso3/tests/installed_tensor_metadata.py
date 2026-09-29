@@ -56,7 +56,7 @@ class TensorMetadataTests(unittest.TestCase):
         self.assertEqual(tensor[0], 17.0)
 
     def test_network_execution_preserves_source_and_structure(self):
-        expression = TensorExpression.gamma(4)("a", "b", "mu")
+        expression = TensorExpression.dirac_gamma(4)("a", "b", "mu")
         library = TensorLibrary.hep_lib_atom()
         network = expression.to_network(library=library)
         source, metadata = network.expression(), network.structure
@@ -94,7 +94,7 @@ class TensorMetadataTests(unittest.TestCase):
         self.assertIn("(+, +, +)", Representation.euc(3).to_html())
 
     def test_structure_display_uses_native_controls_and_distinct_groups(self):
-        expression = TensorExpression.gamma(4)(1, 2, 1)
+        expression = TensorExpression.dirac_gamma(4)(1, 2, 1)
         original = expression.to_typst()
         first, second = expression.structure.to_html(), expression.structure.to_html()
         self.assertIn("TensorStructure", first)

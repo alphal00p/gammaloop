@@ -156,7 +156,7 @@ for kind, incoming, outgoing, loops, vertices, count in [
         if kind in ("tree", "vertex"):
             # Conjugate the tree's color tensor; the generated tree fixes the norm.
             color_projector = (
-                TensorExpression.t(dA, Nc)(ports[1], ports[0], ports[2])
+                TensorExpression.color_t(dA, Nc)(ports[1], ports[0], ports[2])
                 .dirac_adjoint()
                 .to_expression()
             )
@@ -546,7 +546,7 @@ for kind, incoming, outgoing, count, qcd_order in [
         )
         if kind == "vertex":
             color_projector = (
-                TensorExpression.t(dA, Nc)(ports[1], ports[0], ports[2])
+                TensorExpression.color_t(dA, Nc)(ports[1], ports[0], ports[2])
                 .dirac_adjoint()
                 .to_expression()
             )

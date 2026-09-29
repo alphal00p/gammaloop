@@ -30,11 +30,11 @@ generated = result.diagrams[0]
 Q, P, K = S("gammalooprs::Q", "gammalooprs::P", "gammalooprs::K")
 s, t, u, me, mm, e = S("s", "t", "u", "UFO::Me", "UFO::MM", "UFO::ee")
 a, b, ell = S("chiral::a_", "chiral::b_", "chiral::ell_")
-gamma = TensorExpression.gamma(4)(a, b, ell).to_expression()
+gamma = TensorExpression.dirac_gamma(4)(a, b, ell).to_expression()
 right_current = chain(
     Representation.bis(4)(a),
     Representation.bis(4)(b),
-    TensorExpression.gamma(4)(a, "middle", ell),
+    TensorExpression.dirac_gamma(4)(a, "middle", ell),
     TensorExpression.projp(4)("middle", b),
 ).to_expression()
 

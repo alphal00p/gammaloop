@@ -49,7 +49,7 @@ d, kk, kp1, kp2, p1sq, p2sq, p12, msq, x, Qsq = (
     )
 )
 lorentz = Representation.mink(dimension=d)
-gamma = TensorExpression.gamma(d)
+gamma = TensorExpression.dirac_gamma(d)
 momentum = TensorName.vector("ludy_port::momentum")
 k, p1, p2 = (momentum(i, lorentz) for i in range(3))
 loop_products = (kk, kp1, kp2)
