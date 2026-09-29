@@ -380,9 +380,28 @@ impl SlotContraction {
             &scope.tree,
             node,
             &mut |tape, node, value| {
-                if self.power_scope(scope, node).is_some() {
+                if let Some((child, power, _)) = self.power_scope(scope, node) {
                     let result = self.scoped_power(scope, node, sum.rank_one)?;
-                    scoped.insert((scope as *const _ as usize, node), result);
+                    let unchanged = scope.literal(node).map_or_else(
+                        || {
+                            scope
+                                .literal(child)
+                                .is_some_and(|base| result.root == base.pow(power))
+                        },
+                        |source| result.root.as_view() == source,
+                    );
+                    // Visiting an unchanged scalar power is bookkeeping, not
+                    // a contraction. It must not disable exact source reuse.
+                    if !unchanged
+                        || result.status != ContractionStatus::Complete
+                        || !result.aliases.is_empty()
+                        || result
+                            .literal_relabellings
+                            .iter()
+                            .any(|(source, target)| source != target)
+                    {
+                        scoped.insert((scope as *const _ as usize, node), result);
+                    }
                     return Some(TermLeaf::Value(InputLeaf::Scalar(result.root.as_view())));
                 }
                 if !matches!(value, NetworkNode::Leaf(_)) {
@@ -1130,6 +1149,40 @@ mod tests {
         assert!(result.aliases.is_empty());
         assert_eq!(result.root, source);
     }
+
+    #[test]
+    fn scalar_rational_sums_keep_their_factorization() {
+        let contractor = setup();
+        for scalar in ["z", "q(0,spenso::cind(0))", "g(p(mink(4)),q(mink(4)))"] {
+            let source = input(&format!(
+                "n*(1/({scalar}+x)+1/({scalar}+y))+m*(1/({scalar}-x)+1/({scalar}-y))"
+            ));
+            for rank_one in [false, true] {
+                let result = contractor
+                    .contract_factorized(source.as_view(), None, rank_one)
+                    .unwrap();
+                assert!(result.status == ContractionStatus::Complete);
+                assert!(result.aliases.is_empty());
+                // An exact Atom comparison protects the factored scalar input;
+                // expanding both sides would hide this regression.
+                assert_eq!(result.root, source, "{scalar}, rank_one={rank_one}");
+
+                let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+                let settings = crate::tensor::ContractionSettings::default();
+                let settings = if rank_one {
+                    settings
+                } else {
+                    settings.without_rank_one_tensors()
+                };
+                for settings in [settings, settings.with_order(&[0])] {
+                    let result = tensor.contract(settings).unwrap();
+                    assert_eq!(result.root(), tensor);
+                    assert!(result.expression.get_aliases().is_empty());
+                    assert_eq!(result.resolved().unwrap().expression, source);
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1154,6 +1207,20 @@ mod lazy_tests {
             assert_eq!(scope.network.graph.graph.n_nodes(), nodes, "{source}");
             assert!(scope.opened.values().all(|entry| entry.get().is_none()));
         }
+    }
+
+    #[test]
+    fn fixed_component_scalar_sums_stay_closed() {
+        let contractor = super::super::tests::setup();
+        let source =
+            super::super::tests::input("n*(1/(q(0,spenso::cind(0))+x)+1/(q(0,spenso::cind(0))+y))");
+        let scope = ContractionScope::parse(source.as_view()).unwrap();
+        let result = contractor
+            .contract_graph(&scope, scope.root, None, true)
+            .unwrap();
+        assert!(result.status == ContractionStatus::Complete);
+        assert_eq!(result.root, source);
+        assert!(scope.opened.values().all(|entry| entry.get().is_none()));
     }
 
     #[test]

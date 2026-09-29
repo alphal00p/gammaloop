@@ -451,3 +451,113 @@ The complete gamma notebook also passes its existing Clifford, trace and HEP
 component checks. Its slash example now registers vector momenta and contracts
 the typed gamma Lorentz port explicitly. Both HEP notebook regression tests
 pass together; benchmark buttons remain opt-in during notebook tests.
+
+
+== Scalar factorization regression, 2026-09-29
+
+The lazy-contraction amendment at `73c246d1` distributed scalar sums that had
+no abstract indices to contract. A fixed momentum component `Q(0,cind(0))`
+was incorrectly reported as potential dot work. Inspecting unchanged inverse
+powers then populated scoped-power bookkeeping, preventing the scheduler from
+returning the original expression when no contraction occurred. For example,
+with `q` a registered fixed component, the following expression was distributed:
+
+```text
+n*(1/(q+x) + 1/(q+y)) + m*(1/(q-x) + 1/(q-y))
+```
+
+The same installed-input probe preserves this expression at `78a0a22f` and
+distributes it at `73c246d1`; both builds use Symbolica `6a96c9d7`. The fix uses
+the existing slot matcher to recognize valid concrete components. It also
+keeps power bookkeeping only for changed results, alias definitions, meaningful
+relabellings, or incomplete contraction status. Scalar powers with unchanged
+bodies therefore no longer force result reconstruction. Powers containing
+actual contractions still reduce their bodies in independent scopes.
+
+This matters upstream of evaluator construction. The final-integrand pipeline
+calls the contractor even when the later evaluator setting `do_algebra=false`
+skips gamma/epsilon work. Unnecessary distribution repeats numerator and
+orientation-selector references, which conditional collection subsequently
+has to regroup. The earlier assertion that this setting excluded Idenso from
+the production regression was incorrect.
+
+Conditional collection now groups direct `if(condition,0,body)` siblings by
+their exact condition and constructs each sum in bulk. The existing theta and
+conditional-shape normalization stays in place. Coefficients, powers, other
+branch forms, and unrelated factors retain their structure. Newly joined
+nested conditional sums are collected locally, without expanding their bodies.
+The same bulk pass runs to a fixed point so normalization callbacks that
+introduce new conditional descendants retain the previous behavior.
+
+Two exact scalar-preservation tests failed before the fix. All 170 selected
+Idenso tests pass afterward, including power scopes, callback-sensitive
+contraction, lazy parsing, and dot handling. The new preservation assertions
+compare the original atoms directly; expanding both sides would conceal the
+regression. Conditional tests cover exact branch equivalence, nesting,
+cancellation, unrelated factors, and large sums. All seven selected native
+GammaLoop tests pass, including the six conditional tests and the evaluator
+regression for inactive singular branches.
+
+A separate synthetic benchmark uses four condition groups and 3,004 factored
+payloads of the form `body(i)*(a+b)^7`, plus an opaque reciprocal spectator.
+The complete collection clock includes the initial scan and all existing
+normalization passes. Input construction and exact correctness checks are
+outside that clock. One warmup and three alternating samples per route on
+CPU 20, with the same Symbolica library, give these median elapsed milliseconds:
+
+#table(
+  columns: (1fr, 1fr, 1fr),
+  [Branches], [Repeated pair matching], [Bulk collection],
+  [64], [0.545], [0.232],
+  [512], [15.038], [1.632],
+  [3,004], [493.703], [9.573],
+)
+
+Every measured output equals the independently constructed conditional sum
+exactly. This is a synthetic scaling check, not the original production
+expression that took about 32 seconds to regroup. The complete GL000 command
+is measured separately below.
+
+The paired production run uses the frozen `73c246d1` binary and the fixed
+binary, both with Symbolica `6a96c9d7` and the `dev-optim` profile. Each fresh
+process handles the same GL000 fixture, generation settings, seed 1337, and
+20-sample integration. Both builds get one warmup, followed by three measured
+pairs with alternating order, pinned to CPU 12. Other builds were active on
+this shared host, so both process CPU time and wall time are retained.
+
+#table(
+  columns: (2fr, 1fr, 1fr, 1fr),
+  [Complete GL000 command], [Regressed], [Fixed], [Speedup],
+  [Median wall time], [81.760 s], [7.898 s], [10.35×],
+  [Median process CPU time], [79.893 s], [7.649 s], [10.45×],
+)
+
+All four warmup/measured comparisons pass: real and imaginary integration
+summaries and errors agree at relative tolerance `1e-9`, absolute tolerance
+`1e-12`, and all four maximum-weight coordinates are identical. These are
+summary checks, not comparisons of every pointwise sample. The complete
+runtime regression is recovered without changing Symbolica.
+
+The fixed GL000 diagnostic capture restores the historical evaluator root
+byte for byte: 1,274,783 characters, with 434 numerator-component references
+instead of 3,004. The 220 parameters, 434 orientations, 63 graph definitions,
+and 64 additional definitions are unchanged. This comparison preserves the
+factorized input and does not expand graph numerators.
+
+The corresponding instrumented stages are single observations from separate
+generation/export runs, with one generation thread and four allowed CPUs
+(24–27 before, 16–19 after). They must not be added to the complete-command
+medians:
+
+#table(
+  columns: (2fr, 1fr, 1fr),
+  [Diagnostic stage], [Regressed], [Fixed],
+  [Rust expression preparation], [38,914 ms], [46.6 ms],
+  [Symbolica evaluator construction], [1,591 ms], [1,682 ms],
+)
+
+`scalar_contraction_regression.json` retains the source and binary hashes,
+raw timing samples, exact capture comparison, numerical integration checks,
+fail-first regressions, and validation commands. The complete-command clock
+includes graph processing, expression preparation, evaluator construction,
+and integration; it is not a Spenso-only simplification timing.
