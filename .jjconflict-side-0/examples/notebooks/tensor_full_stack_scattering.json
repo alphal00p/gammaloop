@@ -1,0 +1,42 @@
+{
+  "source": "/tmp/feynkit-tensor-full-stack/crates/feynkit-py/tests/installed_feyncalc_gluon_scattering.py",
+  "source_sha256": "1e08483aed962f2d440f1237d9db1abe01d547d5fa261fa0bb4774fe3e3185f4",
+  "instrumented_sha256": "a416a6d6e4ac0ae6ef80e3257ce7cebd53158b7f851a017dc7acd3c12e2cbfbc",
+  "core_sha256": "f2b20cc9d87464dae920f5d24e1f65f7c15463c015e16450c082044f87742d67",
+  "source_commit": "73c246d16da9c49062c400229d2d44bb1a538f9c",
+  "command": [
+    "taskset",
+    "-c",
+    "22",
+    "/tmp/feynkit-tensor-review-host-v1/venv/bin/python",
+    "/tmp/feynkit-full-stack-checks/scattering-instrumented.py"
+  ],
+  "timeout_seconds": 1800,
+  "exit_code": 124,
+  "wall_seconds": 1800.0719637959264,
+  "child_cpu_seconds": 1757.252016,
+  "peak_rss_kib": 648368,
+  "instrumentation": "Adds stage timestamp prints only; all original operations and assertions retained.",
+  "schema": "tensor-full-stack-incomplete-workload-v1",
+  "case": "generated-gg-to-gg-symbolic-D-SU-N",
+  "completed": false,
+  "last_stage": "second color simplification/materialization",
+  "stage_log": "[elapsed=0.146121 cpu=0.125076] color contraction\n[elapsed=0.146220 cpu=0.125171] begin color pass\n[elapsed=326.492866 cpu=319.367383] begin color pass\n",
+  "log_path": "/tmp/feynkit-full-stack-checks/scattering.log",
+  "log_sha256": "2f555de2d26ee5ba9783624e61adcf006599c5ba0c01d135c2e2d6b0b75e5038",
+  "correctness": "Final assertions not reached; no completed or passing timing claimed.",
+  "previous_observation": {
+    "checkpoint": "78a0a22f",
+    "stage": "first simplify_color",
+    "stopped_after_seconds": 1037.7637225869112,
+    "identical_inputs_at_color_stage": true,
+    "receipt": "/tmp/feynkit-tensor-review-checks/migrations/gluon-scattering-limit.json"
+  },
+  "stage_boundaries": {
+    "first_color_start_wall_seconds": 0.14622,
+    "second_color_start_wall_seconds": 326.492866,
+    "first_color_stage_wall_seconds": 326.346646,
+    "first_color_stage_cpu_seconds": 319.242212,
+    "note": "Each color stage includes tensor admission, simplify_color, materialization and subsequent replacements; no internal stage clocks."
+  }
+}

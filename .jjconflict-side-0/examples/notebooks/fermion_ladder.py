@@ -238,6 +238,7 @@ class FermionLadder:
         """Separate diagnostic clock; never substituted for the complete timing."""
         start = process_time_ns()
         traced = self.source.simplify_gamma(self.settings)
+        after_gamma = process_time_ns()
         traced = (
             traced.expand() if self.staged_routing else traced.to_expression()
         ).to_expression()
@@ -266,6 +267,8 @@ class FermionLadder:
         assert result == expected
         return {
             "trace_cpu_ns": after_trace - start,
+            "gamma_reduction_cpu_ns": after_gamma - start,
+            "trace_materialization_cpu_ns": after_trace - after_gamma,
             **phases,
             "expanded_trace_terms": len(list(traced.expand(via_poly=True).terms())),
             "final_terms": len(list(result.terms())),
@@ -591,7 +594,9 @@ def consolidation_child(args):
                     "The factorized route requires a gluonic ladder fixture"
                 )
             prepared = prepare(case)
-            call = lambda observer=None: reduce(case, prepared, observer)
+            call = lambda observer=None: reduce(
+                case, prepared, observer, order_policy=args.contraction_order
+            )
         else:
             call = case.scalar if route == "scalar" else case.reduce
         return case, call
@@ -678,7 +683,10 @@ def consolidation_child(args):
         assert call(phases) == result
         record["phases"] = phases
         record["strategy"] = {
-            "vertex_order": list(case.order),
+            "order_policy": args.contraction_order,
+            "vertex_order": list(case.order)
+            if args.contraction_order == "explicit"
+            else None,
             "rule_application": "reusable TensorRule per local vertex; factorized output",
             "contraction": "existing Rust component reducer with merged states",
             "materialization": "explicit polynomial forward pass over aliases",
@@ -926,6 +934,8 @@ def consolidation_benchmark(args):
         "saved_frontends": frontends,
         "target_api": "Typed rule/alias contraction; gamma result expanded explicitly within the measured operation when the case requests a polynomial",
         "ladder_routes": ladder_routes,
+        "contraction_order": args.contraction_order,
+        "contraction_order_scope": "Current frontend only; frozen saved frontends retain their recorded strategy and do not receive this option",
         "cases": cases,
         "timing": "Fresh interpreter for each case/route/round; one fixed unmeasured warmup, checked and disposed before clocks; fixed measured calls; setup/checks/disposal excluded; no discarded measured samples or retries",
         "diagnostic_scope": "Separate check processes; phase clocks/counts never substituted for primary clocks",
@@ -982,6 +992,8 @@ def consolidation_benchmark(args):
             "--output",
             str(output),
         ]
+        if label not in frontends:
+            command += ["--contraction-order", args.contraction_order]
         if measurement and args.complete_algebra:
             command += ["--complete-algebra"]
         if args.cpu is not None:
@@ -1055,9 +1067,11 @@ def consolidation_benchmark(args):
         return value
 
     for case in cases:
+        # Register tensor heads and cooked index tags before importing any child
+        # result. Parsing first could create an untagged head permanently.
+        reference = make_case(case)
         if not args.form_only:
-            # Declare the capture's cooked index tags before parsing its outputs.
-            component_case = make_case(case) if case == "production-aa-aa" else None
+            component_case = reference if case == "production-aa-aa" else None
             expected = None
             expected_input = None
             expected_outputs = {}
@@ -1134,7 +1148,6 @@ def consolidation_benchmark(args):
                     )
                     assert Path(value["expression"]).read_text() == expected
         if args.form and case != "production-aa-aa":
-            reference = make_case(case)
             with tempfile.TemporaryDirectory(prefix="r3-form-") as temp:
                 script = case_form_script(reference, Path(temp))
                 diagnostic = None
@@ -1440,6 +1453,12 @@ if __name__ == "__main__":
         "--ladder-route",
         action="append",
         help="LABEL=typed or LABEL=factorized for historical/gluonic ladders only",
+    )
+    parser.add_argument(
+        "--contraction-order",
+        choices=("graph", "explicit"),
+        default="graph",
+        help="Use the default graph order or the fixture order for current factorized ladders; saved frontends retain their own strategy",
     )
     parser.add_argument("--cases", help="Comma-separated consolidation case names")
     parser.add_argument("--check-only", action="store_true")

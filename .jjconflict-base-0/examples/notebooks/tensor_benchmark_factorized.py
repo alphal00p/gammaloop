@@ -50,7 +50,7 @@ def prepare(case):
     ]
 
 
-def reduce(case, prepared, observer=None):
+def reduce(case, prepared, observer=None, *, order_policy="graph"):
     """Apply local rules, contract the factored graph, then explicitly expand."""
     start = process_time_ns() if observer is not None else 0
     factors = {}
@@ -63,10 +63,14 @@ def reduce(case, prepared, observer=None):
     actual = list(expression)
     if len(actual) != len(factors):
         raise ValueError("This ladder fixture no longer has one factor per vertex")
-    order = [actual.index(factors[i]) for i in case.order]
+    order = (
+        [actual.index(factors[i]) for i in case.order]
+        if order_policy == "explicit"
+        else None
+    )
     value = TensorExpression(expression)
     replaced = process_time_ns() if observer is not None else 0
-    result = value.contract(order=order)
+    result = value.contract() if order is None else value.contract(order=order)
     contracted = process_time_ns() if observer is not None else 0
     expanded = result.expand().to_expression()
     if hasattr(case, "replacements"):
@@ -82,7 +86,8 @@ def reduce(case, prepared, observer=None):
                     "cpu_ns": materialized - contracted,
                 },
             ],
-            vertex_order=list(case.order),
+            order_policy=order_policy,
+            vertex_order=list(case.order) if order is not None else None,
             normalized_factor_order=order,
             aliased_bytes=result.get_byte_size(),
             definitions=len(result.aliases),

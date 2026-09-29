@@ -102,11 +102,15 @@ need explicit assumptions or substitutions for unevaluated conjugations.
 
 Compact fundamental chains and ordered traces of these Hermitian generators
 use the same conjugation: reverse the generator sequence and, for open chains,
-exchange and dualize the endpoints. `collect_chains(Representation.cof(3))`
-therefore commutes with conjugating an explicit SU(3) network. A trace of three
-generators is not assumed real. The existing trace builder retains cyclic
-normalization. Symmetric, antisymmetric and cyclic groups are traversed
-recursively, keeping the projectors compact. Reversing an antisymmetric group
+exchange and dualize the endpoints. Color simplification with
+`ColorSimplifySettings(evaluate_traces=False, expand_cross_chain_fierz=False)`
+collects explicit generator words while retaining compact chains and traces;
+this commutes with conjugating an explicit SU(3) network. If both operands
+remain explicit, scope their internal dummies before multiplying a word by
+its adjoint, as above. A trace of three generators is not assumed real. The
+existing trace builder retains cyclic normalization. Symmetric, antisymmetric
+and cyclic groups are traversed recursively, keeping the projectors compact.
+Reversing an antisymmetric group
 produces its permutation sign through Spenso's existing normalization. Numeric
 coefficients and scalar symbols, including their sums and products, are
 conjugated within groups.

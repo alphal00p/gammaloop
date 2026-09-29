@@ -269,3 +269,185 @@ The optional `validation` and both-order `factor-polynomial` timing commands
 are retained in the JSON but deferred to a later quiet window so implementation
 builds can proceed. No timing claim is made for those prototypes in this M0
 record.
+
+
+== Algebra simplification follow-up, 2026-09-29
+
+This follow-up measures the implementation at `73c246d1`. The accompanying
+changes update the color notebook, its regressions, and the timing harness;
+they do not change the Rust algebra. The primary algebra comparison uses
+`78a0a22f` and `73c246d1`, both with Symbolica `6a96c9d7`. It runs all sixteen
+cases in three alternating fresh-process rounds, with one fixed warmup per
+measured boundary (prepared and fresh). It retains all observations and checks against fresh FORM output where an independent FORM case exists.
+The complete ladder route now uses the public contractor's default graph order.
+The former fixed fixture order remains available through
+`--contraction-order explicit`. To reproduce the current complete route with
+qualified releases:
+
+```sh
+python examples/notebooks/fermion_ladder.py --suite consolidation \
+  --interpreter checkpoint=/path/to/checkpoint/python --core checkpoint=CORE_SHA256 \
+  --interpreter current=/path/to/current/python --core current=CORE_SHA256 \
+  --ladder-route checkpoint=factorized --ladder-route current=factorized \
+  --contraction-order graph --complete-algebra --rounds 3 --calls 1 \
+  --form /path/to/form --cpu 8 --output /tmp/tensor-full-stack.json
+```
+
+Two clocks answer different questions. Prepared reduction excludes input and
+rule construction; complete algebra includes them and the requested output
+materialization. Both exclude process startup and correctness checks. FORM's
+batched body clock excludes setup and startup, so ratios against FORM use the
+prepared native clock. Graph generation, evaluator construction and integration
+are outside this algebra cohort. The host is shared; CPU affinity does not establish exclusive
+access to memory or other machine resources.
+
+The two historical ladder names select the original and early FORM schedules.
+With graph ordering selected, both native cases use the same automatic
+contraction strategy. Phase clocks are separate diagnostic executions, not
+parts to add to the independently measured complete time. Intermediate output
+inspection occurs after the phase clocks, so it cannot resolve aliases before
+a later timed phase.
+
+=== Complete algebra results
+
+`tensor_full_stack_timing.json` retains all 102 measured observations, 34 check
+processes, 15 FORM references, phase samples, and source/core identities. The
+cohort completed with unchanged source/core hashes. Values below are median
+process CPU milliseconds. Prepared and fresh clocks are separate executions;
+small timing differences between those columns are not incremental costs.
+
+#table(
+  columns: (2.4fr, 1fr, 1fr, 1fr, 1fr),
+  [Case], [78a0a22f fresh], [73c246d1 fresh], [73c246d1 prepared], [FORM body],
+  [3-loop fermion, 4D], [5.698], [5.807], [3.840], [0.325],
+  [3-loop fermion, D], [28.633], [27.783], [25.467], [1.580],
+  [4-loop fermion, 4D], [40.408], [40.768], [36.564], [5.655],
+  [4-loop fermion, D], [299.946], [295.779], [293.545], [47.500],
+  [4-loop gluon, 4D], [722.453], [235.601], [236.479], [637.000],
+  [4-loop gluon, D], [842.312], [313.120], [337.623], [852.000],
+  [Historical, original FORM order], [450.055], [92.416], [90.301], [702.000],
+  [Historical, early FORM order], [451.075], [88.526], [94.477], [160.000],
+  [Free trace 4, 4D], [1.110], [1.114], [0.936], [0.001740],
+  [Free trace 4, D], [1.127], [1.129], [0.935], [0.001354],
+  [Free trace 12, 4D], [408.183], [406.151], [403.604], [2.860],
+  [Free trace 12, D], [275.974], [276.308], [267.935], [4.134],
+  [Free trace 14, 4D], [1800.488], [1756.257], [1799.228], [20.800],
+  [Free trace 14, D], [1396.468], [1412.707], [1390.074], [57.750],
+  [Axial trace 12, 4D], [1346.019], [1325.472], [1359.298], [0.665],
+  [Captured production numerator], [4195.621], [4328.220], [4640.229], [—],
+)
+
+The complete default-order gluonic routes improve by about 3.1× (four-loop
+4D), 2.7× (four-loop D), and 4.9× (historical original) relative to the paired
+checkpoint. Fermionic and free traces remain approximately at checkpoint
+performance. The native prepared gluon times are below FORM's body times,
+while the fermion ladders remain roughly 6–16× slower. Free and axial traces
+have much larger gaps. The original and early historical FORM schedules have
+the same exact output but substantially different runtimes.
+
+The older M1 record is materially faster on trace workloads: for example,
+its axial control was about 1.9 ms, versus the current prepared 1.36 s. M1
+used Symbolica `06906976` and the earlier expanded-result frontend, so these
+historical numbers do not isolate the effect of the present amendment.
+They do establish that flat timings against `78a0a22f` are not evidence
+that the complete consolidation retained the earlier trace performance.
+
+=== Trace and production-capture breakdown
+
+The compact record’s `phase_diagnostics` contains the corrected separate phase
+measurements; the original raw report’s earlier diagnostic metadata remains
+preserved. These phase measurements locate most current trace time before final
+conversion. The four-loop D fermion case spends about 245 ms in gamma
+reduction, 33 ms materializing its trace aliases, 8.5 ms converting to a
+polynomial, 25 ms routing the polynomial, and 6 ms emitting the scalar result.
+The free fourteen-gamma 4D case spends about 1,605 ms in gamma reduction and
+130 ms in materialization; generic D spends about 804 ms and 496 ms,
+respectively. These diagnostic medians are not a reconstructed total.
+
+The axial control spends about 1,123 ms in gamma reduction. Its explicit
+spectator-preserving alias reconstruction takes about 157 ms, followed by
+21 ms of expansion. The literal `(x+y)^8` spectator is retained; its
+unrelated scalar expansion is not part of the requested result.
+
+The captured production numerator spends about 2,303.5 ms in gamma, 1,482 ms
+in color, 0.007 ms in its final no-op index contraction, and 381 ms resolving
+the aliases. This case starts from a captured post-metric expression and
+measures algebra only. A fast final contractor does not imply a fast complete
+simplification pipeline.
+
+=== Where the trace overhead occurs
+
+`tensor_benchmark_trace_diagnostics.json` records an additional read-only
+comparison on CPU 20: one warmup and three samples for each existing scheduling
+setting. Gamma-only processing takes about 222 ms for free-12/4D, 139 ms for
+free-12/D, and 56 ms for axial-12; the default pipeline takes about 389 ms,
+243 ms, and 1,193 ms in that same phase. Every variant has the same exact
+materialized output as the independently checked primary result. These
+comparisons change scheduling through the existing API; no alternative engine
+or production optimization was added.
+
+The free-12 results contain 496 typed aliases in 4D and 211 in D. Sampling
+locates repeated structure work in `TraceDefinitions::retain`, which infers
+the sums before making alias handles, and `with_aliases`, which validates the
+definitions. Index observation, interface inference, and alias registration
+appear prominently. These are inclusive, overlapping stacks, not percentages
+that can be added into a time budget. Production builds typed factored aliases;
+the earlier direct expanded trace output is now restricted to tests.
+
+For axial-12, gamma plus metrics takes about 98 ms, while gamma plus epsilon
+takes about 925 ms. The alias count stays at 103, but default processing grows
+the definition payload from 45,606 to 481,987 bytes, with the largest definition
+growing from 2,217 to 225,866 bytes. The global registry-epsilon flag enters
+collection for every domain, including metric-only definitions. That collection
+path still parses without a depth limit; it is distinct from the amended
+shallow contraction planner. The larger payload also increases later interface
+reconstruction, as the separate axial phase clocks show.
+
+The perf captures cover short complete diagnostic processes, including setup
+and receipt hashing. They identify hot call stacks rather than supplying
+another accounting of the primary clock. Together with the within-release
+setting comparisons, they identify shared alias admission and domain-pass
+scheduling as concrete remaining bottlenecks. Final polynomial conversion
+alone does not explain the current trace slowdown.
+
+=== Unfinished full gluon-scattering check
+
+The complete generated `gg → gg` test with symbolic D and SU(N) still does not
+finish its two-stage color reduction. A fresh run on CPU 22, retaining every
+original operation and assertion, reached the 1,800-second timeout (1,757
+seconds of child CPU; about 633 MiB peak RSS). Tensor construction and the
+pre-color pipeline reached the first stage after about 0.15 seconds. That
+stage, including materialization, finished after about 326 seconds; the
+second color stage was still running at timeout. Later polarization,
+closed-form, and cross-section checks were not reached, so this is an
+incomplete workload, not a passing test or completed timing.
+
+`tensor_full_stack_scattering.json` retains the command, source/core hashes,
+stage log, and timeout receipt. The earlier `78a0a22f` run was also stopped in
+its first color pass after more than 1,037 seconds; the original checkpoint, migrated
+checkpoint, and current inputs at that boundary were byte-identical. The
+small color-word notebook fix therefore does not establish that this much
+larger color pipeline is fast or fully validated.
+
+=== Color notebook regression
+
+The explicit word and its adjoint are individually valid. Their internal `k`
+labels represent independent sums; flattening the two unscoped expressions
+creates four compatible occurrences of `k`. The admission check saturates its
+count at three and rejects the product before color algebra. This behavior is
+identical at both measured releases. The former notebook compacted the word
+into a chain before multiplication, which removed the exposed internal label.
+
+The migrated HEP notebook demonstrates both compact chains and explicit words.
+It gives the two explicit operands distinct
+`wrap_indices(scope, dummies_only=True)` scopes, preserving their shared free
+ports. Exact SU(2), SU(3), and SU(5) norm regressions pass; the independent HEP
+SU(3) component network gives `16/3`. The weighted complex example retains its
+`400/3` component oracle. The complete notebook executes successfully, and raw
+unscoped overuse remains rejected. Existing exact trace-equality assertions
+compare explicitly materialized alias outputs.
+
+The complete gamma notebook also passes its existing Clifford, trace and HEP
+component checks. Its slash example now registers vector momenta and contracts
+the typed gamma Lorentz port explicitly. Both HEP notebook regression tests
+pass together; benchmark buttons remain opt-in during notebook tests.

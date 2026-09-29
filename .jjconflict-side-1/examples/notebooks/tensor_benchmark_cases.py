@@ -464,7 +464,18 @@ class FreeTrace:
         return self.source.simplify_gamma(self.settings).expand().to_expression()
 
     def phases(self, expected):
+        start = process_time_ns()
+        reduced = self.source.simplify_gamma(self.settings)
+        after_gamma = process_time_ns()
+        expanded = reduced.expand()
+        after_expansion = process_time_ns()
+        result = expanded.to_expression()
+        end = process_time_ns()
+        assert result == expected
         return {
+            "gamma_reduction_cpu_ns": after_gamma - start,
+            "trace_materialization_cpu_ns": after_expansion - after_gamma,
+            "atom_extraction_cpu_ns": end - after_expansion,
             "final_terms": sum(1 for _ in expected.terms()),
             "free_ports": self.length,
         }
@@ -645,6 +656,26 @@ class AxialTrace(FreeTrace):
         # (x+y)^8, which is outside this case's declared materialization scope.
         trace = AliasedTensorExpression(reduced.root / self.spectator, reduced.aliases)
         return self.spectator * trace.expand().to_expression()
+
+    def phases(self, expected):
+        start = process_time_ns()
+        reduced = self.source.simplify_gamma(self.settings)
+        after_gamma = process_time_ns()
+        trace = AliasedTensorExpression(reduced.root / self.spectator, reduced.aliases)
+        after_interface = process_time_ns()
+        expanded = trace.expand()
+        after_expansion = process_time_ns()
+        result = self.spectator * expanded.to_expression()
+        end = process_time_ns()
+        assert result == expected
+        return {
+            "gamma_reduction_cpu_ns": after_gamma - start,
+            "spectator_interface_cpu_ns": after_interface - after_gamma,
+            "trace_materialization_cpu_ns": after_expansion - after_interface,
+            "atom_extraction_and_spectator_cpu_ns": end - after_expansion,
+            "final_terms": sum(1 for _ in expected.terms()),
+            "free_ports": self.length,
+        }
 
     def form_source(self):
         indices = ",".join(f"i{i}" for i in range(self.length))
@@ -845,14 +876,24 @@ class ProductionNumerator:
         }
 
     def phases(self, expected):
-        rows = []
+        rows, outputs = [], []
         value = self.source
         for method in ("simplify_gamma", "simplify_color", "contract"):
             start = process_time_ns()
             value = getattr(value, method)()
             elapsed = process_time_ns() - start
-            rows.append({"phase": method, "cpu_ns": elapsed, **describe(value)})
-        assert atom(value) == expected
+            rows.append({"phase": method, "cpu_ns": elapsed})
+            outputs.append(value)
+        start = process_time_ns()
+        result = atom(value)
+        elapsed = process_time_ns() - start
+        rows.append({"phase": "materialization", "cpu_ns": elapsed})
+        outputs.append(result)
+        # Describing aliases resolves them. Defer this until all clocks have
+        # finished so diagnostics do not warm a later operation's inputs.
+        for row, output in zip(rows, outputs, strict=True):
+            row.update(describe(output))
+        assert result == expected
         return {"stages": rows}
 
 
