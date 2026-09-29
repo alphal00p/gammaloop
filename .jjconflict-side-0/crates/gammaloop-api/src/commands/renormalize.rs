@@ -123,8 +123,15 @@ impl Renormalize {
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
             let simplified = SymbolicTensor::infer(cooking.try_cook(part.as_view())?)?
-                .simplify_color(ColorSimplifySettings::default())?
-                .contract(Default::default())?
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })?
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .to_dots()?
                 .resolved()?;
             let simplified = cooking.uncook(simplified.expression().as_view());

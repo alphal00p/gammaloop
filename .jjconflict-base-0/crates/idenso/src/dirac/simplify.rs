@@ -1,6 +1,6 @@
 #[cfg(test)]
 use crate::shorthands::schoonschip::Schoonschip;
-use std::{cell::RefCell, sync::LazyLock};
+use std::{cell::RefCell, collections::HashMap, sync::LazyLock};
 
 use spenso::{
     chain, g,
@@ -455,92 +455,129 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         registry: &[Definition],
         settings: GammaSimplifySettings,
+        settled: &mut crate::tensor::simplification::observation::SettledRegions,
     ) -> Result<(Self, Vec<Definition>), TensorInferenceError> {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::GammaKernel,
+        );
         self.ensure_validated()?;
         let representation = Bispinor {}.into();
         let standalone_trace = matches!(self.expression.as_view(), AtomView::Fun(function)
             if function.get_symbol() == T.trace);
-        let simplify = |selected: Self, _registry: &[Definition], complete: bool| {
-            let definitions = RefCell::new(trace_kernel::TraceDefinitions::new(
-                selected.normalization_is_intrinsic(),
-            ));
-            let mut scalar_callback = false;
-            let mut component_callback = false;
-            selected.expression.visitor(&mut |node| {
-                if let AtomView::Fun(function) = node {
-                    let symbol = function.get_symbol();
-                    let callback = symbol.get_normalization_function().is_some()
-                        || symbol.get_evaluation_info().is_some();
-                    scalar_callback |= symbol.is_scalar() && callback;
-                    component_callback |= symbol.has_tag(&T.rank1) && callback;
-                }
-                true
-            });
-            let contextual_callback = !standalone_trace && (scalar_callback || component_callback);
-            if contextual_callback && !complete {
-                return Ok((selected, Vec::new()));
-            }
-            // A scalar normalizer observes the actual child result, as in
-            // the former local Factored rewrite. Literal aliases cannot be
-            // substituted for that callback input. Ordinary cyclic trace
-            // wrappers retain the aliased emission path.
-            let output = if scalar_callback || contextual_callback {
-                trace_kernel::TraceOutput::Factored
-            } else {
-                trace_kernel::TraceOutput::Aliased(&definitions)
-            };
-            let prepared = DiracSimplifier::new(&settings).prepare(selected.expression.as_view());
-            let expression = BracketNormalizer::normalize(prepared.as_view())
-                .chainify(representation)
-                .join_chains(representation);
-            let expression = BracketNormalizer::normalize(expression.as_view());
-            // Finish joining the selected spinor factors before Clifford
-            // reduction can turn an open prefix into a sum of chains. Such
-            // a sum can hide the cycle closed by a later selected factor.
-            let expression = if settings.output == GammaOutput::Chains || !complete {
-                expression
-            } else if contextual_callback {
-                // Component normalizers can temporarily remove one port
-                // before the next local trace identity removes its partner.
-                // Finish this original selected atom context before typed
-                // publication. The shared scheduler remains the only owner
-                // of contractions and cross-domain fixed points.
-                let limit = crate::tensor::simplification::SimplifySettings::default().max_passes;
-                let mut current = expression;
-                let mut finished = false;
-                for _ in 0..limit {
-                    let next = settings.rewrite_expression(current.clone(), output);
-                    if next == current {
-                        finished = true;
-                        break;
+        let mut simplify = |selected: Self, _registry: &[Definition], complete: bool| {
+            settled.run(selected, complete, |selected| {
+                let definitions = RefCell::new(trace_kernel::TraceDefinitions::new(
+                    selected.normalization_is_intrinsic(),
+                ));
+                let mut scalar_callback = false;
+                let mut component_callback = false;
+                selected.expression.visitor(&mut |node| {
+                    if let AtomView::Fun(function) = node {
+                        let symbol = function.get_symbol();
+                        let callback = symbol.get_normalization_function().is_some()
+                            || symbol.get_evaluation_info().is_some();
+                        scalar_callback |= symbol.is_scalar() && callback;
+                        component_callback |= symbol.has_tag(&T.rank1) && callback;
                     }
-                    current = next;
+                    true
+                });
+                let contextual_callback =
+                    !standalone_trace && (scalar_callback || component_callback);
+                if contextual_callback && !complete {
+                    return Ok((selected, Vec::new()));
                 }
-                if !finished {
-                    return Err(TensorInferenceError::Invalid(format!(
-                        "callback-sensitive gamma kernel did not stabilize within {limit} passes"
-                    )));
-                }
-                current
-            } else {
-                let simplifier = DiracSimplifier {
-                    settings: &settings,
-                    output,
+                // A scalar normalizer observes the actual child result, as in
+                // the former local Factored rewrite. Literal aliases cannot be
+                // substituted for that callback input. Ordinary cyclic trace
+                // wrappers retain the aliased emission path.
+                let output = if scalar_callback || contextual_callback {
+                    trace_kernel::TraceOutput::Factored
+                } else {
+                    trace_kernel::TraceOutput::Aliased(&definitions)
                 };
-                let terminal = settings
-                    .evaluate_traces
-                    .then(|| {
-                        if standalone_trace {
-                            simplifier.evaluate_terminal_trace::<false>(expression.as_view())
-                        } else {
-                            simplifier.evaluate_terminal_trace::<true>(expression.as_view())
+                let prepared =
+                    DiracSimplifier::new(&settings).prepare(selected.expression.as_view());
+                let expression = BracketNormalizer::normalize(prepared.as_view())
+                    .chainify(representation)
+                    .join_chains(representation);
+                let expression = BracketNormalizer::normalize(expression.as_view());
+                // Finish joining the selected spinor factors before Clifford
+                // reduction can turn an open prefix into a sum of chains. Such
+                // a sum can hide the cycle closed by a later selected factor.
+                let expression = if settings.output == GammaOutput::Chains || !complete {
+                    expression
+                } else if contextual_callback {
+                    // Component normalizers can temporarily remove one port
+                    // before the next local trace identity removes its partner.
+                    // Finish this original selected atom context before typed
+                    // publication. The shared scheduler remains the only owner
+                    // of contractions and cross-domain fixed points.
+                    let limit = crate::tensor::AlgebraSettings::default().max_passes;
+                    let mut current = expression;
+                    let mut finished = false;
+                    for _ in 0..limit {
+                        let next = settings.rewrite_expression(current.clone(), output);
+                        if next == current {
+                            finished = true;
+                            break;
                         }
-                    })
-                    .flatten();
-                terminal.unwrap_or_else(|| settings.rewrite_expression(expression, output))
-            };
-            let definitions = definitions.into_inner().into_definitions()?;
-            Ok((selected.with_identity_result(expression)?, definitions))
+                        current = next;
+                    }
+                    if !finished {
+                        // An intermediate callback result can temporarily lack a
+                        // port. Retain the exact admitted input when this local
+                        // safety budget expires, rather than publishing that state.
+                        let mut unfinished = selected;
+                        unfinished.proofs.frontier = crate::tensor::ReductionStatus::Capped;
+                        return Ok((unfinished, Vec::new()));
+                    }
+                    current
+                } else {
+                    let simplifier = DiracSimplifier {
+                        settings: &settings,
+                        output,
+                    };
+                    let terminal = settings
+                        .evaluate_traces
+                        .then(|| {
+                            if standalone_trace {
+                                simplifier.evaluate_terminal_trace::<false>(expression.as_view())
+                            } else {
+                                simplifier.evaluate_terminal_trace::<true>(expression.as_view())
+                            }
+                        })
+                        .flatten();
+                    terminal.unwrap_or_else(|| settings.rewrite_expression(expression, output))
+                };
+                let mut definitions = definitions.into_inner().into_definitions()?;
+                for (_, body) in &mut definitions {
+                    // These bodies were emitted by this identity, so finishing their
+                    // new metric connections is a prerequisite of the same work.
+                    body.proofs.prerequisites = settings.output == GammaOutput::Reduced;
+                }
+                let rewritten = selected.with_identity_result(expression)?;
+                if settings.output != GammaOutput::Reduced || rewritten == selected {
+                    return Ok((rewritten, definitions));
+                }
+                let mut contracted = rewritten.contract_parts(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?;
+                let mut registry = definitions
+                    .into_iter()
+                    .map(|pair| (pair.0.expression.clone(), pair))
+                    .collect();
+                SymbolicTensor::<
+                    crate::tensor::aliases::AliasInterfaces,
+                    symbolica::atom::AliasedAtom,
+                >::retain_contracted_definitions(
+                    &contracted, &HashMap::new(), &mut registry
+                )?;
+                contracted.root.proofs.frontier = contracted.status;
+                Ok((contracted.root, registry.into_values().collect()))
+            })
         };
         // A trace without external definitions is already one selected Dirac
         // domain. No collection graph is needed to establish its interface.
@@ -2005,12 +2042,22 @@ mod tests {
                         assert!(expected.is_zero());
                     }
                     let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
-                    let result = source.simplify_gamma(settings).unwrap();
+                    let result = source
+                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            gamma: Some(settings),
+                            epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                            ..Default::default()
+                        })
+                        .unwrap();
                     assert_eq!(result.root().structure, source.structure);
                     assert_eq!(result.resolved().unwrap().into_expression(), expected);
                     assert_eq!(
                         result
-                            .simplify_gamma(settings)
+                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                                gamma: Some(settings),
+                                epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                                ..Default::default()
+                            })
                             .unwrap()
                             .resolved()
                             .unwrap()
@@ -2084,7 +2131,17 @@ mod tests {
             let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
             calls.lock().unwrap().clear();
             let output = source
-                .simplify_gamma(GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -2135,7 +2192,17 @@ mod tests {
             let source = SymbolicTensor::<PartialStructure>::infer(&spectator * input).unwrap();
             calls.lock().unwrap().clear();
             let result = source
-                .simplify_gamma(GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -2197,18 +2264,32 @@ mod tests {
                         );
                         let expected = SymbolicTensor::<PartialStructure>::infer(forward)
                             .unwrap()
-                            .simplify_gamma(settings)
+                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                                gamma: Some(settings),
+                                epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                                ..Default::default()
+                            })
                             .unwrap()
                             .resolved()
                             .unwrap()
                             .into_expression();
                         let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
-                        let output = source.simplify_gamma(settings).unwrap();
+                        let output = source
+                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                                gamma: Some(settings),
+                                epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                                ..Default::default()
+                            })
+                            .unwrap();
                         assert_eq!(output.root().structure, source.structure);
                         assert_eq!(output.resolved().unwrap().into_expression(), expected);
                         assert_eq!(
                             output
-                                .simplify_gamma(settings)
+                                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                                    gamma: Some(settings),
+                                    epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                                    ..Default::default()
+                                })
                                 .unwrap()
                                 .resolved()
                                 .unwrap()
@@ -2316,7 +2397,17 @@ mod tests {
             let input = &spectator * trace!(&spin; slots.iter().map(|slot| gamma!(slot)));
             let source = SymbolicTensor::<PartialStructure>::infer(input.clone()).unwrap();
             let result = source
-                .simplify_gamma(GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap();
             assert_eq!(result.root().structure, source.structure);
             assert!(
@@ -2353,7 +2444,17 @@ mod tests {
             gamma!(reps.mink_d.to_symbolic([Atom::num(93200 + index)]))));
         let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
         let result = source
-            .simplify_gamma(GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap();
         assert!(result.root().expression.is_zero());
         assert_eq!(result.root().structure, source.structure);
@@ -2375,23 +2476,42 @@ mod tests {
         let source = SymbolicTensor::infer(&spectator * input).unwrap();
         let settings = GammaSimplifySettings::default();
         let chains = source
-            .simplify_gamma(GammaSimplifySettings {
-                output: GammaOutput::Chains,
-                ..settings
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings {
+                    output: GammaOutput::Chains,
+                    ..settings
+                }),
+                epsilon: false,
+                ..Default::default()
             })
             .unwrap();
         assert!(
             matches!(chains.root().expression.as_view(), AtomView::Mul(product)
             if product.iter().any(|factor| factor == spectator.as_view()))
         );
-        let expected = chains.simplify_gamma(settings).unwrap();
+        let expected = chains
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(settings),
+                epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                ..Default::default()
+            })
+            .unwrap();
         assert!(expected.resolved().unwrap().expression.is_zero());
-        let result = source.simplify_gamma(settings).unwrap();
+        let result = source
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(settings),
+                epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                ..Default::default()
+            })
+            .unwrap();
         assert!(result.resolved().unwrap().expression.is_zero());
         assert_eq!(result.root().structure, source.structure);
         assert_eq!(result.resolved().unwrap(), expected.resolved().unwrap());
         let completed = result
-            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                color: Some(crate::color::ColorSimplifySettings::default()),
+                ..Default::default()
+            })
             .unwrap()
             .contract(Default::default())
             .unwrap();
@@ -2416,7 +2536,17 @@ mod tests {
             (&spectator
                 * crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -2425,14 +2555,34 @@ mod tests {
             .to_owned(),
         )
         .unwrap()
-        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+        .reduce_algebra(&crate::tensor::AlgebraSettings {
+            gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap()
         .resolved()
         .unwrap()
         .into_expression();
         let output = crate::tensor::SymbolicTensor::infer((decorated).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -2443,7 +2593,17 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((output).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -2453,7 +2613,17 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((decorated).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(GammaSimplifySettings::default().without_trace_evaluation())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::default().without_trace_evaluation()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -2577,7 +2747,17 @@ mod tests {
         let output =
             crate::tensor::SymbolicTensor::infer((&spectator * &input).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -2586,7 +2766,17 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((output).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -2597,7 +2787,17 @@ mod tests {
             ((&output / &spectator)
                 - crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -2716,7 +2916,11 @@ mod tests {
             (Atom::num(4) * g!(&a, &b)).as_view()
         );
         let actual = source
-            .simplify_gamma(settings)
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(settings),
+                epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -2726,7 +2930,7 @@ mod tests {
     }
 
     #[test]
-    fn contextual_callback_kernel_reports_nonstabilization_at_shared_default_bound() {
+    fn contextual_callback_kernel_retains_exact_input_at_its_safety_bound() {
         use std::sync::{
             Arc, OnceLock,
             atomic::{AtomicUsize, Ordering},
@@ -2761,17 +2965,22 @@ mod tests {
             SymbolicTensor::<PartialStructure>::infer(symbolica::function!(symbols[0], word))
                 .unwrap();
         calls.store(0, Ordering::Relaxed);
-        let error = source
-            .simplify_gamma(GammaSimplifySettings::default())
-            .unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("callback-sensitive gamma kernel did not stabilize")
+        let result = source
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(
+            result.reduction_status(),
+            crate::tensor::ReductionStatus::Capped
         );
+        assert_eq!(result.root(), source);
+        assert!(result.aliases().unwrap().is_empty());
         assert_eq!(
             calls.load(Ordering::Relaxed),
-            crate::tensor::simplification::SimplifySettings::default().max_passes
+            crate::tensor::AlgebraSettings::default().max_passes
         );
     }
 
@@ -2830,7 +3039,17 @@ mod tests {
             * g!(
                 crate::tensor::SymbolicTensor::infer((inner).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -2862,7 +3081,15 @@ mod tests {
         let inner = crate::tensor::SymbolicTensor::infer(inner).unwrap();
         assert_eq!(inner.structure.logical_slots().len(), 2);
         assert!(crate::tensor::SymbolicTensor::infer(output).is_err());
-        assert!(source.simplify_gamma(settings).is_err());
+        assert!(
+            source
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(settings),
+                    epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                    ..Default::default()
+                })
+                .is_err()
+        );
     }
 
     #[test]
@@ -2934,7 +3161,17 @@ mod tests {
                 );
                 let complete = crate::tensor::SymbolicTensor::infer(fallback)
                     .unwrap()
-                    .simplify_gamma(GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -2953,7 +3190,17 @@ mod tests {
                 );
                 let standalone = crate::tensor::SymbolicTensor::infer(input.clone())
                     .unwrap()
-                    .simplify_gamma(GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -2962,7 +3209,19 @@ mod tests {
                 assert_eq!(
                     crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                         .unwrap()
-                        .simplify_gamma(GammaSimplifySettings::default().without_trace_evaluation())
+                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            gamma: Some(
+                                GammaSimplifySettings::default().without_trace_evaluation()
+                            ),
+                            epsilon: true,
+                            ..Default::default()
+                        })
+                        .unwrap()
+                        .contract(crate::tensor::ContractSettings {
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })
                         .unwrap()
                         .resolved()
                         .unwrap()
@@ -3012,7 +3271,11 @@ mod tests {
                         (&inert * &trace).as_atom_view().to_owned(),
                     )
                     .unwrap()
-                    .simplify_gamma(settings)
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(settings),
+                        epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -3030,7 +3293,11 @@ mod tests {
                             (decorated).as_atom_view().to_owned(),
                         )
                         .unwrap()
-                        .simplify_gamma(settings)
+                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            gamma: Some(settings),
+                            epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                            ..Default::default()
+                        })
                         .unwrap()
                         .resolved()
                         .unwrap()
@@ -3044,7 +3311,11 @@ mod tests {
                                 (result).as_atom_view().to_owned()
                             )
                             .unwrap()
-                            .simplify_gamma(settings)
+                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                                gamma: Some(settings),
+                                epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                                ..Default::default()
+                            })
                             .unwrap()
                             .resolved()
                             .unwrap()
@@ -3114,7 +3385,11 @@ mod tests {
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer((rounded_input).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(settings)
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(settings),
+                        epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -3123,7 +3398,11 @@ mod tests {
                     (&inert * &rounded_input).as_atom_view().to_owned()
                 )
                 .unwrap()
-                .simplify_gamma(settings)
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(settings),
+                    epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3153,7 +3432,11 @@ mod tests {
             let reference =
                 crate::tensor::SymbolicTensor::infer((&inert * &input).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(settings)
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(settings),
+                        epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -3163,7 +3446,11 @@ mod tests {
             assert!(!expected_calls.is_empty());
             let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(settings)
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(settings),
+                    epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3213,7 +3500,17 @@ mod tests {
             let expected = pairing.as_view() * unit;
             let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3229,7 +3526,17 @@ mod tests {
                     (&spectator * input).as_atom_view().to_owned()
                 )
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3240,7 +3547,17 @@ mod tests {
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -3268,7 +3585,17 @@ mod tests {
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -3282,7 +3609,17 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((odd).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3292,7 +3629,17 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((odd).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(GammaSimplifySettings::default().without_trace_evaluation())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::default().without_trace_evaluation()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3307,7 +3654,17 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((symbolic_spin).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3330,7 +3687,17 @@ mod tests {
         let input = g!(&slots[0], &slots[1]) * trace!(&spin; slots.iter().map(|slot| gamma!(slot)));
         let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -3338,7 +3705,17 @@ mod tests {
         let tail = trace!(&spin; slots[2..].iter().map(|slot| gamma!(slot)));
         let expected = crate::tensor::SymbolicTensor::infer((tail).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -3357,7 +3734,17 @@ mod tests {
                 + g!(&p, &slots[3]) * g!(&q, &slots[2]));
         let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -3383,7 +3770,17 @@ mod tests {
                 assert_eq!(
                     crate::tensor::SymbolicTensor::infer((paired).as_atom_view().to_owned())
                         .unwrap()
-                        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                            epsilon: true,
+                            ..Default::default()
+                        })
+                        .unwrap()
+                        .contract(crate::tensor::ContractSettings {
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })
                         .unwrap()
                         .resolved()
                         .unwrap()
@@ -3402,7 +3799,17 @@ mod tests {
                     let result =
                         crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                             .unwrap()
-                            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                                epsilon: true,
+                                ..Default::default()
+                            })
+                            .unwrap()
+                            .contract(crate::tensor::ContractSettings {
+                                collect_chains: false,
+                                collect_traces: false,
+                                ..Default::default()
+                            })
                             .unwrap()
                             .resolved()
                             .unwrap()
@@ -3411,7 +3818,17 @@ mod tests {
                     assert_eq!(
                         crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
                             .unwrap()
-                            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                                epsilon: true,
+                                ..Default::default()
+                            })
+                            .unwrap()
+                            .contract(crate::tensor::ContractSettings {
+                                collect_chains: false,
+                                collect_traces: false,
+                                ..Default::default()
+                            })
                             .unwrap()
                             .resolved()
                             .unwrap()
@@ -3444,7 +3861,17 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3455,7 +3882,17 @@ mod tests {
         assert!(
             crate::tensor::SymbolicTensor::infer((odd).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3495,7 +3932,17 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(GammaSimplifySettings::default().without_trace_evaluation())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::default().without_trace_evaluation()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3543,14 +3990,34 @@ mod tests {
         assert!(
             (crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
                 .into_expression()
                 - crate::tensor::SymbolicTensor::infer((expected_first).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -3598,7 +4065,17 @@ mod tests {
                         assert_eq!(
                             crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                                 .unwrap()
-                                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                                    epsilon: true,
+                                    ..Default::default()
+                                })
+                                .unwrap()
+                                .contract(crate::tensor::ContractSettings {
+                                    collect_chains: false,
+                                    collect_traces: false,
+                                    ..Default::default()
+                                })
                                 .unwrap()
                                 .resolved()
                                 .unwrap()
@@ -3676,7 +4153,17 @@ mod tests {
                 .to_owned(),
         )
         .unwrap()
-        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+        .reduce_algebra(&crate::tensor::AlgebraSettings {
+            gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap()
         .resolved()
         .unwrap()
@@ -3685,7 +4172,17 @@ mod tests {
             + (dimension.to_owned() - Atom::num(4)) * reduced;
         let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -3704,7 +4201,17 @@ mod tests {
         );
         let complete = crate::tensor::SymbolicTensor::infer((decorated).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -3854,7 +4361,17 @@ mod tests {
             .schoonschip_with_settings(&SchoonschipSettings::default().with_chain_like_functions());
         let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -3863,7 +4380,17 @@ mod tests {
             (&result
                 - crate::tensor::SymbolicTensor::infer((contracted).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -3874,7 +4401,17 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3899,7 +4436,11 @@ mod tests {
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(settings)
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(settings),
+                        epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -3913,7 +4454,17 @@ mod tests {
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -3939,7 +4490,17 @@ mod tests {
         let expected = 4 * chain!(&start, &end; [gamma!(&c), gamma!(&d)]);
         let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -3948,7 +4509,17 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3973,7 +4544,17 @@ mod tests {
             let expected = 4 * chain!(&start, &end; [gamma!(&b), gamma!(&c)]);
             let result = crate::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -3982,7 +4563,17 @@ mod tests {
             assert_eq!(
                 crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()

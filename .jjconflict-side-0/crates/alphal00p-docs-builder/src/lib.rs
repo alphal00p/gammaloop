@@ -1767,6 +1767,15 @@ impl SiteBuilder {
                 source.display(),
                 typst.display()
             );
+            // Preserve the versioned upstream package verbatim. This vendor-owned
+            // changelog is not an editable repository documentation source.
+            if source
+                == Path::new(
+                    "crates/linnet-py/vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md",
+                )
+            {
+                continue;
+            }
             if !matches!(
                 source.file_name().and_then(|name| name.to_str()),
                 Some("AGENTS.md" | "README.md")

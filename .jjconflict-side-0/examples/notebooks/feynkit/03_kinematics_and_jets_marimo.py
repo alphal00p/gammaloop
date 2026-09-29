@@ -43,7 +43,7 @@ def _(mo):
 def _():
     from math import cos, cosh, sin, sinh
 
-    from symbolica.community.hep import (
+    from symbolica.community.feynkit import (
         Axis,
         Boost,
         FourMomentum,

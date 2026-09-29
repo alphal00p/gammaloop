@@ -1,7 +1,7 @@
 use idenso::{
     IndexTooling,
     representations::initialize,
-    tensor::{SymbolicNetParse, SymbolicTensor, contract::ContractionSettings},
+    tensor::{SymbolicNetParse, SymbolicTensor, contract::ContractSettings},
 };
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::{
@@ -32,7 +32,7 @@ symbol_set!(TestSymbols, TS;
     mu1 mu2 mu3 mu4 mu5 mu6 mu7 mu8 mu9 mu10 mu11
 );
 
-fn contract(input: &Atom, settings: &ContractionSettings<'_>) -> Atom {
+fn contract(input: &Atom, settings: &ContractSettings<'_>) -> Atom {
     SymbolicTensor::infer(input.clone())
         .unwrap()
         .contract(*settings)
@@ -42,7 +42,7 @@ fn contract(input: &Atom, settings: &ContractionSettings<'_>) -> Atom {
         .into_expression()
 }
 
-fn assert_factorized_contraction(input: &Atom, output: &Atom, settings: &ContractionSettings<'_>) {
+fn assert_factorized_contraction(input: &Atom, output: &Atom, settings: &ContractSettings<'_>) {
     // Sum-by-sum boundaries deliberately remain factorized in this mode. A
     // metric/rank-one probe under the same settings still requires contraction
     // progress, so returning every input unchanged cannot satisfy this oracle.
@@ -233,7 +233,7 @@ fn spenso_bare_symb_vertex_substitution() {
     settings.max_line_length = Some(80);
     println!("in:{}", r.printer(settings.clone()));
 
-    let contraction_settings = ContractionSettings::default();
+    let contraction_settings = ContractSettings::default();
     let out = contract(&r, &contraction_settings);
 
     println!("out:{}", out.printer(settings.clone()));
@@ -341,7 +341,7 @@ fn three_vertex_shared_contraction_preserves_external_ports() {
     initialize();
     let _ = TS.mu1;
     let (r, _) = substituted_three_vertex_reproducer();
-    let contraction_settings = ContractionSettings::default();
+    let contraction_settings = ContractSettings::default();
     let out = contract(&r, &contraction_settings);
 
     // Only mu2 and mu7 are physical external slots. Parsing every sum branch
@@ -374,7 +374,7 @@ fn compare_two_slot_boundary_shapes() {
 
     let mu1: Atom = mu1.into();
     let mu9: Atom = mu9.into();
-    let settings = ContractionSettings::default();
+    let settings = ContractSettings::default();
 
     let cases = [
         (
@@ -448,7 +448,7 @@ fn metric_sum_boundary_contracts_without_expanding_inputs() {
     let mu1: Atom = mu1.into();
     let mu9: Atom = mu9.into();
     let dummies = [("mu1", mu1.clone()), ("mu9", mu9.clone())];
-    let settings = ContractionSettings::default();
+    let settings = ContractSettings::default();
 
     let target_after_metric_identification = parse!(
         "spenso::g(k(2,spenso::mink(4)), spenso::mink(4,mu9))
@@ -495,7 +495,7 @@ fn non_linear_metric_simplifies_summed_momentum_boundary_without_expansion() {
     let mu1: Atom = mu1.into();
     let mu9: Atom = mu9.into();
     let dummies = [("mu1", mu1.clone()), ("mu9", mu9.clone())];
-    let settings = ContractionSettings::default();
+    let settings = ContractSettings::default();
 
     let metric_identified_target = parse!(
         "spenso::g(k(2,spenso::mink(4))-k(3,spenso::mink(4)), spenso::mink(4,mu9))
@@ -542,7 +542,7 @@ fn metric_vector_product_preserves_its_free_metric_slot() {
 
     let mu9: Atom = TS.mu9.into();
     let dummies = [("mu9", mu9.clone())];
-    let settings = ContractionSettings::default();
+    let settings = ContractSettings::default();
     let expr = parse!(
         "spenso::g(spenso::mink(4,mu7), spenso::mink(4,mu9))
          * spenso::g(k(0,spenso::mink(4))-k(1,spenso::mink(4)), spenso::mink(4,mu9))"
@@ -567,7 +567,7 @@ fn metric_vector_product_preserves_its_free_metric_slot() {
 #[test]
 fn three_vertex_contraction_preserves_components() {
     let (input, dummies) = substituted_three_vertex_reproducer();
-    let settings = ContractionSettings::default();
+    let settings = ContractSettings::default();
     let output = contract(&input, &settings);
     print_three_vertex_method("shared contraction", output.clone(), &dummies);
     assert_factorized_contraction(&input, &output, &settings);

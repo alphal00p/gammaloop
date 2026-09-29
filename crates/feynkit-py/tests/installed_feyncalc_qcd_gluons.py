@@ -4,13 +4,14 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-GlGl
 The ordinary amplitudes include all three diagrams and their interference.
 """
 
+from symbolica.community.tensor import AlgebraSettings, ContractSettings
+
 from pathlib import Path
 
 from symbolica import E, Replacement, S
-from symbolica.community import hep as fk
+from symbolica.community import feynkit as fk
 from symbolica.community.tensor import (
     ColorSimplifySettings,
-    CookSettings,
     GammaSimplifySettings,
     TensorExpression,
 )
@@ -73,7 +74,13 @@ operator = TensorExpression(amplitude)
 assert len(operator.structure.slots) == 8
 adjoint = (
     operator.dirac_adjoint()
-    .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+    .reduce_algebra(
+        AlgebraSettings(
+            gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
+            epsilon=True,
+        )
+    )
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
     .to_expression()
 )
@@ -119,15 +126,21 @@ generic = (
     .replace(coad(8, index), coad(dA, index))
 )
 colored = (
-    TensorExpression(generic, cook_indices=CookSettings.indices())
-    .simplify_color()
+    TensorExpression(generic, intern="flattened")
+    .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
     .to_expression()
     .replace(dA, Nc**2 - 1)
 )
 colored = (
     TensorExpression(colored)
-    .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
+    .reduce_algebra(
+        AlgebraSettings(
+            color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
+        )
+    )
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
 )
 
@@ -139,10 +152,9 @@ spin_projector = model.particle_by_pdg(5).spin_sum(
     P(1), index_scope(adjoint_index, ports[0]), ports[1], average=True
 )
 spin_summed = (
-    TensorExpression(
-        colored.to_expression() * spin_projector, cook_indices=CookSettings.indices()
-    )
-    .simplify_gamma()
+    TensorExpression(colored.to_expression() * spin_projector, intern="flattened")
+    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
 )
 expected = (
@@ -175,9 +187,9 @@ for references in ((P(3), P(2)), (P(0), P(0))):
     scalar = (
         TensorExpression(
             spin_summed.to_expression() * polarizations,
-            cook_indices=CookSettings.indices(),
+            intern="flattened",
         )
-        .contract()
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_dots()
     )

@@ -37,9 +37,20 @@ class ExpandedTraceTests(unittest.TestCase):
             sp.GammaSimplifySettings(expand_traces=True)
         trace = self.trace_word(self.dimension, [f"a{i}" for i in range(6)])
         self.assertEqual(
-            trace.simplify_gamma().expand(), trace.simplify_gamma(defaults).expand()
+            trace.reduce_algebra(
+                sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(sp.ContractSettings(collect_chains=False, collect_traces=False))
+            .expand(),
+            trace.reduce_algebra(sp.AlgebraSettings(gamma=defaults, epsilon=True))
+            .contract(sp.ContractSettings(collect_chains=False, collect_traces=False))
+            .expand(),
         )
-        inert = trace.simplify_gamma(sp.GammaSimplifySettings(evaluate_traces=False))
+        inert = trace.reduce_algebra(
+            sp.AlgebraSettings(
+                gamma=sp.GammaSimplifySettings(evaluate_traces=False), epsilon=True
+            )
+        ).contract(sp.ContractSettings(collect_chains=False, collect_traces=False))
         self.assertEqual(inert.to_expression(), trace)
         self.assertEqual(inert.root.structure.slots, trace.structure.slots)
 
@@ -53,15 +64,29 @@ class ExpandedTraceTests(unittest.TestCase):
         source = gamma("chain_a", "chain_b", "chain_mu") * gamma(
             "chain_b", "chain_c", "chain_mu"
         )
-        joined = source.simplify_gamma(chains)
-        reduced = source.simplify_gamma(sp.GammaSimplifySettings(evaluate_traces=False))
+        joined = source.reduce_algebra(sp.AlgebraSettings(gamma=chains))
+        reduced = source.reduce_algebra(
+            sp.AlgebraSettings(
+                gamma=sp.GammaSimplifySettings(evaluate_traces=False), epsilon=True
+            )
+        ).contract(sp.ContractSettings(collect_chains=False, collect_traces=False))
         self.assertNotEqual(joined.to_expression(), reduced.to_expression())
         self.assertEqual(joined.root.structure.slots, source.structure.slots)
         self.assertEqual(
-            joined.simplify_gamma(chains).to_expression(), joined.to_expression()
+            joined.reduce_algebra(sp.AlgebraSettings(gamma=chains)).to_expression(),
+            joined.to_expression(),
         )
         self.assertEqual(
-            joined.simplify_gamma().expand(), source.simplify_gamma().expand()
+            joined.reduce_algebra(
+                sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(sp.ContractSettings(collect_chains=False, collect_traces=False))
+            .expand(),
+            source.reduce_algebra(
+                sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(sp.ContractSettings(collect_chains=False, collect_traces=False))
+            .expand(),
         )
         for value in [source, joined]:
             self.assertFalse(hasattr(value, "collect_gamma_chains"))
@@ -73,16 +98,42 @@ class ExpandedTraceTests(unittest.TestCase):
                 trace = self.trace_word(
                     dimension, ["mu", "a", "b", "mu", "c", "d", "e", "f"]
                 )
-                body = trace.simplify_gamma().expand().to_expression()
+                body = (
+                    trace.reduce_algebra(
+                        sp.AlgebraSettings(
+                            gamma=sp.GammaSimplifySettings(), epsilon=True
+                        )
+                    )
+                    .contract(
+                        sp.ContractSettings(collect_chains=False, collect_traces=False)
+                    )
+                    .expand()
+                    .to_expression()
+                )
                 source = self.scalar * trace
-                result = source.simplify_gamma()
+                result = source.reduce_algebra(
+                    sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), epsilon=True)
+                ).contract(
+                    sp.ContractSettings(collect_chains=False, collect_traces=False)
+                )
                 self.assertIsInstance(result, sp.AliasedTensorExpression)
                 self.assertEqual(result.root.structure.slots, source.structure.slots)
                 expanded = result.expand()
                 self.assertEqual(
                     expanded.to_expression(), (self.scalar * body).expand()
                 )
-                self.assertEqual(result.simplify_gamma().expand(), expanded)
+                self.assertEqual(
+                    result.reduce_algebra(
+                        sp.AlgebraSettings(
+                            gamma=sp.GammaSimplifySettings(), epsilon=True
+                        )
+                    )
+                    .contract(
+                        sp.ContractSettings(collect_chains=False, collect_traces=False)
+                    )
+                    .expand(),
+                    expanded,
+                )
                 self.assertEqual(expanded.structure.slots, source.structure.slots)
                 self.assertEqual(
                     result.to_expression().to_expression().expand(),
@@ -94,29 +145,58 @@ class ExpandedTraceTests(unittest.TestCase):
         right = self.trace_word(self.dimension, [f"right{i}" for i in range(6)])
         expected = (
             self.scalar
-            * left.simplify_gamma().expand().to_expression()
-            * right.simplify_gamma().expand().to_expression()
+            * left.reduce_algebra(
+                sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(sp.ContractSettings(collect_chains=False, collect_traces=False))
+            .expand()
+            .to_expression()
+            * right.reduce_algebra(
+                sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(sp.ContractSettings(collect_chains=False, collect_traces=False))
+            .expand()
+            .to_expression()
         ).expand()
         source = self.scalar * left * right
-        result = source.simplify_gamma()
+        result = source.reduce_algebra(
+            sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), epsilon=True)
+        ).contract(sp.ContractSettings(collect_chains=False, collect_traces=False))
         self.assertEqual(result.expand().to_expression(), expected)
-        self.assertEqual(result.simplify_gamma().expand(), result.expand())
+        self.assertEqual(
+            result.reduce_algebra(
+                sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(sp.ContractSettings(collect_chains=False, collect_traces=False))
+            .expand(),
+            result.expand(),
+        )
         self.assertEqual(result.root.structure.slots, source.structure.slots)
 
     def test_pipeline_shares_alias_result_and_requires_explicit_expansion(self):
         trace = self.trace_word(self.dimension, [f"pipeline{i}" for i in range(6)])
         source = self.scalar * trace
-        pipeline = sp.SimplifySettings(metrics=False, gamma=sp.GammaSimplifySettings())
+        pipeline = sp.AlgebraSettings(gamma=sp.GammaSimplifySettings())
         self.assertTrue(pipeline.gamma.evaluate_traces)
         with self.assertRaises(TypeError):
-            sp.SimplifySettings(expand=True)
-        with self.assertRaisesRegex(ValueError, "max_passes"):
-            sp.SimplifySettings(max_passes=0)
-        result = source.simplify(pipeline)
+            sp.AlgebraSettings(expand=True)
+        capped = source.reduce_algebra(
+            sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), max_passes=0)
+        )
+        self.assertEqual(capped.reduction_status, sp.ReductionStatus.Capped)
+        self.assertEqual(capped.to_expression(), source)
+        result = source.reduce_algebra(pipeline)
         self.assertIsInstance(result, sp.AliasedTensorExpression)
-        self.assertEqual(result.expand(), source.simplify_gamma().expand())
-        self.assertEqual(result.simplify(pipeline).expand(), result.expand())
-        zero = (0 * source).simplify(pipeline)
+        self.assertEqual(
+            result.expand(),
+            source.reduce_algebra(
+                sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(sp.ContractSettings(collect_chains=False, collect_traces=False))
+            .expand(),
+        )
+        self.assertEqual(result.reduce_algebra(pipeline).expand(), result.expand())
+        zero = (0 * source).reduce_algebra(pipeline)
         self.assertEqual(zero.expand().structure.slots, source.structure.slots)
         self.assertFalse(zero.expand())
 

@@ -9,11 +9,17 @@ No automatic counterterm diagrams, subtraction forest or finite two-loop
 self-energy is claimed; bounded IBP residuals are not certified masters.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 import json
 from pathlib import Path
 
 from symbolica import E, Replacement, S
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 from symbolica.community.tensor import TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -170,7 +176,8 @@ for diagram in result.diagrams:
     uv = uv.replace(uv_mass, zero)
     traced = (
         TensorExpression(uv.expand())
-        .simplify_gamma()
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .expand()
         .to_dots()
         .to_expression()
@@ -376,7 +383,8 @@ for label, inserted, powers, weight in insertions:
     selective = uv.replace(uv_mass, zero)
     trace = (
         TensorExpression(selective.expand())
-        .simplify_gamma()
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .expand()
         .to_dots()
         .to_expression()

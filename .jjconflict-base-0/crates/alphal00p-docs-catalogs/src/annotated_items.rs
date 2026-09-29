@@ -49,6 +49,16 @@ fn feynkit_kinematics_entry() {}
 fn feynkit_graph_entry() {}
 
 #[alphal00p_docs::ty(
+    id = "Amplitude",
+    title = "Amplitude",
+    summary = "Builds coherent amputated amplitudes from compatible diagram operators.",
+    format = "rust-markdown",
+    source = "crates/feynkit-amplitude/src/lib.rs",
+    source_id = "feynkit_amplitude::Amplitude"
+)]
+fn feynkit_amplitude_entry() {}
+
+#[alphal00p_docs::ty(
     id = "Process",
     title = "Process",
     summary = "Generates Feynman diagrams from a validated model and process specification.",
@@ -1289,6 +1299,7 @@ pub(super) fn for_component(component: &str) -> Option<Vec<DocItem>> {
         "feynkit-ufo" => vec![__alphal00p_docs_ty_feynkit_ufo_entry()],
         "feynkit-kinematics" => vec![__alphal00p_docs_ty_feynkit_kinematics_entry()],
         "feynkit-graph" => vec![__alphal00p_docs_ty_feynkit_graph_entry()],
+        "feynkit-amplitude" => vec![__alphal00p_docs_ty_feynkit_amplitude_entry()],
         "feynkit-generator" => vec![__alphal00p_docs_ty_feynkit_generator_entry()],
         "feynkit-cff" => vec![__alphal00p_docs_ty_feynkit_cff_entry()],
         "feynkit-tensor" => vec![__alphal00p_docs_ty_feynkit_tensor_entry()],

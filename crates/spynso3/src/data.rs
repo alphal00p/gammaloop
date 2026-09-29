@@ -137,6 +137,14 @@ impl Spensor {
 #[pymethods]
 impl Spensor {
     /// Python component type: float, complex, or Expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = tensor.dtype
     #[getter]
     #[gen_stub(override_return_type(type_repr = "type[float] | type[complex] | type[Expression]"))]
     fn dtype<'py>(&self, py: Python<'py>) -> Bound<'py, PyType> {
@@ -150,6 +158,14 @@ impl Spensor {
     }
 
     /// Component storage format, independent of tensor rank or expression type.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = tensor.storage
     #[getter]
     #[gen_stub(override_return_type(type_repr="typing.Literal['dense', 'sparse']", imports=("typing")))]
     fn storage(&self) -> &'static str {
@@ -166,18 +182,42 @@ impl Spensor {
     }
 
     /// Number of external axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = tensor.rank
     #[getter]
     fn rank(&self) -> usize {
         self.descriptor.rank()
     }
 
     /// Whether the tensor has no external axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = tensor.is_scalar
     #[getter]
     fn is_scalar(&self) -> bool {
         self.descriptor.is_scalar()
     }
 
     /// Dimensions in logical axis order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> result = tensor.shape
     #[getter]
     #[gen_stub(override_return_type(type_repr = "tuple[int, ...]"))]
     fn shape<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
@@ -188,16 +228,38 @@ impl Spensor {
     }
 
     /// Independent copy of component storage and metadata.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> independent = tensor.copy()
+    /// >>> independent[0] = 9.0
+    /// >>> assert tensor[0] == 1.0
     fn copy(&self) -> Self {
         self.clone()
     }
 
-    /// Apply a scalar callback to components, preserving sparse storage and logical axes.
+    /// Return a tensor obtained by applying a scalar function to every component.
+    /// The input tensor is unchanged. Sparse storage is retained when implicit zeros
+    /// stay zero; otherwise the result becomes dense.
     ///
-    /// The default dtype is unchanged; select float, complex, or Expression explicitly
-    /// to convert it. Sparse defaults are mapped once; if zero maps to nonzero,
-    /// the result becomes dense so later contractions include every component.
-    /// Callback traversal order is unspecified. The input tensor is never modified.
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> squared = tensor.map_components(lambda value: value * value)
+    ///
+    /// Parameters
+    /// ----------
+    /// callback : Callable[[Expression | float | complex], Expression | float | complex]
+    ///     Function called with each scalar component. Return a coefficient compatible with dtype. If implicit sparse zeros become nonzero, the result uses dense storage.
+    /// dtype : type[float] | type[complex] | type[Expression] | None
+    ///     Output component class: float, complex, or Expression. None retains the input component class.
     #[pyo3(signature = (callback, *, dtype=None))]
     fn map_components(
         &self,
@@ -262,6 +324,15 @@ impl Spensor {
 
     /// Copy numeric components into a NumPy array in logical axis order.
     /// Imports NumPy only when called. Symbolic tensors must first be evaluated.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> array = tensor.to_numpy()
+    /// >>> assert array.shape == (2, 2)
     #[gen_stub(override_return_type(type_repr="numpy.typing.NDArray[numpy.float64] | numpy.typing.NDArray[numpy.complex128]", imports=("numpy", "numpy.typing")))]
     fn to_numpy(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let dtype = match &self.tensor {
@@ -280,6 +351,22 @@ impl Spensor {
 
     /// Copy a numeric NumPy array into a named tensor, checking the full logical shape.
     /// Real numeric arrays become float64 storage; complex arrays become complex128.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> import numpy as np
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> array = np.array([[1.0, 2.0], [3.0, 4.0]])
+    /// >>> tensor = sp.Tensor.from_numpy(A, array)
+    ///
+    /// Parameters
+    /// ----------
+    /// structure : TensorExpression
+    ///     Named TensorExpression defining the component dimensions, scalar arguments, and logical axis order.
+    /// array : numpy.ArrayLike
+    ///     Numeric NumPy-compatible array whose full shape matches structure.shape. The data is copied; later changes to the array do not affect the tensor.
     #[staticmethod]
     fn from_numpy(
         structure: TensorDataDescriptor,

@@ -1,4 +1,4 @@
-//! Measure individual public stages on saved contraction-benchmark inputs.
+//! Measure public operations and isolated kernels on saved contraction inputs.
 //!
 //! First run `metric_contraction_benchmark` to create input snapshots, then run
 //! `cargo run -p idenso --profile dev-optim --example contraction_phase_benchmark
@@ -15,16 +15,13 @@
 //! representation and both orientations of an unrelated dual representation.
 //!
 //! Typed gamma methods include admission and alias resolution in each call.
-//! Each method is called directly through the linked production API. Compare
+//! Public operations call the linked production API. `Chainify` isolates the
+//! internal notation primitive through the `reference-cases` feature. Compare
 //! output snapshots across builds; term counts alone do not establish equivalence.
 
 use std::{hint::black_box, path::Path, time::Instant};
 
-use idenso::{
-    representations::Bispinor,
-    shorthands::chain::Chain,
-    tensor::{SymbolicTensor, contract::ContractionSettings},
-};
+use idenso::tensor::{SymbolicTensor, contract::ContractSettings};
 use spenso::network::{parsing::AtomStructureExt, tags::SPENSO_TAG};
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
@@ -32,7 +29,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 enum Method {
     Clone,
     RepeatedIndices,
-    ToDots,
+    NotationToDots,
     MetricContractResolve,
     ContractResolve,
     Epsilon,
@@ -43,7 +40,7 @@ enum Method {
 const METHODS: [Method; 9] = [
     Method::Clone,
     Method::RepeatedIndices,
-    Method::ToDots,
+    Method::NotationToDots,
     Method::MetricContractResolve,
     Method::ContractResolve,
     Method::Epsilon,
@@ -72,38 +69,60 @@ fn run(method: Method, view: AtomView<'_>) -> Outcome {
     }
     Outcome::Atom(match method {
         Clone => view.to_owned(),
-        ToDots => SymbolicTensor::infer(view.to_owned())
+        NotationToDots => SymbolicTensor::infer(view.to_owned())
             .unwrap()
             .to_dots()
             .unwrap()
             .into_expression(),
         MetricContractResolve => SymbolicTensor::infer(view.to_owned())
             .unwrap()
-            .contract(ContractionSettings::default().without_rank_one_tensors())
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
             .into_expression(),
         ContractResolve => SymbolicTensor::infer(view.to_owned())
             .unwrap()
-            .contract(Default::default())
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
             .into_expression(),
         Epsilon => SymbolicTensor::infer(view.to_owned())
             .unwrap()
-            .simplify_epsilon()
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
             .into_expression(),
-        Chainify => view.chainify(Bispinor {}.into()),
+        Chainify => idenso::reference_cases::chain_notation_phase(view),
         TypedGammaChainsResolve => {
             idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(idenso::dirac::GammaSimplifySettings {
-                    output: idenso::dirac::GammaOutput::Chains,
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings {
+                        output: idenso::dirac::GammaOutput::Chains,
+                        ..Default::default()
+                    }),
+                    epsilon: false,
                     ..Default::default()
                 })
                 .unwrap()
@@ -114,7 +133,17 @@ fn run(method: Method, view: AtomView<'_>) -> Outcome {
         TypedGammaResolve => {
             idenso::tensor::SymbolicTensor::infer((view).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -264,8 +293,15 @@ fn main() {
         } else {
             sorted[samples / 2]
         };
+        #[cfg(feature = "reference-cases")]
+        let (_, diagnostic) = idenso::reference_cases::timing::measure(
+            &format!("phase/{case}/{variant}/{method:?}"),
+            || drop(run(*method, input.as_view())),
+        );
+        #[cfg(not(feature = "reference-cases"))]
+        let diagnostic = "null";
         println!(
-            "{{\"case\":{case:?},\"input_variant\":{variant:?},\"method\":\"{method:?}\",\"nodes\":{nodes},\"terms\":{},\"output_terms\":{output_terms},\"changed\":{changed},\"repetitions\":{},\"samples_ns\":{:?},\"median_ns\":{median_ns}}}",
+            "{{\"case\":{case:?},\"input_variant\":{variant:?},\"method\":\"{method:?}\",\"nodes\":{nodes},\"terms\":{},\"output_terms\":{output_terms},\"changed\":{changed},\"repetitions\":{},\"samples_ns\":{:?},\"median_ns\":{median_ns},\"diagnostic\":{diagnostic}}}",
             input.nterms(),
             repetitions[index],
             timings[index]

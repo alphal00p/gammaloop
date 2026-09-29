@@ -215,7 +215,10 @@ mod tests {
         let slot = rep.slot(AbstractIndex::from(1));
         let structure: Canonicalized<Structure> =
             NamedStructure::from_iter([slot], symbol!("f"), None::<Vec<Atom>>);
-        let expression = function!(tensor_symbol!(opaque), slot.to_atom());
+        let expression = function!(
+            tensor_symbol!(param_tensor_inferred_structure_opaque),
+            slot.to_atom()
+        );
         type TensorLib = DummyLibrary<ParamTensor<Structure>, DummyKey>;
         type FunLib = ErroringLibrary<Symbol>;
         let tensor = <ParamTensor<Structure> as TensorFromExpression<

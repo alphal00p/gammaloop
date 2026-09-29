@@ -5,6 +5,8 @@
 #import "content/quickstart-python.typ": quickstart-python
 #import "content/tutorial.typ": tutorial
 #import "content/tensor-reduction.typ": tensor-reduction
+#import "content/feyncalc-coverage.typ": feyncalc-coverage
+#import "content/integral-families.typ": integral-families
 #import "content/notebooks.typ": notebooks
 #import "content/showcases.typ": showcases
 #import "content/showcase-first-diagram.typ": showcase-first-diagram
@@ -29,6 +31,8 @@
     #quickstart-python
     #tutorial
     #tensor-reduction
+    #feyncalc-coverage
+    #integral-families
     #notebooks
     #showcases
     #showcase-first-diagram

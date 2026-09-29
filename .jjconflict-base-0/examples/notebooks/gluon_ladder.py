@@ -14,6 +14,7 @@ from time import process_time_ns
 
 from symbolica import E, Replacement, S
 from symbolica.community.tensor import (
+    ContractSettings,
     Representation,
     TensorExpression,
     TensorName,
@@ -177,7 +178,9 @@ class GluonLadder:
     def reduce(self, source=None):
         result = self.source if source is None else source
         for vertex in self.order:
-            result = result.replace(self.rules[vertex - 1]).contract()
+            result = result.replace(self.rules[vertex - 1]).contract(
+                ContractSettings(collect_chains=False, collect_traces=False)
+            )
         # Materialize once, then name scalar products for the exact FORM comparison.
         return result.expand().to_expression().replace_multiple(self.replacements)
 
@@ -195,19 +198,24 @@ class GluonLadder:
         return E(text).expand(via_poly=True)
 
     def phases(self, expected):
+        from tensor_benchmark_cases import completed
+
         result = self.source
         rows = []
         for vertex in self.order:
             start = process_time_ns()
             result = result.replace(self.rules[vertex - 1])
             replaced = process_time_ns()
-            result = result.contract()
+            result = result.contract(
+                ContractSettings(collect_chains=False, collect_traces=False)
+            )
             contracted = process_time_ns()
             rows.append(
                 {
                     "vertex": vertex,
                     "replacement_cpu_ns": replaced - start,
                     "contraction_cpu_ns": contracted - replaced,
+                    "completion": completed(contract=result),
                 }
             )
         start = process_time_ns()

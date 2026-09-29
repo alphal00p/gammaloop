@@ -68,6 +68,13 @@ measurement.
 
 == Reproduction
 
+This is a frozen historical benchmark, including its source-hashed driver and
+retired `simplify_gamma` call. Link it only against the recorded compatible
+historical library family. The current API uses `reduce_algebra(AlgebraSettings)`;
+its independently captured comparison is documented in
+#link("../../../docs/architecture/unified-tensor-reduction.typ")[`Unified tensor reduction`].
+The archived driver is not a current API usage example.
+
 #link("timings.json")[`timings.json`] records all samples, block medians,
 build features, artifact hashes and the protocol. The measurement driver is
 #link("driver.rs")[`driver.rs`]. Its checked-in formatting differs from the

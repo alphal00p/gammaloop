@@ -1,17 +1,23 @@
 """Generated massive photon self-energy through shared tensor and OneLOop APIs.
 
-Run in the installed symbolica.community.hep host (which includes OneLOop).
+Run in the installed symbolica.community.feynkit host (which includes OneLOop).
 The photon UV pole is a component of the FeynCalc QED renormalization example:
 https://feyncalc.github.io/FeynCalcExamples/QED/OneLoop/Renormalization
 The full renormalization example, including its other diagrams, remains pending.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 from math import pi, sqrt
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community import hep as fk
-from symbolica.community.hep import oneloop
+from symbolica.community import feynkit as fk
+from symbolica.community.feynkit import oneloop
 from symbolica.community.tensor import TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -39,7 +45,13 @@ for edge in diagram.external_edges:
     numerator = numerator.replace(mink(4, port), mink(D, (mu, nu)[edge.external_index]))
 # Continue Lorentz contractions to D before taking the Dirac trace; tr(1) = 4.
 numerator = numerator.replace(mink(4, index), mink(D, index))
-trace = TensorExpression(numerator.expand()).simplify_gamma().expand().to_dots()
+trace = (
+    TensorExpression(numerator.expand())
+    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .expand()
+    .to_dots()
+)
 kinematics = fk.Kinematics(D, momenta=[K(0), P(0)]).with_scalar_product(P(0), P(0), s)
 family = diagram.integral_family(kinematics=kinematics)
 reducer = (

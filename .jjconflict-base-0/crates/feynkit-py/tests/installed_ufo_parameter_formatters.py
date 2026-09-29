@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 
 root = Path(__file__).resolve().parents[3]
 model = hep.UfoLoader(simplify_model=False).load(root / "assets/models/ufo/sm").model
@@ -34,11 +34,10 @@ with tempfile.TemporaryDirectory() as directory:
     assert mass.texname == "m_{test}"
     assert "m_{test}" in mass.symbol.to_latex()
     assert "m_{test}" in mass.symbol.to_typst()
+    assert imported.particle("phi+").electric_charge == imported.parameter("e").symbol
     assert (
-        imported.particle("phi+").electric_charge == imported.parameter("e").symbol
-    )
-    assert (
-        imported.particle("phi-").electric_charge == -imported.particle("phi+").electric_charge
+        imported.particle("phi-").electric_charge
+        == -imported.particle("phi+").electric_charge
     )
 
 print("UFO-first and JSON loader parameter formatters passed")

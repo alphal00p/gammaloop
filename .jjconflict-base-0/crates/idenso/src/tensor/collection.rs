@@ -38,6 +38,14 @@ use super::{
 };
 
 type Result<T> = std::result::Result<T, TensorInferenceError>;
+
+#[cfg(test)]
+thread_local! {
+    pub(crate) static SHALLOW_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(crate) static SHALLOW_VIEWS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(crate) static SELECTED_OPENS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 type CoefficientVisitor<'a> = dyn FnMut(
         &[(
             SymbolicTensor<PartialStructure>,
@@ -52,13 +60,14 @@ type CoefficientVisitor<'a> = dyn FnMut(
 // TermTape; cached templates retain borrowed source storage until this call ends.
 struct CollectionInput<'a, Select> {
     definitions: &'a [Definition],
+    observations: Arc<super::simplification::observation::DomainObservations>,
     templates: HashMap<usize, Arc<SymbolicNet<AbstractIndex, AtomOrView<'a>>>>,
     template_interfaces: HashMap<usize, PartialStructure>,
     template_owned: HashMap<usize, bool>,
     origins: HashMap<Atom, usize>,
     registry: HashMap<Atom, Definition>,
     state: ParseState<AbstractIndex>,
-    definitions_intrinsic: bool,
+    template_intrinsic: std::cell::RefCell<HashMap<usize, bool>>,
     select: Select,
     values: Vec<(SymbolicTensor<PartialStructure>, bool)>,
     positions: HashMap<(Atom, Vec<PartialSlot>, bool), usize>,
@@ -78,6 +87,7 @@ impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
     ) -> Self {
         Self {
             definitions,
+            observations: Arc::clone(source.reduction_observations()),
             templates: HashMap::new(),
             template_interfaces: HashMap::new(),
             template_owned: HashMap::new(),
@@ -94,16 +104,38 @@ impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
             state: SymbolicTensor::reserved_dummies(
                 std::iter::once(source).chain(definitions.iter().flat_map(|(a, b)| [a, b])),
             ),
-            definitions_intrinsic: definitions
-                .iter()
-                .all(|(_, body)| body.normalization_is_intrinsic()),
+            template_intrinsic: Default::default(),
             select,
             values: Vec::new(),
             positions: HashMap::new(),
         }
     }
 
-    fn parse(&self, source: AtomView<'a>) -> Result<SymbolicNet<AbstractIndex, AtomOrView<'a>>> {
+    fn parse(
+        &self,
+        source: &SymbolicTensor<PartialStructure>,
+    ) -> Result<SymbolicNet<AbstractIndex, AtomOrView<'a>>> {
+        #[cfg(test)]
+        SHALLOW_VIEWS.with(|count| count.set(count.get() + 1));
+        let graph = source.shallow_graph()?;
+        Ok(graph.map_ref(
+            |scalar| AtomOrView::Atom(scalar.clone()),
+            |tensor| SymbolicTensor {
+                expression: AtomOrView::Atom(tensor.expression.clone()),
+                structure: tensor.structure.clone(),
+                is_metric: tensor.is_metric,
+                is_composite: tensor.is_composite,
+                proofs: tensor.proofs.clone(),
+            },
+        ))
+    }
+
+    fn open<'src>(
+        &self,
+        source: AtomView<'src>,
+    ) -> Result<SymbolicNet<AbstractIndex, AtomOrView<'src>>> {
+        #[cfg(test)]
+        SELECTED_OPENS.with(|count| count.set(count.get() + 1));
         let settings = ParseSettings {
             precontract_scalars: false,
             depth_limit: None,
@@ -127,19 +159,67 @@ impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
         if let Some(graph) = self.templates.get(&index) {
             return Ok(Arc::clone(graph));
         }
-        let graph = Arc::new(self.parse(self.definitions[index].1.expression.as_atom_view())?);
+        let graph = Arc::new(self.parse(&self.definitions[index].1)?);
         self.templates.insert(index, Arc::clone(&graph));
         Ok(graph)
     }
 
+    fn definition_is_intrinsic(&self, index: usize, depth: usize) -> bool {
+        if let Some(&intrinsic) = self.template_intrinsic.borrow().get(&index) {
+            return intrinsic;
+        }
+        if depth >= TermTape::<usize>::MAX_EXPANSION_DEPTH {
+            return false;
+        }
+        let body = &self.definitions[index].1;
+        let intrinsic = body.normalization_is_intrinsic()
+            && body
+                .reduction_observations()
+                .literals
+                .iter()
+                .filter_map(|literal| self.origins.get(literal))
+                .all(|&dependency| self.definition_is_intrinsic(dependency, depth + 1));
+        self.template_intrinsic
+            .borrow_mut()
+            .insert(index, intrinsic);
+        intrinsic
+    }
+
     fn selected(&mut self, value: AtomView<'_>, depth: usize) -> Result<bool> {
         let Some(&index) = self.origins.get(value.get_data()) else {
-            return Ok((self.select)(value));
+            if (self.select)(value) {
+                return Ok(true);
+            }
+            if matches!(
+                value,
+                AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_)
+            ) {
+                if let Some(region) = self.observations.region(value) {
+                    return Ok(region
+                        .leaves
+                        .iter()
+                        .any(|leaf| (self.select)(leaf.as_view())));
+                }
+                // Arbitrary user selection and newly exposed replacement regions
+                // have no reusable family observation. Inspect only this leaf.
+                let mut selected = false;
+                value.visitor(&mut |node| {
+                    if selected {
+                        return false;
+                    }
+                    if matches!(node, AtomView::Fun(_)) {
+                        selected = (self.select)(node);
+                        return false;
+                    }
+                    true
+                });
+                return Ok(selected);
+            }
+            return Ok(false);
         };
-        // A callback-sensitive registry stays opaque before any template
-        // parsing or speculative construction. Domain mapping still visits its
-        // original reachable bodies through the established checked schedule.
-        if !self.definitions_intrinsic {
+        // Only this definition and its dependencies constrain exposure. An
+        // unrelated callback elsewhere in the registry cannot veto local work.
+        if !self.definition_is_intrinsic(index, depth) {
             return Ok(false);
         }
         if let Some(&owned) = self.template_owned.get(&index) {
@@ -286,26 +366,28 @@ impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
         tree: &CollectionTree,
         node: NodeIndex,
     ) -> bool {
-        self.definitions_intrinsic
-            && tree
-                .iter_preorder_tree_nodes(&network.graph.graph, node)
-                .all(|node| match &network.graph.graph[node] {
-                    NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
-                        InterfaceInference::normalization_is_intrinsic(
-                            network.store.tensors[*index].expression.as_atom_view(),
-                        )
-                    }
-                    NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
-                        InterfaceInference::normalization_is_intrinsic(
-                            network.store.get_scalar_ref(*index).as_atom_view(),
-                        )
-                    }
-                    NetworkNode::Op(NetworkOp::Function(symbol)) => {
-                        InterfaceInference::intrinsic_normalization_head(*symbol)
-                    }
-                    NetworkNode::Op(_) => true,
-                    _ => false,
-                })
+        tree.iter_preorder_tree_nodes(&network.graph.graph, node)
+            .all(|node| match &network.graph.graph[node] {
+                NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                    let value = network.store.tensors[*index].expression.as_atom_view();
+                    self.origins
+                        .get(value.get_data())
+                        .is_none_or(|&index| self.definition_is_intrinsic(index, 0))
+                        && InterfaceInference::normalization_is_intrinsic(value)
+                }
+                NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
+                    let value = network.store.get_scalar_ref(*index).as_atom_view();
+                    self.origins
+                        .get(value.get_data())
+                        .is_none_or(|&index| self.definition_is_intrinsic(index, 0))
+                        && InterfaceInference::normalization_is_intrinsic(value)
+                }
+                NetworkNode::Op(NetworkOp::Function(symbol)) => {
+                    InterfaceInference::intrinsic_normalization_head(*symbol)
+                }
+                NetworkNode::Op(_) => true,
+                _ => false,
+            })
     }
 
     fn expose_scope<E: AtomCore + Clone + From<E::Output>>(
@@ -332,9 +414,7 @@ impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
             }),
         );
         let body = SymbolicTensor::from_validated_parts(self.emit(network, tree, node)?, logical);
-        if !self.definitions_intrinsic
-            || !InterfaceInference::normalization_is_intrinsic(body.expression.as_atom_view())
-        {
+        if !InterfaceInference::normalization_is_intrinsic(body.expression.as_atom_view()) {
             return Ok(None);
         }
         let handle = body.alias_handle()?;
@@ -468,6 +548,19 @@ impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
                             "selected power has multiple bases",
                         ));
                     }
+                    if matches!(network.graph.graph[base], NetworkNode::Leaf(_)) {
+                        let base_value = self.emit(network, tree, base)?;
+                        if matches!(base_value.as_view(), AtomView::Add(_) | AtomView::Mul(_)) {
+                            // Open the selected power before copying: internal
+                            // dummy pairs belong to each copy, not its opaque leaf.
+                            let value = self.emit(network, tree, node)?;
+                            let opened = self.open(value.as_view())?;
+                            let tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
+                            let root = opened.graph.graph.node_id(opened.graph.head());
+                            return self.compile(tape, &opened, &tree, root, exposure[&node], depth + 1)
+                                .map(|compiled| compiled.map(|(node, size)| TermLeaf::Reference(node, size)));
+                        }
+                    }
                     let mut copies = Vec::new();
                     for _ in 0..power {
                         let Some(graph) =
@@ -493,12 +586,26 @@ impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
                     return Ok(None);
                 }
                 let expression = self.emit(network, tree, node)?;
+                if owned[&node] && matches!(value, NetworkNode::Leaf(_))
+                    && matches!(expression.as_view(), AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                {
+                    // This leaf was selected from its retained head inventory.
+                    // Preserve the established copy-local dummy machinery when
+                    // opening its arithmetic; unrelated leaves remain opaque.
+                    let opened = self.open(expression.as_view())?;
+                    let opened_tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
+                    let opened_root = opened.graph.graph.node_id(opened.graph.head());
+                    if !matches!(opened.graph.graph[opened_root], NetworkNode::Leaf(_)) {
+                        return self.compile(tape, &opened, &opened_tree, opened_root, exposure[&node], depth + 1)
+                            .map(|compiled| compiled.map(|(node, size)| TermLeaf::Reference(node, size)));
+                    }
+                }
                 let value =
                     SymbolicTensor::from_normalized_parts(expression, interfaces[&node].clone());
-                if self.definitions_intrinsic
-                    && owned[&node]
+                if owned[&node]
                     && exposure[&node]
                     && let Some(&index) = self.origins.get(&value.expression)
+                    && self.definition_is_intrinsic(index, depth)
                 {
                     let template = self.template(index)?;
                     let definition = &self.definitions[index];
@@ -550,6 +657,37 @@ impl<'a, Select: FnMut(AtomView<'_>) -> bool> CollectionInput<'a, Select> {
 }
 
 impl SymbolicTensor<PartialStructure> {
+    /// Retain the existing shallow Network and its discovered leaf interfaces
+    /// with this immutable domain. A changed payload rebuilds topology while
+    /// intrinsic replacements reuse the exact unchanged boundary interfaces.
+    pub(crate) fn shallow_graph(&self) -> Result<Arc<super::SymbolicNet<AbstractIndex>>> {
+        self.proofs
+            .shallow_graph
+            .get_or_init(|| {
+                #[cfg(test)]
+                SHALLOW_BUILDS.with(|count| count.set(count.get() + 1));
+                let network = crate::shorthands::schoonschip::SlotContraction::shallow_network(
+                    self.expression.as_view(),
+                    (self.proofs.validated.get() == Some(&true))
+                        .then(|| self.proofs.leaf_interfaces.get_or_init(Default::default)),
+                )
+                .map_err(|error| error.to_string())?;
+                Ok(Arc::new(network.map_ref(
+                    |scalar| scalar.as_view().to_owned(),
+                    |tensor| SymbolicTensor {
+                        expression: tensor.expression.as_view().to_owned(),
+                        structure: tensor.structure.clone(),
+                        is_metric: tensor.is_metric,
+                        is_composite: tensor.is_composite,
+                        proofs: tensor.proofs.clone(),
+                    },
+                )))
+            })
+            .as_ref()
+            .map(Arc::clone)
+            .map_err(|error| TensorInferenceError::invalid(error.clone()))
+    }
+
     /// Compare selected coefficients without distributing either tensor payload.
     ///
     /// Exact matching operands return after checking their interfaces. Remaining
@@ -702,7 +840,7 @@ impl SymbolicTensor<PartialStructure> {
     ) -> Result<(Self, Vec<Definition>)> {
         self.ensure_validated()?;
         let mut input = CollectionInput::new(self, definitions, &mut select);
-        let network = input.parse(self.expression.as_atom_view())?;
+        let network = input.parse(self)?;
         let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
         let root = network.graph.graph.node_id(network.graph.head());
         let (owned, interfaces) = input.analyze(&network, &tree, root, 0)?;
@@ -765,7 +903,9 @@ impl SymbolicTensor<PartialStructure> {
                 // tape coalescence; free boundary names still join across arms.
                 let Some(graph) = input.expose_scope(&network, &tree, node, &interfaces[&node])?
                 else {
-                    return Ok((self.clone(), vec![]));
+                    let mut deferred = self.clone();
+                    deferred.proofs.frontier = super::simplification::ReductionStatus::Deferred;
+                    return Ok((deferred, vec![]));
                 };
                 let scoped_tree = graph.graph.expr_tree().cast::<ChildVecStore<()>>();
                 let scoped_root = graph.graph.graph.node_id(graph.graph.head());
@@ -775,7 +915,9 @@ impl SymbolicTensor<PartialStructure> {
             };
             let Some((compiled, _)) = compiled else {
                 // No domain callback has run; discard all refused tape scratch.
-                return Ok((self.clone(), vec![]));
+                let mut deferred = self.clone();
+                deferred.proofs.frontier = super::simplification::ReductionStatus::Deferred;
+                return Ok((deferred, vec![]));
             };
             factors.push((node, compiled));
         }
@@ -818,6 +960,7 @@ impl SymbolicTensor<PartialStructure> {
         };
         let mut generated = 0usize;
         let mut remaining = Vec::new();
+        let mut frontier = super::simplification::ReductionStatus::Complete;
         for (level, &(_, factor)) in factors.iter().enumerate() {
             tape.clear_terms();
             if tape
@@ -910,8 +1053,16 @@ impl SymbolicTensor<PartialStructure> {
                         }
                     }
                     let monomial = Self::collection_product(&selected_factors)?;
+                    monomial.observe_replacement(self);
                     let (mapped, emitted) =
-                        step(monomial.clone(), &available, level + 1 == factors.len())?;
+                        if frontier == super::simplification::ReductionStatus::Capped {
+                            // Finish retaining the already distributed row frontier,
+                            // but do not invoke another kernel after its budget ended.
+                            (monomial.clone(), Vec::new())
+                        } else {
+                            step(monomial.clone(), &available, level + 1 == factors.len())?
+                        };
+                    frontier = frontier.max(mapped.proofs.frontier);
                     // Internal domain owners publish certified typed results. Only
                     // unchecked callbacks need to have their payload observed again.
                     if mapped.structure != monomial.structure {
@@ -978,10 +1129,15 @@ impl SymbolicTensor<PartialStructure> {
                     Ok((selected, handle))
                 })
                 .collect::<Result<Vec<_>>>()?;
+            if frontier == super::simplification::ReductionStatus::Capped {
+                remaining.extend(factors[level + 1..].iter().map(|(node, _)| *node));
+                break;
+            }
         }
         // These are the complete coefficient rows. Definitions remain a
         // dependency registry; a capped frontier cannot certify its coefficients.
         if remaining.is_empty()
+            && frontier != super::simplification::ReductionStatus::Capped
             && let Some(visit) = coefficients.as_mut()
         {
             visit(&states, &spectators, &available)?;
@@ -993,6 +1149,9 @@ impl SymbolicTensor<PartialStructure> {
             })
             .collect::<Result<Vec<_>>>()?;
         let mut output = vec![Atom::add_many(terms)];
+        if !remaining.is_empty() {
+            frontier = super::simplification::ReductionStatus::Capped;
+        }
         for node in remaining {
             let expression = network
                 .graph
@@ -1026,7 +1185,8 @@ impl SymbolicTensor<PartialStructure> {
         }
         output.extend(spectators.into_iter().map(|value| value.expression));
         let expression = Atom::mul_many(output);
-        let root = self.with_identity_result(expression)?;
+        let mut root = self.with_identity_result(expression)?;
+        root.proofs.frontier = frontier;
         Ok((root, additional))
     }
 
@@ -1133,6 +1293,7 @@ mod tests {
             .collect();
         SymbolicTensor::<AliasInterfaces, AliasedAtom>::retain_contracted_definitions(
             &contracted,
+            &HashMap::new(),
             &mut registry,
         )?;
         Ok((contracted.root, registry.into_values().collect()))
@@ -1689,7 +1850,7 @@ mod tests {
         .reindex_interface_ports(&HashMap::from([(2, AbstractIndex::Normal(99513))]))
         .unwrap();
         let mut input = CollectionInput::new(&source, &[], |_| true);
-        let network = input.parse(source.expression.as_atom_view()).unwrap();
+        let network = input.parse(&source).unwrap();
         let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
         let root = network.graph.graph.node_id(network.graph.head());
         let mut tape = TermTape::<usize>::default();
@@ -1799,6 +1960,44 @@ mod tests {
         );
         assert_eq!(rebuilt.collect_factors(), expression.collect_factors());
         assert_eq!(source, original);
+    }
+
+    #[test]
+    fn capped_kernel_stops_later_rows_and_retains_exact_remaining_factors() {
+        crate::test_support::test_initialize();
+        let heads = [
+            "capped_kernel_frontier_a",
+            "capped_kernel_frontier_b",
+            "capped_kernel_frontier_c",
+            "capped_kernel_frontier_d",
+        ]
+        .map(|name| spenso::network::tags::SPENSO_TAG.tensor_symbol(name));
+        let source = SymbolicTensor::infer(
+            (tensor(heads[0], &[]) + tensor(heads[1], &[]))
+                * (tensor(heads[2], &[]) + tensor(heads[3], &[])),
+        )
+        .unwrap();
+        let mut calls = 0;
+        let mut complete_rows = false;
+        let (root, definitions) = source.collect_with_map(
+            Some(&mut |_, _, _| { complete_rows = true; Ok(()) }),
+            &[],
+            |value| matches!(value, AtomView::Fun(function) if heads.contains(&function.get_symbol())),
+            |mut selected, _, _| {
+                calls += 1;
+                selected.proofs.frontier = super::super::simplification::ReductionStatus::Capped;
+                Ok((selected, Vec::new()))
+            },
+        ).unwrap();
+        assert_eq!(calls, 1);
+        assert!(!complete_rows);
+        assert_eq!(
+            root.proofs.frontier,
+            super::super::simplification::ReductionStatus::Capped
+        );
+        let result = root.with_aliases(definitions).unwrap().resolved().unwrap();
+        assert_eq!(result.expression.expand(), source.expression.expand());
+        assert_eq!(result.structure(), source.structure());
     }
 
     #[test]
@@ -1929,5 +2128,35 @@ mod tests {
                 .is_err()
         );
         assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
+}
+
+#[cfg(test)]
+mod planning_tests {
+    use super::*;
+    use spenso::{g, mink};
+    use symbolica::atom::FunctionBuilder;
+
+    #[test]
+    fn unselected_arithmetic_leaves_remain_unopened() {
+        crate::test_support::test_initialize();
+        let vector = spenso::vector_symbol!("shallow_collection_vector");
+        let a = mink!(4, 98901);
+        let b = mink!(4, 98902);
+        let spectator = symbolica::parse_lit!((shallow_spectator_x + shallow_spectator_y) ^ 1000);
+        let expression =
+            &spectator * g!(&a, &b) * FunctionBuilder::new(vector).add_arg(&a).finish();
+        let source = SymbolicTensor::infer(expression.clone()).unwrap();
+        SHALLOW_BUILDS.with(|count| count.set(0));
+        SHALLOW_VIEWS.with(|count| count.set(0));
+        SELECTED_OPENS.with(|count| count.set(0));
+        let collected = source.collect(TensorCollectFilter::<0>::Metrics).unwrap();
+        assert_eq!(collected.resolved().unwrap().expression, expression);
+        assert_eq!(SHALLOW_VIEWS.with(|count| count.get()), 1);
+        assert_eq!(SELECTED_OPENS.with(|count| count.get()), 0);
+        let graph = source.shallow_graph().unwrap();
+        source.collect(TensorCollectFilter::<0>::Metrics).unwrap();
+        assert!(Arc::ptr_eq(&graph, &source.shallow_graph().unwrap()));
+        assert_eq!(SHALLOW_BUILDS.with(|count| count.get()), 1);
     }
 }

@@ -195,19 +195,35 @@ class TensorOperationsTests(unittest.TestCase):
             ("permuted", permuted),
         ]:
             expression, structure = source.to_expression(), source.structure
-            for method in ["to_dots", "simplify_gamma"]:
+            for method in ["to_dots", "reduce_algebra"]:
                 with self.subTest(case=label, method=method):
-                    result = getattr(source, method)()
+                    result = (
+                        getattr(source, method)(
+                            sp.AlgebraSettings(
+                                gamma=sp.GammaSimplifySettings(), epsilon=True
+                            )
+                        )
+                        if method == "reduce_algebra"
+                        else source.to_dots()
+                    )
                     self.assertIsNot(result, source)
                     typed = (
-                        result.to_expression() if method == "simplify_gamma" else result
+                        result.to_expression() if method == "reduce_algebra" else result
                     )
                     self.assertEqual(typed.to_expression(), expression)
                     self.assertEqual(typed.structure, structure)
-                    rerun = getattr(result, method)()
+                    rerun = (
+                        getattr(result, method)(
+                            sp.AlgebraSettings(
+                                gamma=sp.GammaSimplifySettings(), epsilon=True
+                            )
+                        )
+                        if method == "reduce_algebra"
+                        else result.to_dots()
+                    )
                     self.assertIsNot(rerun, result)
                     typed_rerun = (
-                        rerun.to_expression() if method == "simplify_gamma" else rerun
+                        rerun.to_expression() if method == "reduce_algebra" else rerun
                     )
                     self.assertEqual(typed_rerun.to_expression(), expression)
                     self.assertEqual(typed_rerun.structure, structure)
@@ -411,24 +427,37 @@ class TensorOperationsTests(unittest.TestCase):
     def test_simplification_presets_and_expansion_control(self):
         a = self.A(self.rep("i"))
         expression = (self.x + 1) * (self.y + 1) * a
-        self.assertEqual(expression.simplify().to_expression(), expression)
-        self.assertEqual(expression.simplify().expand(), expression.expand())
+        self.assertEqual(expression.reduce_algebra().to_expression(), expression)
+        self.assertEqual(expression.reduce_algebra().expand(), expression.expand())
         metric = sp.TensorExpression.g(self.rep)("i", "j") * a
-        self.assertEqual(metric.simplify().expand(), metric.contract().expand())
+        self.assertEqual(metric.reduce_algebra().expand(), metric.expand())
         gamma = sp.TensorExpression.gamma(4)
         chain = gamma("a", "b", "mu") * gamma("b", "a", "nu")
-        simplified = chain.simplify(sp.SimplifySettings.hep())
+        simplified = chain.reduce_algebra(sp.AlgebraSettings.hep())
         self.assertEqual(
-            simplified.expand(), simplified.simplify(sp.SimplifySettings.hep()).expand()
+            simplified.expand(),
+            simplified.reduce_algebra(sp.AlgebraSettings.hep()).expand(),
         )
         self.assertEqual(simplified.root.rank, 2)
         d = S("api_operations::D")
         symbolic_metric = sp.TensorExpression.g(sp.Representation.mink(d))("mu", "mu")
-        self.assertEqual(symbolic_metric.simplify().expand().to_expression(), d)
-        with self.assertRaises(ValueError):
-            sp.SimplifySettings(max_passes=0)
-        with self.assertRaisesRegex(ValueError, "stabilize"):
-            metric.simplify(sp.SimplifySettings(max_passes=1))
+        self.assertEqual(symbolic_metric.reduce_algebra().expand().to_expression(), d)
+        capped = chain.reduce_algebra(
+            sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), max_passes=0)
+        )
+        self.assertEqual(capped.reduction_status, sp.ReductionStatus.Capped)
+        self.assertEqual(capped.to_expression(), chain)
+        bounded = chain.reduce_algebra(
+            sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), max_passes=1)
+        )
+        self.assertIn(
+            bounded.reduction_status,
+            (sp.ReductionStatus.Complete, sp.ReductionStatus.Capped),
+        )
+        self.assertEqual(
+            bounded.reduce_algebra(sp.AlgebraSettings.hep()).expand(),
+            simplified.expand(),
+        )
 
     def test_interpreted_and_compiled_batch_contract(self):
         for values in (

@@ -28,6 +28,17 @@ and the graph's ordered layout supplies occurrence-local port identities.
 Unselected arithmetic subtrees remain opaque terminals of the existing
 component reducer.
 
+The same admitted depth-one Spenso parser supplies this shallow graph. Exact
+leaf-interface observations survive trusted replacements, so unchanged large
+leaves do not repeat interface discovery. Selected scope opening and callback
+invalidation follow the ordinary parser boundaries rather than a second
+contraction path. `contract` and `reduce_algebra` schedule this implementation;
+the latter permits prerequisite connections only for its selected identity.
+Representation filters select compatible connections and preserve other ports.
+Chain and trace collection share notation primitives, and collecting a trace
+never evaluates it. `reduction_status` distinguishes complete, deferred, and
+budget-capped work without discarding the exact remaining expression.
+
 The contraction frontier chooses an incident factor, visits its alternatives,
 and carries index overrides to adjacent leaves. Equivalent remaining states
 merge before emitting an expression. A distinct relabeled tensor is constructed
@@ -38,7 +49,7 @@ A powered scalar subexpression owns its internal dummy pairs. Contract that
 scope before applying its power; copies must not accidentally identify their
 dummies. Open powers retain the existing cross-copy contraction semantics.
 
-`contract(order=None, *, rank_one=True)` returns the typed alias result.
+`contract(settings=None)` returns the typed alias result.
 Order and rank-one handling are
 policies of this operation, not separate contraction engines. Metric-only
 callers retain explicit vector contractions until their chosen later stage.

@@ -4,9 +4,9 @@
 use std::sync::Once;
 
 use idenso::{
-    epsilon::{EPSILON_SYMBOL, EpsilonSimplifier},
+    epsilon::EPSILON_SYMBOL,
     representations::{Bispinor, ColorFundamental, initialize},
-    tensor::{ContractionSettings, SymbolicTensor},
+    tensor::{AlgebraSettings, ContractSettings, SymbolicTensor},
 };
 use spenso::{
     network::{
@@ -227,7 +227,7 @@ impl MetricEvaluation {
     fn assert_rewrite(
         &self,
         expression: Atom,
-        settings: &ContractionSettings<'_>,
+        settings: &ContractSettings<'_>,
         must_change: bool,
     ) -> Atom {
         let simplified = SymbolicTensor::infer(expression.clone())
@@ -261,7 +261,7 @@ impl MetricEvaluation {
 
 #[test]
 fn metric_chains_and_traces_preserve_exact_components() {
-    let settings = ContractionSettings::default().without_rank_one_tensors();
+    let settings = ContractSettings::default().without_rank_one_tensors();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, nu, rho, _] = MetricEvaluation::slots();
@@ -312,8 +312,8 @@ fn long_product_contractions_preserve_independent_sum_scopes() {
                 .map(|index| spenso::g!(&slots[index], &slots[(index + 1) % length]))
                 .product();
             for settings in [
-                ContractionSettings::default().without_rank_one_tensors(),
-                ContractionSettings::default(),
+                ContractSettings::default().without_rank_one_tensors(),
+                ContractSettings::default(),
             ] {
                 let value = evaluation.assert_rewrite(expression.clone(), &settings, true);
                 assert!(
@@ -332,7 +332,7 @@ fn long_product_contractions_preserve_independent_sum_scopes() {
 
 #[test]
 fn metric_substitution_preserves_antisymmetric_orientation_and_scalar_parameters() {
-    let settings = ContractionSettings::default().without_rank_one_tensors();
+    let settings = ContractSettings::default().without_rank_one_tensors();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, nu, rho, sigma] = MetricEvaluation::slots();
@@ -395,7 +395,7 @@ fn metric_substitution_preserves_antisymmetric_orientation_and_scalar_parameters
 
 #[test]
 fn metric_rewrites_preserve_sum_and_power_scopes() {
-    let settings = ContractionSettings::default().without_rank_one_tensors();
+    let settings = ContractSettings::default().without_rank_one_tensors();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, nu, rho, _] = MetricEvaluation::slots();
@@ -439,7 +439,7 @@ fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
         let metric_input = spenso::g!(&mu, &nu) * &sum * scalar.pow(2);
         let metric_result = SymbolicTensor::infer(metric_input.clone())
             .unwrap()
-            .contract(ContractionSettings::default().without_rank_one_tensors())
+            .contract(ContractSettings::default().without_rank_one_tensors())
             .unwrap()
             .resolved()
             .unwrap()
@@ -455,7 +455,7 @@ fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
             evaluation.vector(2, &mu) * &sum,
             spenso::g!(&mu, evaluation.compact(2)) * &sum,
         ] {
-            let _ = evaluation.assert_rewrite(expression, &ContractionSettings::default(), true);
+            let _ = evaluation.assert_rewrite(expression, &ContractSettings::default(), true);
         }
 
         let antisymmetric_sum =
@@ -463,7 +463,7 @@ fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
         let expression = spenso::g!(&mu, &sigma) * antisymmetric_sum;
         let simplified = SymbolicTensor::infer(expression.clone())
             .unwrap()
-            .contract(ContractionSettings::default())
+            .contract(ContractSettings::default())
             .unwrap()
             .resolved()
             .unwrap()
@@ -483,7 +483,7 @@ fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
             let expression = metric * sum;
             let simplified = SymbolicTensor::infer(expression.clone())
                 .unwrap()
-                .contract(ContractionSettings::default())
+                .contract(ContractSettings::default())
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -498,7 +498,7 @@ fn metric_and_vector_substitution_through_sums_preserves_exact_components() {
 
 #[test]
 fn compact_vectors_and_chain_like_metric_endpoints_preserve_exact_components() {
-    let settings = ContractionSettings::default();
+    let settings = ContractSettings::default();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, nu, _, _] = MetricEvaluation::slots();
@@ -534,7 +534,7 @@ fn dual_metric_loops_preserve_exact_components() {
     let cof = ColorFundamental {}.new_rep(3);
     let [i, j, k] =
         ["color_i", "color_j", "color_k"].map(|name| cof.slot::<AbstractIndex, _>(symbol!(name)));
-    let settings = ContractionSettings::default().without_rank_one_tensors();
+    let settings = ContractSettings::default().without_rank_one_tensors();
     for (expression, must_change) in [
         (spenso::g!(i, i.dual()), false),
         (
@@ -622,7 +622,7 @@ fn constructed_metric_traces_are_scalar_before_taking_powers() {
         assert_eq!(
             SymbolicTensor::infer(constructed.clone())
                 .unwrap()
-                .contract(ContractionSettings::default().without_rank_one_tensors())
+                .contract(ContractSettings::default().without_rank_one_tensors())
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -659,7 +659,7 @@ fn constructed_compact_metric_agrees_with_explicit_component_contraction() {
             assert_eq!(
                 SymbolicTensor::infer(constructed.clone())
                     .unwrap()
-                    .contract(ContractionSettings::default().without_rank_one_tensors())
+                    .contract(ContractSettings::default().without_rank_one_tensors())
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -682,7 +682,7 @@ fn constructed_compact_metric_agrees_with_explicit_component_contraction() {
 
 #[test]
 fn compact_metric_and_tagged_vector_substitutions_agree() {
-    let settings = ContractionSettings::default();
+    let settings = ContractSettings::default();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, nu, _, _] = MetricEvaluation::slots();
@@ -716,7 +716,7 @@ fn compact_metric_and_tagged_vector_substitutions_agree() {
         assert_eq!(
             SymbolicTensor::infer(explicit.clone())
                 .unwrap()
-                .contract(ContractionSettings::default().without_rank_one_tensors())
+                .contract(ContractSettings::default().without_rank_one_tensors())
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -744,7 +744,7 @@ fn tagged_vectors_and_compact_metrics_preserve_epsilon_orientation() {
             let expression = source * &tensor;
             let simplified = SymbolicTensor::infer(expression.clone())
                 .unwrap()
-                .contract(ContractionSettings::default())
+                .contract(ContractSettings::default())
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -760,7 +760,7 @@ fn tagged_vectors_and_compact_metrics_preserve_epsilon_orientation() {
 
 #[test]
 fn tagged_vectors_contract_inside_ordered_chains_and_trace_projectors() {
-    let settings = ContractionSettings::default();
+    let settings = ContractSettings::default();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let [mu, _, _, _] = MetricEvaluation::slots();
@@ -791,7 +791,7 @@ fn tagged_vectors_contract_inside_ordered_chains_and_trace_projectors() {
 fn tagged_vector_dots_preserve_dual_slot_orientation() {
     // Both old and new cleanup turn V(cof(i))*W(dind(cof(i))) into
     // g(V(cof),W(cof)); the compact parser requires opposite orientations.
-    let settings = ContractionSettings::default();
+    let settings = ContractSettings::default();
     for sample in 0..3 {
         let evaluation = MetricEvaluation::new(sample);
         let cof = ColorFundamental {}.new_rep(3);
@@ -818,9 +818,23 @@ fn compact_epsilon_powers_simplify_without_repeated_explicit_indices() {
             (epsilon.clone().pow(2) + 1).pow(2),
         ] {
             assert!(!expression.has_repeated_explicit_indices());
-            let simplified = expression.simplify_epsilon();
+            let source = SymbolicTensor::infer(expression.clone()).unwrap();
+            let settings = AlgebraSettings {
+                epsilon: true,
+                ..Default::default()
+            };
+            let reduced = source.reduce_algebra(&settings).unwrap();
+            let simplified = reduced.resolved().unwrap().into_expression();
             assert_ne!(expression, simplified);
-            assert_eq!(simplified.simplify_epsilon(), simplified);
+            assert_eq!(
+                reduced
+                    .reduce_algebra(&settings)
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .into_expression(),
+                simplified
+            );
             let value = evaluation.assert_same_value(&expression, &simplified);
             assert!(!value.is_zero());
         }
@@ -840,9 +854,23 @@ fn disjoint_epsilon_pairs_simplify_before_closing_their_indices() {
         });
         let expression = idenso::epsilon!(; &left) * idenso::epsilon!(; &right);
         assert!(!expression.has_repeated_explicit_indices());
-        let simplified = expression.simplify_epsilon();
+        let source = SymbolicTensor::infer(expression.clone()).unwrap();
+        let settings = AlgebraSettings {
+            epsilon: true,
+            ..Default::default()
+        };
+        let reduced = source.reduce_algebra(&settings).unwrap();
+        let simplified = reduced.resolved().unwrap().into_expression();
         assert_ne!(expression, simplified);
-        assert_eq!(simplified.simplify_epsilon(), simplified);
+        assert_eq!(
+            reduced
+                .reduce_algebra(&settings)
+                .unwrap()
+                .resolved()
+                .unwrap()
+                .into_expression(),
+            simplified
+        );
         let spectator = (0..4).fold(Atom::one(), |product, i| {
             product * evaluation.vector(i, &left[i]) * evaluation.vector(i, &right[i])
         });
@@ -863,7 +891,16 @@ fn metric_induced_epsilon_zero_preserves_an_unaffected_summand() {
             * evaluation.vector(3, &sigma);
         let unaffected = spenso::g!(evaluation.compact(0), evaluation.compact(1));
         let expression = zero + &unaffected;
-        let simplified = expression.simplify_epsilon();
+        let simplified = SymbolicTensor::infer(expression.clone())
+            .unwrap()
+            .reduce_algebra(&AlgebraSettings {
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .into_expression();
         assert_eq!(simplified, unaffected);
         assert_eq!(
             evaluation.assert_same_value(&expression, &simplified),

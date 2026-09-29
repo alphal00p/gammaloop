@@ -5,12 +5,17 @@ QiQi-QiQi and QiQibar-QiQibar. All four massive SU(N) expressions,
 interference terms and massless limits are checked before phase-space integration.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 import numpy as np
 from symbolica import E, Replacement, S, Symbol
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 from symbolica.community.tensor import (
     ColorSimplifySettings,
-    CookSettings,
     TensorExpression,
 )
 
@@ -127,24 +132,32 @@ for name, pdgs in [
             .replace(coad(8, index), coad(dA, index))
         )
         colored = (
-            TensorExpression(generic, cook_indices=CookSettings.indices())
-            .simplify_color()
+            TensorExpression(generic, intern="flattened")
+            .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_expression()
             .replace(dA, Nc**2 - 1)
         )
         colored = (
             TensorExpression(colored)
-            .simplify_color(
-                ColorSimplifySettings(substitute_cof_dimension_invariants=True)
+            .reduce_algebra(
+                AlgebraSettings(
+                    color=ColorSimplifySettings(
+                        substitute_cof_dimension_invariants=True
+                    )
+                )
             )
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_expression()
         )
         scalar = (
-            TensorExpression(colored * spins, cook_indices=CookSettings.indices())
-            .simplify_gamma()
-            .contract()
+            TensorExpression(colored * spins, intern="flattened")
+            .reduce_algebra(
+                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_dots()
         )

@@ -69,7 +69,7 @@ static CHAIN_NORMALIZATIONS: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
     ]
 });
 
-pub trait Chain {
+pub(crate) trait Chain {
     /// Join adjacent factors in one selected chain monomial.
     /// Distribution and foreign coefficients belong to the shared typed collector.
     ///
@@ -84,10 +84,17 @@ pub trait Chain {
     /// This is an ordinary transpose and does not conjugate scalar entries.
     fn join_chains(&self, representation: LibraryRep) -> Atom;
 
+    /// Collect only the selected representation, optionally retaining closed words
+    /// as exact chains. A disabled collection only converts existing closed chains.
+    fn collect_chains(&self, representation: LibraryRep, collect: bool, traces: bool) -> Atom;
+
     /// Collapse identity words to metrics and closed chains to traces, e.g.
     ///
     /// `chain(rep(d,i), rep(d,i), ...)` becomes `trace(rep(d),...)`
     fn normalize_chains(&self) -> Atom;
+
+    /// Normalize empty or identity-only words, optionally in one representation.
+    fn normalize_chain_identities(&self, representation: Option<LibraryRep>) -> Atom;
 
     /// and single length chains back into the corresponding tensor
     fn undo_single_length(&self) -> Atom;
@@ -104,6 +111,11 @@ impl Chain for Atom {
         self.as_view().join_chains(representation)
     }
 
+    fn collect_chains(&self, representation: LibraryRep, collect: bool, traces: bool) -> Atom {
+        self.as_view()
+            .collect_chains(representation, collect, traces)
+    }
+
     fn undo_single_length(&self) -> Atom {
         self.as_view().undo_single_length()
     }
@@ -115,13 +127,62 @@ impl Chain for Atom {
     fn normalize_chains(&self) -> Atom {
         self.as_view().normalize_chains()
     }
+
+    fn normalize_chain_identities(&self, representation: Option<LibraryRep>) -> Atom {
+        self.as_view().normalize_chain_identities(representation)
+    }
 }
 impl<'a> Chain for AtomView<'a> {
     fn join_chains(&self, representation: LibraryRep) -> Atom {
+        self.collect_chains(representation, true, true)
+            .chainify(representation)
+            .normalize_chains()
+    }
+
+    fn collect_chains(&self, representation: LibraryRep, collect: bool, traces: bool) -> Atom {
+        let normalize = |value: Atom| {
+            if !traces {
+                return value;
+            }
+            // Match full slot compatibility, including dimensions and duality.
+            // Names alone never authorize a closure.
+            use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
+            let mut slots = SlotMatcher::default();
+            value.replace_map(|node, _, output| {
+                let AtomView::Fun(chain) = node else {
+                    return;
+                };
+                if chain.get_symbol() != T.chain || chain.get_nargs() < 2 {
+                    return;
+                }
+                let mut arguments = chain.iter();
+                let Ok(start) = slots.parse::<LibraryRep, AbstractIndex>(arguments.next().unwrap())
+                else {
+                    return;
+                };
+                let Ok(end) = slots.parse::<LibraryRep, AbstractIndex>(arguments.next().unwrap())
+                else {
+                    return;
+                };
+                if start.rep().rep != representation
+                    || !start.rep().matches(&end.rep())
+                    || start.aind != end.aind
+                    || !(representation.is_self_dual()
+                        || representation.is_base() && end.rep().rep.is_dual())
+                {
+                    return;
+                }
+                **output = spenso::shadowing::trace(start.rep().to_symbolic([]), arguments);
+            })
+        };
+        if !collect {
+            return normalize(self.to_owned());
+        }
+        let source = self.chainify(representation);
         // Every local join requires a chain. The typed collector has already
         // selected this monomial and retained unrelated factors outside it.
-        if !self.contains_symbol(T.chain) {
-            return self.to_owned();
+        if !source.contains_symbol(T.chain) {
+            return source;
         }
 
         let in_index = representation.to_symbolic([W_.d_, W_.i_]);
@@ -150,7 +211,8 @@ impl<'a> Chain for AtomView<'a> {
                 ),
             ]);
         }
-        let mut result = self.to_owned();
+        let mut result = source;
+        let mut joined = false;
         loop {
             let previous = result.clone();
             for (product, transpose_left, transpose_right) in &joins {
@@ -198,10 +260,37 @@ impl<'a> Chain for AtomView<'a> {
                         collected.finish()
                     });
             }
-            result = result.normalize_chains();
+            joined |= result != previous;
+            result = normalize(result);
             // Every join removes one chain; normalization may close it as a trace.
             if result == previous {
-                return result;
+                if !joined && !traces {
+                    return self.to_owned();
+                }
+                // An isolated matrix has no product to collect. Retain its exact
+                // indexed form; a closed word must survive when traces are disabled.
+                return result.replace_map(|node, _, output| {
+                    let AtomView::Fun(chain) = node else {
+                        return;
+                    };
+                    if chain.get_symbol() != T.chain || chain.get_nargs() != 3 {
+                        return;
+                    }
+                    let mut arguments = chain.iter();
+                    let start = arguments.next().unwrap();
+                    let end = arguments.next().unwrap();
+                    use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
+                    let mut slots = SlotMatcher::default();
+                    let Ok(start) = slots.parse::<LibraryRep, AbstractIndex>(start) else {
+                        return;
+                    };
+                    let Ok(end) = slots.parse::<LibraryRep, AbstractIndex>(end) else {
+                        return;
+                    };
+                    if start.rep().rep == representation && start.aind != end.aind {
+                        **output = node.undo_single_length();
+                    }
+                });
             }
         }
     }
@@ -230,6 +319,7 @@ impl<'a> Chain for AtomView<'a> {
                 .all(|arg| !arg.contains_symbol(T.chain_in) && !arg.contains_symbol(T.chain_out))
         };
         let tensor_alias = spenso::tensor_symbol!("idenso::tensor_alias");
+        let scalar_alias = symbolica::symbol!("idenso::scalar_alias"; Scalar);
         let replacement = Replacement::new(
             function!(W_.a_, W_.a___, in_index, W_.b___, out_index, W_.c___).to_pattern(),
             function!(
@@ -242,13 +332,13 @@ impl<'a> Chain for AtomView<'a> {
         .when(
             W_.a_.filter_match(move |a| {
                 matches!(a, Match::FunctionName(a)
-                    if *a != T.chain && *a != T.trace && *a != ETS.metric && *a != tensor_alias)
+                    if *a != T.chain && *a != T.trace && *a != ETS.metric && *a != tensor_alias && *a != scalar_alias)
             }) & W_.a___.filter_match(no_ports)
                 & W_.b___.filter_match(no_ports)
                 & W_.c___.filter_match(no_ports),
         )
         .max_level(0);
-        let opaque_heads = [T.chain, T.trace, tensor_alias];
+        let opaque_heads = [T.chain, T.trace, tensor_alias, scalar_alias];
         let existing_chain = chain!(&in_index, &out_index, W_.a___).to_pattern();
         // An unchanged pruning assignment in replace_map rebuilds ancestors
         // and invokes their normalizers. Keep borrowed children until this
@@ -353,6 +443,11 @@ impl<'a> Chain for AtomView<'a> {
     }
 
     fn normalize_chains(&self) -> Atom {
+        self.normalize_chain_identities(None)
+            .replace_multiple_repeat(CHAIN_NORMALIZATIONS.as_ref())
+    }
+
+    fn normalize_chain_identities(&self, representation: Option<LibraryRep>) -> Atom {
         self.replace_map(|atom, _, out| {
             let AtomView::Fun(chain) = atom else { return };
             if chain.get_symbol() != T.chain || chain.get_nargs() < 2 {
@@ -361,6 +456,20 @@ impl<'a> Chain for AtomView<'a> {
             let mut factors = chain.iter();
             let start = factors.next().unwrap();
             let end = factors.next().unwrap();
+            if let Some(representation) = representation {
+                use spenso::structure::{
+                    representation::Representation,
+                    slot::{IsAbstractSlot, SlotMatcher},
+                };
+                let selected = SlotMatcher::default()
+                    .parse::<LibraryRep, AbstractIndex>(start)
+                    .map(|slot| slot.rep().rep)
+                    .ok()
+                    .or_else(|| Representation::<LibraryRep>::try_from(start).ok().map(|rep| rep.rep));
+                if selected.is_none_or(|selected| selected.base() != representation.base()) {
+                    return;
+                }
+            }
             // Empty words and words consisting only of identity lines have
             // the physical endpoint metric, in every representation.
             if factors.all(|factor| {
@@ -375,7 +484,6 @@ impl<'a> Chain for AtomView<'a> {
                 **out = function!(ETS.metric, start, end);
             }
         })
-        .replace_multiple_repeat(CHAIN_NORMALIZATIONS.as_ref())
     }
 
     fn undo_single_length(&self) -> Atom {
@@ -432,7 +540,17 @@ mod tests {
                 let chainified = expression.chainify(Bispinor {}.into());
                 assert!(!chainified.contains_symbol(T.dot));
                 let result = source
-                    .simplify_gamma(GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap();
                 assert_eq!(result.root().structure, source.structure);
                 assert_eq!(
@@ -445,15 +563,25 @@ mod tests {
                         .and_then(|value| value.resolved())
                         .map(|value| value.expression),
                     source
-                        .simplify_gamma(GammaSimplifySettings {
-                            output: crate::dirac::GammaOutput::Chains,
+                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            gamma: Some(GammaSimplifySettings {
+                                output: crate::dirac::GammaOutput::Chains,
+                                ..Default::default()
+                            }),
+                            epsilon: false,
                             ..Default::default()
                         })
                         .and_then(|value| value.resolved())
                         .map(|value| value.expression),
                     source
                         .undo_dots()
-                        .and_then(|value| value.simplify_gamma(GammaSimplifySettings::default()))
+                        .and_then(
+                            |value| value.reduce_algebra(&crate::tensor::AlgebraSettings {
+                                gamma: Some(GammaSimplifySettings::default()),
+                                epsilon: true,
+                                ..Default::default()
+                            })
+                        )
                         .and_then(|value| value.resolved())
                         .map(|value| value.expression),
                 );
@@ -465,13 +593,23 @@ mod tests {
                         .unwrap(),
                 );
                 assert_eq!(
-                    dag.simplify_gamma(GammaSimplifySettings::default())
-                        .unwrap()
-                        .resolved()
-                        .unwrap()
-                        .to_dots()
-                        .unwrap()
-                        .expression,
+                    dag.reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .to_dots()
+                    .unwrap()
+                    .expression,
                     expected,
                 );
             }
@@ -571,12 +709,23 @@ mod tests {
                 source.structure
             );
             let actual = source
-                .simplify_gamma(GammaSimplifySettings::canonical())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::canonical()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap();
             assert_eq!(actual.root().structure, source.structure);
+            let expected = Atom::num(2) * spenso::p!(&spectator) * g!(&left, &right);
             assert_eq!(
-                actual.resolved().unwrap().expression,
-                Atom::num(2) * spenso::p!(&spectator) * g!(&left, &right)
+                (actual.resolved().unwrap().expression - expected).expand(),
+                Atom::Zero
             );
         }
     }
@@ -664,8 +813,12 @@ mod tests {
                 .unwrap(),
         );
         let collected = source
-            .simplify_gamma(crate::dirac::GammaSimplifySettings {
-                output: crate::dirac::GammaOutput::Chains,
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings {
+                    output: crate::dirac::GammaOutput::Chains,
+                    ..Default::default()
+                }),
+                epsilon: false,
                 ..Default::default()
             })
             .unwrap();
@@ -984,8 +1137,10 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer(input)
                 .unwrap()
-                .simplify_color(crate::color::ColorSimplifySettings {
-                    simplify_non_color: false,
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    color: Some(crate::color::ColorSimplifySettings {
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 })
                 .unwrap()

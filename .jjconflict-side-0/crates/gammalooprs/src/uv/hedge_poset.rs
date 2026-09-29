@@ -1502,7 +1502,15 @@ impl Forests {
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
             let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
-                .simplify_color(ColorSimplifySettings::default())?
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })?
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .to_dots()?
                 .resolved()?;
             let atom = cooking.uncook(reduced.expression().as_view());
@@ -1582,7 +1590,7 @@ mod tests {
         processes::DotExportSettings,
         uv::{UltravioletGraph, Wood as OldWood, settings::RenormalizationPrescriptionSettings},
     };
-    use idenso::tensor::ContractionSettings;
+    use idenso::tensor::ContractSettings;
     use symbolica::id::ConditionResult;
 
     use super::*;
@@ -2108,7 +2116,15 @@ mod tests {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let expected = SymbolicTensor::infer(cooking.try_cook(expected.as_view())?)?
-            .simplify_color(ColorSimplifySettings::default())?
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings::default()),
+                ..Default::default()
+            })?
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
             .to_dots()?
             .resolved()?;
         let expected = cooking
@@ -2848,7 +2864,12 @@ mod tests {
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
             let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
-                .contract(ContractionSettings::default().without_rank_one_tensors())?
+                .contract(ContractSettings {
+                    rank_one: false,
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .resolved()?;
             Ok(cooking
                 .uncook(expression.expression().as_view())
@@ -3038,7 +3059,12 @@ mod tests {
                 .with_representation_payloads(true, true);
             let mixed_remainder =
                 SymbolicTensor::infer(cooking.try_cook(mixed_remainder.as_view())?)?
-                    .contract(ContractionSettings::default().without_rank_one_tensors())?
+                    .contract(ContractSettings {
+                        rank_one: false,
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?
                     .resolved()?;
             let mixed_remainder = cooking
                 .uncook(mixed_remainder.expression().as_view())
@@ -3128,7 +3154,12 @@ mod tests {
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
             let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
-                .contract(ContractionSettings::default().without_rank_one_tensors())?
+                .contract(ContractSettings {
+                    rank_one: false,
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .resolved()?;
             Ok(cooking.uncook(expression.expression().as_view()))
         });

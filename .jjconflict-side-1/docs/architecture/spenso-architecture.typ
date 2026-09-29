@@ -102,6 +102,15 @@ not a duplicate leaf cache. The graph never embeds the external library value. M
 occurs through the supplied `Library`, while opaque function nodes delegate to the supplied
 `FunctionLibrary`.
 
+`map_occurrences` materializes each graph occurrence against its current port
+bindings while reusing untouched stored aliases with the same logical layout.
+It checks surviving storage slots and records any storage permutation separately
+from the logical-position witness. `reindex_ports` applies simultaneous external
+port assignments through this boundary; it does not relabel unrelated internal
+contractions with matching labels. Concrete execution rejects unmaterialized
+bound ports. Network arithmetic refreshes its state from the resulting graph,
+and component execution invalidates logical layout observations it cannot retain.
+
 Execution follows one semantic path with interchangeable policies:
 
 ```text
@@ -155,6 +164,18 @@ names before allocating dummies, and parser clones share that reservation set an
 Positive powers that lower shorthand with internal dummies reparse each copy from the original
 base, giving it fresh internal indices while retaining explicit boundary slots. Callers combining
 independently parsed expressions must still manage index namespaces deliberately.
+
+Trusted shallow planning uses `Network::try_from_admitted_view` with opaque
+shorthand and depth one. It shares the ordinary parser's construction and
+dispatch, while reusing established syntax and dummy-scope admission instead of
+validating and reserving the whole input again. `LeafInterfaceCache` stores exact
+boundary expressions' tensor classification and logical slots. Unchanged leaves
+reuse these facts across graph replacements, including scalar interfaces with
+internal contractions. The cache requires unchanged classification policy and
+admission facts; callbacks and materialized rewrites leave the trusted path.
+No live occurrence binding is stored in this cache: graph ports still own it.
+The profiler records misses, hits, actual syntactic visits, and uncached inference
+time separately from general structure-attempt time.
 
 The detailed dispatch and shorthand behavior are recorded in the
 #link("parsing-flow.typ")[Symbolica-to-network parsing flow]. Syntax and rewrite ownership across

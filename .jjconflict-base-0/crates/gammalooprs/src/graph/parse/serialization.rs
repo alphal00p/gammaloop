@@ -42,19 +42,24 @@ impl Graph {
                 * &self.global_prefactor.projector
                 * &self.overall_factor;
             let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-            let mut num = std::sync::Arc::new(
-                SymbolicTensor::infer(cooking.try_cook(num.as_view())?)?
-                    .contract(Default::default())?,
-            );
-
-            if settings.do_color_algebra {
-                num = num.simplify_color(
-                    ColorSimplifySettings::default().with_cof_dimension_invariants(),
-                )?;
-            }
+            let num = SymbolicTensor::infer(cooking.try_cook(num.as_view())?)?
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    color: settings
+                        .do_color_algebra
+                        .then(|| ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                    gamma: settings
+                        .do_gamma_algebra
+                        .then(GammaSimplifySettings::default),
+                    epsilon: settings.do_gamma_algebra,
+                    ..Default::default()
+                })?
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?;
 
             if settings.do_gamma_algebra {
-                num = num.simplify_gamma(GammaSimplifySettings::default())?;
                 crate::debug_tags!(#generation, #graph, #inspect, #dump;
                     stage = "graph_serialization_after_simplify_gamma",
                     log.after_gamma = num.expression().get_root(),

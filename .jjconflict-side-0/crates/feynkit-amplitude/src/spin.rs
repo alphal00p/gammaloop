@@ -334,16 +334,16 @@ impl SpinSum {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idenso::tensor::{ContractionSettings, SymbolicTensor};
+    use idenso::tensor::{ContractSettings, SymbolicTensor};
     use symbolica::parse;
 
     #[test]
     fn polarized_density_has_one_state_and_shared_wavefunction_replacement() {
         let model =
             Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
-        let p = parse!("polarized::p");
-        let spin = parse!("polarized::s");
-        let opposite = parse!("polarized::opposite");
+        let p = spenso::vector_symbol!("polarized::p").to_atom();
+        let spin = spenso::vector_symbol!("polarized::s").to_atom();
+        let opposite = spenso::vector_symbol!("polarized::opposite").to_atom();
         let a = parse!("polarized::a");
         let b = parse!("polarized::b");
         let rep = Bispinor {}.new_rep(4);
@@ -374,7 +374,17 @@ mod tests {
                         .to_owned()
                 )
                 .unwrap()
-                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -388,7 +398,17 @@ mod tests {
             assert_eq!(
                 idenso::tensor::SymbolicTensor::infer((trace.expand()).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                        gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -408,7 +428,17 @@ mod tests {
                         .to_owned()
                 )
                 .unwrap()
-                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -573,7 +603,11 @@ mod tests {
                 (projector.clone() * rep.vector(p.as_view(), [mu.clone()])).expand(),
             )
             .unwrap()
-            .contract(ContractionSettings::default())
+            .contract(ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -589,7 +623,11 @@ mod tests {
                     (projector.clone() * rep.vector(reference.as_view(), [mu.clone()])).expand(),
                 )
                 .unwrap()
-                .contract(ContractionSettings::default())
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -601,7 +639,11 @@ mod tests {
             }
             let trace = SymbolicTensor::infer((projector * rep.id(&mu, &nu)).expand())
                 .unwrap()
-                .contract(ContractionSettings::default())
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -647,7 +689,11 @@ mod tests {
                     let trace =
                         SymbolicTensor::infer((projector.clone() * rep.id(&mu, &nu)).expand())
                             .unwrap()
-                            .contract(ContractionSettings::default())
+                            .contract(ContractSettings {
+                                collect_chains: false,
+                                collect_traces: false,
+                                ..Default::default()
+                            })
                             .unwrap()
                             .resolved()
                             .unwrap()
@@ -667,7 +713,11 @@ mod tests {
                         (projector.clone() * rep.vector(p.as_view(), [mu.clone()])).expand(),
                     )
                     .unwrap()
-                    .contract(ContractionSettings::default())
+                    .contract(ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -684,7 +734,11 @@ mod tests {
                                 .expand(),
                         )
                         .unwrap()
-                        .contract(ContractionSettings::default())
+                        .contract(ContractSettings {
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })
                         .unwrap()
                         .resolved()
                         .unwrap()
@@ -708,6 +762,8 @@ mod tests {
 
     #[test]
     fn dimensional_spin_sums_reject_invalid_dimensions_and_polarized_dirac_states() {
+        let momentum = spenso::vector_symbol!("dimension_spin_rejection::p").to_atom();
+        let spin = spenso::vector_symbol!("dimension_spin_rejection::s").to_atom();
         let model =
             Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
         let photon = model
@@ -735,21 +791,26 @@ mod tests {
             .with_dimension(&parse!("D"))
             .unwrap();
         assert!(matches!(
-            sum.expression(
-                &parse!("p"),
-                [parse!("i"), parse!("j")],
-                None,
-                Some(&parse!("s"))
-            ),
+            sum.expression(&momentum, [parse!("i"), parse!("j")], None, Some(&spin)),
             Err(SpinSumError::PolarizedDimension)
         ));
         let unpolarized = sum
-            .expression(&parse!("p"), [parse!("i"), parse!("i")], None, None)
+            .expression(&momentum, [parse!("i"), parse!("i")], None, None)
             .unwrap();
         assert_eq!(
             idenso::tensor::SymbolicTensor::infer((unpolarized).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -761,6 +822,7 @@ mod tests {
 
     #[test]
     fn spinor_trace_and_scalar_sum() {
+        let momentum = spenso::vector_symbol!("spinor_trace_test::p").to_atom();
         let model =
             Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
         for (pdg, expected) in [(13, 4), (-13, -4)] {
@@ -769,12 +831,22 @@ mod tests {
                 .unwrap();
             let projector = SpinSum::new(particle, &model)
                 .unwrap()
-                .expression(&parse!("p"), [parse!("i"), parse!("i")], None, None)
+                .expression(&momentum, [parse!("i"), parse!("i")], None, None)
                 .unwrap();
             assert_eq!(
                 idenso::tensor::SymbolicTensor::infer((projector).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                        gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -790,7 +862,7 @@ mod tests {
             SpinSum::new(scalar, &model)
                 .unwrap()
                 .averaged(true)
-                .expression(&parse!("p"), [parse!("i"), parse!("j")], None, None)
+                .expression(&momentum, [parse!("i"), parse!("j")], None, None)
                 .unwrap(),
             Atom::one()
         );

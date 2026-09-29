@@ -5,7 +5,7 @@ use spenso::{
 };
 use std::sync::Arc;
 use symbolica::{
-    atom::{Atom, AtomView},
+    atom::{Atom, AtomCore, AtomView},
     id::AliasedAtom,
 };
 
@@ -23,9 +23,9 @@ pub mod metric;
 pub mod schoonschip;
 
 impl SymbolicTensor<PartialStructure> {
-    /// Render compact metric products as dots without contracting indexed factors.
+    /// Normalize index-free scalar-product notation without contracting indexed factors.
     pub fn to_dots(&self) -> Result<Self, TensorInferenceError> {
-        self.with_rewritten_expression(schoonschip::DotNormalizer::metric_shorthand_to_dot(
+        self.with_identity_result(schoonschip::DotNormalizer::notation(
             self.expression().as_view(),
         ))
     }
@@ -34,12 +34,22 @@ impl SymbolicTensor<PartialStructure> {
     /// This does not expand a numerator or evaluate finite tensor components.
     pub fn undo_dots(&self) -> Result<Self, TensorInferenceError> {
         let expression = self.expression().undo_dots::<AbstractIndex>()?;
-        self.with_rewritten_expression(expression)
+        self.with_identity_result(expression)
+    }
+
+    /// Expose chain factors with fresh compatible dummy indices and unchanged endpoints.
+    pub fn undo_chain(&self) -> Result<Self, TensorInferenceError> {
+        self.with_identity_result(self.expression().undo_chain::<AbstractIndex>()?)
+    }
+
+    /// Replace trace notation with a closed chain, without evaluating it.
+    pub fn undo_trace(&self) -> Result<Self, TensorInferenceError> {
+        self.with_identity_result(self.expression().undo_trace::<AbstractIndex>()?)
     }
 }
 
 impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
-    /// Render compact metric products in the root and reachable definitions.
+    /// Normalize scalar-product notation in the root and reachable definitions.
     pub fn to_dots(self: &Arc<Self>) -> Result<Arc<Self>, TensorInferenceError> {
         self.map_domains(|domain, _| Ok((domain.to_dots()?, Vec::new())))
     }
@@ -48,16 +58,24 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
     pub fn undo_dots(self: &Arc<Self>) -> Result<Arc<Self>, TensorInferenceError> {
         self.map_domains(|domain, _| Ok((domain.undo_dots()?, Vec::new())))
     }
+
+    /// Expose chain factors in reachable definitions while retaining alias ownership.
+    pub fn undo_chain(self: &Arc<Self>) -> Result<Arc<Self>, TensorInferenceError> {
+        self.map_domains(|domain, _| Ok((domain.undo_chain()?, Vec::new())))
+    }
+
+    /// Open trace notation in reachable definitions, retaining the alias DAG.
+    pub fn undo_trace(self: &Arc<Self>) -> Result<Arc<Self>, TensorInferenceError> {
+        self.map_domains(|domain, _| Ok((domain.undo_trace()?, Vec::new())))
+    }
 }
 
 pub trait UndoShorthands {
+    #[cfg(test)]
     fn undo_schoonschip<Aind: AbsInd + DummyAind + ParseableAind>(
         &self,
     ) -> Result<Atom, NetworkToolingError>;
 
-    fn undo_all<Aind: AbsInd + DummyAind + ParseableAind>(
-        &self,
-    ) -> Result<Atom, NetworkToolingError>;
     fn undo_dots<Aind: AbsInd + DummyAind + ParseableAind>(
         &self,
     ) -> Result<Atom, NetworkToolingError>;
@@ -70,16 +88,11 @@ pub trait UndoShorthands {
 }
 
 impl UndoShorthands for Atom {
+    #[cfg(test)]
     fn undo_schoonschip<Aind: AbsInd + DummyAind + ParseableAind>(
         &self,
     ) -> Result<Atom, NetworkToolingError> {
         self.as_view().undo_schoonschip::<Aind>()
-    }
-
-    fn undo_all<Aind: AbsInd + DummyAind + ParseableAind>(
-        &self,
-    ) -> Result<Atom, NetworkToolingError> {
-        self.as_view().undo_all::<Aind>()
     }
 
     fn undo_dots<Aind: AbsInd + DummyAind + ParseableAind>(
@@ -102,66 +115,128 @@ impl UndoShorthands for Atom {
 }
 
 impl<'a> UndoShorthands for AtomView<'a> {
-    fn undo_all<Aind: AbsInd + DummyAind + ParseableAind>(
-        &self,
-    ) -> Result<Atom, NetworkToolingError> {
-        let net = self
-            .parse_to_symbolic_net::<Aind>(&ParseSettings {
-                shorthand_parsing: ShorthandParsing::Expand {
-                    schoonschip: SchoonschipExpansionMode::full(),
-                    trace: true,
-                    chain: true,
-                },
-                ..Default::default()
-            })
-            .map_err(|error| NetworkToolingError::Parse {
-                reason: error.to_string(),
-            })?;
-
-        net.simple_execute::<()>()
-    }
     fn undo_chain<Aind: AbsInd + DummyAind + ParseableAind>(
         &self,
     ) -> Result<Atom, NetworkToolingError> {
-        let net = self
-            .parse_to_symbolic_net::<Aind>(&ParseSettings {
-                shorthand_parsing: ShorthandParsing::Expand {
-                    schoonschip: SchoonschipExpansionMode::none(),
-                    trace: false,
-                    chain: true,
-                },
-                ..Default::default()
-            })
-            .map_err(|error| NetworkToolingError::Parse {
-                reason: error.to_string(),
-            })?;
-
-        net.simple_execute::<()>()
+        use spenso::network::{parsing::ParseState, tags::SPENSO_TAG};
+        let state = ParseState::<Aind>::default();
+        state.reserve_indices(*self);
+        let mut error = None;
+        let expression = self.replace_map(|value, context, output| {
+            let AtomView::Fun(chain) = value else { return };
+            if chain.get_symbol() != SPENSO_TAG.chain {
+                return;
+            }
+            match state.materialize_indexed_chain(chain) {
+                Ok(expression) => {
+                    **output = if context.parent_type == Some(symbolica::atom::AtomType::Pow) {
+                        symbolica::atom::FunctionBuilder::new(SPENSO_TAG.bracket)
+                            .add_arg(expression)
+                            .finish()
+                    } else {
+                        expression
+                    };
+                }
+                Err(reason) => error = Some(reason),
+            }
+        });
+        error.map_or(Ok(expression), |reason| {
+            Err(NetworkToolingError::Parse { reason })
+        })
     }
 
     fn undo_dots<Aind: AbsInd + DummyAind + ParseableAind>(
         &self,
     ) -> Result<Atom, NetworkToolingError> {
-        let net = self
-            .parse_to_symbolic_net::<Aind>(&ParseSettings {
-                shorthand_parsing: ShorthandParsing::Expand {
-                    schoonschip: SchoonschipExpansionMode {
-                        inner_products: true,
-                        expand_inside_chains: false,
-                        expand_schoonship: false,
+        use spenso::{
+            network::{library::symbolic::ETS, parsing::ParseState, tags::SPENSO_TAG},
+            structure::{
+                representation::LibraryRep,
+                slot::{IsAbstractSlot, SlotMatcher},
+            },
+        };
+        let contains_dots = |value: AtomView<'_>| {
+            value.contains_symbol(SPENSO_TAG.dot) || value.contains_symbol(ETS.metric)
+        };
+        if !contains_dots(*self) {
+            return Ok(self.to_owned());
+        }
+        let state = ParseState::<Aind>::default();
+        state.reserve_indices(*self);
+        let unfold = |scope: AtomView<'_>| -> Result<Atom, NetworkToolingError> {
+            // Preserve the parser's established per-copy scopes when notation
+            // occurs inside a power. Ordinary arithmetic outside this selected
+            // scope never enters the parser.
+            let net = scope
+                .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                    shorthand_parsing: ShorthandParsing::Expand {
+                        schoonschip: SchoonschipExpansionMode {
+                            inner_products: true,
+                            expand_inside_chains: false,
+                            expand_schoonship: false,
+                        },
+                        trace: false,
+                        chain: false,
                     },
-                    trace: false,
-                    chain: false,
-                },
-                ..Default::default()
-            })
-            .map_err(|error| NetworkToolingError::Parse {
-                reason: error.to_string(),
-            })?;
-
-        net.simple_execute::<()>()
+                    ..Default::default()
+                })
+                .map_err(|error| NetworkToolingError::Parse {
+                    reason: error.to_string(),
+                })?;
+            let mut slots = SlotMatcher::default();
+            let mut written = std::collections::HashSet::new();
+            scope.visitor(&mut |value| {
+                if let Ok(slot) = slots.parse::<LibraryRep, Aind>(value) {
+                    written.insert(slot.aind);
+                    return false;
+                }
+                true
+            });
+            let expression = net.simple_execute::<()>()?;
+            let mut fresh = std::collections::HashMap::new();
+            // Only names allocated while opening this notation are freshened.
+            // Existing bindings and external port identities remain unchanged.
+            Ok(expression.replace_map(|value, _, output| {
+                if let Ok(slot) = slots.parse::<LibraryRep, Aind>(value)
+                    && (slot.aind.is_dummy()
+                        || slot
+                            .aind
+                            .to_atom()
+                            .as_view()
+                            .get_symbol()
+                            .is_some_and(|symbol| {
+                                symbol.has_tag(spenso::structure::abstract_index::DUMMY_INDEX_TAG)
+                            }))
+                    && !written.contains(&slot.aind)
+                {
+                    let index = *fresh
+                        .entry(slot.aind)
+                        .or_insert_with(|| state.fresh_index());
+                    **output = slot.reindex(index).to_atom();
+                }
+            }))
+        };
+        let mut error = None;
+        let expression = self.replace_map(|value, _, output| {
+            let selected = match value {
+                AtomView::Pow(_) => contains_dots(value),
+                AtomView::Fun(fun) => {
+                    fun.get_symbol() == SPENSO_TAG.dot || fun.get_symbol() == ETS.metric
+                }
+                _ => false,
+            };
+            if selected {
+                match unfold(value) {
+                    Ok(expression) if expression.as_view() != value => **output = expression,
+                    Ok(_) => {}
+                    Err(reason) => error = Some(reason),
+                }
+            }
+        });
+        error.map_or(Ok(expression), Err)
     }
 
+    #[cfg(test)]
     fn undo_schoonschip<Aind: AbsInd + DummyAind + ParseableAind>(
         &self,
     ) -> Result<Atom, NetworkToolingError> {
@@ -188,20 +263,46 @@ impl<'a> UndoShorthands for AtomView<'a> {
     fn undo_trace<Aind: AbsInd + DummyAind + ParseableAind>(
         &self,
     ) -> Result<Atom, NetworkToolingError> {
-        let net = self
-            .parse_to_symbolic_net::<Aind>(&ParseSettings {
-                shorthand_parsing: ShorthandParsing::Expand {
-                    schoonschip: SchoonschipExpansionMode::none(),
-                    trace: true,
-                    chain: false,
-                },
-                ..Default::default()
-            })
-            .map_err(|error| NetworkToolingError::Parse {
-                reason: error.to_string(),
-            })?;
-
-        net.simple_execute::<()>()
+        use spenso::{
+            network::{parsing::ParseState, tags::SPENSO_TAG},
+            shadowing,
+            structure::{
+                representation::{LibraryRep, Representation},
+                slot::{DualSlotTo, IsAbstractSlot},
+            },
+        };
+        use symbolica::atom::FunctionBuilder;
+        let state = ParseState::<Aind>::default();
+        state.reserve_indices(*self);
+        let mut error = None;
+        let expression = self.replace_map(|value, _, output| {
+            let AtomView::Fun(trace) = value else { return };
+            if trace.get_symbol() != SPENSO_TAG.trace {
+                return;
+            }
+            let mut arguments = trace.iter();
+            let Some(representation) = arguments.next() else {
+                error = Some("trace requires a representation".to_owned());
+                return;
+            };
+            let representation = match Representation::<LibraryRep>::try_from(representation) {
+                Ok(rep) => rep,
+                Err(err) => {
+                    error = Some(err.to_string());
+                    return;
+                }
+            };
+            let start = representation.slot::<Aind, _>(state.fresh_index());
+            let arguments = arguments.collect::<Vec<_>>();
+            **output = FunctionBuilder::new(SPENSO_TAG.chain)
+                .add_arg(start.to_atom())
+                .add_arg(start.dual().to_atom())
+                .add_args(shadowing::trace_factor_views(&arguments))
+                .finish();
+        });
+        error.map_or(Ok(expression), |reason| {
+            Err(NetworkToolingError::Parse { reason })
+        })
     }
 }
 
@@ -357,8 +458,7 @@ mod tests {
                     .map(|plan| {
                         (
                             plan.root,
-                            plan.status
-                                == crate::shorthands::schoonschip::ContractionStatus::Complete,
+                            plan.status == crate::tensor::ReductionStatus::Complete,
                             plan.aliases,
                         )
                     });
@@ -555,5 +655,129 @@ mod typed_dot_tests {
                 .1,
             body
         );
+    }
+}
+
+#[cfg(test)]
+mod explicit_notation_tests {
+    use super::*;
+    use spenso::{chain, chain_factor, mink, network::tags::SPENSO_TAG, trace, vector};
+    use symbolica::atom::AtomCore;
+
+    #[test]
+    fn trace_unfolding_preserves_order_and_does_not_evaluate() {
+        crate::test_support::test_initialize();
+        let trace = trace!(
+            mink!(4),
+            chain_factor!(notation_A, in, out),
+            chain_factor!(notation_B, in, out)
+        );
+        let source = SymbolicTensor::infer(trace).unwrap();
+        let opened = source.undo_trace().unwrap();
+        assert_eq!(opened.structure(), source.structure());
+        assert!(opened.expression().contains_symbol(SPENSO_TAG.chain));
+        assert!(!opened.expression().contains_symbol(SPENSO_TAG.trace));
+        let again = source.undo_trace().unwrap();
+        assert_ne!(
+            opened.expression(),
+            again.expression(),
+            "independent unfoldings use fresh dummies"
+        );
+        let explicit = opened.undo_chain().unwrap();
+        assert!(!explicit.expression().contains_symbol(SPENSO_TAG.chain));
+        SymbolicTensor::validate_atom(explicit.expression()).unwrap();
+        let joined = opened
+            .contract(Default::default())
+            .unwrap()
+            .resolved()
+            .unwrap();
+        assert_eq!(joined.expression(), source.expression());
+        let empty = SymbolicTensor::infer(trace!(mink!(4)))
+            .unwrap()
+            .undo_trace()
+            .unwrap();
+        assert!(empty.expression().contains_symbol(SPENSO_TAG.chain));
+        assert_ne!(empty.expression(), &Atom::num(4));
+    }
+
+    #[test]
+    fn chain_unfolding_keeps_factor_ports_and_spectator_factorization() {
+        crate::test_support::test_initialize();
+        let left = mink!(4, 97071);
+        let right = mink!(4, 97072);
+        let coefficient = (Atom::var(symbolica::symbol!("notation_weight")) + Atom::one()).pow(40);
+        let expression = &coefficient
+            * chain!(
+                &left,
+                &right,
+                chain_factor!(notation_order_A, in, out),
+                chain_factor!(notation_order_B, in, out)
+            );
+        let source = SymbolicTensor::infer(expression).unwrap();
+        let opened = source.undo_chain().unwrap();
+        assert_eq!(opened.structure(), source.structure());
+        assert!(
+            matches!(opened.expression().as_view(), AtomView::Mul(product)
+            if product.iter().any(|factor| factor == coefficient.as_view()))
+        );
+        let first = spenso::tensor_symbol!(notation_order_A);
+        let second = spenso::tensor_symbol!(notation_order_B);
+        let mut ports = std::collections::HashMap::new();
+        opened.expression().visitor(&mut |value| {
+            if let AtomView::Fun(function) = value
+                && (function.get_symbol() == first || function.get_symbol() == second)
+            {
+                ports.insert(
+                    function.get_symbol(),
+                    function.iter().map(|a| a.to_owned()).collect::<Vec<_>>(),
+                );
+            }
+            true
+        });
+        assert_eq!(ports[&first][0], left);
+        assert_eq!(ports[&first][1], ports[&second][0]);
+        assert_eq!(ports[&second][1], right);
+    }
+
+    #[test]
+    fn independently_unfolded_dots_use_disjoint_dummy_names() {
+        crate::test_support::test_initialize();
+        let source = SymbolicTensor::infer(spenso::dot!(
+            vector!(notation_copy_p, mink!(4)),
+            vector!(notation_copy_q, mink!(4))
+        ))
+        .unwrap();
+        let first = source.undo_dots().unwrap();
+        let second = source.undo_dots().unwrap();
+        assert_ne!(first.expression(), second.expression());
+        let product = first.expression() * second.expression();
+        SymbolicTensor::validate_atom(&product).unwrap();
+        let contracted = SymbolicTensor::infer(product)
+            .unwrap()
+            .contract(Default::default())
+            .unwrap()
+            .resolved()
+            .unwrap()
+            .to_dots()
+            .unwrap();
+        assert_eq!(contracted.expression(), &source.expression().pow(2));
+    }
+
+    #[test]
+    fn dot_notation_normalizes_compact_scalars_without_index_contractions() {
+        crate::test_support::test_initialize();
+        let compact = spenso::g!(vector!(notation_p, mink!(4)), vector!(notation_q, mink!(4)));
+        let source = SymbolicTensor::infer(compact.clone()).unwrap();
+        assert_eq!(
+            source.expression(),
+            &compact,
+            "construction does not canonicalize this spelling"
+        );
+        let dotted = source.to_dots().unwrap();
+        assert_ne!(dotted.expression(), &compact);
+        assert!(dotted.expression().contains_symbol(SPENSO_TAG.dot));
+        let indexed = vector!(notation_explicit_p, mink!(4, 97081)).pow(2);
+        let source = SymbolicTensor::infer(indexed.clone()).unwrap();
+        assert_eq!(source.to_dots().unwrap().expression(), &indexed);
     }
 }

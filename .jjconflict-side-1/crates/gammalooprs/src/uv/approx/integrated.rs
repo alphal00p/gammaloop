@@ -4,11 +4,10 @@ use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
     CookMode, CookSettings,
     color::ColorSimplifySettings,
-    dirac::{AGS, GammaOutput, GammaSimplifySettings},
+    dirac::{AGS, GammaSimplifySettings},
     representations::Bispinor,
-    shorthands::chain::Chain,
     tensor::{
-        ContractionSettings, SymbolicNetExt, SymbolicNetParse, SymbolicTensor,
+        ContractSettings, SymbolicNetExt, SymbolicNetParse, SymbolicTensor,
         inference::InterfaceInference,
     },
 };
@@ -159,8 +158,16 @@ fn simplify(integrand: &Atom) -> Result<Atom> {
     // expansion/protection registry here. Vakint consumes the resolved Atom.
     let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
     let simplified = SymbolicTensor::infer(cooking.try_cook(integrand.as_view())?)?
-        .simplify_gamma(GammaSimplifySettings::canonical())?
-        .contract(Default::default())?
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::canonical()),
+            epsilon: true,
+            ..Default::default()
+        })?
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?
         .resolved()?;
     let dotted = simplified.to_dots()?;
     let dotted = cooking.uncook(dotted.expression().as_view());
@@ -377,7 +384,12 @@ impl Integrated<'_> {
 
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let dotted = SymbolicTensor::infer(cooking.try_cook(res.as_view())?)?
-            .contract(ContractionSettings::default().without_rank_one_tensors())?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
             .resolved()?
             .to_dots()?;
         res = Self::dimensionally_regularized(&cooking.uncook(dotted.expression().as_view()));
@@ -390,14 +402,17 @@ impl Integrated<'_> {
         // This strips as many dummies as possible after undoing chains and traces,
         // so that terms can merge later on.
         let collected = SymbolicTensor::infer(cooking.try_cook(res.as_view())?)?
-            .simplify_gamma(GammaSimplifySettings {
-                output: GammaOutput::Chains,
-                ..GammaSimplifySettings::canonical()
+            .contract(ContractSettings {
+                representations: Some(&[Bispinor {}.into()]),
+                metrics: false,
+                rank_one: false,
+                collect_chains: true,
+                collect_traces: true,
+                ..Default::default()
             })?
             .resolved()?;
-        res = cooking
-            .uncook(collected.expression().as_view())
-            .undo_single_length();
+        // Collection already returns isolated one-factor words in indexed form.
+        res = cooking.uncook(collected.expression().as_view());
         debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #collect;
             log.expr = res,
             "Integrated UV cleanup through shared chain collection"
@@ -698,8 +713,10 @@ pub(crate) fn to_vakint_integrand<
     let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
     let input = GS.erase_uv_momentum_provenance(integrand);
     let color = SymbolicTensor::infer(cooking.try_cook(input.as_view())?)?
-        .simplify_color(ColorSimplifySettings {
-            simplify_non_color: false,
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            color: Some(ColorSimplifySettings {
+                ..Default::default()
+            }),
             ..Default::default()
         })?
         .resolved()?;
@@ -743,7 +760,12 @@ pub(crate) fn to_vakint_integrand<
     // metric of the reduced graph. Contract those metric-only structures before
     // the expression is split into Vakint terms.
     let metric_contracted = SymbolicTensor::infer(cooking.try_cook(integrand_vakint.as_view())?)?
-        .contract(ContractionSettings::default().without_rank_one_tensors())?
+        .contract(ContractSettings {
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?
         .resolved()?;
     integrand_vakint = cooking.uncook(metric_contracted.expression().as_view());
     debug_tags!(#uv, #integrated, #vakint, #trace;
@@ -1385,7 +1407,12 @@ impl VakintMomentumSolution {
         let numerator = numerator.replace_multiple(&self.replacements);
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let normalized = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?
-            .contract(ContractionSettings::default().without_rank_one_tensors())?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
             .resolved()?;
         Ok(cooking.uncook(normalized.expression().as_view()))
     }
@@ -2099,7 +2126,12 @@ mod tests {
 
         let converted = SymbolicTensor::infer(numerator)
             .unwrap()
-            .contract(ContractionSettings::default().without_rank_one_tensors())
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -2158,7 +2190,12 @@ mod tests {
             let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
             let prepared = SymbolicTensor::infer(cooking.try_cook(numerator.as_view()).unwrap())
                 .unwrap()
-                .contract(ContractionSettings::default().without_rank_one_tensors())
+                .contract(ContractSettings {
+                    rank_one: false,
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap();

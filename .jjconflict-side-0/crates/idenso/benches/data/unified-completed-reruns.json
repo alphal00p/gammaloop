@@ -1,0 +1,1062 @@
+{
+  "baseline": [
+    {
+      "case": "free4-trace4",
+      "scope": "Rerun complete legacy gamma operation on its retained factorized result owner; excludes fresh admission, materialization and checks",
+      "samples": [
+        {
+          "wall_ns": 42040,
+          "cpu_ns": 46630,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        },
+        {
+          "wall_ns": 23791,
+          "cpu_ns": 25610,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        },
+        {
+          "wall_ns": 21830,
+          "cpu_ns": 23030,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        }
+      ],
+      "median_wall_ns": 23791,
+      "input": {
+        "terms": 3,
+        "atom_bytes": 247,
+        "sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae",
+        "rank": 4
+      },
+      "output": {
+        "terms": 3,
+        "atom_bytes": 247,
+        "sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae",
+        "rank": 4
+      },
+      "input_sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae"
+    },
+    {
+      "case": "free12-trace4",
+      "scope": "Rerun complete legacy gamma operation on its retained factorized result owner; excludes fresh admission, materialization and checks",
+      "samples": [
+        {
+          "wall_ns": 11241022,
+          "cpu_ns": 11140558,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        },
+        {
+          "wall_ns": 10741150,
+          "cpu_ns": 10656178,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        },
+        {
+          "wall_ns": 10537740,
+          "cpu_ns": 10458419,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        }
+      ],
+      "median_wall_ns": 10741150,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 462740,
+        "sha256": "e10c9d502a10a7597729ad9c686c353c1d271f152475bc639630bce8b34587b9",
+        "rank": 12
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 462740,
+        "sha256": "e10c9d502a10a7597729ad9c686c353c1d271f152475bc639630bce8b34587b9",
+        "rank": 12
+      },
+      "input_sha256": "e10c9d502a10a7597729ad9c686c353c1d271f152475bc639630bce8b34587b9"
+    },
+    {
+      "case": "free12-tracen",
+      "scope": "Rerun complete legacy gamma operation on its retained factorized result owner; excludes fresh admission, materialization and checks",
+      "samples": [
+        {
+          "wall_ns": 7874639,
+          "cpu_ns": 7782810,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        },
+        {
+          "wall_ns": 5868593,
+          "cpu_ns": 5828516,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        },
+        {
+          "wall_ns": 6079513,
+          "cpu_ns": 6034815,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        }
+      ],
+      "median_wall_ns": 6079513,
+      "input": {
+        "terms": 11,
+        "atom_bytes": 1044373,
+        "sha256": "12e65a46b40c7bb0413f46477ab17e6cfc7a031303e1f4f2e1905a294f33b7d1",
+        "rank": 12
+      },
+      "output": {
+        "terms": 11,
+        "atom_bytes": 1044373,
+        "sha256": "12e65a46b40c7bb0413f46477ab17e6cfc7a031303e1f4f2e1905a294f33b7d1",
+        "rank": 12
+      },
+      "input_sha256": "12e65a46b40c7bb0413f46477ab17e6cfc7a031303e1f4f2e1905a294f33b7d1"
+    },
+    {
+      "case": "axial12-trace4",
+      "scope": "Rerun complete legacy gamma operation on its retained factorized result owner; excludes fresh admission, materialization and checks",
+      "samples": [
+        {
+          "wall_ns": 191628663,
+          "cpu_ns": 189934695,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        },
+        {
+          "wall_ns": 195592698,
+          "cpu_ns": 193893434,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        },
+        {
+          "wall_ns": 188812522,
+          "cpu_ns": 187042197,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        }
+      ],
+      "median_wall_ns": 191628663,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 213542,
+        "sha256": "6bbcd4e6ea05bb1cd05c67cf357ebedf508805906d2787dc35e03aa5462d7293",
+        "rank": 12
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 213542,
+        "sha256": "6bbcd4e6ea05bb1cd05c67cf357ebedf508805906d2787dc35e03aa5462d7293",
+        "rank": 12
+      },
+      "input_sha256": "6bbcd4e6ea05bb1cd05c67cf357ebedf508805906d2787dc35e03aa5462d7293"
+    },
+    {
+      "case": "fermion-3-trace4",
+      "scope": "Rerun complete legacy gamma operation on its retained factorized result owner; excludes fresh admission, materialization and checks",
+      "samples": [
+        {
+          "wall_ns": 175230,
+          "cpu_ns": 169670,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        },
+        {
+          "wall_ns": 136921,
+          "cpu_ns": 138320,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        },
+        {
+          "wall_ns": 133870,
+          "cpu_ns": 135070,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        }
+      ],
+      "median_wall_ns": 136921,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 1534,
+        "sha256": "0bb483887d09dbce1f4560c52f73d2ccb0dfd73a7d3fa40e89a88ccea62613bf",
+        "rank": 0
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 1534,
+        "sha256": "0bb483887d09dbce1f4560c52f73d2ccb0dfd73a7d3fa40e89a88ccea62613bf",
+        "rank": 0
+      },
+      "input_sha256": "0bb483887d09dbce1f4560c52f73d2ccb0dfd73a7d3fa40e89a88ccea62613bf"
+    },
+    {
+      "case": "fermion-3-tracen",
+      "scope": "Rerun complete legacy gamma operation on its retained factorized result owner; excludes fresh admission, materialization and checks",
+      "samples": [
+        {
+          "wall_ns": 1207105,
+          "cpu_ns": 1203381,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        },
+        {
+          "wall_ns": 1179254,
+          "cpu_ns": 1175172,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        },
+        {
+          "wall_ns": 1176514,
+          "cpu_ns": 1171951,
+          "exact_same_resolved_expression": true,
+          "complete": true
+        }
+      ],
+      "median_wall_ns": 1179254,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 24537,
+        "sha256": "bad1f9583d155ddad275b5408600732da9d940977d8be2ebe73d50ffa482e8cf",
+        "rank": 0
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 24537,
+        "sha256": "bad1f9583d155ddad275b5408600732da9d940977d8be2ebe73d50ffa482e8cf",
+        "rank": 0
+      },
+      "input_sha256": "bad1f9583d155ddad275b5408600732da9d940977d8be2ebe73d50ffa482e8cf"
+    }
+  ],
+  "candidate": [
+    {
+      "case": "free4-trace4",
+      "operation": "reduce_algebra",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 4240,
+          "cpu_ns": 9620,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 2721,
+          "cpu_ns": 5620,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 1250,
+          "cpu_ns": 3200,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 2721,
+      "input": {
+        "terms": 3,
+        "atom_bytes": 247,
+        "sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae",
+        "rank": 4
+      },
+      "output": {
+        "terms": 3,
+        "atom_bytes": 247,
+        "sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae",
+        "rank": 4
+      },
+      "input_sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae"
+    },
+    {
+      "case": "free4-trace4",
+      "operation": "contract",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 3640,
+          "cpu_ns": 6700,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 1971,
+          "cpu_ns": 3570,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 690,
+          "cpu_ns": 1930,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 1971,
+      "input": {
+        "terms": 3,
+        "atom_bytes": 247,
+        "sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae",
+        "rank": 4
+      },
+      "output": {
+        "terms": 3,
+        "atom_bytes": 247,
+        "sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae",
+        "rank": 4
+      },
+      "input_sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae"
+    },
+    {
+      "case": "free4-trace4",
+      "operation": "legacy_gamma_permissions",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 65080,
+          "cpu_ns": 67800,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 43090,
+          "cpu_ns": 44520,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 33790,
+          "cpu_ns": 35270,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 43090,
+      "input": {
+        "terms": 3,
+        "atom_bytes": 247,
+        "sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae",
+        "rank": 4
+      },
+      "output": {
+        "terms": 3,
+        "atom_bytes": 247,
+        "sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae",
+        "rank": 4
+      },
+      "input_sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae"
+    },
+    {
+      "case": "free12-trace4",
+      "operation": "reduce_algebra",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 8490,
+          "cpu_ns": 13020,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 8810,
+          "cpu_ns": 13760,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 9000,
+          "cpu_ns": 13490,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 8810,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 462740,
+        "sha256": "e10c9d502a10a7597729ad9c686c353c1d271f152475bc639630bce8b34587b9",
+        "rank": 12
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 462740,
+        "sha256": "e10c9d502a10a7597729ad9c686c353c1d271f152475bc639630bce8b34587b9",
+        "rank": 12
+      },
+      "input_sha256": "e10c9d502a10a7597729ad9c686c353c1d271f152475bc639630bce8b34587b9"
+    },
+    {
+      "case": "free12-trace4",
+      "operation": "contract",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 27500,
+          "cpu_ns": 31880,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 9201,
+          "cpu_ns": 13860,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 9760,
+          "cpu_ns": 22410,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 9760,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 462740,
+        "sha256": "e10c9d502a10a7597729ad9c686c353c1d271f152475bc639630bce8b34587b9",
+        "rank": 12
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 462740,
+        "sha256": "e10c9d502a10a7597729ad9c686c353c1d271f152475bc639630bce8b34587b9",
+        "rank": 12
+      },
+      "input_sha256": "e10c9d502a10a7597729ad9c686c353c1d271f152475bc639630bce8b34587b9"
+    },
+    {
+      "case": "free12-trace4",
+      "operation": "legacy_gamma_permissions",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 325133288,
+          "cpu_ns": 322084406,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 323885884,
+          "cpu_ns": 320693284,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 334380081,
+          "cpu_ns": 331266891,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 325133288,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 462740,
+        "sha256": "e10c9d502a10a7597729ad9c686c353c1d271f152475bc639630bce8b34587b9",
+        "rank": 12
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 462740,
+        "sha256": "e10c9d502a10a7597729ad9c686c353c1d271f152475bc639630bce8b34587b9",
+        "rank": 12
+      },
+      "input_sha256": "e10c9d502a10a7597729ad9c686c353c1d271f152475bc639630bce8b34587b9"
+    },
+    {
+      "case": "free12-tracen",
+      "operation": "reduce_algebra",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 9540,
+          "cpu_ns": 13890,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 8200,
+          "cpu_ns": 12420,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 7980,
+          "cpu_ns": 12000,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 8200,
+      "input": {
+        "terms": 11,
+        "atom_bytes": 1044373,
+        "sha256": "12e65a46b40c7bb0413f46477ab17e6cfc7a031303e1f4f2e1905a294f33b7d1",
+        "rank": 12
+      },
+      "output": {
+        "terms": 11,
+        "atom_bytes": 1044373,
+        "sha256": "12e65a46b40c7bb0413f46477ab17e6cfc7a031303e1f4f2e1905a294f33b7d1",
+        "rank": 12
+      },
+      "input_sha256": "12e65a46b40c7bb0413f46477ab17e6cfc7a031303e1f4f2e1905a294f33b7d1"
+    },
+    {
+      "case": "free12-tracen",
+      "operation": "contract",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 7860,
+          "cpu_ns": 11810,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 9281,
+          "cpu_ns": 13420,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 9100,
+          "cpu_ns": 12930,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 9100,
+      "input": {
+        "terms": 11,
+        "atom_bytes": 1044373,
+        "sha256": "12e65a46b40c7bb0413f46477ab17e6cfc7a031303e1f4f2e1905a294f33b7d1",
+        "rank": 12
+      },
+      "output": {
+        "terms": 11,
+        "atom_bytes": 1044373,
+        "sha256": "12e65a46b40c7bb0413f46477ab17e6cfc7a031303e1f4f2e1905a294f33b7d1",
+        "rank": 12
+      },
+      "input_sha256": "12e65a46b40c7bb0413f46477ab17e6cfc7a031303e1f4f2e1905a294f33b7d1"
+    },
+    {
+      "case": "free12-tracen",
+      "operation": "legacy_gamma_permissions",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 68510206,
+          "cpu_ns": 67936851,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 66205038,
+          "cpu_ns": 65641005,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 68035945,
+          "cpu_ns": 67424930,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 68035945,
+      "input": {
+        "terms": 11,
+        "atom_bytes": 1044373,
+        "sha256": "12e65a46b40c7bb0413f46477ab17e6cfc7a031303e1f4f2e1905a294f33b7d1",
+        "rank": 12
+      },
+      "output": {
+        "terms": 11,
+        "atom_bytes": 1044373,
+        "sha256": "12e65a46b40c7bb0413f46477ab17e6cfc7a031303e1f4f2e1905a294f33b7d1",
+        "rank": 12
+      },
+      "input_sha256": "12e65a46b40c7bb0413f46477ab17e6cfc7a031303e1f4f2e1905a294f33b7d1"
+    },
+    {
+      "case": "axial12-trace4",
+      "operation": "reduce_algebra",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 7340,
+          "cpu_ns": 11240,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 6100,
+          "cpu_ns": 9880,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 4100,
+          "cpu_ns": 8150,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 6100,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 110453,
+        "sha256": "d0cfebd952e8b0d9e7a79849c767d6e1a2ee3d137f040429c75f36d22de0c221",
+        "rank": 12
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 110453,
+        "sha256": "d0cfebd952e8b0d9e7a79849c767d6e1a2ee3d137f040429c75f36d22de0c221",
+        "rank": 12
+      },
+      "input_sha256": "d0cfebd952e8b0d9e7a79849c767d6e1a2ee3d137f040429c75f36d22de0c221"
+    },
+    {
+      "case": "axial12-trace4",
+      "operation": "contract",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 6430,
+          "cpu_ns": 10170,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 6410,
+          "cpu_ns": 10360,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 5410,
+          "cpu_ns": 9771,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 6410,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 110453,
+        "sha256": "d0cfebd952e8b0d9e7a79849c767d6e1a2ee3d137f040429c75f36d22de0c221",
+        "rank": 12
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 110453,
+        "sha256": "d0cfebd952e8b0d9e7a79849c767d6e1a2ee3d137f040429c75f36d22de0c221",
+        "rank": 12
+      },
+      "input_sha256": "d0cfebd952e8b0d9e7a79849c767d6e1a2ee3d137f040429c75f36d22de0c221"
+    },
+    {
+      "case": "axial12-trace4",
+      "operation": "legacy_gamma_permissions",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 60898319,
+          "cpu_ns": 60327291,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 61574821,
+          "cpu_ns": 61007552,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 64140820,
+          "cpu_ns": 63543196,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 61574821,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 110453,
+        "sha256": "d0cfebd952e8b0d9e7a79849c767d6e1a2ee3d137f040429c75f36d22de0c221",
+        "rank": 12
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 110453,
+        "sha256": "d0cfebd952e8b0d9e7a79849c767d6e1a2ee3d137f040429c75f36d22de0c221",
+        "rank": 12
+      },
+      "input_sha256": "d0cfebd952e8b0d9e7a79849c767d6e1a2ee3d137f040429c75f36d22de0c221"
+    },
+    {
+      "case": "fermion-3-trace4",
+      "operation": "reduce_algebra",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 2700,
+          "cpu_ns": 6210,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 1149,
+          "cpu_ns": 2790,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 1090,
+          "cpu_ns": 2370,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 1149,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 1534,
+        "sha256": "0bb483887d09dbce1f4560c52f73d2ccb0dfd73a7d3fa40e89a88ccea62613bf",
+        "rank": 0
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 1534,
+        "sha256": "0bb483887d09dbce1f4560c52f73d2ccb0dfd73a7d3fa40e89a88ccea62613bf",
+        "rank": 0
+      },
+      "input_sha256": "0bb483887d09dbce1f4560c52f73d2ccb0dfd73a7d3fa40e89a88ccea62613bf"
+    },
+    {
+      "case": "fermion-3-trace4",
+      "operation": "contract",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 2250,
+          "cpu_ns": 4489,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 1080,
+          "cpu_ns": 2680,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 590,
+          "cpu_ns": 1830,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 1080,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 1534,
+        "sha256": "0bb483887d09dbce1f4560c52f73d2ccb0dfd73a7d3fa40e89a88ccea62613bf",
+        "rank": 0
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 1534,
+        "sha256": "0bb483887d09dbce1f4560c52f73d2ccb0dfd73a7d3fa40e89a88ccea62613bf",
+        "rank": 0
+      },
+      "input_sha256": "0bb483887d09dbce1f4560c52f73d2ccb0dfd73a7d3fa40e89a88ccea62613bf"
+    },
+    {
+      "case": "fermion-3-trace4",
+      "operation": "legacy_gamma_permissions",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 230681,
+          "cpu_ns": 232911,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 186111,
+          "cpu_ns": 187600,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 187400,
+          "cpu_ns": 180550,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 187400,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 1534,
+        "sha256": "0bb483887d09dbce1f4560c52f73d2ccb0dfd73a7d3fa40e89a88ccea62613bf",
+        "rank": 0
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 1534,
+        "sha256": "0bb483887d09dbce1f4560c52f73d2ccb0dfd73a7d3fa40e89a88ccea62613bf",
+        "rank": 0
+      },
+      "input_sha256": "0bb483887d09dbce1f4560c52f73d2ccb0dfd73a7d3fa40e89a88ccea62613bf"
+    },
+    {
+      "case": "fermion-3-tracen",
+      "operation": "reduce_algebra",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 2170,
+          "cpu_ns": 5440,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 1580,
+          "cpu_ns": 3480,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 860,
+          "cpu_ns": 2510,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 1580,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 24537,
+        "sha256": "bad1f9583d155ddad275b5408600732da9d940977d8be2ebe73d50ffa482e8cf",
+        "rank": 0
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 24537,
+        "sha256": "bad1f9583d155ddad275b5408600732da9d940977d8be2ebe73d50ffa482e8cf",
+        "rank": 0
+      },
+      "input_sha256": "bad1f9583d155ddad275b5408600732da9d940977d8be2ebe73d50ffa482e8cf"
+    },
+    {
+      "case": "fermion-3-tracen",
+      "operation": "contract",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 2600,
+          "cpu_ns": 5220,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 1349,
+          "cpu_ns": 3520,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 810,
+          "cpu_ns": 2820,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 1349,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 24537,
+        "sha256": "bad1f9583d155ddad275b5408600732da9d940977d8be2ebe73d50ffa482e8cf",
+        "rank": 0
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 24537,
+        "sha256": "bad1f9583d155ddad275b5408600732da9d940977d8be2ebe73d50ffa482e8cf",
+        "rank": 0
+      },
+      "input_sha256": "bad1f9583d155ddad275b5408600732da9d940977d8be2ebe73d50ffa482e8cf"
+    },
+    {
+      "case": "fermion-3-tracen",
+      "operation": "legacy_gamma_permissions",
+      "scope": "Rerun on retained factorized owner; excludes fresh admission, materialization and checks. Legacy gamma permissions reruns both reduce_algebra and ambient contract.",
+      "samples": [
+        {
+          "wall_ns": 6984025,
+          "cpu_ns": 6928026,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 6956885,
+          "cpu_ns": 6887166,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        },
+        {
+          "wall_ns": 6918265,
+          "cpu_ns": 6863537,
+          "exact_same_resolved_expression": true,
+          "completion": [
+            "ReductionStatus.Complete",
+            "ReductionStatus.Complete"
+          ]
+        }
+      ],
+      "median_wall_ns": 6956885,
+      "input": {
+        "terms": 1,
+        "atom_bytes": 24537,
+        "sha256": "bad1f9583d155ddad275b5408600732da9d940977d8be2ebe73d50ffa482e8cf",
+        "rank": 0
+      },
+      "output": {
+        "terms": 1,
+        "atom_bytes": 24537,
+        "sha256": "bad1f9583d155ddad275b5408600732da9d940977d8be2ebe73d50ffa482e8cf",
+        "rank": 0
+      },
+      "input_sha256": "bad1f9583d155ddad275b5408600732da9d940977d8be2ebe73d50ffa482e8cf"
+    }
+  ]
+}

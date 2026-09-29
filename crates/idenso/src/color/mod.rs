@@ -543,9 +543,6 @@ pub static CS, CS_INNER: ColorSymbols = || {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColorSimplifySettings {
-    /// Normalize non-color chains and metric contractions outside collected
-    /// color payloads. Disable this to preserve their factorized coefficients.
-    pub simplify_non_color: bool,
     /// Whether closed color chains should be evaluated as traces.
     pub evaluate_traces: bool,
     /// Whether contractions between generators on different open chains or traces should
@@ -559,7 +556,6 @@ pub struct ColorSimplifySettings {
 impl Default for ColorSimplifySettings {
     fn default() -> Self {
         Self {
-            simplify_non_color: true,
             evaluate_traces: true,
             expand_cross_chain_fierz: true,
             substitute_cof_dimension_invariants: false,
@@ -621,7 +617,7 @@ impl ColorCasimirSettings {
 
 /// Rewrite color dimensions and scalar invariants between SU(N) conventions.
 /// Indexed generator, structure-constant and trace reduction belongs to
-/// `simplify_color` method on [`SymbolicTensor`](crate::tensor::SymbolicTensor).
+/// `reduce_algebra` method on [`SymbolicTensor`](crate::tensor::SymbolicTensor).
 pub trait ColorSimplifier {
     /// Replace concrete QCD fundamental and adjoint dimensions by their
     /// parametric SU(Nc) expressions while preserving all color indices.

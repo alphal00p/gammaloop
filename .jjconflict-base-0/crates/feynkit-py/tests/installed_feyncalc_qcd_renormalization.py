@@ -13,12 +13,19 @@ Massless reference:
 https://feyncalc.github.io/FeynCalcExamples/QCD/OneLoop/RenormalizationMassless
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+    ColorSimplifySettings,
+)
+
 import json
 from pathlib import Path
 
 from symbolica import E, Matrix, Replacement, S, Symbol
-from symbolica.community import hep
-from symbolica.community.hep import oneloop
+from symbolica.community import feynkit as hep
+from symbolica.community.feynkit import oneloop
 from symbolica.community.tensor import (
     TensorExpression,
 )
@@ -188,7 +195,11 @@ for kind, incoming, outgoing, loops, vertices, count in [
             )
             fundamental_dimension = CA
         numerator = (
-            TensorExpression(numerator).simplify_color().to_expression().to_expression()
+            TensorExpression(numerator)
+            .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .to_expression()
+            .to_expression()
         )
         # CF and CA are display names for shared representation-aware invariants;
         # the quark-loop trace uses the conventional fundamental index TR=1/2.
@@ -266,9 +277,12 @@ for kind, incoming, outgoing, loops, vertices, count in [
         for label, projector in probes:
             traced = (
                 TensorExpression(numerator * projector)
-                .simplify_gamma()
+                .reduce_algebra(
+                    AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+                )
+                .contract(ContractSettings(collect_chains=False, collect_traces=False))
                 .to_expression()
-                .contract()
+                .contract(ContractSettings(collect_chains=False, collect_traces=False))
                 .to_expression()
                 .to_dots()
                 .to_expression()
@@ -571,7 +585,11 @@ for kind, incoming, outgoing, count, qcd_order in [
             )
             fundamental_dimension = CA
         numerator = (
-            TensorExpression(numerator).simplify_color().to_expression().to_expression()
+            TensorExpression(numerator)
+            .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .to_expression()
+            .to_expression()
         )
         numerator = (
             numerator.replace(cas(2, cof(Nc)), CF)
@@ -614,9 +632,12 @@ for kind, incoming, outgoing, count, qcd_order in [
         for label, projector in probes:
             trace = (
                 TensorExpression(numerator * projector)
-                .simplify_gamma()
+                .reduce_algebra(
+                    AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+                )
+                .contract(ContractSettings(collect_chains=False, collect_traces=False))
                 .to_expression()
-                .contract()
+                .contract(ContractSettings(collect_chains=False, collect_traces=False))
                 .to_expression()
                 .to_dots()
                 .to_expression()
@@ -807,9 +828,16 @@ for scenario in ("massive", "massless"):
                     continue
                 traced = (
                     TensorExpression(numerator * projector)
-                    .simplify_gamma()
+                    .reduce_algebra(
+                        AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+                    )
+                    .contract(
+                        ContractSettings(collect_chains=False, collect_traces=False)
+                    )
                     .to_expression()
-                    .contract()
+                    .contract(
+                        ContractSettings(collect_chains=False, collect_traces=False)
+                    )
                     .to_expression()
                     .to_dots()
                     .to_expression()

@@ -93,8 +93,8 @@ correct and not faster; there is nothing to merge.
 A no-op pass costs as much as the productive pass that produced its input,
 because every call re-classifies every leaf. Production works on bare atoms
 (audited production-only counts at the fixed base: `simplify_metrics` 13,
-`to_dots` 8, `normalize_dots` 5, `simplify_gamma` 4 plus one settings call,
-`simplify_color` 6 plus nine settings calls, `replace_multiple` 96, and
+`to_dots` 8, `normalize_dots` 5, `reduce_algebra` 4 plus one settings call,
+`reduce_algebra` 6 plus nine settings calls, `replace_multiple` 96, and
 `schoonschip_net` 1), so this is paid on every call. Tests are excluded from
 these counts. `simplify_metrics` also disables rank-one handling, which bypasses
 every collector fast path.
@@ -119,12 +119,12 @@ accumulation in its driver, not by parsing.
 
 === Keep-the-rest conformance
 
-`simplify_color`, `simplify_gamma`, `simplify_metrics`, `schoonschip` and the
+`reduce_algebra`, `reduce_algebra`, `simplify_metrics`, `schoonschip` and the
 collector route keep `(1+x)·(A + f(z)·B)` factored and pass foreign factors
 through; the current fast route even keeps disconnected components factored.
 The module distributes scalar spectators and refuses any foreign factor. One
 defect: a metric contracting into a gamma with `AUTO` spinor indices fails in
-`simplify_metrics` and `simplify_gamma` while explicit indices work.
+`simplify_metrics` and `reduce_algebra` while explicit indices work.
 
 == Work in flight on the second agent's line
 <second-agent>
@@ -328,10 +328,10 @@ land in one change together with every caller.
   columns: (1.2fr, 2.6fr, 2.6fr),
   table.header([*Verb*], [*Meaning*], [*Absorbs*]),
   [`replace(rule | rules)`], [tensor-safe rule application, factorized output, construction checks and binding-dependent interface checks], [`replace_tensor`, `replace_multiple` for tensor leaves, `contract=` flag],
-  [`contract(order=None, *, rank_one=True)`], [metric, identity and optional rank-one contraction on the structural graph; returns aliases, with separate explicit materialization], [`schoonschip`, `schoonschip_net`, `simplify_metrics`],
-  [`simplify_gamma(settings)`], [unchanged algebra, aliases foreign structure], [`simplify_gamma0`, `simplify_gamma_conjugate` become settings; `collect_gamma_chains` becomes `output="chains"`],
-  [`simplify_color(settings)`], [unchanged algebra, aliases foreign structure], [remove unused coefficient-splitting helpers; retain required local colour algebra in this owner],
-  [`simplify_epsilon()`], [unchanged], [—],
+  [`contract(settings=None)`], [metric, identity and optional rank-one contraction on the structural graph; returns aliases, with separate explicit materialization], [`schoonschip`, `schoonschip_net`, `simplify_metrics`],
+  [`reduce_algebra(AlgebraSettings(gamma=settings))`], [unchanged algebra, aliases foreign structure], [`simplify_gamma0`, `simplify_gamma_conjugate` become settings; `collect_gamma_chains` becomes `output="chains"`],
+  [`reduce_algebra(AlgebraSettings(color=settings))`], [unchanged algebra, aliases foreign structure], [remove unused coefficient-splitting helpers; retain required local colour algebra in this owner],
+  [`reduce_algebra(AlgebraSettings(epsilon=True))`], [unchanged], [—],
   [`canonize()`], [graph canonization on the shared graph], [`wrap_dummies`, `wrap_indices` where they only served canonization],
   [`to_dots()` / `undo_dots()`], [representation toggles; distinct paths by design], [`normalize_dots`, `metric_shorthand_to_dot`; unused undo wrappers are removed],
   [`expand()` / `evaluator()`], [materialization, explicit], [—],
@@ -340,9 +340,10 @@ land in one change together with every caller.
 Binary positional contraction is `contract_ports`; it is not an overload of
 unary index contraction. The unused `expand_metrics`, `expand_mink`,
 `expand_bis`, `expand_mink_bis` and `expand_in_patterns` coefficient-list
-methods are removed. Python keeps only `undo_dots` from the undo family.
+methods are removed. Python exposes `undo_dots`, `undo_chain`, and `undo_trace`
+as independent notation conversions; aggregate undo pipelines are removed.
 Production callers that relied on `to_dots` to contract rank-one tensors use
-`contract()` before `to_dots()`. `canonize`, `simplify_epsilon` and
+`contract()` before `to_dots()`. `canonize`, `reduce_algebra` and
 `undo_dots` are target verbs even if their current callers are tests only.
 
 Spenso's explicit filtered collect/expand operations remain available, with
@@ -362,7 +363,7 @@ notebook (about a quarter of the current ninety-odd methods) are removed in
 the same change unless a product doc deliberately specifies their semantics. A generated stub,
 a historical performance report, or a bare name inventory is not such a claim. The supported
 construction/indexing/presentation operations are explicitly specified in the Idenso API page. The target verbs `canonize`,
-`simplify_epsilon` and `undo_dots` are retained regardless of current caller
+`reduce_algebra` and `undo_dots` are retained regardless of current caller
 counts. The unused `expand_metrics`, `expand_mink`, `expand_bis`,
 `expand_mink_bis` and `expand_in_patterns` return structure/coefficient lists;
 remove them rather than treating them as contraction aliases.
@@ -387,7 +388,7 @@ findings of the other agent; their line references are to
 `crates/spynso3/src/network.rs` (`multiply_network`),
 `crates/idenso/src/tensor/inference.rs` (fallback inference),
 `crates/idenso/src/tensor/replacement.rs` (`Signature::observe`),
-`crates/spynso3/src/expression.rs` (`simplify` pipeline,
+`crates/spynso3/src/expression.rs` (`reduce_algebra` pipeline,
 `from_transformed_atom`), `crates/idenso/src/color/simplify.rs`
 (`rewrite_terms`, `ProductView`) and
 `crates/idenso/src/shorthands/schoonschip/normalize_dots.rs` (preflight).
@@ -494,8 +495,8 @@ Taken on 2026-09-27 unless marked open.
 - #strong[D1 — old Python names: no compatibility layer.] The renames land in
   one change together with every caller: the production sites
   (production-only audited counts: `simplify_metrics` 13, `to_dots` 8,
-  `normalize_dots` 5, `simplify_gamma` 4 plus one settings call,
-  `simplify_color` 6 plus nine settings calls, `schoonschip_net` 1, and the
+  `normalize_dots` 5, `reduce_algebra` 4 plus one settings call,
+  `reduce_algebra` 6 plus nine settings calls, `schoonschip_net` 1, and the
   tensor-leaf uses among 96 `replace_multiple`), the notebooks, tests, and
   generated stubs and docs. Nothing is kept for compatibility.
 - #strong[D2 — `TensorNetwork` retains component graphs.] Execution and rendering
@@ -566,7 +567,7 @@ parallel types or engines:
   symbolic-network algebra, strategy knobs and per-dot network parsing only
   after migrating their production callers and capturing their inputs.
 - R13 removes materializing sector collection and repeated cleanup. Gamma chain
-  collection is an output of `simplify_gamma`; scalar and foreign spectators
+  collection is an output of `reduce_algebra`; scalar and foreign spectators
   remain opaque. Callback outputs still undergo the necessary interface checks.
 - R15 regenerates stubs and documentation from the installed bindings and removes
   compatibility names and obsolete coefficient-list APIs in the same change.
@@ -629,10 +630,10 @@ chain normalization, color-basis, and alternate conjugation wrappers. Aliasing b
 `wrap_indices(scope, dummies_only=True)` replaces raw dummy wrapping. The unused Python
 `ColorCasimirSettings` class is removed with its consumer. Rust retains cooking and local
 algebra needed by production. The evaluator's invariant-only branch runs when `do_algebra`
-is false, whereas `simplify_color` runs when it is true: these are mutually exclusive, so
+is false, whereas `reduce_algebra` runs when it is true: these are mutually exclusive, so
 removing the Rust-only invariant pass there would change behavior.
 
-Retain `simplify(settings)` as the documented shared Rust orchestrator returning aliases.
+Retain `reduce_algebra(settings)` as the documented shared Rust orchestrator returning aliases.
 Retain the deliberately documented construction, indexing, composition, and presentation
 surface. D2 adopts the binary-method rename, preserving network component data operations.
 
@@ -674,7 +675,7 @@ metric/vector core changes from 0.056 to 0.061 ms. Graph allocation stays at fiv
 syntax inspection for inference and candidate detection still scales with payload size.
 
 The supplementary order comparison prepares the same local vertex factors before timing.
-It measures `contract(order=None)` followed by explicit materialization and final routing,
+It measures `contract()` followed by explicit materialization and final routing,
 alternates explicit/default schedules, and verifies exact equality of their outputs. Its
 default-to-default CPU comparison is:
 

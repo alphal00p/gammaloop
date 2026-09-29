@@ -1,10 +1,16 @@
 """Coherent amplitudes close physical ports and reproduce a massive QED result."""
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 import re
 import xml.etree.ElementTree as ET
 
 from symbolica import E, S
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 from symbolica.community.tensor import TensorExpression
 
 model = hep.Model.standard_model()
@@ -72,7 +78,14 @@ for references in (None, {2: P(3), 3: P(2)}, {2: P(0), 3: P(0)}):
     assert expression.is_scalar
     # The gamma pass reaches its own fixed point. Physical polarization sums
     # then require distributing contracted tensor factors, not scalar algebra.
-    scalar = expression.simplify_gamma().contract().to_expression().to_dots()
+    scalar = (
+        expression.reduce_algebra(
+            AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .to_expression()
+        .to_dots()
+    )
     result = kin.apply(scalar.to_expression())
     assert (result - expected).replace(s, 2 * mass**2 - t - u).together() == E("0")
     assert closed.sum_spins().expression().to_expression() == expression.to_expression()

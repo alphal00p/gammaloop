@@ -3,6 +3,12 @@
 The ALOHA Weyl convention is C = -i gamma(2) gamma(0).
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 from symbolica import E, S
 from symbolica.community.tensor import (
     AUTO,
@@ -39,7 +45,11 @@ assert c_head(bis_j, bis_i) == -charge.to_expression()
 identity = TensorExpression.g(spin)(i, j)
 square = TensorExpression(c_head(bis_i, bis_k) * c_head(bis_k, bis_j))
 assert (
-    square.simplify_gamma().to_expression().to_expression() == -identity.to_expression()
+    square.reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .to_expression()
+    .to_expression()
+    == -identity.to_expression()
 )
 
 c = c_head(incoming, outgoing)
@@ -48,13 +58,16 @@ transposed_mu = g_head(outgoing, incoming, mink_mu)
 transposed_nu = g_head(outgoing, incoming, mink_nu)
 sandwich = TensorExpression(chain_head(bis_i, bis_j, c, gamma_mu, c))
 transposed_sandwich = TensorExpression(chain_head(bis_i, bis_j, c, transposed_mu, c))
-assert sandwich.simplify_gamma().to_expression().to_expression() == chain_head(
-    bis_i, bis_j, transposed_mu
-)
-assert (
-    transposed_sandwich.simplify_gamma().to_expression().to_expression()
-    == chain_head(bis_i, bis_j, gamma_mu)
-)
+assert sandwich.reduce_algebra(
+    AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+).contract(
+    ContractSettings(collect_chains=False, collect_traces=False)
+).to_expression().to_expression() == chain_head(bis_i, bis_j, transposed_mu)
+assert transposed_sandwich.reduce_algebra(
+    AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+).contract(
+    ContractSettings(collect_chains=False, collect_traces=False)
+).to_expression().to_expression() == chain_head(bis_i, bis_j, gamma_mu)
 
 # The public chain builder selects each matrix channel; no sewing indices are
 # manufactured here. A product of transposes retains the original factor order.
@@ -71,10 +84,18 @@ word = scalar * chain(
     open_charge,
 )
 expected = -scalar * chain_head(bis_i, bis_j, transposed_mu, transposed_nu)
-reduced = word.simplify_gamma().to_expression()
+reduced = (
+    word.reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .to_expression()
+)
 assert reduced.to_expression() == expected
 assert (
-    reduced.simplify_gamma().to_expression().to_expression() == reduced.to_expression()
+    reduced.reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .to_expression()
+    .to_expression()
+    == reduced.to_expression()
 )
 
 # Slash dimension inference also accepts a momentum label followed by mink(D).
@@ -88,18 +109,34 @@ for dim in (E("4"), dimension):
             bis_i, bis_j, g_head(outgoing, incoming, momentum(7, mink_head(dim)))
         )
         assert (
-            compact.simplify_gamma().to_expression().to_expression() == expected_slash
+            compact.reduce_algebra(
+                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .to_expression()
+            .to_expression()
+            == expected_slash
         )
     else:
         assert (
-            compact.simplify_gamma().to_expression().to_expression()
+            compact.reduce_algebra(
+                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .to_expression()
+            .to_expression()
             == compact.to_expression()
         )
     ordinary = g_head(incoming, outgoing, mink_head(dim, mu))
     ordinary_word = TensorExpression(chain_head(bis_i, bis_j, c, ordinary, c))
     if dim == dimension:
         assert (
-            ordinary_word.simplify_gamma().to_expression().to_expression()
+            ordinary_word.reduce_algebra(
+                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .to_expression()
+            .to_expression()
             == ordinary_word.to_expression()
         )
 

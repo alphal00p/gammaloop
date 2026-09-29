@@ -4,6 +4,12 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-MuAmu
 This tests the squared current contraction, not diagram generation or phase space.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 import importlib
 import sys
 from pathlib import Path
@@ -47,10 +53,16 @@ kin = fk.Kinematics.mandelstam(
 )
 contracted = (
     (
-        TensorExpression(incoming).simplify_gamma().to_expression()
-        * TensorExpression(outgoing).simplify_gamma().to_expression()
+        TensorExpression(incoming)
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .to_expression()
+        * TensorExpression(outgoing)
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .to_expression()
     )
-    .contract()
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_dots()
     .to_expression()
     .to_expression()
@@ -92,9 +104,17 @@ right_current = chain(
     TensorExpression.projp(4)("middle", b),
 ).to_expression()
 projected = (incoming * outgoing).replace(pattern, right_current)
-traces = TensorExpression(projected).simplify_gamma()
+traces = (
+    TensorExpression(projected)
+    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+)
 contracted = (
-    traces.simplify_epsilon().contract().to_dots().to_expression().to_expression()
+    traces.reduce_algebra(AlgebraSettings(epsilon=True))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .to_dots()
+    .to_expression()
+    .to_expression()
 )
 # Undo the two initial spin averages: each projected state is specified.
 polarized = 4 * kin.apply(contracted) * e**4 / s**2

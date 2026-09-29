@@ -4,13 +4,14 @@ Reference: FeynCalc EW/Tree/Mu-ElAnelNmu. The full unitary-gauge squared
 amplitude is retained before the low-energy limit and analytic integrations.
 """
 
+from symbolica.community.tensor import AlgebraSettings, ContractSettings
+
 import json
 
 import numpy as np
 from symbolica import E, Replacement, S, Symbol
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 from symbolica.community.tensor import (
-    CookSettings,
     GammaSimplifySettings,
     TensorExpression,
 )
@@ -69,7 +70,13 @@ operator = TensorExpression(
 )
 adjoint = (
     operator.dirac_adjoint()
-    .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+    .reduce_algebra(
+        AlgebraSettings(
+            gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
+            epsilon=True,
+        )
+    )
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
     .to_expression()
 )
@@ -87,12 +94,14 @@ projector = (
 contracted = (
     TensorExpression(
         operator.to_expression() * adjoint * projector,
-        cook_indices=CookSettings.indices(),
+        intern="flattened",
     )
-    .simplify_gamma()
-    .simplify_epsilon()
+    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .reduce_algebra(AlgebraSettings(epsilon=True))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
-    .contract()
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
 )
 assert contracted.contraction_complete
 contracted = contracted.to_expression().to_dots()

@@ -114,7 +114,7 @@ impl ColorSum {
 mod tests {
     use super::*;
     use feynkit_model::Model;
-    use idenso::tensor::{ContractionSettings, SymbolicTensor};
+    use idenso::tensor::{ContractSettings, SymbolicTensor};
     use symbolica::parse;
 
     #[test]
@@ -130,7 +130,12 @@ mod tests {
             let sum = ColorSum::new(&particle).unwrap();
             let trace = SymbolicTensor::infer(sum.expression([parse!("i"), parse!("i")]))
                 .unwrap()
-                .contract(ContractionSettings::default().without_rank_one_tensors())
+                .contract(ContractSettings {
+                    rank_one: false,
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -139,7 +144,12 @@ mod tests {
             let average =
                 SymbolicTensor::infer(sum.averaged(true).expression([parse!("i"), parse!("i")]))
                     .unwrap()
-                    .contract(ContractionSettings::default().without_rank_one_tensors())
+                    .contract(ContractSettings {
+                        rank_one: false,
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()

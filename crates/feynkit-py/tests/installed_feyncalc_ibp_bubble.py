@@ -8,8 +8,8 @@ integrals at spacelike and timelike points below the two-particle threshold.
 
 import numpy as np
 from symbolica import E, Replacement, S
-from symbolica.community import hep
-from symbolica.community.hep import oneloop
+from symbolica.community import feynkit as hep
+from symbolica.community.feynkit import oneloop
 
 d, k, p, s, mass_a, mass_b, eps = S(
     "ibp_bubble::d",

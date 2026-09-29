@@ -25,6 +25,8 @@ from time import perf_counter_ns, process_time_ns
 from symbolica import E, Replacement, S
 from symbolica.community.tensor import (
     AUTO,
+    AlgebraSettings,
+    ContractSettings,
     GammaSimplifySettings,
     Representation,
     TensorExpression,
@@ -213,7 +215,9 @@ class FermionLadder:
         """Trace, insert physical momentum routing, then fully collect the scalar."""
         if source is None:
             source = self.source
-        traced = source.simplify_gamma(self.settings)
+        traced = source.reduce_algebra(
+            AlgebraSettings(gamma=self.settings, epsilon=True)
+        ).contract(ContractSettings(collect_chains=False, collect_traces=False))
         traced = (
             traced.expand() if self.staged_routing else traced.to_expression()
         ).to_expression()
@@ -236,8 +240,16 @@ class FermionLadder:
 
     def phases(self, expected):
         """Separate diagnostic clock; never substituted for the complete timing."""
+        from tensor_benchmark_cases import completed
+
         start = process_time_ns()
-        traced = self.source.simplify_gamma(self.settings)
+        algebra = self.source.reduce_algebra(
+            AlgebraSettings(gamma=self.settings, epsilon=True)
+        )
+        owner = algebra.contract(
+            ContractSettings(collect_chains=False, collect_traces=False)
+        )
+        traced = owner
         after_gamma = process_time_ns()
         traced = (
             traced.expand() if self.staged_routing else traced.to_expression()
@@ -266,6 +278,7 @@ class FermionLadder:
             }
         assert result == expected
         return {
+            "completion": completed(reduce_algebra=algebra, contract=owner),
             "trace_cpu_ns": after_trace - start,
             "gamma_reduction_cpu_ns": after_gamma - start,
             "trace_materialization_cpu_ns": after_trace - after_gamma,
@@ -700,7 +713,14 @@ def consolidation_child(args):
         if isinstance(case, HistoricalLadder):
             assert describe(result)["terms"] == 9652
             typed = case.typed()
-            assert atom(typed.contract().expand()) == result
+            assert (
+                atom(
+                    typed.contract(
+                        ContractSettings(collect_chains=False, collect_traces=False)
+                    ).expand()
+                )
+                == result
+            )
             record["scalar_rank_and_fixedpoint"] = typed.is_scalar
             assert record["scalar_rank_and_fixedpoint"]
         if args.form and hasattr(case, "import_form"):
@@ -1190,7 +1210,10 @@ def consolidation_benchmark(args):
                     "samples": [],
                 }
                 report["form"].append(row)
-                if case.startswith("free4-"):
+                if case.startswith("free4-") or case in (
+                    "colour-fierz",
+                    "mixed-colour-trace4",
+                ):
                     repeats = 8192
                     while True:
                         calibration = _form_run(

@@ -53,14 +53,24 @@ pub fn nested_dot_expression() -> Atom {
 pub fn run_contraction(expr: Atom) -> SymbolicTensor<AliasInterfaces, AliasedAtom> {
     SymbolicTensor::infer(expr)
         .expect("valid benchmark tensor")
-        .contract(Default::default())
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .expect("valid contraction")
 }
 
 pub fn assert_contraction_invariants() {
     let result = std::sync::Arc::new(run_contraction(nested_dot_expression()));
     assert!(result.contraction_complete());
-    let repeated = result.contract(Default::default()).unwrap();
+    let repeated = result
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap();
     assert!(std::sync::Arc::ptr_eq(&result, &repeated));
 }
 

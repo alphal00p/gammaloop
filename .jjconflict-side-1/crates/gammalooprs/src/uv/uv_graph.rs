@@ -557,7 +557,7 @@ pub trait UVE {
 mod shared_expression_tests {
     use super::*;
     use crate::uv::spenso_lor_atom;
-    use idenso::tensor::{ContractionSettings, SymbolicTensor};
+    use idenso::tensor::{ContractSettings, SymbolicTensor};
     use linnet::half_edge::involution::EdgeIndex;
 
     #[test]
@@ -568,7 +568,11 @@ mod shared_expression_tests {
         let momentum_square =
             SymbolicTensor::infer(spenso_lor_atom(edge.0 as i32, edge.0, GS.dim).pow(2))
                 .unwrap()
-                .contract(ContractionSettings::default())
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()

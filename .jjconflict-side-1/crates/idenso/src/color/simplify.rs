@@ -51,48 +51,56 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         registry: &[Definition],
         settings: ColorSimplifySettings,
+        settled: &mut crate::tensor::simplification::observation::SettledRegions,
     ) -> Result<(Self, Vec<Definition>), TensorInferenceError> {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::ColorKernel,
+        );
         let simplifier = ColorAlgebraSimplifier { settings };
         self.collect_with_map(
             None,
             registry,
             atom_contains_color_node,
             |selected, registry, complete| {
-                let expression = simplifier.step(selected.expression.as_view(), complete);
-                let mut network = expression
-                    .as_view()
-                    .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
-                    .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?;
-                let expression = if network.remove_antisymmetric_zero_terms() {
-                    network
-                        .simple_execute::<()>()
-                        .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?
-                } else {
-                    expression
-                };
-                let expression = restore_explicit_su_n_generator_chains(expression);
-                let rewritten = selected.with_rewritten_expression(expression)?;
-                if settings.simplify_non_color {
-                    // The shared scheduler contracts the complete changed domain.
-                    Ok((rewritten, Vec::new()))
-                } else {
-                    // Internal colour metrics still close, while the collector keeps
-                    // foreign coefficients outside this selected monomial. Carry any
-                    // generated aliases instead of resolving their bodies here.
-                    let contracted = rewritten.contract_parts(Default::default())?;
-                    let mut registry = registry
+                settled.run(selected, complete, |selected| {
+                    let expression = simplifier.step(selected.expression.as_view(), complete);
+                    let mut network = expression
+                        .as_view()
+                        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                        .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?;
+                    let expression = if network.remove_antisymmetric_zero_terms() {
+                        network
+                            .simple_execute::<()>()
+                            .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?
+                    } else {
+                        expression
+                    };
+                    let expression = restore_explicit_su_n_generator_chains(expression);
+                    let rewritten = selected.with_rewritten_expression(expression)?;
+                    // Every structural request is limited to this selected colour
+                    // monomial and uses the shared contraction implementation.
+                    let mut contracted =
+                        rewritten.contract_parts(crate::tensor::ContractSettings {
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })?;
+                    let inherited = registry
                         .iter()
                         .cloned()
                         .map(|pair| (pair.0.expression.clone(), pair))
                         .collect();
+                    let mut registry = std::collections::HashMap::new();
                     SymbolicTensor::<
                         crate::tensor::aliases::AliasInterfaces,
                         symbolica::atom::AliasedAtom,
                     >::retain_contracted_definitions(
-                        &contracted, &mut registry
+                        &contracted, &inherited, &mut registry
                     )?;
+                    contracted.root.proofs.frontier = contracted.status;
                     Ok((contracted.root, registry.into_values().collect()))
-                }
+                })
             },
         )
     }

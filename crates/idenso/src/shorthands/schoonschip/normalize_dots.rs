@@ -4,7 +4,10 @@ use spenso::{
     dot, dualizable_, g,
     network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
     rank1_, self_dual_,
-    structure::slot::{SlotMatch, SlotMatcher},
+    structure::{
+        representation::RepName,
+        slot::{IsAbstractSlot, SlotMatch, SlotMatcher},
+    },
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
@@ -59,6 +62,9 @@ pub(crate) struct DotNormalizer {
     rank_one: &'static str,
     metric: Symbol,
     exposes_product: bool,
+    metrics: bool,
+    rank_one_powers: bool,
+    representations: Option<Vec<spenso::structure::representation::LibraryRep>>,
 }
 
 /// An odd tensor power exposes a factor which a subsequent contraction
@@ -69,16 +75,53 @@ pub(super) struct DotNormalization {
 }
 
 impl DotNormalizer {
+    #[cfg(any(test, feature = "reference-cases"))]
     pub(crate) fn run(view: AtomView<'_>) -> Atom {
         Self::normalize(view).expression
     }
 
+    /// Convert compact scalar-product spelling only. Explicit indices and powers
+    /// remain available for the structural contractor.
+    pub(crate) fn notation(view: AtomView<'_>) -> Atom {
+        let compact = Self::with_settings(
+            view,
+            crate::tensor::ContractSettings {
+                metrics: false,
+                rank_one: false,
+                ..Default::default()
+            },
+        );
+        Self::metric_shorthand_to_dot(compact.as_view())
+    }
+
+    pub(crate) fn with_settings(
+        view: AtomView<'_>,
+        settings: crate::tensor::ContractSettings<'_>,
+    ) -> Atom {
+        Self::normalize_with_settings(view, settings).expression
+    }
+
+    #[cfg(any(test, feature = "reference-cases"))]
     pub(super) fn normalize(view: AtomView<'_>) -> DotNormalization {
+        Self::normalize_with_settings(view, Default::default())
+    }
+
+    pub(super) fn normalize_with_settings(
+        view: AtomView<'_>,
+        settings: crate::tensor::ContractSettings<'_>,
+    ) -> DotNormalization {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::OutputNormalization,
+        );
         let mut normalizer = Self {
             slots: SlotMatcher::default(),
             rank_one: &T.rank1,
             metric: ETS.metric,
             exposes_product: false,
+            metrics: settings.metrics,
+            rank_one_powers: settings.rank_one,
+            representations: settings.representations.map(<[_]>::to_vec),
         };
         let expression = normalizer.apply(view);
         DotNormalization {
@@ -181,6 +224,20 @@ impl DotNormalizer {
         Some(function!(self.metric, outer, inner))
     }
 
+    fn permits(&mut self, slot: AtomView<'_>) -> bool {
+        if self.representations.is_none() {
+            return true;
+        }
+        let Ok(slot) = self.slots.parse::<spenso::structure::representation::LibraryRep, spenso::structure::abstract_index::AbstractIndex>(slot) else {
+            return false;
+        };
+        self.representations.as_ref().is_none_or(|allowed| {
+            allowed
+                .iter()
+                .any(|candidate| candidate.base() == slot.rep().rep.base())
+        })
+    }
+
     fn normalize_power(&mut self, base: AtomView<'_>, exponent: AtomView<'_>) -> Option<Atom> {
         let exponent = i64::try_from(exponent).ok()?;
         // Retain the existing integral-power convention: negative even powers
@@ -191,12 +248,16 @@ impl DotNormalizer {
         let AtomView::Fun(function) = base else {
             return None;
         };
-        let square = if function.get_symbol() == self.metric {
+        let square = if self.metrics && function.get_symbol() == self.metric {
             let mut arguments = function.iter();
             if arguments.len() != 2 {
                 return None;
             }
-            let SlotMatch::Explicit(first) = self.slots.classify(arguments.next().unwrap()) else {
+            let first_argument = arguments.next().unwrap();
+            if !self.permits(first_argument) {
+                return None;
+            }
+            let SlotMatch::Explicit(first) = self.slots.classify(first_argument) else {
                 return None;
             };
             let SlotMatch::Explicit(second) = self.slots.classify(arguments.next().unwrap()) else {
@@ -211,8 +272,11 @@ impl DotNormalizer {
                 return None;
             }
             first.dimension().to_owned()
-        } else if function.get_symbol().has_tag(self.rank_one) {
+        } else if self.rank_one_powers && function.get_symbol().has_tag(self.rank_one) {
             let argument = self.slots.vector_argument(function)?;
+            if !self.permits(argument) {
+                return None;
+            }
             let SlotMatch::Explicit(slot) = self.slots.classify(argument) else {
                 return None;
             };

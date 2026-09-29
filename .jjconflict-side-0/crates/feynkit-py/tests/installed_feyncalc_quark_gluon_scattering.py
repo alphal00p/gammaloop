@@ -6,12 +6,13 @@ https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QGl-QGl-2
 The extra angular-cut rates retain the quark mass and use native phase space.
 """
 
+from symbolica.community.tensor import AlgebraSettings, ContractSettings
+
 import numpy as np
 from symbolica import E, S, Symbol
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 from symbolica.community.tensor import (
     ColorSimplifySettings,
-    CookSettings,
     GammaSimplifySettings,
     TensorExpression,
 )
@@ -84,7 +85,13 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     assert len(operator.structure.slots) == (8 if count == 3 else 6)
     adjoint = (
         operator.dirac_adjoint()
-        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .reduce_algebra(
+            AlgebraSettings(
+                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
+                epsilon=True,
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
     )
@@ -139,15 +146,21 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     )
     print("color", boson, flush=True)
     colored = (
-        TensorExpression(generic, cook_indices=CookSettings.indices())
-        .simplify_color()
+        TensorExpression(generic, intern="flattened")
+        .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
         .replace(dA, Nc**2 - 1)
     )
     colored = (
         TensorExpression(colored)
-        .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
+        .reduce_algebra(
+            AlgebraSettings(
+                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
     )
 
@@ -160,12 +173,19 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
     spin_summed = (
         TensorExpression(
             colored.to_expression() * spin_projector,
-            cook_indices=CookSettings.indices(),
+            intern="flattened",
         )
-        .simplify_gamma()
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
     )
-    reduced = kinematics.apply(spin_summed.contract().to_expression().to_dots())
+    reduced = kinematics.apply(
+        spin_summed.contract(
+            ContractSettings(collect_chains=False, collect_traces=False)
+        )
+        .to_expression()
+        .to_dots()
+    )
     for mode in ("covariant", "null", "timelike") if count == 3 else ("ghost",):
         polarizations = E("1")
         if count == 3:
@@ -186,9 +206,9 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
         scalar = (
             TensorExpression(
                 reduced.to_expression() * polarizations,
-                cook_indices=CookSettings.indices(),
+                intern="flattened",
             )
-            .contract()
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_dots()
         )

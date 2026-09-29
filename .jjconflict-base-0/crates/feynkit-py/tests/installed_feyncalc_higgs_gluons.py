@@ -5,12 +5,18 @@ The gallery uses CreateFeynAmp PreFactor -> -1. Native UFO amplitudes retain
 all graph/Feynman-rule phases, so their overall sign is opposite to that page.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 from math import asin, asinh, log, pi, sqrt
 from pathlib import Path
 
 from symbolica import E, Replacement, S, Symbol
-from symbolica.community import hep
-from symbolica.community.hep import oneloop
+from symbolica.community import feynkit as hep
+from symbolica.community.feynkit import oneloop
 from symbolica.community.tensor import ColorSimplifySettings, TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -123,10 +129,15 @@ for orientation, diagram in enumerate(result.diagrams):
     # orientations. Promote Lorentz dimension before Dirac trace; tr(1)=4.
     trace = (
         TensorExpression(numerator.expand())
-        .simplify_gamma()
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .expand()
-        .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
-        .contract()
+        .reduce_algebra(
+            AlgebraSettings(
+                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_dots()
         .to_expression()
@@ -287,7 +298,7 @@ assert (tensor - exchanged).expand() == E("0")
 for contraction in (P(1, mink(D, mu)), P(0, mink(D, nu)) - P(1, mink(D, nu))):
     ward = (
         TensorExpression((tensor * contraction).expand())
-        .contract()
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_dots()
         .to_expression()
@@ -295,13 +306,18 @@ for contraction in (P(1, mink(D, mu)), P(0, mink(D, nu)) - P(1, mink(D, nu))):
     assert kinematics.apply(ward).expand() == E("0")
 norm = kinematics.apply(
     TensorExpression((tensor**2).expand())
-    .contract()
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
     .to_dots()
     .to_expression()
 )
 assert (norm - (D - 2) * s**2 / 4).expand() == E("0")
-color_norm = TensorExpression(color**2).contract().to_expression().to_expression()
+color_norm = (
+    TensorExpression(color**2)
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .to_expression()
+    .to_expression()
+)
 assert color_norm == dA
 # Also evaluate the physical axial polarization sums, taking each gluon as
 # the other's null reference. Ward identities imply agreement with -g sums.
@@ -323,7 +339,7 @@ polarization_sum = gluon.spin_sum(P(1), mu, rho, reference=P(2)) * gluon.spin_su
 )
 physical_norm = physical_kinematics.apply(
     TensorExpression((physical_tensor * conjugate_tensor * polarization_sum).expand())
-    .contract()
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
     .to_dots()
     .to_expression()
@@ -345,7 +361,7 @@ physical_projection_residual = physical_kinematics.apply(
             (full_finite_tensor - finite_factor * physical_tensor) * polarization_sum
         ).expand()
     )
-    .contract()
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
     .to_dots()
     .to_expression()

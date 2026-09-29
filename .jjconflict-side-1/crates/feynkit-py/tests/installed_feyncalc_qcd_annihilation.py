@@ -4,10 +4,16 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QiQibar-QjQjbar
 Bottom and top flavors keep both quark masses symbolic in the SM fixture.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 from pathlib import Path
 
 from symbolica import E, S, Symbol
-from symbolica.community import hep as fk
+from symbolica.community import feynkit as fk
 from symbolica.community.tensor import ColorSimplifySettings, TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -82,9 +88,9 @@ i, j = S("color_i", "color_j")
 assert model.particle_by_pdg(11).color_sum(i, j, average=True) == E("1")
 for pdg in (5, -5, 21):
     identity = model.particle_by_pdg(pdg).color_sum(i, i, average=True)
-    assert TensorExpression(identity).contract().to_expression().to_expression() == E(
-        "1"
-    )
+    assert TensorExpression(identity).contract(
+        ContractSettings(collect_chains=False, collect_traces=False)
+    ).to_expression().to_expression() == E("1")
 
 # A named adjoint dimension is required by Spenso. Impose dA=Nc²-1 after
 # contraction, when the dimensions are ordinary scalar expressions.
@@ -96,8 +102,14 @@ generic = (
 )
 contracted = (
     TensorExpression(generic)
-    .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
-    .simplify_gamma()
+    .reduce_algebra(
+        AlgebraSettings(
+            color=ColorSimplifySettings(substitute_cof_dimension_invariants=True),
+            gamma=GammaSimplifySettings(),
+            epsilon=True,
+        )
+    )
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
     .to_dots()
 )

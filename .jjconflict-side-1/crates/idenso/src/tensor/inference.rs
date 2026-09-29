@@ -74,6 +74,10 @@ impl SymbolicTensor<PartialStructure> {
         if self.proofs.validated.get() == Some(&true) {
             return Ok(());
         }
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::Validation,
+        );
         let (_, occurrences) = Self::validate_observed_interface(
             &self.expression,
             &self.structure,
@@ -114,13 +118,16 @@ impl SymbolicTensor<PartialStructure> {
         if expression == self.expression {
             return Ok(self.clone());
         }
-        if expression.is_zero() || self.normalization_is_intrinsic() {
-            return Ok(Self::from_validated_parts(
-                expression,
-                self.structure.clone(),
-            ));
+        let mut result = if expression.is_zero() || self.normalization_is_intrinsic() {
+            Self::from_validated_parts(expression, self.structure.clone())
+        } else {
+            self.with_rewritten_expression(expression)?
+        };
+        result.proofs.literal_origin = self.proofs.literal_origin.clone();
+        if self.proofs.observations.get().is_some() {
+            result.observe_replacement(self);
         }
-        self.with_rewritten_expression(expression)
+        Ok(result)
     }
 
     /// Cached facts belong to this exact payload/interface pair. Unchecked
@@ -245,6 +252,9 @@ impl SymbolicTensor<PartialStructure> {
 
     /// Infer an ordered interface from symbolic syntax, lowering unresolved powers.
     pub fn infer(atom: Atom) -> InferenceResult<Self> {
+        #[cfg(feature = "reference-cases")]
+        let _phase =
+            crate::reference_cases::timing::scope(crate::reference_cases::timing::Phase::Admission);
         Self::infer_with_contractions(atom).map(|(value, _)| value)
     }
 
@@ -382,16 +392,18 @@ impl SymbolicTensor<PartialStructure> {
         if let Some(expression) = normalized {
             self = Self::from_normalized_parts(expression, self.structure);
         }
-        let mut value = self.normalize_closed_root_chain()?;
+        // Publishing proven tensor parts must retain their chosen notation.
+        // Chain closure belongs to explicit composition and permitted contraction;
+        // doing it here would reverse undo_trace and ignore collect_traces=false.
         let structure = InterfaceInference::merge_explicit_interface_sequence(
-            std::slice::from_ref(&value.structure),
+            std::slice::from_ref(&self.structure),
         )?
         .canonicalize_open_ports();
-        if structure != value.structure {
-            value.invalidate_proofs();
-            value.structure = structure;
+        if structure != self.structure {
+            self.invalidate_proofs();
+            self.structure = structure;
         }
-        Ok(value)
+        Ok(self)
     }
 
     /// Check an arbitrary result against this interface and finish it once.
@@ -452,6 +464,10 @@ impl SymbolicTensor<PartialStructure> {
     /// A selected variable or polynomial mode uses the corresponding Symbolica
     /// operation unchanged. Callback-sensitive results retain normal validation.
     pub fn expanded(&self, var: Option<AtomView<'_>>, via_poly: bool) -> InferenceResult<Self> {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::Materialization,
+        );
         let expression = if let Some(var) = var {
             if !matches!(var, AtomView::Var(_) | AtomView::Fun(_)) {
                 return Err(TensorInferenceError::invalid(
@@ -1501,6 +1517,10 @@ impl InterfaceInference {
         &mut self,
         atom: AtomView<'_>,
     ) -> InferenceResult<(PartialStructure, ExplicitIndexOccurrences)> {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::InterfaceDiscovery,
+        );
         #[cfg(test)]
         tests::INFERENCE_CALLS.with(|count| count.set(count.get() + 1));
         let occurrences = Self::scoped_occurrences(atom, &mut self.slots)?;
@@ -1942,6 +1962,10 @@ impl InterfaceInference {
     }
 
     fn infer_view(&mut self, atom: AtomView<'_>) -> InferenceResult<PartialStructure> {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::InterfaceDiscovery,
+        );
         if self.leaf_inference == LeafInference::ObserveStorage {
             return self.infer_storage_view(atom);
         }
@@ -4333,7 +4357,17 @@ pub(crate) mod tests {
                             (source.expression).as_atom_view().to_owned(),
                         )
                         .unwrap()
-                        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                            epsilon: true,
+                            ..Default::default()
+                        })
+                        .unwrap()
+                        .contract(crate::tensor::ContractSettings {
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })
                         .unwrap()
                         .resolved()
                         .unwrap()
@@ -4342,7 +4376,17 @@ pub(crate) mod tests {
                             (expected.expression).as_atom_view().to_owned(),
                         )
                         .unwrap()
-                        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                        .reduce_algebra(&crate::tensor::AlgebraSettings {
+                            gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                            epsilon: true,
+                            ..Default::default()
+                        })
+                        .unwrap()
+                        .contract(crate::tensor::ContractSettings {
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })
                         .unwrap()
                         .resolved()
                         .unwrap()
@@ -4577,7 +4621,17 @@ pub(crate) mod tests {
                         (value.expression).as_atom_view().to_owned(),
                     )
                     .unwrap()
-                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -4787,7 +4841,15 @@ pub(crate) mod tests {
         assert!(!before_validation.is_empty());
         assert!(value.with_rewritten_expression(rewritten).is_err());
         assert_eq!(*calls.lock().unwrap(), before_validation);
-        assert!(value.simplify_gamma(settings).is_err());
+        assert!(
+            value
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(settings),
+                    epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                    ..Default::default()
+                })
+                .is_err()
+        );
     }
 
     #[test]

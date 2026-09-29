@@ -5,12 +5,18 @@ The shared model, graph UV expansion, Spenso traces, tensor projection and
 RustRed IBP calculate all two-, three- and four-point ultraviolet poles.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 import copy
 import json
 
 from symbolica import E, Matrix, Replacement, S, Symbol
-from symbolica.community import hep
-from symbolica.community.hep import oneloop
+from symbolica.community import feynkit as hep
+from symbolica.community.feynkit import oneloop
 from symbolica.community.tensor import TensorExpression
 
 # Reuse the built-in quartic scalar and Standard Model Dirac propagators.
@@ -272,7 +278,12 @@ for variant, lorentz, local_coupling in [
                 for label, projector in probes:
                     trace = (
                         TensorExpression((numerator * projector).expand())
-                        .simplify_gamma()
+                        .reduce_algebra(
+                            AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+                        )
+                        .contract(
+                            ContractSettings(collect_chains=False, collect_traces=False)
+                        )
                         .expand()
                         .to_dots()
                         .to_expression()

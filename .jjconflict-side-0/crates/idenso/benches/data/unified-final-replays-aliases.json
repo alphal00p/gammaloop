@@ -1,0 +1,4942 @@
+{
+  "cases": [
+    "historical-original",
+    "historical-early",
+    "gluon-4-trace4",
+    "gluon-4-tracen"
+  ],
+  "rounds": 3,
+  "timing": "Fresh interpreter for each case/route/round; one fixed unmeasured warmup, checked and disposed before clocks; fixed measured calls; setup/checks/disposal excluded; no discarded measured samples or retries",
+  "diagnostic_scope": "Separate check processes; phase clocks/counts never substituted for primary clocks",
+  "scheduling": "Rotate interpreter order each round; raw scalar and FORM references separate from paired criterion",
+  "host_scope": "Pinned among cooperating jobs, not an exclusive-host claim",
+  "ladder_routes": {
+    "baseline": "factorized",
+    "candidate": "factorized"
+  },
+  "contraction_order_scope": "Current frontend only; frozen saved frontends retain their recorded strategy and do not receive this option",
+  "schema": 1,
+  "protocol": "Exact replay of measured child commands; same clocks/warmups and rotating labels; new checked source/core and fresh baseline samples.",
+  "reference": {
+    "path": "/tmp/unified-tensor-baseline/paired-aliases11.json",
+    "sha256": "67f5d5614a3c769551ef6ea2219ffdf080be6aab347fbcfa97a7394555b1b650",
+    "core_identities": {
+      "baseline": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+      "candidate": "66da03e10278c7c4a9893d08569974792007e8d2e038115faf2413dd6d327905"
+    },
+    "checker_scope": "The saved cohort independently checked baseline+host11 against FORM and exact HEP components. New input hashes and raw serialized expressions must equal those checked outputs, so equality transfers that certificate. FORM clocks retain their original timestamps."
+  },
+  "source_manifest": {
+    "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+    "entrypoint": "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+    "sources": {
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/tensor_benchmark_diagnostics.py": "8f1d2e3205f12cbaec77142d4fa560857c4d0fcf62bd647d44993e64529fa7ca",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/gluon_ladder_validation.py": "e76466517daf3dbb4fe730211bcd6817bf9eb2d4f53facf4a8886122e9443b31",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/spenso_tensor_explorer.py": "749825ae28924b9337c01bc240aa85fd977dec7b88a0d9fe90e89bfa8c990685",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/gluon_ladder.py": "d71c3218972118ceee31eb7fe7dfc42c4c0e7701115099d8314ed090832d775c",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/spenso_current_kernel.py": "fa95c1db816b5ebd88dfd55f8b917d96862445833c1e94f0973792767a29bbbc",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/spenso_api_tour.py": "7dca3fb4543b63cda79531617ffb6a01dac4743f21d1297118c60c2e3d24c12f",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder_validation.py": "621636b6feb9077459435162f9b7acb27c90ef203e1b3adf2ec0f0badeefcebc",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/spenso_idenso_display.py": "ea06eb3461d3668c5b6fdcd75f8cdc4ba99e9cbd559bb7a71977ffd89aab1435",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/tensor_benchmark_cases.py": "23d0b13eec37037da9c26bb9050e059f1e5f4e701395cadc2e7857f1a875da39",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/tensor_benchmark_factorized.py": "014bee330003387566d75714ee9128694ffc1cfc9df496abf411d657a44dec6b",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/tensor_benchmark_production.py": "96e96947d41dcaaf8665ac8b0e8b61c1e5672632c4bdd3ebd934013b99690d6b",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/tensor_benchmark_provenance.json": "0434661857702d5e405e4a09eff23a71100f6f8684cbdbdeb0bb5156b2782b11",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py": "9a5d5291889704846c1ef566fa2c69701bf4cfcfcd37a6ff47cbd1dad410afd4",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/tensor_benchmark_production_fixtures.py": "2c4b81f16cd6b97906415ff9578079568f1705fcc7386f5d081745b9c3fc2b6e",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/gluon_propagator_ladder.frm": "d97bdd5bac979b1c35702687579b5b2256a5e3a456e6a3b49047b176d34f8b23",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_propagator_ladder.frm": "65504488cad22f555a93a215737bd8024f099a4941696e3cb3ba87c18ce0bc1a",
+      "/tmp/unified-tensor-baseline/candidate-benchmark-source12/crates/idenso/tests/fixtures/aa_aa_2l_gl16_integrated_uv_start_after_simplify_metrics.sym": "1466fa00bf69c90b3261e16f58bd62fa78b2ac2c653b9437835d4300e93fd5f3"
+    }
+  },
+  "summary": {
+    "historical-original": {
+      "baseline": {
+        "wall_ns": 97374870.0,
+        "process_ns": 96550557.0,
+        "thread_ns": 96545667.0,
+        "complete_algebra": {
+          "wall_ns": 94397798.0,
+          "process_ns": 93626501.0,
+          "thread_ns": 93620801.0
+        }
+      },
+      "candidate": {
+        "wall_ns": 93601566.0,
+        "process_ns": 92766796.0,
+        "thread_ns": 92761006.0,
+        "complete_algebra": {
+          "wall_ns": 93374275.0,
+          "process_ns": 92575119.0,
+          "thread_ns": 92569469.0
+        }
+      },
+      "FORM": {
+        "body_cpu_ns": 746000000.0,
+        "scope": "Independent batch expression; excludes startup/setup/checks/disposal",
+        "retained_from_checked_cohort": "/tmp/unified-tensor-baseline/paired-aliases11.json"
+      }
+    },
+    "historical-early": {
+      "baseline": {
+        "wall_ns": 89982004.0,
+        "process_ns": 89255929.0,
+        "thread_ns": 89248599.0,
+        "complete_algebra": {
+          "wall_ns": 92378813.0,
+          "process_ns": 91663313.0,
+          "thread_ns": 91657233.0
+        }
+      },
+      "candidate": {
+        "wall_ns": 92055251.0,
+        "process_ns": 91363711.0,
+        "thread_ns": 91358021.0,
+        "complete_algebra": {
+          "wall_ns": 90059804.0,
+          "process_ns": 89032865.0,
+          "thread_ns": 89027075.0
+        }
+      },
+      "FORM": {
+        "body_cpu_ns": 156000000.0,
+        "scope": "Independent batch expression; excludes startup/setup/checks/disposal",
+        "retained_from_checked_cohort": "/tmp/unified-tensor-baseline/paired-aliases11.json"
+      }
+    },
+    "gluon-4-trace4": {
+      "baseline": {
+        "wall_ns": 241471960.0,
+        "process_ns": 239251279.0,
+        "thread_ns": 239246079.0,
+        "complete_algebra": {
+          "wall_ns": 243618148.0,
+          "process_ns": 241669870.0,
+          "thread_ns": 241663620.0
+        }
+      },
+      "candidate": {
+        "wall_ns": 239600274.0,
+        "process_ns": 237589729.0,
+        "thread_ns": 237585087.0,
+        "complete_algebra": {
+          "wall_ns": 241502502.0,
+          "process_ns": 239754546.0,
+          "thread_ns": 239748826.0
+        }
+      },
+      "FORM": {
+        "body_cpu_ns": 602000000.0,
+        "scope": "Independent batch expression; excludes startup/setup/checks/disposal",
+        "retained_from_checked_cohort": "/tmp/unified-tensor-baseline/paired-aliases11.json"
+      }
+    },
+    "gluon-4-tracen": {
+      "baseline": {
+        "wall_ns": 325028163.0,
+        "process_ns": 322609855.0,
+        "thread_ns": 322605445.0,
+        "complete_algebra": {
+          "wall_ns": 315500189.0,
+          "process_ns": 313092977.0,
+          "thread_ns": 313087287.0
+        }
+      },
+      "candidate": {
+        "wall_ns": 315175267.0,
+        "process_ns": 312610645.0,
+        "thread_ns": 312605134.0,
+        "complete_algebra": {
+          "wall_ns": 318325590.0,
+          "process_ns": 315803219.0,
+          "thread_ns": 315798289.0
+        }
+      },
+      "FORM": {
+        "body_cpu_ns": 870000000.0,
+        "scope": "Independent batch expression; excludes startup/setup/checks/disposal",
+        "retained_from_checked_cohort": "/tmp/unified-tensor-baseline/paired-aliases11.json"
+      }
+    }
+  },
+  "completed": true,
+  "process_wall_seconds": 101.1935452669859,
+  "records": [
+    {
+      "label": "baseline",
+      "case": "historical-original",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-original",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-factorized-round1.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.0166150038130581,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-factorized-round1.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-original",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 93946227,
+        "process_ns": 93158667,
+        "thread_ns": 93152517,
+        "setup_process_ns": 1369071,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-factorized-round1.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700750806187438,
+          "load_average": [
+            75.6591796875,
+            76.79345703125,
+            76.79736328125
+          ],
+          "max_rss": 122984,
+          "voluntary_switches": 4,
+          "involuntary_switches": 2,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 43996191 2032910 4044303 162794806 23309 683372 322352 0 0 0",
+            "cpu285 20508477 1245898 4624726 187805656 26978 460045 277014 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 94397798,
+          "process_ns": 93626501,
+          "thread_ns": 93620801,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 5473245
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 36123740
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 50255869
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 86689,
+          "definitions": 163,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 5,
+              "stored_weight_terms": 17
+            },
+            {
+              "depth": 2,
+              "definitions": 9,
+              "stored_weight_terms": 29
+            },
+            {
+              "depth": 3,
+              "definitions": 17,
+              "stored_weight_terms": 68
+            },
+            {
+              "depth": 4,
+              "definitions": 29,
+              "stored_weight_terms": 148
+            },
+            {
+              "depth": 5,
+              "definitions": 30,
+              "stored_weight_terms": 346
+            },
+            {
+              "depth": 6,
+              "definitions": 43,
+              "stored_weight_terms": 219
+            },
+            {
+              "depth": 7,
+              "definitions": 29,
+              "stored_weight_terms": 556
+            },
+            {
+              "depth": 8,
+              "definitions": 1,
+              "stored_weight_terms": 184
+            }
+          ],
+          "final_terms": 9652
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "candidate",
+      "case": "historical-original",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+        "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-original",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-original-factorized-round1.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.0164168328046799,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-original-factorized-round1.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-original",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 89761191,
+        "process_ns": 89009714,
+        "thread_ns": 89003984,
+        "setup_process_ns": 1778871,
+        "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-original-factorized-round1.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700751842670733,
+          "load_average": [
+            75.6591796875,
+            76.79345703125,
+            76.79736328125
+          ],
+          "max_rss": 126096,
+          "voluntary_switches": 4,
+          "involuntary_switches": 3,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 43996261 2032910 4044324 162794818 23309 683373 322352 0 0 0",
+            "cpu285 20508478 1245898 4624727 187805758 26978 460045 277014 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 93374275,
+          "process_ns": 92575119,
+          "thread_ns": 92569469,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "completion": {
+            "contract": "ReductionStatus.Complete"
+          },
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 5579946
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 37083005
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 48605092
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 86689,
+          "definitions": 163,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 5,
+              "stored_weight_terms": 17
+            },
+            {
+              "depth": 2,
+              "definitions": 9,
+              "stored_weight_terms": 29
+            },
+            {
+              "depth": 3,
+              "definitions": 17,
+              "stored_weight_terms": 68
+            },
+            {
+              "depth": 4,
+              "definitions": 29,
+              "stored_weight_terms": 148
+            },
+            {
+              "depth": 5,
+              "definitions": 30,
+              "stored_weight_terms": 346
+            },
+            {
+              "depth": 6,
+              "definitions": 43,
+              "stored_weight_terms": 219
+            },
+            {
+              "depth": 7,
+              "definitions": 29,
+              "stored_weight_terms": 556
+            },
+            {
+              "depth": 8,
+              "definitions": 1,
+              "stored_weight_terms": 184
+            }
+          ],
+          "final_terms": 9652
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "historical-original",
+      "route": "scalar",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-original",
+        "--route",
+        "scalar",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-scalar-round1.json",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 13.894643920939416,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-scalar-round1.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-original",
+        "route": "scalar",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 828840143,
+        "process_ns": 822575923,
+        "thread_ns": 822570443,
+        "setup_process_ns": 1488441,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "vertices": 8,
+          "internal_edges": 11,
+          "scope": "Typed replace, ambient contraction, final typed expansion"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-scalar-round1.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700754316513843,
+          "load_average": [
+            75.44580078125,
+            76.73046875,
+            76.77685546875
+          ],
+          "max_rss": 122940,
+          "voluntary_switches": 5,
+          "involuntary_switches": 7,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 43996471 2032910 4044349 162794829 23309 683374 322352 0 0 0",
+            "cpu285 20508480 1245898 4624728 187806002 26978 460045 277015 0 0 0"
+          ]
+        },
+        "phases": {
+          "stages": [
+            {
+              "vertex": 1,
+              "replacement_cpu_ns": 614370,
+              "contraction_cpu_ns": 1171611,
+              "terms": 5,
+              "atom_bytes": 5300,
+              "sha256": "76d9ec4d717436c74e4c647c160a8ca2ff0b0ce463a23f6f18530cec807952ff",
+              "rank": 0
+            },
+            {
+              "vertex": 2,
+              "replacement_cpu_ns": 1268151,
+              "contraction_cpu_ns": 4815895,
+              "terms": 24,
+              "atom_bytes": 22849,
+              "sha256": "abe17b72a62a725ecc1f81ee628f59f69e3db13ef7ce02a434199960f90d7639",
+              "rank": 0
+            },
+            {
+              "vertex": 3,
+              "replacement_cpu_ns": 2904363,
+              "contraction_cpu_ns": 18295607,
+              "terms": 108,
+              "atom_bytes": 91568,
+              "sha256": "248a9eac54387628c113867c2b377cf3559dec22b74d8073c9919c683e0377b2",
+              "rank": 0
+            },
+            {
+              "vertex": 4,
+              "replacement_cpu_ns": 8213746,
+              "contraction_cpu_ns": 71399989,
+              "terms": 490,
+              "atom_bytes": 368303,
+              "sha256": "a87e3ec28b91d17a78da7ddf7355e0bbb977a5e6cfb9c8847d548429f7ce3e4d",
+              "rank": 0
+            },
+            {
+              "vertex": 5,
+              "replacement_cpu_ns": 27652817,
+              "contraction_cpu_ns": 250914535,
+              "terms": 1381,
+              "atom_bytes": 1098977,
+              "sha256": "472512e8eef8ee1bf90b90dcf9763fcbd2737f79d4480d9d171133b390ef5038",
+              "rank": 0
+            },
+            {
+              "vertex": 6,
+              "replacement_cpu_ns": 79372387,
+              "contraction_cpu_ns": 833559709,
+              "terms": 1064,
+              "atom_bytes": 2779816,
+              "sha256": "51ce1795a133a08cfbf29d37048b4df9225bcd7ef33e9811f6d6ea22c77e624f",
+              "rank": 0
+            },
+            {
+              "vertex": 7,
+              "replacement_cpu_ns": 78805058,
+              "contraction_cpu_ns": 562642598,
+              "terms": 313,
+              "atom_bytes": 16748528,
+              "sha256": "d4a576fb34130dd309f309453f9c9d20bbbac5aca3e5a049fd6bfa3f0980ac1c",
+              "rank": 0
+            },
+            {
+              "vertex": 8,
+              "replacement_cpu_ns": 82072367,
+              "contraction_cpu_ns": 178685815,
+              "terms": 1548,
+              "atom_bytes": 88799011,
+              "sha256": "859a86b6626c1c4851a0de5eee7dddb0bc52a079014c30148e7703686b5fd751",
+              "rank": 0
+            },
+            {
+              "phase": "materialization",
+              "cpu_ns": 162588816,
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": 0
+            }
+          ],
+          "internal_edges": 11
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "candidate",
+      "case": "historical-original",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+        "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-original",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-original-factorized-round2.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.016400828026235,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-original-factorized-round2.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-original",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 95803424,
+        "process_ns": 94932628,
+        "thread_ns": 94926428,
+        "setup_process_ns": 1629081,
+        "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-original-factorized-round2.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700766779414863,
+          "load_average": [
+            78.59326171875,
+            77.365234375,
+            76.9833984375
+          ],
+          "max_rss": 126084,
+          "voluntary_switches": 5,
+          "involuntary_switches": 1,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 43997594 2032910 4044454 162794837 23309 683384 322352 0 0 0",
+            "cpu285 20508491 1245898 4624731 187807233 26978 460046 277015 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 90342105,
+          "process_ns": 89555629,
+          "thread_ns": 89549579,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "completion": {
+            "contract": "ReductionStatus.Complete"
+          },
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 3883474
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 36238105
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 43051959
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 86689,
+          "definitions": 163,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 5,
+              "stored_weight_terms": 17
+            },
+            {
+              "depth": 2,
+              "definitions": 9,
+              "stored_weight_terms": 29
+            },
+            {
+              "depth": 3,
+              "definitions": 17,
+              "stored_weight_terms": 68
+            },
+            {
+              "depth": 4,
+              "definitions": 29,
+              "stored_weight_terms": 148
+            },
+            {
+              "depth": 5,
+              "definitions": 30,
+              "stored_weight_terms": 346
+            },
+            {
+              "depth": 6,
+              "definitions": 43,
+              "stored_weight_terms": 219
+            },
+            {
+              "depth": 7,
+              "definitions": 29,
+              "stored_weight_terms": 556
+            },
+            {
+              "depth": 8,
+              "definitions": 1,
+              "stored_weight_terms": 184
+            }
+          ],
+          "final_terms": 9652
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "historical-original",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-original",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-factorized-round2.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.0664567979983985,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-factorized-round2.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-original",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 99294146,
+        "process_ns": 98414726,
+        "thread_ns": 98408526,
+        "setup_process_ns": 1620162,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-factorized-round2.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700767828476928,
+          "load_average": [
+            78.59326171875,
+            77.365234375,
+            76.9833984375
+          ],
+          "max_rss": 122976,
+          "voluntary_switches": 5,
+          "involuntary_switches": 2,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 43997666 2032910 4044474 162794849 23309 683385 322352 0 0 0",
+            "cpu285 20508503 1245898 4624733 187807322 26978 460047 277015 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 99822398,
+          "process_ns": 98911331,
+          "thread_ns": 98905422,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 5531124
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 37944740
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 54701196
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 86689,
+          "definitions": 163,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 5,
+              "stored_weight_terms": 17
+            },
+            {
+              "depth": 2,
+              "definitions": 9,
+              "stored_weight_terms": 29
+            },
+            {
+              "depth": 3,
+              "definitions": 17,
+              "stored_weight_terms": 68
+            },
+            {
+              "depth": 4,
+              "definitions": 29,
+              "stored_weight_terms": 148
+            },
+            {
+              "depth": 5,
+              "definitions": 30,
+              "stored_weight_terms": 346
+            },
+            {
+              "depth": 6,
+              "definitions": 43,
+              "stored_weight_terms": 219
+            },
+            {
+              "depth": 7,
+              "definitions": 29,
+              "stored_weight_terms": 556
+            },
+            {
+              "depth": 8,
+              "definitions": 1,
+              "stored_weight_terms": 184
+            }
+          ],
+          "final_terms": 9652
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "historical-original",
+      "route": "scalar",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-original",
+        "--route",
+        "scalar",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-scalar-round2.json",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 15.149086670018733,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-scalar-round2.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-original",
+        "route": "scalar",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 869600982,
+        "process_ns": 861999031,
+        "thread_ns": 861992741,
+        "setup_process_ns": 1559101,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "vertices": 8,
+          "internal_edges": 11,
+          "scope": "Typed replace, ambient contraction, final typed expansion"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-scalar-round2.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700770430919371,
+          "load_average": [
+            77.90478515625,
+            77.24267578125,
+            76.94580078125
+          ],
+          "max_rss": 122980,
+          "voluntary_switches": 5,
+          "involuntary_switches": 6,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 43997886 2032910 4044499 162794861 23309 683387 322352 0 0 0",
+            "cpu285 20508534 1245898 4624740 187807542 26978 460048 277016 0 0 0"
+          ]
+        },
+        "phases": {
+          "stages": [
+            {
+              "vertex": 1,
+              "replacement_cpu_ns": 634160,
+              "contraction_cpu_ns": 1232531,
+              "terms": 5,
+              "atom_bytes": 5300,
+              "sha256": "76d9ec4d717436c74e4c647c160a8ca2ff0b0ce463a23f6f18530cec807952ff",
+              "rank": 0
+            },
+            {
+              "vertex": 2,
+              "replacement_cpu_ns": 1320732,
+              "contraction_cpu_ns": 4910265,
+              "terms": 24,
+              "atom_bytes": 22849,
+              "sha256": "abe17b72a62a725ecc1f81ee628f59f69e3db13ef7ce02a434199960f90d7639",
+              "rank": 0
+            },
+            {
+              "vertex": 3,
+              "replacement_cpu_ns": 4360914,
+              "contraction_cpu_ns": 18776746,
+              "terms": 108,
+              "atom_bytes": 91568,
+              "sha256": "248a9eac54387628c113867c2b377cf3559dec22b74d8073c9919c683e0377b2",
+              "rank": 0
+            },
+            {
+              "vertex": 4,
+              "replacement_cpu_ns": 8484047,
+              "contraction_cpu_ns": 74963709,
+              "terms": 490,
+              "atom_bytes": 368303,
+              "sha256": "a87e3ec28b91d17a78da7ddf7355e0bbb977a5e6cfb9c8847d548429f7ce3e4d",
+              "rank": 0
+            },
+            {
+              "vertex": 5,
+              "replacement_cpu_ns": 29065958,
+              "contraction_cpu_ns": 269363509,
+              "terms": 1381,
+              "atom_bytes": 1098977,
+              "sha256": "472512e8eef8ee1bf90b90dcf9763fcbd2737f79d4480d9d171133b390ef5038",
+              "rank": 0
+            },
+            {
+              "vertex": 6,
+              "replacement_cpu_ns": 87575996,
+              "contraction_cpu_ns": 895108169,
+              "terms": 1064,
+              "atom_bytes": 2779816,
+              "sha256": "51ce1795a133a08cfbf29d37048b4df9225bcd7ef33e9811f6d6ea22c77e624f",
+              "rank": 0
+            },
+            {
+              "vertex": 7,
+              "replacement_cpu_ns": 89106119,
+              "contraction_cpu_ns": 619515788,
+              "terms": 313,
+              "atom_bytes": 16748528,
+              "sha256": "d4a576fb34130dd309f309453f9c9d20bbbac5aca3e5a049fd6bfa3f0980ac1c",
+              "rank": 0
+            },
+            {
+              "vertex": 8,
+              "replacement_cpu_ns": 92162840,
+              "contraction_cpu_ns": 193545765,
+              "terms": 1548,
+              "atom_bytes": 88799011,
+              "sha256": "859a86b6626c1c4851a0de5eee7dddb0bc52a079014c30148e7703686b5fd751",
+              "rank": 0
+            },
+            {
+              "phase": "materialization",
+              "cpu_ns": 169244593,
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": 0
+            }
+          ],
+          "internal_edges": 11
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "historical-original",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-original",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-factorized-round3.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.0164715331047773,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-factorized-round3.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-original",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 97374870,
+        "process_ns": 96550557,
+        "thread_ns": 96545667,
+        "setup_process_ns": 1578912,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-factorized-round3.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700784050876665,
+          "load_average": [
+            75.97509765625,
+            76.84033203125,
+            76.81787109375
+          ],
+          "max_rss": 122972,
+          "voluntary_switches": 5,
+          "involuntary_switches": 5,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 43999104 2032910 4044618 162794874 23309 683399 322353 0 0 0",
+            "cpu285 20508709 1245898 4624775 187808683 26978 460057 277019 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 91212598,
+          "process_ns": 90218578,
+          "thread_ns": 90213209,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 5142436
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 36281651
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 48431885
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 86689,
+          "definitions": 163,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 5,
+              "stored_weight_terms": 17
+            },
+            {
+              "depth": 2,
+              "definitions": 9,
+              "stored_weight_terms": 29
+            },
+            {
+              "depth": 3,
+              "definitions": 17,
+              "stored_weight_terms": 68
+            },
+            {
+              "depth": 4,
+              "definitions": 29,
+              "stored_weight_terms": 148
+            },
+            {
+              "depth": 5,
+              "definitions": 30,
+              "stored_weight_terms": 346
+            },
+            {
+              "depth": 6,
+              "definitions": 43,
+              "stored_weight_terms": 219
+            },
+            {
+              "depth": 7,
+              "definitions": 29,
+              "stored_weight_terms": 556
+            },
+            {
+              "depth": 8,
+              "definitions": 1,
+              "stored_weight_terms": 184
+            }
+          ],
+          "final_terms": 9652
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "candidate",
+      "case": "historical-original",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+        "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-original",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-original-factorized-round3.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.0164396627806127,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-original-factorized-round3.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-original",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 93601566,
+        "process_ns": 92766796,
+        "thread_ns": 92761006,
+        "setup_process_ns": 1483041,
+        "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-original-factorized-round3.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700785082561933,
+          "load_average": [
+            75.97509765625,
+            76.84033203125,
+            76.81787109375
+          ],
+          "max_rss": 126112,
+          "voluntary_switches": 4,
+          "involuntary_switches": 6,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 43999177 2032910 4044637 162794885 23309 683400 322353 0 0 0",
+            "cpu285 20508722 1245898 4624778 187808769 26978 460058 277019 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 95388483,
+          "process_ns": 94370522,
+          "thread_ns": 94365322,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "completion": {
+            "contract": "ReductionStatus.Complete"
+          },
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 5169405
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 37639891
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 46387907
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 86689,
+          "definitions": 163,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 5,
+              "stored_weight_terms": 17
+            },
+            {
+              "depth": 2,
+              "definitions": 9,
+              "stored_weight_terms": 29
+            },
+            {
+              "depth": 3,
+              "definitions": 17,
+              "stored_weight_terms": 68
+            },
+            {
+              "depth": 4,
+              "definitions": 29,
+              "stored_weight_terms": 148
+            },
+            {
+              "depth": 5,
+              "definitions": 30,
+              "stored_weight_terms": 346
+            },
+            {
+              "depth": 6,
+              "definitions": 43,
+              "stored_weight_terms": 219
+            },
+            {
+              "depth": 7,
+              "definitions": 29,
+              "stored_weight_terms": 556
+            },
+            {
+              "depth": 8,
+              "definitions": 1,
+              "stored_weight_terms": 184
+            }
+          ],
+          "final_terms": 9652
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "historical-original",
+      "route": "scalar",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-original",
+        "--route",
+        "scalar",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-scalar-round3.json",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 14.847340424079448,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-scalar-round3.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-original",
+        "route": "scalar",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 891925816,
+        "process_ns": 884146066,
+        "thread_ns": 884136256,
+        "setup_process_ns": 1510012,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "vertices": 8,
+          "internal_edges": 11,
+          "scope": "Typed replace, ambient contraction, final typed expansion"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-original-scalar-round3.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700787692913325,
+          "load_average": [
+            75.97509765625,
+            76.84033203125,
+            76.81787109375
+          ],
+          "max_rss": 123000,
+          "voluntary_switches": 5,
+          "involuntary_switches": 7,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 43999402 2032910 4044661 162794896 23309 683402 322353 0 0 0",
+            "cpu285 20508754 1245898 4624785 187808990 26978 460059 277019 0 0 0"
+          ]
+        },
+        "phases": {
+          "stages": [
+            {
+              "vertex": 1,
+              "replacement_cpu_ns": 641900,
+              "contraction_cpu_ns": 1256072,
+              "terms": 5,
+              "atom_bytes": 5300,
+              "sha256": "76d9ec4d717436c74e4c647c160a8ca2ff0b0ce463a23f6f18530cec807952ff",
+              "rank": 0
+            },
+            {
+              "vertex": 2,
+              "replacement_cpu_ns": 2112702,
+              "contraction_cpu_ns": 5697435,
+              "terms": 24,
+              "atom_bytes": 22849,
+              "sha256": "abe17b72a62a725ecc1f81ee628f59f69e3db13ef7ce02a434199960f90d7639",
+              "rank": 0
+            },
+            {
+              "vertex": 3,
+              "replacement_cpu_ns": 2957963,
+              "contraction_cpu_ns": 20451149,
+              "terms": 108,
+              "atom_bytes": 91568,
+              "sha256": "248a9eac54387628c113867c2b377cf3559dec22b74d8073c9919c683e0377b2",
+              "rank": 0
+            },
+            {
+              "vertex": 4,
+              "replacement_cpu_ns": 9372960,
+              "contraction_cpu_ns": 77636070,
+              "terms": 490,
+              "atom_bytes": 368303,
+              "sha256": "a87e3ec28b91d17a78da7ddf7355e0bbb977a5e6cfb9c8847d548429f7ce3e4d",
+              "rank": 0
+            },
+            {
+              "vertex": 5,
+              "replacement_cpu_ns": 34624575,
+              "contraction_cpu_ns": 269964065,
+              "terms": 1381,
+              "atom_bytes": 1098977,
+              "sha256": "472512e8eef8ee1bf90b90dcf9763fcbd2737f79d4480d9d171133b390ef5038",
+              "rank": 0
+            },
+            {
+              "vertex": 6,
+              "replacement_cpu_ns": 85444925,
+              "contraction_cpu_ns": 897435239,
+              "terms": 1064,
+              "atom_bytes": 2779816,
+              "sha256": "51ce1795a133a08cfbf29d37048b4df9225bcd7ef33e9811f6d6ea22c77e624f",
+              "rank": 0
+            },
+            {
+              "vertex": 7,
+              "replacement_cpu_ns": 85314723,
+              "contraction_cpu_ns": 606952505,
+              "terms": 313,
+              "atom_bytes": 16748528,
+              "sha256": "d4a576fb34130dd309f309453f9c9d20bbbac5aca3e5a049fd6bfa3f0980ac1c",
+              "rank": 0
+            },
+            {
+              "vertex": 8,
+              "replacement_cpu_ns": 88608040,
+              "contraction_cpu_ns": 195245780,
+              "terms": 1548,
+              "atom_bytes": 88799011,
+              "sha256": "859a86b6626c1c4851a0de5eee7dddb0bc52a079014c30148e7703686b5fd751",
+              "rank": 0
+            },
+            {
+              "phase": "materialization",
+              "cpu_ns": 169251016,
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": 0
+            }
+          ],
+          "internal_edges": 11
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "historical-early",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-early",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-factorized-round1.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.066473077982664,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-factorized-round1.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-early",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 97603791,
+        "process_ns": 96699910,
+        "thread_ns": 96693440,
+        "setup_process_ns": 1560442,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-factorized-round1.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700800990522391,
+          "load_average": [
+            76.65966796875,
+            76.94677734375,
+            76.85302734375
+          ],
+          "max_rss": 122960,
+          "voluntary_switches": 5,
+          "involuntary_switches": 4,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44000596 2032910 4044776 162794904 23309 683412 322354 0 0 0",
+            "cpu285 20508922 1245898 4624819 187810107 26978 460067 277022 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 98014073,
+          "process_ns": 97170712,
+          "thread_ns": 97164902,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 5337276
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 36708669
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 54500400
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 86689,
+          "definitions": 163,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 5,
+              "stored_weight_terms": 17
+            },
+            {
+              "depth": 2,
+              "definitions": 9,
+              "stored_weight_terms": 29
+            },
+            {
+              "depth": 3,
+              "definitions": 17,
+              "stored_weight_terms": 68
+            },
+            {
+              "depth": 4,
+              "definitions": 29,
+              "stored_weight_terms": 148
+            },
+            {
+              "depth": 5,
+              "definitions": 30,
+              "stored_weight_terms": 346
+            },
+            {
+              "depth": 6,
+              "definitions": 43,
+              "stored_weight_terms": 219
+            },
+            {
+              "depth": 7,
+              "definitions": 29,
+              "stored_weight_terms": 556
+            },
+            {
+              "depth": 8,
+              "definitions": 1,
+              "stored_weight_terms": 184
+            }
+          ],
+          "final_terms": 9652
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "candidate",
+      "case": "historical-early",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+        "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-early",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-early-factorized-round1.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.0164929879829288,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-early-factorized-round1.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-early",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 94638300,
+        "process_ns": 93905098,
+        "thread_ns": 93898458,
+        "setup_process_ns": 1702052,
+        "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-early-factorized-round1.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700802053547667,
+          "load_average": [
+            76.65966796875,
+            76.94677734375,
+            76.85302734375
+          ],
+          "max_rss": 126016,
+          "voluntary_switches": 4,
+          "involuntary_switches": 4,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44000668 2032910 4044796 162794918 23309 683413 322354 0 0 0",
+            "cpu285 20508934 1245898 4624821 187810197 26978 460068 277022 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 90059804,
+          "process_ns": 89032865,
+          "thread_ns": 89027075,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "completion": {
+            "contract": "ReductionStatus.Complete"
+          },
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 5621905
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 40263425
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 42077688
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 86689,
+          "definitions": 163,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 5,
+              "stored_weight_terms": 17
+            },
+            {
+              "depth": 2,
+              "definitions": 9,
+              "stored_weight_terms": 29
+            },
+            {
+              "depth": 3,
+              "definitions": 17,
+              "stored_weight_terms": 68
+            },
+            {
+              "depth": 4,
+              "definitions": 29,
+              "stored_weight_terms": 148
+            },
+            {
+              "depth": 5,
+              "definitions": 30,
+              "stored_weight_terms": 346
+            },
+            {
+              "depth": 6,
+              "definitions": 43,
+              "stored_weight_terms": 219
+            },
+            {
+              "depth": 7,
+              "definitions": 29,
+              "stored_weight_terms": 556
+            },
+            {
+              "depth": 8,
+              "definitions": 1,
+              "stored_weight_terms": 184
+            }
+          ],
+          "final_terms": 9652
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "historical-early",
+      "route": "scalar",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-early",
+        "--route",
+        "scalar",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-scalar-round1.json",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 7.430985269136727,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-scalar-round1.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-early",
+        "route": "scalar",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 336045010,
+        "process_ns": 333106912,
+        "thread_ns": 333101381,
+        "setup_process_ns": 1496542,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order": [
+            5,
+            4,
+            6,
+            3,
+            7,
+            2,
+            8,
+            1
+          ],
+          "vertices": 8,
+          "internal_edges": 11,
+          "scope": "Typed replace, ambient contraction, final typed expansion"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-scalar-round1.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700803546271199,
+          "load_average": [
+            76.65966796875,
+            76.94677734375,
+            76.85302734375
+          ],
+          "max_rss": 122988,
+          "voluntary_switches": 5,
+          "involuntary_switches": 4,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44000788 2032910 4044815 162794926 23309 683414 322354 0 0 0",
+            "cpu285 20508954 1245898 4624825 187810323 26978 460069 277022 0 0 0"
+          ]
+        },
+        "phases": {
+          "stages": [
+            {
+              "vertex": 5,
+              "replacement_cpu_ns": 435440,
+              "contraction_cpu_ns": 1036111,
+              "terms": 5,
+              "atom_bytes": 5316,
+              "sha256": "b9490d808bc7fd77756cf642a293aa73a73d9cdc1e4b671c9f36706c78e26635",
+              "rank": 0
+            },
+            {
+              "vertex": 4,
+              "replacement_cpu_ns": 1246951,
+              "contraction_cpu_ns": 4798734,
+              "terms": 24,
+              "atom_bytes": 22849,
+              "sha256": "6db64ec2a929436c6990c07cff4b944199a279c3e2711edeeade00979208970a",
+              "rank": 0
+            },
+            {
+              "vertex": 6,
+              "replacement_cpu_ns": 7280155,
+              "contraction_cpu_ns": 16702276,
+              "terms": 32,
+              "atom_bytes": 31881,
+              "sha256": "a28d7f946b28f12df57b0aea8c9560a91262552d74228ba933fc34a3ab97d021",
+              "rank": 0
+            },
+            {
+              "vertex": 3,
+              "replacement_cpu_ns": 3857494,
+              "contraction_cpu_ns": 19960993,
+              "terms": 70,
+              "atom_bytes": 93427,
+              "sha256": "fd88f753cfe4fa9ae648ebeaaa8798829b383aa0759c003e8d7afe29141e2dae",
+              "rank": 0
+            },
+            {
+              "vertex": 7,
+              "replacement_cpu_ns": 11469910,
+              "contraction_cpu_ns": 46984090,
+              "terms": 48,
+              "atom_bytes": 380293,
+              "sha256": "34dbf90eff99e7117d94319ca75173e3f6a1bfac2fe23856a0c5ccdf8680805a",
+              "rank": 0
+            },
+            {
+              "vertex": 2,
+              "replacement_cpu_ns": 6388355,
+              "contraction_cpu_ns": 27204065,
+              "terms": 110,
+              "atom_bytes": 2108366,
+              "sha256": "563377f60c65a10958093d9ca996d8bf6c6fd2e977a4fa51cfbb2fdca403c1fb",
+              "rank": 0
+            },
+            {
+              "vertex": 8,
+              "replacement_cpu_ns": 19010066,
+              "contraction_cpu_ns": 65415769,
+              "terms": 66,
+              "atom_bytes": 14474122,
+              "sha256": "74e8889f9e3d8474bc008af5bc62f1c94e6af3bcd10f49da9dac0c0f923129b2",
+              "rank": 0
+            },
+            {
+              "vertex": 1,
+              "replacement_cpu_ns": 12808611,
+              "contraction_cpu_ns": 29561719,
+              "terms": 259,
+              "atom_bytes": 56607209,
+              "sha256": "310123df5429d27a2f946c9ec7298ddd0e134e4a7ab2a5b5ab06e83bcd1c1edd",
+              "rank": 0
+            },
+            {
+              "phase": "materialization",
+              "cpu_ns": 50184945,
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": 0
+            }
+          ],
+          "internal_edges": 11
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "candidate",
+      "case": "historical-early",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+        "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-early",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-early-factorized-round2.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 0.9663528092205524,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-early-factorized-round2.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-early",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 86444722,
+        "process_ns": 85771398,
+        "thread_ns": 85765358,
+        "setup_process_ns": 1547792,
+        "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-early-factorized-round2.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700810484949817,
+          "load_average": [
+            78.61181640625,
+            77.359375,
+            76.98876953125
+          ],
+          "max_rss": 126036,
+          "voluntary_switches": 5,
+          "involuntary_switches": 4,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44001393 2032910 4044890 162794935 23309 683419 322354 0 0 0",
+            "cpu285 20508981 1245898 4624829 187810984 26978 460070 277023 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 83915932,
+          "process_ns": 83301529,
+          "thread_ns": 83296609,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "completion": {
+            "contract": "ReductionStatus.Complete"
+          },
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 3821973
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 34032690
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 41013766
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 86689,
+          "definitions": 163,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 5,
+              "stored_weight_terms": 17
+            },
+            {
+              "depth": 2,
+              "definitions": 9,
+              "stored_weight_terms": 29
+            },
+            {
+              "depth": 3,
+              "definitions": 17,
+              "stored_weight_terms": 68
+            },
+            {
+              "depth": 4,
+              "definitions": 29,
+              "stored_weight_terms": 148
+            },
+            {
+              "depth": 5,
+              "definitions": 30,
+              "stored_weight_terms": 346
+            },
+            {
+              "depth": 6,
+              "definitions": 43,
+              "stored_weight_terms": 219
+            },
+            {
+              "depth": 7,
+              "definitions": 29,
+              "stored_weight_terms": 556
+            },
+            {
+              "depth": 8,
+              "definitions": 1,
+              "stored_weight_terms": 184
+            }
+          ],
+          "final_terms": 9652
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "historical-early",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-early",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-factorized-round2.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.0164225702174008,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-factorized-round2.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-early",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 89982004,
+        "process_ns": 89255929,
+        "thread_ns": 89248599,
+        "setup_process_ns": 1592399,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-factorized-round2.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700811484471126,
+          "load_average": [
+            78.61181640625,
+            77.359375,
+            76.98876953125
+          ],
+          "max_rss": 119900,
+          "voluntary_switches": 5,
+          "involuntary_switches": 5,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44001460 2032910 4044910 162794947 23309 683420 322354 0 0 0",
+            "cpu285 20508981 1245898 4624829 187811084 26978 460070 277023 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 92378813,
+          "process_ns": 91663313,
+          "thread_ns": 91657233,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 5245023
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 33873573
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 51593264
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 86689,
+          "definitions": 163,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 5,
+              "stored_weight_terms": 17
+            },
+            {
+              "depth": 2,
+              "definitions": 9,
+              "stored_weight_terms": 29
+            },
+            {
+              "depth": 3,
+              "definitions": 17,
+              "stored_weight_terms": 68
+            },
+            {
+              "depth": 4,
+              "definitions": 29,
+              "stored_weight_terms": 148
+            },
+            {
+              "depth": 5,
+              "definitions": 30,
+              "stored_weight_terms": 346
+            },
+            {
+              "depth": 6,
+              "definitions": 43,
+              "stored_weight_terms": 219
+            },
+            {
+              "depth": 7,
+              "definitions": 29,
+              "stored_weight_terms": 556
+            },
+            {
+              "depth": 8,
+              "definitions": 1,
+              "stored_weight_terms": 184
+            }
+          ],
+          "final_terms": 9652
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "historical-early",
+      "route": "scalar",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-early",
+        "--route",
+        "scalar",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-scalar-round2.json",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 7.230871334671974,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-scalar-round2.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-early",
+        "route": "scalar",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 318111156,
+        "process_ns": 315339147,
+        "thread_ns": 315334607,
+        "setup_process_ns": 1540161,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order": [
+            5,
+            4,
+            6,
+            3,
+            7,
+            2,
+            8,
+            1
+          ],
+          "vertices": 8,
+          "internal_edges": 11,
+          "scope": "Typed replace, ambient contraction, final typed expansion"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-scalar-round2.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700812939209085,
+          "load_average": [
+            78.61181640625,
+            77.359375,
+            76.98876953125
+          ],
+          "max_rss": 122972,
+          "voluntary_switches": 4,
+          "involuntary_switches": 5,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44001572 2032910 4044930 162794960 23309 683421 322354 0 0 0",
+            "cpu285 20508981 1245898 4624829 187811229 26978 460070 277023 0 0 0"
+          ]
+        },
+        "phases": {
+          "stages": [
+            {
+              "vertex": 5,
+              "replacement_cpu_ns": 457140,
+              "contraction_cpu_ns": 2935692,
+              "terms": 5,
+              "atom_bytes": 5316,
+              "sha256": "b9490d808bc7fd77756cf642a293aa73a73d9cdc1e4b671c9f36706c78e26635",
+              "rank": 0
+            },
+            {
+              "vertex": 4,
+              "replacement_cpu_ns": 1252461,
+              "contraction_cpu_ns": 4737093,
+              "terms": 24,
+              "atom_bytes": 22849,
+              "sha256": "6db64ec2a929436c6990c07cff4b944199a279c3e2711edeeade00979208970a",
+              "rank": 0
+            },
+            {
+              "vertex": 6,
+              "replacement_cpu_ns": 5512366,
+              "contraction_cpu_ns": 16828134,
+              "terms": 32,
+              "atom_bytes": 31881,
+              "sha256": "a28d7f946b28f12df57b0aea8c9560a91262552d74228ba933fc34a3ab97d021",
+              "rank": 0
+            },
+            {
+              "vertex": 3,
+              "replacement_cpu_ns": 3556103,
+              "contraction_cpu_ns": 18051065,
+              "terms": 70,
+              "atom_bytes": 93427,
+              "sha256": "fd88f753cfe4fa9ae648ebeaaa8798829b383aa0759c003e8d7afe29141e2dae",
+              "rank": 0
+            },
+            {
+              "vertex": 7,
+              "replacement_cpu_ns": 11506090,
+              "contraction_cpu_ns": 44494448,
+              "terms": 48,
+              "atom_bytes": 380293,
+              "sha256": "34dbf90eff99e7117d94319ca75173e3f6a1bfac2fe23856a0c5ccdf8680805a",
+              "rank": 0
+            },
+            {
+              "vertex": 2,
+              "replacement_cpu_ns": 6410286,
+              "contraction_cpu_ns": 25236237,
+              "terms": 110,
+              "atom_bytes": 2108366,
+              "sha256": "563377f60c65a10958093d9ca996d8bf6c6fd2e977a4fa51cfbb2fdca403c1fb",
+              "rank": 0
+            },
+            {
+              "vertex": 8,
+              "replacement_cpu_ns": 17023613,
+              "contraction_cpu_ns": 61535837,
+              "terms": 66,
+              "atom_bytes": 14474122,
+              "sha256": "74e8889f9e3d8474bc008af5bc62f1c94e6af3bcd10f49da9dac0c0f923129b2",
+              "rank": 0
+            },
+            {
+              "vertex": 1,
+              "replacement_cpu_ns": 12710540,
+              "contraction_cpu_ns": 26790102,
+              "terms": 259,
+              "atom_bytes": 56607209,
+              "sha256": "310123df5429d27a2f946c9ec7298ddd0e134e4a7ab2a5b5ab06e83bcd1c1edd",
+              "rank": 0
+            },
+            {
+              "phase": "materialization",
+              "cpu_ns": 50364972,
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": 0
+            }
+          ],
+          "internal_edges": 11
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "historical-early",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-early",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-factorized-round3.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 0.9666699231602252,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-factorized-round3.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-early",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 86889183,
+        "process_ns": 86205979,
+        "thread_ns": 86200199,
+        "setup_process_ns": 1510011,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-factorized-round3.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700819756194371,
+          "load_average": [
+            80.1513671875,
+            77.7138671875,
+            77.107421875
+          ],
+          "max_rss": 123036,
+          "voluntary_switches": 5,
+          "involuntary_switches": 2,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44002163 2032910 4045003 162794972 23309 683426 322355 0 0 0",
+            "cpu285 20508981 1245898 4624830 187811910 26978 460070 277023 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 91868561,
+          "process_ns": 91117809,
+          "thread_ns": 91111339,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 5314874
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 34345952
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 51225182
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 86689,
+          "definitions": 163,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 5,
+              "stored_weight_terms": 17
+            },
+            {
+              "depth": 2,
+              "definitions": 9,
+              "stored_weight_terms": 29
+            },
+            {
+              "depth": 3,
+              "definitions": 17,
+              "stored_weight_terms": 68
+            },
+            {
+              "depth": 4,
+              "definitions": 29,
+              "stored_weight_terms": 148
+            },
+            {
+              "depth": 5,
+              "definitions": 30,
+              "stored_weight_terms": 346
+            },
+            {
+              "depth": 6,
+              "definitions": 43,
+              "stored_weight_terms": 219
+            },
+            {
+              "depth": 7,
+              "definitions": 29,
+              "stored_weight_terms": 556
+            },
+            {
+              "depth": 8,
+              "definitions": 1,
+              "stored_weight_terms": 184
+            }
+          ],
+          "final_terms": 9652
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "candidate",
+      "case": "historical-early",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+        "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-early",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-early-factorized-round3.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.016655812971294,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-early-factorized-round3.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-early",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 92055251,
+        "process_ns": 91363711,
+        "thread_ns": 91358021,
+        "setup_process_ns": 1682742,
+        "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-historical-early-factorized-round3.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700820767501125,
+          "load_average": [
+            80.1513671875,
+            77.7138671875,
+            77.107421875
+          ],
+          "max_rss": 126012,
+          "voluntary_switches": 4,
+          "involuntary_switches": 4,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44002232 2032910 4045025 162794981 23309 683427 322355 0 0 0",
+            "cpu285 20508990 1245898 4624830 187812001 26978 460070 277023 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 95810505,
+          "process_ns": 95059646,
+          "thread_ns": 95053316,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "completion": {
+            "contract": "ReductionStatus.Complete"
+          },
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 5445805
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 36132628
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 49825303
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 86689,
+          "definitions": 163,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 5,
+              "stored_weight_terms": 17
+            },
+            {
+              "depth": 2,
+              "definitions": 9,
+              "stored_weight_terms": 29
+            },
+            {
+              "depth": 3,
+              "definitions": 17,
+              "stored_weight_terms": 68
+            },
+            {
+              "depth": 4,
+              "definitions": 29,
+              "stored_weight_terms": 148
+            },
+            {
+              "depth": 5,
+              "definitions": 30,
+              "stored_weight_terms": 346
+            },
+            {
+              "depth": 6,
+              "definitions": 43,
+              "stored_weight_terms": 219
+            },
+            {
+              "depth": 7,
+              "definitions": 29,
+              "stored_weight_terms": 556
+            },
+            {
+              "depth": 8,
+              "definitions": 1,
+              "stored_weight_terms": 184
+            }
+          ],
+          "final_terms": 9652
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "historical-early",
+      "route": "scalar",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "historical-early",
+        "--route",
+        "scalar",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-scalar-round3.json",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 7.581742126960307,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-scalar-round3.json",
+      "reference_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1170,
+          "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+          "rank": 0
+        },
+        "case": "historical-early",
+        "route": "scalar",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 323198625,
+        "process_ns": 320664497,
+        "thread_ns": 320657977,
+        "setup_process_ns": 1463062,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order": [
+            5,
+            4,
+            6,
+            3,
+            7,
+            2,
+            8,
+            1
+          ],
+          "vertices": 8,
+          "internal_edges": 11,
+          "scope": "Typed replace, ambient contraction, final typed expansion"
+        },
+        "result": {
+          "terms": 9652,
+          "atom_bytes": 1880422,
+          "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-historical-early-scalar-round3.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700822220331200,
+          "load_average": [
+            80.1513671875,
+            77.7138671875,
+            77.107421875
+          ],
+          "max_rss": 123036,
+          "voluntary_switches": 5,
+          "involuntary_switches": 4,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44002346 2032910 4045046 162794991 23309 683428 322355 0 0 0",
+            "cpu285 20509006 1245898 4624831 187812129 26978 460071 277023 0 0 0"
+          ]
+        },
+        "phases": {
+          "stages": [
+            {
+              "vertex": 5,
+              "replacement_cpu_ns": 436271,
+              "contraction_cpu_ns": 3181033,
+              "terms": 5,
+              "atom_bytes": 5316,
+              "sha256": "b9490d808bc7fd77756cf642a293aa73a73d9cdc1e4b671c9f36706c78e26635",
+              "rank": 0
+            },
+            {
+              "vertex": 4,
+              "replacement_cpu_ns": 1263890,
+              "contraction_cpu_ns": 6359667,
+              "terms": 24,
+              "atom_bytes": 22849,
+              "sha256": "6db64ec2a929436c6990c07cff4b944199a279c3e2711edeeade00979208970a",
+              "rank": 0
+            },
+            {
+              "vertex": 6,
+              "replacement_cpu_ns": 5496085,
+              "contraction_cpu_ns": 17178774,
+              "terms": 32,
+              "atom_bytes": 31881,
+              "sha256": "a28d7f946b28f12df57b0aea8c9560a91262552d74228ba933fc34a3ab97d021",
+              "rank": 0
+            },
+            {
+              "vertex": 3,
+              "replacement_cpu_ns": 3538052,
+              "contraction_cpu_ns": 19403728,
+              "terms": 70,
+              "atom_bytes": 93427,
+              "sha256": "fd88f753cfe4fa9ae648ebeaaa8798829b383aa0759c003e8d7afe29141e2dae",
+              "rank": 0
+            },
+            {
+              "vertex": 7,
+              "replacement_cpu_ns": 12106970,
+              "contraction_cpu_ns": 48447444,
+              "terms": 48,
+              "atom_bytes": 380293,
+              "sha256": "34dbf90eff99e7117d94319ca75173e3f6a1bfac2fe23856a0c5ccdf8680805a",
+              "rank": 0
+            },
+            {
+              "vertex": 2,
+              "replacement_cpu_ns": 6327225,
+              "contraction_cpu_ns": 25434673,
+              "terms": 110,
+              "atom_bytes": 2108366,
+              "sha256": "563377f60c65a10958093d9ca996d8bf6c6fd2e977a4fa51cfbb2fdca403c1fb",
+              "rank": 0
+            },
+            {
+              "vertex": 8,
+              "replacement_cpu_ns": 19018927,
+              "contraction_cpu_ns": 64381731,
+              "terms": 66,
+              "atom_bytes": 14474122,
+              "sha256": "74e8889f9e3d8474bc008af5bc62f1c94e6af3bcd10f49da9dac0c0f923129b2",
+              "rank": 0
+            },
+            {
+              "vertex": 1,
+              "replacement_cpu_ns": 12715673,
+              "contraction_cpu_ns": 28454234,
+              "terms": 259,
+              "atom_bytes": 56607209,
+              "sha256": "310123df5429d27a2f946c9ec7298ddd0e134e4a7ab2a5b5ab06e83bcd1c1edd",
+              "rank": 0
+            },
+            {
+              "phase": "materialization",
+              "cpu_ns": 54241265,
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": 0
+            }
+          ],
+          "internal_edges": 11
+        },
+        "serialized_output_sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "gluon-4-trace4",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "gluon-4-trace4",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-trace4-factorized-round1.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.7181649548001587,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-trace4-factorized-round1.json",
+      "reference_output_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1465,
+          "sha256": "9be31c0f8bc65fb56465794e5f17052edb11f79cf3f87017000c508f75a85f30",
+          "rank": 0
+        },
+        "case": "gluon-4-trace4",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 241471960,
+        "process_ns": 239251279,
+        "thread_ns": 239246079,
+        "setup_process_ns": 2556694,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 2425,
+          "atom_bytes": 57284,
+          "sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-trace4-factorized-round1.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700829874893442,
+          "load_average": [
+            80.0322265625,
+            77.7587890625,
+            77.1279296875
+          ],
+          "max_rss": 122984,
+          "voluntary_switches": 7,
+          "involuntary_switches": 4,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44003014 2032910 4045124 162795004 23309 683434 322355 0 0 0",
+            "cpu285 20509103 1245898 4624835 187812792 26978 460072 277024 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 243618148,
+          "process_ns": 241669870,
+          "thread_ns": 241663620,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 4687384
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 160821292
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 81520554
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 277347,
+          "definitions": 488,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 19,
+              "stored_weight_terms": 217
+            },
+            {
+              "depth": 2,
+              "definitions": 47,
+              "stored_weight_terms": 484
+            },
+            {
+              "depth": 3,
+              "definitions": 28,
+              "stored_weight_terms": 373
+            },
+            {
+              "depth": 4,
+              "definitions": 79,
+              "stored_weight_terms": 1145
+            },
+            {
+              "depth": 5,
+              "definitions": 182,
+              "stored_weight_terms": 488
+            },
+            {
+              "depth": 6,
+              "definitions": 132,
+              "stored_weight_terms": 1889
+            },
+            {
+              "depth": 7,
+              "definitions": 1,
+              "stored_weight_terms": 745
+            }
+          ],
+          "final_terms": 2425
+        },
+        "serialized_output_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "candidate",
+      "case": "gluon-4-trace4",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+        "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "gluon-4-trace4",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-trace4-factorized-round1.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.7179697547107935,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-trace4-factorized-round1.json",
+      "reference_output_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1465,
+          "sha256": "9be31c0f8bc65fb56465794e5f17052edb11f79cf3f87017000c508f75a85f30",
+          "rank": 0
+        },
+        "case": "gluon-4-trace4",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 247849064,
+        "process_ns": 245723074,
+        "thread_ns": 245717654,
+        "setup_process_ns": 2688252,
+        "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 2425,
+          "atom_bytes": 57284,
+          "sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-trace4-factorized-round1.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700831615007506,
+          "load_average": [
+            80.0322265625,
+            77.7587890625,
+            77.1279296875
+          ],
+          "max_rss": 126100,
+          "voluntary_switches": 5,
+          "involuntary_switches": 4,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44003154 2032910 4045150 162795011 23309 683435 322355 0 0 0",
+            "cpu285 20509125 1245898 4624836 187812942 26978 460073 277024 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 246136748,
+          "process_ns": 244169721,
+          "thread_ns": 244164141,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "completion": {
+            "contract": "ReductionStatus.Complete"
+          },
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 4854396
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 166740290
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 67134232
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 277347,
+          "definitions": 488,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 19,
+              "stored_weight_terms": 217
+            },
+            {
+              "depth": 2,
+              "definitions": 47,
+              "stored_weight_terms": 484
+            },
+            {
+              "depth": 3,
+              "definitions": 28,
+              "stored_weight_terms": 373
+            },
+            {
+              "depth": 4,
+              "definitions": 79,
+              "stored_weight_terms": 1145
+            },
+            {
+              "depth": 5,
+              "definitions": 182,
+              "stored_weight_terms": 488
+            },
+            {
+              "depth": 6,
+              "definitions": 132,
+              "stored_weight_terms": 1889
+            },
+            {
+              "depth": 7,
+              "definitions": 1,
+              "stored_weight_terms": 745
+            }
+          ],
+          "final_terms": 2425
+        },
+        "serialized_output_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "candidate",
+      "case": "gluon-4-trace4",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+        "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "gluon-4-trace4",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-trace4-factorized-round2.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.6678538150154054,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-trace4-factorized-round2.json",
+      "reference_output_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1465,
+          "sha256": "9be31c0f8bc65fb56465794e5f17052edb11f79cf3f87017000c508f75a85f30",
+          "rank": 0
+        },
+        "case": "gluon-4-trace4",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 239600274,
+        "process_ns": 237589729,
+        "thread_ns": 237585087,
+        "setup_process_ns": 2609692,
+        "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 2425,
+          "atom_bytes": 57284,
+          "sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-trace4-factorized-round2.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700833308607014,
+          "load_average": [
+            80.0322265625,
+            77.7587890625,
+            77.1279296875
+          ],
+          "max_rss": 126108,
+          "voluntary_switches": 4,
+          "involuntary_switches": 5,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44003290 2032910 4045170 162795023 23309 683436 322355 0 0 0",
+            "cpu285 20509146 1245898 4624837 187813089 26978 460073 277024 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 239659845,
+          "process_ns": 237502362,
+          "thread_ns": 237496972,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "completion": {
+            "contract": "ReductionStatus.Complete"
+          },
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 5395765
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 159151705
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 68385832
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 277347,
+          "definitions": 488,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 19,
+              "stored_weight_terms": 217
+            },
+            {
+              "depth": 2,
+              "definitions": 47,
+              "stored_weight_terms": 484
+            },
+            {
+              "depth": 3,
+              "definitions": 28,
+              "stored_weight_terms": 373
+            },
+            {
+              "depth": 4,
+              "definitions": 79,
+              "stored_weight_terms": 1145
+            },
+            {
+              "depth": 5,
+              "definitions": 182,
+              "stored_weight_terms": 488
+            },
+            {
+              "depth": 6,
+              "definitions": 132,
+              "stored_weight_terms": 1889
+            },
+            {
+              "depth": 7,
+              "definitions": 1,
+              "stored_weight_terms": 745
+            }
+          ],
+          "final_terms": 2425
+        },
+        "serialized_output_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "gluon-4-trace4",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "gluon-4-trace4",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-trace4-factorized-round2.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.6679534860886633,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-trace4-factorized-round2.json",
+      "reference_output_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1465,
+          "sha256": "9be31c0f8bc65fb56465794e5f17052edb11f79cf3f87017000c508f75a85f30",
+          "rank": 0
+        },
+        "case": "gluon-4-trace4",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 235884060,
+        "process_ns": 233929577,
+        "thread_ns": 233924737,
+        "setup_process_ns": 2551333,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 2425,
+          "atom_bytes": 57284,
+          "sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-trace4-factorized-round2.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700834960730932,
+          "load_average": [
+            79.388671875,
+            77.6630859375,
+            77.10009765625
+          ],
+          "max_rss": 123036,
+          "voluntary_switches": 4,
+          "involuntary_switches": 4,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44003423 2032910 4045190 162795033 23309 683438 322355 0 0 0",
+            "cpu285 20509167 1245898 4624838 187813233 26978 460073 277024 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 238523651,
+          "process_ns": 236475736,
+          "thread_ns": 236470676,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 4598383
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 155273267
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 75370217
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 277347,
+          "definitions": 488,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 19,
+              "stored_weight_terms": 217
+            },
+            {
+              "depth": 2,
+              "definitions": 47,
+              "stored_weight_terms": 484
+            },
+            {
+              "depth": 3,
+              "definitions": 28,
+              "stored_weight_terms": 373
+            },
+            {
+              "depth": 4,
+              "definitions": 79,
+              "stored_weight_terms": 1145
+            },
+            {
+              "depth": 5,
+              "definitions": 182,
+              "stored_weight_terms": 488
+            },
+            {
+              "depth": 6,
+              "definitions": 132,
+              "stored_weight_terms": 1889
+            },
+            {
+              "depth": 7,
+              "definitions": 1,
+              "stored_weight_terms": 745
+            }
+          ],
+          "final_terms": 2425
+        },
+        "serialized_output_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "gluon-4-trace4",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "gluon-4-trace4",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-trace4-factorized-round3.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.6679439372383058,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-trace4-factorized-round3.json",
+      "reference_output_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1465,
+          "sha256": "9be31c0f8bc65fb56465794e5f17052edb11f79cf3f87017000c508f75a85f30",
+          "rank": 0
+        },
+        "case": "gluon-4-trace4",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 242518555,
+        "process_ns": 240237547,
+        "thread_ns": 240232407,
+        "setup_process_ns": 2537472,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 2425,
+          "atom_bytes": 57284,
+          "sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-trace4-factorized-round3.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700836636173136,
+          "load_average": [
+            79.388671875,
+            77.6630859375,
+            77.10009765625
+          ],
+          "max_rss": 123000,
+          "voluntary_switches": 5,
+          "involuntary_switches": 5,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44003558 2032910 4045211 162795044 23309 683439 322355 0 0 0",
+            "cpu285 20509187 1245898 4624839 187813378 26978 460074 277024 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 244899523,
+          "process_ns": 242915432,
+          "thread_ns": 242909892,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 4556425
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 156205305
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 79072198
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 277347,
+          "definitions": 488,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 19,
+              "stored_weight_terms": 217
+            },
+            {
+              "depth": 2,
+              "definitions": 47,
+              "stored_weight_terms": 484
+            },
+            {
+              "depth": 3,
+              "definitions": 28,
+              "stored_weight_terms": 373
+            },
+            {
+              "depth": 4,
+              "definitions": 79,
+              "stored_weight_terms": 1145
+            },
+            {
+              "depth": 5,
+              "definitions": 182,
+              "stored_weight_terms": 488
+            },
+            {
+              "depth": 6,
+              "definitions": 132,
+              "stored_weight_terms": 1889
+            },
+            {
+              "depth": 7,
+              "definitions": 1,
+              "stored_weight_terms": 745
+            }
+          ],
+          "final_terms": 2425
+        },
+        "serialized_output_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "candidate",
+      "case": "gluon-4-trace4",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+        "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "gluon-4-trace4",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-trace4-factorized-round3.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 1.6678878259845078,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-trace4-factorized-round3.json",
+      "reference_output_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1465,
+          "sha256": "9be31c0f8bc65fb56465794e5f17052edb11f79cf3f87017000c508f75a85f30",
+          "rank": 0
+        },
+        "case": "gluon-4-trace4",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 237910628,
+        "process_ns": 236099022,
+        "thread_ns": 236093682,
+        "setup_process_ns": 2569312,
+        "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 2425,
+          "atom_bytes": 57284,
+          "sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-trace4-factorized-round3.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700838318430444,
+          "load_average": [
+            79.388671875,
+            77.6630859375,
+            77.10009765625
+          ],
+          "max_rss": 126028,
+          "voluntary_switches": 4,
+          "involuntary_switches": 4,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44003694 2032910 4045232 162795054 23309 683440 322355 0 0 0",
+            "cpu285 20509209 1245898 4624840 187813524 26978 460074 277025 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 241502502,
+          "process_ns": 239754546,
+          "thread_ns": 239748826,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "completion": {
+            "contract": "ReductionStatus.Complete"
+          },
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 6160326
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 160568807
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 66922824
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 277347,
+          "definitions": 488,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 19,
+              "stored_weight_terms": 217
+            },
+            {
+              "depth": 2,
+              "definitions": 47,
+              "stored_weight_terms": 484
+            },
+            {
+              "depth": 3,
+              "definitions": 28,
+              "stored_weight_terms": 373
+            },
+            {
+              "depth": 4,
+              "definitions": 79,
+              "stored_weight_terms": 1145
+            },
+            {
+              "depth": 5,
+              "definitions": 182,
+              "stored_weight_terms": 488
+            },
+            {
+              "depth": 6,
+              "definitions": 132,
+              "stored_weight_terms": 1889
+            },
+            {
+              "depth": 7,
+              "definitions": 1,
+              "stored_weight_terms": 745
+            }
+          ],
+          "final_terms": 2425
+        },
+        "serialized_output_sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "gluon-4-tracen",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "gluon-4-tracen",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-tracen-factorized-round1.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 2.068792764097452,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-tracen-factorized-round1.json",
+      "reference_output_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1465,
+          "sha256": "4f2152caf3b9e20d61715f234e1c322577b276ff29aca1c30bf5e1d75750d470",
+          "rank": 0
+        },
+        "case": "gluon-4-tracen",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 330882894,
+        "process_ns": 328431249,
+        "thread_ns": 328425999,
+        "setup_process_ns": 2696913,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 7102,
+          "atom_bytes": 187631,
+          "sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-tracen-factorized-round1.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700840306219786,
+          "load_average": [
+            79.357421875,
+            77.685546875,
+            77.1103515625
+          ],
+          "max_rss": 122972,
+          "voluntary_switches": 4,
+          "involuntary_switches": 5,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44003858 2032910 4045256 162795063 23309 683441 322355 0 0 0",
+            "cpu285 20509235 1245898 4624842 187813694 26978 460075 277025 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 315500189,
+          "process_ns": 313092977,
+          "thread_ns": 313087287,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 4742973
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 163717916
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 143161462
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 309124,
+          "definitions": 520,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 49,
+              "stored_weight_terms": 263
+            },
+            {
+              "depth": 2,
+              "definitions": 43,
+              "stored_weight_terms": 489
+            },
+            {
+              "depth": 3,
+              "definitions": 32,
+              "stored_weight_terms": 396
+            },
+            {
+              "depth": 4,
+              "definitions": 81,
+              "stored_weight_terms": 1601
+            },
+            {
+              "depth": 5,
+              "definitions": 182,
+              "stored_weight_terms": 488
+            },
+            {
+              "depth": 6,
+              "definitions": 132,
+              "stored_weight_terms": 1945
+            },
+            {
+              "depth": 7,
+              "definitions": 1,
+              "stored_weight_terms": 790
+            }
+          ],
+          "final_terms": 7102
+        },
+        "serialized_output_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "candidate",
+      "case": "gluon-4-tracen",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+        "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "gluon-4-tracen",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-tracen-factorized-round1.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 2.0686951046809554,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-tracen-factorized-round1.json",
+      "reference_output_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1465,
+          "sha256": "4f2152caf3b9e20d61715f234e1c322577b276ff29aca1c30bf5e1d75750d470",
+          "rank": 0
+        },
+        "case": "gluon-4-tracen",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 308823875,
+        "process_ns": 306503250,
+        "thread_ns": 306496730,
+        "setup_process_ns": 2467931,
+        "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 7102,
+          "atom_bytes": 187631,
+          "sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-tracen-factorized-round1.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700842376529256,
+          "load_average": [
+            79.357421875,
+            77.685546875,
+            77.1103515625
+          ],
+          "max_rss": 123044,
+          "voluntary_switches": 5,
+          "involuntary_switches": 6,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44004026 2032910 4045282 162795074 23309 683443 322356 0 0 0",
+            "cpu285 20509257 1245898 4624843 187813877 26978 460075 277025 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 317503746,
+          "process_ns": 315038916,
+          "thread_ns": 315033316,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "completion": {
+            "contract": "ReductionStatus.Complete"
+          },
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 6020256
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 167602304
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 134998482
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 309124,
+          "definitions": 520,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 49,
+              "stored_weight_terms": 263
+            },
+            {
+              "depth": 2,
+              "definitions": 43,
+              "stored_weight_terms": 489
+            },
+            {
+              "depth": 3,
+              "definitions": 32,
+              "stored_weight_terms": 396
+            },
+            {
+              "depth": 4,
+              "definitions": 81,
+              "stored_weight_terms": 1601
+            },
+            {
+              "depth": 5,
+              "definitions": 182,
+              "stored_weight_terms": 488
+            },
+            {
+              "depth": 6,
+              "definitions": 132,
+              "stored_weight_terms": 1945
+            },
+            {
+              "depth": 7,
+              "definitions": 1,
+              "stored_weight_terms": 790
+            }
+          ],
+          "final_terms": 7102
+        },
+        "serialized_output_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "candidate",
+      "case": "gluon-4-tracen",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+        "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "gluon-4-tracen",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-tracen-factorized-round2.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 2.118927855975926,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-tracen-factorized-round2.json",
+      "reference_output_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1465,
+          "sha256": "4f2152caf3b9e20d61715f234e1c322577b276ff29aca1c30bf5e1d75750d470",
+          "rank": 0
+        },
+        "case": "gluon-4-tracen",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 317279765,
+        "process_ns": 314764052,
+        "thread_ns": 314758472,
+        "setup_process_ns": 2625090,
+        "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 7102,
+          "atom_bytes": 187631,
+          "sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-tracen-factorized-round2.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700844472443320,
+          "load_average": [
+            78.44775390625,
+            77.5244140625,
+            77.06103515625
+          ],
+          "max_rss": 126012,
+          "voluntary_switches": 4,
+          "involuntary_switches": 4,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44004196 2032910 4045308 162795085 23309 683444 322356 0 0 0",
+            "cpu285 20509287 1245898 4624844 187814056 26978 460075 277025 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 320355986,
+          "process_ns": 317791515,
+          "thread_ns": 317784705,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "completion": {
+            "contract": "ReductionStatus.Complete"
+          },
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 4850094
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 176864550
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 134325607
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 309124,
+          "definitions": 520,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 49,
+              "stored_weight_terms": 263
+            },
+            {
+              "depth": 2,
+              "definitions": 43,
+              "stored_weight_terms": 489
+            },
+            {
+              "depth": 3,
+              "definitions": 32,
+              "stored_weight_terms": 396
+            },
+            {
+              "depth": 4,
+              "definitions": 81,
+              "stored_weight_terms": 1601
+            },
+            {
+              "depth": 5,
+              "definitions": 182,
+              "stored_weight_terms": 488
+            },
+            {
+              "depth": 6,
+              "definitions": 132,
+              "stored_weight_terms": 1945
+            },
+            {
+              "depth": 7,
+              "definitions": 1,
+              "stored_weight_terms": 790
+            }
+          ],
+          "final_terms": 7102
+        },
+        "serialized_output_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "gluon-4-tracen",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "gluon-4-tracen",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-tracen-factorized-round2.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 2.018956916872412,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-tracen-factorized-round2.json",
+      "reference_output_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1465,
+          "sha256": "4f2152caf3b9e20d61715f234e1c322577b276ff29aca1c30bf5e1d75750d470",
+          "rank": 0
+        },
+        "case": "gluon-4-tracen",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 322935085,
+        "process_ns": 320498495,
+        "thread_ns": 320493575,
+        "setup_process_ns": 3010032,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 7102,
+          "atom_bytes": 187631,
+          "sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-tracen-factorized-round2.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700846550700521,
+          "load_average": [
+            78.44775390625,
+            77.5244140625,
+            77.06103515625
+          ],
+          "max_rss": 123044,
+          "voluntary_switches": 4,
+          "involuntary_switches": 5,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44004364 2032910 4045336 162795097 23309 683446 322356 0 0 0",
+            "cpu285 20509311 1245898 4624844 187814238 26978 460076 277025 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 311872326,
+          "process_ns": 309516373,
+          "thread_ns": 309510873,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 4571263
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 159787137
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 142943599
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 309124,
+          "definitions": 520,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 49,
+              "stored_weight_terms": 263
+            },
+            {
+              "depth": 2,
+              "definitions": 43,
+              "stored_weight_terms": 489
+            },
+            {
+              "depth": 3,
+              "definitions": 32,
+              "stored_weight_terms": 396
+            },
+            {
+              "depth": 4,
+              "definitions": 81,
+              "stored_weight_terms": 1601
+            },
+            {
+              "depth": 5,
+              "definitions": 182,
+              "stored_weight_terms": 488
+            },
+            {
+              "depth": 6,
+              "definitions": 132,
+              "stored_weight_terms": 1945
+            },
+            {
+              "depth": 7,
+              "definitions": 1,
+              "stored_weight_terms": 790
+            }
+          ],
+          "final_terms": 7102
+        },
+        "serialized_output_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "baseline",
+      "case": "gluon-4-tracen",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/python-venv/bin/python",
+        "/tmp/unified-tensor-baseline/benchmark-source-color/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "gluon-4-tracen",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-tracen-factorized-round3.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 2.118967368733138,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-tracen-factorized-round3.json",
+      "reference_output_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1465,
+          "sha256": "4f2152caf3b9e20d61715f234e1c322577b276ff29aca1c30bf5e1d75750d470",
+          "rank": 0
+        },
+        "case": "gluon-4-tracen",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 325028163,
+        "process_ns": 322609855,
+        "thread_ns": 322605445,
+        "setup_process_ns": 2831824,
+        "core": "/tmp/unified-tensor-baseline/python-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "90ee7075ddbe537dcd64ab499f342d4ded1a0f7ac11b03921a4e54b5216cf880",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 7102,
+          "atom_bytes": 187631,
+          "sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/baseline-gluon-4-tracen-factorized-round3.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700848608787740,
+          "load_average": [
+            78.44775390625,
+            77.5244140625,
+            77.06103515625
+          ],
+          "max_rss": 122988,
+          "voluntary_switches": 4,
+          "involuntary_switches": 6,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44004533 2032910 4045363 162795105 23309 683447 322356 0 0 0",
+            "cpu285 20509338 1245898 4624846 187814415 26978 460076 277026 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 318612090,
+          "process_ns": 316260816,
+          "thread_ns": 316254936,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 4749033
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 167679601
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 145896647
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 309124,
+          "definitions": 520,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 49,
+              "stored_weight_terms": 263
+            },
+            {
+              "depth": 2,
+              "definitions": 43,
+              "stored_weight_terms": 489
+            },
+            {
+              "depth": 3,
+              "definitions": 32,
+              "stored_weight_terms": 396
+            },
+            {
+              "depth": 4,
+              "definitions": 81,
+              "stored_weight_terms": 1601
+            },
+            {
+              "depth": 5,
+              "definitions": 182,
+              "stored_weight_terms": 488
+            },
+            {
+              "depth": 6,
+              "definitions": 132,
+              "stored_weight_terms": 1945
+            },
+            {
+              "depth": 7,
+              "definitions": 1,
+              "stored_weight_terms": 790
+            }
+          ],
+          "final_terms": 7102
+        },
+        "serialized_output_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    },
+    {
+      "label": "candidate",
+      "case": "gluon-4-tracen",
+      "route": "factorized",
+      "command": [
+        "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+        "/tmp/unified-tensor-baseline/candidate-benchmark-source12/examples/notebooks/fermion_ladder.py",
+        "--suite",
+        "consolidation",
+        "--child",
+        "--case",
+        "gluon-4-tracen",
+        "--route",
+        "factorized",
+        "--calls",
+        "1",
+        "--output",
+        "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-tracen-factorized-round3.json",
+        "--complete-algebra",
+        "--cpu",
+        "29",
+        "--expected-core",
+        "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f"
+      ],
+      "exit_code": 0,
+      "process_wall_seconds": 2.0687888297252357,
+      "output": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-tracen-factorized-round3.json",
+      "reference_output_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+      "record": {
+        "input": {
+          "terms": 1,
+          "atom_bytes": 1465,
+          "sha256": "4f2152caf3b9e20d61715f234e1c322577b276ff29aca1c30bf5e1d75750d470",
+          "rank": 0
+        },
+        "case": "gluon-4-tracen",
+        "route": "factorized",
+        "calls": 1,
+        "fixed_warmups": 1,
+        "wall_ns": 315175267,
+        "process_ns": 312610645,
+        "thread_ns": 312605134,
+        "setup_process_ns": 2970923,
+        "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+        "core_sha256": "83079179ede4a59e4231eca6cae9a3b0396fa16999dd875c87bcb77868b0fa6f",
+        "affinity": [
+          29
+        ],
+        "strategy": {
+          "order_policy": "graph",
+          "vertex_order": null,
+          "rule_application": "reusable TensorRule per local vertex; factorized output",
+          "contraction": "existing Rust component reducer with merged states",
+          "materialization": "explicit polynomial forward pass over aliases"
+        },
+        "result": {
+          "terms": 7102,
+          "atom_bytes": 187631,
+          "sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+          "rank": null
+        },
+        "expression": "/tmp/unified-tensor-baseline/paired-aliases12/candidate-gluon-4-tracen-factorized-round3.expression",
+        "scope": "Complete case.reduce / scalar recipe; Python dispatch and retained output list included; setup, checks, counts and disposal excluded",
+        "resource": {
+          "time_ns": 1790700850723948907,
+          "load_average": [
+            77.37060546875,
+            77.31640625,
+            76.99609375
+          ],
+          "max_rss": 126032,
+          "voluntary_switches": 4,
+          "involuntary_switches": 5,
+          "smt_siblings": "29,285",
+          "cpu_stat": [
+            "cpu29 44004703 2032910 4045391 162795117 23309 683449 322356 0 0 0",
+            "cpu285 20509365 1245898 4624847 187814598 26978 460077 277026 0 0 0"
+          ]
+        },
+        "complete_algebra": {
+          "calls": 1,
+          "fixed_warmups": 1,
+          "wall_ns": 318325590,
+          "process_ns": 315803219,
+          "thread_ns": 315798289,
+          "scope": "Fresh make_case plus input/rule construction and the same reduction/requested materialization; excludes interpreter/import startup, checks, diagnostics, output and disposal. Executed after the prepared-input sample; this is one continuous clock, not summed medians."
+        },
+        "phases": {
+          "completion": {
+            "contract": "ReductionStatus.Complete"
+          },
+          "stages": [
+            {
+              "phase": "rule_application_and_admission",
+              "cpu_ns": 4660995
+            },
+            {
+              "phase": "contraction",
+              "cpu_ns": 165843119
+            },
+            {
+              "phase": "explicit_materialization",
+              "cpu_ns": 131749544
+            }
+          ],
+          "order_policy": "graph",
+          "vertex_order": null,
+          "normalized_factor_order": null,
+          "aliased_bytes": 309124,
+          "definitions": 520,
+          "alias_levels": [
+            {
+              "depth": 1,
+              "definitions": 49,
+              "stored_weight_terms": 263
+            },
+            {
+              "depth": 2,
+              "definitions": 43,
+              "stored_weight_terms": 489
+            },
+            {
+              "depth": 3,
+              "definitions": 32,
+              "stored_weight_terms": 396
+            },
+            {
+              "depth": 4,
+              "definitions": 81,
+              "stored_weight_terms": 1601
+            },
+            {
+              "depth": 5,
+              "definitions": 182,
+              "stored_weight_terms": 488
+            },
+            {
+              "depth": 6,
+              "definitions": 132,
+              "stored_weight_terms": 1945
+            },
+            {
+              "depth": 7,
+              "definitions": 1,
+              "stored_weight_terms": 790
+            }
+          ],
+          "final_terms": 7102
+        },
+        "serialized_output_sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515"
+      },
+      "same_input_sha256": true,
+      "exact_serialized_output_equal": true
+    }
+  ]
+}

@@ -1028,9 +1028,19 @@ pub fn register_tensor_symbol(
     attributes: Vec<SymbolAttribute>,
     rank_one: bool,
 ) -> Result<Symbol, String> {
+    // Bootstrap before taking the registration lock: Symbolica's initializers
+    // can themselves register vectors through this boundary.
+    let tags = &*SPENSO_TAG;
+    // The lookup and callback-bearing registration must be atomic with respect
+    // to other callers of this boundary. Symbolica rejects a second callback
+    // even when two concurrent declarations use this same tensor printer.
+    static REGISTRATION: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _registration = REGISTRATION
+        .lock()
+        .expect("tensor symbol registration lock is not poisoned");
     if let Some(existing) = Symbol::get_symbol(name.clone()) {
-        if !existing.has_tag(&SPENSO_TAG.tensor)
-            || existing.has_tag(&SPENSO_TAG.rank1) != rank_one
+        if !existing.has_tag(&tags.tensor)
+            || existing.has_tag(&tags.rank1) != rank_one
             || existing.get_attributes() != attributes
         {
             return Err(format!(
@@ -1042,9 +1052,9 @@ pub fn register_tensor_symbol(
     }
 
     let tags = if rank_one {
-        vec![SPENSO_TAG.tensor.clone(), SPENSO_TAG.rank1.clone()]
+        vec![tags.tensor.clone(), tags.rank1.clone()]
     } else {
-        vec![SPENSO_TAG.tensor.clone()]
+        vec![tags.tensor.clone()]
     };
     SymbolBuilder::new(name)
         .with_attributes(attributes)
@@ -1921,6 +1931,59 @@ mod tests {
             .add_arg(representation)
             .add_arg(Atom::num(label))
             .finish()
+    }
+
+    #[test]
+    fn concurrent_tensor_registration_reuses_one_declared_symbol() {
+        use std::sync::{Arc, Barrier};
+
+        let start = Arc::new(Barrier::new(8));
+        let results = std::thread::scope(|scope| {
+            (0..8)
+                .map(|_| {
+                    let start = Arc::clone(&start);
+                    scope.spawn(move || {
+                        (0..32)
+                            .map(|index| {
+                                let name = format!("concurrent_tensor_registration::t{index}");
+                                start.wait();
+                                register_tensor_symbol(
+                                    NamespacedSymbol::parse(&name),
+                                    vec![],
+                                    index % 2 == 0,
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|worker| {
+                    worker
+                        .join()
+                        .unwrap()
+                        .into_iter()
+                        .collect::<Result<Vec<_>, _>>()
+                        .unwrap()
+                })
+                .collect::<Vec<_>>()
+        });
+        for symbols in &results {
+            assert_eq!(symbols, &results[0]);
+            for (index, symbol) in symbols.iter().enumerate() {
+                assert!(symbol.has_tag(&SPENSO_TAG.tensor));
+                assert_eq!(symbol.has_tag(&SPENSO_TAG.rank1), index % 2 == 0);
+                assert!(symbol.get_print_function().is_some());
+                assert!(
+                    register_tensor_symbol(
+                        NamespacedSymbol::parse(symbol.get_name()),
+                        vec![],
+                        index % 2 != 0,
+                    )
+                    .is_err()
+                );
+            }
+        }
     }
 
     #[test]

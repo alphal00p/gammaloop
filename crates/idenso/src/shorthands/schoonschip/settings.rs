@@ -1,7 +1,11 @@
+use spenso::structure::representation::LibraryRep;
+
 /// Options for the local ordered metric/vector rewrite fallback.
 /// Factored network contraction and materialization are owned by the typed engine.
 pub(crate) struct SchoonschipSettings {
     pub simplify_chain_like_functions: bool,
+    pub metrics: bool,
+    pub representations: Option<Vec<LibraryRep>>,
     pub schoonschip_rank1_tensors: bool,
 }
 
@@ -9,6 +13,8 @@ impl Default for SchoonschipSettings {
     fn default() -> Self {
         Self {
             simplify_chain_like_functions: false,
+            metrics: true,
+            representations: None,
             schoonschip_rank1_tensors: true,
         }
     }

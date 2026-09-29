@@ -4,7 +4,7 @@ import inspect
 from pathlib import Path
 from types import EllipsisType
 
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 
 model = hep.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 states = [1000, 1000]

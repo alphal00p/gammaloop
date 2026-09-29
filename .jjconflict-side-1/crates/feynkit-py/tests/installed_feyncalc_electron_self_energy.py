@@ -7,13 +7,19 @@ Keep the native ordered external-state weight, then state the conversion to
 an amputated Dirac kernel explicitly. No UV expansion or mass rearrangement.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 import json
 from math import log, pi
 from pathlib import Path
 
 from symbolica import E, Replacement, S, Symbol
-from symbolica.community import hep
-from symbolica.community.hep import oneloop
+from symbolica.community import feynkit as hep
+from symbolica.community.feynkit import oneloop
 from symbolica.community.tensor import TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -94,7 +100,8 @@ tree_probe = gamma(
 ) / (4 * D)
 tree_coupling = (
     TensorExpression((tree_num * tree_probe).expand())
-    .simplify_gamma()
+    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .expand()
     .to_expression()
 )
@@ -151,7 +158,8 @@ terms_by_structure, targets, traced_coefficients = [], set(), []
 for projector, independent in zip(probes, independent_numerators, strict=True):
     trace = (
         TensorExpression((numerator * projector).expand())
-        .simplify_gamma()
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .expand()
         .to_dots()
         .to_expression()

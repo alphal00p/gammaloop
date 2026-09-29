@@ -4,12 +4,17 @@ References: FeynCalc EW/Tree/W-ElAnel, W-QiQjbar and Qt-QbW.
 The top reference sums initial colors; the physical width averages them.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    ColorSimplifySettings,
+)
+
 import math
 
 from symbolica import E, Replacement, S, Symbol
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 from symbolica.community.tensor import (
-    CookSettings,
     GammaSimplifySettings,
     TensorExpression,
 )
@@ -81,7 +86,13 @@ for label, pdgs, masses, ckm_name in [
     )
     adjoint = (
         operator.dirac_adjoint()
-        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .reduce_algebra(
+            AlgebraSettings(
+                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
+                epsilon=True,
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
     )
@@ -192,11 +203,16 @@ for label, pdgs, masses, ckm_name in [
         contracted = (
             TensorExpression(
                 operator.to_expression() * adjoint * spin_projector * color_projector,
-                cook_indices=CookSettings.indices(),
+                intern="flattened",
             )
-            .simplify_gamma()
-            .simplify_color()
-            .contract()
+            .reduce_algebra(
+                AlgebraSettings(
+                    gamma=GammaSimplifySettings(),
+                    epsilon=True,
+                    color=ColorSimplifySettings(),
+                )
+            )
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_dots()
         )

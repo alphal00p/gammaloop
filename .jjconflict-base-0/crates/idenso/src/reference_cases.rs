@@ -1,4 +1,6 @@
 pub mod metric_contraction_benchmark;
+#[cfg(feature = "reference-cases")]
+pub mod timing;
 
 use spenso::{
     chain, g, p, q, s, slot,
@@ -16,6 +18,14 @@ use crate::{
     representations::{Bispinor, ColorAdjoint, ColorFundamental, initialize},
     tensor::SymbolicTensor,
 };
+
+/// Isolate the internal chain-notation primitive in the phase benchmark.
+/// Production callers select chain collection through `ContractSettings`.
+#[cfg(feature = "reference-cases")]
+pub fn chain_notation_phase(expression: symbolica::atom::AtomView<'_>) -> Atom {
+    use crate::shorthands::chain::Chain;
+    expression.chainify(Bispinor {}.into())
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReferenceDomain {
@@ -59,17 +69,34 @@ impl ReferenceCase {
         let tensor = SymbolicTensor::infer(expression.clone()).expect("valid reference tensor");
         let result = match self.simplification {
             ReferenceSimplification::GammaDefault => {
-                tensor.simplify_gamma(GammaSimplifySettings::default())
+                tensor.reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
             }
             ReferenceSimplification::GammaCanonical => {
-                tensor.simplify_gamma(GammaSimplifySettings::canonical())
+                tensor.reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::canonical()),
+                    epsilon: true,
+                    ..Default::default()
+                })
             }
             ReferenceSimplification::ColorDefault => {
-                tensor.simplify_color(ColorSimplifySettings::default())
+                tensor.reduce_algebra(&crate::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
             }
         };
         result
             .expect("valid reference simplification")
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .expect("valid reference contractions")
             .resolved()
             .expect("valid reference aliases")
             .into_expression()

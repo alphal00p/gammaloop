@@ -91,12 +91,22 @@ def check_types(
     assert_type(expression.to_expression().factor(), Expression)
     assert_type(expression.to_expression().collect_num(), Expression)
     assert_type(expression.to_expression().collect_factors(), Expression)
-    assert_type(expression.simplify_gamma(), sp.AliasedTensorExpression)
-    assert_type(expression.simplify_color(), sp.AliasedTensorExpression)
+    assert_type(
+        expression.reduce_algebra(
+            sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), epsilon=True)
+        ).contract(sp.ContractSettings(collect_chains=False, collect_traces=False)),
+        sp.AliasedTensorExpression,
+    )
+    assert_type(
+        expression.reduce_algebra(
+            sp.AlgebraSettings(color=sp.ColorSimplifySettings())
+        ).contract(sp.ContractSettings(collect_chains=False, collect_traces=False)),
+        sp.AliasedTensorExpression,
+    )
     assert_type(expression.replace(sp.TensorRule(expression, 0)), sp.TensorExpression)
     assert_type(expression.to_expression().derivative(scalar), Expression)
     assert_type(
-        expression.simplify(sp.SimplifySettings.hep()), sp.AliasedTensorExpression
+        expression.reduce_algebra(sp.AlgebraSettings.hep()), sp.AliasedTensorExpression
     )
     assert_type(expression.reindex("mu", sp.AUTO), sp.TensorExpression)
     assert_type(expression.rename_indices({"mu": "nu"}), sp.TensorExpression)

@@ -1,10 +1,16 @@
 """M0 diagnostics ported from the plan's Python probes, outside primary clocks."""
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 from collections import defaultdict
 from math import prod
 from time import process_time_ns
 
-from symbolica.community.hep import Symbols
+from symbolica.community.feynkit import Symbols
 from symbolica import E, Replacement, S, T
 from symbolica.community.tensor import (
     AUTO,
@@ -43,7 +49,9 @@ def validation_cost(case):
     stages = {}
     result = case.source
     for step, vertex in enumerate(case.order, 1):
-        result = result.replace(case.rules[vertex - 1]).contract()
+        result = result.replace(case.rules[vertex - 1]).contract(
+            ContractSettings(collect_chains=False, collect_traces=False)
+        )
         stages[step] = result
     stages[8] = result.expand()
     rows = []
@@ -52,7 +60,12 @@ def validation_cost(case):
         # Resolving the diagnostic input is outside the measured admission call.
         raw = atom(source)
         for name, call in (
-            ("contract", lambda source=source: source.contract()),
+            (
+                "contract",
+                lambda source=source: source.contract(
+                    ContractSettings(collect_chains=False, collect_traces=False)
+                ),
+            ),
             ("expand", lambda source=source: source.expand()),
             (
                 "no_match_replace",
@@ -73,7 +86,9 @@ def validation_cost(case):
 def partial_parse(case, limit=200):
     result, stages = case.source, {}
     for step, vertex in enumerate(case.order, 1):
-        result = result.replace(case.rules[vertex - 1]).contract()
+        result = result.replace(case.rules[vertex - 1]).contract(
+            ContractSettings(collect_chains=False, collect_traces=False)
+        )
         if step in (5, 7, 8):
             stages[step] = result.expand() if step == 8 else result
     rows = []
@@ -103,7 +118,12 @@ def partial_parse(case, limit=200):
                 continue
             whole = TensorExpression(sum((atom(t) for t in selected), E("0")))
             singles, individual = observe(
-                lambda selected=selected: [t.contract() for t in selected]
+                lambda selected=selected: [
+                    t.contract(
+                        ContractSettings(collect_chains=False, collect_traces=False)
+                    )
+                    for t in selected
+                ]
             )
             combined, batch = observe(whole.contract)
             row = {
@@ -157,9 +177,17 @@ def keep_rest():
     for name, expression in cases.items():
         source = TensorExpression(expression)
         oracle, oracle_record = observe(
-            lambda source=source: source.replace(rule).expand().contract()
+            lambda source=source: (
+                source.replace(rule)
+                .expand()
+                .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            )
         )
-        output, row = observe(lambda source=source: source.replace(rule).contract())
+        output, row = observe(
+            lambda source=source: source.replace(rule).contract(
+                ContractSettings(collect_chains=False, collect_traces=False)
+            )
+        )
         row.update(
             case=name,
             route="replace_then_contract",
@@ -179,7 +207,12 @@ def keep_rest():
                 preserves_outer_scalar_factor=bool(atom(output).contains(1 + x))
                 if name in ("factored_scalar", "nested_sum")
                 else None,
-                rerun=atom(output.contract()) == atom(output),
+                rerun=atom(
+                    output.contract(
+                        ContractSettings(collect_chains=False, collect_traces=False)
+                    )
+                )
+                == atom(output),
             )
         rows.append(row)
     gam = TensorExpression.gamma(4)
@@ -194,8 +227,16 @@ def keep_rest():
             if branches == 2:
                 gamma_value = gamma_value + gam(*indices, rep(S("r3rest::nu")))
             source = metric(rep(S("r3rest::mu")), rep(S("r3rest::nu"))) * gamma_value
-            for method in ("contract", "simplify_gamma"):
-                output, row = observe(getattr(source, method))
+            for method in ("contract", "reduce_algebra"):
+                settings = AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+                operation = lambda value: (
+                    value.reduce_algebra(settings)
+                    if method == "reduce_algebra"
+                    else value.contract(
+                        ContractSettings(collect_chains=False, collect_traces=False)
+                    )
+                )
+                output, row = observe(lambda: operation(source))
                 row.update(
                     case="metric_into_gamma",
                     spinor_slots=label,
@@ -208,8 +249,12 @@ def keep_rest():
                 if output is not None:
                     row["output"] = atom(output).format_plain()
                     expected_gamma = (
-                        gamma_value.simplify_gamma()
-                        if method == "simplify_gamma"
+                        gamma_value.reduce_algebra(
+                            AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+                        ).contract(
+                            ContractSettings(collect_chains=False, collect_traces=False)
+                        )
+                        if method == "reduce_algebra"
                         else gamma_value
                     )
                     expected = atom(expected_gamma).replace(
@@ -217,7 +262,7 @@ def keep_rest():
                         rep(S("r3rest::mu")).to_expression(),
                     )
                     row["exact_expanded"] = (atom(output) - expected).expand() == E("0")
-                    row["rerun"] = atom(getattr(output, method)()) == atom(output)
+                    row["rerun"] = atom(operation(output)) == atom(output)
                 rows.append(row)
     return rows
 
@@ -265,7 +310,11 @@ class FactorProbe:
             value = value.replace(*self.dot_fix)
         if internal:
             self.internal += 1
-            value = atom(TensorExpression(value).contract())
+            value = atom(
+                TensorExpression(value).contract(
+                    ContractSettings(collect_chains=False, collect_traces=False)
+                )
+            )
         state[index] = value
 
     def apply(self, term, state):

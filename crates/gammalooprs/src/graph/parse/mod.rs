@@ -651,7 +651,15 @@ impl Graph {
                 .try_cook(full_num.as_view())
                 .map_err(|error| eyre!("{error}"))?,
         )?
-        .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())?
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+            ..Default::default()
+        })?
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?
         .resolved()?;
         if !full_num.is_zero() && color_simplified.expression().is_zero() {
             warn!(

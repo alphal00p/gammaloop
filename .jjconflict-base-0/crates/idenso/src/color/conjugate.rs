@@ -245,7 +245,16 @@ mod tests {
         let norm = crate::tensor::SymbolicTensor::infer(
             (crate::tensor::SymbolicTensor::infer((generator * adjoint).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    color: Some(crate::color::ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -255,7 +264,7 @@ mod tests {
             .to_owned(),
         )
         .unwrap()
-        .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+        .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
         .unwrap()
         .resolved()
         .unwrap()
@@ -301,7 +310,16 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((conjugate).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    color: Some(crate::color::ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -310,7 +328,16 @@ mod tests {
                 (explicit.spenso_conj()).as_atom_view().to_owned()
             )
             .unwrap()
-            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                color: Some(crate::color::ColorSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -319,7 +346,16 @@ mod tests {
         let norm = crate::tensor::SymbolicTensor::infer(
             (crate::tensor::SymbolicTensor::infer((chain * conjugate).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    color: Some(crate::color::ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -329,7 +365,7 @@ mod tests {
             .to_owned(),
         )
         .unwrap()
-        .contract(crate::tensor::ContractionSettings::default().without_rank_one_tensors())
+        .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
         .unwrap()
         .resolved()
         .unwrap()
@@ -360,7 +396,16 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((conjugate).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    color: Some(crate::color::ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -369,7 +414,16 @@ mod tests {
                 (explicit.spenso_conj()).as_atom_view().to_owned()
             )
             .unwrap()
-            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                color: Some(crate::color::ColorSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()

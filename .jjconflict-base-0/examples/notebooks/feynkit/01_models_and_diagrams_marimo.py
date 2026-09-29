@@ -45,7 +45,7 @@ def _(mo):
 
 @app.cell
 def _():
-    from symbolica.community.hep import FeynmanDiagram, Model, ModelError
+    from symbolica.community.feynkit import FeynmanDiagram, Model, ModelError
 
     model = Model.phi_3_4()
     return (FeynmanDiagram, Model, ModelError, model)

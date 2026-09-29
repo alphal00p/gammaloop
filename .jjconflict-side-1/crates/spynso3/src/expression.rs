@@ -4,9 +4,8 @@ use idenso::{
     IndexTooling,
     color::CS,
     dirac::AGS,
-    shorthands::chain::Chain,
     tensor::{
-        ContractionSettings, SymbolicTensor, composition,
+        SymbolicTensor, composition,
         inference::{InterfaceInference, TensorInferenceError},
     },
 };
@@ -54,8 +53,7 @@ use crate::{
     library::SpensorLibrary,
     network::{ConvertibleToSpensoNet, ExecutionMode, SpensoNet},
     simplification::{
-        CanonicalizationError, CookingError, DiracAdjointError, NetworkToolingError,
-        PyColorSimplifySettings, PyCookSettings, PyGammaSimplifySettings,
+        CanonicalizationError, CookingError, DiracAdjointError, NetworkToolingError, PyCookSettings,
     },
     structure::{
         ArithmeticStructure, ConvertibleToAbstractIndex, ConvertibleToDimension,
@@ -93,19 +91,37 @@ impl AutoIndex {
 /// in logical interface order. Dimensions are representation metadata, not
 /// scalar tensor arguments.
 ///
+/// Construct a tensor expression, preserving existing tensor metadata or inferring it.
+///
+/// Pass `cook_indices=sp.CookSettings.reversible()` to reversibly encode nested index payloads before
+/// inferring the tensor interface for arbitrary nested index expressions.
+/// Custom CookSettings control the index encoding, source filters, and output tags.
+/// An explicit `structure` is checked against the resulting expression and
+/// retains declared logical order and the interface of a symbolic zero.
+///
 /// Examples
 /// --------
-/// >>> from symbolica.community.tensor import Representation, TensorExpression
-/// >>> mink = Representation.mink(4)
-/// >>> metric = TensorExpression.g(mink)("mu", "nu")
-/// >>> flat = TensorExpression.flat(mink)("mu", "nu")
-/// >>> gamma = TensorExpression.gamma(4)("i", "j", "mu")
-/// >>> gamma5 = TensorExpression.gamma5(4)("i", "j")
-/// >>> projm = TensorExpression.projm(4)("i", "j")
-/// >>> projp = TensorExpression.projp(4)("i", "j")
-/// >>> sigma = TensorExpression.sigma(4)("mu", "nu", "i", "j")
-/// >>> structure_constant = TensorExpression.f(8)("a", "b", "c")
-/// >>> generator = TensorExpression.t(8, 3)("a", "i", "j")
+/// >>> from symbolica.community import tensor as sp
+/// >>> from symbolica import E, S
+/// >>> r = sp.Representation.euc(2)
+/// >>> A = sp.TensorName("docs::A")(r, r)
+/// >>> payload = S("docs::edge")(7, 2)
+/// >>> label = S("docs::index")
+/// >>> raw = A(label, "j").to_expression().replace(label, payload)
+/// >>> value = sp.TensorExpression(raw, cook_indices=sp.CookSettings.reversible())
+/// >>> mink = sp.Representation.mink(4)
+/// >>> metric = sp.TensorExpression.g(mink)("mu", "nu")
+/// >>> gamma = sp.TensorExpression.gamma(4)("i", "j", "mu")
+/// >>> sigma = sp.TensorExpression.sigma(4)("mu", "nu", "i", "j")
+///
+/// Parameters
+/// ----------
+/// expression : TensorExpression | Expression or scalar
+///     TensorExpression to copy, or scalar/Symbolica expression from which to infer the external tensor ports.
+/// structure : TensorStructure, optional
+///     Optional TensorStructure declaring the logical port order. It must agree with the expression and can retain the interface of a symbolic zero.
+/// cook_indices : CookSettings, optional
+///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -288,19 +304,6 @@ impl TensorExpression {
         Self::from_shared(py, Arc::new(value), name, args)
     }
 
-    /// Wrap a tensor identity using the shared callback-aware interface proof.
-    fn from_preserved_atom(
-        self_: &PyRef<'_, Self>,
-        py: Python<'_>,
-        atom: Atom,
-    ) -> PyResult<Py<Self>> {
-        let value = Self::structured(self_)
-            .with_rewritten_expression(atom)
-            .map_err(Self::inference_error)?;
-        let (name, args) = Self::transformed_descriptor(self_, value.expression());
-        Self::from_shared(py, Arc::new(value), name, args)
-    }
-
     fn with_cooked_indices(
         self_: &PyRef<'_, Self>,
         py: Python<'_>,
@@ -367,7 +370,7 @@ impl TensorExpression {
     pub(crate) fn index_replacements(
         interface: &PartialStructure,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: Option<&crate::simplification::PyCookSettings>,
+        cook_indices: Option<&PyCookSettings>,
     ) -> PyResult<HashMap<usize, AbstractIndex>> {
         let open_positions = interface.open_positions();
         Self::port_replacements(interface, &open_positions, indices, cook_indices)
@@ -504,6 +507,9 @@ impl TensorExpression {
 
 impl ModuleInit for TensorExpression {}
 
+// Operands are transient stack values; boxing this dispatch variant would add
+// an allocation to every structured Python arithmetic operation.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum TensorOperand {
     Structured(SymbolicTensor<PartialStructure>),
     Scalar(Atom),
@@ -571,12 +577,12 @@ impl TensorOperand {
 
 pub(crate) fn index_value(
     value: ConvertibleToAbstractIndex,
-    cook: Option<&PyCookSettings>,
+    cook_indices: Option<&PyCookSettings>,
 ) -> PyResult<AbstractIndex> {
     match value {
         ConvertibleToAbstractIndex::Aind(index) => Ok(index),
         ConvertibleToAbstractIndex::Atom(expression) => {
-            let atom = match (cook, expression.expr.as_view()) {
+            let atom = match (cook_indices, expression.expr.as_view()) {
                 (Some(settings), AtomView::Fun(fun)) => {
                     settings.rust().cook_function(fun).map_err(|error| {
                         CookingError::new_err(format!("cannot cook index: {error:?}"))
@@ -585,7 +591,7 @@ pub(crate) fn index_value(
                 _ => expression.expr,
             };
             atom.as_view().try_into().map_err(|error| {
-                let hint = if cook.is_some() {
+                let hint = if cook_indices.is_some() {
                     ""
                 } else {
                     " Try passing cook_indices=CookSettings.indices()."
@@ -696,11 +702,31 @@ fn inferred_descriptor(atom: AtomView<'_>) -> (Option<Symbol>, Vec<Atom>) {
 impl TensorExpression {
     /// Construct a tensor expression, preserving existing tensor metadata or inferring it.
     ///
-    /// Pass `cook_indices=CookSettings.indices()` to flatten nested index payloads before
+    /// Pass `cook_indices=sp.CookSettings.reversible()` to reversibly encode nested index payloads before
     /// inferring the tensor interface for arbitrary nested index expressions.
-    /// Custom settings control the index encoding, source filters, and output tags.
+    /// Custom CookSettings control the index encoding, source filters, and output tags.
     /// An explicit `structure` is checked against the resulting expression and
     /// retains declared logical order and the interface of a symbolic zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> from symbolica import E, S
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> payload = S("docs::edge")(7, 2)
+    /// >>> label = S("docs::index")
+    /// >>> raw = A(label, "j").to_expression().replace(label, payload)
+    /// >>> value = sp.TensorExpression(raw, cook_indices=sp.CookSettings.reversible())
+    ///
+    /// Parameters
+    /// ----------
+    /// expression : TensorExpression | Expression or scalar
+    ///     TensorExpression to copy, or scalar/Symbolica expression from which to infer the external tensor ports.
+    /// structure : TensorStructure, optional
+    ///     Optional TensorStructure declaring the logical port order. It must agree with the expression and can retain the interface of a symbolic zero.
+    /// cook_indices : CookSettings, optional
+    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
     #[new]
     #[pyo3(signature = (expression, *, structure = None, cook_indices = None))]
     #[gen_stub(override_return_type(type_repr = "TensorExpression"))]
@@ -760,6 +786,20 @@ impl TensorExpression {
     /// `other` defaults to `rep`; it may also be the dual of the same space.
     /// For example, `g(fund, fund.dual())("i", "j")` creates a fundamental identity.
     /// Call the result with two indices to fill its ports in logical order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> tensor = sp.TensorExpression.g(r)
+    /// >>> ports = tensor.structure.slots
+    ///
+    /// Parameters
+    /// ----------
+    /// rep : Representation
+    ///     Representation, including its dimension, for the tensor’s ports.
+    /// other : Representation, optional
+    ///     Representation paired with rep. None uses rep itself; a dualizable space can instead be paired with rep.dual().
     #[staticmethod]
     #[pyo3(signature = (rep, other = None))]
     fn g(
@@ -781,6 +821,18 @@ impl TensorExpression {
     /// Create an unresolved musical-isomorphism tensor for `rep`.
     ///
     /// Call the result with two indices to fill its ports in logical order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> tensor = sp.TensorExpression.flat(r)
+    /// >>> ports = tensor.structure.slots
+    ///
+    /// Parameters
+    /// ----------
+    /// rep : Representation
+    ///     Representation, including its dimension, for the tensor’s ports.
     #[staticmethod]
     fn flat(py: Python<'_>, rep: &SpensoRepresentation) -> PyResult<Py<TensorExpression>> {
         let structure = ExplicitKey::<AbstractIndex>::from_iter(
@@ -791,12 +843,19 @@ impl TensorExpression {
         Self::from_structure(py, &structure)
     }
 
-    /// Create an unresolved gamma matrix with Minkowski dimension
-    /// `minkowski_dimension`.
+    /// Construct a gamma matrix with two four-dimensional bispinor ports followed by
+    /// one Lorentz port. Call the result as `gamma(i, j, mu)` to assign its indices.
     ///
-    /// Its public ports use storage order: bispinor, bispinor, then Minkowski.
-    /// The bispinor dimension is four. Call the result with `(i, j, mu)` to
-    /// index it.
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> tensor = sp.TensorExpression.gamma(4)
+    /// >>> ports = tensor.structure.slots
+    ///
+    /// Parameters
+    /// ----------
+    /// minkowski_dimension : int | Expression | str
+    ///     Dimension of the Lorentz representation. The bispinor ports remain four-dimensional; a symbolic Lorentz dimension is allowed.
     #[staticmethod]
     fn gamma(
         py: Python<'_>,
@@ -805,8 +864,19 @@ impl TensorExpression {
         Self::from_structure(py, &AGS.gamma_strct::<AbstractIndex>(minkowski_dimension.0))
     }
 
-    /// Create an unresolved gamma-five matrix with two bispinor ports of
-    /// `spinor_dimension`; call the result with `(i, j)`.
+    /// Construct gamma-five with two bispinor ports. Call the result as `gamma5(i, j)`.
+    /// Four-dimensional gamma-five identities require four-dimensional spinor and Lorentz spaces.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> tensor = sp.TensorExpression.gamma5(4)
+    /// >>> ports = tensor.structure.slots
+    ///
+    /// Parameters
+    /// ----------
+    /// spinor_dimension : int | Expression | str
+    ///     Dimension of the bispinor representation. Use 4 for the ordinary four-component Dirac matrices.
     #[staticmethod]
     fn gamma5(
         py: Python<'_>,
@@ -815,8 +885,18 @@ impl TensorExpression {
         Self::from_structure(py, &AGS.gamma5_strct::<AbstractIndex>(spinor_dimension.0))
     }
 
-    /// Create an unresolved left-chiral projector with two bispinor ports of
-    /// `spinor_dimension`; call the result with `(i, j)`.
+    /// Construct the left-chiral projector with two bispinor ports.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> tensor = sp.TensorExpression.projm(4)
+    /// >>> ports = tensor.structure.slots
+    ///
+    /// Parameters
+    /// ----------
+    /// spinor_dimension : int | Expression | str
+    ///     Dimension of the bispinor representation. Use 4 for the ordinary four-component Dirac matrices.
     #[staticmethod]
     fn projm(
         py: Python<'_>,
@@ -825,8 +905,18 @@ impl TensorExpression {
         Self::from_structure(py, &AGS.projm_strct::<AbstractIndex>(spinor_dimension.0))
     }
 
-    /// Create an unresolved right-chiral projector with two bispinor ports of
-    /// `spinor_dimension`; call the result with `(i, j)`.
+    /// Construct the right-chiral projector with two bispinor ports.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> tensor = sp.TensorExpression.projp(4)
+    /// >>> ports = tensor.structure.slots
+    ///
+    /// Parameters
+    /// ----------
+    /// spinor_dimension : int | Expression | str
+    ///     Dimension of the bispinor representation. Use 4 for the ordinary four-component Dirac matrices.
     #[staticmethod]
     fn projp(
         py: Python<'_>,
@@ -835,11 +925,19 @@ impl TensorExpression {
         Self::from_structure(py, &AGS.projp_strct::<AbstractIndex>(spinor_dimension.0))
     }
 
-    /// Create an unresolved sigma matrix with Minkowski dimension
-    /// `minkowski_dimension`.
+    /// Construct the sigma tensor with two Lorentz and two four-dimensional bispinor ports.
+    /// Inspect `.structure.slots` before indexing when composing it with other tensor conventions.
     ///
-    /// Its logical ports are two Minkowski ports followed by two four-dimensional
-    /// bispinor ports. Call the result with `(mu, nu, i, j)` to index it.
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> tensor = sp.TensorExpression.sigma(4)
+    /// >>> ports = tensor.structure.slots
+    ///
+    /// Parameters
+    /// ----------
+    /// minkowski_dimension : int | Expression | str
+    ///     Dimension of the Lorentz representation. The bispinor ports remain four-dimensional; a symbolic Lorentz dimension is allowed.
     #[staticmethod]
     fn sigma(
         py: Python<'_>,
@@ -852,6 +950,17 @@ impl TensorExpression {
     ///
     /// All three logical ports are adjoint representations of
     /// `adjoint_dimension`; call the result with `(a, b, c)`.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> tensor = sp.TensorExpression.f(8)
+    /// >>> ports = tensor.structure.slots
+    ///
+    /// Parameters
+    /// ----------
+    /// adjoint_dimension : int | Expression | str
+    ///     Dimension of the adjoint color representation, such as 8 for SU(3). Symbolic dimensions are also accepted.
     #[staticmethod]
     fn f(
         py: Python<'_>,
@@ -867,9 +976,16 @@ impl TensorExpression {
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> generator = TensorExpression.t(8, 3)
-    /// >>> indexed = generator("a", "i", "j")
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> tensor = sp.TensorExpression.t(8, 3)
+    /// >>> ports = tensor.structure.slots
+    ///
+    /// Parameters
+    /// ----------
+    /// adjoint_dimension : int | Expression | str
+    ///     Dimension of the adjoint color representation, such as 8 for SU(3). Symbolic dimensions are also accepted.
+    /// fundamental_dimension : int | Expression | str
+    ///     Dimension of the fundamental color representation, such as 3 for SU(3).
     #[staticmethod]
     fn t(
         py: Python<'_>,
@@ -883,18 +999,39 @@ impl TensorExpression {
     }
 
     /// Number of external tensor ports in the ordered interface.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A.rank
     #[getter]
     fn rank(&self) -> usize {
         self.interface().canonical().order()
     }
 
     /// Whether the expression has no external tensor ports.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A.is_scalar
     #[getter]
     fn is_scalar(&self) -> bool {
         self.interface().canonical().is_scalar()
     }
 
     /// Tensor identity, scalar arguments, and external ports in logical order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A.shape
     #[getter]
     #[gen_stub(override_return_type(type_repr = "tuple[int | Expression, ...]"))]
     fn shape(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
@@ -902,6 +1039,13 @@ impl TensorExpression {
     }
 
     /// Tensor identity, scalar arguments, and external ports in logical order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A.structure
     #[getter]
     fn structure(&self) -> crate::metadata::SpensoTensorStructure {
         crate::metadata::SpensoTensorStructure {
@@ -912,12 +1056,31 @@ impl TensorExpression {
     }
 
     /// The optional identity used when this expression describes stored data.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A.name
     #[getter]
     fn name(&self) -> Option<SpensoName> {
         self.name.map(|name| SpensoName { name })
     }
 
     /// Return a named descriptor without changing the underlying expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> named = (2 * A).with_name("docs::twice_A")
+    ///
+    /// Parameters
+    /// ----------
+    /// name : TensorName | str | Expression | TensorExpression
+    ///     New data identity, as a TensorName, name string, symbol, or named TensorExpression. The tensor’s mathematical expression and logical interface are retained.
     fn with_name(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -927,10 +1090,35 @@ impl TensorExpression {
         Self::from_shared(py, Arc::clone(&self_.value), Some(name.name), args)
     }
 
+    /// Return the number of component positions in the tensor’s logical shape.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> size = len(A)
     fn __len__(&self) -> PyResult<usize> {
         logical_size(&logical_dimensions(self.interface())?)
     }
 
+    /// Convert between flat positions and tensor coordinates in logical row-major order.
+    /// An integer returns coordinates, a coordinate list returns a flat position, and a slice
+    /// returns coordinate lists. This indexes the layout; use `.components()` for values.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> coordinates = A[3]
+    /// >>> flat_index = A[[1, 1]]
+    /// >>> all_coordinates = A[:]
+    ///
+    /// Parameters
+    /// ----------
+    /// item : int
+    ///     Flat integer position, list of coordinates, or slice of flat positions. Coordinates follow .structure.slots and use row-major order.
     #[gen_stub(skip)]
     fn __getitem__(&self, py: Python<'_>, item: SliceOrIntOrExpanded) -> PyResult<Py<PyAny>> {
         let dimensions = logical_dimensions(self.interface())?;
@@ -961,24 +1149,38 @@ impl TensorExpression {
     }
 
     /// Drop the structured interface and return an ordinary Symbolica `Expression`.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> scalar_algebra = A.to_expression()
+    /// >>> restored = sp.TensorExpression(scalar_algebra)
     fn to_expression(self_: PyRef<'_, Self>) -> PythonExpression {
         PythonExpression {
             expr: self_.atom().clone(),
         }
     }
 
-    /// Apply a TensorRule or an ordered list of rules in one tensor-aware pass.
-    /// The first matching rule owns each source leaf; freshly produced right-hand
-    /// sides are not matched again during the same application.
+    /// Apply one tensor replacement rule or an ordered list of rules.
+    /// The matched tensor must have explicit ports and a supported tensor structure.
+    /// The replacement retains its external interface; index the tensor before creating
+    /// a rule that targets unresolved ports.
     ///
-    /// Traverses sums and products, leaving scalar metadata and tensor arguments
-    /// opaque. Each replacement must preserve the factor's explicit interface
-    /// without introducing additional index occurrences. Unresolved ports and
-    /// unsupported tensor powers are rejected. Conditions are evaluated at each
-    /// match; repeated right-hand sides and their checks share a bounded cache.
-    /// Remaining user normalization or evaluation hooks are rejected; callbacks
-    /// may produce an admitted normalized RHS. Use `rhs_cache_size=0` when RHS
-    /// callbacks have side effects.
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> A = A("i", "j")
+    /// >>> rule = sp.TensorRule(A, 2 * A)
+    /// >>> replaced = A.replace(rule)
+    ///
+    /// Parameters
+    /// ----------
+    /// rules : TensorRule | list[TensorRule]
+    ///     One TensorRule or an ordered list of rules. The first matching rule wins; the replacement is checked against the matched tensor interface.
     #[pyo3(signature = (rules))]
     fn replace(
         self_: PyRef<'_, Self>,
@@ -995,6 +1197,23 @@ impl TensorExpression {
     }
 
     /// Expand scalar algebra while preserving and validating the tensor interface.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> from symbolica import E, S
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> A = A("i", "j")
+    /// >>> x = S("docs::x")
+    /// >>> expanded = ((x + 1)**2 * A).expand()
+    ///
+    /// Parameters
+    /// ----------
+    /// var : Expression or scalar, optional
+    ///     Optional scalar variable with respect to which to expand. None expands all supported scalar algebra.
+    /// via_poly : bool, optional
+    ///     Whether to use Symbolica’s polynomial expansion route. None uses direct expansion, as with False.
     #[pyo3(signature = (var = None, via_poly = None))]
     fn expand(
         self_: PyRef<'_, Self>,
@@ -1016,10 +1235,25 @@ impl TensorExpression {
         Self::from_shared(py, Arc::new(value), name, args)
     }
 
-    /// Copy the expression together with its ordered interface and data identity.
-    /// Build a symbolic evaluator without expanding the tensor expression.
-    /// Supply symbolic leaves as parameters; use `to_tensor(library)` to evaluate
-    /// tensor components from registered data.
+    /// Build a numerical evaluator for repeated evaluations of a scalar tensor expression.
+    /// Supply parameter values in the order given by `params`; each input row is one evaluation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> from symbolica import E, S
+    /// >>> x = S("docs::x")
+    /// >>> evaluator = sp.TensorExpression((x + 1)**2).evaluator([x])
+    /// >>> values = evaluator.evaluate([[2.0], [3.0]])
+    ///
+    /// Parameters
+    /// ----------
+    /// params : Sequence[Expression]
+    ///     Symbolica variables in the exact order expected in each numerical input row. Include every free numerical parameter that remains after substitutions.
+    /// iterations : int
+    ///     Number of optimization iterations when constructing the evaluator. More iterations can improve repeated evaluations at a higher setup cost.
+    /// n_cores : int
+    ///     Worker count used while optimizing the evaluator. Use 1 for serial setup.
     #[pyo3(signature = (params, *, iterations=1, n_cores=1))]
     fn evaluator(
         &self,
@@ -1035,6 +1269,15 @@ impl TensorExpression {
         Self::build_evaluator(py, self.value.evaluator(&params), iterations, n_cores)
     }
 
+    /// Copy the value and its tensor metadata without mutating the original.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> import copy
+    /// >>> independent = copy.copy(A)
     fn __copy__(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         Py::new(py, self_.clone())
     }
@@ -1043,6 +1286,18 @@ impl TensorExpression {
     ///
     /// Spinor and color dimensions, scalar coefficients, and other Lorentz dimensions
     /// are unchanged. Apply this before contracting four-dimensional Lorentz indices.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> from symbolica import E, S
+    /// >>> D = S("docs::D")
+    /// >>> gamma = sp.TensorExpression.gamma(4).with_lorentz_dimension(D)
+    ///
+    /// Parameters
+    /// ----------
+    /// dimension : int | Expression | str
+    ///     New Lorentz dimension, as an integer, string, or atomic Symbolica expression. This changes Lorentz slots; spinor and color dimensions are retained.
     fn with_lorentz_dimension(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -1059,18 +1314,31 @@ impl TensorExpression {
         Self::from_shared(py, Arc::new(value), name, args)
     }
 
-    /// Apply selected tensor identities to a shared fixed point, retaining aliases.
-    /// The default contracts metrics. `SimplifySettings.hep()` also selects gamma,
-    /// color and epsilon identities. Call `expand()` on the result to materialize it.
+    /// Apply the selected tensor identities while keeping intermediate expressions factored.
+    /// Choose `AlgebraSettings.hep()` for gamma, color, and epsilon identities.
+    /// The result retains shared subexpressions; call `.expand()` when an explicit result is needed.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> gamma = sp.TensorExpression.gamma(4)
+    /// >>> trace = gamma("a", "b", "mu") * gamma("b", "a", "nu")
+    /// >>> reduced = trace.reduce_algebra(sp.AlgebraSettings.hep())
+    /// >>> expanded = reduced.expand()
+    ///
+    /// Parameters
+    /// ----------
+    /// settings : AlgebraSettings, optional
+    ///     AlgebraSettings selecting identity families. None uses the default settings with no optional gamma, color, or epsilon family enabled.
     #[pyo3(signature=(settings=None))]
-    fn simplify(
+    fn reduce_algebra(
         &self,
-        settings: Option<&crate::simplification::PySimplifySettings>,
+        settings: Option<&crate::simplification::PyAlgebraSettings>,
     ) -> PyResult<AliasedTensorExpression> {
         let settings = settings.copied().unwrap_or_default();
         let value = self
             .value
-            .simplify(settings.rust())
+            .reduce_algebra(settings.rust())
             .map_err(Self::inference_error)?;
         Ok(AliasedTensorExpression::from_parts(
             value,
@@ -1079,158 +1347,24 @@ impl TensorExpression {
         ))
     }
 
-    /// Simplify registered Spenso gamma chains and traces with Idenso's default rules.
+    /// Place explicit indices in a named scope so independently constructed expressions
+    /// can be combined without accidental dummy-index collisions. The tensor’s logical
+    /// port order is retained. Use `dummies_only=True` to keep free labels shared.
     ///
-    /// The dimension-generic part applies compatible Clifford anticommutation, adjacent
-    /// contractions, and ordinary odd/even trace recursion. Chisholm identities, gamma-five
-    /// anticommutation and traces, gamma-zero conjugation, and chiral-projector rules are applied
-    /// only when the expression carries explicit four-dimensional Minkowski and bispinor
-    /// representations.
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> from symbolica import E, S
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> scoped = A("i", "j").wrap_indices(S("docs::diagram1"))
     ///
-    /// This method does not select or implement a dimensional-regularization gamma-five scheme.
-    /// Its gamma-five rules are strictly four-dimensional, and the default method does
-    /// not enable the optional three-gamma epsilon expansion available through `GammaSimplifySettings`.
-    /// Gamma factors must use the Spenso representation-aware forms registered on import;
-    /// unrecognized plain Symbolica functions are left unchanged.
-    ///
-    /// # Examples
-    /// ```python
-    /// >>> from symbolica import E
-    /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> # Built-in representations are registered automatically on import.
-    /// >>> trace = E('''
-    /// ...     gamma(bis(4,a),bis(4,b),mink(4,mu))
-    /// ...     * gamma(bis(4,b),bis(4,a),mink(4,nu))
-    /// ... ''', default_namespace="spenso")
-    /// >>> simplified = TensorExpression(trace).simplify_gamma()
-    /// >>> "gamma(" not in str(simplified) and "g(" in str(simplified)
-    /// True
-    /// ```
-    ///
-    /// The native gamma argument order is `bis(dim,alpha), bis(dim,beta), mink(dim,mu)`:
-    /// `alpha` and `beta` are spinor indices, followed by the Lorentz index `mu`.
-    /// These forms can also be constructed through the HEP tensor library.
-    ///
-    /// # Arguments
-    /// - `self`: expression containing gamma matrix products and traces
-    ///
-    /// # Returns
-    /// The simplified expression with gamma algebra applied.
-    ///
-    /// # Examples:
-    /// ```python
-    /// from symbolica.community.tensor import TensorLibrary, TensorName
-    /// from symbolica.community.tensor import TensorExpression
-    /// from symbolica import S, Expression
-    /// # Get HEP library with standard tensors
-    /// hep_lib = TensorLibrary.hep_lib()
-    /// # Access standard tensors like gamma matrices
-    /// gamma_structure = hep_lib[S("spenso::gamma")].expression()
-    /// print(gamma_structure)
-    /// print(TensorExpression(gamma_structure(3, 4, 7) * gamma_structure(7, 4, 3)).simplify_gamma())
-    /// ```
-    #[pyo3(signature = (settings = None))]
-    fn simplify_gamma(
-        &self,
-        settings: Option<&PyGammaSimplifySettings>,
-    ) -> PyResult<AliasedTensorExpression> {
-        let settings = settings.map_or_else(Default::default, PyGammaSimplifySettings::rust);
-        let value = self
-            .value
-            .simplify_gamma(settings)
-            .map_err(Self::inference_error)?;
-        Ok(AliasedTensorExpression::from_parts(
-            value,
-            self.name,
-            self.name_args.clone(),
-        ))
-    }
-
-    /// Simplify Levi-Civita/metric contractions, retaining generated aliases.
-    fn simplify_epsilon(&self) -> PyResult<AliasedTensorExpression> {
-        let value = self
-            .value
-            .simplify_epsilon()
-            .map_err(Self::inference_error)?;
-        Ok(AliasedTensorExpression::from_parts(
-            value,
-            self.name,
-            self.name_args.clone(),
-        ))
-    }
-
-    /// Apply Idenso's SU(N) color-algebra simplifier while retaining the external interface.
-    ///
-    /// Simplify registered Spenso color chains, traces, generators, and structure constants.
-    ///
-    /// With the default Python settings, the simplifier evaluates supported closed traces and
-    /// expands contractions between generators on separate fundamental chains. Its normalization
-    /// conventions are
-    ///
-    /// - `Tr(T^a T^b) = TR δ^{ab}`;
-    /// - `Σ_a (T^a)_i^j (T^a)_k^l = TR (δ_i^l δ_k^j - δ_i^j δ_k^l/Nc)`;
-    /// - `Σ_a (T^a)_i^j (T^a)_j^k = CF δ_i^k`;
-    /// - `Σ_{c,d} f^{acd} f^{bcd} = CA δ^{ab}`.
-    /// Antisymmetry and Jacobi identities apply to the registered structure constants.
-    ///
-    /// `CA = Nc`, `CF = (Nc² - 1)/(2Nc)`, and `TR = 1/2` are the conventional fundamental
-    /// SU(Nc) specialization, not identities imposed on every input. The default simplifier keeps
-    /// representation invariants symbolic where possible; explicit dimension substitution is a
-    /// separate `ColorSimplifySettings` option.
-    ///
-    /// # Examples
-    /// ```python
-    /// >>> from symbolica import S
-    /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> # Formal dimensions are atomic; apply group-specific relations later.
-    /// >>> Na, Nc = S("Na", "Nc")
-    /// >>> generator = TensorExpression.t(Na, Nc)
-    /// >>> generators = generator("a", "i", "j") * generator("a", "k", "l")
-    /// >>> simplified = generators.simplify_color().to_expression()
-    /// >>> "t(" not in str(simplified) and "g(" in str(simplified)
-    /// True
-    /// ```
-    ///
-    /// **Representation invariants:**
-    /// Use `Representation.dimension`, `.casimir()`, `.dynkin_index()`, and `.gram(...)`
-    /// to construct the scalar invariants associated with explicitly typed color structures.
-    ///
-    /// # Arguments
-    /// - `self`: expression containing SU(N) color structures
-    ///
-    /// # Returns
-    /// The simplified expression, reduced to representation-owned scalar invariants when possible.
-    /// Unsupported or open indexed structures may remain explicitly in the result; their presence
-    /// is not an error.
-    ///
-    /// # Notes
-    /// Only representation-aware Spenso color forms are recognized. Plain Symbolica functions with
-    /// similar names are left unchanged.
-    #[pyo3(signature = (settings = None))]
-    fn simplify_color(
-        &self,
-        settings: Option<&PyColorSimplifySettings>,
-    ) -> PyResult<AliasedTensorExpression> {
-        let settings = settings.map_or_else(Default::default, PyColorSimplifySettings::rust);
-        let value = self
-            .value
-            .simplify_color(settings)
-            .map_err(Self::inference_error)?;
-        Ok(AliasedTensorExpression::from_parts(
-            value,
-            self.name,
-            self.name_args.clone(),
-        ))
-    }
-
-    /// Put all explicit indices in a named scope, preserving the tensor interface.
-    ///
-    /// Scoped copies contract internally as before, but their indices are distinct
-    /// from the original. Alphabet display uses primed labels for scoped indices.
-    /// Applying the same outer scope twice is idempotent; different scopes nest.
-    /// Set `dummies_only=True` to retain external indices while separating local contractions.
-    ///
-    /// >>> conjugate = tensor.dirac_adjoint().wrap_indices(S("bra"))
+    /// Parameters
+    /// ----------
+    /// header : Expression
+    ///     Symbolica symbol naming the index scope. Use different symbols for independently built expressions whose dummy labels must not collide.
+    /// dummies_only : bool
+    ///     If True, scope only contracted indices, leaving the external labels unchanged. False scopes all explicit indices.
     #[pyo3(signature = (header, *, dummies_only=false))]
     fn wrap_indices(
         self_: PyRef<'_, Self>,
@@ -1261,31 +1395,20 @@ impl TensorExpression {
     /// - Determining the rank and structure of tensor expressions
     /// - Debugging index contractions
     ///
-    /// # Arguments
-    /// - `self`: tensor expression to analyze
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> free_indices = A("i", "j").list_dangling()
     ///
-    /// # Returns
+    /// Returns
+    /// -------
     /// A list of expressions, each representing a free (dangling) index.
     ///
-    /// # Raises
+    /// Raises
+    /// ------
     /// `ValueError` when the expression cannot be parsed as a tensor network.
-    ///
-    /// # Examples:
-    /// ```python
-    /// from symbolica.community.tensor import TensorName, Slot, Representation
-    /// import symbolica as sp
-    /// from symbolica.community.tensor import TensorExpression
-    ///
-    /// T = TensorName("T")
-    /// rep = Representation.euc(3)
-    /// # With slots (creates TensorExpression)
-    /// mu = rep("mu")
-    /// nu = rep("nu")
-    /// x = sp.S("x")
-    /// tensor_with_args = T(x, mu, nu, nu)  # T(x; mu, nu, nu)
-    /// # print(tensor_with_args)
-    /// print(tensor_with_args.list_dangling())
-    /// ```
     fn list_dangling(self_: PyRef<'_, Self>) -> PyResult<Vec<PythonExpression>> {
         if self_.interface().open_positions().is_empty() {
             return Ok(self_
@@ -1305,6 +1428,13 @@ impl TensorExpression {
     /// Canonically order tensor factors and deterministically rename contracted indices.
     ///
     /// Raises `CanonicalizationError` when the expression cannot be parsed or canonicalized.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> canonical = (A("i", "j") * A("j", "k")).canonize()
     fn canonize(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         let value = Self::structured(&self_)
             .canonize()
@@ -1316,39 +1446,23 @@ impl TensorExpression {
         Self::from_shared(py, Arc::new(value), name, args)
     }
 
-    /// Construct the physics-aware Dirac adjoint and re-infer the tensor interface.
+    /// Take the complex-conjugate, reversed Dirac chain, including the gamma-zero
+    /// factors needed at open bispinor endpoints. Use `preserve_indices=True` when
+    /// external labels must remain attached to the original amplitude legs.
     ///
-    /// Construct the physics-aware Dirac adjoint of a tensor expression.
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> gamma = sp.TensorExpression.gamma(4)("a", "b", "mu")
+    /// >>> adjoint = gamma.dirac_adjoint(preserve_indices=True)
     ///
-    /// Idenso takes the symbolic complex conjugate, reverses compatible open bispinor chains, and
-    /// inserts the registered `gamma0` factors required at dangling bispinor slots.
-    /// With `preserve_indices=True`, external labels remain attached to the same physical
-    /// amplitude legs instead of exchanging the two endpoints of each open chain. Use this
-    /// when summing diagrams with different fermion pairings before squaring an amplitude.
-    /// The gamma-zero boundary factors still apply. The default matrix-adjoint convention
-    /// exchanges endpoints and is unchanged.
-    /// The input must use the representation-aware Spenso forms registered on import.
-    /// Raises `DiracAdjointError` when the tensor network does not define a consistent adjoint.
+    /// Parameters
+    /// ----------
+    /// preserve_indices : bool
+    ///     Keep external labels attached to their original amplitude legs. False uses the usual endpoint exchange when taking the Dirac adjoint.
     ///
-    /// # Examples
-    /// ```python
-    /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> from symbolica.community.tensor import Representation, TensorName
-    /// >>> # Built-in representations are registered automatically on import.
-    /// >>> # Re-importing the module does not require explicit re-registration.
-    /// >>> bispinor = Representation.bis(4)
-    /// >>> spinor = TensorName("u")(bispinor("alpha")).to_expression()
-    /// >>> adjoint = TensorExpression(spinor).dirac_adjoint()
-    /// >>> len(TensorExpression(adjoint).list_dangling()) == 1
-    /// True
-    /// >>> "gamma0" in str(adjoint)
-    /// True
-    /// ```
-    ///
-    /// # Arguments
-    /// - `self`: a Spenso-compatible tensor expression.
-    ///
-    /// # Returns
+    /// Returns
+    /// -------
     /// The representation-aware Dirac adjoint.
     #[pyo3(signature = (*, preserve_indices=false))]
     fn dirac_adjoint(
@@ -1363,8 +1477,17 @@ impl TensorExpression {
         Self::from_transformed_atom(&self_, py, result)
     }
 
-    /// Render compact metric products as dots without contracting indexed factors.
+    /// Normalize index-free scalar-product notation without contracting indexed factors.
     /// Use `contract()` first when explicit vector indices should be contracted.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> p = sp.TensorName.vector("docs::p")(r)
+    /// >>> q = sp.TensorName.vector("docs::q")(r)
+    /// >>> value = sp.dot(p, q)
+    /// >>> rewritten = value.to_dots()
     fn to_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         let value = self_.value.to_dots().map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(&self_, value.expression());
@@ -1373,29 +1496,69 @@ impl TensorExpression {
 
     /// Open dots into symbolic indexed contractions, retaining other shorthands.
     /// This does not expand the numerator or evaluate finite tensor components.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> p = sp.TensorName.vector("docs::p")(r)
+    /// >>> q = sp.TensorName.vector("docs::q")(r)
+    /// >>> value = sp.dot(p, q)
+    /// >>> rewritten = value.undo_dots()
     fn undo_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         let value = self_.value.undo_dots().map_err(Self::inference_error)?;
         let (name, args) = Self::transformed_descriptor(&self_, value.expression());
         Self::from_shared(py, Arc::new(value), name, args)
     }
 
-    /// Join adjacent open chains for `representation`, retaining the external interface.
+    /// Expose collected chain factors with fresh compatible dummy indices.
     ///
-    /// Rewrite tensors with two `representation` slots as open-chain factors.
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> value = sp.chain(r("i"), r("j"), A, A)
+    /// >>> opened = value.undo_chain()
+    fn undo_chain(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let value = self_.value.undo_chain().map_err(Self::inference_error)?;
+        let (name, args) = Self::transformed_descriptor(&self_, value.expression());
+        Self::from_shared(py, Arc::new(value), name, args)
+    }
+
+    /// Open traces as closed chains without evaluating them.
     ///
-    /// Rewrite tensors with two slots in `representation` as explicit open-chain factors.
-    fn chainify(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        representation: &SpensoRepresentation,
-    ) -> PyResult<Py<Self>> {
-        let result = self_.atom().chainify(representation.representation.rep);
-        Self::from_preserved_atom(&self_, py, result)
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> value = sp.trace(r, A, A)
+    /// >>> opened = value.undo_trace()
+    fn undo_trace(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let value = self_.value.undo_trace().map_err(Self::inference_error)?;
+        let (name, args) = Self::transformed_descriptor(&self_, value.expression());
+        Self::from_shared(py, Arc::new(value), name, args)
     }
 
     /// Materialize unresolved ports and parse this expression as a tensor network.
     ///
     /// When `library` is omitted, use the built-in four-dimensional HEP and SU(3) library.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> library = sp.TensorLibrary()
+    /// >>> library.register(tensor)
+    /// >>> network = A.to_network(library)
+    ///
+    /// Parameters
+    /// ----------
+    /// library : TensorLibrary, optional
+    ///     Component definitions for named tensors. None uses the built-in four-dimensional HEP and SU(3) library; supply a TensorLibrary for your own tensors.
     #[pyo3(signature = (library = None))]
     fn to_network(
         self_: PyRef<'_, Self>,
@@ -1417,6 +1580,23 @@ impl TensorExpression {
     ///
     /// Unregistered names acquire symbolic components. This uses the same execution
     /// path as to_network().execute() and does not mutate the expression or library.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> library = sp.TensorLibrary()
+    /// >>> library.register(tensor)
+    /// >>> result = A.to_tensor(library)
+    ///
+    /// Parameters
+    /// ----------
+    /// library : TensorLibrary, optional
+    ///     Component definitions for named tensors. None uses the built-in four-dimensional HEP and SU(3) library; supply a TensorLibrary for your own tensors.
+    /// function_library : TensorFunctionLibrary, optional
+    ///     Callbacks for custom elementwise functions during component evaluation. None uses only the available built-in functions.
     #[pyo3(signature = (library=None, *, function_library=None))]
     fn to_tensor(
         self_: PyRef<'_, Self>,
@@ -1442,6 +1622,21 @@ impl TensorExpression {
     /// When `library` is omitted, use the default HEP library; pass
     /// `TensorLibrary.hep_lib_atom()` to select its atom-valued variant.
     /// Values retain the Python types returned by `TensorNetwork.result_tensor()`.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+    /// >>> library = sp.TensorLibrary()
+    /// >>> library.register(tensor)
+    /// >>> entries = A.components(library)
+    ///
+    /// Parameters
+    /// ----------
+    /// library : TensorLibrary, optional
+    ///     Component definitions for named tensors. None uses the built-in four-dimensional HEP and SU(3) library; supply a TensorLibrary for your own tensors.
     #[pyo3(signature = (library = None))]
     #[gen_stub(override_return_type(
         type_repr = "builtins.list[Expression | builtins.complex | builtins.float]"
@@ -1457,15 +1652,29 @@ impl TensorExpression {
 
     /// Fill the unresolved external ports with `indices` in interface order.
     ///
-    /// Pass `AUTO` to leave a port unresolved. Pass `cook_indices=CookSettings.indices()` to flatten nested
+    /// Pass `AUTO` to leave a port unresolved. Pass `cook_indices=sp.CookSettings.reversible()` to encode nested
     /// symbolic index payloads before insertion. Repeated compatible indices contract their
     /// ports, in which case the result no longer carries the original stored-data identity.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> indexed = A.index("i", "j")
+    ///
+    /// Parameters
+    /// ----------
+    /// indices : index label, Slot, or AUTO
+    ///     One index per selected port, in logical axis order. Accepts integers, strings, expressions, typed Slots, and AUTO; AUTO leaves that port unchanged.
+    /// cook_indices : CookSettings, optional
+    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
     #[pyo3(signature = (*indices, cook_indices = None))]
     fn index(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: Option<&crate::simplification::PyCookSettings>,
+        cook_indices: Option<&PyCookSettings>,
     ) -> PyResult<Py<Self>> {
         let replacements = Self::index_replacements(self_.interface(), indices, cook_indices)?;
         let value = Self::structured(&self_)
@@ -1481,6 +1690,21 @@ impl TensorExpression {
 
     /// Assign all external ports in logical order, including already indexed ports.
     /// AUTO keeps the current port. Repeated compatible indices contract.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> indexed = A("i", "j")
+    /// >>> renamed = indexed.reindex("mu", sp.AUTO)
+    ///
+    /// Parameters
+    /// ----------
+    /// indices : index label, Slot, or AUTO
+    ///     One index per selected port, in logical axis order. Accepts integers, strings, expressions, typed Slots, and AUTO; AUTO leaves that port unchanged.
+    /// cook_indices : CookSettings, optional
+    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
     #[pyo3(signature = (*indices, cook_indices=None))]
     fn reindex(
         self_: PyRef<'_, Self>,
@@ -1500,6 +1724,21 @@ impl TensorExpression {
 
     /// Rename external indices simultaneously without changing rank or capturing dummy indices.
     /// Keys are index labels or typed Slots; typed keys disambiguate representations.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> indexed = A("i", "j")
+    /// >>> swapped = indexed.rename_indices({"i": "j", "j": "i"})
+    ///
+    /// Parameters
+    /// ----------
+    /// mapping : dict[int | str | Expression | Slot, index label, Slot, or AUTO]
+    ///     Old-to-new external index labels, applied simultaneously. Typed Slot keys disambiguate representations. Renaming cannot contract ports or capture dummy indices; use reindex() for contractions.
+    /// cook_indices : CookSettings, optional
+    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
     #[pyo3(signature = (mapping, *, cook_indices=None))]
     fn rename_indices(
         self_: PyRef<'_, Self>,
@@ -1527,6 +1766,18 @@ impl TensorExpression {
     /// Return a tensor with external axes in the specified logical order.
     /// Unresolved ports acquire fresh indices so identical representations remain distinct.
     /// Use reindex() to assign preferred labels after permutation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> transposed = A.permute_axes([1, 0])
+    ///
+    /// Parameters
+    /// ----------
+    /// axes : Sequence[int]
+    ///     Permutation of all axis positions, starting at zero. For a matrix, [1, 0] transposes the logical axes.
     fn permute_axes(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -1540,16 +1791,38 @@ impl TensorExpression {
     }
 
     /// Fill the unresolved external ports with `indices` in interface order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> indexed = A("i", "j")
+    ///
+    /// Parameters
+    /// ----------
+    /// indices : index label, Slot, or AUTO
+    ///     One index per selected port, in logical axis order. Accepts integers, strings, expressions, typed Slots, and AUTO; AUTO leaves that port unchanged.
+    /// cook_indices : CookSettings, optional
+    ///     None leaves index payloads unchanged. CookSettings selects encoding, filters, and output tags; CookSettings.indices() flattens nested index payloads.
     #[pyo3(signature = (*indices, cook_indices = None))]
     fn __call__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         indices: &Bound<'_, PyTuple>,
-        cook_indices: Option<&crate::simplification::PyCookSettings>,
+        cook_indices: Option<&PyCookSettings>,
     ) -> PyResult<Py<Self>> {
         Self::index(self_, py, indices, cook_indices)
     }
 
+    /// Negate every tensor coefficient, preserving the external axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> negative = -A
     fn __neg__(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
         Self::from_known_parts(
             py,
@@ -1560,6 +1833,19 @@ impl TensorExpression {
         )
     }
 
+    /// Add compatible tensors, preserving their logical external axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A + A
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : TensorExpression | Expression or scalar
+    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
     #[gen_stub(skip)]
     fn __add__(
         self_: PyRef<'_, Self>,
@@ -1602,6 +1888,19 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
+    /// Add compatible tensors, preserving their logical external axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A + A
+    ///
+    /// Parameters
+    /// ----------
+    /// lhs : TensorExpression | Expression or scalar
+    ///     Left operand. Addition and subtraction require compatible tensor interfaces.
     #[gen_stub(skip)]
     fn __radd__(
         self_: PyRef<'_, Self>,
@@ -1617,6 +1916,19 @@ impl TensorExpression {
         Self::__add__(self_, py, lhs)
     }
 
+    /// Subtract compatible tensors, preserving their logical external axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A - A
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : TensorExpression | Expression or scalar
+    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
     #[gen_stub(skip)]
     fn __sub__(
         self_: PyRef<'_, Self>,
@@ -1659,6 +1971,19 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
+    /// Subtract compatible tensors, preserving their logical external axes.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A - A
+    ///
+    /// Parameters
+    /// ----------
+    /// lhs : TensorExpression | Expression or scalar
+    ///     Left operand. Addition and subtraction require compatible tensor interfaces.
     #[gen_stub(skip)]
     fn __rsub__(
         self_: PyRef<'_, Self>,
@@ -1695,6 +2020,19 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
+    /// Multiply tensor operands, contracting repeated compatible explicit indices.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A * 2
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : TensorExpression | Expression or scalar
+    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
     #[gen_stub(skip)]
     fn __mul__(
         self_: PyRef<'_, Self>,
@@ -1725,6 +2063,19 @@ impl TensorExpression {
         }
     }
 
+    /// Multiply tensor operands, contracting repeated compatible explicit indices.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = 2 * A
+    ///
+    /// Parameters
+    /// ----------
+    /// lhs : TensorExpression | Expression or scalar
+    ///     Left operand. Addition and subtraction require compatible tensor interfaces.
     #[gen_stub(skip)]
     fn __rmul__(
         self_: PyRef<'_, Self>,
@@ -1755,6 +2106,19 @@ impl TensorExpression {
         }
     }
 
+    /// Divide tensor coefficients by a scalar denominator.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A / 2
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : TensorExpression | Expression or scalar
+    ///     Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar.
     #[gen_stub(skip)]
     fn __truediv__(
         self_: PyRef<'_, Self>,
@@ -1775,6 +2139,18 @@ impl TensorExpression {
         Self::from_structured(py, value).map(TensorDispatch::Expression)
     }
 
+    /// Divide a scalar by a scalar tensor expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> scalar = sp.TensorExpression(2)
+    /// >>> result = 1 / scalar
+    ///
+    /// Parameters
+    /// ----------
+    /// lhs : TensorExpression | Expression or scalar
+    ///     Left operand. Addition and subtraction require compatible tensor interfaces.
     #[gen_stub(skip)]
     fn __rtruediv__(
         self_: PyRef<'_, Self>,
@@ -1794,7 +2170,22 @@ impl TensorExpression {
         Self::from_structured(py, value).map(TensorDispatch::Expression)
     }
 
-    /// Raise this tensor to a scalar power through typed composition.
+    /// Raise a scalar tensor expression to a power. Non-scalar tensor powers are rejected.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> from symbolica import E, S
+    /// >>> x = S("docs::x")
+    /// >>> scalar = sp.TensorExpression(x)
+    /// >>> result = scalar**2
+    ///
+    /// Parameters
+    /// ----------
+    /// exponent : TensorExpression | Expression or scalar
+    ///     Scalar exponent. Tensor-valued exponents are not supported.
+    /// modulo : Any, optional
+    ///     Must be None; modular exponentiation is not supported.
     fn __pow__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -1811,7 +2202,22 @@ impl TensorExpression {
         Self::from_structured(py, value)
     }
 
-    /// Use this scalar tensor as a power's exponent.
+    /// Raise a scalar tensor expression to a power. Non-scalar tensor powers are rejected.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> from symbolica import E, S
+    /// >>> x = S("docs::x")
+    /// >>> scalar = sp.TensorExpression(x)
+    /// >>> result = 2**scalar
+    ///
+    /// Parameters
+    /// ----------
+    /// base : TensorExpression | Expression or scalar
+    ///     Scalar base of the power.
+    /// modulo : Any, optional
+    ///     Must be None; modular exponentiation is not supported.
     fn __rpow__(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -1828,8 +2234,20 @@ impl TensorExpression {
         Self::from_structured(py, value)
     }
 
-    /// Compare exact normalized tensor values, including their logical interfaces.
-    /// Compare to ordinary Symbolica expressions through `to_expression()`.
+    /// Compare normalized expressions and their ordered tensor interfaces for equality.
+    /// For a comparison to a plain Symbolica expression, first use `.to_expression()`.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> assert A == sp.TensorExpression(A)
+    ///
+    /// Parameters
+    /// ----------
+    /// other : object
+    ///     TensorExpression to compare. Other types can provide their own reverse comparison.
     fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let Ok(other) = other.extract::<PyRef<'_, Self>>() else {
             return Ok(py.NotImplemented());
@@ -1843,6 +2261,19 @@ impl TensorExpression {
             .unbind())
     }
 
+    /// Test whether normalized expressions or their ordered tensor interfaces differ.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> assert A != 2 * A
+    ///
+    /// Parameters
+    /// ----------
+    /// other : object
+    ///     TensorExpression to compare. Other types can provide their own reverse comparison.
     fn __ne__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let Ok(other) = other.extract::<PyRef<'_, Self>>() else {
             return Ok(py.NotImplemented());
@@ -1854,6 +2285,16 @@ impl TensorExpression {
             .unbind())
     }
 
+    /// Hash the immutable tensor value for use in dictionaries and sets.
+    /// Equal tensor expressions have equal hashes, including their ordered interfaces.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> labels = {A: "matrix A"}
+    /// >>> assert labels[sp.TensorExpression(A)] == "matrix A"
     fn __hash__(&self) -> isize {
         use std::hash::{DefaultHasher, Hasher};
         let mut state = DefaultHasher::new();
@@ -1862,13 +2303,31 @@ impl TensorExpression {
         if hash == -1 { -2 } else { hash }
     }
 
-    /// False only when the normalized tensor value is exactly zero.
-    /// This does not solve symbolic conditions or inspect component count.
+    /// Test whether the symbolic tensor expression is nonzero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> nonzero = bool(A)
     fn __bool__(&self) -> bool {
         !self.value.is_zero()
     }
 
-    /// Form an outer product without contracting compatible ports.
+    /// Form an outer product, keeping both operands’ ports free even when their labels coincide.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A.outer(A)
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : TensorExpression | Expression
+    ///     Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
     #[gen_stub(skip)]
     fn outer(
         self_: PyRef<'_, Self>,
@@ -1891,24 +2350,32 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
-    /// Contract metric/vector indices, retaining generated sums as a typed DAG.
-    /// Call `expand()` on the result to materialize it explicitly.
-    #[pyo3(signature = (order=None, *, rank_one=true))]
+    /// Contract compatible indices, retaining shared subexpressions in the result.
+    /// Use `ContractSettings` to select representations or control chain and trace collection.
+    /// Call `.expand()` to materialize the factored result.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> metric = sp.TensorExpression.g(r)("i", "j")
+    /// >>> vector = sp.TensorName.vector("docs::p")(r("j"))
+    /// >>> contracted = (metric * vector).contract()
+    /// >>> explicit = contracted.expand()
+    ///
+    /// Parameters
+    /// ----------
+    /// settings : ContractSettings, optional
+    ///     ContractSettings selecting contractions and collection. None enables the default contraction policy.
+    #[pyo3(signature=(settings=None))]
     fn contract(
         &self,
-        order: Option<Vec<usize>>,
-        rank_one: bool,
+        settings: Option<&crate::simplification::PyContractSettings>,
     ) -> PyResult<AliasedTensorExpression> {
-        let mut settings = ContractionSettings::default();
-        if let Some(order) = &order {
-            settings = settings.with_order(order);
-        }
-        if !rank_one {
-            settings = settings.without_rank_one_tensors();
-        }
+        let settings = settings.cloned().unwrap_or_default();
         let value = self
             .value
-            .contract(settings)
+            .contract(settings.rust())
             .map_err(Self::inference_error)?;
         Ok(AliasedTensorExpression::from_parts(
             Arc::new(value),
@@ -1917,7 +2384,23 @@ impl TensorExpression {
         ))
     }
 
-    /// Contract one selected pair of logical interface positions.
+    /// Contract one chosen pair of axes and retain the other external ports in logical order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A.contract_ports(A, left=1, right=0)
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : TensorExpression | Expression
+    ///     Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
+    /// left : int
+    ///     Zero-based axis position in this operand to contract.
+    /// right : int
+    ///     Zero-based axis position in rhs to contract with the selected left axis.
     #[pyo3(signature = (rhs, *, left, right))]
     #[gen_stub(skip)]
     fn contract_ports(
@@ -1946,7 +2429,23 @@ impl TensorExpression {
             .map(TensorDispatch::Expression)
     }
 
-    /// Compose two selected `(input, output)` matrix channels.
+    /// Compose two explicitly selected matrix channels, retaining the uncontracted endpoints.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> result = A.compose(A, left=(0, 1), right=(0, 1))
+    ///
+    /// Parameters
+    /// ----------
+    /// rhs : TensorExpression | Expression
+    ///     Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
+    /// left : tuple[int, int]
+    ///     (input_axis, output_axis) channel in this operand.
+    /// right : tuple[int, int]
+    ///     (input_axis, output_axis) channel in rhs. The selected connecting ports must have compatible representations.
     #[pyo3(signature = (rhs, *, left, right))]
     #[gen_stub(skip)]
     fn compose(
@@ -1984,6 +2483,18 @@ impl TensorExpression {
     }
 
     /// Close `channel`, or the unique matrix channel when it is omitted.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> trace = A.trace(channel=(0, 1))
+    ///
+    /// Parameters
+    /// ----------
+    /// channel : tuple[int, int], optional
+    ///     Pair (input_axis, output_axis) identifying the matrix channel to close. None selects the unique compatible channel; ambiguous tensors require an explicit pair.
     #[pyo3(signature = (*, channel = None))]
     fn trace(
         self_: PyRef<'_, Self>,
@@ -2003,6 +2514,20 @@ impl TensorExpression {
     }
 
     /// Format this structured expression using compact Spenso notation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> text = A.format_tensor(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    ///
+    /// Parameters
+    /// ----------
+    /// show_dimensions : bool, optional
+    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    /// settings : DisplaySettings, optional
+    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
     #[pyo3(signature = (show_dimensions = None, *, settings = None))]
     fn format_tensor(
         self_: PyRef<'_, Self>,
@@ -2019,12 +2544,38 @@ impl TensorExpression {
 
     /// Export LaTeX with tensor notation, index alphabets, and model parameter labels.
     /// ``max_line_length`` wraps top-level sums using Symbolica's usual rules.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> latex_source = A("i", "j").to_latex(max_line_length=80)
+    ///
+    /// Parameters
+    /// ----------
+    /// max_line_length : int, optional
+    ///     Optional target line length for the exported LaTeX source. None leaves line wrapping to the formatter.
     #[pyo3(signature = (max_line_length = None))]
     fn to_latex(self_: PyRef<'_, Self>, max_line_length: Option<usize>) -> String {
         display::structured_to_latex(Self::structured(&self_), false, max_line_length)
     }
 
     /// Format this structured expression as Typst math source.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> typst_source = A.to_typst(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    ///
+    /// Parameters
+    /// ----------
+    /// show_dimensions : bool, optional
+    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    /// settings : DisplaySettings, optional
+    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
     #[pyo3(signature = (show_dimensions = None, *, settings = None))]
     fn to_typst(
         self_: PyRef<'_, Self>,
@@ -2039,13 +2590,29 @@ impl TensorExpression {
         ))
     }
 
-    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     /// Build Symbolica's rich display value, including semantic HTML when the
     /// optional ``gammaloop[typst-display]`` renderer is installed.
     ///
     /// ``notation_source`` is a trusted complete replacement for the bundled
     /// ``notation.typ`` module, not a style fragment. Typst executes it. When
     /// HTML cannot be rendered, the result retains its LaTeX and text forms.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> display_value = A.formatted(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    ///
+    /// Parameters
+    /// ----------
+    /// show_dimensions : bool, optional
+    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    /// settings : DisplaySettings, optional
+    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    /// notation_source : str, optional
+    ///     Optional custom Typst notation definitions. None uses the bundled tensor notation. Pass trusted Typst source, not untrusted user text.
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn formatted(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2062,13 +2629,29 @@ impl TensorExpression {
         )
     }
 
-    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     /// Compile this expression to semantic HTML with the optional Typst
     /// renderer.
     ///
     /// Install ``gammaloop[typst-display]`` to enable this method.
     /// ``notation_source``, when supplied, is trusted Typst code replacing the
     /// complete bundled ``notation.typ`` module.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> html = A.to_html(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    ///
+    /// Parameters
+    /// ----------
+    /// show_dimensions : bool, optional
+    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    /// settings : DisplaySettings, optional
+    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    /// notation_source : str, optional
+    ///     Optional custom Typst notation definitions. None uses the bundled tensor notation. Pass trusted Typst source, not untrusted user text.
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn to_html(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2085,12 +2668,28 @@ impl TensorExpression {
         )
     }
 
-    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     /// Compile this expression to SVG with the optional Typst renderer.
     ///
     /// Install ``gammaloop[typst-display]`` to enable this method.
     /// ``notation_source``, when supplied, is trusted Typst code replacing the
     /// complete bundled ``notation.typ`` module.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> svg = A.to_svg(settings=sp.DisplaySettings(index_style="raw", show_dimensions=True))
+    ///
+    /// Parameters
+    /// ----------
+    /// show_dimensions : bool, optional
+    ///     Override whether representation dimensions are displayed. None uses settings; the default display settings hide dimensions.
+    /// settings : DisplaySettings, optional
+    ///     Optional DisplaySettings controlling notation, indices, and component layout. None uses the default presentation.
+    /// notation_source : str, optional
+    ///     Optional custom Typst notation definitions. None uses the bundled tensor notation. Pass trusted Typst source, not untrusted user text.
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn to_svg(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
@@ -2107,10 +2706,26 @@ impl TensorExpression {
         )
     }
 
+    /// Return a readable object description for inspection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> text = repr(A)
     fn __repr__(self_: PyRef<'_, Self>) -> String {
         display::format_structured(Self::structured(&self_), false)
     }
 
+    /// Return a readable text representation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> text = str(A)
     fn __str__(self_: PyRef<'_, Self>) -> String {
         display::format_structured(Self::structured(&self_), false)
     }
@@ -2140,6 +2755,21 @@ impl TensorExpression {
 }
 
 /// Restore tensor-aware dispatch after a base Symbolica transformation.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community import tensor as sp
+/// >>> from symbolica import E, S
+/// >>> r = sp.Representation.euc(2)
+/// >>> A = sp.TensorName("docs::A")(r, r)
+/// >>> x = S("docs::x")
+/// >>> raw = (x * A).to_expression().derivative(x)
+/// >>> tensor = sp.as_tensor(raw)
+///
+/// Parameters
+/// ----------
+/// expression : Any
+///     TensorExpression to copy, or a Symbolica/scalar expression from which to infer the tensor interface. Useful after scalar algebra operations return a base Expression.
 #[cfg_attr(
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.tensor")
@@ -2199,9 +2829,39 @@ macro_rules! symbolic_function_overload {
 }
 
 #[cfg(feature = "python_stubgen")]
-symbolic_function_overload!("dot", "Contract two rank-one tensors into the canonical dot form.", [], ["left": PositionalOrKeyword, "right": PositionalOrKeyword]);
+symbolic_function_overload!("dot", r##"Contract two rank-one tensors into the canonical dot form.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> p = sp.TensorName.vector("docs::p")(r)
+>>> q = sp.TensorName.vector("docs::q")(r)
+>>> scalar_product = sp.dot(p, q)
+
+Parameters
+----------
+left : TensorExpression | Expression
+    Left rank-one tensor operand.
+right : TensorExpression | Expression
+    Right rank-one tensor operand with a compatible representation."##, [], ["left": PositionalOrKeyword, "right": PositionalOrKeyword]);
 
 /// Contract two rank-one tensors into the canonical dot form.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community import tensor as sp
+/// >>> r = sp.Representation.euc(2)
+/// >>> p = sp.TensorName.vector("docs::p")(r)
+/// >>> q = sp.TensorName.vector("docs::q")(r)
+/// >>> scalar_product = sp.dot(p, q)
+///
+/// Parameters
+/// ----------
+/// left : TensorExpression | Expression
+///     Left rank-one tensor operand.
+/// right : TensorExpression | Expression
+///     Right rank-one tensor operand with a compatible representation.
 #[cfg_attr(
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyfunction(
@@ -2212,9 +2872,40 @@ symbolic_function_overload!("dot", "Contract two rank-one tensors into the canon
 
         @overload
         def dot(left: typing.Union[Tensor, TensorNetwork], right: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]:
-            """Contract two rank-one tensors into the canonical dot form."""
+            """Contract two rank-one tensors into the canonical dot form.
+
+            Examples
+            --------
+            >>> from symbolica.community import tensor as sp
+            >>> r = sp.Representation.euc(2)
+            >>> p = sp.TensorName.vector("docs::p")(r)
+            >>> q = sp.TensorName.vector("docs::q")(r)
+            >>> scalar_product = sp.dot(p, q)
+
+            Parameters
+            ----------
+            left : Union[Tensor, TensorNetwork]
+                Left rank-one tensor operand.
+            right : pyo3_stub_gen.RustType['ConvertibleToSpensoNet']
+                Right rank-one tensor operand with a compatible representation."""
         @overload
-        def dot(left: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"], right: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        def dot(left: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"], right: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+            """Contract two rank-one tensors into the canonical dot form.
+
+            Examples
+            --------
+            >>> from symbolica.community import tensor as sp
+            >>> r = sp.Representation.euc(2)
+            >>> p = sp.TensorName.vector("docs::p")(r)
+            >>> q = sp.TensorName.vector("docs::q")(r)
+            >>> scalar_product = sp.dot(p, q)
+
+            Parameters
+            ----------
+            left : pyo3_stub_gen.RustType['ConvertibleToSpensoNet']
+                Left rank-one tensor operand.
+            right : Union[Tensor, TensorNetwork]
+                Right rank-one tensor operand with a compatible representation."""
         "#,
     )
 )]
@@ -2245,9 +2936,41 @@ fn dot(
 // factor guarantees a network; an arbitrary mixed sequence needs the union fallback
 // because it may be empty or contain only symbolic factors at runtime.
 #[cfg(feature = "python_stubgen")]
-symbolic_function_overload!("chain", "Build an explicitly-ended ordered tensor chain.", ["start_slot": SpensoSlot, "end_slot": SpensoSlot], ["factors": VarPositional]);
+symbolic_function_overload!("chain", r##"Build an explicitly-ended ordered tensor chain.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> chain = sp.chain(r("i"), r("j"), A, A)
+
+Parameters
+----------
+start_slot : Slot
+    Typed Slot labelling the first free endpoint of the chain.
+end_slot : Slot
+    Typed Slot labelling the last free endpoint. Matching compatible endpoints close the chain.
+factors : TensorExpression | Expression
+    Ordered tensor factors. Symbolic operands produce a TensorExpression; any component tensor or network promotes the result to a TensorNetwork."##, ["start_slot": SpensoSlot, "end_slot": SpensoSlot], ["factors": VarPositional]);
 
 /// Build an explicitly-ended ordered tensor chain.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community import tensor as sp
+/// >>> r = sp.Representation.euc(2)
+/// >>> A = sp.TensorName("docs::A")(r, r)
+/// >>> chain = sp.chain(r("i"), r("j"), A, A)
+///
+/// Parameters
+/// ----------
+/// start_slot : Slot
+///     Typed Slot labelling the first free endpoint of the chain.
+/// end_slot : Slot
+///     Typed Slot labelling the last free endpoint. Matching compatible endpoints close the chain.
+/// factors : TensorExpression | Expression
+///     Ordered tensor factors. Symbolic operands produce a TensorExpression; any component tensor or network promotes the result to a TensorNetwork.
 #[cfg_attr(
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyfunction(
@@ -2257,11 +2980,68 @@ symbolic_function_overload!("chain", "Build an explicitly-ended ordered tensor c
         import typing
 
         @overload
-        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], factor: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], factor: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+            """Build an explicitly-ended ordered tensor chain.
+
+            Examples
+            --------
+            >>> from symbolica.community import tensor as sp
+            >>> r = sp.Representation.euc(2)
+            >>> A = sp.TensorName("docs::A")(r, r)
+            >>> chain = sp.chain(r("i"), r("j"), A, A)
+
+            Parameters
+            ----------
+            start_slot : pyo3_stub_gen.RustType['SpensoSlot']
+                Typed Slot labelling the first free endpoint of the chain.
+            end_slot : pyo3_stub_gen.RustType['SpensoSlot']
+                Typed Slot labelling the last free endpoint. Matching compatible endpoints close the chain.
+            factor : Union[Tensor, TensorNetwork]
+                First tensor factor in the ordered product.
+            factors : pyo3_stub_gen.RustType['ConvertibleToSpensoNet']
+                Ordered tensor factors. Symbolic operands produce a TensorExpression; any component tensor or network promotes the result to a TensorNetwork."""
         @overload
-        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], first: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"], second: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], first: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"], second: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+            """Build an explicitly-ended ordered tensor chain.
+
+            Examples
+            --------
+            >>> from symbolica.community import tensor as sp
+            >>> r = sp.Representation.euc(2)
+            >>> A = sp.TensorName("docs::A")(r, r)
+            >>> chain = sp.chain(r("i"), r("j"), A, A)
+
+            Parameters
+            ----------
+            start_slot : pyo3_stub_gen.RustType['SpensoSlot']
+                Typed Slot labelling the first free endpoint of the chain.
+            end_slot : pyo3_stub_gen.RustType['SpensoSlot']
+                Typed Slot labelling the last free endpoint. Matching compatible endpoints close the chain.
+            first : pyo3_stub_gen.RustType['ConvertibleToSpensoNet']
+                First tensor factor in the ordered product.
+            second : Union[Tensor, TensorNetwork]
+                Second tensor factor in the ordered product.
+            factors : pyo3_stub_gen.RustType['ConvertibleToSpensoNet']
+                Ordered tensor factors. Symbolic operands produce a TensorExpression; any component tensor or network promotes the result to a TensorNetwork."""
         @overload
-        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["TensorDispatch"]: ...
+        def chain(start_slot: pyo3_stub_gen.RustType["SpensoSlot"], end_slot: pyo3_stub_gen.RustType["SpensoSlot"], *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["TensorDispatch"]:
+            """Build an explicitly-ended ordered tensor chain.
+
+            Examples
+            --------
+            >>> from symbolica.community import tensor as sp
+            >>> r = sp.Representation.euc(2)
+            >>> A = sp.TensorName("docs::A")(r, r)
+            >>> chain = sp.chain(r("i"), r("j"), A, A)
+
+            Parameters
+            ----------
+            start_slot : pyo3_stub_gen.RustType['SpensoSlot']
+                Typed Slot labelling the first free endpoint of the chain.
+            end_slot : pyo3_stub_gen.RustType['SpensoSlot']
+                Typed Slot labelling the last free endpoint. Matching compatible endpoints close the chain.
+            factors : pyo3_stub_gen.RustType['ConvertibleToSpensoNet']
+                Ordered tensor factors. Symbolic operands produce a TensorExpression; any component tensor or network promotes the result to a TensorNetwork."""
         "#,
     )
 )]
@@ -2325,9 +3105,37 @@ fn chain(
 }
 
 #[cfg(feature = "python_stubgen")]
-symbolic_function_overload!("trace", "Close an ordered factor sequence into a canonical cyclic trace.", ["representation": SpensoRepresentation], ["factors": VarPositional]);
+symbolic_function_overload!("trace", r##"Close an ordered factor sequence into a canonical cyclic trace.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> trace = sp.trace(r, A, A)
+
+Parameters
+----------
+representation : Representation
+    Representation of the matrix channel to trace over.
+factors : TensorExpression | Expression
+    Ordered tensor factors. Symbolic operands produce a TensorExpression; any component tensor or network promotes the result to a TensorNetwork."##, ["representation": SpensoRepresentation], ["factors": VarPositional]);
 
 /// Close an ordered factor sequence into a canonical cyclic trace.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community import tensor as sp
+/// >>> r = sp.Representation.euc(2)
+/// >>> A = sp.TensorName("docs::A")(r, r)
+/// >>> trace = sp.trace(r, A, A)
+///
+/// Parameters
+/// ----------
+/// representation : Representation
+///     Representation of the matrix channel to trace over.
+/// factors : TensorExpression | Expression
+///     Ordered tensor factors. Symbolic operands produce a TensorExpression; any component tensor or network promotes the result to a TensorNetwork.
 #[cfg_attr(
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyfunction(
@@ -2337,11 +3145,62 @@ symbolic_function_overload!("trace", "Close an ordered factor sequence into a ca
         import typing
 
         @overload
-        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], factor: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], factor: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+            """Close an ordered factor sequence into a canonical cyclic trace.
+
+            Examples
+            --------
+            >>> from symbolica.community import tensor as sp
+            >>> r = sp.Representation.euc(2)
+            >>> A = sp.TensorName("docs::A")(r, r)
+            >>> trace = sp.trace(r, A, A)
+
+            Parameters
+            ----------
+            representation : pyo3_stub_gen.RustType['SpensoRepresentation']
+                Representation of the matrix channel to trace over.
+            factor : Union[Tensor, TensorNetwork]
+                First tensor factor in the ordered product.
+            factors : pyo3_stub_gen.RustType['ConvertibleToSpensoNet']
+                Ordered tensor factors. Symbolic operands produce a TensorExpression; any component tensor or network promotes the result to a TensorNetwork."""
         @overload
-        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], first: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"], second: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], first: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"], second: typing.Union[Tensor, TensorNetwork], /, *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+            """Close an ordered factor sequence into a canonical cyclic trace.
+
+            Examples
+            --------
+            >>> from symbolica.community import tensor as sp
+            >>> r = sp.Representation.euc(2)
+            >>> A = sp.TensorName("docs::A")(r, r)
+            >>> trace = sp.trace(r, A, A)
+
+            Parameters
+            ----------
+            representation : pyo3_stub_gen.RustType['SpensoRepresentation']
+                Representation of the matrix channel to trace over.
+            first : pyo3_stub_gen.RustType['ConvertibleToSpensoNet']
+                First tensor factor in the ordered product.
+            second : Union[Tensor, TensorNetwork]
+                Second tensor factor in the ordered product.
+            factors : pyo3_stub_gen.RustType['ConvertibleToSpensoNet']
+                Ordered tensor factors. Symbolic operands produce a TensorExpression; any component tensor or network promotes the result to a TensorNetwork."""
         @overload
-        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["TensorDispatch"]: ...
+        def trace(representation: pyo3_stub_gen.RustType["SpensoRepresentation"], *factors: pyo3_stub_gen.RustType["ConvertibleToSpensoNet"]) -> pyo3_stub_gen.RustType["TensorDispatch"]:
+            """Close an ordered factor sequence into a canonical cyclic trace.
+
+            Examples
+            --------
+            >>> from symbolica.community import tensor as sp
+            >>> r = sp.Representation.euc(2)
+            >>> A = sp.TensorName("docs::A")(r, r)
+            >>> trace = sp.trace(r, A, A)
+
+            Parameters
+            ----------
+            representation : pyo3_stub_gen.RustType['SpensoRepresentation']
+                Representation of the matrix channel to trace over.
+            factors : pyo3_stub_gen.RustType['ConvertibleToSpensoNet']
+                Ordered tensor factors. Symbolic operands produce a TensorExpression; any component tensor or network promotes the result to a TensorNetwork."""
         "#,
     )
 )]
@@ -2406,7 +3265,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
 // symbolic overloads with the same typed inventory used by __getitem__ below.
 #[cfg(feature = "python_stubgen")]
 macro_rules! symbolic_method_overload {
-    ($name:literal, $argument:literal, $input:ty $(, $keyword:literal: $kind:ty)*) => {
+    ($name:literal, $doc:literal, $argument:literal, $input:ty $(, $keyword:literal: $kind:ty)*) => {
         submit! {
             PyMethodsInfo {
                 struct_id: std::any::TypeId::of::<TensorExpression>,
@@ -2430,7 +3289,7 @@ macro_rules! symbolic_method_overload {
                     ],
                     r#type: MethodType::Instance,
                     r#return: TensorExpression::type_output,
-                    doc: "", is_async: false, deprecated: None, type_ignored: None,
+                    doc: $doc, is_async: false, deprecated: None, type_ignored: None,
                     is_overload: true,
                 }],
             }
@@ -2439,27 +3298,211 @@ macro_rules! symbolic_method_overload {
 }
 
 #[cfg(feature = "python_stubgen")]
-symbolic_method_overload!("__add__", "rhs", ConvertibleToExpression);
+symbolic_method_overload!(
+    "__add__",
+    r##"Add compatible tensors, preserving their logical external axes.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> result = A + A
+
+Parameters
+----------
+rhs : TensorExpression | Expression or scalar
+    Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar."##,
+    "rhs",
+    ConvertibleToExpression
+);
 #[cfg(feature = "python_stubgen")]
-symbolic_method_overload!("__radd__", "lhs", ConvertibleToExpression);
+symbolic_method_overload!(
+    "__radd__",
+    r##"Add compatible tensors, preserving their logical external axes.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> result = A + A
+
+Parameters
+----------
+lhs : TensorExpression | Expression or scalar
+    Left operand. Addition and subtraction require compatible tensor interfaces."##,
+    "lhs",
+    ConvertibleToExpression
+);
 #[cfg(feature = "python_stubgen")]
-symbolic_method_overload!("__sub__", "rhs", ConvertibleToExpression);
+symbolic_method_overload!(
+    "__sub__",
+    r##"Subtract compatible tensors, preserving their logical external axes.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> result = A - A
+
+Parameters
+----------
+rhs : TensorExpression | Expression or scalar
+    Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar."##,
+    "rhs",
+    ConvertibleToExpression
+);
 #[cfg(feature = "python_stubgen")]
-symbolic_method_overload!("__rsub__", "lhs", ConvertibleToExpression);
+symbolic_method_overload!(
+    "__rsub__",
+    r##"Subtract compatible tensors, preserving their logical external axes.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> result = A - A
+
+Parameters
+----------
+lhs : TensorExpression | Expression or scalar
+    Left operand. Addition and subtraction require compatible tensor interfaces."##,
+    "lhs",
+    ConvertibleToExpression
+);
 #[cfg(feature = "python_stubgen")]
-symbolic_method_overload!("__mul__", "rhs", ConvertibleToExpression);
+symbolic_method_overload!(
+    "__mul__",
+    r##"Multiply tensor operands, contracting repeated compatible explicit indices.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> result = A * 2
+
+Parameters
+----------
+rhs : TensorExpression | Expression or scalar
+    Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar."##,
+    "rhs",
+    ConvertibleToExpression
+);
 #[cfg(feature = "python_stubgen")]
-symbolic_method_overload!("__rmul__", "lhs", ConvertibleToExpression);
+symbolic_method_overload!(
+    "__rmul__",
+    r##"Multiply tensor operands, contracting repeated compatible explicit indices.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> result = 2 * A
+
+Parameters
+----------
+lhs : TensorExpression | Expression or scalar
+    Left operand. Addition and subtraction require compatible tensor interfaces."##,
+    "lhs",
+    ConvertibleToExpression
+);
 #[cfg(feature = "python_stubgen")]
-symbolic_method_overload!("__truediv__", "rhs", ConvertibleToExpression);
+symbolic_method_overload!(
+    "__truediv__",
+    r##"Divide tensor coefficients by a scalar denominator.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> result = A / 2
+
+Parameters
+----------
+rhs : TensorExpression | Expression or scalar
+    Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar."##,
+    "rhs",
+    ConvertibleToExpression
+);
 #[cfg(feature = "python_stubgen")]
-symbolic_method_overload!("__rtruediv__", "lhs", ConvertibleToExpression);
+symbolic_method_overload!(
+    "__rtruediv__",
+    r##"Divide a scalar by a scalar tensor expression.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> scalar = sp.TensorExpression(2)
+>>> result = 1 / scalar
+
+Parameters
+----------
+lhs : TensorExpression | Expression or scalar
+    Left operand. Addition and subtraction require compatible tensor interfaces."##,
+    "lhs",
+    ConvertibleToExpression
+);
 #[cfg(feature = "python_stubgen")]
-symbolic_method_overload!("outer", "rhs", PythonExpression);
+symbolic_method_overload!(
+    "outer",
+    r##"Form an outer product, keeping both operands’ ports free even when their labels coincide.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> result = A.outer(A)
+
+Parameters
+----------
+rhs : TensorExpression | Expression
+    Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork."##,
+    "rhs",
+    PythonExpression
+);
 #[cfg(feature = "python_stubgen")]
-symbolic_method_overload!("contract_ports", "rhs", PythonExpression, "left": usize, "right": usize);
+symbolic_method_overload!("contract_ports", r##"Contract one chosen pair of axes and retain the other external ports in logical order.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> result = A.contract_ports(A, left=1, right=0)
+
+Parameters
+----------
+rhs : TensorExpression | Expression
+    Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
+left : int
+    Zero-based axis position in this operand to contract.
+right : int
+    Zero-based axis position in rhs to contract with the selected left axis."##, "rhs", PythonExpression, "left": usize, "right": usize);
 #[cfg(feature = "python_stubgen")]
-symbolic_method_overload!("compose", "rhs", PythonExpression, "left": (usize, usize), "right": (usize, usize));
+symbolic_method_overload!("compose", r##"Compose two explicitly selected matrix channels, retaining the uncontracted endpoints.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> result = A.compose(A, left=(0, 1), right=(0, 1))
+
+Parameters
+----------
+rhs : TensorExpression | Expression
+    Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
+left : tuple[int, int]
+    (input_axis, output_axis) channel in this operand.
+right : tuple[int, int]
+    (input_axis, output_axis) channel in rhs. The selected connecting ports must have compatible representations."##, "rhs", PythonExpression, "left": (usize, usize), "right": (usize, usize));
 
 // The stub generator's Python parser requires typing.Union instead of `|`.
 #[cfg(feature = "python_stubgen")]
@@ -2470,30 +3513,177 @@ submit! {
 
         class TensorExpression:
             @overload
-            def __add__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            def __add__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+                """Add compatible tensors, preserving their logical external axes.
+
+                Examples
+                --------
+                >>> from symbolica.community import tensor as sp
+                >>> r = sp.Representation.euc(2)
+                >>> A = sp.TensorName("docs::A")(r, r)
+                >>> result = A + A
+
+                Parameters
+                ----------
+                rhs : Union[Tensor, TensorNetwork]
+                    Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar."""
             @overload
-            def __radd__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            def __radd__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+                """Add compatible tensors, preserving their logical external axes.
+
+                Examples
+                --------
+                >>> from symbolica.community import tensor as sp
+                >>> r = sp.Representation.euc(2)
+                >>> A = sp.TensorName("docs::A")(r, r)
+                >>> result = A + A
+
+                Parameters
+                ----------
+                lhs : Union[Tensor, TensorNetwork]
+                    Left operand. Addition and subtraction require compatible tensor interfaces."""
             @overload
-            def __sub__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            def __sub__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+                """Subtract compatible tensors, preserving their logical external axes.
+
+                Examples
+                --------
+                >>> from symbolica.community import tensor as sp
+                >>> r = sp.Representation.euc(2)
+                >>> A = sp.TensorName("docs::A")(r, r)
+                >>> result = A - A
+
+                Parameters
+                ----------
+                rhs : Union[Tensor, TensorNetwork]
+                    Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar."""
             @overload
-            def __rsub__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            def __rsub__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+                """Subtract compatible tensors, preserving their logical external axes.
+
+                Examples
+                --------
+                >>> from symbolica.community import tensor as sp
+                >>> r = sp.Representation.euc(2)
+                >>> A = sp.TensorName("docs::A")(r, r)
+                >>> result = A - A
+
+                Parameters
+                ----------
+                lhs : Union[Tensor, TensorNetwork]
+                    Left operand. Addition and subtraction require compatible tensor interfaces."""
             @overload
-            def __mul__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            def __mul__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+                """Multiply tensor operands, contracting repeated compatible explicit indices.
+
+                Examples
+                --------
+                >>> from symbolica.community import tensor as sp
+                >>> r = sp.Representation.euc(2)
+                >>> A = sp.TensorName("docs::A")(r, r)
+                >>> result = A * 2
+
+                Parameters
+                ----------
+                rhs : Union[Tensor, TensorNetwork]
+                    Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar."""
             @overload
-            def __rmul__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            def __rmul__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+                """Multiply tensor operands, contracting repeated compatible explicit indices.
+
+                Examples
+                --------
+                >>> from symbolica.community import tensor as sp
+                >>> r = sp.Representation.euc(2)
+                >>> A = sp.TensorName("docs::A")(r, r)
+                >>> result = 2 * A
+
+                Parameters
+                ----------
+                lhs : Union[Tensor, TensorNetwork]
+                    Left operand. Addition and subtraction require compatible tensor interfaces."""
             @overload
-            def __truediv__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            def __truediv__(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+                """Divide tensor coefficients by a scalar denominator.
+
+                Examples
+                --------
+                >>> from symbolica.community import tensor as sp
+                >>> r = sp.Representation.euc(2)
+                >>> A = sp.TensorName("docs::A")(r, r)
+                >>> result = A / 2
+
+                Parameters
+                ----------
+                rhs : Union[Tensor, TensorNetwork]
+                    Right operand, with a compatible tensor interface for addition or subtraction. A denominator must be scalar."""
             @overload
-            def __rtruediv__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]: ...
+            def __rtruediv__(self, lhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]:
+                """Divide a scalar by a scalar tensor expression.
+
+                Examples
+                --------
+                >>> from symbolica.community import tensor as sp
+                >>> scalar = sp.TensorExpression(2)
+                >>> result = 1 / scalar
+
+                Parameters
+                ----------
+                lhs : Union[Tensor, TensorNetwork]
+                    Left operand. Addition and subtraction require compatible tensor interfaces."""
             @overload
             def outer(self, rhs: typing.Union[Tensor, TensorNetwork]) -> pyo3_stub_gen.RustType["SpensoNet"]:
-                """Form an outer product without contracting compatible ports."""
+                """Form an outer product, keeping both operands’ ports free even when their labels coincide.
+
+                Examples
+                --------
+                >>> from symbolica.community import tensor as sp
+                >>> r = sp.Representation.euc(2)
+                >>> A = sp.TensorName("docs::A")(r, r)
+                >>> result = A.outer(A)
+
+                Parameters
+                ----------
+                rhs : Union[Tensor, TensorNetwork]
+                    Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork."""
             @overload
             def contract_ports(self, rhs: typing.Union[Tensor, TensorNetwork], *, left: int, right: int) -> pyo3_stub_gen.RustType["SpensoNet"]:
-                """Contract one selected pair of ordered interface positions."""
+                """Contract one chosen pair of axes and retain the other external ports in logical order.
+
+                Examples
+                --------
+                >>> from symbolica.community import tensor as sp
+                >>> r = sp.Representation.euc(2)
+                >>> A = sp.TensorName("docs::A")(r, r)
+                >>> result = A.contract_ports(A, left=1, right=0)
+
+                Parameters
+                ----------
+                rhs : Union[Tensor, TensorNetwork]
+                    Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
+                left : int
+                    Zero-based axis position in this operand to contract.
+                right : int
+                    Zero-based axis position in rhs to contract with the selected left axis."""
             @overload
             def compose(self, rhs: typing.Union[Tensor, TensorNetwork], *, left: tuple[int, int], right: tuple[int, int]) -> pyo3_stub_gen.RustType["SpensoNet"]:
-                """Compose two selected `(input, output)` matrix channels."""
+                """Compose two explicitly selected matrix channels, retaining the uncontracted endpoints.
+
+                Examples
+                --------
+                >>> from symbolica.community import tensor as sp
+                >>> r = sp.Representation.euc(2)
+                >>> A = sp.TensorName("docs::A")(r, r)
+                >>> result = A.compose(A, left=(0, 1), right=(0, 1))
+
+                Parameters
+                ----------
+                rhs : Union[Tensor, TensorNetwork]
+                    Other tensor, network, or scalar operand. Concrete component data or a network makes the result a TensorNetwork.
+                left : tuple[int, int]
+                    (input_axis, output_axis) channel in this operand.
+                right : tuple[int, int]
+                    (input_axis, output_axis) channel in rhs. The selected connecting ports must have compatible representations."""
         "#
     }
 }
@@ -2519,7 +3709,23 @@ submit! {
                 }],
                 r#type: MethodType::Instance,
                 r#return: Vec::<usize>::type_output,
-                doc: "Convert a logical row-major flat index to tensor coordinates.",
+                doc: r##"Convert between flat positions and tensor coordinates in logical row-major order.
+An integer returns coordinates, a coordinate list returns a flat position, and a slice
+returns coordinate lists. This indexes the layout; use `.components()` for values.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> coordinates = A[3]
+>>> flat_index = A[[1, 1]]
+>>> all_coordinates = A[:]
+
+Parameters
+----------
+item : int
+    Flat integer position, list of coordinates, or slice of flat positions. Coordinates follow .structure.slots and use row-major order."##,
                 is_async: false,
                 deprecated: None,
                 type_ignored: Some(pyo3_stub_gen::type_info::IgnoreTarget::Specified(&["override"])),
@@ -2535,7 +3741,23 @@ submit! {
                 }],
                 r#type: MethodType::Instance,
                 r#return: usize::type_output,
-                doc: "Convert tensor coordinates to a logical row-major flat index.",
+                doc: r##"Convert between flat positions and tensor coordinates in logical row-major order.
+An integer returns coordinates, a coordinate list returns a flat position, and a slice
+returns coordinate lists. This indexes the layout; use `.components()` for values.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> coordinates = A[3]
+>>> flat_index = A[[1, 1]]
+>>> all_coordinates = A[:]
+
+Parameters
+----------
+item : int
+    Flat integer position, list of coordinates, or slice of flat positions. Coordinates follow .structure.slots and use row-major order."##,
                 is_async: false,
                 deprecated: None,
                 type_ignored: Some(pyo3_stub_gen::type_info::IgnoreTarget::Specified(&["override"])),
@@ -2551,7 +3773,23 @@ submit! {
                 }],
                 r#type: MethodType::Instance,
                 r#return: Vec::<Vec<usize>>::type_output,
-                doc: "Expand a slice of logical row-major flat indices to tensor coordinates.",
+                doc: r##"Convert between flat positions and tensor coordinates in logical row-major order.
+An integer returns coordinates, a coordinate list returns a flat position, and a slice
+returns coordinate lists. This indexes the layout; use `.components()` for values.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> coordinates = A[3]
+>>> flat_index = A[[1, 1]]
+>>> all_coordinates = A[:]
+
+Parameters
+----------
+item : int
+    Flat integer position, list of coordinates, or slice of flat positions. Coordinates follow .structure.slots and use row-major order."##,
                 is_async: false,
                 deprecated: None,
                 type_ignored: Some(pyo3_stub_gen::type_info::IgnoreTarget::Specified(&["override", "invalid-method-override"])),
@@ -2564,7 +3802,6 @@ submit! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idenso::epsilon::EpsilonSimplifier;
     use idenso::{
         IndexTooling, IndexToolingError,
         representations::{Bispinor, ColorAdjoint, ColorFundamental},
@@ -2715,7 +3952,10 @@ mod tests {
             // Casimir/index representation arguments are scalar metadata, not ports.
             let simplified = SymbolicTensor::infer(numerator)
                 .unwrap()
-                .simplify_color(idenso::color::ColorSimplifySettings::default())
+                .reduce_algebra(&idenso::tensor::simplification::AlgebraSettings {
+                    color: Some(idenso::color::ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -2749,10 +3989,21 @@ mod tests {
         let scalar = epsilon.clone() * epsilon;
         assert!(infer_interface(&scalar).unwrap().canonical().is_scalar());
         assert!(
-            infer_interface(&scalar.simplify_epsilon())
-                .unwrap()
-                .canonical()
-                .is_scalar()
+            infer_interface(
+                SymbolicTensor::infer(scalar)
+                    .unwrap()
+                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .resolved()
+                    .unwrap()
+                    .expression()
+            )
+            .unwrap()
+            .canonical()
+            .is_scalar()
         );
         assert!(infer_interface(&idenso::epsilon::epsilon4(&mu, &nu, &p, Atom::num(1))).is_err());
     }
@@ -2923,11 +4174,11 @@ mod tests {
                         * idenso::gamma!(&b, endpoint.as_view(), &nu);
                     let tensor = TensorExpression::from_atom_interface(py, original.clone(), None)?;
                     let compact = TensorExpression::from_structured(py, tensor.borrow(py).value.contract(Default::default()).map_err(TensorExpression::inference_error)?.resolved().map_err(TensorExpression::inference_error)?)?;
-                    let settings = PyGammaSimplifySettings::from_rust(idenso::dirac::GammaSimplifySettings {
+                    let settings = crate::simplification::PyGammaSimplifySettings::from_rust(idenso::dirac::GammaSimplifySettings {
                         output: idenso::dirac::GammaOutput::Chains,
                         ..Default::default()
                     });
-                    let collected = compact.borrow(py).simplify_gamma(Some(&settings))?;
+                    let collected = compact.borrow(py).reduce_algebra(Some(&crate::simplification::PyAlgebraSettings::new(Some(settings), None, false, 16)))?;
                     let collected = TensorExpression::from_structured(py, collected.value.resolved().map_err(TensorExpression::inference_error)?)?;
                     let collected = collected.borrow(py);
                     let expected = infer_interface(&original)?;
@@ -3039,16 +4290,13 @@ mod tests {
                 "with_name",
                 "to_expression",
                 "expand",
-                "simplify_gamma",
-                "simplify_epsilon",
-                "simplify_color",
+                "reduce_algebra",
                 "wrap_indices",
                 "list_dangling",
                 "canonize",
                 "dirac_adjoint",
                 "to_dots",
                 "undo_dots",
-                "chainify",
                 "to_network",
                 "index",
                 "outer",
@@ -3555,63 +4803,6 @@ mod tests {
     }
 
     #[test]
-    fn tensor_constructor_preserves_custom_index_encoding_and_tags() {
-        use symbolica::atom::UserData;
-
-        idenso::representations::initialize();
-        Python::initialize();
-        Python::attach(|py| -> PyResult<()> {
-            let module = pyo3::types::PyModule::new(py, "spenso")?;
-            crate::simplification::register(&module)?;
-            let mode = module
-                .getattr("CookMode")?
-                .getattr("ReversibleEncoding")?
-                .extract()?;
-            let payload = FunctionBuilder::new(symbol!(
-                "constructor_index_source",
-                tags = ["idenso::constructor_input_index"]
-            ))
-            .add_arg(Atom::num(7))
-            .finish();
-            let representation = Minkowski {}.new_rep(4).cast::<LibraryRep>();
-            let raw = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("constructor_cooked_tensor"))
-                .add_arg(representation.to_symbolic([payload.clone()]))
-                .finish();
-            let expression = PythonExpression { expr: raw.clone() }.into_pyobject(py)?;
-            let tensor_type = py.get_type::<TensorExpression>();
-            for preserve_tags in [false, true] {
-                let settings = PyCookSettings::new(
-                    mode,
-                    None,
-                    Some(vec!["idenso::constructor_output_index".into()]),
-                    preserve_tags,
-                );
-                let kwargs = pyo3::types::PyDict::new(py);
-                kwargs.set_item("cook_indices", settings.clone())?;
-                let cooked = tensor_type.call((&expression,), Some(&kwargs))?;
-                let cooked = cooked.extract::<PyRef<'_, TensorExpression>>()?;
-                let slots = cooked.interface().logical_slots();
-                assert_eq!(slots.len(), 1);
-                assert_eq!(slots[0].rep(), representation);
-                let PartialIndex::Explicit(AbstractIndex::Symbol(symbol)) = slots[0].aind else {
-                    panic!("cooking must retain an explicit external index");
-                };
-                let symbol: Symbol = symbol.into();
-                let expected_tag = if preserve_tags {
-                    "idenso::constructor_input_index"
-                } else {
-                    "idenso::constructor_output_index"
-                };
-                assert!(symbol.has_tag(expected_tag));
-                assert_eq!(symbol.get_data(), &UserData::Atom(payload.clone()));
-                assert_eq!(settings.rust().uncook(cooked.atom().as_view()), raw);
-            }
-            Ok(())
-        })
-        .unwrap();
-    }
-
-    #[test]
     fn typed_dummy_scopes_preserve_free_indices() {
         idenso::representations::initialize();
         Python::initialize();
@@ -4017,33 +5208,31 @@ mod tests {
                     Some(name),
                     vec![Atom::num(7)],
                 )?;
-                for method in ["simplify", "contract"] {
-                    let result = expression
-                        .bind(py)
-                        .call_method0(method)?
-                        .call_method0("to_expression")?;
-                    let result = result.extract::<PyRef<'_, TensorExpression>>()?;
-                    assert_eq!(*result.atom(), expected, "{method}");
-                    assert_eq!(
-                        result.interface().logical_slots(),
-                        interface.logical_slots(),
-                        "{method}"
-                    );
-                    assert_eq!(result.name, Some(name));
-                    assert_eq!(result.name_args, vec![Atom::num(7)]);
-                    let dangling = TensorExpression::list_dangling(result)?;
-                    assert_eq!(
-                        dangling
-                            .into_iter()
-                            .map(|value| value.expr)
-                            .collect::<Vec<_>>(),
-                        interface
-                            .logical_slots()
-                            .into_iter()
-                            .map(composition::port_atom)
-                            .collect::<Vec<_>>()
-                    );
-                }
+                let result = expression
+                    .bind(py)
+                    .call_method0("contract")?
+                    .call_method0("to_expression")?;
+                let result = result.extract::<PyRef<'_, TensorExpression>>()?;
+                assert_eq!(*result.atom(), expected, "contract");
+                assert_eq!(
+                    result.interface().logical_slots(),
+                    interface.logical_slots(),
+                    "contract"
+                );
+                assert_eq!(result.name, Some(name));
+                assert_eq!(result.name_args, vec![Atom::num(7)]);
+                let dangling = TensorExpression::list_dangling(result)?;
+                assert_eq!(
+                    dangling
+                        .into_iter()
+                        .map(|value| value.expr)
+                        .collect::<Vec<_>>(),
+                    interface
+                        .logical_slots()
+                        .into_iter()
+                        .map(composition::port_atom)
+                        .collect::<Vec<_>>()
+                );
             }
             Ok(())
         })
@@ -4076,14 +5265,24 @@ mod tests {
                 idenso::dirac::GammaOutput::Reduced,
                 idenso::dirac::GammaOutput::Chains,
             ] {
-                let settings =
-                    PyGammaSimplifySettings::from_rust(idenso::dirac::GammaSimplifySettings {
+                let settings = crate::simplification::PyGammaSimplifySettings::from_rust(
+                    idenso::dirac::GammaSimplifySettings {
                         output,
                         ..Default::default()
-                    });
-                let result = gamma_expression
-                    .bind(py)
-                    .call_method1("simplify_gamma", (Py::new(py, settings)?,))?;
+                    },
+                );
+                let result = gamma_expression.bind(py).call_method1(
+                    "reduce_algebra",
+                    (Py::new(
+                        py,
+                        crate::simplification::PyAlgebraSettings::new(
+                            Some(settings),
+                            None,
+                            output == idenso::dirac::GammaOutput::Reduced,
+                            16,
+                        ),
+                    )?,),
+                )?;
                 let result = result.call_method0("to_expression")?;
                 let result = result.extract::<PyRef<'_, TensorExpression>>()?;
                 assert_ne!(
@@ -4130,7 +5329,12 @@ mod tests {
             let tensor = TensorExpression::from_atom_interface(py, source, None)?;
             let kwargs = PyDict::new(py);
             kwargs.set_item("rank_one", false)?;
-            let metric_only = tensor.bind(py).call_method("contract", (), Some(&kwargs))?;
+            kwargs.set_item("collect_chains", false)?;
+            kwargs.set_item("collect_traces", false)?;
+            let policy = py
+                .get_type::<crate::simplification::PyContractSettings>()
+                .call((), Some(&kwargs))?;
+            let metric_only = tensor.bind(py).call_method1("contract", (&policy,))?;
             let value = metric_only.extract::<PyRef<'_, AliasedTensorExpression>>()?;
             assert_eq!(
                 value
@@ -4141,7 +5345,7 @@ mod tests {
                 &(spenso::p!(&nu) * spenso::q!(&nu))
             );
             assert!(!value.value.contraction_complete());
-            let again = metric_only.call_method("contract", (), Some(&kwargs))?;
+            let again = metric_only.call_method1("contract", (&policy,))?;
             let again = again.extract::<PyRef<'_, AliasedTensorExpression>>()?;
             assert_eq!(again.value.root(), value.value.root());
             let full = metric_only.call_method0("contract")?;
@@ -4244,7 +5448,15 @@ mod tests {
                 TensorExpression::new(py, metric.bind(py).as_any(), None, Some(&settings))?,
             )?;
             assert!(cooked.borrow(py).interface().canonical().is_scalar());
-            let simplified = TensorExpression::contract(&cooked.borrow(py), None, true)?;
+            let contraction = PyDict::new(py);
+            contraction.set_item("collect_chains", false)?;
+            contraction.set_item("collect_traces", false)?;
+            let contraction = py
+                .get_type::<crate::simplification::PyContractSettings>()
+                .call((), Some(&contraction))?;
+            let contraction =
+                contraction.extract::<PyRef<'_, crate::simplification::PyContractSettings>>()?;
+            let simplified = TensorExpression::contract(&cooked.borrow(py), Some(&contraction))?;
             assert_eq!(
                 simplified
                     .value
@@ -4277,9 +5489,8 @@ mod tests {
             let original =
                 TensorExpression::from_atom_interface(py, atom.clone(), interface.clone())?;
             let expanded = TensorExpression::expand(original.borrow(py), py, None, None)?;
-            let settings =
-                crate::simplification::PySimplifySettings::new(false, None, None, false, 16)?;
-            let simplified = original.borrow(py).simplify(Some(&settings))?;
+            let settings = crate::simplification::PyAlgebraSettings::new(None, None, false, 16);
+            let simplified = original.borrow(py).reduce_algebra(Some(&settings))?;
             let simplified = simplified
                 .value
                 .expanded()
@@ -4403,9 +5614,8 @@ mod tests {
                         interface.logical_slots()
                     );
                 }
-                let settings =
-                    crate::simplification::PySimplifySettings::new(false, None, None, false, 16)?;
-                let simplified = original.borrow(py).simplify(Some(&settings))?;
+                let settings = crate::simplification::PyAlgebraSettings::new(None, None, false, 16);
+                let simplified = original.borrow(py).reduce_algebra(Some(&settings))?;
                 let simplified = simplified
                     .value
                     .expanded()
@@ -5059,7 +6269,20 @@ mod tests {
             assert_eq!(*tensor.borrow(py).atom(), atom);
             let simplified = tensor
                 .bind(py)
-                .call_method0("simplify_color")?
+                .call_method1(
+                    "reduce_algebra",
+                    (Py::new(
+                        py,
+                        crate::simplification::PyAlgebraSettings::new(
+                            None,
+                            Some(crate::simplification::PyColorSimplifySettings::from_rust(
+                                Default::default(),
+                            )),
+                            false,
+                            16,
+                        ),
+                    )?,),
+                )?
                 .call_method0("to_expression")?;
             let simplified = simplified.extract::<PyRef<'_, TensorExpression>>()?;
             assert!(simplified.interface().canonical().is_scalar());

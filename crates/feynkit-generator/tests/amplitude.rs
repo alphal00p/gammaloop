@@ -5,7 +5,7 @@ use feynkit_generator::{GenerationFilter, GenerationOptions, NumeratorGrouping, 
 use feynkit_model::Model;
 use idenso::{
     CookMode, CookSettings, IndexTooling,
-    tensor::{ContractionSettings, SymbolicTensor},
+    tensor::{ContractSettings, SymbolicTensor},
 };
 use spenso::{
     shadowing::TensorCollectFilter,
@@ -24,11 +24,21 @@ fn canonical_tensor(expression: Atom) -> SymbolicTensor<PartialStructure> {
         .with_representation_payloads(true, true);
     let source = SymbolicTensor::infer(cooking.try_cook(expression.as_view()).unwrap()).unwrap();
     let contracted = source
-        .contract(ContractionSettings::default().without_rank_one_tensors())
+        .contract(ContractSettings::default().without_rank_one_tensors())
         .unwrap()
         .resolved()
         .unwrap()
-        .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap()
         .resolved()
         .unwrap();

@@ -1,7 +1,7 @@
 //! Collect metric/vector components before materializing their products.
 
 mod factorized;
-pub(crate) use factorized::{ContractionStatus, FactorizedContraction};
+pub(crate) use factorized::{FactorizedContraction, ReductionStatus};
 
 use super::{Endpoint, SlotContraction};
 use crate::{
@@ -136,6 +136,8 @@ struct ComponentSum<'a, 'b> {
     monomials: Vec<Vec<(usize, u16)>>,
     input: TermTape<InputLeaf<'a>>,
     scalar_spectators: AHashMap<AtomView<'a>, bool>,
+    scalar_interfaces: AHashMap<AtomView<'a>, bool>,
+    metadata_certificates: AHashMap<AtomView<'a>, bool>,
 }
 
 impl SlotContraction {
@@ -377,6 +379,8 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             monomials: Vec::new(),
             input: TermTape::default(),
             scalar_spectators: AHashMap::new(),
+            scalar_interfaces: AHashMap::new(),
+            metadata_certificates: AHashMap::new(),
         }
     }
 
@@ -514,6 +518,28 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         }
     }
 
+    fn metadata_is_inert(&mut self, value: AtomView<'a>) -> bool {
+        if matches!(value, AtomView::Num(_) | AtomView::Var(_)) {
+            return true;
+        }
+        if let Some(observed) = &self.contractor.observations
+            && let Some(region) = observed.region(value)
+            && observed.candidates.complete
+            && observed.candidates.intrinsic
+        {
+            return !region.structural_work();
+        }
+        // Opaque metadata was intentionally absent from the domain walk. Only
+        // inspect that selected payload now; never rescan its enclosing body.
+        if let Some(&inert) = self.metadata_certificates.get(&value) {
+            return inert;
+        }
+        let observed = SimplificationCandidates::scan(value, [], || true);
+        let inert = observed.complete && observed.intrinsic && observed.normalized();
+        self.metadata_certificates.insert(value, inert);
+        inert
+    }
+
     fn scalar_spectator(&mut self, value: AtomView<'a>) -> bool {
         if let Some(&scalar) = self.scalar_spectators.get(&value) {
             return scalar;
@@ -521,7 +547,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         // Do not mistake an internally contracted tensor product for an inert
         // scalar, or hide pending work inside scalar metadata. Use the shared
         // interface owner rather than a second tensor/metadata grammar.
-        let candidates = SimplificationCandidates::scan(value, [], || true);
+        let inert = self.metadata_is_inert(value);
         let compact_power = if let AtomView::Pow(power) = value
             && let (AtomView::Fun(base), exponent) = power.get_base_exp()
             && i64::try_from(exponent).is_ok_and(|n| n > 0)
@@ -541,15 +567,18 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         });
         // Omitted root factors do not enter compile_input. This complete
         // observer certificate covers all of their function metadata instead.
-        let scalar = candidates.complete
-            && candidates.intrinsic
-            && (candidates.normalized() || compact_power)
+        let scalar = (inert || compact_power)
             && exact
-            && SymbolicTensor::validate_interface(
-                &value.to_owned(),
-                &PartialStructure::from_logical_slots([]),
-            )
-            .is_ok();
+            // An inert candidate inventory does not establish rank: t(i)
+            // has no internal work but still has an external port. Reuse the
+            // shallow graph's actual boundary proof when that leaf is known.
+            && self.scalar_interfaces.get(&value).copied().unwrap_or_else(|| {
+                SymbolicTensor::validate_interface(
+                    &value.to_owned(),
+                    &PartialStructure::from_logical_slots([]),
+                )
+                .is_ok()
+            });
         if self.scalar_spectators.len() < 256 {
             self.scalar_spectators.insert(value, scalar);
         }
@@ -732,8 +761,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             .take(function.get_nargs() - 1)
             .collect::<Vec<_>>();
         for &argument in &metadata {
-            let observed = SimplificationCandidates::scan(argument, [], || true);
-            if !observed.complete || !observed.intrinsic || !observed.normalized() {
+            if !self.metadata_is_inert(argument) {
                 return None;
             }
         }
@@ -839,6 +867,11 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         ))
     }
 
+    fn permits_slot(&mut self, value: AtomView<'_>) -> bool {
+        Endpoint::parse(value, self.slots)
+            .is_some_and(|endpoint| self.contractor.permits(endpoint.representation))
+    }
+
     fn resolve_endpoint(&mut self, value: AtomView<'a>) -> Option<(usize, AtomView<'a>)> {
         if let Some(&endpoint) = self.endpoints.get(&value) {
             return Some(endpoint);
@@ -931,7 +964,12 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
     fn tensor(&mut self, function: FunView<'a>) -> Option<()> {
         let head = function.get_symbol();
         if !head.has_tag(&self.contractor.tags.tensor)
-            || (self.rank_one && head.has_tag(&self.contractor.tags.rank1))
+            || (self.rank_one
+                && head.has_tag(&self.contractor.tags.rank1)
+                && function
+                    .iter()
+                    .last()
+                    .is_some_and(|port| self.permits_slot(port)))
             || head.is_scalar()
             || !self.plain(head)
             || !matches!(self.slots.classify(function.as_view()), SlotMatch::Other)
@@ -955,6 +993,9 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                     continue;
                 }
                 if matches!(self.slots.classify(argument), SlotMatch::Explicit(_)) {
+                    if !self.permits_slot(argument) {
+                        continue;
+                    }
                     self.resolve_endpoint(argument)?;
                     ports.push((position, argument));
                 } else if let AtomView::Fun(vector) = argument
@@ -964,8 +1005,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                 } else {
                     // Scalar metadata stays opaque to the port graph, but the
                     // ordinary contractor would still visit hidden products.
-                    let metadata = SimplificationCandidates::scan(argument, [], || true);
-                    if !metadata.complete || !metadata.intrinsic || !metadata.normalized() {
+                    if !self.metadata_is_inert(argument) {
                         return None;
                     }
                 }
@@ -1024,11 +1064,28 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                 if let Some((space, first, second)) = self.compact_dot(function) {
                     self.dot(space, first, second, exponent);
                 } else {
+                    if !self.contractor.metrics
+                        || (self.contractor.representations.is_some()
+                            && (!self.permits_slot(first) || !self.permits_slot(second)))
+                    {
+                        self.variable(
+                            Variable::Tensor(
+                                TensorSource::Function(function.get_symbol()),
+                                function.iter().map(Argument::Original).collect(),
+                            ),
+                            exponent,
+                        );
+                        return Some(());
+                    }
                     self.metric(self.argument(first), self.argument(second), exponent)?;
                 }
             }
             AtomView::Fun(function) => {
-                let Some(head) = self.vector(function).filter(|_| self.rank_one) else {
+                let allowed = function
+                    .iter()
+                    .last()
+                    .is_some_and(|port| self.permits_slot(port));
+                let Some(head) = self.vector(function).filter(|_| self.rank_one && allowed) else {
                     return (exponent == 1)
                         .then_some(())
                         .and_then(|()| self.tensor(function));
@@ -1227,9 +1284,7 @@ mod tests {
                 let expression = &spectator * base.pow(power);
                 let restricted = SymbolicTensor::infer(expression.clone())
                     .unwrap()
-                    .contract(
-                        crate::tensor::ContractionSettings::default().without_rank_one_tensors(),
-                    )
+                    .contract(crate::tensor::ContractSettings::default().without_rank_one_tensors())
                     .unwrap()
                     .resolved()
                     .unwrap();
@@ -1281,7 +1336,7 @@ mod tests {
             let result = contractor
                 .contract_factorized(source.as_view(), None, true)
                 .expect("registered explicit indices admit the same factorized frontier");
-            assert!(result.status == ContractionStatus::Complete);
+            assert!(result.status == ReductionStatus::Complete);
             let mut resolved = symbolica::atom::AliasedAtom::from(result.root);
             for (handle, body) in result.aliases {
                 resolved.register_alias(handle, body);
@@ -1291,7 +1346,18 @@ mod tests {
                 .unwrap()
                 .contract(Default::default())
                 .unwrap();
-            assert!(result.contraction_complete());
+            assert!(
+                result.contraction_complete(),
+                "status={:?}, root={}, aliases={:?}",
+                result.reduction_status(),
+                result.root().expression(),
+                result
+                    .aliases()
+                    .unwrap()
+                    .iter()
+                    .map(|(handle, body)| (handle.expression().clone(), body.expression().clone()))
+                    .collect::<Vec<_>>()
+            );
             assert_eq!(result.resolved().unwrap().expression(), &expected);
         }
     }
@@ -1934,11 +2000,15 @@ mod tests {
         let settings =
             crate::shorthands::schoonschip::SchoonschipSettings::default().without_rank1_tensors();
         assert_eq!(
-            input("1+p(mink(4,a))^3*q(mink(4,a))").schoonschip_with_settings(&settings),
+            input("1+p(mink(4,a))^3*q(mink(4,a))")
+                .normalize_dots()
+                .schoonschip_with_settings(&settings),
             input("1+g(p(mink(4)),p(mink(4)))*p(mink(4,a))*q(mink(4,a))")
         );
         assert_eq!(
-            input("1+p(mink(4,a))^2").schoonschip_with_settings(&settings),
+            input("1+p(mink(4,a))^2")
+                .normalize_dots()
+                .schoonschip_with_settings(&settings),
             input("1+g(p(mink(4)),p(mink(4)))")
         );
     }
@@ -2137,6 +2207,9 @@ mod tests {
 
     #[test]
     fn component_sum_binds_opaque_ports_and_retains_metadata() {
+        use crate::IndexTooling;
+        use spenso::structure::abstract_index::AbstractIndex;
+
         let contractor = setup();
         let metadata = input("routing(1)");
         let AtomView::Fun(metadata) = metadata.as_view() else {
@@ -2184,7 +2257,20 @@ mod tests {
                     Intake::ExpandedContraction,
                 )
                 .unwrap_or_else(|| panic!("plain opaque ports not admitted: {source}"));
-            assert_eq!(result, input(expected), "{source}");
+            let expected = input(expected);
+            if result != expected {
+                // Either metric endpoint may represent the surviving dummy.
+                // Canonicalization preserves external indices and metadata.
+                assert_eq!(
+                    result
+                        .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                        .unwrap(),
+                    expected
+                        .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+                        .unwrap(),
+                    "{source}"
+                );
+            }
             assert_eq!(result.schoonschip(), result);
         }
         for source in ["1+t(mink(4,a))*u(mink(4,a))", "1+t(mink(4,a),mink(4,a))"] {
@@ -2230,10 +2316,10 @@ mod tests {
                         // The flat and ordered reducers may retain different
                         // original dummy representatives. Compare their exact
                         // alpha key, including all free ports and metadata.
-                        let expected =
-                            SlotContraction::run(product.as_view(), false, true, &mut Vec::new())
-                                .normalize_dots()
-                                + Atom::num(1);
+                        let expected = SlotContraction::new()
+                            .run(product.as_view(), false, true, &mut Vec::new())
+                            .normalize_dots()
+                            + Atom::num(1);
                         let source = product + Atom::num(1);
                         let result = contractor
                             .materialize_test_sum(
@@ -2473,7 +2559,8 @@ mod tests {
         // Derived equal factors still form their old power. Repeated identical
         // tensor identities deliberately do not get an alpha representative.
         let product = input("g(mink(4,a),mink(4,b))*t(mink(4,a))*t(mink(4,b))");
-        let expected = SlotContraction::run(product.as_view(), false, true, &mut Vec::new())
+        let expected = SlotContraction::new()
+            .run(product.as_view(), false, true, &mut Vec::new())
             .normalize_dots()
             + Atom::num(1);
         let source = product + Atom::num(1);
@@ -2516,10 +2603,12 @@ mod tests {
         };
         let first = input(&format!("g(mink(4,mu5),mink(4,mu6))*{}", vertex("mu5")));
         let second = input(&format!("g(mink(4,mu6),mink(4,mu11))*{}", vertex("mu11")));
-        let old_first =
-            SlotContraction::run(first.as_view(), false, true, &mut Vec::new()).normalize_dots();
-        let old_second =
-            SlotContraction::run(second.as_view(), false, true, &mut Vec::new()).normalize_dots();
+        let old_first = SlotContraction::new()
+            .run(first.as_view(), false, true, &mut Vec::new())
+            .normalize_dots();
+        let old_second = SlotContraction::new()
+            .run(second.as_view(), false, true, &mut Vec::new())
+            .normalize_dots();
         assert_ne!(
             old_first, old_second,
             "legacy results intentionally retain different dummy labels"
@@ -2583,7 +2672,8 @@ mod tests {
             terms
                 .iter()
                 .map(|term| {
-                    SlotContraction::run(term.as_view(), false, false, &mut Vec::new())
+                    SlotContraction::new()
+                        .run(term.as_view(), false, false, &mut Vec::new())
                         .normalize_dots()
                 })
                 .collect::<Vec<_>>(),
@@ -2648,7 +2738,7 @@ mod tests {
         let after_contraction = Atom::add_many(
             terms
                 .iter()
-                .map(|term| SlotContraction::run(term, false, true, &mut Vec::new()))
+                .map(|term| SlotContraction::new().run(term, false, true, &mut Vec::new()))
                 .collect::<Vec<_>>(),
         );
         let after_dots = after_contraction.normalize_dots();

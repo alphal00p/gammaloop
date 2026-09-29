@@ -708,7 +708,15 @@ impl Numerator<Global> {
             expr: {
                 let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
                 let result = SymbolicTensor::infer(cooking.try_cook(self.state.expr.as_view())?)?
-                    .simplify_color(ColorSimplifySettings::default())?
+                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                        color: Some(ColorSimplifySettings::default()),
+                        ..Default::default()
+                    })?
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?
                     .resolved()?;
                 cooking.uncook(result.expression().as_view())
             },
@@ -825,7 +833,15 @@ impl Numerator<AppliedFeynmanRule> {
             expr: {
                 let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
                 let result = SymbolicTensor::infer(cooking.try_cook(self.state.expr.as_view())?)?
-                    .simplify_color(ColorSimplifySettings::default())?
+                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                        color: Some(ColorSimplifySettings::default()),
+                        ..Default::default()
+                    })?
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?
                     .resolved()?;
                 cooking.uncook(result.expression().as_view())
             },
@@ -850,7 +866,16 @@ impl Numerator<ColorSimplified> {
         debug!("Gamma simplifying color symplified numerator");
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let result = SymbolicTensor::infer(cooking.try_cook(self.state.expr.as_view())?)?
-            .simplify_gamma(GammaSimplifySettings::default())?
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })?
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
             .resolved()?;
         let expr = cooking.uncook(result.expression().as_view());
         crate::debug_tags!(#generation, #inspect, #dump;

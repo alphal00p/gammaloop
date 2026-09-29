@@ -4,10 +4,16 @@ References: FeynCalc QED/Tree ElGa-ElGa, ElAel-MuAmu, and ElMu-ElMu.
 The Compton cases check both covariant and timelike axial incoming-photon sums.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community import hep as fk
+from symbolica.community import feynkit as fk
 from symbolica.community.tensor import TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -122,7 +128,10 @@ for name, incoming, outgoing in [
             )
             numerator = (
                 TensorExpression(numerator)
-                .simplify_gamma()
+                .reduce_algebra(
+                    AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+                )
+                .contract(ContractSettings(collect_chains=False, collect_traces=False))
                 .to_expression()
                 .to_dots()
                 .to_expression()

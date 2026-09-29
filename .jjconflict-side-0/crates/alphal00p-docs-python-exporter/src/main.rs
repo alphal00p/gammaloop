@@ -68,6 +68,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         "linnet-python" => {
             outputs.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/linnet.pyi"))
         }
+        "spynso3" => outputs.push(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+                "../../examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi",
+            ),
+        ),
         _ => {}
     }
     outputs.sort();
@@ -76,7 +81,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         if check {
             let checked_in = fs::read_to_string(&output)?;
             if checked_in != normalized {
-                let hint = if matches!(component.as_str(), "feynkit-community" | "linnet-python") {
+                let hint = if matches!(
+                    component.as_str(),
+                    "feynkit-community" | "linnet-python" | "spynso3"
+                ) {
                     "regenerate the shared package/docs surface"
                 } else {
                     "regenerate the checked-in snapshot"
@@ -513,6 +521,7 @@ def validate(runtime_module, stub_source):
 
         let mut rendered = module
             .to_string()
+            .trim_end()
             .lines()
             .map(str::trim_end)
             .collect::<Vec<_>>()
@@ -586,7 +595,8 @@ def validate(runtime_module, stub_source):
         assert!(rendered.contains("class TensorFunctionLibrary:"));
         assert!(!rendered.contains("LibraryTensor"));
         assert!(!rendered.contains("TensorIndices"));
-        assert!(!rendered.contains("TensorStructure"));
+        assert!(rendered.contains("class TensorStructure:"));
+        assert!(rendered.contains("class RepresentationName:"));
         assert!(!rendered.contains("TensorNamespace"));
     }
 
@@ -630,10 +640,10 @@ def validate(runtime_module, stub_source):
 
         for signature in [
             "def __new__(cls, expr: typing.Any, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:",
-            "def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:",
-            "def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorExpression:",
-            "def __call__(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:",
-            "def index(self, *indices: typing.Any, cook_indices: builtins.bool = False) -> TensorNetwork:",
+            "def __call__(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:",
+            "def index(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorExpression:",
+            "def __call__(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:",
+            "def index(self, *indices: _IndexInput, cook_indices: typing.Optional[CookSettings] = None) -> TensorNetwork:",
         ] {
             assert!(rendered.contains(signature), "missing `{signature}`");
         }

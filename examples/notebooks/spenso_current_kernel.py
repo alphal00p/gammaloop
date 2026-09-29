@@ -1,3 +1,8 @@
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
 # Run with a combined Symbolica host exposing symbolica.community.tensor:
 #   python -m marimo edit examples/notebooks/spenso_current_kernel.py
 # Additional packages: marimo==0.24.0, typst==0.15.0.
@@ -121,7 +126,7 @@ def _():
     which explains their order in the code.
 
     \begin{lstlisting}[language=Python,caption={A vector current constructed with \spenso{} and simplified with \idenso{}.},label={lst:spenso-current}]
-    from symbolica.community.idenso import simplify_gamma, simplify_metrics
+    from symbolica.community.tensor import AlgebraSettings, ContractSettings, GammaSimplifySettings, TensorExpression
     from symbolica.community.tensor import (
         LibraryTensor, Representation, TensorLibrary, TensorName, TensorNetwork,
     )
@@ -134,7 +139,7 @@ def _():
     gamma = lib[TensorName.gamma()]
     expr = (Jbar(s1).to_expression() *
             gamma("s2", "s1", "mu") * J(s2).to_expression())
-    expr = simplify_metrics(simplify_gamma(expr))
+    expr = TensorExpression(expr).reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)).contract(ContractSettings(collect_chains=False, collect_traces=False)).to_expression()
     net = TensorNetwork(expr, lib)
     net.execute(library=lib)
     K = net.result_tensor(lib)
@@ -213,8 +218,7 @@ def _():
     data can instead be registered when required. Repeated compatible indices
     are contracted, while unmatched indices form the result's tensor interface.
     The Idenso operations exposed through `TensorExpression`, including
-    `contract`, `simplify_gamma` and
-    `simplify_color`, can reduce metric, Dirac and colour identities
+    `contract` and `reduce_algebra`, can reduce metric, Dirac and colour identities
     before component evaluation [@SymbolicaSoftware].
 
     For example, the Standard Model UFO expression `Gamma(3,1,2)` denotes
@@ -509,7 +513,13 @@ def _(AUTO, Representation, TensorExpression, mo, trace):
         _gamma(AUTO, AUTO, lorentz("mu")),
         _gamma(AUTO, AUTO, lorentz("nu")),
     )
-    reduced_trace = gamma_trace.simplify_gamma().to_expression()
+    reduced_trace = (
+        gamma_trace.reduce_algebra(
+            AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .to_expression()
+    )
     assert (
         reduced_trace.to_expression() - 4 * lorentz.g("mu", "nu").to_expression()
     ).expand() == 0

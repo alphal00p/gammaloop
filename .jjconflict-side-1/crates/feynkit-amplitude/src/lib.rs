@@ -235,7 +235,20 @@ impl Amplitude {
                 // Physical leg labels and their declared order belong to the
                 // amplitude. The shared scheduler owns gamma/metric cleanup.
                 SymbolicTensor::checked_parts(adjoint, interface.clone())
-                    .and_then(|value| value.simplify_gamma(settings))
+                    .and_then(|value| {
+                        value.reduce_algebra(&idenso::tensor::AlgebraSettings {
+                            gamma: Some(settings),
+                            epsilon: settings.output == idenso::dirac::GammaOutput::Reduced,
+                            ..Default::default()
+                        })
+                    })
+                    .and_then(|value| {
+                        value.contract(idenso::tensor::ContractSettings {
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })
+                    })
                     .and_then(|value| value.resolved())
                     .map(SymbolicTensor::into_expression)
                     .map_err(|error| AmplitudeError::Tensor(error.to_string()))

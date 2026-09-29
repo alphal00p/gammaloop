@@ -127,6 +127,15 @@ mod annotated_scopes {
     )]
     mod feynkit_graph {}
 
+    /// Builds coherent amputated amplitudes from compatible diagram operators.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-amplitude",
+        title = "feynkit-amplitude supported API",
+        format = "typst"
+    )]
+    mod feynkit_amplitude {}
+
     /// Generates Feynman diagrams from a validated model and process specification.
     /// See #link("reference/rust/")[full Rustdoc] for this component.
     #[alphal00p_docs::scope(
@@ -169,6 +178,7 @@ mod annotated_scopes {
             "feynkit-ufo" => Some(__alphal00p_docs_scope_feynkit_ufo()),
             "feynkit-kinematics" => Some(__alphal00p_docs_scope_feynkit_kinematics()),
             "feynkit-graph" => Some(__alphal00p_docs_scope_feynkit_graph()),
+            "feynkit-amplitude" => Some(__alphal00p_docs_scope_feynkit_amplitude()),
             "feynkit-generator" => Some(__alphal00p_docs_scope_feynkit_generator()),
             "feynkit-cff" => Some(__alphal00p_docs_scope_feynkit_cff()),
             "feynkit-tensor" => Some(__alphal00p_docs_scope_feynkit_tensor()),
@@ -383,6 +393,7 @@ fn rust_examples(component: &str) -> Result<&'static [RustExampleSpec]> {
         "feynkit-ufo" => Ok(FEYNKIT_UFO),
         "feynkit-kinematics" => Ok(FEYNKIT_KINEMATICS),
         "feynkit-graph" => Ok(FEYNKIT_GRAPH),
+        "feynkit-amplitude" => Ok(FEYNKIT_AMPLITUDE),
         "feynkit-generator" => Ok(FEYNKIT_GENERATOR),
         "feynkit-cff" => Ok(FEYNKIT_CFF),
         "feynkit-tensor" => Ok(FEYNKIT_TENSOR),
@@ -418,6 +429,12 @@ const FEYNKIT_GRAPH: &[RustExampleSpec] = &[example!(
     "FeynmanDiagram",
     "rust",
     "use feynkit_graph::FeynmanDiagram;\nfn round_trip(diagram: &FeynmanDiagram) -> Result<FeynmanDiagram, feynkit_graph::DiagramError> {\n    FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json()?)\n}"
+)];
+
+const FEYNKIT_AMPLITUDE: &[RustExampleSpec] = &[example!(
+    "Amplitude",
+    "rust",
+    "use feynkit::{Amplitude, GenerationOptions, Model, Process};\nlet model = Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nlet process = Process::new([\"scalar_0\"], [\"scalar_0\", \"scalar_0\"]);\nlet result = process.generate_diagrams(model, &GenerationOptions::default().max_vertices(3))?;\nlet amplitude = Amplitude::from_diagram(result.diagrams.into_iter().next().expect(\"generated scalar diagram\"))?;\nassert_eq!(amplitude.diagrams().len(), 1);\nassert_eq!(amplitude.terms().len(), 1);"
 )];
 
 const FEYNKIT_GENERATOR: &[RustExampleSpec] = &[example!(
@@ -1039,7 +1056,7 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "StabilityResult",
             "atom_to_canonical_string",
             "evaluate_graph_overall_factor",
-            "to_dots",
+            "contract",
         ]),
         "spynso3" => Ok(&[
             "AliasedTensorExpression",
@@ -1062,7 +1079,9 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "PortPattern",
             "Representation",
             "RepresentationName",
-            "SimplifySettings",
+            "AlgebraSettings",
+            "ContractSettings",
+            "ReductionStatus",
             "Slot",
             "SymbolicParallelism",
             "Tensor",
@@ -1466,8 +1485,14 @@ mod tests {
     #[test]
     fn spynso_supported_surface_covers_the_documented_workflow_types() {
         let required = python_required_exports("spynso3").unwrap();
-        assert_eq!(required.len(), 43);
+        // AlgebraSettings replaces SimplifySettings; independent structural
+        // settings and completion status add two supported exports.
+        assert_eq!(required.len(), 45);
+        assert!(!required.contains(&"SimplifySettings"));
         for entry in [
+            "AlgebraSettings",
+            "ContractSettings",
+            "ReductionStatus",
             "CompiledTensorEvaluator",
             "TensorExpression",
             "TensorEvaluator",
@@ -1510,7 +1535,7 @@ mod tests {
             .iter()
             .flat_map(|declaration| &declaration.members)
             .collect::<Vec<_>>();
-        assert_eq!(members.len(), 108);
+        assert_eq!(members.len(), 106);
         let overload_groups = members
             .iter()
             .filter(|member| {
@@ -1525,7 +1550,7 @@ mod tests {
             .flat_map(|member| &member.members)
             .filter(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
             .collect::<Vec<_>>();
-        assert_eq!(members.len() - overload_groups + overloads.len(), 121);
+        assert_eq!(members.len() - overload_groups + overloads.len(), 119);
         assert_eq!(
             members
                 .iter()
@@ -1541,7 +1566,7 @@ mod tests {
                     .iter()
                     .filter(|member| member.docs.is_some())
                     .count(),
-            86
+            114
         );
     }
 

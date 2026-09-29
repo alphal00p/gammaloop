@@ -51,6 +51,8 @@ use crate::NetworkToolingError;
 pub mod aliases;
 mod canonicalize;
 mod collection;
+#[cfg(test)]
+pub(crate) use collection::SELECTED_OPENS;
 pub mod composition;
 pub mod inference;
 mod replacement;
@@ -184,13 +186,40 @@ pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = A
 
 /// Facts about this immutable payload and interface. Mutation drops every fact;
 /// copying a tensor may copy established facts, but attaching new parts cannot.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub(crate) struct TensorProofs {
     pub(super) validated: OnceLock<bool>,
     pub(super) intrinsic: OnceLock<bool>,
     pub(super) algebra: OnceLock<bool>,
     pub(super) rewrite: OnceLock<bool>,
     pub(super) contracted: bool,
+    pub(super) prerequisites: bool,
+    // The admitted literal body certifies occurrence-local bindings even when
+    // source and target definitions are reduced at different times.
+    pub(super) literal_origin:
+        Option<std::sync::Arc<SymbolicTensor<spenso::structure::partial::PartialStructure>>>,
+    pub(super) frontier: simplification::ReductionStatus,
+    pub(super) shallow_graph: OnceLock<Result<std::sync::Arc<SymbolicNet<AbstractIndex>>, String>>,
+    pub(super) leaf_interfaces: OnceLock<spenso::network::parsing::LeafInterfaceCache>,
+    pub(super) observations:
+        OnceLock<std::sync::Arc<simplification::observation::DomainObservations>>,
+    pub(super) reduction: Option<simplification::ReductionRecord>,
+}
+
+impl std::fmt::Debug for TensorProofs {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TensorProofs")
+            .field("validated", &self.validated)
+            .field("intrinsic", &self.intrinsic)
+            .field("algebra", &self.algebra)
+            .field("rewrite", &self.rewrite)
+            .field("contracted", &self.contracted)
+            .field("frontier", &self.frontier)
+            .field("observed", &self.observations.get().is_some())
+            .field("planned", &self.shallow_graph.get().is_some())
+            .finish()
+    }
 }
 
 impl<S: PartialEq, E: PartialEq> PartialEq for SymbolicTensor<S, E> {
@@ -848,7 +877,8 @@ impl SymbolicNetParse for AtomView<'_> {
 }
 
 pub mod contract;
-pub use contract::ContractionSettings;
+pub use contract::ContractSettings;
+pub use simplification::{AlgebraSettings, ReductionStatus};
 
 impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>
     for ShadowedStructure<Aind>

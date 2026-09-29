@@ -132,7 +132,7 @@ impl GroupingChoice {
     }
 }
 
-#[derive(Args, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[derive(Args, Debug, Clone, Default, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct SpecArgs {
     /// Quote-free spec.
     ///
@@ -349,58 +349,6 @@ impl SpecArgs {
         Self {
             tokens: vec![spec.into()],
             ..Self::default()
-        }
-    }
-}
-
-impl Default for SpecArgs {
-    fn default() -> Self {
-        Self {
-            tokens: Vec::new(),
-            append: false,
-            clear_existing_processes: false,
-            process_name: None,
-            integrand_name: None,
-            only_diagrams: false,
-            filter_selfenergies: None,
-            filter_snails: None,
-            filter_tadpoles: None,
-            veto_vertex_interactions: None,
-            allowed_vertex_interactions: None,
-            filter_cross_section_tadpoles: None,
-            veto_tadpoles_attached_to_massive_lines: None,
-            veto_tadpoles_attached_to_massless_lines: None,
-            veto_only_scaleless_tadpoles: None,
-            veto_snails_attached_to_massive_lines: None,
-            veto_snails_attached_to_massless_lines: None,
-            veto_only_scaleless_snails: None,
-            veto_self_energy_of_massive_lines: None,
-            veto_self_energy_of_massless_lines: None,
-            veto_only_scaleless_self_energy: None,
-            max_n_bridges: None,
-            number_of_factorized_loop_subtopologies: None,
-            number_of_fermion_loops: None,
-            n_cut_blobs: None,
-            n_cut_spectators: None,
-            allow_symmetrization_of_external_fermions_in_amplitudes: None,
-            symmetrize_initial_states: None,
-            symmetrize_final_states: None,
-            symmetrize_left_right_states: None,
-            numerator_aware_isomorphism_grouping: None,
-            numerical_samples_seed: None,
-            number_of_samples_for_numerator_comparisons: None,
-            consider_internal_masses_only_in_numerator_isomorphisms: None,
-            fully_numerical_substitution_when_comparing_numerators: None,
-            compare_canonized_numerator: None,
-            symmetric_left_right_polarizations: None,
-            loop_momentum_bases: None,
-            select_graphs: None,
-            veto_graphs: None,
-            graph_prefix: None,
-            global_prefactor_projector: None,
-            global_prefactor_num: None,
-            filter_self_loop: None,
-            filter_zero_flow_edges: None,
         }
     }
 }
@@ -2500,15 +2448,10 @@ mod tests {
         };
         for mode in [GenerationType::Amplitude, GenerationType::CrossSection] {
             let spec = parse_spec_with_model(&args, mode, model).unwrap();
-            let filters = if mode == GenerationType::Amplitude {
-                spec.process_definition
-                    .generation_options
-                    .filters(FilterScope::Graph)
-            } else {
-                spec.process_definition
-                    .generation_options
-                    .filters(FilterScope::Graph)
-            };
+            let filters = spec
+                .process_definition
+                .generation_options
+                .filters(FilterScope::Graph);
             assert!(filters
                 .iter()
                 .any(|filter| matches!(filter, GenerationFilter::FermionLoopCountRange((1, 2)))));

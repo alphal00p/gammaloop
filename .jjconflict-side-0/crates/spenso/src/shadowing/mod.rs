@@ -47,6 +47,8 @@ initialize!(|| {
         let _ = ETS.force_in_initializer().metric;
         let _ = SPENSO_TAG.force_in_initializer().bracket;
         let _ = AIND_SYMBOLS.force_in_initializer().scope;
+        #[cfg(test)]
+        crate::network::parsing::scalar_batch_tests::initialize_occupied_result_head();
     });
 });
 

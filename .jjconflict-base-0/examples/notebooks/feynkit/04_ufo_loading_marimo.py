@@ -61,7 +61,7 @@ def _():
     import os
     from pathlib import Path
 
-    from symbolica.community.hep import UfoLoader
+    from symbolica.community.feynkit import UfoLoader
 
     UFO_MODEL = Path(__file__).resolve().parents[3] / "assets/models/ufo/scalars"
     return (UFO_MODEL, UfoLoader, os)

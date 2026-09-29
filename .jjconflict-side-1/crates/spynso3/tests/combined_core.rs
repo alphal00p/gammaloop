@@ -89,7 +89,7 @@ fn combined_core_exposes_rich_display_with_one_expression_type() {
         register_spenso(&core)?;
         let spenso = import_spenso_wrapper(py, &community)?;
         assert!(!community.hasattr("spenso")?);
-        for name in ["Tensor", "TensorExpression", "Representation", "CookSettings"] {
+        for name in ["Tensor", "TensorExpression", "Representation"] {
             assert_eq!(
                 spenso.getattr(name)?.getattr("__module__")?.extract::<String>()?,
                 "symbolica.community.tensor"

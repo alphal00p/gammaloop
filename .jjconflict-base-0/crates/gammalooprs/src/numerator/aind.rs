@@ -370,7 +370,7 @@ mod tests {
     use idenso::{
         CookMode, CookSettings,
         dirac::AGS,
-        tensor::ContractionSettings,
+        tensor::ContractSettings,
         tensor::{SymbolicNetParse, SymbolicTensor},
     };
     use spenso::{
@@ -457,7 +457,12 @@ mod tests {
                     cooking.try_cook(expression.expression().as_view()).unwrap(),
                 )
                 .unwrap()
-                .contract(ContractionSettings::default().without_rank_one_tensors())
+                .contract(ContractSettings {
+                    rank_one: false,
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap();

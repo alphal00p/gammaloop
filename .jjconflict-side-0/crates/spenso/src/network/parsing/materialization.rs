@@ -685,6 +685,48 @@ impl SlotMatcher {
 }
 
 impl<Aind: AbsInd + DummyAind + ParseableAind, View> ParseState<Aind, View> {
+    /// Unfold one indexed chain using the same placeholder substitution as the
+    /// network parser. Fresh names remain disjoint across separate conversions.
+    /// Unrelated arithmetic and compact spectator ports stay opaque.
+    pub fn materialize_indexed_chain(&self, value: FunView<'_>) -> Result<Atom, String> {
+        let mut arguments = value.iter();
+        let start = arguments.next().ok_or("chain requires two endpoints")?;
+        let end = arguments.next().ok_or("chain requires two endpoints")?;
+        let mut matcher = self.matcher.borrow_mut();
+        let mut left = matcher
+            .parse::<LibraryRep, Aind>(start)
+            .map_err(|error| error.to_string())?;
+        let end = matcher
+            .parse::<LibraryRep, Aind>(end)
+            .map_err(|error| error.to_string())?;
+        drop(matcher);
+        if !left.rep.matches(&end.rep) {
+            return Err("incompatible chain endpoints".into());
+        }
+        if arguments.len() == 0 {
+            return Ok(FunctionBuilder::new(ETS.metric)
+                .add_arg(start)
+                .add_arg(end.to_atom())
+                .finish());
+        }
+        let count = arguments.len();
+        let factors = arguments.enumerate().map(|(position, factor)| {
+            let right = if position + 1 == count {
+                end.dual()
+            } else {
+                left.rep.slot(self.fresh_index())
+            };
+            let factor = ChainExpansion::replace_placeholders(
+                factor,
+                &left.to_atom(),
+                &right.dual().to_atom(),
+            );
+            left = right;
+            factor
+        });
+        Ok(Atom::mul_many(factors))
+    }
+
     /// Open only this compact inner product using the operation's reserved indices.
     /// Callers select the algebraic domain; unrelated arguments are not traversed.
     pub fn materialize_inner_product(&self, value: FunView<'_>) -> Option<Atom> {
@@ -820,6 +862,7 @@ where
             return Self::parse_regular_function_leaf::<S, Lib, FunLib>(
                 construction,
                 value,
+                &state,
                 library,
                 retain,
             );

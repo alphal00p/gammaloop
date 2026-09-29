@@ -5,7 +5,7 @@ from math import prod
 from time import process_time_ns
 
 from symbolica import E
-from symbolica.community.tensor import TensorExpression
+from symbolica.community.tensor import ContractSettings, TensorExpression
 
 
 def alias_levels(result):
@@ -70,14 +70,23 @@ def reduce(case, prepared, observer=None, *, order_policy="graph"):
     )
     value = TensorExpression(expression)
     replaced = process_time_ns() if observer is not None else 0
-    result = value.contract() if order is None else value.contract(order=order)
+    result = (
+        value.contract(ContractSettings(collect_chains=False, collect_traces=False))
+        if order is None
+        else value.contract(
+            ContractSettings(order=order, collect_chains=False, collect_traces=False)
+        )
+    )
     contracted = process_time_ns() if observer is not None else 0
     expanded = result.expand().to_expression()
     if hasattr(case, "replacements"):
         expanded = expanded.replace_multiple(case.replacements)
     materialized = process_time_ns() if observer is not None else 0
     if observer is not None:
+        from tensor_benchmark_cases import completed
+
         observer.update(
+            completion=completed(contract=result),
             stages=[
                 {"phase": "rule_application_and_admission", "cpu_ns": replaced - start},
                 {"phase": "contraction", "cpu_ns": contracted - replaced},

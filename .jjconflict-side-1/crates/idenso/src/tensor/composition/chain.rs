@@ -39,7 +39,8 @@ impl SymbolicTensor<PartialStructure> {
             logical[position].set_aind(PartialIndex::Explicit(index));
         }
         let value = Self::checked_parts(expression, PartialStructure::from_logical_slots(logical))
-            .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?;
+            .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?
+            .normalize_closed_root_chain()?;
         value.validate_rewrite(&[self])
     }
 

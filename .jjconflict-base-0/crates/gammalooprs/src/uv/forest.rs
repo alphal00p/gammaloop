@@ -373,7 +373,15 @@ impl Forest {
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
             let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
-                .simplify_color(ColorSimplifySettings::default())?
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })?
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .to_dots()?
                 .resolved()?;
             let atom = cooking.uncook(reduced.expression().as_view());

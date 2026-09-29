@@ -25,7 +25,7 @@ use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{
     CookMode, CookSettings,
     color::ColorSimplifySettings,
-    tensor::{ContractionSettings, SymbolicTensor},
+    tensor::{ContractSettings, SymbolicTensor},
 };
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use spenso::network::parsing::{AtomStructureExt, StrictTensorFilter};
@@ -178,8 +178,10 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?
-            .simplify_color(ColorSimplifySettings {
-                simplify_non_color: false,
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings {
+                    ..Default::default()
+                }),
                 ..Default::default()
             })?
             .resolved()?;
@@ -260,8 +262,10 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let resnum = SymbolicTensor::infer(cooking.try_cook(resnum.as_view())?)?
-            .simplify_color(ColorSimplifySettings {
-                simplify_non_color: false,
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings {
+                    ..Default::default()
+                }),
                 ..Default::default()
             })?
             .resolved()?;
@@ -550,8 +554,15 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
             let reduced = SymbolicTensor::infer(cooking.try_cook(atom.as_view())?)?
-                .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())?
-                .contract(ContractionSettings::default())?
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                    ..Default::default()
+                })?
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .resolved()?
                 .expand_dots()?;
             atom = cooking.uncook(reduced.as_view());

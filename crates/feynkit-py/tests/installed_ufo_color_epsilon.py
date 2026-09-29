@@ -5,11 +5,13 @@ interaction of identical bosons. The SM fixture supplies scalar parameters and
 Lorentz structures only; these color interactions define a toy model.
 """
 
+from symbolica.community.tensor import AlgebraSettings, ContractSettings
+
 import json
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community import hep as fk
+from symbolica.community import feynkit as fk
 from symbolica.community.tensor import TensorExpression
 
 source = json.loads(
@@ -67,7 +69,8 @@ for sign in (1, -1):
     assert conjugate.dirac_adjoint().to_expression() == color.to_expression()
     norm = (
         TensorExpression(color.to_expression() * conjugate.to_expression())
-        .simplify_epsilon()
+        .reduce_algebra(AlgebraSettings(epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
     )
     assert norm.is_scalar
@@ -79,7 +82,7 @@ for sign in (1, -1):
                 S("i"), S("i"), average=True
             )
         )
-        .contract()
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
     )
     assert average.to_expression() == E("1")

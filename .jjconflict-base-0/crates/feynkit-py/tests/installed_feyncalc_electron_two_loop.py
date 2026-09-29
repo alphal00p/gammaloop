@@ -7,11 +7,17 @@ explicit analytic inputs. Actual generated diagrams, UV expansion, tensor
 projection, topology mappings and bounded native IBP produce the bare poles.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 from pathlib import Path
 
 from symbolica import E, Replacement, S
-from symbolica.community import hep
-from symbolica.community.hep import oneloop
+from symbolica.community import feynkit as hep
+from symbolica.community.feynkit import oneloop
 from symbolica.community.tensor import TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -109,7 +115,8 @@ one_numerator *= (
 )
 one_trace = kinematics.apply(
     TensorExpression(one_numerator)
-    .simplify_gamma()
+    .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
     .to_dots()
     .to_expression()
@@ -210,7 +217,8 @@ for diagram in result.diagrams:
         )
     traced = (
         TensorExpression(uv)
-        .simplify_gamma()
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_dots()
         .to_expression()

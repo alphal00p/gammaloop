@@ -5,12 +5,13 @@ Spin/color completeness, diagram generation and tensor algebra use shared owners
 The gallery uses fixed 1/2 incoming spin factors; dimensional averages use 1/(D-2).
 """
 
+from symbolica.community.tensor import AlgebraSettings, ContractSettings
+
 import numpy as np
 from symbolica import E, S, Symbol
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 from symbolica.community.tensor import (
     ColorSimplifySettings,
-    CookSettings,
     TensorExpression,
 )
 
@@ -81,7 +82,12 @@ for diagram in generated.diagrams:
     )
 assert set(denominators) == {E("1"), s, t, u}
 amplitude = sum(terms, E("0"))
-operator = kin.apply(TensorExpression(amplitude).contract().to_expression().to_dots())
+operator = kin.apply(
+    TensorExpression(amplitude)
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .to_expression()
+    .to_dots()
+)
 amplitude = operator.to_expression()
 assert len(operator.structure.slots) == 8
 adjoint = operator.dirac_adjoint().to_expression().replace(conj(P(a, b)), P(a, b))
@@ -98,15 +104,21 @@ generic = (amplitude * adjoint * colors * gluon.color**2 / dA**2).replace(
 )
 print("color contraction", flush=True)
 colored = (
-    TensorExpression(generic, cook_indices=CookSettings.indices())
-    .simplify_color()
+    TensorExpression(generic, intern="flattened")
+    .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
     .to_expression()
     .replace(dA, N**2 - 1)
 )
 colored = (
     TensorExpression(colored)
-    .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
+    .reduce_algebra(
+        AlgebraSettings(
+            color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
+        )
+    )
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
     .to_expression()
     .to_expression()
 )
@@ -119,7 +131,11 @@ for i, j in enumerate((1, 0, 3, 2)):
     projector = kin.apply(projector)
     print("polarization", i, "start", flush=True)
     tensor = TensorExpression(result * projector)
-    tensor = tensor.contract().to_expression().to_dots()
+    tensor = (
+        tensor.contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .to_expression()
+        .to_dots()
+    )
     result = tensor.to_expression()
     result = kin.apply(result).replace(u, -s - t)
     print("polarization", i, "done", flush=True)

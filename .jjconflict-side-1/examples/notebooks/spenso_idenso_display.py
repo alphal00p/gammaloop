@@ -23,7 +23,7 @@ def _():
 
 @app.cell
 def _():
-    from symbolica.community.hep import Symbols
+    from symbolica.community.feynkit import Symbols
 
     return (Symbols,)
 
@@ -455,13 +455,21 @@ def _(amplitude, display_settings, mo, show_dimensions, source_block):
 
 
 @app.cell
-def _(Representation, TensorExpression, mu, p):
+def _(Representation, TensorExpression, mu, p, spenso):
     metric = Representation.mink(4).g("mu", "nu")
 
     # Crossing to ordinary Symbolica explicitly leaves the repeated index visible
     # to Idenso instead of asking Spenso to choose a tensor-aware contraction.
     metric_product = metric.to_expression() * p(1, mu).to_expression()
-    simplified_tensor = TensorExpression(metric_product).contract(rank_one=False).to_expression()
+    simplified_tensor = (
+        TensorExpression(metric_product)
+        .contract(
+            spenso.ContractSettings(
+                rank_one=False, collect_chains=False, collect_traces=False
+            )
+        )
+        .to_expression()
+    )
     simplified_atom = simplified_tensor.to_expression()
     return metric_product, simplified_atom, simplified_tensor
 
@@ -483,7 +491,7 @@ def _(
             mo.md(
                 "## 3. Idenso transformation on a TensorExpression\n\n"
                 "`TensorExpression` validates the Symbolica input. Its "
-                "`contract(rank_one=False)` method contracts metrics while retaining "
+                "`contract(ContractSettings(rank_one=False, collect_chains=False, collect_traces=False))` method contracts metrics while retaining "
                 "the typed external interface. `to_expression()` resolves its aliases."
             ),
             mo.hstack(
@@ -516,7 +524,7 @@ def _(
 @app.cell
 def _(TensorExpression, mu, p, q):
     indexed_product = p(1, mu).to_expression() * q(2, mu).to_expression()
-    dotted_tensor = TensorExpression(indexed_product).to_dots()
+    dotted_tensor = TensorExpression(indexed_product).contract().to_expression()
     dotted_atom = dotted_tensor.to_expression()
     return dotted_atom, dotted_tensor, indexed_product
 

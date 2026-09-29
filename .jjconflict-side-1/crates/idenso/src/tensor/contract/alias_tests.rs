@@ -1,12 +1,91 @@
 use super::*;
 use spenso::structure::{abstract_index::AbstractIndex, slot::IsAbstractSlot};
 use spenso::{g, mink};
+use symbolica::atom::AtomCore;
 use symbolica::atom::FunctionBuilder;
 
 fn vector(head: &str, slot: &Atom) -> Atom {
     FunctionBuilder::new(spenso::network::tags::SPENSO_TAG.rank_one_tensor_symbol(head))
         .add_arg(slot)
         .finish()
+}
+
+#[test]
+fn literal_registration_borrows_nested_sources_and_returns_only_new_bindings() {
+    crate::test_support::test_initialize();
+    let a = mink!(4, 97911);
+    let b = mink!(4, 97912);
+    let body = SymbolicTensor::infer(vector("borrowed_alias_p", &a)).unwrap();
+    let inner = body.alias_handle().unwrap();
+    let outer_body = inner.clone();
+    let outer = outer_body.alias_handle().unwrap();
+    let mut registry = HashMap::from([
+        (inner.expression.clone(), (inner.clone(), body)),
+        (outer.expression.clone(), (outer.clone(), outer_body)),
+    ]);
+    // Unrelated definitions may be arbitrarily numerous; registration receives
+    // only a lookup and cannot enumerate or copy this registry.
+    for coefficient in 2..258 {
+        let body = SymbolicTensor::infer(Atom::num(coefficient) * &inner.expression).unwrap();
+        let handle = body.alias_handle().unwrap();
+        registry.insert(handle.expression.clone(), (handle, body));
+    }
+    let target = outer
+        .expression
+        .replace(a.to_pattern())
+        .with(b.to_pattern());
+    let nested = inner
+        .expression
+        .replace(a.to_pattern())
+        .with(b.to_pattern());
+    let lookups = std::cell::Cell::new(0);
+    let inherited = |literal: &Atom| {
+        lookups.set(lookups.get() + 1);
+        registry.get(literal).cloned()
+    };
+    let mut additions = HashMap::new();
+    SymbolicTensor::register_literal_use(&outer.expression, &target, &inherited, &mut additions)
+        .unwrap();
+    assert_eq!(additions.len(), 2);
+    assert!(
+        lookups.get() <= 4,
+        "only nested source and target bindings are looked up"
+    );
+    assert_eq!(
+        additions[&nested].1.expression,
+        vector("borrowed_alias_p", &b)
+    );
+    assert_eq!(additions[&target].1.expression, nested);
+    assert!(!registry.contains_key(&target));
+    // The next binding consumes sources from the delta as well as the borrowed
+    // registry, without re-emitting associations already present there.
+    let c = mink!(4, 97913);
+    let next = target.replace(b.to_pattern()).with(c.to_pattern());
+    SymbolicTensor::register_literal_use(&target, &next, &inherited, &mut additions).unwrap();
+    assert_eq!(additions.len(), 4);
+    registry.extend(additions);
+    let mut additions = HashMap::new();
+    SymbolicTensor::register_literal_use(
+        &outer.expression,
+        &target,
+        &|literal| registry.get(literal).cloned(),
+        &mut additions,
+    )
+    .unwrap();
+    assert!(additions.is_empty());
+    registry.get_mut(&target).unwrap().1 =
+        SymbolicTensor::infer(vector("borrowed_alias_conflict", &b)).unwrap();
+    assert!(
+        SymbolicTensor::register_literal_use(
+            &outer.expression,
+            &target,
+            &|literal| registry.get(literal).cloned(),
+            &mut additions,
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("conflicting relabelled alias definitions")
+    );
 }
 
 #[test]
@@ -166,7 +245,8 @@ fn literal_registration_uses_separate_reversed_open_layouts() {
         .add_arg(&arguments[2])
         .finish();
     let mut definitions = HashMap::from([(handle.expression.clone(), (handle.clone(), body))]);
-    SymbolicTensor::register_literal_use(&handle.expression, &target, &mut definitions).unwrap();
+    SymbolicTensor::register_literal_use(&handle.expression, &target, &|_| None, &mut definitions)
+        .unwrap();
     let (next_handle, next_body) = &definitions[&target];
     assert_eq!(
         next_body.expression,
@@ -308,7 +388,19 @@ fn alias_contraction_exposes_two_independent_dirac_traces() {
             }))
         };
         let source = SymbolicTensor::infer(trace(95200) * trace(95300)).unwrap();
-        let result = source.simplify_gamma(Default::default()).unwrap();
+        let result = source
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(Default::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap();
         assert!(result.contraction_complete());
         assert_eq!(result.resolved().unwrap().expression, Atom::num(640));
     }
@@ -487,6 +579,7 @@ fn alias_contraction_registers_same_stage_templates_before_publication() {
             SymbolicTensor::register_literal_use(
                 &source.expression,
                 &target.expression,
+                &|_| None,
                 &mut definitions,
             )
             .unwrap();
@@ -597,17 +690,35 @@ fn deferred_epsilon_alias_frontier_finishes_in_the_shared_fixed_point() {
         SymbolicTensor::infer(&first.expression * &second.expression + epsilon * &third.expression)
             .unwrap();
     let parts = root.contract_parts(Default::default()).unwrap();
-    assert!(parts.status == ContractionStatus::Deferred);
+    assert!(parts.status == ReductionStatus::Deferred);
     let value = Arc::new(
         root.with_aliases([(first, body.clone()), (second, body.clone()), (third, body)])
             .unwrap(),
     );
-    let result = value.simplify_gamma(Default::default()).unwrap();
+    let result = value
+        .reduce_algebra(&crate::tensor::AlgebraSettings {
+            gamma: Some(Default::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap();
     assert!(result.contraction_complete());
     assert_eq!(result.resolved().unwrap().expression, Atom::num(4));
     assert!(Arc::ptr_eq(
         &result,
-        &result.contract(Default::default()).unwrap()
+        &result
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap()
     ));
 }
 
@@ -629,7 +740,7 @@ fn capped_alias_frontier_before_first_emission_is_not_reentered() {
     }));
     let body = SymbolicTensor::infer(expression).unwrap();
     let direct = body.contract_parts(Default::default()).unwrap();
-    assert!(direct.status == ContractionStatus::Capped);
+    assert!(direct.status == ReductionStatus::Capped);
     assert!(direct.aliases.is_empty());
     assert_eq!(direct.root, body);
     let handle = body.alias_handle().unwrap();
@@ -655,8 +766,13 @@ fn epsilon_context_exposes_symmetric_and_epsilon_aliases() {
     let epsilon = crate::epsilon!(&a, &b, &r, &s);
     let root = SymbolicTensor::infer(&epsilon * &handle.expression).unwrap();
     let value = Arc::new(root.with_aliases([(handle, symmetric)]).unwrap());
-    let result = value.simplify_epsilon().unwrap();
-    assert!(result.contraction_complete());
+    let result = value
+        .reduce_algebra(&crate::tensor::AlgebraSettings {
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
     assert!(result.resolved().unwrap().expression.is_zero());
 
     let c = mink!(4, 97605);
@@ -669,8 +785,13 @@ fn epsilon_context_exposes_symmetric_and_epsilon_aliases() {
         root.with_aliases([(first, body.clone()), (second, body)])
             .unwrap(),
     );
-    let result = value.simplify_epsilon().unwrap();
-    assert!(result.contraction_complete());
+    let result = value
+        .reduce_algebra(&crate::tensor::AlgebraSettings {
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
     assert_eq!(result.resolved().unwrap().expression, Atom::num(24));
 }
 
@@ -693,11 +814,21 @@ fn epsilon_stage_does_not_collect_metrics_from_opaque_index_labels() {
             .unwrap(),
     );
     let result = value
-        .simplify(&crate::tensor::simplification::SimplifySettings {
-            metrics: false,
+        .reduce_algebra(&crate::tensor::AlgebraSettings {
             epsilon: true,
             ..Default::default()
         })
         .unwrap();
-    assert!(Arc::ptr_eq(&value, &result));
+    assert_eq!(result.root(), value.root());
+    assert_eq!(result.aliases().unwrap(), value.aliases().unwrap());
+    assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+    assert!(Arc::ptr_eq(
+        &result,
+        &result
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+    ));
 }

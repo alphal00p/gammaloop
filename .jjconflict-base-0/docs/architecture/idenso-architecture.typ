@@ -179,8 +179,12 @@ explicit lower-level boundaries.
 
 == Rewrite families and execution flow
 
-The shared tensor scheduler runs the selected identity families. Each family owns its
-normal form:
+`contract(ContractSettings)` and `reduce_algebra(AlgebraSettings)` lower into one
+domain scheduler. Their settings are independent: structural permissions and
+connection filters belong to contraction, while identity families, conventions
+and algebraic output forms belong to algebra reduction. An enabled identity
+authorizes its required contractions without enabling unrelated identities.
+Each family retains its internal kernel:
 
 - `IndexTooling` parses enough structure to canonicalize tensor indices, list dangling slots,
   wrap all indices or only dummies, form adjoints, and alias tensor subexpressions;
@@ -193,18 +197,43 @@ normal form:
 - `ColorSimplifier` collects fundamental color lines, closes traces, applies generator,
   structure-constant, Fierz, and Casimir rules, prunes antisymmetric zero terms, and iterates to a
   fixed point;
-- `EpsilonSimplifier` owns epsilon contractions and reductions;
+- the epsilon kernel owns epsilon contractions and reductions;
 - `Cookable` replaces selected functions or representation-index payloads with compact symbols,
   either as readable flattened names or reversible Symbolica `UserData::Atom` encodings.
 
 Settings objects are part of the semantics. Gamma ordering and trace evaluation, color Fierz and
 invariant substitutions, contraction budgets, and cooking source/tag filters can all
-change the result form. Reproducible callers should record the exact settings and the order in
-which independent rewrite families ran.
+change the result form. Reproducible callers record the exact settings; the
+planner chooses eligible work using candidate counts, prerequisites and estimated
+growth. The root and each shared alias definition receive one initial candidate
+scan. Regional replacements update occurrence counts and dependency edges;
+unchanged definitions are not rescanned. Per-family settled regions and explicit
+change flags drive local fixed points, without comparing the complete alias table.
+The same observations retain explicit metric and vector source ports by
+representation. Their absence can certify a completed structural fallback even
+when compact vectors or repeated gamma ports remain. Head occurrence alone
+does not establish eligible work. Validated external-port counts also exclude
+false connections between same-variance or dimension-incompatible ports.
+The observation records the maximum explicit-index count across sum alternatives
+and adds counts across product factors. When that maximum equals the established
+external boundary, no branch contains an internal pair. This fact survives
+regional updates without rescanning an unchanged sum; powered scopes retain
+their separate multiplicity checks.
 
-Most pattern engines use a local fixed-point loop: transform the current atom, compare it with
-the previous atom, and stop when unchanged. That guarantees termination only for the implemented
-oriented rule set; custom rules composed by a caller remain the caller's responsibility.
+Algebra prerequisites use these same observations to discharge free-port
+definitions before contraction setup or budget accounting. Individual domain
+contractions borrow the shared registry and return only newly bound or emitted
+definitions. The alias owner looks up nested bindings and their original
+admission proofs on demand; it does not copy unrelated definitions. The
+collector materializes its mutable registry view only when a selected connection
+requires exposing a non-scalar alias.
+
+The same domain retains its depth-one graph and exact opaque-leaf interfaces.
+When a trusted intrinsic rewrite changes topology, unchanged leaves reuse their
+logical ports through Spenso's admitted parser entry. That entry skips redundant
+admission and dummy-reservation walks; only newly selected boundaries need
+interface discovery. Callback-sensitive rewrites discard invalidated interface
+facts and retain checked result boundaries.
 
 == One symbolic contraction path
 
@@ -230,13 +259,13 @@ uncontracted templates. Completed bodies are staged separately and published
 together, so traversal order cannot compare definitions at different rewrite
 stages. Exact imaginary coefficients remain scalar leaves of the same graph.
 
-After the original alias templates finish, the existing repeated-index scan
-decides whether a domain can contract across literal alias boundaries. Disjoint
+The retained repeated-index observations decide whether a domain can contract
+across literal alias boundaries. Disjoint
 open definitions stay opaque; their sums are not visited merely because they
 contain metrics. Sum alternatives and powers retain the scanner's established
-scope rules. The private contraction status distinguishes deferred opaque work
-from an exhausted budget. Deferred work can expose its registered definitions
-and is checked again by the existing simplification fixed point; an exhausted
+scope rules. Public `ReductionStatus` distinguishes `Complete`, `Deferred` and
+`Capped` relative to the requested work. Deferred work can expose its registered definitions
+and is checked again by the domain scheduler; an exhausted
 frontier is retained exactly and never restarted by this exposure. Neither
 state is certified complete merely because its algebraic output is valid.
 
@@ -246,17 +275,23 @@ so antisymmetry also acts across alias boundaries. Unrelated definitions and
 callback-sensitive templates remain opaque.
 
 `contract_ports` is the separate logical binary composition operation.
-`to_dots` and `undo_dots` change symbolic notation; `to_dots` does not silently
-run a full contraction. The intrinsic `g` normalizer exploits dot symmetry at
+`to_dots`, `undo_dots`, `undo_chain` and `undo_trace` change symbolic notation.
+`to_dots` converts surviving index-free compact scalar products and performs no
+index contraction; undo operations introduce fresh compatible dummy scopes and
+never evaluate traces. The intrinsic `g` normalizer exploits dot symmetry at
 construction. A finite `expand_dots` request crosses Spenso's component
 execution boundary and leaves unrelated factors untouched.
 
 The former network Schoonschip engine, its traversal/order strategy family and
 duplicate metric collector have been removed. The shared tensor scheduler runs
 one fixed point over the root and reachable definitions, carrying observations
-and completion proofs when their invariants allow it. A default rerun of a
-certified complete aliased result reuses its sealed allocation. Budgets retain
-exact unfinished work and do not certify it complete.
+and completion proofs when their invariants allow it. It retains the exact
+completed settings for an unchanged root and alias registry, so alternating
+previously completed operations reuse the sealed allocation. An actual root or
+definition change invalidates those completion facts; callback boundaries retain
+their existing invalidation rules. Status describes the current request, and
+capped or deferred requests never enter the completed-settings cache. Budgets
+retain exact unfinished work and do not certify it complete.
 
 The graph, substitution and callback boundaries are detailed in the
 #link("schoonschip-net-parsing.typ")[shared contraction architecture note].
@@ -288,6 +323,11 @@ shared parser's structure-only construction; `wrap_indices(scope, dummies_only=T
 open-port markers intact. Independently created expressions should be wrapped before multiplication when
 same-spelled dummy names must not contract.
 
+Index canonicalization reconstructs the admitted operation graph without
+executing tensor algebra. Closed scalar inverse powers keep their own dummy
+scope while their interior indices are canonicalized. These preparation and
+conjugation operations remain orthogonal to the reduction planner.
+
 The shared concrete syntax and which crate owns each rewrite are specified in the
 #link("spenso-symbolica-syntax-and-rewrites.typ")[Spenso/Idenso Symbolica syntax note].
 
@@ -305,6 +345,14 @@ and cooked expressions do not form an Idenso checkpoint format. Reversible cooki
 source atom in Symbolica symbol user data and derives a stable-looking hash name, but recovery
 still depends on the matching Symbolica registry and cooking settings. Printed or binary names
 alone are not a portable physics-result archive.
+
+Explicit representation-dimension cooking is a narrower exception: reversible
+mode encodes supported exact rational arithmetic in ordinary symbols into a
+portable name. Atomic dimensions remain unchanged, and decoding checks the
+payload before normalization. Function calls, callback-bearing expressions and
+unsupported symbol metadata are rejected. Index/function cooking keeps its
+existing registry-dependent behavior; construction and cooking remain separate
+from reduction.
 
 == Ownership and error boundaries
 

@@ -27,13 +27,25 @@ fn trace(arguments: impl IntoIterator<Item = Atom>) -> Atom {
 fn assert_expanded(input: &Atom, expected: &Atom) {
     let settings = GammaSimplifySettings::default();
     let source = SymbolicTensor::<PartialStructure>::infer(input.clone()).unwrap();
-    let output = source.simplify_gamma(settings).unwrap();
+    let output = source
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            gamma: Some(settings),
+            epsilon: settings.output == idenso::dirac::GammaOutput::Reduced,
+            ..Default::default()
+        })
+        .unwrap();
     assert_eq!(
         output.expanded().unwrap().into_expression(),
         expected.expand()
     );
     assert_eq!(output.root().structure(), source.structure());
-    let rerun = output.simplify_gamma(settings).unwrap();
+    let rerun = output
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            gamma: Some(settings),
+            epsilon: settings.output == idenso::dirac::GammaOutput::Reduced,
+            ..Default::default()
+        })
+        .unwrap();
     assert_eq!(
         rerun.expression().get_root(),
         output.expression().get_root()
@@ -44,14 +56,22 @@ fn assert_expanded(input: &Atom, expected: &Atom) {
     );
     assert_eq!(
         source
-            .simplify_gamma(settings.without_trace_evaluation())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(settings.without_trace_evaluation()),
+                epsilon: settings.output == idenso::dirac::GammaOutput::Reduced,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
             .into_expression(),
         idenso::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(settings.without_trace_evaluation())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(settings.without_trace_evaluation()),
+                epsilon: settings.output == idenso::dirac::GammaOutput::Reduced,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -74,7 +94,17 @@ fn trace_expansion_preserves_spectators_and_independent_bodies() {
         );
         let ea = idenso::tensor::SymbolicTensor::infer((a).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -82,7 +112,17 @@ fn trace_expansion_preserves_spectators_and_independent_bodies() {
             .expand();
         let eb = idenso::tensor::SymbolicTensor::infer((b).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -116,7 +156,11 @@ fn four_dimensional_component_callbacks_cannot_erase_free_ports() {
     let source = SymbolicTensor::<PartialStructure>::infer(input).unwrap();
     assert!(
         source
-            .simplify_gamma(GammaSimplifySettings::default())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
             .is_err()
     );
 }
@@ -137,7 +181,17 @@ fn nested_traces_in_callbacks_and_metadata_keep_their_own_boundary() {
     let inner = inner_trace();
     let factored = idenso::tensor::SymbolicTensor::infer((inner).as_atom_view().to_owned())
         .unwrap()
-        .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap()
         .resolved()
         .unwrap()
@@ -178,7 +232,11 @@ fn nested_traces_in_callbacks_and_metadata_keep_their_own_boundary() {
     let source = SymbolicTensor::<PartialStructure>::infer(callback).unwrap();
     assert!(
         source
-            .simplify_gamma(GammaSimplifySettings::default())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
             .is_err()
     );
     // Representation dimensions have the same strict admission contract as
@@ -186,7 +244,17 @@ fn nested_traces_in_callbacks_and_metadata_keep_their_own_boundary() {
     assert!(SymbolicTensor::<PartialStructure>::infer(unit).is_err());
     let expected = idenso::tensor::SymbolicTensor::infer((metadata).as_atom_view().to_owned())
         .unwrap()
-        .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap()
         .resolved()
         .unwrap()
@@ -223,7 +291,17 @@ fn rewritten_and_collected_traces_expand_the_complete_body() {
         let input = spenso::trace!(parse("bis(4)"); factors);
         let expected = idenso::tensor::SymbolicTensor::infer((input).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -241,7 +319,17 @@ fn rewritten_and_collected_traces_expand_the_complete_body() {
     }));
     let expected = idenso::tensor::SymbolicTensor::infer((closed).as_atom_view().to_owned())
         .unwrap()
-        .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap()
         .resolved()
         .unwrap()

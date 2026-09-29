@@ -5,11 +5,13 @@ Analytic tadpole/vacuum pole coefficients are reference inputs. A finite
 Laporta residual list is not a certification of a minimal master basis.
 """
 
+from symbolica.community.tensor import ContractSettings
+
 import json
 from math import prod
 
 from symbolica import E, Expression, Matrix, Replacement, S, Symbol
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 from symbolica.community.tensor import TensorExpression, TensorName
 
 d, mass_squared, p_squared, eps, coupling = S(
@@ -339,7 +341,7 @@ for loops, ct_order in [(1, 1), (0, 2)]:
         )
         numerator = (
             TensorExpression(numerator)
-            .contract()
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_dots()
             .to_expression()
@@ -580,7 +582,7 @@ for loops, order in [(1, 1), (0, 2)]:
         )
         numerator = (
             TensorExpression(numerator)
-            .contract()
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_dots()
             .to_expression()

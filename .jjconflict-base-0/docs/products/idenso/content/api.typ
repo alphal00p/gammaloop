@@ -45,8 +45,9 @@ operations cover:
   materializes an expanded result;
 - index preparation: typed `wrap_indices`, `list_dangling`, and the explicit
   `cook_indices=CookSettings(...)` construction/indexing policy;
-- algebra: `contract`, `simplify`, `simplify_gamma`, `simplify_color`, and `simplify_epsilon`;
-- notation and canonical labels: `to_dots`, `undo_dots`, and `canonize`;
+- reduction: `contract(ContractSettings(...))` and `reduce_algebra(AlgebraSettings(...))`;
+- notation: `to_dots`, `undo_dots`, `undo_chain`, and `undo_trace`;
+- canonical labels: `canonize`;
 - conjugation: `dirac_adjoint`.
 
 ```python
@@ -67,15 +68,49 @@ assert reduced == momentum(nu)
 ```
 
 `contract()` returns an `AliasedTensorExpression` and reports whether contraction is complete.
-Use `contract(rank_one=False)` for metrics only. `contract_ports(rhs, left=..., right=...)`
+Use `contract(ContractSettings(rank_one=False, collect_chains=False, collect_traces=False))` for metrics only. `contract_ports(rhs, left=..., right=...)`
 is the separate binary operation on selected logical ports. `to_dots()` changes notation;
 request `contract()` first when repeated explicit indices need contraction.
 Resolve aliases with `to_expression()`, or explicitly distribute the result with `expand()`.
 
-`simplify(settings)` is the shared orchestrator: it applies the configured algebra passes
-and returns an `AliasedTensorExpression`, without implicit expansion. Color dimension
-invariants are selected with `ColorSimplifySettings(substitute_cof_dimension_invariants=True)`.
-There is no separate Python invariant-conversion or Casimir-basis pass.
+`reduce_algebra(AlgebraSettings(...))` selects gamma, color, and epsilon identities
+independently. Its default enables no identity family; `AlgebraSettings.hep()` enables
+all three. The existing `GammaSimplifySettings` and `ColorSimplifySettings` specify
+family conventions and requested output. Enabled identities authorize their necessary
+structural contractions; emitting an epsilon does not itself enable epsilon identities.
+Both reduction operations use the same Rust planner and contraction implementation.
+
+`ContractSettings` independently controls `metrics`, `rank_one`, `representations`,
+`collect_chains`, `collect_traces`, and the work budget `max_passes`. Representation filters select connections,
+including a Lorentz connection on a gamma matrix whose spinor ports survive. `None`
+permits every representation; `[]` permits none. Trace collection preserves an unevaluated
+trace. Disabling it retains indexed factors or closed chains without creating trace notation.
+Neither structural contraction nor color-delta contraction applies generator or Fierz identities.
+
+Construction already normalizes a metric on equal compatible indices to its dimension,
+substitutes compact vectors into metric ports, and orders the symmetric `dot` arguments.
+Filters cannot suppress those intrinsic constructor rules. Structural contraction of
+an indexed product uses the existing compact metric spelling `g(p(R), q(R))` for its
+scalar product. `to_dots()` converts this surviving notation to `dot(p(R), q(R))`;
+the two forms share the scalar-product display. Typed port composition can already
+produce `dot` intrinsically. The conversion remains meaningful for surviving compact
+metrics, and never searches repeated indices or contracts indexed products.
+The nested spelling `p(q(R))` is not accepted by typed tensor admission: a registered
+rank-one tensor requires its final structural port.
+
+`undo_dots()` introduces compatible dummy indices for scalar products. `undo_trace()`
+opens a trace as a closed indexed chain without evaluation; `undo_chain()` then exposes
+its ordered factors. These operations preserve tensor interfaces, aliases, and unrelated
+factorization. They unfold notation currently present and cannot recover an expression's
+history after algebraic reduction. There is no aggregate `undo_all` operation.
+
+Results report `reduction_status` as `Complete`, `Deferred`, or `Capped`.
+Completion is relative to enabled capabilities and output requirements. Budget exhaustion
+retains the exact unfinished tensor and its aliases; rerunning may make further progress.
+A zero `max_passes` budget preserves eligible work and reports `Capped`.
+Completed reruns are stable. Global arithmetic distribution remains an explicit `expand()` request.
+Color dimension invariants are selected with
+`ColorSimplifySettings(substitute_cof_dimension_invariants=True)`.
 
 The construction and indexing surface is intentionally retained: `flat`, `sigma`, and `f`
 construct tensors; `rank` and `shape` inspect their interface; `index`, `reindex`, and
@@ -86,8 +121,8 @@ has no call site. Arbitrary unchecked construction and post-hoc `reinfer` are no
 escape hatches: reconstruct through the checked `TensorExpression` constructor.
 
 Idenso does not define a second parser syntax: the example constructs a Spenso-compatible
-`TensorExpression` and then applies one Idenso transformation through its methods. Keep transformations separate
-while developing a pipeline so expression growth and convention changes remain observable.
+`TensorExpression` and then applies one Idenso transformation through its methods. Select the required identity families together; the shared planner schedules their prerequisites
+while retaining unrelated factorization.
 
 For implementation details, start with
 #source-link("crates/idenso/src/lib.rs", label: "the Rust API") and

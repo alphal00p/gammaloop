@@ -1,7 +1,7 @@
 //! Contract a metric or tagged vector by replacing one compatible tensor slot.
 
 mod components;
-pub(crate) use components::{ContractionStatus, FactorizedContraction};
+pub(crate) use components::{FactorizedContraction, ReductionStatus};
 
 use spenso::{
     network::{
@@ -64,6 +64,17 @@ type ContractionCandidate = (usize, usize, Atom, Vec<(Atom, Atom)>);
 
 pub(crate) struct SlotContraction {
     metric: Symbol,
+    metrics: bool,
+    representations: Option<Vec<LibraryRep>>,
+    observations:
+        Option<std::sync::Arc<crate::tensor::simplification::observation::DomainObservations>>,
+    graph: Option<(
+        Atom,
+        std::sync::Arc<
+            crate::tensor::SymbolicNet<spenso::structure::abstract_index::AbstractIndex>,
+        >,
+    )>,
+    interfaces: Option<spenso::network::parsing::LeafInterfaceCache>,
     alias: Symbol,
     tags: &'static SpensoTags,
     projectors: [Symbol; 2],
@@ -73,10 +84,54 @@ impl SlotContraction {
     pub(crate) fn new() -> Self {
         Self {
             metric: ETS.metric,
+            metrics: true,
+            representations: None,
+            observations: None,
+            graph: None,
+            interfaces: None,
             alias: *crate::tensor::aliases::TENSOR_ALIAS_SYMBOL,
             tags: &SPENSO_TAG,
             projectors: [*shadowing::CYCLIC, *shadowing::SYM],
         }
+    }
+
+    pub(crate) fn configured(metrics: bool, representations: Option<&[LibraryRep]>) -> Self {
+        Self {
+            metrics,
+            representations: representations.map(<[LibraryRep]>::to_vec),
+            ..Self::new()
+        }
+    }
+
+    pub(crate) fn observed(
+        mut self,
+        observations: &std::sync::Arc<
+            crate::tensor::simplification::observation::DomainObservations,
+        >,
+    ) -> Self {
+        self.observations = Some(std::sync::Arc::clone(observations));
+        self
+    }
+
+    pub(crate) fn planned(
+        mut self,
+        source: Atom,
+        graph: std::sync::Arc<
+            crate::tensor::SymbolicNet<spenso::structure::abstract_index::AbstractIndex>,
+        >,
+        interfaces: Option<spenso::network::parsing::LeafInterfaceCache>,
+    ) -> Self {
+        self.graph = Some((source, graph));
+        self.interfaces = interfaces;
+        self
+    }
+
+    fn permits(&self, representation: LibraryRep) -> bool {
+        self.representations.as_ref().is_none_or(|allowed| {
+            allowed
+                .iter()
+                .any(|candidate| candidate.base() == representation.base())
+        })
     }
 
     /// Expand admitted scalar sums without constructing or reducing tensor ports.
@@ -92,6 +147,7 @@ impl SlotContraction {
     /// Dot normalization, including metric traces and powers, remains a
     /// prerequisite stage owned by the caller.
     pub(crate) fn run(
+        &self,
         view: AtomView<'_>,
         chain_like: bool,
         rank_one: bool,
@@ -101,7 +157,7 @@ impl SlotContraction {
         let mut slots = SlotMatcher::default();
         // SlotMatcher has already initialized these predefined bundles. Retain
         // their handles instead of probing Symbolica's state on every candidate.
-        let contractor = Self::new();
+        let contractor = self;
         loop {
             if let AtomView::Mul(product) = current.as_view()
                 && let Some(next) = contractor.contract_product(
@@ -223,7 +279,7 @@ impl SlotContraction {
             let AtomView::Fun(function) = factor else {
                 continue;
             };
-            if function.get_symbol() != self.metric {
+            if !self.metrics || function.get_symbol() != self.metric {
                 continue;
             }
             let mut arguments = function.iter();
@@ -244,6 +300,7 @@ impl SlotContraction {
             }
             for (source, replacement) in [(first_slot, second), (second_slot, first)] {
                 if let Some(source) = source
+                    && self.permits(source.representation)
                     && let Some(replaced) = self.replace_partner(
                         factors.clone(),
                         position,
@@ -265,6 +322,9 @@ impl SlotContraction {
                 let Some((slot_position, source)) = self.rank_one_endpoint(function, slots) else {
                     continue;
                 };
+                if !self.permits(source.representation) {
+                    continue;
+                }
                 // Construct the compact vector only after finding a partner.
                 if let Some(replaced) = self.replace_partner(
                     factors.clone(),
@@ -390,6 +450,9 @@ impl SlotContraction {
             }
             let result = match factor {
                 AtomView::Fun(function) => {
+                    if !self.metrics && function.get_symbol() == self.metric {
+                        continue;
+                    }
                     self.replace_function(function, source, replacement, chain_like, false, slots)
                 }
                 AtomView::Add(_) => {
@@ -669,7 +732,7 @@ mod tests {
         ] {
             let mut observations = Vec::new();
             assert_eq!(
-                SlotContraction::run(input.as_view(), false, false, &mut observations),
+                SlotContraction::new().run(input.as_view(), false, false, &mut observations),
                 expected
             );
             // The nested discovery probe builds the same candidate, but only
@@ -679,7 +742,7 @@ mod tests {
         let refused = ETS.metric(&a, &b) * (&source + Atom::num(1));
         let mut observations = Vec::new();
         assert_eq!(
-            SlotContraction::run(refused.as_view(), false, false, &mut observations),
+            SlotContraction::new().run(refused.as_view(), false, false, &mut observations),
             refused
         );
         assert!(
@@ -698,13 +761,17 @@ mod tests {
                 "T(mink(4,b))*U(mink(4,b))",
             ),
             ("g(lor(4,a),dind(lor(4,b)))*T(lor(4,b))", "T(lor(4,a))"),
-            ("g(mink(4,a),P(mink(4)))*T(mink(4,a))", "T(P(mink(4)))"),
+            (
+                "g(mink(4,a),metric_slot_P(mink(4)))*T(mink(4,a))",
+                "T(metric_slot_P(mink(4)))",
+            ),
         ] {
             let expression = parse(input);
-            let result = SlotContraction::run(expression.as_view(), false, false, &mut Vec::new());
+            let result =
+                SlotContraction::new().run(expression.as_view(), false, false, &mut Vec::new());
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(
-                SlotContraction::run(result.as_view(), false, false, &mut Vec::new()),
+                SlotContraction::new().run(result.as_view(), false, false, &mut Vec::new()),
                 result
             );
         }
@@ -744,12 +811,12 @@ mod tests {
             ),
         ] {
             calls.lock().unwrap().clear();
-            let result = SlotContraction::run(input.as_view(), false, false, &mut Vec::new());
+            let result = SlotContraction::new().run(input.as_view(), false, false, &mut Vec::new());
             assert_eq!(result, output);
             assert_eq!(*calls.lock().unwrap(), expected_calls);
             calls.lock().unwrap().clear();
             assert_eq!(
-                SlotContraction::run(result.as_view(), false, false, &mut Vec::new()),
+                SlotContraction::new().run(result.as_view(), false, false, &mut Vec::new()),
                 result
             );
             assert!(calls.lock().unwrap().is_empty());
@@ -771,7 +838,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), false, false, &mut Vec::new()),
+                SlotContraction::new().run(expression.as_view(), false, false, &mut Vec::new()),
                 parse(expected),
                 "{input}"
             );
@@ -799,10 +866,11 @@ mod tests {
                 "T(slot_contraction_p(mink(4)))",
             ),
         ] {
-            let result = SlotContraction::run(parse(input).as_view(), false, true, &mut Vec::new());
+            let result =
+                SlotContraction::new().run(parse(input).as_view(), false, true, &mut Vec::new());
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(
-                SlotContraction::run(result.as_view(), false, true, &mut Vec::new()),
+                SlotContraction::new().run(result.as_view(), false, true, &mut Vec::new()),
                 result
             );
         }
@@ -850,10 +918,11 @@ mod tests {
             ),
         ] {
             let expression = parse(input);
-            let result = SlotContraction::run(expression.as_view(), true, true, &mut Vec::new());
+            let result =
+                SlotContraction::new().run(expression.as_view(), true, true, &mut Vec::new());
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(
-                SlotContraction::run(result.as_view(), true, true, &mut Vec::new()),
+                SlotContraction::new().run(result.as_view(), true, true, &mut Vec::new()),
                 result
             );
         }
@@ -868,12 +937,13 @@ mod tests {
         let expected = parse(
             "g(mink(4,c),mink(4,d))*epsilon(mink(4,b),mink(4,e),mink(4,f),mink(4,h))-g(mink(4,c),mink(4,b))*epsilon(mink(4,d),mink(4,e),mink(4,f),mink(4,h))",
         );
-        let result = SlotContraction::run(determinant.as_view(), false, false, &mut Vec::new());
+        let result =
+            SlotContraction::new().run(determinant.as_view(), false, false, &mut Vec::new());
         // Epsilon normalization can move a common minus sign outside the
         // two-term tensor polynomial. There are no scalar spectators here.
         assert_eq!(result.expand(), expected.expand());
         assert_eq!(
-            SlotContraction::run(result.as_view(), false, false, &mut Vec::new()),
+            SlotContraction::new().run(result.as_view(), false, false, &mut Vec::new()),
             result
         );
         for (input, expected, rank_one) in [
@@ -896,15 +966,15 @@ mod tests {
             let expression = parse(input);
             if rank_one {
                 assert_eq!(
-                    SlotContraction::run(expression.as_view(), false, false, &mut Vec::new()),
+                    SlotContraction::new().run(expression.as_view(), false, false, &mut Vec::new()),
                     expression
                 );
             }
             let result =
-                SlotContraction::run(expression.as_view(), false, rank_one, &mut Vec::new());
+                SlotContraction::new().run(expression.as_view(), false, rank_one, &mut Vec::new());
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(
-                SlotContraction::run(result.as_view(), false, rank_one, &mut Vec::new()),
+                SlotContraction::new().run(result.as_view(), false, rank_one, &mut Vec::new()),
                 result
             );
         }
@@ -916,7 +986,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), false, false, &mut Vec::new()),
+                SlotContraction::new().run(expression.as_view(), false, false, &mut Vec::new()),
                 expression
             );
         }
@@ -941,7 +1011,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), true, true, &mut Vec::new()),
+                SlotContraction::new().run(expression.as_view(), true, true, &mut Vec::new()),
                 expression,
                 "{input}"
             );
@@ -982,10 +1052,10 @@ mod tests {
             ),
         ] {
             let result =
-                SlotContraction::run(parse(input).as_view(), false, false, &mut Vec::new());
+                SlotContraction::new().run(parse(input).as_view(), false, false, &mut Vec::new());
             assert_eq!(result, parse(expected), "{input}");
             assert_eq!(
-                SlotContraction::run(result.as_view(), false, false, &mut Vec::new()),
+                SlotContraction::new().run(result.as_view(), false, false, &mut Vec::new()),
                 result
             );
         }
@@ -1003,9 +1073,10 @@ mod tests {
                 crate::tensor::SymbolicTensor::infer(expression.clone()).is_err(),
                 "ambiguous incidence must be rejected before graph planning"
             );
-            let ordered = SlotContraction::run(expression.as_view(), false, false, &mut Vec::new());
+            let ordered =
+                SlotContraction::new().run(expression.as_view(), false, false, &mut Vec::new());
             assert_eq!(
-                SlotContraction::run(ordered.as_view(), false, false, &mut Vec::new()),
+                SlotContraction::new().run(ordered.as_view(), false, false, &mut Vec::new()),
                 ordered
             );
         }
@@ -1021,7 +1092,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), true, true, &mut Vec::new()),
+                SlotContraction::new().run(expression.as_view(), true, true, &mut Vec::new()),
                 expression
             );
         }
@@ -1033,7 +1104,7 @@ mod tests {
         let distinct =
             parse("g(mink(4,1),mink(4,2))*T(mink(4,4294967297))*U(mink(4,k))*V(mink(4,k))");
         assert_eq!(
-            SlotContraction::run(distinct.as_view(), false, false, &mut Vec::new()),
+            SlotContraction::new().run(distinct.as_view(), false, false, &mut Vec::new()),
             distinct
         );
         for (input, expected) in [
@@ -1047,7 +1118,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                SlotContraction::run(parse(input).as_view(), false, false, &mut Vec::new()),
+                SlotContraction::new().run(parse(input).as_view(), false, false, &mut Vec::new()),
                 parse(expected)
             );
         }
@@ -1068,7 +1139,7 @@ mod tests {
             ),
         ] {
             assert_eq!(
-                SlotContraction::run(parse(input).as_view(), false, false, &mut Vec::new()),
+                SlotContraction::new().run(parse(input).as_view(), false, false, &mut Vec::new()),
                 parse(expected)
             );
         }
@@ -1079,7 +1150,7 @@ mod tests {
         crate::representations::initialize();
         let endpoint = parse("g(bis(4,a),bis(4,b))*chain(bis(4,b),bis(4,c),F(in,out))");
         assert_eq!(
-            SlotContraction::run(endpoint.as_view(), false, false, &mut Vec::new()),
+            SlotContraction::new().run(endpoint.as_view(), false, false, &mut Vec::new()),
             parse("chain(bis(4,a),bis(4,c),F(in,out))")
         );
         for (input, expected) in [
@@ -1098,12 +1169,12 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), false, false, &mut Vec::new()),
+                SlotContraction::new().run(expression.as_view(), false, false, &mut Vec::new()),
                 expression,
                 "{input}"
             );
             assert_eq!(
-                SlotContraction::run(expression.as_view(), true, false, &mut Vec::new()),
+                SlotContraction::new().run(expression.as_view(), true, false, &mut Vec::new()),
                 parse(expected),
                 "{input}"
             );
@@ -1115,7 +1186,7 @@ mod tests {
         crate::representations::initialize();
         let expression = parse("g(mink(4,a),mink(4,b))*g(mink(4,c),mink(4,d))*T(mink(4,d))");
         assert_eq!(
-            SlotContraction::run(expression.as_view(), false, false, &mut Vec::new()),
+            SlotContraction::new().run(expression.as_view(), false, false, &mut Vec::new()),
             parse("g(mink(4,a),mink(4,b))*T(mink(4,c))")
         );
     }
@@ -1136,7 +1207,7 @@ mod tests {
         ] {
             let expression = parse(input);
             assert_eq!(
-                SlotContraction::run(expression.as_view(), false, false, &mut Vec::new()),
+                SlotContraction::new().run(expression.as_view(), false, false, &mut Vec::new()),
                 expression,
                 "{input}"
             );

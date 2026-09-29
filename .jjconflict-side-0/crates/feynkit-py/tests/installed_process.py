@@ -5,7 +5,7 @@ from functools import partial
 from pathlib import Path
 
 from symbolica import S
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 
 model = hep.Model.standard_model()
 process = model.process(["e-", "e+"], ["a", "a"])

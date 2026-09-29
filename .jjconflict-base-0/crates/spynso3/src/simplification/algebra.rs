@@ -51,6 +51,27 @@ impl From<GammaChainOrdering> for PyGammaChainOrdering {
 }
 
 /// Immutable configuration for gamma-chain simplification.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community import tensor as sp
+/// >>> gamma = sp.GammaSimplifySettings(output="chains", evaluate_traces=False)
+/// >>> settings = sp.AlgebraSettings(gamma=gamma)
+///
+/// Parameters
+/// ----------
+/// output : Literal['reduced', 'chains']
+///     "reduced" applies the selected gamma identities; "chains" retains the supported compact gamma-chain form.
+/// chain_ordering : GammaChainOrdering, optional
+///     Ordering rule for open gamma chains. None selects the native repeated-pair strategy; use GammaChainOrdering.Canonical for deterministic ordering.
+/// evaluate_traces : bool
+///     Evaluate supported closed traces. Disable to retain traces for a later reduction step.
+/// gamma0 : bool
+///     Enable gamma-zero identities for the supported four-dimensional bispinor and Minkowski representations.
+/// conjugate : bool
+///     Enable gamma-matrix conjugation identities. These rules require the supported four-dimensional representations.
+/// expand_three_gamma_epsilon : bool
+///     Enable the optional three-gamma Levi-Civita expansion in four dimensions. This is not a dimensional-regularization gamma-five prescription.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -99,6 +120,13 @@ impl PyGammaSimplifySettings {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyGammaSimplifySettings {
+    /// Return a readable object description for inspection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> settings = sp.GammaSimplifySettings()
+    /// >>> text = repr(settings)
     fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {
         let py = self_.py();
         let object = pyo3::IntoPyObject::into_pyobject(self_, py)?;
@@ -122,6 +150,27 @@ impl PyGammaSimplifySettings {
     /// `output="chains"` only joins gamma chains, without Clifford reduction or trace evaluation.
     /// `output="reduced"` applies the configured gamma identities.
     /// `chain_ordering=None` selects `GammaChainOrdering.RepeatedPairs`.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> gamma = sp.GammaSimplifySettings(output="chains", evaluate_traces=False)
+    /// >>> settings = sp.AlgebraSettings(gamma=gamma)
+    ///
+    /// Parameters
+    /// ----------
+    /// output : Literal['reduced', 'chains']
+    ///     "reduced" applies the selected gamma identities; "chains" retains the supported compact gamma-chain form.
+    /// chain_ordering : GammaChainOrdering, optional
+    ///     Ordering rule for open gamma chains. None selects the native repeated-pair strategy; use GammaChainOrdering.Canonical for deterministic ordering.
+    /// evaluate_traces : bool
+    ///     Evaluate supported closed traces. Disable to retain traces for a later reduction step.
+    /// gamma0 : bool
+    ///     Enable gamma-zero identities for the supported four-dimensional bispinor and Minkowski representations.
+    /// conjugate : bool
+    ///     Enable gamma-matrix conjugation identities. These rules require the supported four-dimensional representations.
+    /// expand_three_gamma_epsilon : bool
+    ///     Enable the optional three-gamma Levi-Civita expansion in four dimensions. This is not a dimensional-regularization gamma-five prescription.
     #[new]
     #[pyo3(
         signature = (
@@ -164,6 +213,12 @@ impl PyGammaSimplifySettings {
     }
 
     /// Requested reduced algebra or chain-only output.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> settings = sp.GammaSimplifySettings()
+    /// >>> result = settings.output
     #[getter]
     #[gen_stub(override_return_type(type_repr="typing.Literal['reduced', 'chains']", imports=("typing")))]
     pub(crate) fn output(&self) -> &'static str {
@@ -174,6 +229,12 @@ impl PyGammaSimplifySettings {
     }
 
     /// Use FORM-like repeated-pair ordering and evaluate closed traces.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> gamma = sp.GammaSimplifySettings.repeated_pairs()
+    /// >>> settings = sp.AlgebraSettings(gamma=gamma)
     #[staticmethod]
     pub(crate) fn repeated_pairs() -> Self {
         Self {
@@ -182,6 +243,12 @@ impl PyGammaSimplifySettings {
     }
 
     /// Canonically order open gamma chains and evaluate closed traces.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> gamma = sp.GammaSimplifySettings.canonical()
+    /// >>> settings = sp.AlgebraSettings(gamma=gamma)
     #[staticmethod]
     pub(crate) fn canonical() -> Self {
         Self {
@@ -190,30 +257,60 @@ impl PyGammaSimplifySettings {
     }
 
     /// Ordering strategy used for open gamma chains.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> settings = sp.GammaSimplifySettings()
+    /// >>> result = settings.chain_ordering
     #[getter]
     pub(crate) fn chain_ordering(&self) -> PyGammaChainOrdering {
         self.inner.chain_ordering.into()
     }
 
     /// Whether closed gamma chains are evaluated as traces.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> settings = sp.GammaSimplifySettings()
+    /// >>> result = settings.evaluate_traces
     #[getter]
     pub(crate) fn evaluate_traces(&self) -> bool {
         self.inner.evaluate_traces
     }
 
     /// Whether to reduce gamma0 sandwiches before ordinary gamma identities.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> settings = sp.GammaSimplifySettings()
+    /// >>> result = settings.gamma0
     #[getter]
     pub(crate) fn gamma0(&self) -> bool {
         self.inner.gamma0
     }
 
     /// Whether to rewrite complex-conjugated gamma matrices before gamma0 reduction.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> settings = sp.GammaSimplifySettings()
+    /// >>> result = settings.conjugate
     #[getter]
     pub(crate) fn conjugate(&self) -> bool {
         self.inner.conjugate
     }
 
     /// Whether three four-dimensional gammas expand into a gamma5-epsilon basis.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> settings = sp.GammaSimplifySettings()
+    /// >>> result = settings.expand_three_gamma_epsilon
     #[getter]
     pub(crate) fn expand_three_gamma_epsilon(&self) -> bool {
         self.inner.expand_three_gamma_epsilon
@@ -221,6 +318,21 @@ impl PyGammaSimplifySettings {
 }
 
 /// Immutable configuration for color simplification.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community import tensor as sp
+/// >>> color = sp.ColorSimplifySettings(expand_cross_chain_fierz=False)
+/// >>> settings = sp.AlgebraSettings(color=color)
+///
+/// Parameters
+/// ----------
+/// evaluate_traces : bool
+///     Evaluate supported closed traces. Disable to retain traces for a later reduction step.
+/// expand_cross_chain_fierz : bool
+///     Apply Fierz identities between generators on separate fundamental color chains. Disable to retain those cross-chain contractions.
+/// substitute_cof_dimension_invariants : bool
+///     Replace supported fundamental-color invariants by dimension-dependent formulas. Leave False to keep invariants such as Casimirs symbolic.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -247,6 +359,13 @@ impl PyColorSimplifySettings {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyColorSimplifySettings {
+    /// Return a readable object description for inspection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> settings = sp.ColorSimplifySettings()
+    /// >>> text = repr(settings)
     fn __repr__(self_: pyo3::PyRef<'_, Self>) -> PyResult<String> {
         let py = self_.py();
         let object = pyo3::IntoPyObject::into_pyobject(self_, py)?;
@@ -264,6 +383,21 @@ impl PyColorSimplifySettings {
     }
 
     /// Configure color-trace evaluation, cross-chain Fierz expansion, and invariant substitution.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> color = sp.ColorSimplifySettings(expand_cross_chain_fierz=False)
+    /// >>> settings = sp.AlgebraSettings(color=color)
+    ///
+    /// Parameters
+    /// ----------
+    /// evaluate_traces : bool
+    ///     Evaluate supported closed traces. Disable to retain traces for a later reduction step.
+    /// expand_cross_chain_fierz : bool
+    ///     Apply Fierz identities between generators on separate fundamental color chains. Disable to retain those cross-chain contractions.
+    /// substitute_cof_dimension_invariants : bool
+    ///     Replace supported fundamental-color invariants by dimension-dependent formulas. Leave False to keep invariants such as Casimirs symbolic.
     #[new]
     #[pyo3(signature = (
         *,
@@ -281,24 +415,41 @@ impl PyColorSimplifySettings {
                 evaluate_traces,
                 expand_cross_chain_fierz,
                 substitute_cof_dimension_invariants,
-                ..ColorSimplifySettings::default()
             },
         }
     }
 
     /// Whether closed color chains are evaluated as traces.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> settings = sp.ColorSimplifySettings()
+    /// >>> result = settings.evaluate_traces
     #[getter]
     pub(crate) fn evaluate_traces(&self) -> bool {
         self.inner.evaluate_traces
     }
 
     /// Whether generators on different open chains or traces are expanded with the Fierz identity.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> settings = sp.ColorSimplifySettings()
+    /// >>> result = settings.expand_cross_chain_fierz
     #[getter]
     pub(crate) fn expand_cross_chain_fierz(&self) -> bool {
         self.inner.expand_cross_chain_fierz
     }
 
     /// Whether supported `cof(N)` invariants are replaced by explicit dimension formulas.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> settings = sp.ColorSimplifySettings()
+    /// >>> result = settings.substitute_cof_dimension_invariants
     #[getter]
     pub(crate) fn substitute_cof_dimension_invariants(&self) -> bool {
         self.inner.substitute_cof_dimension_invariants

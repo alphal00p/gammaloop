@@ -27,6 +27,11 @@ use super::inference::InterfaceInference;
 
 mod chain;
 
+#[cfg(test)]
+thread_local! {
+    pub(crate) static DUMMY_RESERVATION_WALKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 impl SymbolicTensor<PartialStructure> {
     pub fn new(atom: Atom, interface: PartialStructure) -> Self {
         let atom = match Self::normalize_products(atom.as_view()) {
@@ -141,6 +146,10 @@ impl SymbolicTensor<PartialStructure> {
     /// Borrow unchanged branches: only bracket removal requires renormalizing
     /// their arithmetic parents.
     pub(super) fn normalize_products(value: AtomView<'_>) -> AtomOrView<'_> {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::OutputNormalization,
+        );
         match value {
             AtomView::Add(sum) => {
                 let terms: Vec<_> = sum.iter().map(Self::normalize_products).collect();
@@ -522,9 +531,21 @@ impl SymbolicTensor<PartialStructure> {
     pub fn reserved_dummies<'a>(
         values: impl IntoIterator<Item = &'a Self>,
     ) -> ParseState<AbstractIndex> {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::DummyReservation,
+        );
         let state = ParseState::default();
         for value in values {
-            state.reserve_indices(value.expression.as_view());
+            if let Some(observed) = value.proofs.observations.get() {
+                for &index in &observed.reserved_indices {
+                    state.reserve_index(index);
+                }
+            } else {
+                #[cfg(test)]
+                DUMMY_RESERVATION_WALKS.with(|count| count.set(count.get() + 1));
+                state.reserve_indices(value.expression.as_view());
+            }
             for slot in value.structure.logical_slots() {
                 if let PartialIndex::Explicit(index) = slot.aind {
                     state.reserve_index(index);
@@ -3146,8 +3167,8 @@ mod tests {
 
     #[test]
     fn rank_one_product_uses_dot() {
-        let left = tensor("left", &[rep()]);
-        let right = tensor("right", &[rep()]);
+        let left = tensor("rank_one_product_left", &[rep()]);
+        let right = tensor("rank_one_product_right", &[rep()]);
         let result = SymbolicTensor::multiply(&left, &right).unwrap();
 
         assert!(result.is_scalar());
@@ -3422,8 +3443,8 @@ mod tests {
 
     #[test]
     fn multiple_compatible_spectators_are_ambiguous() {
-        let left = tensor("left", &[rep(), rep(), rep()]);
-        let right = tensor("right", &[rep()]);
+        let left = tensor("ambiguous_spectator_left", &[rep(), rep(), rep()]);
+        let right = tensor("ambiguous_spectator_right", &[rep()]);
         let error = SymbolicTensor::multiply(&left, &right).unwrap_err();
 
         assert!(

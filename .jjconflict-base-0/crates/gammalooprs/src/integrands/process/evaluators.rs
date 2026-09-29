@@ -831,9 +831,17 @@ impl EvaluatorStack {
         )?;
         let network_input = if settings.do_algebra {
             input
-                .simplify_color(ColorSimplifySettings::default().with_cof_dimension_invariants())?
-                .simplify_gamma(GammaSimplifySettings::default())?
-                .contract(Default::default())?
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                    gamma: Some(GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })?
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
         } else {
             Arc::new(input.with_aliases([])?)
         };
@@ -3660,7 +3668,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_residue_sum_closes_through_color_trace_and_outer_gamma() {
-        use idenso::{color::CS, dirac::gamma_tensor, shorthands::chain::Chain};
+        use idenso::{color::CS, dirac::gamma_tensor};
 
         test_initialise().unwrap();
         let family = symbol!("evaluator_test::trace_joint_family");
@@ -3670,6 +3678,17 @@ mod tests {
         let left = parse_lit!(spenso::bis(4, 3));
         let right = parse_lit!(spenso::bis(4, 4));
         let generator = CS.chain_t(parse_lit!(spenso::coad(8, 7)));
+        let compact_body = (&q + &x)
+            * spenso::chain!(
+                &left,
+                &right,
+                function!(
+                    idenso::dirac::AGS.gamma,
+                    SPENSO_TAG.chain_in,
+                    SPENSO_TAG.chain_out,
+                    &mu
+                )
+            );
         let definition = Arc::new(FnMapEntry {
             lhs: function!(family, 0, &q),
             rhs: (&q + &x) * gamma_tensor(left.clone(), right.clone(), mu.clone()),
@@ -3694,7 +3713,7 @@ mod tests {
         // Existing compact bodies already own in/out. They must keep their
         // ordinary interface rather than become a nested color/spin binder.
         let compact = Arc::new(FnMapEntry {
-            rhs: definition.rhs.chainify(Bispinor {}.into()),
+            rhs: compact_body,
             ..(*definition).clone()
         });
         let (unfused, joints) = EvaluatorStack::combine_numerator_families(

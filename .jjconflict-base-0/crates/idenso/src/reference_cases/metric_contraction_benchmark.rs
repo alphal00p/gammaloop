@@ -470,15 +470,36 @@ impl Method {
             }
             Self::Repeated => Atom::num(i64::from(expression.has_repeated_explicit_indices())),
             Self::Contract => SymbolicTensor::infer(expression.to_owned())?
-                .contract(Default::default())?
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .resolved()?
                 .into_expression(),
             Self::EpsilonCleanup => SymbolicTensor::infer(expression.to_owned())?
-                .simplify_epsilon()?
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    epsilon: true,
+                    ..Default::default()
+                })?
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .resolved()?
                 .into_expression(),
             Self::FullGamma => SymbolicTensor::infer(expression.to_owned())?
-                .simplify_gamma(GammaSimplifySettings::default())?
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })?
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .resolved()?
                 .into_expression(),
         })
@@ -589,8 +610,15 @@ pub fn run() {
             } else {
                 sorted[samples / 2]
             };
+            #[cfg(feature = "reference-cases")]
+            let (_, diagnostic) =
+                super::timing::measure(&format!("metric/{}/{}", case.name, method.name()), || {
+                    method.run(method.input(&case).unwrap(), case.source.as_deref())
+                });
+            #[cfg(not(feature = "reference-cases"))]
+            let diagnostic = "null";
             println!(
-                "{{\"case\":{:?},\"method\":{:?},\"terms\":{},\"output_terms\":{},\"changed\":{},\"repeated_indices\":{},\"repetitions\":{},\"samples_ns\":{:?},\"median_ns\":{median}}}",
+                "{{\"case\":{:?},\"method\":{:?},\"terms\":{},\"output_terms\":{},\"changed\":{},\"repeated_indices\":{},\"repetitions\":{},\"samples_ns\":{:?},\"median_ns\":{median},\"diagnostic\":{diagnostic}}}",
                 case.name,
                 method.name(),
                 method.input(&case).unwrap().nterms(),

@@ -203,7 +203,16 @@ mod tests {
             let expected =
                 crate::tensor::SymbolicTensor::infer((&metric * &color).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_color(crate::color::ColorSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        color: Some(crate::color::ColorSimplifySettings::default()),
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -213,7 +222,16 @@ mod tests {
                     (bracket!(&metric, &color)).as_atom_view().to_owned()
                 )
                 .unwrap()
-                .simplify_color(crate::color::ColorSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    color: Some(crate::color::ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -221,7 +239,6 @@ mod tests {
                 expected
             );
             let settings = ColorSimplifySettings {
-                simplify_non_color: false,
                 ..Default::default()
             };
             assert_eq!(
@@ -229,7 +246,16 @@ mod tests {
                     (bracket!(&metric, &color)).as_atom_view().to_owned()
                 )
                 .unwrap()
-                .simplify_color(settings)
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    color: Some(settings),
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -253,7 +279,16 @@ mod tests {
                 (bracket!(g!(a, b), color)).as_atom_view().to_owned()
             )
             .unwrap()
-            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                color: Some(crate::color::ColorSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -271,7 +306,17 @@ mod tests {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((bracket!(left, right)).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -359,7 +404,16 @@ mod tests {
         );
         let source = crate::tensor::SymbolicTensor::infer(expression).unwrap();
         let result = source
-            .simplify_color(crate::color::ColorSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                color: Some(crate::color::ColorSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap();

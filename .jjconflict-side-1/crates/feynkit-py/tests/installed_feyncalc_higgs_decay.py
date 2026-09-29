@@ -9,12 +9,17 @@ The vector channels describe a Higgs above the two-vector threshold, not the
 off-shell WW* and ZZ* decays of the physical 125 GeV Higgs.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    ColorSimplifySettings,
+)
+
 from pathlib import Path
 
 from symbolica import E, Expression, S
-from symbolica.community import hep as fk
+from symbolica.community import feynkit as fk
 from symbolica.community.tensor import (
-    CookSettings,
     GammaSimplifySettings,
     TensorExpression,
 )
@@ -96,7 +101,13 @@ for pdgs, mass, yukawa, yukawa_mass in (
     )
     adjoint = (
         operator.dirac_adjoint()
-        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .reduce_algebra(
+            AlgebraSettings(
+                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
+                epsilon=True,
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
     )
@@ -146,11 +157,16 @@ for pdgs, mass, yukawa, yukawa_mass in (
     scalar = (
         TensorExpression(
             operator.to_expression() * adjoint * spin_projector * color_projector,
-            cook_indices=CookSettings.indices(),
+            intern="flattened",
         )
-        .simplify_gamma()
-        .simplify_color()
-        .contract()
+        .reduce_algebra(
+            AlgebraSettings(
+                gamma=GammaSimplifySettings(),
+                epsilon=True,
+                color=ColorSimplifySettings(),
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_dots()
     )

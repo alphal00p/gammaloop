@@ -1,0 +1,4862 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "31",
+    "/tmp/unified-tensor-baseline/final-host12/native-bin/metric_contraction_benchmark",
+    "/tmp/unified-tensor-baseline/final-profiler12-fixtures",
+    "1",
+    "1"
+  ],
+  "environment": {
+    "SPENSO_NETWORK_PROFILE": "1"
+  },
+  "executable_sha256": "a27fbf5248b8287d77ec0b5be263da05fcf1a35511934574257f4a8d94503837",
+  "stderr_sha256": "f4f8c927a6fe7f0e80ae14b2561ab05c7749c9f9eed46149aab9a5906a6d3724",
+  "boundary": "Separate diagnostic process. Only labeled captures retained; no primary performance from profiler-enabled process. Timers process-global nested inclusive wall and top16 sorted only; zero/omitted counters are zero. Cache events count classification and interface lookups, not every deep visit. parse.structure.visit counts ordinary recursive syntactic inference only.",
+  "rows": [
+    {
+      "scope": "metric/metric_hit/normalize_dots",
+      "elapsed_display": "1.240\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_hit/parse_only",
+      "elapsed_display": "7.330\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_hit/parse_and_normalize_dots",
+      "elapsed_display": "6.640\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_hit/repeated_indices_only",
+      "elapsed_display": "530.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_miss/normalize_dots",
+      "elapsed_display": "1.160\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_miss/parse_only",
+      "elapsed_display": "8.680\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_miss/parse_and_normalize_dots",
+      "elapsed_display": "7.340\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_miss/repeated_indices_only",
+      "elapsed_display": "630.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dimension_miss/normalize_dots",
+      "elapsed_display": "980.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dimension_miss/parse_only",
+      "elapsed_display": "6.521\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dimension_miss/parse_and_normalize_dots",
+      "elapsed_display": "6.450\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dimension_miss/repeated_indices_only",
+      "elapsed_display": "610.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/representation_miss/normalize_dots",
+      "elapsed_display": "1.040\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/representation_miss/parse_only",
+      "elapsed_display": "6.590\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/representation_miss/parse_and_normalize_dots",
+      "elapsed_display": "6.440\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/representation_miss/repeated_indices_only",
+      "elapsed_display": "580.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dual_hit/normalize_dots",
+      "elapsed_display": "1.130\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dual_hit/parse_only",
+      "elapsed_display": "7.150\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dual_hit/parse_and_normalize_dots",
+      "elapsed_display": "7.849\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dual_hit/repeated_indices_only",
+      "elapsed_display": "640.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dual_variance_miss/normalize_dots",
+      "elapsed_display": "1.030\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dual_variance_miss/parse_only",
+      "elapsed_display": "7.680\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dual_variance_miss/parse_and_normalize_dots",
+      "elapsed_display": "7.630\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dual_variance_miss/repeated_indices_only",
+      "elapsed_display": "620.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/two_metrics/normalize_dots",
+      "elapsed_display": "1.420\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/two_metrics/parse_only",
+      "elapsed_display": "9.150\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/two_metrics/parse_and_normalize_dots",
+      "elapsed_display": "9.410\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/two_metrics/repeated_indices_only",
+      "elapsed_display": "629.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/closed_metric_loop/normalize_dots",
+      "elapsed_display": "2.350\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/closed_metric_loop/parse_only",
+      "elapsed_display": "22.900\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/closed_metric_loop/parse_and_normalize_dots",
+      "elapsed_display": "11.040\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/closed_metric_loop/repeated_indices_only",
+      "elapsed_display": "651.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/closed_metric_loop/typed_contract_resolved",
+      "elapsed_display": "173.970\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.019,
+          "mean_us_rounded": 19.05
+        },
+        "parse.fun": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.017,
+          "mean_us_rounded": 5.637
+        },
+        "parse.structure": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.01,
+          "mean_us_rounded": 3.2
+        },
+        "parse.structure.uncached": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 1.333
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 3.59
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 2.03
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 1.55
+        }
+      },
+      "counters": {
+        "parse.view": 4,
+        "parse.mul": 1,
+        "parse.fun": 3,
+        "parse.mul.factor": 3,
+        "parse.structure.attempt": 3,
+        "parse.structure.ok": 3,
+        "parse.structure.cache_miss": 3,
+        "parse.structure.visit": 3
+      }
+    },
+    {
+      "scope": "metric/closed_metric_loop/typed_epsilon_resolved",
+      "elapsed_display": "256.741\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.029,
+          "mean_us_rounded": 28.681
+        },
+        "parse.fun": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.025,
+          "mean_us_rounded": 8.457
+        },
+        "parse.structure": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.015,
+          "mean_us_rounded": 4.853
+        },
+        "parse.structure.uncached": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.006,
+          "mean_us_rounded": 1.97
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.006,
+          "mean_us_rounded": 5.56
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 2.989
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 2.52
+        }
+      },
+      "counters": {
+        "parse.view": 4,
+        "parse.mul": 1,
+        "parse.fun": 3,
+        "parse.mul.factor": 3,
+        "parse.structure.attempt": 3,
+        "parse.structure.ok": 3,
+        "parse.structure.cache_miss": 3,
+        "parse.structure.visit": 3
+      }
+    },
+    {
+      "scope": "metric/epsilon_partner/normalize_dots",
+      "elapsed_display": "1.780\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_partner/parse_only",
+      "elapsed_display": "22.850\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_partner/parse_and_normalize_dots",
+      "elapsed_display": "12.600\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_partner/repeated_indices_only",
+      "elapsed_display": "730.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_partner/typed_contract_resolved",
+      "elapsed_display": "208.591\u00b5s",
+      "timers": {
+        "parse.fun": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.021,
+          "mean_us_rounded": 6.88
+        },
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.017,
+          "mean_us_rounded": 16.96
+        },
+        "parse.structure": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.011,
+          "mean_us_rounded": 3.533
+        },
+        "parse.structure.uncached": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.005,
+          "mean_us_rounded": 1.773
+        },
+        "graph.build": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.005,
+          "mean_us_rounded": 2.51
+        },
+        "graph.expr_tree": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 1.379
+        },
+        "graph.sync_order": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 1.145
+        }
+      },
+      "counters": {
+        "parse.view": 4,
+        "parse.mul": 1,
+        "parse.fun": 3,
+        "parse.mul.factor": 2,
+        "parse.structure.attempt": 3,
+        "parse.structure.ok": 3,
+        "parse.structure.cache_miss": 2,
+        "parse.structure.visit": 3
+      }
+    },
+    {
+      "scope": "metric/epsilon_partner/typed_epsilon_resolved",
+      "elapsed_display": "341.141\u00b5s",
+      "timers": {
+        "parse.fun": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.04,
+          "mean_us_rounded": 7.944
+        },
+        "parse.mul": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.039,
+          "mean_us_rounded": 19.45
+        },
+        "parse.structure": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.021,
+          "mean_us_rounded": 4.146
+        },
+        "parse.structure.uncached": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.01,
+          "mean_us_rounded": 1.904
+        },
+        "graph.build": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.009,
+          "mean_us_rounded": 3.04
+        },
+        "graph.sync_order": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 1.407
+        },
+        "graph.expr_tree": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 1.363
+        }
+      },
+      "counters": {
+        "parse.view": 7,
+        "parse.mul": 2,
+        "parse.fun": 5,
+        "parse.mul.factor": 4,
+        "parse.structure.attempt": 5,
+        "parse.structure.ok": 5,
+        "parse.structure.cache_miss": 4,
+        "parse.structure.visit": 5
+      }
+    },
+    {
+      "scope": "metric/chain_partner/normalize_dots",
+      "elapsed_display": "1.280\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/chain_partner/parse_only",
+      "elapsed_display": "12.100\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/chain_partner/parse_and_normalize_dots",
+      "elapsed_display": "12.070\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/chain_partner/repeated_indices_only",
+      "elapsed_display": "1.030\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/trace_partner/normalize_dots",
+      "elapsed_display": "1.490\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/trace_partner/parse_only",
+      "elapsed_display": "11.910\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/trace_partner/parse_and_normalize_dots",
+      "elapsed_display": "11.600\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/trace_partner/repeated_indices_only",
+      "elapsed_display": "751.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/sum_of_products/normalize_dots",
+      "elapsed_display": "1.390\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/sum_of_products/parse_only",
+      "elapsed_display": "12.589\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/sum_of_products/parse_and_normalize_dots",
+      "elapsed_display": "12.520\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/sum_of_products/repeated_indices_only",
+      "elapsed_display": "580.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/factored_sum_partner/normalize_dots",
+      "elapsed_display": "1.370\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/factored_sum_partner/parse_only",
+      "elapsed_display": "8.770\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/factored_sum_partner/parse_and_normalize_dots",
+      "elapsed_display": "8.389\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/factored_sum_partner/repeated_indices_only",
+      "elapsed_display": "750.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/compact_metric/normalize_dots",
+      "elapsed_display": "1.300\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/compact_metric/parse_only",
+      "elapsed_display": "6.550\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/compact_metric/parse_and_normalize_dots",
+      "elapsed_display": "6.650\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/compact_metric/repeated_indices_only",
+      "elapsed_display": "560.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/no_metric/normalize_dots",
+      "elapsed_display": "1.160\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/no_metric/parse_only",
+      "elapsed_display": "4.770\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/no_metric/parse_and_normalize_dots",
+      "elapsed_display": "5.180\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/no_metric/repeated_indices_only",
+      "elapsed_display": "500.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_tensor/normalize_dots",
+      "elapsed_display": "1.300\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_tensor/parse_only",
+      "elapsed_display": "6.001\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_tensor/parse_and_normalize_dots",
+      "elapsed_display": "5.340\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_tensor/repeated_indices_only",
+      "elapsed_display": "710.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_miss/normalize_dots",
+      "elapsed_display": "1.090\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_miss/parse_only",
+      "elapsed_display": "5.500\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_miss/parse_and_normalize_dots",
+      "elapsed_display": "6.271\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_miss/repeated_indices_only",
+      "elapsed_display": "490.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dimension_miss/normalize_dots",
+      "elapsed_display": "1.070\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dimension_miss/parse_only",
+      "elapsed_display": "4.591\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dimension_miss/parse_and_normalize_dots",
+      "elapsed_display": "5.050\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dimension_miss/repeated_indices_only",
+      "elapsed_display": "450.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dual/normalize_dots",
+      "elapsed_display": "1.130\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dual/parse_only",
+      "elapsed_display": "5.570\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dual/parse_and_normalize_dots",
+      "elapsed_display": "5.921\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dual/repeated_indices_only",
+      "elapsed_display": "550.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_variance_miss/normalize_dots",
+      "elapsed_display": "1.031\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_variance_miss/parse_only",
+      "elapsed_display": "5.120\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_variance_miss/parse_and_normalize_dots",
+      "elapsed_display": "5.130\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_variance_miss/repeated_indices_only",
+      "elapsed_display": "520.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_parameter/normalize_dots",
+      "elapsed_display": "1.309\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_parameter/parse_only",
+      "elapsed_display": "5.310\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_parameter/parse_and_normalize_dots",
+      "elapsed_display": "5.330\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_parameter/repeated_indices_only",
+      "elapsed_display": "540.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dot/normalize_dots",
+      "elapsed_display": "1.610\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dot/parse_only",
+      "elapsed_display": "13.740\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dot/parse_and_normalize_dots",
+      "elapsed_display": "6.920\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dot/repeated_indices_only",
+      "elapsed_display": "600.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_dot/typed_contract_resolved",
+      "elapsed_display": "196.661\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.013,
+          "mean_us_rounded": 12.98
+        },
+        "parse.fun": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.011,
+          "mean_us_rounded": 5.539
+        },
+        "parse.structure": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.006,
+          "mean_us_rounded": 3.2
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 2.889
+        },
+        "parse.structure.uncached": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 1.24
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 1.91
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.001,
+          "mean_us_rounded": 1.089
+        }
+      },
+      "counters": {
+        "parse.view": 3,
+        "parse.mul": 1,
+        "parse.fun": 2,
+        "parse.mul.factor": 2,
+        "parse.structure.attempt": 2,
+        "parse.structure.ok": 2,
+        "parse.structure.cache_miss": 2,
+        "parse.structure.visit": 2
+      }
+    },
+    {
+      "scope": "metric/vector_dot/typed_epsilon_resolved",
+      "elapsed_display": "234.911\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.018,
+          "mean_us_rounded": 17.82
+        },
+        "parse.fun": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.015,
+          "mean_us_rounded": 7.56
+        },
+        "parse.structure": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.009,
+          "mean_us_rounded": 4.735
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 4.26
+        },
+        "parse.structure.uncached": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 1.505
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 2.53
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 1.77
+        }
+      },
+      "counters": {
+        "parse.view": 3,
+        "parse.mul": 1,
+        "parse.fun": 2,
+        "parse.mul.factor": 2,
+        "parse.structure.attempt": 2,
+        "parse.structure.ok": 2,
+        "parse.structure.cache_miss": 2,
+        "parse.structure.visit": 2
+      }
+    },
+    {
+      "scope": "metric/vector_chain/normalize_dots",
+      "elapsed_display": "1.540\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_chain/parse_only",
+      "elapsed_display": "11.020\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_chain/parse_and_normalize_dots",
+      "elapsed_display": "10.960\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_chain/repeated_indices_only",
+      "elapsed_display": "840.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_trace/normalize_dots",
+      "elapsed_display": "1.450\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_trace/parse_only",
+      "elapsed_display": "11.160\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_trace/parse_and_normalize_dots",
+      "elapsed_display": "10.720\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_trace/repeated_indices_only",
+      "elapsed_display": "790.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_symmetric_trace/normalize_dots",
+      "elapsed_display": "1.530\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_symmetric_trace/parse_only",
+      "elapsed_display": "10.510\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_symmetric_trace/parse_and_normalize_dots",
+      "elapsed_display": "9.989\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_symmetric_trace/repeated_indices_only",
+      "elapsed_display": "690.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_epsilon/normalize_dots",
+      "elapsed_display": "1.320\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_epsilon/parse_only",
+      "elapsed_display": "25.660\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_epsilon/parse_and_normalize_dots",
+      "elapsed_display": "11.960\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_epsilon/repeated_indices_only",
+      "elapsed_display": "810.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_epsilon/typed_contract_resolved",
+      "elapsed_display": "238.570\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.024,
+          "mean_us_rounded": 11.95
+        },
+        "parse.fun": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.02,
+          "mean_us_rounded": 6.553
+        },
+        "parse.structure": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.01,
+          "mean_us_rounded": 3.227
+        },
+        "graph.build": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.006,
+          "mean_us_rounded": 2.955
+        },
+        "parse.structure.uncached": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.005,
+          "mean_us_rounded": 1.583
+        },
+        "graph.expr_tree": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 1.48
+        },
+        "graph.sync_order": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 1.21
+        }
+      },
+      "counters": {
+        "parse.view": 7,
+        "parse.mul": 2,
+        "parse.fun": 3,
+        "parse.mul.factor": 5,
+        "parse.structure.attempt": 3,
+        "parse.structure.ok": 3,
+        "parse.structure.cache_miss": 2,
+        "parse.structure.visit": 3
+      }
+    },
+    {
+      "scope": "metric/vector_epsilon/typed_epsilon_resolved",
+      "elapsed_display": "332.081\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.035,
+          "mean_us_rounded": 17.736
+        },
+        "parse.fun": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.034,
+          "mean_us_rounded": 6.87
+        },
+        "parse.structure": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.018,
+          "mean_us_rounded": 3.608
+        },
+        "graph.build": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.008,
+          "mean_us_rounded": 2.833
+        },
+        "parse.structure.uncached": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.007,
+          "mean_us_rounded": 1.498
+        },
+        "graph.expr_tree": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 1.273
+        },
+        "graph.sync_order": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 1.227
+        }
+      },
+      "counters": {
+        "parse.view": 8,
+        "parse.mul": 2,
+        "parse.fun": 5,
+        "parse.mul.factor": 5,
+        "parse.structure.attempt": 5,
+        "parse.structure.ok": 5,
+        "parse.structure.cache_miss": 4,
+        "parse.structure.visit": 5
+      }
+    },
+    {
+      "scope": "metric/tagged_compact_metric/normalize_dots",
+      "elapsed_display": "1.140\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/tagged_compact_metric/parse_only",
+      "elapsed_display": "8.620\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/tagged_compact_metric/parse_and_normalize_dots",
+      "elapsed_display": "7.711\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/tagged_compact_metric/repeated_indices_only",
+      "elapsed_display": "510.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_square/normalize_dots",
+      "elapsed_display": "2.150\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_square/parse_only",
+      "elapsed_display": "28.470\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_square/parse_and_normalize_dots",
+      "elapsed_display": "13.010\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_square/repeated_indices_only",
+      "elapsed_display": "820.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_square/typed_contract_resolved",
+      "elapsed_display": "99.640\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_square/typed_epsilon_resolved",
+      "elapsed_display": "1.357ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 30,
+          "inclusive_ms_rounded": 0.228,
+          "mean_us_rounded": 7.595
+        },
+        "parse.structure": {
+          "calls": 51,
+          "inclusive_ms_rounded": 0.167,
+          "mean_us_rounded": 3.276
+        },
+        "parse.add": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.159,
+          "mean_us_rounded": 79.371
+        },
+        "parse.structure.uncached": {
+          "calls": 49,
+          "inclusive_ms_rounded": 0.145,
+          "mean_us_rounded": 2.956
+        },
+        "parse.fun": {
+          "calls": 28,
+          "inclusive_ms_rounded": 0.093,
+          "mean_us_rounded": 3.316
+        },
+        "graph.build": {
+          "calls": 11,
+          "inclusive_ms_rounded": 0.037,
+          "mean_us_rounded": 3.406
+        },
+        "parse.pow": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.031,
+          "mean_us_rounded": 15.405
+        },
+        "graph.expr_tree": {
+          "calls": 10,
+          "inclusive_ms_rounded": 0.012,
+          "mean_us_rounded": 1.219
+        },
+        "graph.sync_order": {
+          "calls": 11,
+          "inclusive_ms_rounded": 0.012,
+          "mean_us_rounded": 1.046
+        }
+      },
+      "counters": {
+        "parse.view": 71,
+        "parse.mul": 30,
+        "parse.add": 2,
+        "parse.pow": 2,
+        "parse.fun": 28,
+        "parse.mul.factor": 31,
+        "parse.add.term": 25,
+        "parse.structure.attempt": 51,
+        "parse.structure.ok": 28,
+        "parse.structure.err": 23,
+        "parse.structure.cache_hit": 2,
+        "parse.structure.cache_miss": 18,
+        "parse.structure.visit": 141
+      }
+    },
+    {
+      "scope": "metric/epsilon_distinct_pair/normalize_dots",
+      "elapsed_display": "3.160\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_distinct_pair/parse_only",
+      "elapsed_display": "30.021\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_distinct_pair/parse_and_normalize_dots",
+      "elapsed_display": "15.270\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_distinct_pair/repeated_indices_only",
+      "elapsed_display": "870.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_distinct_pair/typed_contract_resolved",
+      "elapsed_display": "114.270\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_distinct_pair/typed_epsilon_resolved",
+      "elapsed_display": "1.984ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.025,
+          "mean_us_rounded": 24.961
+        },
+        "parse.fun": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.021,
+          "mean_us_rounded": 10.351
+        },
+        "parse.structure": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.012,
+          "mean_us_rounded": 6.08
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.006,
+          "mean_us_rounded": 6.18
+        },
+        "parse.structure.uncached": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.005,
+          "mean_us_rounded": 2.435
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 2.93
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 2.64
+        }
+      },
+      "counters": {
+        "parse.view": 4,
+        "parse.mul": 1,
+        "parse.fun": 2,
+        "parse.mul.factor": 3,
+        "parse.structure.attempt": 2,
+        "parse.structure.ok": 2,
+        "parse.structure.cache_miss": 2,
+        "parse.structure.visit": 2
+      }
+    },
+    {
+      "scope": "metric/epsilon_compact_spectator/normalize_dots",
+      "elapsed_display": "1.230\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_compact_spectator/parse_only",
+      "elapsed_display": "21.571\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_compact_spectator/parse_and_normalize_dots",
+      "elapsed_display": "13.870\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_compact_spectator/repeated_indices_only",
+      "elapsed_display": "670.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_compact_spectator/typed_contract_resolved",
+      "elapsed_display": "66.601\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/epsilon_compact_spectator/typed_epsilon_resolved",
+      "elapsed_display": "58.760\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace/normalize_dots",
+      "elapsed_display": "990.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace/parse_only",
+      "elapsed_display": "5.680\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace/parse_and_normalize_dots",
+      "elapsed_display": "4.620\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace/repeated_indices_only",
+      "elapsed_display": "360.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace/typed_contract_resolved",
+      "elapsed_display": "7.540\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace/typed_epsilon_resolved",
+      "elapsed_display": "6.070\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace_square/normalize_dots",
+      "elapsed_display": "840.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace_square/parse_only",
+      "elapsed_display": "7.290\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace_square/parse_and_normalize_dots",
+      "elapsed_display": "5.480\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace_square/repeated_indices_only",
+      "elapsed_display": "351.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace_square/typed_contract_resolved",
+      "elapsed_display": "7.890\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace_square/typed_epsilon_resolved",
+      "elapsed_display": "6.270\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace_cube/normalize_dots",
+      "elapsed_display": "1.140\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace_cube/parse_only",
+      "elapsed_display": "6.070\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace_cube/parse_and_normalize_dots",
+      "elapsed_display": "5.110\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace_cube/repeated_indices_only",
+      "elapsed_display": "340.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace_cube/typed_contract_resolved",
+      "elapsed_display": "6.900\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_self_trace_cube/typed_epsilon_resolved",
+      "elapsed_display": "6.380\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_symbolic_trace_square/normalize_dots",
+      "elapsed_display": "1.030\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_symbolic_trace_square/parse_only",
+      "elapsed_display": "7.420\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_symbolic_trace_square/parse_and_normalize_dots",
+      "elapsed_display": "6.010\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_symbolic_trace_square/repeated_indices_only",
+      "elapsed_display": "350.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_symbolic_trace_square/typed_contract_resolved",
+      "elapsed_display": "10.060\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_symbolic_trace_square/typed_epsilon_resolved",
+      "elapsed_display": "8.160\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compound_trace/normalize_dots",
+      "elapsed_display": "1.450\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compound_trace/parse_only",
+      "elapsed_display": "10.680\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compound_trace/parse_and_normalize_dots",
+      "elapsed_display": "7.590\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compound_trace/repeated_indices_only",
+      "elapsed_display": "350.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compound_trace/typed_contract_resolved",
+      "elapsed_display": "13.429\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compound_trace/typed_epsilon_resolved",
+      "elapsed_display": "9.910\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_dual_trace_square/normalize_dots",
+      "elapsed_display": "1.070\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_dual_trace_square/parse_only",
+      "elapsed_display": "7.911\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_dual_trace_square/parse_and_normalize_dots",
+      "elapsed_display": "6.500\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_dual_trace_square/repeated_indices_only",
+      "elapsed_display": "320.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_dual_trace_square/typed_contract_resolved",
+      "elapsed_display": "8.460\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_dual_trace_square/typed_epsilon_resolved",
+      "elapsed_display": "6.400\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_dual_trace_miss/normalize_dots",
+      "elapsed_display": "1.489\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_dual_trace_miss/parse_only",
+      "elapsed_display": "8.780\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_dual_trace_miss/parse_and_normalize_dots",
+      "elapsed_display": "5.690\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_dual_trace_miss/repeated_indices_only",
+      "elapsed_display": "449.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_dual_trace_miss/typed_contract_resolved",
+      "elapsed_display": "39.270\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_dual_trace_miss/typed_epsilon_resolved",
+      "elapsed_display": "43.210\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_trace_dimension_miss/normalize_dots",
+      "elapsed_display": "1.100\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_trace_dimension_miss/parse_only",
+      "elapsed_display": "4.471\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_trace_dimension_miss/parse_and_normalize_dots",
+      "elapsed_display": "4.990\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_trace_dimension_miss/repeated_indices_only",
+      "elapsed_display": "490.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_square/normalize_dots",
+      "elapsed_display": "2.690\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_square/parse_only",
+      "elapsed_display": "16.861\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_square/parse_and_normalize_dots",
+      "elapsed_display": "7.570\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_square/repeated_indices_only",
+      "elapsed_display": "600.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_square/typed_contract_resolved",
+      "elapsed_display": "132.971\u00b5s",
+      "timers": {
+        "parse.pow": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.016,
+          "mean_us_rounded": 15.77
+        },
+        "parse.fun": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.014,
+          "mean_us_rounded": 6.925
+        },
+        "parse.structure": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.008,
+          "mean_us_rounded": 3.82
+        },
+        "graph.build": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 2.22
+        },
+        "parse.structure.uncached": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 2.57
+        },
+        "graph.sync_order": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 0.815
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.001,
+          "mean_us_rounded": 1.2
+        }
+      },
+      "counters": {
+        "parse.view": 4,
+        "parse.pow": 1,
+        "parse.fun": 2,
+        "parse.structure.attempt": 2,
+        "parse.structure.ok": 2,
+        "parse.structure.cache_hit": 1,
+        "parse.structure.cache_miss": 1,
+        "parse.structure.visit": 1
+      }
+    },
+    {
+      "scope": "metric/dot_metric_square/typed_epsilon_resolved",
+      "elapsed_display": "205.411\u00b5s",
+      "timers": {
+        "parse.pow": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.024,
+          "mean_us_rounded": 23.81
+        },
+        "parse.fun": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.021,
+          "mean_us_rounded": 10.325
+        },
+        "parse.structure": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.013,
+          "mean_us_rounded": 6.25
+        },
+        "graph.build": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.007,
+          "mean_us_rounded": 3.36
+        },
+        "parse.structure.uncached": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 4.37
+        },
+        "graph.sync_order": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 1.42
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 2.45
+        }
+      },
+      "counters": {
+        "parse.view": 4,
+        "parse.pow": 1,
+        "parse.fun": 2,
+        "parse.structure.attempt": 2,
+        "parse.structure.ok": 2,
+        "parse.structure.cache_hit": 1,
+        "parse.structure.cache_miss": 1,
+        "parse.structure.visit": 1
+      }
+    },
+    {
+      "scope": "metric/dot_metric_fourth/normalize_dots",
+      "elapsed_display": "1.549\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_fourth/parse_only",
+      "elapsed_display": "6.000\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_fourth/parse_and_normalize_dots",
+      "elapsed_display": "6.440\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_fourth/repeated_indices_only",
+      "elapsed_display": "520.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_negative_even/normalize_dots",
+      "elapsed_display": "2.940\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_negative_even/parse_only",
+      "elapsed_display": "7.940\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_negative_even/parse_and_normalize_dots",
+      "elapsed_display": "9.260\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_negative_even/repeated_indices_only",
+      "elapsed_display": "510.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_fractional/normalize_dots",
+      "elapsed_display": "1.140\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_fractional/parse_only",
+      "elapsed_display": "6.150\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_fractional/parse_and_normalize_dots",
+      "elapsed_display": "6.010\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_metric_fractional/repeated_indices_only",
+      "elapsed_display": "629.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_square/normalize_dots",
+      "elapsed_display": "4.569\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_square/parse_only",
+      "elapsed_display": "10.200\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_square/parse_and_normalize_dots",
+      "elapsed_display": "7.110\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_square/repeated_indices_only",
+      "elapsed_display": "600.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_square/typed_contract_resolved",
+      "elapsed_display": "159.950\u00b5s",
+      "timers": {
+        "parse.fun": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.015,
+          "mean_us_rounded": 4.93
+        },
+        "parse.pow": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.011,
+          "mean_us_rounded": 11.34
+        },
+        "parse.structure": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.007,
+          "mean_us_rounded": 2.287
+        },
+        "parse.structure.uncached": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 1.97
+        },
+        "graph.build": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 1.69
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.001,
+          "mean_us_rounded": 1.38
+        },
+        "graph.sync_order": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.001,
+          "mean_us_rounded": 0.625
+        }
+      },
+      "counters": {
+        "parse.view": 4,
+        "parse.pow": 1,
+        "parse.fun": 3,
+        "parse.structure.attempt": 3,
+        "parse.structure.ok": 2,
+        "parse.structure.err": 1,
+        "parse.structure.cache_hit": 1,
+        "parse.structure.cache_miss": 1,
+        "parse.structure.visit": 4
+      }
+    },
+    {
+      "scope": "metric/dot_vector_square/typed_epsilon_resolved",
+      "elapsed_display": "199.831\u00b5s",
+      "timers": {
+        "parse.fun": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.019,
+          "mean_us_rounded": 6.357
+        },
+        "parse.pow": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.014,
+          "mean_us_rounded": 14.24
+        },
+        "parse.structure": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.009,
+          "mean_us_rounded": 2.99
+        },
+        "parse.structure.uncached": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.005,
+          "mean_us_rounded": 2.686
+        },
+        "graph.build": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 2.2
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 1.92
+        },
+        "graph.sync_order": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 0.845
+        }
+      },
+      "counters": {
+        "parse.view": 4,
+        "parse.pow": 1,
+        "parse.fun": 3,
+        "parse.structure.attempt": 3,
+        "parse.structure.ok": 2,
+        "parse.structure.err": 1,
+        "parse.structure.cache_hit": 1,
+        "parse.structure.cache_miss": 1,
+        "parse.structure.visit": 4
+      }
+    },
+    {
+      "scope": "metric/dot_vector_cube/normalize_dots",
+      "elapsed_display": "3.380\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_cube/parse_only",
+      "elapsed_display": "3.590\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_cube/parse_and_normalize_dots",
+      "elapsed_display": "5.620\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_cube/repeated_indices_only",
+      "elapsed_display": "520.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_nested_vectors/normalize_dots",
+      "elapsed_display": "1.740\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_nested_vectors/parse_only",
+      "elapsed_display": "4.090\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_nested_vectors/parse_and_normalize_dots",
+      "elapsed_display": "4.630\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_nested_vectors/repeated_indices_only",
+      "elapsed_display": "480.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compact_vector/normalize_dots",
+      "elapsed_display": "880.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compact_vector/parse_only",
+      "elapsed_display": "9.250\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compact_vector/parse_and_normalize_dots",
+      "elapsed_display": "6.209\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compact_vector/repeated_indices_only",
+      "elapsed_display": "480.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compact_vector/typed_contract_resolved",
+      "elapsed_display": "27.280\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compact_vector/typed_epsilon_resolved",
+      "elapsed_display": "19.769\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_dimension_miss/normalize_dots",
+      "elapsed_display": "910.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_dimension_miss/parse_only",
+      "elapsed_display": "5.840\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_dimension_miss/parse_and_normalize_dots",
+      "elapsed_display": "6.560\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_dimension_miss/repeated_indices_only",
+      "elapsed_display": "550.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_no_slot/normalize_dots",
+      "elapsed_display": "700.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_no_slot/parse_only",
+      "elapsed_display": "4.820\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_no_slot/parse_and_normalize_dots",
+      "elapsed_display": "5.060\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_vector_no_slot/repeated_indices_only",
+      "elapsed_display": "490.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compact_scalar_factors/normalize_dots",
+      "elapsed_display": "1.590\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compact_scalar_factors/parse_only",
+      "elapsed_display": "16.560\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compact_scalar_factors/parse_and_normalize_dots",
+      "elapsed_display": "9.450\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compact_scalar_factors/repeated_indices_only",
+      "elapsed_display": "610.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compact_scalar_factors/typed_contract_resolved",
+      "elapsed_display": "46.071\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_compact_scalar_factors/typed_epsilon_resolved",
+      "elapsed_display": "40.000\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_factored_scope/normalize_dots",
+      "elapsed_display": "1.340\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_factored_scope/parse_only",
+      "elapsed_display": "12.721\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_factored_scope/parse_and_normalize_dots",
+      "elapsed_display": "8.560\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_factored_scope/repeated_indices_only",
+      "elapsed_display": "510.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_factored_scope/typed_contract_resolved",
+      "elapsed_display": "18.480\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_factored_scope/typed_epsilon_resolved",
+      "elapsed_display": "14.120\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_malformed_metric/normalize_dots",
+      "elapsed_display": "1.020\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_malformed_metric/parse_only",
+      "elapsed_display": "4.900\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_malformed_metric/parse_and_normalize_dots",
+      "elapsed_display": "5.250\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_malformed_metric/repeated_indices_only",
+      "elapsed_display": "450.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_malformed_slot/normalize_dots",
+      "elapsed_display": "880.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_malformed_slot/parse_only",
+      "elapsed_display": "4.900\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_malformed_slot/parse_and_normalize_dots",
+      "elapsed_display": "5.410\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_malformed_slot/repeated_indices_only",
+      "elapsed_display": "420.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_opaque_payload/normalize_dots",
+      "elapsed_display": "950.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_opaque_payload/parse_only",
+      "elapsed_display": "8.789\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_opaque_payload/parse_and_normalize_dots",
+      "elapsed_display": "6.240\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_opaque_payload/repeated_indices_only",
+      "elapsed_display": "390.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_opaque_payload/typed_contract_resolved",
+      "elapsed_display": "12.829\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/dot_opaque_payload/typed_epsilon_resolved",
+      "elapsed_display": "9.870\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/symmetric_trace_partner/normalize_dots",
+      "elapsed_display": "1.449\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/symmetric_trace_partner/parse_only",
+      "elapsed_display": "12.420\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/symmetric_trace_partner/parse_and_normalize_dots",
+      "elapsed_display": "11.340\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/symmetric_trace_partner/repeated_indices_only",
+      "elapsed_display": "731.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_sum_8/normalize_dots",
+      "elapsed_display": "1.740\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_sum_8/parse_only",
+      "elapsed_display": "15.660\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_sum_8/parse_and_normalize_dots",
+      "elapsed_display": "16.680\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_sum_8/repeated_indices_only",
+      "elapsed_display": "1.240\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_sum_8/normalize_dots",
+      "elapsed_display": "1.770\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_sum_8/parse_only",
+      "elapsed_display": "14.531\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_sum_8/parse_and_normalize_dots",
+      "elapsed_display": "15.180\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_sum_8/repeated_indices_only",
+      "elapsed_display": "970.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_sum_32/normalize_dots",
+      "elapsed_display": "3.790\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_sum_32/parse_only",
+      "elapsed_display": "48.190\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_sum_32/parse_and_normalize_dots",
+      "elapsed_display": "52.071\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_sum_32/repeated_indices_only",
+      "elapsed_display": "2.260\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_sum_32/normalize_dots",
+      "elapsed_display": "3.840\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_sum_32/parse_only",
+      "elapsed_display": "47.229\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_sum_32/parse_and_normalize_dots",
+      "elapsed_display": "49.260\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_sum_32/repeated_indices_only",
+      "elapsed_display": "2.260\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_sum_128/normalize_dots",
+      "elapsed_display": "12.500\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_sum_128/parse_only",
+      "elapsed_display": "178.391\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_sum_128/parse_and_normalize_dots",
+      "elapsed_display": "182.701\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_sum_128/repeated_indices_only",
+      "elapsed_display": "7.270\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_sum_128/normalize_dots",
+      "elapsed_display": "11.660\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_sum_128/parse_only",
+      "elapsed_display": "180.431\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_sum_128/parse_and_normalize_dots",
+      "elapsed_display": "182.321\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/vector_sum_128/repeated_indices_only",
+      "elapsed_display": "7.080\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/factored_nested_sum_partner/normalize_dots",
+      "elapsed_display": "1.680\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/factored_nested_sum_partner/parse_only",
+      "elapsed_display": "13.170\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/factored_nested_sum_partner/parse_and_normalize_dots",
+      "elapsed_display": "13.900\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/factored_nested_sum_partner/repeated_indices_only",
+      "elapsed_display": "980.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/many_spectators_hit/normalize_dots",
+      "elapsed_display": "4.040\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/many_spectators_hit/parse_only",
+      "elapsed_display": "62.270\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/many_spectators_hit/parse_and_normalize_dots",
+      "elapsed_display": "70.740\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/many_spectators_hit/repeated_indices_only",
+      "elapsed_display": "590.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/many_spectators_miss/normalize_dots",
+      "elapsed_display": "4.280\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/many_spectators_miss/parse_only",
+      "elapsed_display": "62.620\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/many_spectators_miss/parse_and_normalize_dots",
+      "elapsed_display": "64.000\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/many_spectators_miss/repeated_indices_only",
+      "elapsed_display": "2.051\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/eight_metrics/normalize_dots",
+      "elapsed_display": "2.060\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/eight_metrics/parse_only",
+      "elapsed_display": "23.141\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/eight_metrics/parse_and_normalize_dots",
+      "elapsed_display": "24.620\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/eight_metrics/repeated_indices_only",
+      "elapsed_display": "640.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_8/normalize_dots",
+      "elapsed_display": "3.010\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_8/parse_only",
+      "elapsed_display": "36.110\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_8/parse_and_normalize_dots",
+      "elapsed_display": "24.890\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_8/repeated_indices_only",
+      "elapsed_display": "660.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_8/typed_contract_resolved",
+      "elapsed_display": "354.331\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.041,
+          "mean_us_rounded": 40.831
+        },
+        "parse.fun": {
+          "calls": 8,
+          "inclusive_ms_rounded": 0.035,
+          "mean_us_rounded": 4.425
+        },
+        "parse.structure": {
+          "calls": 8,
+          "inclusive_ms_rounded": 0.021,
+          "mean_us_rounded": 2.604
+        },
+        "parse.structure.uncached": {
+          "calls": 8,
+          "inclusive_ms_rounded": 0.007,
+          "mean_us_rounded": 0.927
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.006,
+          "mean_us_rounded": 5.8
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 2.55
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 2.21
+        }
+      },
+      "counters": {
+        "parse.view": 9,
+        "parse.mul": 1,
+        "parse.fun": 8,
+        "parse.mul.factor": 8,
+        "parse.structure.attempt": 8,
+        "parse.structure.ok": 8,
+        "parse.structure.cache_miss": 8,
+        "parse.structure.visit": 8
+      }
+    },
+    {
+      "scope": "metric/metric_loop_8/typed_epsilon_resolved",
+      "elapsed_display": "376.271\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.043,
+          "mean_us_rounded": 42.681
+        },
+        "parse.fun": {
+          "calls": 8,
+          "inclusive_ms_rounded": 0.037,
+          "mean_us_rounded": 4.593
+        },
+        "parse.structure": {
+          "calls": 8,
+          "inclusive_ms_rounded": 0.022,
+          "mean_us_rounded": 2.732
+        },
+        "parse.structure.uncached": {
+          "calls": 8,
+          "inclusive_ms_rounded": 0.007,
+          "mean_us_rounded": 0.929
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.006,
+          "mean_us_rounded": 6.44
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 2.62
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 2.5
+        }
+      },
+      "counters": {
+        "parse.view": 9,
+        "parse.mul": 1,
+        "parse.fun": 8,
+        "parse.mul.factor": 8,
+        "parse.structure.attempt": 8,
+        "parse.structure.ok": 8,
+        "parse.structure.cache_miss": 8,
+        "parse.structure.visit": 8
+      }
+    },
+    {
+      "scope": "metric/metric_chain_16/normalize_dots",
+      "elapsed_display": "3.030\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_chain_16/parse_only",
+      "elapsed_display": "43.270\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_chain_16/parse_and_normalize_dots",
+      "elapsed_display": "45.820\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_chain_16/repeated_indices_only",
+      "elapsed_display": "591.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_16/normalize_dots",
+      "elapsed_display": "4.029\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_16/parse_only",
+      "elapsed_display": "75.560\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_16/parse_and_normalize_dots",
+      "elapsed_display": "47.760\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_16/repeated_indices_only",
+      "elapsed_display": "680.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_16/typed_contract_resolved",
+      "elapsed_display": "632.542\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.073,
+          "mean_us_rounded": 72.78
+        },
+        "parse.fun": {
+          "calls": 16,
+          "inclusive_ms_rounded": 0.065,
+          "mean_us_rounded": 4.036
+        },
+        "parse.structure": {
+          "calls": 16,
+          "inclusive_ms_rounded": 0.039,
+          "mean_us_rounded": 2.427
+        },
+        "parse.structure.uncached": {
+          "calls": 16,
+          "inclusive_ms_rounded": 0.014,
+          "mean_us_rounded": 0.88
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.009,
+          "mean_us_rounded": 8.99
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 3.83
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 3.39
+        }
+      },
+      "counters": {
+        "parse.view": 17,
+        "parse.mul": 1,
+        "parse.fun": 16,
+        "parse.mul.factor": 16,
+        "parse.structure.attempt": 16,
+        "parse.structure.ok": 16,
+        "parse.structure.cache_miss": 16,
+        "parse.structure.visit": 16
+      }
+    },
+    {
+      "scope": "metric/metric_loop_16/typed_epsilon_resolved",
+      "elapsed_display": "689.733\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.079,
+          "mean_us_rounded": 78.961
+        },
+        "parse.fun": {
+          "calls": 16,
+          "inclusive_ms_rounded": 0.07,
+          "mean_us_rounded": 4.346
+        },
+        "parse.structure": {
+          "calls": 16,
+          "inclusive_ms_rounded": 0.041,
+          "mean_us_rounded": 2.556
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.02,
+          "mean_us_rounded": 20.49
+        },
+        "parse.structure.uncached": {
+          "calls": 16,
+          "inclusive_ms_rounded": 0.016,
+          "mean_us_rounded": 0.978
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.014,
+          "mean_us_rounded": 14.39
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 3.79
+        }
+      },
+      "counters": {
+        "parse.view": 17,
+        "parse.mul": 1,
+        "parse.fun": 16,
+        "parse.mul.factor": 16,
+        "parse.structure.attempt": 16,
+        "parse.structure.ok": 16,
+        "parse.structure.cache_miss": 16,
+        "parse.structure.visit": 16
+      }
+    },
+    {
+      "scope": "metric/metric_chain_32/normalize_dots",
+      "elapsed_display": "6.240\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_chain_32/parse_only",
+      "elapsed_display": "84.980\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_chain_32/parse_and_normalize_dots",
+      "elapsed_display": "88.610\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_chain_32/repeated_indices_only",
+      "elapsed_display": "620.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_32/normalize_dots",
+      "elapsed_display": "10.810\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_32/parse_only",
+      "elapsed_display": "111.400\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_32/parse_and_normalize_dots",
+      "elapsed_display": "89.490\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_32/repeated_indices_only",
+      "elapsed_display": "670.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_32/typed_contract_resolved",
+      "elapsed_display": "1.353ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.143,
+          "mean_us_rounded": 142.57
+        },
+        "parse.fun": {
+          "calls": 32,
+          "inclusive_ms_rounded": 0.128,
+          "mean_us_rounded": 3.99
+        },
+        "parse.structure": {
+          "calls": 32,
+          "inclusive_ms_rounded": 0.077,
+          "mean_us_rounded": 2.415
+        },
+        "parse.structure.uncached": {
+          "calls": 32,
+          "inclusive_ms_rounded": 0.029,
+          "mean_us_rounded": 0.91
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.015,
+          "mean_us_rounded": 15.28
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.007,
+          "mean_us_rounded": 6.54
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.005,
+          "mean_us_rounded": 5.34
+        }
+      },
+      "counters": {
+        "parse.view": 33,
+        "parse.mul": 1,
+        "parse.fun": 32,
+        "parse.mul.factor": 32,
+        "parse.structure.attempt": 32,
+        "parse.structure.ok": 32,
+        "parse.structure.cache_miss": 32,
+        "parse.structure.visit": 32
+      }
+    },
+    {
+      "scope": "metric/metric_loop_32/typed_epsilon_resolved",
+      "elapsed_display": "1.396ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.147,
+          "mean_us_rounded": 146.561
+        },
+        "parse.fun": {
+          "calls": 32,
+          "inclusive_ms_rounded": 0.131,
+          "mean_us_rounded": 4.089
+        },
+        "parse.structure": {
+          "calls": 32,
+          "inclusive_ms_rounded": 0.078,
+          "mean_us_rounded": 2.443
+        },
+        "parse.structure.uncached": {
+          "calls": 32,
+          "inclusive_ms_rounded": 0.029,
+          "mean_us_rounded": 0.893
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.016,
+          "mean_us_rounded": 16.34
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.007,
+          "mean_us_rounded": 6.56
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.005,
+          "mean_us_rounded": 5.24
+        }
+      },
+      "counters": {
+        "parse.view": 33,
+        "parse.mul": 1,
+        "parse.fun": 32,
+        "parse.mul.factor": 32,
+        "parse.structure.attempt": 32,
+        "parse.structure.ok": 32,
+        "parse.structure.cache_miss": 32,
+        "parse.structure.visit": 32
+      }
+    },
+    {
+      "scope": "metric/metric_chain_64/normalize_dots",
+      "elapsed_display": "9.720\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_chain_64/parse_only",
+      "elapsed_display": "166.921\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_chain_64/parse_and_normalize_dots",
+      "elapsed_display": "175.061\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_chain_64/repeated_indices_only",
+      "elapsed_display": "590.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_64/normalize_dots",
+      "elapsed_display": "23.210\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_64/parse_only",
+      "elapsed_display": "218.230\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_64/parse_and_normalize_dots",
+      "elapsed_display": "177.640\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_64/repeated_indices_only",
+      "elapsed_display": "700.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/metric_loop_64/typed_contract_resolved",
+      "elapsed_display": "3.154ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.276,
+          "mean_us_rounded": 275.981
+        },
+        "parse.fun": {
+          "calls": 64,
+          "inclusive_ms_rounded": 0.248,
+          "mean_us_rounded": 3.868
+        },
+        "parse.structure": {
+          "calls": 64,
+          "inclusive_ms_rounded": 0.151,
+          "mean_us_rounded": 2.363
+        },
+        "parse.structure.uncached": {
+          "calls": 64,
+          "inclusive_ms_rounded": 0.055,
+          "mean_us_rounded": 0.854
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.028,
+          "mean_us_rounded": 28.409
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.012,
+          "mean_us_rounded": 12.169
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.009,
+          "mean_us_rounded": 8.84
+        }
+      },
+      "counters": {
+        "parse.view": 65,
+        "parse.mul": 1,
+        "parse.fun": 64,
+        "parse.mul.factor": 64,
+        "parse.structure.attempt": 64,
+        "parse.structure.ok": 64,
+        "parse.structure.cache_miss": 64,
+        "parse.structure.visit": 64
+      }
+    },
+    {
+      "scope": "metric/metric_loop_64/typed_epsilon_resolved",
+      "elapsed_display": "3.265ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.284,
+          "mean_us_rounded": 283.771
+        },
+        "parse.fun": {
+          "calls": 64,
+          "inclusive_ms_rounded": 0.254,
+          "mean_us_rounded": 3.972
+        },
+        "parse.structure": {
+          "calls": 64,
+          "inclusive_ms_rounded": 0.154,
+          "mean_us_rounded": 2.402
+        },
+        "parse.structure.uncached": {
+          "calls": 64,
+          "inclusive_ms_rounded": 0.056,
+          "mean_us_rounded": 0.881
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.031,
+          "mean_us_rounded": 31.21
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.013,
+          "mean_us_rounded": 13.34
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.009,
+          "mean_us_rounded": 9.189
+        }
+      },
+      "counters": {
+        "parse.view": 65,
+        "parse.mul": 1,
+        "parse.fun": 64,
+        "parse.mul.factor": 64,
+        "parse.structure.attempt": 64,
+        "parse.structure.ok": 64,
+        "parse.structure.cache_miss": 64,
+        "parse.structure.visit": 64
+      }
+    },
+    {
+      "scope": "metric/axial_6/normalize_dots",
+      "elapsed_display": "4.540\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_6/repeated_indices_only",
+      "elapsed_display": "2.050\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_6/typed_contract_resolved",
+      "elapsed_display": "377.771\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_6/typed_epsilon_resolved",
+      "elapsed_display": "362.562\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_6/typed_gamma_resolved",
+      "elapsed_display": "924.453\u00b5s",
+      "timers": {
+        "parse.add": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.077,
+          "mean_us_rounded": 76.73
+        },
+        "parse.mul": {
+          "calls": 6,
+          "inclusive_ms_rounded": 0.068,
+          "mean_us_rounded": 11.302
+        },
+        "parse.structure": {
+          "calls": 7,
+          "inclusive_ms_rounded": 0.064,
+          "mean_us_rounded": 9.118
+        },
+        "parse.structure.uncached": {
+          "calls": 7,
+          "inclusive_ms_rounded": 0.041,
+          "mean_us_rounded": 5.803
+        },
+        "graph.build": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.017,
+          "mean_us_rounded": 8.36
+        },
+        "parse.fun": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.012,
+          "mean_us_rounded": 11.9
+        },
+        "graph.sync_order": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.009,
+          "mean_us_rounded": 4.73
+        },
+        "graph.expr_tree": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 2.22
+        }
+      },
+      "counters": {
+        "parse.view": 8,
+        "parse.mul": 6,
+        "parse.add": 1,
+        "parse.fun": 1,
+        "parse.add.term": 6,
+        "parse.structure.attempt": 7,
+        "parse.structure.ok": 7,
+        "parse.structure.cache_miss": 7,
+        "parse.structure.visit": 29
+      }
+    },
+    {
+      "scope": "metric/axial_8/normalize_dots",
+      "elapsed_display": "29.410\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_8/repeated_indices_only",
+      "elapsed_display": "10.380\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_8/typed_contract_resolved",
+      "elapsed_display": "1.983ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_8/typed_epsilon_resolved",
+      "elapsed_display": "1.976ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_8/typed_gamma_resolved",
+      "elapsed_display": "3.513ms",
+      "timers": {
+        "parse.add": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.513,
+          "mean_us_rounded": 513.272
+        },
+        "parse.mul": {
+          "calls": 33,
+          "inclusive_ms_rounded": 0.478,
+          "mean_us_rounded": 14.473
+        },
+        "parse.structure": {
+          "calls": 34,
+          "inclusive_ms_rounded": 0.426,
+          "mean_us_rounded": 12.524
+        },
+        "parse.structure.uncached": {
+          "calls": 34,
+          "inclusive_ms_rounded": 0.294,
+          "mean_us_rounded": 8.634
+        },
+        "graph.build": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.078,
+          "mean_us_rounded": 38.995
+        },
+        "graph.sync_order": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.047,
+          "mean_us_rounded": 23.455
+        },
+        "parse.fun": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.018,
+          "mean_us_rounded": 18.46
+        },
+        "graph.expr_tree": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.013,
+          "mean_us_rounded": 6.441
+        }
+      },
+      "counters": {
+        "parse.view": 35,
+        "parse.mul": 33,
+        "parse.add": 1,
+        "parse.fun": 1,
+        "parse.add.term": 33,
+        "parse.structure.attempt": 34,
+        "parse.structure.ok": 34,
+        "parse.structure.cache_miss": 34,
+        "parse.structure.visit": 171
+      }
+    },
+    {
+      "scope": "metric/axial_10/normalize_dots",
+      "elapsed_display": "202.731\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_10/repeated_indices_only",
+      "elapsed_display": "54.431\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_10/typed_contract_resolved",
+      "elapsed_display": "12.235ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_10/typed_epsilon_resolved",
+      "elapsed_display": "12.207ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_10/typed_gamma_resolved",
+      "elapsed_display": "30.648ms",
+      "timers": {
+        "parse.add": {
+          "calls": 44,
+          "inclusive_ms_rounded": 2.577,
+          "mean_us_rounded": 58.568
+        },
+        "parse.mul": {
+          "calls": 223,
+          "inclusive_ms_rounded": 2.537,
+          "mean_us_rounded": 11.378
+        },
+        "parse.structure": {
+          "calls": 257,
+          "inclusive_ms_rounded": 2.036,
+          "mean_us_rounded": 7.922
+        },
+        "parse.structure.uncached": {
+          "calls": 240,
+          "inclusive_ms_rounded": 1.283,
+          "mean_us_rounded": 5.346
+        },
+        "graph.build": {
+          "calls": 74,
+          "inclusive_ms_rounded": 0.64,
+          "mean_us_rounded": 8.647
+        },
+        "graph.sync_order": {
+          "calls": 74,
+          "inclusive_ms_rounded": 0.388,
+          "mean_us_rounded": 5.242
+        },
+        "parse.fun": {
+          "calls": 64,
+          "inclusive_ms_rounded": 0.353,
+          "mean_us_rounded": 5.517
+        },
+        "graph.expr_tree": {
+          "calls": 83,
+          "inclusive_ms_rounded": 0.154,
+          "mean_us_rounded": 1.851
+        }
+      },
+      "counters": {
+        "parse.view": 349,
+        "parse.mul": 223,
+        "parse.add": 44,
+        "parse.fun": 64,
+        "parse.mul.factor": 76,
+        "parse.add.term": 199,
+        "parse.structure.attempt": 257,
+        "parse.structure.ok": 257,
+        "parse.structure.cache_hit": 17,
+        "parse.structure.cache_miss": 184,
+        "parse.structure.visit": 769
+      }
+    },
+    {
+      "scope": "metric/axial_12/normalize_dots",
+      "elapsed_display": "430.412\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_12/repeated_indices_only",
+      "elapsed_display": "300.181\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_12/typed_contract_resolved",
+      "elapsed_display": "72.137ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_12/typed_epsilon_resolved",
+      "elapsed_display": "72.225ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_12/typed_gamma_resolved",
+      "elapsed_display": "171.813ms",
+      "timers": {
+        "parse.add": {
+          "calls": 145,
+          "inclusive_ms_rounded": 9.32,
+          "mean_us_rounded": 64.274
+        },
+        "parse.mul": {
+          "calls": 727,
+          "inclusive_ms_rounded": 9.141,
+          "mean_us_rounded": 12.573
+        },
+        "parse.structure": {
+          "calls": 838,
+          "inclusive_ms_rounded": 7.371,
+          "mean_us_rounded": 8.795
+        },
+        "parse.structure.uncached": {
+          "calls": 794,
+          "inclusive_ms_rounded": 4.693,
+          "mean_us_rounded": 5.91
+        },
+        "graph.build": {
+          "calls": 241,
+          "inclusive_ms_rounded": 2.353,
+          "mean_us_rounded": 9.764
+        },
+        "graph.sync_order": {
+          "calls": 241,
+          "inclusive_ms_rounded": 1.474,
+          "mean_us_rounded": 6.117
+        },
+        "parse.fun": {
+          "calls": 207,
+          "inclusive_ms_rounded": 1.14,
+          "mean_us_rounded": 5.509
+        },
+        "graph.expr_tree": {
+          "calls": 269,
+          "inclusive_ms_rounded": 0.489,
+          "mean_us_rounded": 1.819
+        }
+      },
+      "counters": {
+        "parse.view": 1129,
+        "parse.mul": 727,
+        "parse.add": 145,
+        "parse.fun": 207,
+        "parse.mul.factor": 240,
+        "parse.add.term": 648,
+        "parse.structure.attempt": 838,
+        "parse.structure.ok": 838,
+        "parse.structure.cache_hit": 44,
+        "parse.structure.cache_miss": 606,
+        "parse.structure.visit": 2592
+      }
+    },
+    {
+      "scope": "metric/free_trace_8/normalize_dots",
+      "elapsed_display": "88.540\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/free_trace_8/repeated_indices_only",
+      "elapsed_display": "36.791\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/free_trace_8/typed_contract_resolved",
+      "elapsed_display": "5.794ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/free_trace_8/typed_epsilon_resolved",
+      "elapsed_display": "5.844ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/free_trace_8/typed_gamma_resolved",
+      "elapsed_display": "6.025ms",
+      "timers": {},
+      "counters": {
+        "parse.structure.visit": 6
+      }
+    },
+    {
+      "scope": "metric/compact_paired_8/normalize_dots",
+      "elapsed_display": "1.480\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/compact_paired_8/repeated_indices_only",
+      "elapsed_display": "800.000ns",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/compact_paired_8/typed_contract_resolved",
+      "elapsed_display": "99.171\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/compact_paired_8/typed_epsilon_resolved",
+      "elapsed_display": "87.591\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/compact_paired_8/typed_gamma_resolved",
+      "elapsed_display": "307.421\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/order_sensitive_12/normalize_dots",
+      "elapsed_display": "78.630\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/order_sensitive_12/repeated_indices_only",
+      "elapsed_display": "32.380\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/order_sensitive_12/typed_contract_resolved",
+      "elapsed_display": "2.828ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/order_sensitive_12/typed_epsilon_resolved",
+      "elapsed_display": "2.865ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/order_sensitive_12/typed_gamma_resolved",
+      "elapsed_display": "3.994ms",
+      "timers": {
+        "parse.fun": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.021,
+          "mean_us_rounded": 21.38
+        },
+        "parse.structure": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.016,
+          "mean_us_rounded": 16.01
+        },
+        "parse.structure.uncached": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.012,
+          "mean_us_rounded": 11.79
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.006,
+          "mean_us_rounded": 6.4
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 3.67
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 2.83
+        }
+      },
+      "counters": {
+        "parse.view": 1,
+        "parse.fun": 1,
+        "parse.structure.attempt": 1,
+        "parse.structure.ok": 1,
+        "parse.structure.cache_miss": 1,
+        "parse.structure.visit": 175
+      }
+    },
+    {
+      "scope": "metric/ordinary_odd_8/normalize_dots",
+      "elapsed_display": "17.130\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_odd_8/repeated_indices_only",
+      "elapsed_display": "5.349\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_odd_8/typed_contract_resolved",
+      "elapsed_display": "549.982\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_odd_8/typed_epsilon_resolved",
+      "elapsed_display": "530.142\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_odd_8/typed_gamma_resolved",
+      "elapsed_display": "1.154ms",
+      "timers": {
+        "parse.fun": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.013,
+          "mean_us_rounded": 13.5
+        },
+        "parse.structure": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.01,
+          "mean_us_rounded": 10.07
+        },
+        "parse.structure.uncached": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.007,
+          "mean_us_rounded": 6.96
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 3.39
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 1.67
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.001,
+          "mean_us_rounded": 1.31
+        }
+      },
+      "counters": {
+        "parse.view": 1,
+        "parse.fun": 1,
+        "parse.structure.attempt": 1,
+        "parse.structure.ok": 1,
+        "parse.structure.cache_miss": 1,
+        "parse.structure.visit": 53
+      }
+    },
+    {
+      "scope": "metric/ordinary_even4_10/normalize_dots",
+      "elapsed_display": "207.181\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_even4_10/repeated_indices_only",
+      "elapsed_display": "127.620\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_even4_10/typed_contract_resolved",
+      "elapsed_display": "10.319ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_even4_10/typed_epsilon_resolved",
+      "elapsed_display": "10.377ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_even4_10/typed_gamma_resolved",
+      "elapsed_display": "15.700ms",
+      "timers": {
+        "parse.fun": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.02,
+          "mean_us_rounded": 19.98
+        },
+        "parse.structure": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.015,
+          "mean_us_rounded": 14.849
+        },
+        "parse.structure.uncached": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.011,
+          "mean_us_rounded": 10.851
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.005,
+          "mean_us_rounded": 5.18
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 3.92
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 2.42
+        }
+      },
+      "counters": {
+        "parse.view": 1,
+        "parse.fun": 1,
+        "parse.structure.attempt": 1,
+        "parse.structure.ok": 1,
+        "parse.structure.cache_miss": 1,
+        "parse.structure.visit": 493
+      }
+    },
+    {
+      "scope": "metric/axial_odd_8/normalize_dots",
+      "elapsed_display": "5.780\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_odd_8/repeated_indices_only",
+      "elapsed_display": "3.380\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_odd_8/typed_contract_resolved",
+      "elapsed_display": "297.071\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_odd_8/typed_epsilon_resolved",
+      "elapsed_display": "291.501\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_odd_8/typed_gamma_resolved",
+      "elapsed_display": "1.388ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 13,
+          "inclusive_ms_rounded": 0.071,
+          "mean_us_rounded": 5.475
+        },
+        "parse.structure": {
+          "calls": 20,
+          "inclusive_ms_rounded": 0.049,
+          "mean_us_rounded": 2.446
+        },
+        "parse.fun": {
+          "calls": 14,
+          "inclusive_ms_rounded": 0.047,
+          "mean_us_rounded": 3.365
+        },
+        "parse.structure.uncached": {
+          "calls": 20,
+          "inclusive_ms_rounded": 0.038,
+          "mean_us_rounded": 1.881
+        },
+        "parse.add": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.029,
+          "mean_us_rounded": 29.23
+        },
+        "graph.build": {
+          "calls": 9,
+          "inclusive_ms_rounded": 0.014,
+          "mean_us_rounded": 1.528
+        },
+        "graph.expr_tree": {
+          "calls": 10,
+          "inclusive_ms_rounded": 0.01,
+          "mean_us_rounded": 0.974
+        },
+        "graph.sync_order": {
+          "calls": 9,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 0.374
+        }
+      },
+      "counters": {
+        "parse.view": 35,
+        "parse.mul": 13,
+        "parse.add": 1,
+        "parse.fun": 14,
+        "parse.mul.factor": 20,
+        "parse.add.term": 6,
+        "parse.structure.attempt": 20,
+        "parse.structure.ok": 1,
+        "parse.structure.err": 19,
+        "parse.structure.cache_miss": 20,
+        "parse.structure.visit": 76
+      }
+    },
+    {
+      "scope": "metric/axial_even4_10/normalize_dots",
+      "elapsed_display": "65.720\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_even4_10/repeated_indices_only",
+      "elapsed_display": "27.660\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_even4_10/typed_contract_resolved",
+      "elapsed_display": "2.614ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_even4_10/typed_epsilon_resolved",
+      "elapsed_display": "2.599ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_even4_10/typed_gamma_resolved",
+      "elapsed_display": "8.373ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 138,
+          "inclusive_ms_rounded": 0.828,
+          "mean_us_rounded": 5.999
+        },
+        "parse.structure": {
+          "calls": 271,
+          "inclusive_ms_rounded": 0.424,
+          "mean_us_rounded": 1.566
+        },
+        "parse.fun": {
+          "calls": 203,
+          "inclusive_ms_rounded": 0.371,
+          "mean_us_rounded": 1.827
+        },
+        "parse.add": {
+          "calls": 3,
+          "inclusive_ms_rounded": 0.362,
+          "mean_us_rounded": 120.627
+        },
+        "parse.structure.uncached": {
+          "calls": 149,
+          "inclusive_ms_rounded": 0.329,
+          "mean_us_rounded": 2.205
+        },
+        "graph.build": {
+          "calls": 74,
+          "inclusive_ms_rounded": 0.114,
+          "mean_us_rounded": 1.535
+        },
+        "graph.expr_tree": {
+          "calls": 75,
+          "inclusive_ms_rounded": 0.068,
+          "mean_us_rounded": 0.908
+        },
+        "graph.sync_order": {
+          "calls": 74,
+          "inclusive_ms_rounded": 0.018,
+          "mean_us_rounded": 0.241
+        }
+      },
+      "counters": {
+        "parse.view": 414,
+        "parse.mul": 138,
+        "parse.add": 3,
+        "parse.fun": 203,
+        "parse.mul.factor": 272,
+        "parse.add.term": 68,
+        "parse.structure.attempt": 271,
+        "parse.structure.ok": 1,
+        "parse.structure.err": 270,
+        "parse.structure.cache_hit": 122,
+        "parse.structure.cache_miss": 147,
+        "parse.structure.visit": 817
+      }
+    },
+    {
+      "scope": "metric/axial_crossing_12/normalize_dots",
+      "elapsed_display": "29.510\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_crossing_12/repeated_indices_only",
+      "elapsed_display": "14.500\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_crossing_12/typed_contract_resolved",
+      "elapsed_display": "1.420ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_crossing_12/typed_epsilon_resolved",
+      "elapsed_display": "1.405ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/axial_crossing_12/typed_gamma_resolved",
+      "elapsed_display": "4.664ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 69,
+          "inclusive_ms_rounded": 0.418,
+          "mean_us_rounded": 6.065
+        },
+        "parse.structure": {
+          "calls": 136,
+          "inclusive_ms_rounded": 0.223,
+          "mean_us_rounded": 1.638
+        },
+        "parse.fun": {
+          "calls": 103,
+          "inclusive_ms_rounded": 0.2,
+          "mean_us_rounded": 1.939
+        },
+        "parse.add": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.177,
+          "mean_us_rounded": 176.88
+        },
+        "parse.structure.uncached": {
+          "calls": 74,
+          "inclusive_ms_rounded": 0.17,
+          "mean_us_rounded": 2.299
+        },
+        "graph.build": {
+          "calls": 38,
+          "inclusive_ms_rounded": 0.064,
+          "mean_us_rounded": 1.687
+        },
+        "graph.expr_tree": {
+          "calls": 40,
+          "inclusive_ms_rounded": 0.04,
+          "mean_us_rounded": 1.005
+        },
+        "graph.sync_order": {
+          "calls": 38,
+          "inclusive_ms_rounded": 0.011,
+          "mean_us_rounded": 0.297
+        }
+      },
+      "counters": {
+        "parse.view": 209,
+        "parse.mul": 69,
+        "parse.add": 1,
+        "parse.fun": 103,
+        "parse.mul.factor": 138,
+        "parse.add.term": 33,
+        "parse.structure.attempt": 136,
+        "parse.structure.ok": 2,
+        "parse.structure.err": 134,
+        "parse.structure.cache_hit": 62,
+        "parse.structure.cache_miss": 74,
+        "parse.structure.visit": 406
+      }
+    },
+    {
+      "scope": "metric/ordinary_even2_8/normalize_dots",
+      "elapsed_display": "3.149\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_even2_8/repeated_indices_only",
+      "elapsed_display": "1.810\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_even2_8/typed_contract_resolved",
+      "elapsed_display": "188.631\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_even2_8/typed_epsilon_resolved",
+      "elapsed_display": "168.841\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_even2_8/typed_gamma_resolved",
+      "elapsed_display": "531.582\u00b5s",
+      "timers": {
+        "parse.fun": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.011,
+          "mean_us_rounded": 11.45
+        },
+        "parse.structure": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.009,
+          "mean_us_rounded": 9.12
+        },
+        "parse.structure.uncached": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.006,
+          "mean_us_rounded": 6.34
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.003,
+          "mean_us_rounded": 2.6
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.001,
+          "mean_us_rounded": 1.46
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.001,
+          "mean_us_rounded": 1.21
+        }
+      },
+      "counters": {
+        "parse.view": 1,
+        "parse.fun": 1,
+        "parse.structure.attempt": 1,
+        "parse.structure.ok": 1,
+        "parse.structure.cache_miss": 1,
+        "parse.structure.visit": 16
+      }
+    },
+    {
+      "scope": "metric/ordinary_cyclic_12/normalize_dots",
+      "elapsed_display": "444.852\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_cyclic_12/repeated_indices_only",
+      "elapsed_display": "280.551\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_cyclic_12/typed_contract_resolved",
+      "elapsed_display": "22.900ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_cyclic_12/typed_epsilon_resolved",
+      "elapsed_display": "22.948ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/ordinary_cyclic_12/typed_gamma_resolved",
+      "elapsed_display": "19.062ms",
+      "timers": {
+        "parse.fun": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.017,
+          "mean_us_rounded": 17.08
+        },
+        "parse.structure": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.013,
+          "mean_us_rounded": 13.25
+        },
+        "parse.structure.uncached": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.01,
+          "mean_us_rounded": 9.58
+        },
+        "graph.build": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.004,
+          "mean_us_rounded": 4.42
+        },
+        "graph.expr_tree": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 2.12
+        },
+        "graph.sync_order": {
+          "calls": 1,
+          "inclusive_ms_rounded": 0.002,
+          "mean_us_rounded": 1.96
+        }
+      },
+      "counters": {
+        "parse.view": 1,
+        "parse.fun": 1,
+        "parse.structure.attempt": 1,
+        "parse.structure.ok": 1,
+        "parse.structure.cache_miss": 1,
+        "parse.structure.visit": 482
+      }
+    },
+    {
+      "scope": "metric/external_metrics_12/normalize_dots",
+      "elapsed_display": "82.270\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/external_metrics_12/repeated_indices_only",
+      "elapsed_display": "32.970\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/external_metrics_12/typed_contract_resolved",
+      "elapsed_display": "2.896ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/external_metrics_12/typed_epsilon_resolved",
+      "elapsed_display": "2.879ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/external_metrics_12/typed_gamma_resolved",
+      "elapsed_display": "4.437ms",
+      "timers": {
+        "parse.fun": {
+          "calls": 8,
+          "inclusive_ms_rounded": 0.075,
+          "mean_us_rounded": 9.326
+        },
+        "parse.mul": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.057,
+          "mean_us_rounded": 28.555
+        },
+        "parse.structure": {
+          "calls": 8,
+          "inclusive_ms_rounded": 0.051,
+          "mean_us_rounded": 6.344
+        },
+        "parse.structure.uncached": {
+          "calls": 8,
+          "inclusive_ms_rounded": 0.034,
+          "mean_us_rounded": 4.289
+        },
+        "graph.build": {
+          "calls": 4,
+          "inclusive_ms_rounded": 0.014,
+          "mean_us_rounded": 3.462
+        },
+        "graph.expr_tree": {
+          "calls": 4,
+          "inclusive_ms_rounded": 0.007,
+          "mean_us_rounded": 1.71
+        },
+        "graph.sync_order": {
+          "calls": 4,
+          "inclusive_ms_rounded": 0.006,
+          "mean_us_rounded": 1.593
+        }
+      },
+      "counters": {
+        "parse.view": 10,
+        "parse.mul": 2,
+        "parse.fun": 8,
+        "parse.mul.factor": 6,
+        "parse.structure.attempt": 8,
+        "parse.structure.ok": 8,
+        "parse.structure.cache_miss": 7,
+        "parse.structure.visit": 215
+      }
+    },
+    {
+      "scope": "metric/free_12/normalize_dots",
+      "elapsed_display": "1.834ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/free_12/repeated_indices_only",
+      "elapsed_display": "1.323ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/free_12/typed_contract_resolved",
+      "elapsed_display": "326.288ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/free_12/typed_epsilon_resolved",
+      "elapsed_display": "327.635ms",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/free_12/typed_gamma_resolved",
+      "elapsed_display": "672.295ms",
+      "timers": {},
+      "counters": {
+        "parse.structure.visit": 1579
+      }
+    },
+    {
+      "scope": "metric/late_metric_4_4_ordinary/normalize_dots",
+      "elapsed_display": "3.920\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/late_metric_4_4_ordinary/repeated_indices_only",
+      "elapsed_display": "1.830\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/late_metric_4_4_ordinary/typed_contract_resolved",
+      "elapsed_display": "470.552\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 7,
+          "inclusive_ms_rounded": 0.076,
+          "mean_us_rounded": 10.809
+        },
+        "parse.structure": {
+          "calls": 11,
+          "inclusive_ms_rounded": 0.051,
+          "mean_us_rounded": 4.632
+        },
+        "parse.add": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.045,
+          "mean_us_rounded": 22.615
+        },
+        "parse.structure.uncached": {
+          "calls": 10,
+          "inclusive_ms_rounded": 0.03,
+          "mean_us_rounded": 3.008
+        },
+        "parse.fun": {
+          "calls": 7,
+          "inclusive_ms_rounded": 0.028,
+          "mean_us_rounded": 4.017
+        },
+        "graph.build": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.015,
+          "mean_us_rounded": 2.936
+        },
+        "graph.sync_order": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.007,
+          "mean_us_rounded": 1.35
+        },
+        "graph.expr_tree": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.006,
+          "mean_us_rounded": 1.128
+        }
+      },
+      "counters": {
+        "parse.view": 19,
+        "parse.mul": 7,
+        "parse.add": 2,
+        "parse.fun": 7,
+        "parse.mul.factor": 11,
+        "parse.add.term": 3,
+        "parse.structure.attempt": 11,
+        "parse.structure.ok": 11,
+        "parse.structure.cache_hit": 1,
+        "parse.structure.cache_miss": 10,
+        "parse.structure.visit": 23
+      }
+    },
+    {
+      "scope": "metric/late_metric_4_4_ordinary/typed_epsilon_resolved",
+      "elapsed_display": "557.722\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 7,
+          "inclusive_ms_rounded": 0.086,
+          "mean_us_rounded": 12.231
+        },
+        "parse.structure": {
+          "calls": 11,
+          "inclusive_ms_rounded": 0.057,
+          "mean_us_rounded": 5.207
+        },
+        "parse.add": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.053,
+          "mean_us_rounded": 26.36
+        },
+        "parse.structure.uncached": {
+          "calls": 10,
+          "inclusive_ms_rounded": 0.034,
+          "mean_us_rounded": 3.43
+        },
+        "parse.fun": {
+          "calls": 7,
+          "inclusive_ms_rounded": 0.031,
+          "mean_us_rounded": 4.443
+        },
+        "graph.build": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.03,
+          "mean_us_rounded": 6.048
+        },
+        "graph.sync_order": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.02,
+          "mean_us_rounded": 4.024
+        },
+        "graph.expr_tree": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.007,
+          "mean_us_rounded": 1.434
+        }
+      },
+      "counters": {
+        "parse.view": 19,
+        "parse.mul": 7,
+        "parse.add": 2,
+        "parse.fun": 7,
+        "parse.mul.factor": 11,
+        "parse.add.term": 3,
+        "parse.structure.attempt": 11,
+        "parse.structure.ok": 11,
+        "parse.structure.cache_hit": 1,
+        "parse.structure.cache_miss": 10,
+        "parse.structure.visit": 23
+      }
+    },
+    {
+      "scope": "metric/late_metric_4_4_ordinary/typed_gamma_resolved",
+      "elapsed_display": "549.382\u00b5s",
+      "timers": {
+        "parse.mul": {
+          "calls": 7,
+          "inclusive_ms_rounded": 0.087,
+          "mean_us_rounded": 12.383
+        },
+        "parse.structure": {
+          "calls": 11,
+          "inclusive_ms_rounded": 0.058,
+          "mean_us_rounded": 5.247
+        },
+        "parse.add": {
+          "calls": 2,
+          "inclusive_ms_rounded": 0.054,
+          "mean_us_rounded": 26.831
+        },
+        "parse.structure.uncached": {
+          "calls": 10,
+          "inclusive_ms_rounded": 0.035,
+          "mean_us_rounded": 3.454
+        },
+        "parse.fun": {
+          "calls": 7,
+          "inclusive_ms_rounded": 0.03,
+          "mean_us_rounded": 4.293
+        },
+        "graph.build": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.017,
+          "mean_us_rounded": 3.376
+        },
+        "graph.sync_order": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.008,
+          "mean_us_rounded": 1.524
+        },
+        "graph.expr_tree": {
+          "calls": 5,
+          "inclusive_ms_rounded": 0.007,
+          "mean_us_rounded": 1.436
+        }
+      },
+      "counters": {
+        "parse.view": 19,
+        "parse.mul": 7,
+        "parse.add": 2,
+        "parse.fun": 7,
+        "parse.mul.factor": 11,
+        "parse.add.term": 3,
+        "parse.structure.attempt": 11,
+        "parse.structure.ok": 11,
+        "parse.structure.cache_hit": 1,
+        "parse.structure.cache_miss": 10,
+        "parse.structure.visit": 23
+      }
+    },
+    {
+      "scope": "metric/late_metric_4_10_ordinary/normalize_dots",
+      "elapsed_display": "281.811\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/late_metric_4_10_ordinary/repeated_indices_only",
+      "elapsed_display": "193.840\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/late_metric_4_10_ordinary/typed_contract_resolved",
+      "elapsed_display": "97.798ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 2009,
+          "inclusive_ms_rounded": 14.737,
+          "mean_us_rounded": 7.335
+        },
+        "parse.add": {
+          "calls": 624,
+          "inclusive_ms_rounded": 10.141,
+          "mean_us_rounded": 16.251
+        },
+        "parse.structure": {
+          "calls": 3024,
+          "inclusive_ms_rounded": 9.017,
+          "mean_us_rounded": 2.982
+        },
+        "parse.fun": {
+          "calls": 1708,
+          "inclusive_ms_rounded": 4.451,
+          "mean_us_rounded": 2.606
+        },
+        "graph.build": {
+          "calls": 1317,
+          "inclusive_ms_rounded": 3.881,
+          "mean_us_rounded": 2.947
+        },
+        "parse.structure.uncached": {
+          "calls": 521,
+          "inclusive_ms_rounded": 3.741,
+          "mean_us_rounded": 7.18
+        },
+        "graph.sync_order": {
+          "calls": 1317,
+          "inclusive_ms_rounded": 1.714,
+          "mean_us_rounded": 1.302
+        },
+        "graph.expr_tree": {
+          "calls": 1317,
+          "inclusive_ms_rounded": 1.102,
+          "mean_us_rounded": 0.837
+        }
+      },
+      "counters": {
+        "parse.view": 4721,
+        "parse.mul": 2009,
+        "parse.add": 624,
+        "parse.fun": 1708,
+        "parse.mul.factor": 2400,
+        "parse.add.term": 1004,
+        "parse.structure.attempt": 3024,
+        "parse.structure.ok": 3024,
+        "parse.structure.cache_hit": 2503,
+        "parse.structure.cache_miss": 521,
+        "parse.structure.visit": 2914
+      }
+    },
+    {
+      "scope": "metric/late_metric_4_10_ordinary/typed_epsilon_resolved",
+      "elapsed_display": "98.401ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 2009,
+          "inclusive_ms_rounded": 14.78,
+          "mean_us_rounded": 7.357
+        },
+        "parse.add": {
+          "calls": 624,
+          "inclusive_ms_rounded": 10.152,
+          "mean_us_rounded": 16.269
+        },
+        "parse.structure": {
+          "calls": 3024,
+          "inclusive_ms_rounded": 9.047,
+          "mean_us_rounded": 2.992
+        },
+        "parse.fun": {
+          "calls": 1708,
+          "inclusive_ms_rounded": 4.475,
+          "mean_us_rounded": 2.62
+        },
+        "graph.build": {
+          "calls": 1317,
+          "inclusive_ms_rounded": 3.885,
+          "mean_us_rounded": 2.95
+        },
+        "parse.structure.uncached": {
+          "calls": 521,
+          "inclusive_ms_rounded": 3.721,
+          "mean_us_rounded": 7.142
+        },
+        "graph.sync_order": {
+          "calls": 1317,
+          "inclusive_ms_rounded": 1.725,
+          "mean_us_rounded": 1.31
+        },
+        "graph.expr_tree": {
+          "calls": 1317,
+          "inclusive_ms_rounded": 1.097,
+          "mean_us_rounded": 0.833
+        }
+      },
+      "counters": {
+        "parse.view": 4721,
+        "parse.mul": 2009,
+        "parse.add": 624,
+        "parse.fun": 1708,
+        "parse.mul.factor": 2400,
+        "parse.add.term": 1004,
+        "parse.structure.attempt": 3024,
+        "parse.structure.ok": 3024,
+        "parse.structure.cache_hit": 2503,
+        "parse.structure.cache_miss": 521,
+        "parse.structure.visit": 2914
+      }
+    },
+    {
+      "scope": "metric/late_metric_4_10_ordinary/typed_gamma_resolved",
+      "elapsed_display": "97.057ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 2009,
+          "inclusive_ms_rounded": 14.682,
+          "mean_us_rounded": 7.308
+        },
+        "parse.add": {
+          "calls": 624,
+          "inclusive_ms_rounded": 10.042,
+          "mean_us_rounded": 16.092
+        },
+        "parse.structure": {
+          "calls": 3024,
+          "inclusive_ms_rounded": 8.975,
+          "mean_us_rounded": 2.968
+        },
+        "parse.fun": {
+          "calls": 1708,
+          "inclusive_ms_rounded": 4.479,
+          "mean_us_rounded": 2.622
+        },
+        "graph.build": {
+          "calls": 1317,
+          "inclusive_ms_rounded": 3.87,
+          "mean_us_rounded": 2.938
+        },
+        "parse.structure.uncached": {
+          "calls": 521,
+          "inclusive_ms_rounded": 3.717,
+          "mean_us_rounded": 7.135
+        },
+        "graph.sync_order": {
+          "calls": 1317,
+          "inclusive_ms_rounded": 1.723,
+          "mean_us_rounded": 1.309
+        },
+        "graph.expr_tree": {
+          "calls": 1317,
+          "inclusive_ms_rounded": 1.097,
+          "mean_us_rounded": 0.833
+        }
+      },
+      "counters": {
+        "parse.view": 4721,
+        "parse.mul": 2009,
+        "parse.add": 624,
+        "parse.fun": 1708,
+        "parse.mul.factor": 2400,
+        "parse.add.term": 1004,
+        "parse.structure.attempt": 3024,
+        "parse.structure.ok": 3024,
+        "parse.structure.cache_hit": 2503,
+        "parse.structure.cache_miss": 521,
+        "parse.structure.visit": 2914
+      }
+    },
+    {
+      "scope": "metric/late_metric_D_10_ordinary/normalize_dots",
+      "elapsed_display": "403.572\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/late_metric_D_10_ordinary/repeated_indices_only",
+      "elapsed_display": "252.770\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/late_metric_D_10_ordinary/typed_contract_resolved",
+      "elapsed_display": "128.281ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 2665,
+          "inclusive_ms_rounded": 17.51,
+          "mean_us_rounded": 6.57
+        },
+        "parse.add": {
+          "calls": 776,
+          "inclusive_ms_rounded": 11.157,
+          "mean_us_rounded": 14.377
+        },
+        "parse.structure": {
+          "calls": 3998,
+          "inclusive_ms_rounded": 9.816,
+          "mean_us_rounded": 2.455
+        },
+        "parse.fun": {
+          "calls": 2278,
+          "inclusive_ms_rounded": 5.823,
+          "mean_us_rounded": 2.556
+        },
+        "graph.build": {
+          "calls": 1721,
+          "inclusive_ms_rounded": 5.186,
+          "mean_us_rounded": 3.014
+        },
+        "parse.structure.uncached": {
+          "calls": 435,
+          "inclusive_ms_rounded": 3.302,
+          "mean_us_rounded": 7.59
+        },
+        "graph.sync_order": {
+          "calls": 1721,
+          "inclusive_ms_rounded": 2.111,
+          "mean_us_rounded": 1.227
+        },
+        "graph.expr_tree": {
+          "calls": 1721,
+          "inclusive_ms_rounded": 1.474,
+          "mean_us_rounded": 0.856
+        }
+      },
+      "counters": {
+        "parse.view": 6821,
+        "parse.mul": 2665,
+        "parse.add": 776,
+        "parse.fun": 2278,
+        "parse.mul.factor": 3768,
+        "parse.add.term": 1332,
+        "parse.structure.attempt": 3998,
+        "parse.structure.ok": 3998,
+        "parse.structure.cache_hit": 3563,
+        "parse.structure.cache_miss": 435,
+        "parse.structure.visit": 2791
+      }
+    },
+    {
+      "scope": "metric/late_metric_D_10_ordinary/typed_epsilon_resolved",
+      "elapsed_display": "128.531ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 2665,
+          "inclusive_ms_rounded": 17.637,
+          "mean_us_rounded": 6.618
+        },
+        "parse.add": {
+          "calls": 776,
+          "inclusive_ms_rounded": 11.284,
+          "mean_us_rounded": 14.542
+        },
+        "parse.structure": {
+          "calls": 3998,
+          "inclusive_ms_rounded": 9.848,
+          "mean_us_rounded": 2.463
+        },
+        "parse.fun": {
+          "calls": 2278,
+          "inclusive_ms_rounded": 5.881,
+          "mean_us_rounded": 2.582
+        },
+        "graph.build": {
+          "calls": 1721,
+          "inclusive_ms_rounded": 5.197,
+          "mean_us_rounded": 3.02
+        },
+        "parse.structure.uncached": {
+          "calls": 435,
+          "inclusive_ms_rounded": 3.364,
+          "mean_us_rounded": 7.734
+        },
+        "graph.sync_order": {
+          "calls": 1721,
+          "inclusive_ms_rounded": 2.112,
+          "mean_us_rounded": 1.227
+        },
+        "graph.expr_tree": {
+          "calls": 1721,
+          "inclusive_ms_rounded": 1.505,
+          "mean_us_rounded": 0.874
+        }
+      },
+      "counters": {
+        "parse.view": 6821,
+        "parse.mul": 2665,
+        "parse.add": 776,
+        "parse.fun": 2278,
+        "parse.mul.factor": 3768,
+        "parse.add.term": 1332,
+        "parse.structure.attempt": 3998,
+        "parse.structure.ok": 3998,
+        "parse.structure.cache_hit": 3563,
+        "parse.structure.cache_miss": 435,
+        "parse.structure.visit": 2791
+      }
+    },
+    {
+      "scope": "metric/late_metric_D_10_ordinary/typed_gamma_resolved",
+      "elapsed_display": "129.270ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 2665,
+          "inclusive_ms_rounded": 17.739,
+          "mean_us_rounded": 6.656
+        },
+        "parse.add": {
+          "calls": 776,
+          "inclusive_ms_rounded": 11.24,
+          "mean_us_rounded": 14.485
+        },
+        "parse.structure": {
+          "calls": 3998,
+          "inclusive_ms_rounded": 9.841,
+          "mean_us_rounded": 2.462
+        },
+        "parse.fun": {
+          "calls": 2278,
+          "inclusive_ms_rounded": 6.03,
+          "mean_us_rounded": 2.647
+        },
+        "graph.build": {
+          "calls": 1721,
+          "inclusive_ms_rounded": 5.232,
+          "mean_us_rounded": 3.04
+        },
+        "parse.structure.uncached": {
+          "calls": 435,
+          "inclusive_ms_rounded": 3.335,
+          "mean_us_rounded": 7.666
+        },
+        "graph.sync_order": {
+          "calls": 1721,
+          "inclusive_ms_rounded": 2.206,
+          "mean_us_rounded": 1.282
+        },
+        "graph.expr_tree": {
+          "calls": 1721,
+          "inclusive_ms_rounded": 1.47,
+          "mean_us_rounded": 0.854
+        }
+      },
+      "counters": {
+        "parse.view": 6821,
+        "parse.mul": 2665,
+        "parse.add": 776,
+        "parse.fun": 2278,
+        "parse.mul.factor": 3768,
+        "parse.add.term": 1332,
+        "parse.structure.attempt": 3998,
+        "parse.structure.ok": 3998,
+        "parse.structure.cache_hit": 3563,
+        "parse.structure.cache_miss": 435,
+        "parse.structure.visit": 2791
+      }
+    },
+    {
+      "scope": "metric/late_metric_4_12_axial/normalize_dots",
+      "elapsed_display": "437.902\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/late_metric_4_12_axial/repeated_indices_only",
+      "elapsed_display": "309.811\u00b5s",
+      "timers": {},
+      "counters": {}
+    },
+    {
+      "scope": "metric/late_metric_4_12_axial/typed_contract_resolved",
+      "elapsed_display": "189.564ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 3844,
+          "inclusive_ms_rounded": 30.344,
+          "mean_us_rounded": 7.894
+        },
+        "parse.add": {
+          "calls": 1028,
+          "inclusive_ms_rounded": 20.246,
+          "mean_us_rounded": 19.694
+        },
+        "parse.structure": {
+          "calls": 5771,
+          "inclusive_ms_rounded": 18.215,
+          "mean_us_rounded": 3.156
+        },
+        "parse.fun": {
+          "calls": 3336,
+          "inclusive_ms_rounded": 9.794,
+          "mean_us_rounded": 2.936
+        },
+        "parse.structure.uncached": {
+          "calls": 2167,
+          "inclusive_ms_rounded": 9.723,
+          "mean_us_rounded": 4.487
+        },
+        "graph.build": {
+          "calls": 2437,
+          "inclusive_ms_rounded": 8.512,
+          "mean_us_rounded": 3.493
+        },
+        "graph.sync_order": {
+          "calls": 2437,
+          "inclusive_ms_rounded": 3.99,
+          "mean_us_rounded": 1.637
+        },
+        "graph.expr_tree": {
+          "calls": 2437,
+          "inclusive_ms_rounded": 2.339,
+          "mean_us_rounded": 0.96
+        }
+      },
+      "counters": {
+        "parse.view": 8958,
+        "parse.mul": 3844,
+        "parse.add": 1028,
+        "parse.fun": 3336,
+        "parse.mul.factor": 4600,
+        "parse.add.term": 1921,
+        "parse.structure.attempt": 5771,
+        "parse.structure.ok": 5771,
+        "parse.structure.cache_hit": 3604,
+        "parse.structure.cache_miss": 631,
+        "parse.structure.visit": 6925
+      }
+    },
+    {
+      "scope": "metric/late_metric_4_12_axial/typed_epsilon_resolved",
+      "elapsed_display": "199.458ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 3844,
+          "inclusive_ms_rounded": 30.788,
+          "mean_us_rounded": 8.009
+        },
+        "parse.add": {
+          "calls": 1028,
+          "inclusive_ms_rounded": 20.667,
+          "mean_us_rounded": 20.104
+        },
+        "parse.structure": {
+          "calls": 5772,
+          "inclusive_ms_rounded": 18.313,
+          "mean_us_rounded": 3.173
+        },
+        "parse.fun": {
+          "calls": 3337,
+          "inclusive_ms_rounded": 9.872,
+          "mean_us_rounded": 2.958
+        },
+        "parse.structure.uncached": {
+          "calls": 2168,
+          "inclusive_ms_rounded": 9.779,
+          "mean_us_rounded": 4.51
+        },
+        "graph.build": {
+          "calls": 2437,
+          "inclusive_ms_rounded": 8.699,
+          "mean_us_rounded": 3.569
+        },
+        "graph.sync_order": {
+          "calls": 2437,
+          "inclusive_ms_rounded": 3.998,
+          "mean_us_rounded": 1.641
+        },
+        "graph.expr_tree": {
+          "calls": 2437,
+          "inclusive_ms_rounded": 2.347,
+          "mean_us_rounded": 0.963
+        }
+      },
+      "counters": {
+        "parse.view": 8958,
+        "parse.mul": 3844,
+        "parse.add": 1028,
+        "parse.fun": 3337,
+        "parse.mul.factor": 4600,
+        "parse.add.term": 1921,
+        "parse.structure.attempt": 5772,
+        "parse.structure.ok": 5772,
+        "parse.structure.cache_hit": 3604,
+        "parse.structure.cache_miss": 633,
+        "parse.structure.visit": 6925
+      }
+    },
+    {
+      "scope": "metric/late_metric_4_12_axial/typed_gamma_resolved",
+      "elapsed_display": "199.902ms",
+      "timers": {
+        "parse.mul": {
+          "calls": 3844,
+          "inclusive_ms_rounded": 30.841,
+          "mean_us_rounded": 8.023
+        },
+        "parse.add": {
+          "calls": 1028,
+          "inclusive_ms_rounded": 20.607,
+          "mean_us_rounded": 20.046
+        },
+        "parse.structure": {
+          "calls": 5772,
+          "inclusive_ms_rounded": 18.372,
+          "mean_us_rounded": 3.183
+        },
+        "parse.fun": {
+          "calls": 3337,
+          "inclusive_ms_rounded": 9.959,
+          "mean_us_rounded": 2.984
+        },
+        "parse.structure.uncached": {
+          "calls": 2168,
+          "inclusive_ms_rounded": 9.752,
+          "mean_us_rounded": 4.498
+        },
+        "graph.build": {
+          "calls": 2437,
+          "inclusive_ms_rounded": 8.671,
+          "mean_us_rounded": 3.558
+        },
+        "graph.sync_order": {
+          "calls": 2437,
+          "inclusive_ms_rounded": 4.01,
+          "mean_us_rounded": 1.645
+        },
+        "graph.expr_tree": {
+          "calls": 2437,
+          "inclusive_ms_rounded": 2.353,
+          "mean_us_rounded": 0.966
+        }
+      },
+      "counters": {
+        "parse.view": 8958,
+        "parse.mul": 3844,
+        "parse.add": 1028,
+        "parse.fun": 3337,
+        "parse.mul.factor": 4600,
+        "parse.add.term": 1921,
+        "parse.structure.attempt": 5772,
+        "parse.structure.ok": 5772,
+        "parse.structure.cache_hit": 3604,
+        "parse.structure.cache_miss": 633,
+        "parse.structure.visit": 6925
+      }
+    }
+  ]
+}

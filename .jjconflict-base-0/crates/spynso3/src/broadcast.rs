@@ -27,6 +27,51 @@ use pyo3_stub_gen::{
 use symbolica::api::python::ConvertibleToExpression;
 
 /// A unary Symbolica function whose action is broadcast over tensor entries.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community import tensor as sp
+/// >>> square = sp.BroadcastFunction("docs::square")
+/// >>> expression = square(sp.TensorExpression(2))
+///
+/// Parameters
+/// ----------
+/// name : str
+///     Registered function name. Use a namespace such as "my_model::A" to avoid collisions; reusing a name also reuses its Symbolica identity.
+/// is_symmetric : bool, optional
+///     Declare symmetry under permutations of function arguments. None retains the existing or default Symbolica attribute.
+/// is_antisymmetric : bool, optional
+///     Declare antisymmetry under permutations of function arguments. None retains the existing or default Symbolica attribute.
+/// is_cyclesymmetric : bool, optional
+///     Declare invariance under cyclic argument permutations. None retains the existing or default Symbolica attribute.
+/// is_linear : bool, optional
+///     Declare a linear function so Symbolica can distribute it over supported sums. None retains the existing or default attribute.
+/// is_flat : bool, optional
+///     Flatten nested applications of the same function. None retains the existing or default Symbolica attribute.
+/// is_scalar : bool, optional
+///     Mark the registered function as scalar for Symbolica. This flag does not supply tensor component data.
+/// is_real : bool, optional
+///     Declare real-valued output for symbolic simplification. None retains the existing or default attribute.
+/// is_integer : bool, optional
+///     Declare integer-valued output for symbolic simplification. None retains the existing or default attribute.
+/// is_positive : bool, optional
+///     Declare positive output for symbolic simplification. None retains the existing or default attribute.
+/// tags : Sequence[str], optional
+///     Additional Symbolica tags. The required Spenso tensor or broadcast tag is attached automatically.
+/// aliases : Sequence[str], optional
+///     Alternative names registered for the same Symbolica symbol.
+/// normalization : Transformer | Callable[[Expression], Expression], optional
+///     Optional Transformer or callable that normalizes a Symbolica function application. The callable receives and returns an Expression.
+/// print : Any, optional
+///     Optional Symbolica print callback. See Expression.symbol for the complete callback signature.
+/// derivative : Any, optional
+///     Optional Symbolica differentiation callback for the registered function; it follows Expression.symbol’s callback contract.
+/// series : Any, optional
+///     Optional Symbolica series-expansion callback for the registered function; it follows Expression.symbol’s callback contract.
+/// eval : Any, optional
+///     Optional Symbolica numerical-evaluation callback for the registered function. Concrete broadcasts additionally use TensorFunctionLibrary.
+/// data : Expression or scalar | str | dict | list | bytes, optional
+///     Optional Symbolica metadata attached to the symbol, such as an expression, text, or structured data.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
@@ -48,6 +93,51 @@ impl SpensoBroadcastFunction {
     /// Register a Symbolica function for elementwise application to tensor entries.
     ///
     /// The function is always tagged as a Spenso broadcast and cannot also be a tensor head.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> square = sp.BroadcastFunction("docs::square")
+    /// >>> expression = square(sp.TensorExpression(2))
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Registered function name. Use a namespace such as "my_model::A" to avoid collisions; reusing a name also reuses its Symbolica identity.
+    /// is_symmetric : bool, optional
+    ///     Declare symmetry under permutations of function arguments. None retains the existing or default Symbolica attribute.
+    /// is_antisymmetric : bool, optional
+    ///     Declare antisymmetry under permutations of function arguments. None retains the existing or default Symbolica attribute.
+    /// is_cyclesymmetric : bool, optional
+    ///     Declare invariance under cyclic argument permutations. None retains the existing or default Symbolica attribute.
+    /// is_linear : bool, optional
+    ///     Declare a linear function so Symbolica can distribute it over supported sums. None retains the existing or default attribute.
+    /// is_flat : bool, optional
+    ///     Flatten nested applications of the same function. None retains the existing or default Symbolica attribute.
+    /// is_scalar : bool, optional
+    ///     Mark the registered function as scalar for Symbolica. This flag does not supply tensor component data.
+    /// is_real : bool, optional
+    ///     Declare real-valued output for symbolic simplification. None retains the existing or default attribute.
+    /// is_integer : bool, optional
+    ///     Declare integer-valued output for symbolic simplification. None retains the existing or default attribute.
+    /// is_positive : bool, optional
+    ///     Declare positive output for symbolic simplification. None retains the existing or default attribute.
+    /// tags : Sequence[str], optional
+    ///     Additional Symbolica tags. The required Spenso tensor or broadcast tag is attached automatically.
+    /// aliases : Sequence[str], optional
+    ///     Alternative names registered for the same Symbolica symbol.
+    /// normalization : Transformer | Callable[[Expression], Expression], optional
+    ///     Optional Transformer or callable that normalizes a Symbolica function application. The callable receives and returns an Expression.
+    /// print : Any, optional
+    ///     Optional Symbolica print callback. See Expression.symbol for the complete callback signature.
+    /// derivative : Any, optional
+    ///     Optional Symbolica differentiation callback for the registered function; it follows Expression.symbol’s callback contract.
+    /// series : Any, optional
+    ///     Optional Symbolica series-expansion callback for the registered function; it follows Expression.symbol’s callback contract.
+    /// eval : Any, optional
+    ///     Optional Symbolica numerical-evaluation callback for the registered function. Concrete broadcasts additionally use TensorFunctionLibrary.
+    /// data : Expression or scalar | str | dict | list | bytes, optional
+    ///     Optional Symbolica metadata attached to the symbol, such as an expression, text, or structured data.
     #[new]
     #[pyo3(signature = (name, *, is_symmetric=None, is_antisymmetric=None, is_cyclesymmetric=None, is_linear=None, is_flat=None, is_scalar=None, is_real=None, is_integer=None, is_positive=None, tags=None, aliases=None, normalization=None, print=None, derivative=None, series=None, eval=None, data=None))]
     #[allow(clippy::too_many_arguments)]
@@ -124,6 +214,13 @@ impl SpensoBroadcastFunction {
     }
 
     /// Return Spenso's registered complex-conjugation broadcast function.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> from symbolica import E, S
+    /// >>> conjugate = sp.BroadcastFunction.conj()
+    /// >>> result = conjugate(E("1 + 2i"))
     #[staticmethod]
     fn conj() -> Self {
         Self {
@@ -132,6 +229,19 @@ impl SpensoBroadcastFunction {
     }
 
     /// Apply this unary function elementwise, preserving a structured interface.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> conjugate = sp.BroadcastFunction.conj()
+    /// >>> tensor = sp.Tensor.dense(sp.TensorName.vector("docs::p")(r), [1 + 2j, 3 + 4j])
+    /// >>> result = conjugate(tensor).to_tensor()
+    ///
+    /// Parameters
+    /// ----------
+    /// arg : Tensor | TensorNetwork
+    ///     Scalar, TensorExpression, Tensor, or TensorNetwork to transform elementwise. Component tensors are evaluated lazily as networks.
     #[gen_stub(skip)]
     fn __call__(&self, py: Python<'_>, arg: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         if let Ok(network) = arg.extract::<SpensoNet>() {
@@ -165,15 +275,35 @@ impl SpensoBroadcastFunction {
         }
     }
 
+    /// Return a readable object description for inspection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> conjugate = sp.BroadcastFunction.conj()
+    /// >>> text = repr(conjugate)
     fn __repr__(&self) -> String {
         format!("BroadcastFunction({:?})", self.name)
     }
 
+    /// Return a readable text representation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> conjugate = sp.BroadcastFunction.conj()
+    /// >>> text = str(conjugate)
     fn __str__(&self) -> String {
         self.name.to_string()
     }
 
     /// Return the registered function as a Symbolica variable expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> conjugate = sp.BroadcastFunction.conj()
+    /// >>> symbolic_head = conjugate.to_expression()
     fn to_expression(&self) -> PythonExpression {
         PythonExpression::from(Atom::var(self.name))
     }
@@ -181,6 +311,18 @@ impl SpensoBroadcastFunction {
     /// Whether the registered function carries `tag`.
     ///
     /// Unqualified names also match tags registered in Symbolica's Python namespace.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> conjugate = sp.BroadcastFunction.conj()
+    /// >>> tags = conjugate.get_tags()
+    /// >>> assert all(conjugate.has_tag(tag) for tag in tags)
+    ///
+    /// Parameters
+    /// ----------
+    /// tag : str
+    ///     Tag name to test. Fully qualified names are unambiguous; unqualified names also match tags in the Python namespace.
     fn has_tag(&self, tag: &str) -> bool {
         self.name.has_tag(tag)
             || (!tag.contains("::")
@@ -192,6 +334,12 @@ impl SpensoBroadcastFunction {
     }
 
     /// Return the fully qualified tags attached to the registered function.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> conjugate = sp.BroadcastFunction.conj()
+    /// >>> tags = conjugate.get_tags()
     fn get_tags(&self) -> Vec<String> {
         self.name.get_tags().to_vec()
     }
@@ -220,7 +368,20 @@ submit! {
                 ],
                 r#type: MethodType::Instance,
                 r#return: SpensoNet::type_output,
-                doc: "Apply this unary function lazily to a concrete tensor or tensor network.",
+                doc: r##"Apply this unary function lazily to a concrete tensor or tensor network.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> conjugate = sp.BroadcastFunction.conj()
+>>> tensor = sp.Tensor.dense(sp.TensorName.vector("docs::p")(r), [1 + 2j, 3 + 4j])
+>>> result = conjugate(tensor).to_tensor()
+
+Parameters
+----------
+arg : Tensor | TensorNetwork
+    Scalar, TensorExpression, Tensor, or TensorNetwork to transform elementwise. Component tensors are evaluated lazily as networks."##,
                 is_async: false,
                 deprecated: None,
                 type_ignored: None,
@@ -238,7 +399,20 @@ submit! {
                 ],
                 r#type: MethodType::Instance,
                 r#return: TensorExpression::type_output,
-                doc: "Apply this unary function elementwise, preserving a structured interface.",
+                doc: r##"Apply this unary function lazily to a concrete tensor or tensor network.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> conjugate = sp.BroadcastFunction.conj()
+>>> tensor = sp.Tensor.dense(sp.TensorName.vector("docs::p")(r), [1 + 2j, 3 + 4j])
+>>> result = conjugate(tensor).to_tensor()
+
+Parameters
+----------
+arg : Tensor | TensorNetwork
+    Scalar, TensorExpression, Tensor, or TensorNetwork to transform elementwise. Component tensors are evaluated lazily as networks."##,
                 is_async: false,
                 deprecated: None,
                 type_ignored: None,
@@ -256,7 +430,20 @@ submit! {
                 ],
                 r#type: MethodType::Instance,
                 r#return: PythonExpression::type_output,
-                doc: "Apply this unary function to an ordinary scalar expression.",
+                doc: r##"Apply this unary function lazily to a concrete tensor or tensor network.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> conjugate = sp.BroadcastFunction.conj()
+>>> tensor = sp.Tensor.dense(sp.TensorName.vector("docs::p")(r), [1 + 2j, 3 + 4j])
+>>> result = conjugate(tensor).to_tensor()
+
+Parameters
+----------
+arg : Tensor | TensorNetwork
+    Scalar, TensorExpression, Tensor, or TensorNetwork to transform elementwise. Component tensors are evaluated lazily as networks."##,
                 is_async: false,
                 deprecated: None,
                 type_ignored: None,

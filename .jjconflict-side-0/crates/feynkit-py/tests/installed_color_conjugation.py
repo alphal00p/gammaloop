@@ -1,7 +1,9 @@
 """Compact color words use the same conjugation as explicit indexed networks."""
 
+from symbolica.community.tensor import AlgebraSettings, ContractSettings
+
 from symbolica import E, S
-from symbolica.community.hep import Symbols  # noqa: F401 (register SU(3) components)
+from symbolica.community.feynkit import Symbols  # noqa: F401 (register SU(3) components)
 from symbolica.community.tensor import (
     AUTO,
     ColorSimplifySettings,
@@ -39,8 +41,8 @@ for colors in (2, 3, 5):
     explicit_norm = ket * bra
     color_settings = ColorSimplifySettings(substitute_cof_dimension_invariants=True)
     assert explicit_norm.rank == 0
-    assert explicit_norm.simplify_color(
-        color_settings
+    assert explicit_norm.reduce_algebra(AlgebraSettings(color=color_settings)).contract(
+        ContractSettings(collect_chains=False, collect_traces=False)
     ).to_expression().to_expression() == E(str((colors**2 - 1) ** 2)) / (4 * colors)
     if colors == 3:
         # HEP's explicit SU(3) matrices are independent of the color identities.
@@ -63,14 +65,27 @@ for colors in (2, 3, 5):
     assert conjugate.to_expression() == expected.to_expression()
     assert conjugate.dirac_adjoint().to_expression() == word.to_expression()
     assert word.dirac_adjoint().to_expression() == conjugate.to_expression()
-    assert conjugate.simplify_color().to_expression().to_expression() == (
-        explicit.dirac_adjoint().simplify_color().to_expression().to_expression()
+    assert conjugate.reduce_algebra(
+        AlgebraSettings(color=ColorSimplifySettings())
+    ).contract(
+        ContractSettings(collect_chains=False, collect_traces=False)
+    ).to_expression().to_expression() == (
+        explicit.dirac_adjoint()
+        .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .to_expression()
+        .to_expression()
     )
     norm = (
         (word * conjugate)
-        .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
+        .reduce_algebra(
+            AlgebraSettings(
+                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
-        .contract()
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
     )
     assert norm.is_scalar
@@ -84,8 +99,16 @@ for colors in (2, 3, 5):
     )
     conjugate_trace = trace.dirac_adjoint()
     assert conjugate_trace.dirac_adjoint().to_expression() == trace.to_expression()
-    assert conjugate_trace.simplify_color().to_expression().to_expression() == (
-        loop.dirac_adjoint().simplify_color().to_expression().to_expression()
+    assert conjugate_trace.reduce_algebra(
+        AlgebraSettings(color=ColorSimplifySettings())
+    ).contract(
+        ContractSettings(collect_chains=False, collect_traces=False)
+    ).to_expression().to_expression() == (
+        loop.dirac_adjoint()
+        .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .to_expression()
+        .to_expression()
     )
     print(f"SU({colors}): compact/explicit color conjugation and norm passed")
 
@@ -104,24 +127,40 @@ for colors in (2, 3, 5):
         symmetric_trace.dirac_adjoint().to_expression()
         == symmetric_trace.to_expression()
     )
+    assert (antisymmetric_trace.dirac_adjoint() + antisymmetric_trace).reduce_algebra(
+        AlgebraSettings(color=ColorSimplifySettings())
+    ).contract(
+        ContractSettings(collect_chains=False, collect_traces=False)
+    ).to_expression().to_expression() == E("0")
     assert (
-        antisymmetric_trace.dirac_adjoint() + antisymmetric_trace
-    ).simplify_color().to_expression().to_expression() == E("0")
-    assert (
-        symmetric_trace.simplify_color().to_expression().to_expression()
+        symmetric_trace.reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .to_expression()
+        .to_expression()
         == ((trace + conjugate_trace) / 2)
-        .simplify_color()
+        .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
     )
-    antisymmetric = antisymmetric_trace.simplify_color().to_expression()
+    antisymmetric = (
+        antisymmetric_trace.reduce_algebra(
+            AlgebraSettings(color=ColorSimplifySettings())
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .to_expression()
+    )
     expected_antisymmetric = (
-        ((trace - conjugate_trace) / 2).simplify_color().to_expression()
+        ((trace - conjugate_trace) / 2)
+        .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .to_expression()
     )
     # Factored half-differences need not have the same literal Atom form.
     assert (
         (antisymmetric - expected_antisymmetric)
-        .simplify_color()
+        .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
     ) == E("0")

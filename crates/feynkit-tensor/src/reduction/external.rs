@@ -192,8 +192,12 @@ mod tests {
     fn one_external_direction_rank_one_and_mixed_rank_two() {
         let d = symbol!("external_test::D");
         let rep = Minkowski {}.new_rep(d);
-        let [k, q, p] = ["external_test::k", "external_test::q", "external_test::p"]
-            .map(|name| rep.vector(symbol!(name).to_atom().as_view(), []));
+        let [k, q, p] = [
+            spenso::vector_symbol!("external_test::k"),
+            spenso::vector_symbol!("external_test::q"),
+            spenso::vector_symbol!("external_test::p"),
+        ]
+        .map(|head| rep.vector(head.to_atom().as_view(), []));
         let [mu, nu] = [
             symbol!("external_test::mu").to_atom(),
             symbol!("external_test::nu").to_atom(),
@@ -229,11 +233,11 @@ mod tests {
         let d = symbol!("external_rank3::D");
         let rep = Minkowski {}.new_rep(d);
         let [k, p, r] = [
-            "external_rank3::k",
-            "external_rank3::p",
-            "external_rank3::r",
+            spenso::vector_symbol!("external_rank3::k"),
+            spenso::vector_symbol!("external_rank3::p"),
+            spenso::vector_symbol!("external_rank3::r"),
         ]
-        .map(|name| rep.vector(symbol!(name).to_atom().as_view(), []));
+        .map(|head| rep.vector(head.to_atom().as_view(), []));
         let reducer = TensorReducer::new(d.to_atom())
             .with_integrated_vector(k.clone())
             .with_external_vector(p.clone());
@@ -259,8 +263,12 @@ mod tests {
     #[test]
     fn two_direction_gram_inverse_and_full_span() {
         let rep = Minkowski {}.new_rep(2);
-        let [k, p, r] = ["external_full::k", "external_full::p", "external_full::r"]
-            .map(|name| rep.vector(symbol!(name).to_atom().as_view(), []));
+        let [k, p, r] = [
+            spenso::vector_symbol!("external_full::k"),
+            spenso::vector_symbol!("external_full::p"),
+            spenso::vector_symbol!("external_full::r"),
+        ]
+        .map(|head| rep.vector(head.to_atom().as_view(), []));
         let mu = symbol!("external_full::mu").to_atom();
         let nu = symbol!("external_full::nu").to_atom();
         let reducer = TensorReducer::new(Atom::num(2))

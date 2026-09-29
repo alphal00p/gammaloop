@@ -123,7 +123,17 @@ impl Case {
                     (trace!(&spin; factors)).as_atom_view().to_owned(),
                 )
                 .unwrap()
-                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()

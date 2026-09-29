@@ -26,7 +26,7 @@ strictly four-dimensional: the simplifier does not choose a dimensional-regulari
 prescription. Mixed dimensions and unsupported transposed words can remain unevaluated.
 The notebook checks these boundaries as well as successful reductions.
 
-`simplify_gamma()` returns an `AliasedTensorExpression`: both ordinary and axial
+`reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings()))` returns an `AliasedTensorExpression`: both ordinary and axial
 trace identities retain factored definitions. `to_expression()` resolves the
 literal aliases, while `expand()` explicitly materializes the full polynomial.
 Rust uses the same shared result through `resolved()` and `expanded()`.
@@ -531,7 +531,7 @@ opaque scalar parameters, and the chain-like and rank-one settings are retained.
 The repeated-index scan still guards this work, and substitutions preserve sums
 and powers rather than distributing them.
 
-Epsilon cleanup remains a separate `simplify_epsilon()` operation. When epsilon
+Epsilon cleanup remains a separate `reduce_algebra(AlgebraSettings(epsilon=True))` operation. When epsilon
 is present, it retains one initial whole-expression Schoonschip pass. Candidate
 selection directly distinguishes powers, products and epsilon function heads.
 It no longer runs Schoonschip at every visited node: another whole-expression
@@ -4675,8 +4675,8 @@ controls have negative median paired changes. All trace samples and slower
 observations remain in the report; this cohort does not isolate the cause of
 those changes.
 
-A subsequent source audit follows the free-10 D control through
-`simplify_gamma(expand_traces=True)`. Its ten distinct indices use the existing
+A subsequent source audit follows the free-10 D control through the then-public
+`simplify_gamma(expand_traces=True)` call. Its ten distinct indices use the existing
 generic terminal trace evaluator; the scalar spectator remains factored and
 the evaluator returns before Schoonschip component collection. The Python
 wrapper uses the existing rewritten-result finisher. Neither the new public

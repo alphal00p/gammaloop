@@ -9,12 +9,16 @@ from pathlib import Path
 from time import process_time_ns
 
 from symbolica import E, S, T
-from symbolica.community.hep import Symbols
+from symbolica.community.feynkit import Symbols
 from symbolica.community.tensor import (
     AUTO,
+    AlgebraSettings,
     AliasedTensorExpression,
+    ColorSimplifySettings,
+    ContractSettings,
     CookSettings,
     GammaSimplifySettings,
+    ReductionStatus,
     Representation,
     TensorExpression,
     TensorName,
@@ -33,6 +37,15 @@ def atom(value):
     if isinstance(value, AliasedTensorExpression):
         value = value.to_expression()
     return value.to_expression() if isinstance(value, TensorExpression) else value
+
+
+def completed(**operations):
+    """Unclocked completion gate for the retained result of each requested policy."""
+    statuses = {name: value.reduction_status for name, value in operations.items()}
+    assert all(status == ReductionStatus.Complete for status in statuses.values()), (
+        statuses
+    )
+    return {name: str(status) for name, status in statuses.items()}
 
 
 def describe(value):
@@ -360,7 +373,9 @@ L F = vx(1,-k0, k0-k1, k1, k10, mu1, mu8)*
             start = process_time_ns() if observer is not None else 0
             result = result.replace(self.rules[vertex - 1])
             replaced = process_time_ns() if observer is not None else 0
-            result = result.contract()
+            result = result.contract(
+                ContractSettings(collect_chains=False, collect_traces=False)
+            )
             contracted = process_time_ns() if observer is not None else 0
             if observer is not None:
                 observer.append(
@@ -368,6 +383,7 @@ L F = vx(1,-k0, k0-k1, k1, k10, mu1, mu8)*
                         "vertex": vertex,
                         "replacement_cpu_ns": replaced - start,
                         "contraction_cpu_ns": contracted - replaced,
+                        "completion": completed(contract=result),
                         **describe(result),
                     }
                 )
@@ -461,11 +477,23 @@ class FreeTrace:
         self.form_order = "trace-first"
 
     def reduce(self):
-        return self.source.simplify_gamma(self.settings).expand().to_expression()
+        return (
+            self.source.reduce_algebra(
+                AlgebraSettings(gamma=self.settings, epsilon=True)
+            )
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .expand()
+            .to_expression()
+        )
 
     def phases(self, expected):
         start = process_time_ns()
-        reduced = self.source.simplify_gamma(self.settings)
+        algebra = self.source.reduce_algebra(
+            AlgebraSettings(gamma=self.settings, epsilon=True)
+        )
+        reduced = algebra.contract(
+            ContractSettings(collect_chains=False, collect_traces=False)
+        )
         after_gamma = process_time_ns()
         expanded = reduced.expand()
         after_expansion = process_time_ns()
@@ -473,6 +501,7 @@ class FreeTrace:
         end = process_time_ns()
         assert result == expected
         return {
+            "completion": completed(reduce_algebra=algebra, contract=reduced),
             "gamma_reduction_cpu_ns": after_gamma - start,
             "trace_materialization_cpu_ns": after_expansion - after_gamma,
             "atom_extraction_cpu_ns": end - after_expansion,
@@ -650,7 +679,9 @@ class AxialTrace(FreeTrace):
         )
 
     def reduce(self):
-        reduced = self.source.simplify_gamma(self.settings)
+        reduced = self.source.reduce_algebra(
+            AlgebraSettings(gamma=self.settings, epsilon=True)
+        ).contract(ContractSettings(collect_chains=False, collect_traces=False))
         # M1 and FORM materialize the trace while retaining the scalar factor.
         # Applying expand to the entire aliased tensor would also distribute
         # (x+y)^8, which is outside this case's declared materialization scope.
@@ -659,7 +690,12 @@ class AxialTrace(FreeTrace):
 
     def phases(self, expected):
         start = process_time_ns()
-        reduced = self.source.simplify_gamma(self.settings)
+        algebra = self.source.reduce_algebra(
+            AlgebraSettings(gamma=self.settings, epsilon=True)
+        )
+        reduced = algebra.contract(
+            ContractSettings(collect_chains=False, collect_traces=False)
+        )
         after_gamma = process_time_ns()
         trace = AliasedTensorExpression(reduced.root / self.spectator, reduced.aliases)
         after_interface = process_time_ns()
@@ -669,6 +705,7 @@ class AxialTrace(FreeTrace):
         end = process_time_ns()
         assert result == expected
         return {
+            "completion": completed(reduce_algebra=algebra, contract=reduced),
             "gamma_reduction_cpu_ns": after_gamma - start,
             "spectator_interface_cpu_ns": after_interface - after_gamma,
             "trace_materialization_cpu_ns": after_expansion - after_interface,
@@ -721,15 +758,20 @@ class ProductionNumerator:
         self.strategy = {
             "fixture": str(self.path.relative_to(REPO)),
             "sha256": hashlib.sha256(self.path.read_bytes()).hexdigest(),
-            "scope": "Captured post-metric numerator: gamma, color, then metric simplification",
+            "scope": "Captured post-metric numerator: enabled gamma and colour identities in one planner, then ambient structural contraction",
             "input_adapter": "Existing CookSettings.indices() for nested hedge/edge index payloads; setup excluded",
         }
 
     def reduce(self):
         return (
-            self.source.simplify_gamma()
-            .simplify_color()
-            .contract()
+            self.source.reduce_algebra(
+                AlgebraSettings(
+                    gamma=GammaSimplifySettings(),
+                    epsilon=True,
+                    color=ColorSimplifySettings(),
+                )
+            )
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_expression()
         )
@@ -876,28 +918,234 @@ class ProductionNumerator:
         }
 
     def phases(self, expected):
-        rows, outputs = [], []
-        value = self.source
-        for method in ("simplify_gamma", "simplify_color", "contract"):
-            start = process_time_ns()
-            value = getattr(value, method)()
-            elapsed = process_time_ns() - start
-            rows.append({"phase": method, "cpu_ns": elapsed})
-            outputs.append(value)
         start = process_time_ns()
-        result = atom(value)
-        elapsed = process_time_ns() - start
-        rows.append({"phase": "materialization", "cpu_ns": elapsed})
-        outputs.append(result)
-        # Describing aliases resolves them. Defer this until all clocks have
-        # finished so diagnostics do not warm a later operation's inputs.
-        for row, output in zip(rows, outputs, strict=True):
-            row.update(describe(output))
+        reduced = self.source.reduce_algebra(
+            AlgebraSettings(
+                gamma=GammaSimplifySettings(),
+                color=ColorSimplifySettings(),
+                epsilon=True,
+            )
+        )
+        after_algebra = process_time_ns()
+        contracted = reduced.contract(
+            ContractSettings(collect_chains=False, collect_traces=False)
+        )
+        after_contract = process_time_ns()
+        result = atom(contracted)
+        end = process_time_ns()
         assert result == expected
-        return {"stages": rows}
+        return {
+            "completion": completed(reduce_algebra=reduced, contract=contracted),
+            "stages": [
+                {
+                    "phase": "combined_algebra",
+                    "cpu_ns": after_algebra - start,
+                    **describe(reduced),
+                },
+                {
+                    "phase": "contract",
+                    "cpu_ns": after_contract - after_algebra,
+                    **describe(contracted),
+                },
+                {
+                    "phase": "materialization",
+                    "cpu_ns": end - after_contract,
+                    **describe(result),
+                },
+            ],
+        }
+
+
+class ColourFierz:
+    """Closed SU(3) crossed generator word, with Tr(Ta Tb)=delta(a,b)/2."""
+
+    def __init__(self):
+        TensorName.t()
+        Representation.cof(3)
+        Representation.coad(8)
+        self.mode, self.loops, self.form_order = "trace4", 0, "trace-first"
+        generator = TensorName.t().to_expression()
+        adjoint, fundamental = Representation.coad(8), Representation.cof(3)
+        a, b = (adjoint(S(f"colour_fierz::{name}")) for name in ("a", "b"))
+        i, j, k, l = (S(f"colour_fierz::{name}") for name in ("i", "j", "k", "l"))
+        ports = ((a, i, j), (b, j, k), (a, k, l), (b, l, i))
+        self.source = TensorExpression(
+            prod(
+                generator(
+                    color.to_expression(),
+                    fundamental(left).to_expression(),
+                    fundamental.dual()(right).to_expression(),
+                )
+                for color, left, right in ports
+            )
+        )
+        self.settings = ColorSimplifySettings()
+        self.trace_index = E("spenso::idx(2,spenso::cof(3))")
+        self.strategy = {
+            "color_group": "SU(3)",
+            "generator_normalization": "Tr(Ta Tb)=delta(a,b)/2",
+            "input": "Tr(Ta Tb Ta Tb), summed adjoint a,b",
+            "output": "complete scalar -2/3",
+        }
+
+    def reduce(self):
+        return atom(
+            self.source.reduce_algebra(AlgebraSettings(color=self.settings)).contract(
+                ContractSettings(collect_chains=False, collect_traces=False)
+            )
+        ).replace(self.trace_index, E("1/2"))
+
+    def phases(self, expected):
+        start = process_time_ns()
+        reduced = self.source.reduce_algebra(AlgebraSettings(color=self.settings))
+        after_color = process_time_ns()
+        repeated = reduced.reduce_algebra(AlgebraSettings(color=self.settings))
+        after_rerun = process_time_ns()
+        assert atom(repeated) == atom(reduced)
+        start_contract = process_time_ns()
+        contracted = reduced.contract(
+            ContractSettings(collect_chains=False, collect_traces=False)
+        )
+        after_contract = process_time_ns()
+        result = atom(contracted).replace(self.trace_index, E("1/2"))
+        end = process_time_ns()
+        assert result == expected
+        return {
+            "completion": completed(
+                reduce_algebra=reduced, completed_rerun=repeated, contract=contracted
+            ),
+            "color_reduction_cpu_ns": after_color - start,
+            "completed_color_rerun_cpu_ns": after_rerun - after_color,
+            "contraction_cpu_ns": after_contract - start_contract,
+            "materialization_and_normalization_cpu_ns": end - after_contract,
+        }
+
+    def form_source(self):
+        return form_batch(
+            "Dimension 8; Indices a,b; Dimension 3; Indices i,j,k,l; CFunctions T;",
+            "T(a,i,j)*T(b,j,k)*T(a,k,l)*T(b,l,i)",
+            "repeat;\n"
+            "id T(a?,i?,j?)*T(a?,k?,l?)=1/2*(d_(i,l)*d_(j,k)-1/3*d_(i,j)*d_(k,l));\n"
+            "contract;\nendrepeat;",
+        )
+
+    def import_form(self, text):
+        return E(re.sub(r"\s+", "", text).rstrip(";"))
+
+    def check_components(self, outputs, inputs):
+        from symbolica.community.tensor import TensorLibrary, TensorNetwork
+
+        library = TensorLibrary.hep_lib_atom()
+        network = TensorNetwork(self.source.to_expression(), library=library)
+        network.execute(library=library)
+        expected = network.result_scalar()
+        assert expected == E("-2/3")
+        assert all(atom(value) == expected for value in outputs.values())
+        return {
+            "scope": "Complete finite SU(3) HEP generator-component contraction",
+            "result": expected.format_plain(),
+            "passed": True,
+        }
+
+
+class MixedColourTrace(FreeTrace):
+    """Crossed SU(3) word times a four-gamma trace, with all 256 open components."""
+
+    def __init__(self):
+        super().__init__("trace4", 4)
+        self.color = ColourFierz()
+        self.source = self.color.source * self.source
+        self.strategy.update(
+            color_group="SU(3)",
+            generator_normalization="Tr(Ta Tb)=delta(a,b)/2",
+            identities="gamma and colour enabled together",
+            output="complete four-port Lorentz polynomial",
+        )
+
+    def reduce(self):
+        value = self.source.reduce_algebra(
+            AlgebraSettings(
+                gamma=self.settings, color=self.color.settings, epsilon=True
+            )
+        ).contract(ContractSettings(collect_chains=False, collect_traces=False))
+        return atom(value.expand()).replace(self.color.trace_index, E("1/2"))
+
+    def phases(self, expected):
+        start = process_time_ns()
+        reduced = self.source.reduce_algebra(
+            AlgebraSettings(
+                gamma=self.settings, color=self.color.settings, epsilon=True
+            )
+        )
+        after_algebra = process_time_ns()
+        contracted = reduced.contract(
+            ContractSettings(collect_chains=False, collect_traces=False)
+        )
+        after_contraction = process_time_ns()
+        result = atom(contracted.expand()).replace(self.color.trace_index, E("1/2"))
+        end = process_time_ns()
+        assert result == expected
+        return {
+            "completion": completed(reduce_algebra=reduced, contract=contracted),
+            "combined_algebra_cpu_ns": after_algebra - start,
+            "contraction_cpu_ns": after_contraction - after_algebra,
+            "materialization_and_normalization_cpu_ns": end - after_contraction,
+        }
+
+    def form_source(self):
+        return form_batch(
+            "Dimension 8; Indices a,b; Dimension 3; Indices i,j,k,l; CFunctions T; "
+            "Dimension 4; Indices i0,i1,i2,i3; UnitTrace 4;",
+            "T(a,i,j)*T(b,j,k)*T(a,k,l)*T(b,l,i)*g_(1,i0,i1,i2,i3)",
+            "repeat;\n"
+            "id T(a?,i?,j?)*T(a?,k?,l?)=1/2*(d_(i,l)*d_(j,k)-1/3*d_(i,j)*d_(k,l));\n"
+            "contract;\nendrepeat;\ntrace4,1;",
+        )
+
+    def check_components(self, outputs, inputs):
+        from itertools import product
+
+        from symbolica import Expression
+        from symbolica.community.tensor import Tensor, TensorLibrary, TensorNetwork
+
+        library = TensorLibrary.hep_lib_atom()
+        metric = Tensor.sparse(
+            TensorExpression.g(self.lorentz, self.lorentz), Expression
+        )
+        for axis in range(4):
+            metric[axis, axis] = E("1" if axis == 0 else "-1")
+        library.register(metric)
+        slots = [slot.to_expression() for slot in self.source.structure.slots]
+        assert len(slots) == 4 and len(set(slots)) == 4
+        rows = {}
+        expected = None
+        for label, expression in {"source": atom(self.source), **outputs}.items():
+            network = TensorNetwork(atom(expression), library=library)
+            network.execute(library=library)
+            tensor = network.result_tensor(library=library)
+            actual = [slot.to_expression() for slot in tensor.structure.slots]
+            assert len(actual) == 4 and set(actual) == set(slots)
+            tensor = tensor.permute_axes([actual.index(slot) for slot in slots])
+            values = [tensor[list(index)] for index in product(range(4), repeat=4)]
+            assert all(isinstance(value, Expression) for value in values)
+            if expected is None:
+                expected = values
+            else:
+                assert values == expected
+            rows[label] = [value.format_plain() for value in values]
+        return {
+            "scope": "All 256 exact HEP components of the original SU(3) and four-dimensional Clifford tensors and reduced outputs",
+            "external_slots": [slot.format_plain() for slot in slots],
+            "results": rows,
+            "passed": True,
+        }
 
 
 def make_case(name):
+    if name == "mixed-colour-trace4":
+        return MixedColourTrace()
+    if name == "colour-fierz":
+        return ColourFierz()
     if name.startswith("historical-"):
         return HistoricalLadder(name.removeprefix("historical-"))
     if name == "axial12-trace4":
@@ -915,6 +1163,8 @@ def make_case(name):
 
 
 CASES = [
+    "mixed-colour-trace4",
+    "colour-fierz",
     *(f"fermion-{n}-{m}" for n in (3, 4) for m in ("trace4", "tracen")),
     *(f"gluon-4-{m}" for m in ("trace4", "tracen")),
     "historical-original",

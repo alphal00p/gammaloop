@@ -14,7 +14,7 @@ use gammalooprs::{
     settings::{global::OrientationPattern, RuntimeSettings},
     utils::tracing::LogLevel,
 };
-use idenso::tensor::SymbolicTensor;
+use idenso::tensor::{ContractSettings, SymbolicTensor};
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::{ModifySubSet, SuBitGraph},
@@ -137,7 +137,7 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
     Ok(parse!(atom_str).to_canonical_string())
 }
 
-/// Rewrite a Symbolica tensor expression into Idenso dot-product notation.
+/// Contract repeated tensor indices using Idenso's structural contraction.
 ///
 /// Parameters
 /// ----------
@@ -147,7 +147,7 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 /// Returns
 /// -------
 /// str
-///     The equivalent expression using Idenso dot-product notation.
+///     The contracted expression, with compatible vector pairs written as dots.
 ///
 /// Raises
 /// ------
@@ -159,14 +159,18 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 /// Rewrite a contraction before passing it to an Idenso workflow:
 ///
 /// ```python
-/// to_dots("p(mu) * q(mu)")
+/// contract("spenso::g(spenso::mink(4,mu),spenso::mink(4,mu))")
 /// ```
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(name = "to_dots")]
-pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
+#[pyo3(name = "contract")]
+pub(crate) fn atom_contract(atom_str: &str) -> Result<String> {
     let dotted = SymbolicTensor::infer(parse!(atom_str, default_namespace = "python"))?
-        .contract(Default::default())?
+        .contract(ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?
         .resolved()?
         .to_dots()?
         .into_expression();
@@ -238,7 +242,7 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     */
     // m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
-    m.add_wrapped(wrap_pyfunction!(atom_to_dots))?;
+    m.add_wrapped(wrap_pyfunction!(atom_contract))?;
     m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())
 }

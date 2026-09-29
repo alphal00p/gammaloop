@@ -261,8 +261,10 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         .with_mode(CookMode::ReversibleEncoding)
         .with_representation_payloads(true, true);
     let numerator = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?
-        .simplify_color(ColorSimplifySettings {
-            simplify_non_color: false,
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            color: Some(ColorSimplifySettings {
+                ..Default::default()
+            }),
             ..Default::default()
         })?
         .resolved()?;

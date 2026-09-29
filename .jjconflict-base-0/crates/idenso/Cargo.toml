@@ -53,6 +53,10 @@ harness = false
 name = "metric_contraction_benchmark"
 required-features = ["reference-cases"]
 
+[[example]]
+name = "contraction_phase_benchmark"
+required-features = ["reference-cases"]
+
 [features]
 default = ["native"]
 bincode = ["dep:bincode", "dep:bincode-trait-derive"]

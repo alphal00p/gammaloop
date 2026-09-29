@@ -196,7 +196,17 @@ fn validate_gamma(expr: Atom, const_map: HashMap<Atom, Atom>) {
     println!("Expression: {}", expr);
     let simplified = idenso::tensor::SymbolicTensor::infer(expr)
         .unwrap()
-        .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap();
 
     println!("Simplified to {}", simplified.root().expression());

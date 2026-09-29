@@ -36,7 +36,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use feynkit_graph::FeynmanDiagram;
 use idenso::{
     CookMode, CookSettings,
-    tensor::{ContractionSettings, SymbolicTensor},
+    tensor::{ContractSettings, SymbolicTensor},
 };
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use spenso::network::{library::symbolic::ETS, parsing::AtomStructureExt, tags::SPENSO_TAG};
@@ -475,7 +475,12 @@ impl TensorReducer {
                 .unwrap_or_else(|| TensorReductionError::TensorAlgebra(error.to_string()))
         })?;
         let normalized = source
-            .contract(ContractionSettings::default().without_rank_one_tensors())
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .and_then(|value| value.resolved())
             .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
         let normalized = normalized

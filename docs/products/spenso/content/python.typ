@@ -7,6 +7,36 @@ Spenso's Python interface is a native adapter over the same tensor structures, l
 network executor as the Rust crates. Use the generated reference for exact signatures and this
 guide for the object boundaries and execution sequence that those signatures do not explain.
 
+== Compute a scalar product
+
+Once the tensor module is available, this example computes the squared Euclidean
+length of a vector. A representation defines its three component positions;
+`Tensor.dense` supplies their values. Matching index labels request contraction.
+
+// docs-example: compile
+```python
+from symbolica.community import tensor as sp
+
+space = sp.Representation.euc(3)
+p = sp.TensorName.vector("quickstart::p")(space)
+vector = sp.Tensor.dense(p, [1.0, 2.0, 3.0])
+
+network = vector("i") * vector("i")
+result = network.to_tensor()
+assert result.scalar() == 14.0
+```
+
+The product creates a computation; `to_tensor()` executes a copy and returns its
+component data. Use `result[:]` for the flat components of a tensor with free
+indices, or `result.scalar()` when no free indices remain. Call `network.execute()`
+when you want to update the network itself and inspect its progress.
+
+For symbolic calculations, work with `p` before supplying component values.
+For reusable numerical definitions, register `vector` in a `TensorLibrary` and
+pass that library when evaluating an expression. Each method's reference entry
+includes a runnable example followed by its parameter descriptions. The same
+documentation is available in Python with `help(sp.Tensor.dense)`.
+
 == Availability and version boundary
 
 #boundary("A Symbolica community module", [
@@ -36,6 +66,10 @@ the host-provided `initialize_module`. That initializer must remain in the expor
 `SpensoModule::get_name()` returns `tensor`; package the public wrapper under
 `python/symbolica/community/tensor/`. Python classes and generated stubs use
 `symbolica.community.tensor`, while Rust crate names and symbolic `spenso::` names remain unchanged.
+Include the generated `__init__.pyi` beside that wrapper and a `py.typed` marker in
+the `tensor` package so editors and type checkers can discover the public API.
+The Spenso documentation exporter writes and checks the same stub in
+`docs/api/python/spynso3.pyi` and the notebook host's `tensor` package.
 Do not link Spynso into `gammaloop._gammaloop` or distribute it as a second native extension.
 
 GammaLoop owns the Spynso source and bundled Tydenso `render.typ` and `notation.typ` assets;
@@ -311,14 +345,15 @@ one native Single step, including the executor's normal preprocessing. Self trac
 can therefore run before a reported ready operation. Repeat `step`, inspect or display
 the returned network, or execute it to completion.
 
-`expression.simplify()` contracts metrics without selecting a dimensional scheme or
-expanding scalar polynomials. `SimplifySettings.hep()` enables the existing gamma,
-color, and epsilon passes as well. A custom `SimplifySettings` selects these passes,
-their `GammaSimplifySettings` and `ColorSimplifySettings`, optional full polynomial
-expansion, and a positive `max_passes` bound. The chosen passes repeat until stable;
-failure to stabilize raises an error rather than returning a partial result. Each
-pass keeps Idenso's own dimension and gamma5 rules. Individual algebra identities can
-introduce sums even when full polynomial expansion is disabled.
+`expression.contract(ContractSettings(...))` performs structural contractions and optional
+chain or trace collection without evaluating algebraic identities. Independently,
+`expression.reduce_algebra(AlgebraSettings(...))` selects gamma, color, and epsilon families
+with their existing dimension and gamma5 conventions. Its default enables none;
+`AlgebraSettings.hep()` selects all three. Each identity includes its necessary local
+contractions. No nested contraction settings or implicit global expansion is involved.
+The result retains aliases and reports `Complete`, `Deferred`, or `Capped` through
+`reduction_status`. A `max_passes` budget caps work while retaining the exact
+remaining expression. Explicit `expand()` requests polynomial materialization.
 
 == Numerical evaluation
 
@@ -633,15 +668,13 @@ unevaluated. The result remains a `TensorExpression` with its two bispinor ports
 // docs-example: compile
 ```python
 from symbolica.community.tensor import (
-    GammaSimplifySettings, Representation, TensorExpression, TensorName,
+    AlgebraSettings, GammaSimplifySettings, Representation, TensorExpression, TensorName,
 )
 
 mink = Representation.mink(4)
 p = TensorName.vector("p")
 indexed = TensorExpression.gamma(4)("a", "b", "mu") * p(mink("mu"))
-pslash = indexed.contract().simplify_gamma(
-    GammaSimplifySettings(output="chains")
-).to_expression()
+pslash = indexed.contract().reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(output="chains"))).to_expression()
 pslash.formatted()
 ```
 

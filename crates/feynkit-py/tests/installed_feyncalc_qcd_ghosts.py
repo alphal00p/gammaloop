@@ -4,13 +4,14 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/QQbar-GlGl-2
 Both ghost orderings are generated independently; all gluon interference is kept.
 """
 
+from symbolica.community.tensor import AlgebraSettings, ContractSettings
+
 from pathlib import Path
 
 from symbolica import E, Replacement, S
-from symbolica.community import hep as fk
+from symbolica.community import feynkit as fk
 from symbolica.community.tensor import (
     ColorSimplifySettings,
-    CookSettings,
     GammaSimplifySettings,
     TensorExpression,
 )
@@ -79,7 +80,13 @@ for outgoing, vertices, count in (
     assert len(operator.structure.slots) == (8 if count == 3 else 6)
     adjoint = (
         operator.dirac_adjoint()
-        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .reduce_algebra(
+            AlgebraSettings(
+                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
+                epsilon=True,
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
     )
@@ -127,15 +134,21 @@ for outgoing, vertices, count in (
         .replace(coad(8, index), coad(dA, index))
     )
     colored = (
-        TensorExpression(generic, cook_indices=CookSettings.indices())
-        .simplify_color()
+        TensorExpression(generic, intern="flattened")
+        .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
         .replace(dA, Nc**2 - 1)
     )
     colored = (
         TensorExpression(colored)
-        .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
+        .reduce_algebra(
+            AlgebraSettings(
+                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
     )
 
@@ -149,9 +162,10 @@ for outgoing, vertices, count in (
     spin_summed = (
         TensorExpression(
             colored.to_expression() * spin_projector,
-            cook_indices=CookSettings.indices(),
+            intern="flattened",
         )
-        .simplify_gamma()
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
     )
     polarizations = E("1")
@@ -166,9 +180,9 @@ for outgoing, vertices, count in (
     scalar = (
         TensorExpression(
             spin_summed.to_expression() * polarizations,
-            cook_indices=CookSettings.indices(),
+            intern="flattened",
         )
-        .contract()
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_dots()
     )

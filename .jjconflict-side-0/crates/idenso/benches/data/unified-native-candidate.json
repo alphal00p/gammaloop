@@ -1,0 +1,611 @@
+{
+  "profile": "dev-optim",
+  "platform": "Linux-6.18.45-x86_64-with-glibc2.42",
+  "cpu_count": 384,
+  "cpu_affinity": [
+    30
+  ],
+  "settings": {
+    "samples": 3,
+    "target_ms": 8.0
+  },
+  "binary_sha256": {
+    "metric_contraction_benchmark": "a27fbf5248b8287d77ec0b5be263da05fcf1a35511934574257f4a8d94503837",
+    "contraction_phase_benchmark": "1f46d6fb5e3400ca8c506c9172da04dac14b823f8b14c0a6610d357aa8cdcc3c",
+    "trace_form": "621f457a0f33c23f61ec8789a3ee66e3a54e9d7a27e25ee59eabf74e2b288ed4"
+  },
+  "lockfile_sha256": "6d0e8d91d8d5c6a5e927d68ef4971460908403c3639c1590a6102f2336b86efe",
+  "form_sha256": "2b3de22e575b20328ed1d848d1821129b550f885ac32785aa73728a7fec408fd",
+  "boundaries": {
+    "native_rows": "Existing benchmark method clocks; see example source.",
+    "process_receipts": "Include process startup, input setup, checks and output.",
+    "form_rows": "Process wall clocks include parsing, sorting and scalar checks.",
+    "memory": "Cumulative child maximum, not isolated per-operation allocations.",
+    "compilation": "Must complete separately before invoking this runner.",
+    "diagnostic": "Separate instrumented call after primary clocks; thread-local wall time, nested inclusive totals overlap. outermost_ns avoids same-phase recursive double counting. Absent on frozen baseline."
+  },
+  "metric_run": {
+    "command": [
+      "/tmp/unified-tensor-baseline/final-host12/native-bin/metric_contraction_benchmark",
+      "/tmp/unified-tensor-baseline/final-native12/metric/fixtures",
+      "3",
+      "8.0"
+    ],
+    "exit_code": 0,
+    "process_wall_ns": 31043030342,
+    "child_cpu_ns": 30788109000,
+    "cumulative_child_peak_rss_kib": 569644,
+    "stdout_sha256": "bed3a478debea7f1507cd613029b169a28b13025670018ddd8ef3579648685e2",
+    "stderr_sha256": "08c0581d328644edee2c7ec20f7212b93dd1b63807fa614ee77e4e949be412dc"
+  },
+  "phase_runs": [
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_10/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_10/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 642325673,
+      "child_cpu_ns": 636729000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "908e096d506626017e96191818ce03c48f1db3515f98f6cc7d29be1568d1db4b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "axial_10",
+      "input_sha256": "deaad83ebb666e3cf35a516ebef42b72bbf3bda7c766e88a8f89c64e80fd8afa"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_12/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_12/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 1483606387,
+      "child_cpu_ns": 1471592000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "168bb96dbbd3a6c8816d2bce3676377ba4a2202fddc7e25b417e5bd478b78c9a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "axial_12",
+      "input_sha256": "d9a768dc076f2c0fc6f8397072f86e4735716a0e135f59e4a0251ffa81832b6b"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_6/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_6/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 507237299,
+      "child_cpu_ns": 503222000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "35e4d55893e9c4ceb8e669b5807d5b624f3f9ef0d94752b10de367f164f8751c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "axial_6",
+      "input_sha256": "66cbdb70fd49170f55e799812c3abb8b4a5f4e7349ceb017cb6d41c78bfd8f89"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_8/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_8/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 538554307,
+      "child_cpu_ns": 534164000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "762e8f15b182922e6fe798ba7cadd1c25b1042b96cc053717a34e45a7952a57a",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "axial_8",
+      "input_sha256": "f6ee77087cacfb8b4bd97c9552bb44074b9c137985e7ccd9bcdbae23a91b952b"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_crossing_12/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_crossing_12/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 506728137,
+      "child_cpu_ns": 502402000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "6ec429e4cee32bc2b9f1bbcb671e6395d2af10d976d5b34105f681696145d6d5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "axial_crossing_12",
+      "input_sha256": "1ddfda78f074e11592a63f4956827d873871f5f8d9a3d91ffa985836c20b4733"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_even4_10/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_even4_10/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 535391044,
+      "child_cpu_ns": 530829000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "a2d59d3fee0627985fb236f9459ff8e0b45e3ce557f1958004ffa47b05e1bc38",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "axial_even4_10",
+      "input_sha256": "549c1f270863c9b7cf323e0f006fd8dcd2882b2438679d4b6f26da321d75ea37"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_odd_8/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/axial_odd_8/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 524018162,
+      "child_cpu_ns": 519583000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "eab39fff68ea06f7ad6a4df1aaa396ad524229f6e0d5b9ebcda52674204fc79e",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "axial_odd_8",
+      "input_sha256": "cb1af142bb502c2992af24fa6968ada579cabc952c03cf51461cbe25aa81ff91"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/compact_paired_8/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/compact_paired_8/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 101,
+      "process_wall_ns": 4182476,
+      "child_cpu_ns": 3755000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "364dfe73c76e59423b6188fe5cd737755e5048c80454f68f0e12a065ae628364",
+      "case": "compact_paired_8",
+      "input_sha256": "671cd7f2940c20581b684f813dbfeb0387f922bfa8a7d05292b4076cf45d2613"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/external_metrics_12/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/external_metrics_12/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 526698522,
+      "child_cpu_ns": 521743000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "13237e8770733ff0bb5b03d86bb0db9d0718394f1ce9bf18f4a07508de6421a4",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "external_metrics_12",
+      "input_sha256": "adf3b7417ea819050a4c6f7d00edb1f3de18bbf643c568edfe1c0f8e7b857bdf"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/free_12/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/free_12/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 4243000006,
+      "child_cpu_ns": 4210100000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "2eb47225ef1a4a07a86016893b884ce3af68bf883f51dbce8b2b1c70d2612d9c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "free_12",
+      "input_sha256": "acb6831bffcf8b5a28a8f3fb0ec53cedd4840e6597809e368d24839f9928c64d"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/free_trace_8/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/free_trace_8/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 533098316,
+      "child_cpu_ns": 528325000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "9c6606f717015d29b2b8593f756f8ec54e021c508b42733f2a1354b34ca756a7",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "free_trace_8",
+      "input_sha256": "84890a6ce33425083ff0052b2f79fb88d70ee75ac8e504d19f06c9a9b841a49e"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/late_metric_4_10_ordinary/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/late_metric_4_10_ordinary/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 3204962419,
+      "child_cpu_ns": 3180239000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "2441acd2106cbb23b5824d3edc22f90f826c3149e61fdb63ffaf5a6b3d897e7c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "late_metric_4_10_ordinary",
+      "input_sha256": "74d39a265fac929e1169cc16f43a384b38ff9c03ca3ef04f44357ce82079df12"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/late_metric_4_12_axial/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/late_metric_4_12_axial/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 5713417574,
+      "child_cpu_ns": 5669094000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "ad5f4aba17164fe0f419a2d5eee2618a7af159c8a90d01e9fa243382dbe8a5e7",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "late_metric_4_12_axial",
+      "input_sha256": "f2f8341efd84b7a5042ce298b9a3575092627d85886c3b94f58c624787498047"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/late_metric_4_4_ordinary/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/late_metric_4_4_ordinary/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 527209114,
+      "child_cpu_ns": 522383000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "b4bd8ab19981b19b9216e0e0dff9d10692ae39cf0e69849603a80e6af9ecb016",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "late_metric_4_4_ordinary",
+      "input_sha256": "23b3b91e4dfa701593905b6efd97c4f0ee033a18565d91c2314b8a162c291a9c"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/late_metric_D_10_ordinary/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/late_metric_D_10_ordinary/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 4040427862,
+      "child_cpu_ns": 4008182000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "d31e18f26545dc9d612d41847753b55fc0af35b9393891e5d7d394773f4b09e5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "late_metric_D_10_ordinary",
+      "input_sha256": "b72951ee29978178b318eac0e2e5e90c5f10d64de03ef14cd6857c2b6158f8ac"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/order_sensitive_12/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/order_sensitive_12/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 515149619,
+      "child_cpu_ns": 510329000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "99cb2b401f86d25ba37e376f0b35b5698e2241c71e81105976e5af91a8dfc8ce",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "order_sensitive_12",
+      "input_sha256": "50f82f58cb0eda42aa87a5d09939c6e9555f3fb97fa2c8277e5dd26fefd973a7"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/ordinary_cyclic_12/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/ordinary_cyclic_12/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 575172593,
+      "child_cpu_ns": 570148000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "0dc71aa9c5b62881fb4491fb3b3d9c3f5f4f5f8c49064f9821b60ac0d042ff21",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "ordinary_cyclic_12",
+      "input_sha256": "a2781d6776edcd3621e9d116931fac66ca2679a27d42235598a12e66c6a1f538"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/ordinary_even2_8/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/ordinary_even2_8/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 518563621,
+      "child_cpu_ns": 513770000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "46dfa99e0b72a1cd1e56a72431ab2d1d35e187426e456e54bf1c438155208b08",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "ordinary_even2_8",
+      "input_sha256": "6138073faaeeaf8f6a696cad481fad8ac5142ff6a26737e540f5d1a3d1b0b85f"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/ordinary_even4_10/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/ordinary_even4_10/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 524301233,
+      "child_cpu_ns": 519890000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "14802f304e5c174257eb2f5af7eb29891de386905551b0c1ef74afa8364e2904",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "ordinary_even4_10",
+      "input_sha256": "e5fea8351e33c35140f88dd1472bab1740f75eb7c4636431cf9a94fdc4c6c48d"
+    },
+    {
+      "command": [
+        "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+        "/tmp/unified-tensor-baseline/final-native12/phases/ordinary_odd_8/inputs",
+        "/tmp/unified-tensor-baseline/final-native12/phases/ordinary_odd_8/outputs",
+        "3",
+        "8.0"
+      ],
+      "exit_code": 0,
+      "process_wall_ns": 499860642,
+      "child_cpu_ns": 495360000,
+      "cumulative_child_peak_rss_kib": 569644,
+      "stdout_sha256": "7a8e8679e93ae9571c991f15e2c0390096ef5eecdc1d63fe3b57870e96d9f81c",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "case": "ordinary_odd_8",
+      "input_sha256": "36f3ef3b57fd7da3a203566242fed5c5937db3821aae39d7ecd8814b4d186ea0"
+    }
+  ],
+  "full_phase_run": {
+    "command": [
+      "/tmp/unified-tensor-baseline/final-host12/native-bin/contraction_phase_benchmark",
+      "/tmp/unified-tensor-baseline/final-native12/metric/fixtures",
+      "/tmp/unified-tensor-baseline/final-native12/full_phases/outputs",
+      "3",
+      "8.0"
+    ],
+    "exit_code": 101,
+    "process_wall_ns": 829543190,
+    "child_cpu_ns": 822429000,
+    "cumulative_child_peak_rss_kib": 569644,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "ada9522175da001f32650e4838df020e9823399caa4ae0d4b2cb3c523e6cab39"
+  },
+  "form_run": {
+    "command": [
+      "/tmp/unified-tensor-baseline/final-host12/native-bin/trace_form",
+      "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form",
+      "12"
+    ],
+    "exit_code": 0,
+    "process_wall_ns": 6348842252,
+    "child_cpu_ns": 6280608000,
+    "cumulative_child_peak_rss_kib": 569644,
+    "stdout_sha256": "a92e9195128099834adddb26d6de039dad9e196db29bd4e6148e02271ffbdc3b",
+    "stderr_sha256": "f686912b428458943b845b696d944af1b41da2a9a4b8bfdf6a6a40246ec45f0a"
+  },
+  "form_rows": [
+    {
+      "case": "free",
+      "length": "2",
+      "terms": "1",
+      "idenso_cold_ms": "6.766375",
+      "idenso_warm_ms": "0.113620",
+      "form_trace4_process_ms": "9.877907",
+      "form_tracen_process_ms": "9.306265",
+      "form_trace4_terms": "1",
+      "form_tracen_terms": "1"
+    },
+    {
+      "case": "paired",
+      "length": "2",
+      "terms": "1",
+      "idenso_cold_ms": "0.787554",
+      "idenso_warm_ms": "0.105580",
+      "form_trace4_process_ms": "9.427965",
+      "form_tracen_process_ms": "8.837713",
+      "form_trace4_terms": "1",
+      "form_tracen_terms": "1"
+    },
+    {
+      "case": "alternating",
+      "length": "2",
+      "terms": "1",
+      "idenso_cold_ms": "0.372641",
+      "idenso_warm_ms": "0.113171",
+      "form_trace4_process_ms": "8.870143",
+      "form_tracen_process_ms": "8.711352",
+      "form_trace4_terms": "1",
+      "form_tracen_terms": "1"
+    },
+    {
+      "case": "free",
+      "length": "4",
+      "terms": "3",
+      "idenso_cold_ms": "1.340264",
+      "idenso_warm_ms": "0.375942",
+      "form_trace4_process_ms": "9.639356",
+      "form_tracen_process_ms": "8.530812",
+      "form_trace4_terms": "3",
+      "form_tracen_terms": "3"
+    },
+    {
+      "case": "paired",
+      "length": "4",
+      "terms": "1",
+      "idenso_cold_ms": "0.360622",
+      "idenso_warm_ms": "0.143881",
+      "form_trace4_process_ms": "8.223341",
+      "form_tracen_process_ms": "8.435232",
+      "form_trace4_terms": "1",
+      "form_tracen_terms": "1"
+    },
+    {
+      "case": "alternating",
+      "length": "4",
+      "terms": "2",
+      "idenso_cold_ms": "0.835653",
+      "idenso_warm_ms": "0.286291",
+      "form_trace4_process_ms": "8.391851",
+      "form_tracen_process_ms": "8.998423",
+      "form_trace4_terms": "2",
+      "form_tracen_terms": "2"
+    },
+    {
+      "case": "free",
+      "length": "6",
+      "terms": "15",
+      "idenso_cold_ms": "1.800577",
+      "idenso_warm_ms": "0.996644",
+      "form_trace4_process_ms": "9.279414",
+      "form_tracen_process_ms": "9.304295",
+      "form_trace4_terms": "15",
+      "form_tracen_terms": "15"
+    },
+    {
+      "case": "paired",
+      "length": "6",
+      "terms": "1",
+      "idenso_cold_ms": "0.396972",
+      "idenso_warm_ms": "0.176400",
+      "form_trace4_process_ms": "9.174225",
+      "form_tracen_process_ms": "8.784512",
+      "form_trace4_terms": "1",
+      "form_tracen_terms": "1"
+    },
+    {
+      "case": "alternating",
+      "length": "6",
+      "terms": "2",
+      "idenso_cold_ms": "0.702173",
+      "idenso_warm_ms": "0.393001",
+      "form_trace4_process_ms": "8.850813",
+      "form_tracen_process_ms": "8.964364",
+      "form_trace4_terms": "2",
+      "form_tracen_terms": "2"
+    },
+    {
+      "case": "free",
+      "length": "8",
+      "terms": "105",
+      "idenso_cold_ms": "6.376623",
+      "idenso_warm_ms": "5.684981",
+      "form_trace4_process_ms": "9.311064",
+      "form_tracen_process_ms": "9.634086",
+      "form_trace4_terms": "105",
+      "form_tracen_terms": "105"
+    },
+    {
+      "case": "paired",
+      "length": "8",
+      "terms": "1",
+      "idenso_cold_ms": "0.421361",
+      "idenso_warm_ms": "0.203531",
+      "form_trace4_process_ms": "9.475616",
+      "form_tracen_process_ms": "9.307764",
+      "form_trace4_terms": "1",
+      "form_tracen_terms": "1"
+    },
+    {
+      "case": "alternating",
+      "length": "8",
+      "terms": "3",
+      "idenso_cold_ms": "0.790203",
+      "idenso_warm_ms": "0.512701",
+      "form_trace4_process_ms": "9.354044",
+      "form_tracen_process_ms": "8.671122",
+      "form_trace4_terms": "3",
+      "form_tracen_terms": "3"
+    },
+    {
+      "case": "free",
+      "length": "10",
+      "terms": "693",
+      "idenso_cold_ms": "60.774216",
+      "idenso_warm_ms": "58.073907",
+      "form_trace4_process_ms": "10.189938",
+      "form_tracen_process_ms": "10.428369",
+      "form_trace4_terms": "693",
+      "form_tracen_terms": "945"
+    },
+    {
+      "case": "paired",
+      "length": "10",
+      "terms": "1",
+      "idenso_cold_ms": "0.483332",
+      "idenso_warm_ms": "0.231361",
+      "form_trace4_process_ms": "9.041204",
+      "form_tracen_process_ms": "8.686382",
+      "form_trace4_terms": "1",
+      "form_tracen_terms": "1"
+    },
+    {
+      "case": "alternating",
+      "length": "10",
+      "terms": "3",
+      "idenso_cold_ms": "0.950403",
+      "idenso_warm_ms": "0.646363",
+      "form_trace4_process_ms": "8.394881",
+      "form_tracen_process_ms": "8.126000",
+      "form_trace4_terms": "3",
+      "form_tracen_terms": "3"
+    },
+    {
+      "case": "free",
+      "length": "12",
+      "terms": "4383",
+      "idenso_cold_ms": "627.972210",
+      "idenso_warm_ms": "616.072146",
+      "form_trace4_process_ms": "17.096344",
+      "form_tracen_process_ms": "23.229676",
+      "form_trace4_terms": "4383",
+      "form_tracen_terms": "10395"
+    },
+    {
+      "case": "paired",
+      "length": "12",
+      "terms": "1",
+      "idenso_cold_ms": "0.606382",
+      "idenso_warm_ms": "0.255961",
+      "form_trace4_process_ms": "9.866447",
+      "form_tracen_process_ms": "9.783677",
+      "form_trace4_terms": "1",
+      "form_tracen_terms": "1"
+    },
+    {
+      "case": "alternating",
+      "length": "12",
+      "terms": "4",
+      "idenso_cold_ms": "1.142825",
+      "idenso_warm_ms": "0.824423",
+      "form_trace4_process_ms": "9.825906",
+      "form_tracen_process_ms": "9.715246",
+      "form_trace4_terms": "4",
+      "form_tracen_terms": "4"
+    }
+  ]
+}

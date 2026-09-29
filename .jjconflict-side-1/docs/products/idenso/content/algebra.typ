@@ -16,7 +16,7 @@ printed names do not create accidental contractions. Cooking temporarily replace
 index payloads or function subexpressions with compact symbols. Rust `CookSettings::uncook`
 restores reversible encodings. Python accepts a `CookSettings` policy through the
 `cook_indices` keyword when constructing or indexing a tensor; it has no separate cooking
-or uncooking pass.
+pass on `TensorExpression`.
 
 Cooking changes what downstream matchers can see. Retain the original expression when a later
 identity needs the hidden function head or index payload. Typed dummy scoping below does not
@@ -29,6 +29,7 @@ each factor with a distinct header first, while leaving its external indices unt
 
 // docs-example: compile idenso-dummy-namespaces
 ```python
+from symbolica.community.tensor import ContractSettings
 import symbolica as sp
 from symbolica.community.tensor import (
     Representation,
@@ -53,7 +54,7 @@ safe_product = (
 
 assert len(safe_product.list_dangling()) == 2
 assert (
-    safe_product.contract(rank_one=False).to_expression().to_expression()
+    safe_product.contract(ContractSettings(rank_one=False)).to_expression().to_expression()
     == p(nu).to_expression() * q(rho).to_expression()
 )
 ```
@@ -91,8 +92,9 @@ Minkowski expansion selective to avoid distributing unrelated scalar factors.
 
 Dirac passes simplify gamma chains, traces, slashes, and spinor-compatible contractions. Color
 passes handle fundamental/adjoint deltas, generators, structure constants, and registered
-group parameters. Apply one algebra family at a time and inspect the intermediate expression;
-an all-at-once fixed-point loop can obscure which convention produced a sign or normalization.
+group parameters. Select the required families explicitly in `AlgebraSettings`; the shared planner chooses
+their order and revisits only affected domains. Inspect intermediate output when comparing
+conventions, without prescribing a global pass pipeline.
 
 For explicit color generators, `dirac_adjoint` exchanges
 fundamental and antifundamental slots and transposes the generator ports. This

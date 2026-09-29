@@ -9,11 +9,17 @@ signs. The gallery squares average initial spins and sum final spins; they do
 not include the identical-final-state phase-space factor.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 from pathlib import Path
 
 from symbolica import E, Expression, S
-from symbolica.community import hep as fk
-from symbolica.community.tensor import CookSettings, TensorExpression
+from symbolica.community import feynkit as fk
+from symbolica.community.tensor import TensorExpression
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 P = S("gammalooprs::P")
@@ -121,14 +127,16 @@ for label, pdgs in (
     # same dummy-index canonicalization tests adjoint linearity exactly.
     combined_normalized = (
         TensorExpression(combined_adjoint)
-        .simplify_gamma()
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .canonize()
         .to_expression()
     )
     separate_normalized = (
         TensorExpression(sum(adjoints, E("0")))
-        .simplify_gamma()
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .canonize()
         .to_expression()
@@ -154,9 +162,11 @@ for label, pdgs in (
         sum((x * y for x, y in zip(operators, adjoints, strict=True)), E("0")),
     ):
         scalar = (
-            TensorExpression(raw * spins, cook_indices=CookSettings.indices())
-            .simplify_gamma()
-            .contract()
+            TensorExpression(raw * spins, intern="flattened")
+            .reduce_algebra(
+                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
         )
         assert scalar.contraction_complete
         scalar = scalar.to_expression().to_dots()

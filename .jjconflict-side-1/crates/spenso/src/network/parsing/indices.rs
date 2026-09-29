@@ -385,6 +385,7 @@ mod tests {
     #[test]
     fn index_observer_reports_slots_without_entering_their_payloads() {
         crate::structure::representation::initialize();
+        crate::structure::representation::LibraryRep::new_dual("cof").unwrap();
         for source in [
             "T(mink(dim(hidden_dimension),index(hidden_index)))",
             "T(mink(4,index(hidden_index)))+U(mink(4,index(hidden_index)))",

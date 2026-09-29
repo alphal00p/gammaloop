@@ -4,10 +4,16 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElAel-MuAmu
 Chirality coincides with the specified helicities only in the massless limit.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community import hep as fk
+from symbolica.community import feynkit as fk
 from symbolica.community.tensor import Representation, TensorExpression, chain
 
 model = fk.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -66,8 +72,10 @@ for coordinate in generated.cuts[0].edges:
     numerator = model.expand_couplings(numerator * projector)
     contracted = (
         TensorExpression(numerator)
-        .simplify_gamma()
-        .simplify_epsilon()
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .reduce_algebra(AlgebraSettings(epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_dots()
         .to_expression()

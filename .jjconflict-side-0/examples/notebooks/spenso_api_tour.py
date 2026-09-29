@@ -89,10 +89,22 @@ def example_specification():
             "status",
         ),
         (
-            "SimplifySettings",
-            "Choose metric, gamma, color and epsilon passes. The HEP preset retains native dimension rules and leaves full polynomial expansion off.",
-            "simplify_settings = sp.SimplifySettings.hep()\nsimplified = indexed.simplify(simplify_settings)",
-            "simplify_settings",
+            "AlgebraSettings",
+            "Choose gamma, color and epsilon identities independently. The HEP preset enables all three with native conventions; polynomial expansion remains explicit.",
+            "algebra_settings = sp.AlgebraSettings.hep()\nreduced = indexed.reduce_algebra(algebra_settings)",
+            "algebra_settings",
+        ),
+        (
+            "ContractSettings",
+            "Choose structural metric and vector contraction, permitted representations, and chain/trace collection independently of algebra identities.",
+            "contract_settings = sp.ContractSettings(representations=[rep], collect_traces=False)\ncontracted = indexed.contract(contract_settings)",
+            "contract_settings",
+        ),
+        (
+            "ReductionStatus",
+            "Complete means no eligible work remains under the selected settings. Deferred and Capped retain an exact expression for subsequent work.",
+            "reduction_status = contracted.reduction_status",
+            "reduction_status",
         ),
         (
             "TensorEvaluator",
@@ -338,10 +350,10 @@ def _(mo):
     - `replace` applies a reusable `TensorRule` or an ordered rule list.
     - Materialization is explicit: `expand` emits a polynomial result and `evaluator` builds numerical evaluation.
     - An `AliasedTensorExpression` retains definitions separately. Its `to_expression()` resolves them to a `TensorExpression`; a second `to_expression()` crosses to ordinary Symbolica algebra. Reconstruct with `TensorExpression(raw, structure=source.structure)` to validate and retain a logical layout.
-    - Dirac algebra: `simplify_gamma`, with `GammaSimplifySettings(output="chains")` for collected words, gamma conjugation and `dirac_adjoint`.
-    - Color algebra: `simplify_color`, with dimension-invariant substitution selected in `ColorSimplifySettings`.
-    - Index algebra: `contract`, `simplify_epsilon`, `with_lorentz_dimension`, cooking and canonicalization.
-    - Compact notation: `to_dots`, `undo_dots` and gamma-chain collection. Shared `contract` handles metric and vector contractions.
+    - Dirac algebra: `reduce_algebra`, with `GammaSimplifySettings(output="chains")` for collected words, gamma conjugation and `dirac_adjoint`.
+    - Color algebra: `reduce_algebra`, with dimension-invariant substitution selected in `ColorSimplifySettings`.
+    - Index algebra: `contract`, `reduce_algebra`, `with_lorentz_dimension`, cooking and canonicalization.
+    - Compact notation: `to_dots`, `undo_dots`, `undo_chain`, and `undo_trace`. Shared `contract` handles indexed contractions and chain or trace collection.
     - `format_tensor`, `to_typst`, `to_html`, `to_svg` and `formatted` also accept ordinary Symbolica expressions.
       `TensorExpression(raw)` validates and wraps an ordinary expression.
 

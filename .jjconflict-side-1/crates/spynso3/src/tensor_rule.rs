@@ -7,12 +7,30 @@ use symbolica::{
 
 use crate::{ModuleInit, expression::TensorExpression, network::ReplacementCondition};
 
-/// A reusable whole-tensor replacement rule.
+/// Create a reusable rule for replacing tensors or scalar subexpressions.
+/// Index tensor ports before using them in a rule. Apply the rule with `.replace()`;
+/// its replacement must keep the matched tensor interface, while a scalar zero
+/// can inherit that interface. Callbacks receive a dictionary of wildcard bindings.
 ///
-/// Construction checks wildcard closure and retains proofs for literal right-hand
-/// sides. Binding-dependent interfaces are checked when the rule is applied.
-/// Conditions run for each candidate match. RHS callbacks are cached only within
-/// one application; use `rhs_cache_size=0` for callbacks with side effects.
+/// Examples
+/// --------
+/// >>> from symbolica.community import tensor as sp
+/// >>> r = sp.Representation.euc(2)
+/// >>> A = sp.TensorName("docs::A")(r, r)
+/// >>> A = A("i", "j")
+/// >>> rule = sp.TensorRule(A, 2 * A)
+/// >>> result = A.replace(rule)
+///
+/// Parameters
+/// ----------
+/// pattern : TensorExpression | Expression or scalar | HeldExpression
+///     Expression or held expression to match, including Symbolica wildcards where needed.
+/// rhs : callable
+///     Replacement expression or callback receiving a dict of wildcard bindings. A callback may return a TensorExpression or a Symbolica scalar expression.
+/// cond : PatternRestriction | Condition, optional
+///     Optional Symbolica condition or pattern restriction. Only candidate matches satisfying it are replaced.
+/// rhs_cache_size : int
+///     Maximum cached right-hand-side callback results within one application. Use 0 for callbacks with side effects.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(frozen, name = "TensorRule", module = "symbolica.community.tensor")]
 pub struct PyTensorRule {
@@ -39,10 +57,43 @@ impl PyTensorRule {
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyTensorRule {
+    /// Return a readable object description for inspection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> rule = sp.TensorRule(A("i", "j"), 2 * A("i", "j"))
+    /// >>> text = repr(rule)
     fn __repr__(&self) -> String {
         format!("{:?}", self.rule)
     }
 
+    /// Create a reusable rule for replacing tensors or scalar subexpressions.
+    /// Index tensor ports before using them in a rule. Apply the rule with `.replace()`;
+    /// its replacement must keep the matched tensor interface, while a scalar zero
+    /// can inherit that interface. Callbacks receive a dictionary of wildcard bindings.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import tensor as sp
+    /// >>> r = sp.Representation.euc(2)
+    /// >>> A = sp.TensorName("docs::A")(r, r)
+    /// >>> A = A("i", "j")
+    /// >>> rule = sp.TensorRule(A, 2 * A)
+    /// >>> result = A.replace(rule)
+    ///
+    /// Parameters
+    /// ----------
+    /// pattern : TensorExpression | Expression or scalar | HeldExpression
+    ///     Expression or held expression to match, including Symbolica wildcards where needed.
+    /// rhs : callable
+    ///     Replacement expression or callback receiving a dict of wildcard bindings. A callback may return a TensorExpression or a Symbolica scalar expression.
+    /// cond : PatternRestriction | Condition, optional
+    ///     Optional Symbolica condition or pattern restriction. Only candidate matches satisfying it are replaced.
+    /// rhs_cache_size : int
+    ///     Maximum cached right-hand-side callback results within one application. Use 0 for callbacks with side effects.
     #[new]
     #[pyo3(signature = (pattern, rhs, *, cond=None, rhs_cache_size=100))]
     pub(crate) fn new(

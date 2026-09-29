@@ -59,7 +59,7 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
             return Ok(Arc::clone(self));
         }
         for (source, target) in literal_uses {
-            Self::register_literal_use(&source, &target, &mut definitions)?;
+            Self::register_literal_use(&source, &target, &|_| None, &mut definitions)?;
         }
         for pair in additional {
             if let Some(previous) = definitions.get(&pair.0.expression)
@@ -75,17 +75,27 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
             .map(Arc::new)
     }
 
+    /// Register only newly bound literals. The borrowed lookup retains unrelated
+    /// definitions and supplies source/target associations on demand, including
+    /// nested bindings and their original admission proofs.
     pub(in crate::tensor) fn register_literal_use(
         source: &Atom,
         target: &Atom,
+        inherited: &dyn Fn(&Atom) -> Option<Definition>,
         definitions: &mut HashMap<Atom, Definition>,
     ) -> Result<()> {
         if source == target {
             return Ok(());
         }
-        let (handle, body) = definitions.get(source).cloned().ok_or_else(|| {
-            TensorInferenceError::invalid("rewritten alias use has no registered source literal")
-        })?;
+        let (handle, body) = definitions
+            .get(source)
+            .cloned()
+            .or_else(|| inherited(source))
+            .ok_or_else(|| {
+                TensorInferenceError::invalid(
+                    "rewritten alias use has no registered source literal",
+                )
+            })?;
         let (AtomView::Fun(before), AtomView::Fun(after)) = (source.as_view(), target.as_view())
         else {
             return Err(TensorInferenceError::invalid(
@@ -100,6 +110,8 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                 "alias rewriting changed its head or arity",
             ));
         }
+        let origin = body.proofs.literal_origin.clone();
+        let original_is_current = origin.as_ref().is_some_and(|origin| **origin == body);
         let handle_slots = handle.structure.logical_slots();
         let body_slots = body.structure.logical_slots();
         let mut replacements = HashMap::new();
@@ -192,25 +204,79 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
             }
         }).map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
         for (old, new) in nested {
-            Self::register_literal_use(&old, &new, definitions)?;
+            Self::register_literal_use(&old, &new, inherited, definitions)?;
         }
         // A compact-vector binding can create P(Q(rep)). The existing dot
         // owner finishes that scalar contraction before the strict interface
         // check; callback-induced rank changes are still checked below.
         let expression = if expression != body.expression {
-            DotNormalizer::run(expression.as_view())
+            DotNormalizer::with_settings(
+                expression.as_view(),
+                crate::tensor::ContractSettings {
+                    metrics: false,
+                    rank_one: false,
+                    ..Default::default()
+                },
+            )
         } else {
             expression
         };
         SymbolicTensor::validate_encoded_interface(&expression, &interface)?;
         let body = SymbolicTensor::checked_parts(expression, interface.clone())?;
         let handle = SymbolicTensor::checked_parts(target.clone(), handle_interface)?;
-        let pair = (handle, body);
-        if let Some(previous) = definitions.get(target) {
-            if previous != &pair {
-                return Err(TensorInferenceError::invalid(
-                    "conflicting relabelled alias definitions",
-                ));
+        let mut pair = (handle, body);
+        if origin.is_some() {
+            let admitted = if original_is_current {
+                pair.1.clone()
+            } else {
+                // Compare the original association, not two independently
+                // reduced spellings. Reuse this same positional binding owner.
+                let originals = |key: &Atom| {
+                    definitions
+                        .get(key)
+                        .cloned()
+                        .or_else(|| inherited(key))
+                        .map(|(handle, body)| {
+                            let mut body = body
+                                .proofs
+                                .literal_origin
+                                .as_deref()
+                                .unwrap_or(&body)
+                                .clone();
+                            body.proofs.literal_origin = None;
+                            (handle, body)
+                        })
+                };
+                let mut admissions = HashMap::new();
+                Self::register_literal_use(source, target, &originals, &mut admissions)?;
+                admissions
+                    .remove(target)
+                    .or_else(|| originals(target))
+                    .unwrap()
+                    .1
+            };
+            pair.1.proofs.literal_origin = Some(Arc::new(admitted));
+        }
+        if let Some(previous) = definitions
+            .get(target)
+            .cloned()
+            .or_else(|| inherited(target))
+        {
+            if previous != pair {
+                let same_binding = previous
+                    .1
+                    .proofs
+                    .literal_origin
+                    .as_ref()
+                    .zip(pair.1.proofs.literal_origin.as_ref())
+                    .is_some_and(|(left, right)| left == right);
+                if !same_binding {
+                    return Err(TensorInferenceError::invalid(
+                        "conflicting relabelled alias definitions",
+                    ));
+                }
+                // The existing target has its own pending work and current
+                // observations. A proven binding does not rewind that domain.
             }
         } else {
             definitions.insert(target.clone(), pair);
@@ -536,8 +602,13 @@ mod tests {
             .add_arg(&arguments[2])
             .finish();
         let mut definitions = HashMap::from([(handle.expression.clone(), (handle.clone(), body))]);
-        SymbolicTensor::register_literal_use(&handle.expression, &target, &mut definitions)
-            .unwrap();
+        SymbolicTensor::register_literal_use(
+            &handle.expression,
+            &target,
+            &|_| None,
+            &mut definitions,
+        )
+        .unwrap();
         let (next_handle, next_body) = &definitions[&target];
         assert_eq!(
             next_body.expression,
@@ -571,8 +642,13 @@ mod tests {
             .with(a.to_pattern());
         let expected = body.expression.replace(b.to_pattern()).with(a.to_pattern());
         let mut definitions = HashMap::from([(handle.expression.clone(), (handle.clone(), body))]);
-        SymbolicTensor::register_literal_use(&handle.expression, &target, &mut definitions)
-            .unwrap();
+        SymbolicTensor::register_literal_use(
+            &handle.expression,
+            &target,
+            &|_| None,
+            &mut definitions,
+        )
+        .unwrap();
         let (next_handle, next_body) = &definitions[&target];
         assert!(next_handle.is_scalar());
         assert!(next_body.is_scalar());
@@ -591,8 +667,13 @@ mod tests {
             .replace(a.to_pattern())
             .with(compact.to_pattern());
         let mut definitions = HashMap::from([(handle.expression.clone(), (handle.clone(), body))]);
-        SymbolicTensor::register_literal_use(&handle.expression, &target, &mut definitions)
-            .unwrap();
+        SymbolicTensor::register_literal_use(
+            &handle.expression,
+            &target,
+            &|_| None,
+            &mut definitions,
+        )
+        .unwrap();
         let (next_handle, next_body) = &definitions[&target];
         assert!(next_handle.is_scalar());
         assert!(next_body.is_scalar());

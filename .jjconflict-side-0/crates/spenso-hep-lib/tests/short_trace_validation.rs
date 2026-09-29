@@ -6,7 +6,7 @@ use std::{cell::RefCell, collections::HashMap, sync::Once};
 use idenso::{
     epsilon::EPSILON_SYMBOL,
     representations::{Bispinor, initialize},
-    tensor::{ContractionSettings, SymbolicTensor},
+    tensor::{ContractSettings, SymbolicTensor},
 };
 use spenso::{
     network::{
@@ -285,7 +285,17 @@ impl TraceEvaluation {
             let expression = evaluations[0].trace(length, axial);
             let simplified = idenso::tensor::SymbolicTensor::infer(expression.clone())
                 .unwrap()
-                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -331,7 +341,17 @@ impl TraceEvaluation {
             let expression = spenso::trace!(&Bispinor {}.new_rep(4); factors);
             let simplified = idenso::tensor::SymbolicTensor::infer(expression.clone())
                 .unwrap()
-                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -377,7 +397,17 @@ impl TraceEvaluation {
             let simplified =
                 idenso::tensor::SymbolicTensor::infer((trace).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                        gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -386,7 +416,17 @@ impl TraceEvaluation {
             assert_eq!(
                 idenso::tensor::SymbolicTensor::infer(simplified.clone())
                     .unwrap()
-                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                        gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -447,7 +487,17 @@ impl TraceEvaluation {
         // recurrence is exercised independently of the four-dimensional kernel.
         let simplified = idenso::tensor::SymbolicTensor::infer((trace).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -456,7 +506,17 @@ impl TraceEvaluation {
         assert_eq!(
             idenso::tensor::SymbolicTensor::infer(simplified.clone())
                 .unwrap()
-                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -522,7 +582,17 @@ impl TraceEvaluation {
         // metric/epsilon polynomial, not index contraction inside the trace.
         let evaluated = idenso::tensor::SymbolicTensor::infer((trace).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -539,7 +609,17 @@ impl TraceEvaluation {
             let late = &metric * &evaluated;
             let result = idenso::tensor::SymbolicTensor::infer((late).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -552,7 +632,17 @@ impl TraceEvaluation {
             assert_eq!(
                 idenso::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                        gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -668,7 +758,17 @@ fn repeated_slashes_match_exact_hep_tensor_contractions() {
                 let label = format!("sample {sample}, repeated slashes {order:?}, gamma5 {axial}");
                 let simplified = idenso::tensor::SymbolicTensor::infer(expression.clone())
                     .unwrap()
-                    .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                        gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -702,7 +802,17 @@ fn repeated_pair_order_and_cyclic_cuts_match_exact_hep_contractions() {
         .map(|expression| {
             idenso::tensor::SymbolicTensor::infer(expression.clone())
                 .unwrap()
-                .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -737,7 +847,7 @@ fn external_metric_trace_matches_exact_hep_contractions() {
     let original = spenso::g!(&a, &c) * spenso::g!(&b, &d) * spenso::trace!(&bis; factors);
     let precontracted = SymbolicTensor::infer(original.clone())
         .unwrap()
-        .contract(ContractionSettings::default().without_rank_one_tensors())
+        .contract(ContractSettings::default().without_rank_one_tensors())
         .unwrap()
         .resolved()
         .unwrap()
@@ -750,7 +860,17 @@ fn external_metric_trace_matches_exact_hep_contractions() {
     let simplified = cases.each_ref().map(|expression| {
         idenso::tensor::SymbolicTensor::infer(expression.clone())
             .unwrap()
-            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -785,7 +905,17 @@ fn axial_pair_order_and_gamma5_positions_match_exact_hep_contractions() {
     let simplified = cases.each_ref().map(|expression| {
         idenso::tensor::SymbolicTensor::infer(expression.clone())
             .unwrap()
-            .simplify_gamma(idenso::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -852,7 +982,17 @@ fn reversed_axial_words_match_exact_hep_components() {
                 );
                 let simplified = SymbolicTensor::infer(input.clone())
                     .unwrap()
-                    .simplify_gamma(GammaSimplifySettings::default())
+                    .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                        gamma: Some(GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()

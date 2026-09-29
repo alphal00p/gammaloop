@@ -8,6 +8,8 @@ import enum
 import linnet
 import os
 import pathlib
+import symbolica
+import symbolica.community.tensor
 import symbolica.core
 import types
 import typing
@@ -29,7 +31,8 @@ class Amplitude:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import feynkit as hep
+    >>> from symbolica.community.tensor import AlgebraSettings, ContractSettings
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> generated = process.generate_diagrams()
@@ -38,7 +41,8 @@ class Amplitude:
     >>> operator = amplitude.expression()
     >>> adjoint = amplitude.conjugate().expression()
     >>> squared = amplitude.squared().sum_spins(average_initial=True).sum_colors()
-    >>> scalar = squared.expression().simplify_gamma().simplify_color()
+    >>> scalar = squared.expression().reduce_algebra(AlgebraSettings.hep())
+    >>> scalar = scalar.contract(ContractSettings(collect_chains=False, collect_traces=False))
     """
     @property
     def diagrams(self) -> builtins.list[FeynmanDiagram]:
@@ -204,7 +208,7 @@ class AmplitudeLeg:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import feynkit as hep
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> generated = process.generate_diagrams()
@@ -837,6 +841,36 @@ class CffResult:
         """
     def residue(self, group: CffSurfaceGroup, *, variable: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], root: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], surface: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], coefficient: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], normalized: builtins.bool = False, replacements: typing.Optional[typing.Sequence[tuple[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]]]] = None) -> Expression:
         r"""
+        Evaluate all pole-order contributions to a residue in an explicit variable.
+        ``surface`` must be the group's energy surface expressed in that variable;
+        ``coefficient`` is the complete remaining coefficient, including any factors
+        whose derivatives must act. The supplied root is assumed to be a simple zero.
+
+        Examples
+        --------
+        Using the setup in ``CffResult``, illustrate a simple pole locally
+        parameterized by ``surface=t`` with constant remaining coefficient:
+
+        >>> t = S("t")
+        >>> group = result.raised_surface_groups()[0]
+        >>> residue = result.residue(group, variable=t, root=E("0"), surface=t, coefficient=E("1"))
+
+        Parameters
+        ----------
+        group : CffSurfaceGroup
+            A raised-surface group belonging to this result.
+        variable : Expression
+            Independent integration variable.
+        root : Expression
+            Simple zero of the surface, independent of variable.
+        surface : Expression
+            Energy surface expressed in the integration variable.
+        coefficient : Expression
+            Complete remaining coefficient to differentiate.
+        normalized : bool
+            Include the generated CFF normalization in the coefficient.
+        replacements : list[tuple[Expression, Expression]], optional
+            Route all energy dependence to the integration variable before differentiating.
         Evaluate all pole-order contributions to a residue in an explicit variable.
         ``surface`` must be the group's energy surface expressed in that variable;
         ``coefficient`` is the complete remaining coefficient, including any factors
@@ -2866,7 +2900,7 @@ class FeynmanDiagram:
             Basis from this diagram instance. Supplying it enables routing and
             takes precedence over ``in_lmb``, including for a selected region.
         """
-    def uv_expansion(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None) -> TensorExpression:
+    def uv_expansion(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: symbolica.Expression | symbolica.community.tensor.TensorExpression | None = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None) -> TensorExpression:
         r"""
         Expand the local integrand through its UV degree of divergence.
 
@@ -2906,7 +2940,7 @@ class FeynmanDiagram:
             Zero omits the denominator; negative powers put it in the numerator.
             Entries outside the selected internal edges are ignored.
         """
-    def uv_counterterm(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None) -> TensorExpression:
+    def uv_counterterm(self, uv_mass: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, dimension: builtins.int = 4, numerator: symbolica.Expression | symbolica.community.tensor.TensorExpression | None = None, edge_powers: typing.Optional[typing.Mapping[builtins.int, builtins.int]] = None) -> TensorExpression:
         r"""
         Return the additive local UV counterterm, the negative of ``uv_expansion``.
 
@@ -2959,7 +2993,7 @@ class FeynmanDiagram:
         >>> projected_numerator = projector * diagram.numerator_expression()
         >>> projected_numerator
         """
-    def tensor_reduce(self, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, expression: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, projector: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
+    def tensor_reduce(self, dimension: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], *, expression: symbolica.Expression | symbolica.community.tensor.TensorExpression | None = None, projector: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None) -> TensorExpression:
         r"""
         Reduce the numerator and projector using the diagram's internal edge momenta.
 
@@ -5336,7 +5370,7 @@ class Kinematics:
     >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
     >>> assert kin.scalar_product(p1, p2) == s/2
     """
-    s: typing.ClassVar[Expression]
+    s: Expression
     r"""
     Mandelstam invariant ``s=(p1+p2)^2`` for ``p1 + p2 -> p3 + p4``.
 
@@ -5345,7 +5379,7 @@ class Kinematics:
     >>> from symbolica.community import hep
     >>> s = hep.Kinematics.s
     """
-    t: typing.ClassVar[Expression]
+    t: Expression
     r"""
     Mandelstam invariant ``t=(p1-p3)^2`` for ``p1 + p2 -> p3 + p4``.
 
@@ -5354,7 +5388,7 @@ class Kinematics:
     >>> from symbolica.community import hep
     >>> t = hep.Kinematics.t
     """
-    u: typing.ClassVar[Expression]
+    u: Expression
     r"""
     Mandelstam invariant ``u=(p1-p4)^2`` for ``p1 + p2 -> p3 + p4``.
 
@@ -5363,7 +5397,7 @@ class Kinematics:
     >>> from symbolica.community import hep
     >>> u = hep.Kinematics.u
     """
-    external_momentum: typing.ClassVar[Expression]
+    external_momentum: Expression
     r"""
     External momentum family indexed by physical leg.
 
@@ -5372,7 +5406,7 @@ class Kinematics:
     >>> from symbolica.community import hep
     >>> reference = hep.Kinematics.external_momentum
     """
-    loop_momentum: typing.ClassVar[Expression]
+    loop_momentum: Expression
     r"""
     Loop momentum family indexed by loop basis position.
 
@@ -8814,7 +8848,8 @@ class SquaredAmplitude:
     Examples
     --------
     >>> from symbolica import S, E
-    >>> from symbolica.community import hep
+    >>> from symbolica.community import feynkit as hep
+    >>> from symbolica.community.tensor import AlgebraSettings, ContractSettings
     >>> model = hep.Model.phi4()
     >>> process = model.process(["phi", "phi"], ["phi", "phi"])
     >>> generated = process.generate_diagrams()
@@ -8887,7 +8922,8 @@ class SquaredAmplitude:
         --------
         Using the setup in the ``SquaredAmplitude`` class example:
 
-        >>> tensor = squared.expression().simplify_gamma().simplify_color()
+        >>> tensor = squared.expression().reduce_algebra(AlgebraSettings.hep())
+        >>> tensor = tensor.contract(ContractSettings(collect_chains=False, collect_traces=False))
         """
     def sum_spins(self, legs: typing.Optional[typing.Sequence[builtins.int]] = None, *, average_initial: builtins.bool = False, references: typing.Optional[typing.Mapping[builtins.int, Expression]] = None, spin_vectors: typing.Optional[typing.Mapping[builtins.int, Expression]] = None) -> SquaredAmplitude:
         r"""
@@ -9130,6 +9166,314 @@ class Subgraph(FeynmanDiagram):
         """
 
 @typing.final
+class Symbols:
+    r"""
+    Canonical expression heads for diagram and tensor algebra.
+
+    Use these references for pattern matching and momentum construction without
+    depending on internal namespaces. External and loop momenta belong to
+    ``Kinematics``. Model parameters and couplings belong to
+    their model; obtain those through ``model.parameter(name).symbol`` or
+    ``model.coupling(name).symbol`` instead.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> Q = hep.Symbols.edge_momentum
+    >>> edge_momentum = Q(0)
+    >>> mass = hep.Model.standard_model().particle("e-").mass
+    """
+    edge_momentum: Expression
+    r"""
+    Momentum family indexed by graph edge.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.edge_momentum
+    """
+    denominator: Expression
+    r"""
+    Tagged propagator denominator head; its fourth argument is the inverse denominator.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.denominator
+    """
+    dimension: Expression
+    r"""
+    Lorentz dimension used by generated diagram expressions.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.dimension
+    """
+    half_edge: Expression
+    r"""
+    Half-edge index family used to match external tensor slots.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.half_edge
+    """
+    polarization: Expression
+    r"""
+    Vector polarization wavefunction head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.polarization
+    """
+    polarization_conjugate: Expression
+    r"""
+    Conjugated vector polarization wavefunction head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.polarization_conjugate
+    """
+    metric: Expression
+    r"""
+    Metric tensor head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.metric
+    """
+    gamma: Expression
+    r"""
+    Dirac gamma tensor head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.gamma
+    """
+    color_f: Expression
+    r"""
+    Antisymmetric color tensor head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.color_f
+    """
+    lorentz: Expression
+    r"""
+    Lorentz representation head, accepting dimension and optionally index.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.lorentz
+    """
+    spinor: Expression
+    r"""
+    Bispinor representation head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.spinor
+    """
+    color_fundamental: Expression
+    r"""
+    Fundamental color representation head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.color_fundamental
+    """
+    color_adjoint: Expression
+    r"""
+    Adjoint color representation head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.color_adjoint
+    """
+    color_number: Expression
+    r"""
+    Number of colors used by symbolic color simplification.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.color_number
+    """
+    conjugate: Expression
+    r"""
+    Conjugation wrapper used in tensor expressions.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.conjugate
+    """
+    dot: Expression
+    r"""
+    Scalar product head used by contracted tensor expressions.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.dot
+    """
+    casimir: Expression
+    r"""
+    Color Casimir invariant head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.casimir
+    """
+    color_index: Expression
+    r"""
+    Color representation index invariant head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.color_index
+    """
+    ufo_metric: Expression
+    r"""
+    Metric head in model propagator definitions.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.ufo_metric
+    """
+    ufo_index: Expression
+    r"""
+    Index placeholder head in model propagator definitions.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.ufo_index
+    """
+    ufo_momentum: Expression
+    r"""
+    Momentum head in model propagator definitions.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.ufo_momentum
+    """
+    chain_in: Expression
+    r"""
+    Incoming placeholder for an open gamma chain.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.chain_in
+    """
+    chain_out: Expression
+    r"""
+    Outgoing placeholder for an open gamma chain.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.chain_out
+    """
+    gamma_chain: Expression
+    r"""
+    Compact gamma-chain wrapper.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.gamma_chain
+    """
+    levi_civita: Expression
+    r"""
+    Antisymmetric Levi-Civita tensor head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.levi_civita
+    """
+    charge_conjugation: Expression
+    r"""
+    Dirac charge-conjugation matrix head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.charge_conjugation
+    """
+    cyclic: Expression
+    r"""
+    Cyclic symmetry wrapper.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.cyclic
+    """
+    symmetric: Expression
+    r"""
+    Symmetric tensor wrapper.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.symmetric
+    """
+    antisymmetric: Expression
+    r"""
+    Antisymmetric tensor wrapper.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.antisymmetric
+    """
+    gamma_zero: Expression
+    r"""
+    Time-component gamma matrix head.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.gamma_zero
+    """
+    trace: Expression
+    r"""
+    Compact tensor trace wrapper.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> reference = hep.Symbols.trace
+    """
+    model_conjugate: Expression
+    r"""
+    Complex-conjugation helper used in imported model formulas.
+
+    Examples
+    --------
+    >>> from symbolica.community import hep
+    >>> model = hep.Model.standard_model()
+    >>> conjugate = hep.Symbols.model_conjugate(model.parameter("CKM1x1").symbol)
+    """
+
+@typing.final
 class TadpoleFilterOptions:
     r"""
     Configure rejection of tadpoles by the mass of their attachment.
@@ -9195,7 +9539,9 @@ class TensorReducer:
 
     >>> from symbolica import S, E
     >>> from symbolica.community import hep
-    >>> D, k, p, mu, nu = S("D", "k", "p", "mu", "nu")
+    >>> from symbolica.community.tensor import TensorName
+    >>> D, mu, nu = S("D", "mu", "nu")
+    >>> k, p = (TensorName.vector(name).to_expression() for name in ("k", "p"))
     >>> mink = S("spenso::mink")
     >>> reducer = hep.TensorReducer(D).with_integrated_vector(k(mink(D)))
     >>> numerator = k(mink(D, mu)) * k(mink(D, nu))
@@ -9396,7 +9742,8 @@ class TensorReducer:
         >>> from symbolica import S
         >>> from symbolica.community import hep
         >>> D, mu, nu = S("hep_docs::D", "hep_docs::mu", "hep_docs::nu")
-        >>> k, p = S("hep_docs::k", "hep_docs::p")
+        >>> from symbolica.community.tensor import TensorName
+        >>> k, p = (TensorName.vector("hep_docs::" + name).to_expression() for name in ("k", "p"))
         >>> mink, dot = S("spenso::mink", "spenso::dot")
         >>> k_compact = k(mink(D))
         >>> p_compact = p(mink(D))
@@ -10310,312 +10657,3 @@ class ParameterType(enum.Enum):
     """
     REAL = ...
     COMPLEX = ...
-
-
-@typing.final
-class Symbols:
-    r"""
-    Canonical expression heads for diagram and tensor algebra.
-
-    Use these references for pattern matching and momentum construction without
-    depending on internal namespaces. External and loop momenta belong to
-    ``Kinematics``. Model parameters and couplings belong to
-    their model; obtain those through ``model.parameter(name).symbol`` or
-    ``model.coupling(name).symbol`` instead.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> Q = hep.Symbols.edge_momentum
-    >>> edge_momentum = Q(0)
-    >>> mass = hep.Model.standard_model().particle("e-").mass
-    """
-    edge_momentum: typing.ClassVar[Expression]
-    r"""
-    Momentum family indexed by graph edge.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.edge_momentum
-    """
-    denominator: typing.ClassVar[Expression]
-    r"""
-    Tagged propagator denominator head; its fourth argument is the inverse denominator.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.denominator
-    """
-    dimension: typing.ClassVar[Expression]
-    r"""
-    Lorentz dimension used by generated diagram expressions.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.dimension
-    """
-    half_edge: typing.ClassVar[Expression]
-    r"""
-    Half-edge index family used to match external tensor slots.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.half_edge
-    """
-    polarization: typing.ClassVar[Expression]
-    r"""
-    Vector polarization wavefunction head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.polarization
-    """
-    polarization_conjugate: typing.ClassVar[Expression]
-    r"""
-    Conjugated vector polarization wavefunction head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.polarization_conjugate
-    """
-    metric: typing.ClassVar[Expression]
-    r"""
-    Metric tensor head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.metric
-    """
-    gamma: typing.ClassVar[Expression]
-    r"""
-    Dirac gamma tensor head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.gamma
-    """
-    color_f: typing.ClassVar[Expression]
-    r"""
-    Antisymmetric color tensor head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.color_f
-    """
-    lorentz: typing.ClassVar[Expression]
-    r"""
-    Lorentz representation head, accepting dimension and optionally index.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.lorentz
-    """
-    spinor: typing.ClassVar[Expression]
-    r"""
-    Bispinor representation head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.spinor
-    """
-    color_fundamental: typing.ClassVar[Expression]
-    r"""
-    Fundamental color representation head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.color_fundamental
-    """
-    color_adjoint: typing.ClassVar[Expression]
-    r"""
-    Adjoint color representation head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.color_adjoint
-    """
-    color_number: typing.ClassVar[Expression]
-    r"""
-    Number of colors used by symbolic color simplification.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.color_number
-    """
-    conjugate: typing.ClassVar[Expression]
-    r"""
-    Conjugation wrapper used in tensor expressions.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.conjugate
-    """
-    dot: typing.ClassVar[Expression]
-    r"""
-    Scalar product head used by contracted tensor expressions.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.dot
-    """
-    casimir: typing.ClassVar[Expression]
-    r"""
-    Color Casimir invariant head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.casimir
-    """
-    color_index: typing.ClassVar[Expression]
-    r"""
-    Color representation index invariant head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.color_index
-    """
-    ufo_metric: typing.ClassVar[Expression]
-    r"""
-    Metric head in model propagator definitions.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.ufo_metric
-    """
-    ufo_index: typing.ClassVar[Expression]
-    r"""
-    Index placeholder head in model propagator definitions.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.ufo_index
-    """
-    ufo_momentum: typing.ClassVar[Expression]
-    r"""
-    Momentum head in model propagator definitions.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.ufo_momentum
-    """
-    chain_in: typing.ClassVar[Expression]
-    r"""
-    Incoming placeholder for an open gamma chain.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.chain_in
-    """
-    chain_out: typing.ClassVar[Expression]
-    r"""
-    Outgoing placeholder for an open gamma chain.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.chain_out
-    """
-    gamma_chain: typing.ClassVar[Expression]
-    r"""
-    Compact gamma-chain wrapper.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.gamma_chain
-    """
-    levi_civita: typing.ClassVar[Expression]
-    r"""
-    Antisymmetric Levi-Civita tensor head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.levi_civita
-    """
-    charge_conjugation: typing.ClassVar[Expression]
-    r"""
-    Dirac charge-conjugation matrix head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.charge_conjugation
-    """
-    cyclic: typing.ClassVar[Expression]
-    r"""
-    Cyclic symmetry wrapper.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.cyclic
-    """
-    symmetric: typing.ClassVar[Expression]
-    r"""
-    Symmetric tensor wrapper.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.symmetric
-    """
-    antisymmetric: typing.ClassVar[Expression]
-    r"""
-    Antisymmetric tensor wrapper.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.antisymmetric
-    """
-    gamma_zero: typing.ClassVar[Expression]
-    r"""
-    Time-component gamma matrix head.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.gamma_zero
-    """
-    trace: typing.ClassVar[Expression]
-    r"""
-    Compact tensor trace wrapper.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> reference = hep.Symbols.trace
-    """
-    model_conjugate: typing.ClassVar[Expression]
-    r"""
-    Complex-conjugation helper used in imported model formulas.
-
-    Examples
-    --------
-    >>> from symbolica.community import hep
-    >>> model = hep.Model.standard_model()
-    >>> conjugate = hep.Symbols.model_conjugate(model.parameter("CKM1x1").symbol)
-    """

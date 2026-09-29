@@ -129,8 +129,29 @@ pub(crate) fn refine(module: &mut Module) {
             let mut slice = overloads.last().expect("Tensor component overload").clone();
             slice.parameters.positional_or_keyword[0].type_info = named("tuple[int | slice, ...]");
             slice.r#return = named("_Components");
-            slice.doc =
-                "Select components by logical coordinates, returning nested lists for sliced axes.";
+            slice.doc = r#"Select tensor components by logical coordinates.
+Each sliced axis contributes a level of nested lists; integer coordinates remove
+that axis. The input tensor is unchanged.
+
+Examples
+--------
+>>> from symbolica.community import tensor as sp
+>>> r = sp.Representation.euc(2)
+>>> A = sp.TensorName("docs::A")(r, r)
+>>> tensor = sp.Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
+>>> assert tensor[:, 1] == [2.0, 4.0]
+>>> assert tensor[:, :] == [[1.0, 2.0], [3.0, 4.0]]
+
+Parameters
+----------
+item : tuple[int | slice, ...]
+    One integer or slice for every logical axis. Negative coordinates count
+    from the end; use a full slice to retain an axis.
+
+Returns
+-------
+float, complex, Expression, or nested list
+    A scalar when every axis is selected by an integer; nested lists otherwise."#;
             overloads.push(slice);
         }
         if class.name == "TensorLibrary"

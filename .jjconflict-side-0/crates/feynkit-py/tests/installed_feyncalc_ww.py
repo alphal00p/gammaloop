@@ -1,10 +1,11 @@
 """Generated massive e- e+ -> W- W+ with Higgs and gauge interference."""
 
+from symbolica.community.tensor import AlgebraSettings, ContractSettings
+
 import numpy as np
 from symbolica import E, S, Symbol
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 from symbolica.community.tensor import (
-    CookSettings,
     GammaSimplifySettings,
     TensorExpression,
 )
@@ -101,7 +102,12 @@ longitudinal = (diagram_terms[23] * (s - mz**2)).replace(
 transverse_test = (longitudinal * projection).replace(
     P(3, a), P(0, a) + P(1, a) - P(2, a)
 )
-transverse_test = TensorExpression(transverse_test).contract().to_expression().to_dots()
+transverse_test = (
+    TensorExpression(transverse_test)
+    .contract(ContractSettings(collect_chains=False, collect_traces=False))
+    .to_expression()
+    .to_dots()
+)
 transverse_test = (
     kin.apply(transverse_test.to_expression())
     .replace(u, 2 * me**2 + 2 * mw**2 - s - t)
@@ -124,7 +130,13 @@ for pdg, term in diagram_terms.items():
     operator = TensorExpression(term)
     adjoint = (
         operator.dirac_adjoint()
-        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .reduce_algebra(
+            AlgebraSettings(
+                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
+                epsilon=True,
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
         .replace(conjugate(P(a, b)), P(a, b))
@@ -139,14 +151,20 @@ for left, left_operator in operators.items():
     for right, right_adjoint in adjoints.items():
         paired = TensorExpression(
             left_operator.to_expression() * right_adjoint * spins,
-            cook_indices=CookSettings.indices(),
+            intern="flattened",
         )
-        traced = paired.simplify_gamma().simplify_epsilon().to_expression()
-        scalar = (
-            TensorExpression(
-                traced.to_expression() * density, cook_indices=CookSettings.indices()
+        traced = (
+            paired.reduce_algebra(
+                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
             )
-            .contract()
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .reduce_algebra(AlgebraSettings(epsilon=True))
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .to_expression()
+        )
+        scalar = (
+            TensorExpression(traced.to_expression() * density, intern="flattened")
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_dots()
         )
@@ -165,8 +183,8 @@ for left, left_operator in operators.items():
         result = (
             kin.apply(
                 TensorExpression(conserved)
-                .simplify_epsilon()
-                .contract()
+                .reduce_algebra(AlgebraSettings(epsilon=True))
+                .contract(ContractSettings(collect_chains=False, collect_traces=False))
                 .to_expression()
                 .to_dots()
                 .to_expression()

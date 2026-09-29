@@ -16,7 +16,7 @@ use idenso::{
     color::{CS, ColorSimplifier, ColorSimplifySettings},
     color_idx,
     dirac::GammaSimplifySettings,
-    tensor::{ContractionSettings, SymbolicTensor},
+    tensor::{ContractSettings, SymbolicTensor},
 };
 use spenso::{shadowing::symbolica_utils::LogPrint, structure::abstract_index::AbstractIndex};
 use symbolica::{
@@ -58,7 +58,16 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .with_representation_payloads(true, true);
     let color = SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap())
         .unwrap()
-        .simplify_color(ColorSimplifySettings::default())
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap()
         .resolved()
         .unwrap();
@@ -70,15 +79,22 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .collect_factors();
     let expression = SymbolicTensor::infer(cooking.try_cook(expression.as_view()).unwrap())
         .unwrap()
-        .contract(ContractionSettings::default().without_rank_one_tensors())
+        .contract(ContractSettings::default().without_rank_one_tensors())
         .unwrap()
         .resolved()
         .unwrap()
-        .simplify_gamma(GammaSimplifySettings::default())
+        .reduce_algebra(&idenso::tensor::AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::default()),
+            color: Some(ColorSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
         .unwrap()
-        .simplify_color(ColorSimplifySettings::default())
-        .unwrap()
-        .contract(ContractionSettings::default())
+        .contract(idenso::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap()
         .to_dots()
         .unwrap()
@@ -154,7 +170,16 @@ fn scalar_pole_part() {
             .with_representation_payloads(true, true);
         let color = SymbolicTensor::infer(cooking.try_cook(a.expression.as_view()).unwrap())
             .unwrap()
-            .simplify_color(ColorSimplifySettings::default())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap();
@@ -267,7 +292,7 @@ fn finite_part_quark_lo() {
         let contracted_log_coefficient =
             SymbolicTensor::infer(cooking.try_cook(log_coefficient.as_view()).unwrap())
                 .unwrap()
-                .contract(ContractionSettings::default())
+                .contract(ContractSettings::default())
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -331,13 +356,22 @@ fn finite_part_ghost_2loop() {
                 .with_representation_payloads(true, true);
             let atom = SymbolicTensor::infer(cooking.try_cook(atom.as_view()).unwrap())
                 .unwrap()
-                .contract(ContractionSettings::default())
+                .contract(ContractSettings::default())
                 .unwrap()
                 .resolved()
                 .unwrap()
                 .to_dots()
                 .unwrap()
-                .simplify_color(ColorSimplifySettings::default())
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap();
@@ -666,7 +700,7 @@ mod failing {
             .collect_factors();
         let aligned = SymbolicTensor::infer(aligned)
             .unwrap()
-            .contract(ContractionSettings::default())
+            .contract(ContractSettings::default())
             .unwrap()
             .resolved()
             .unwrap()

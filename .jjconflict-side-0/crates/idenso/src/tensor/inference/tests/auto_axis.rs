@@ -287,7 +287,7 @@ fn unchanged_ordered_products_keep_raw_and_encoded_auto_ports() {
                 );
                 // Port materialization retains ordered syntax. Explicit shorthand
                 // materialization now has named ports, so it can emit an ordinary product.
-                let materialized = materialized.undo_all::<AbstractIndex>().unwrap();
+                let materialized = materialized.undo_schoonschip::<AbstractIndex>().unwrap();
                 assert_eq!(
                     materialized,
                     indexed(high, positions[0]) * indexed(low, positions[1])

@@ -364,7 +364,17 @@ mod test {
             .with_representation_payloads(true, true);
         let source = SymbolicTensor::infer(cooking.try_cook(expr.as_view()).unwrap()).unwrap();
         let _ = source
-            .simplify_gamma(GammaSimplifySettings::default())
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap();
     }
 }

@@ -19,7 +19,7 @@ use crate::{error, graph::PyFeynmanDiagram, model::PyParticle};
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import feynkit as hep
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> generated = process.generate_diagrams()
@@ -151,7 +151,8 @@ impl PyAmplitudeLeg {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import feynkit as hep
+/// >>> from symbolica.community.tensor import AlgebraSettings, ContractSettings
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> generated = process.generate_diagrams()
@@ -160,7 +161,8 @@ impl PyAmplitudeLeg {
 /// >>> operator = amplitude.expression()
 /// >>> adjoint = amplitude.conjugate().expression()
 /// >>> squared = amplitude.squared().sum_spins(average_initial=True).sum_colors()
-/// >>> scalar = squared.expression().simplify_gamma().simplify_color()
+/// >>> scalar = squared.expression().reduce_algebra(AlgebraSettings.hep())
+/// >>> scalar = scalar.contract(ContractSettings(collect_chains=False, collect_traces=False))
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Amplitude",
@@ -420,7 +422,8 @@ impl PyAmplitude {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hep
+/// >>> from symbolica.community import feynkit as hep
+/// >>> from symbolica.community.tensor import AlgebraSettings, ContractSettings
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
 /// >>> generated = process.generate_diagrams()
@@ -513,7 +516,8 @@ impl PySquaredAmplitude {
     /// --------
     /// Using the setup in the ``SquaredAmplitude`` class example:
     ///
-    /// >>> tensor = squared.expression().simplify_gamma().simplify_color()
+    /// >>> tensor = squared.expression().reduce_algebra(AlgebraSettings.hep())
+    /// >>> tensor = tensor.contract(ContractSettings(collect_chains=False, collect_traces=False))
     fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_atom_interface(py, self.inner.expression().clone(), None)
     }

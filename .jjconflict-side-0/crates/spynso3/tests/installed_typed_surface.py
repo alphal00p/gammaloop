@@ -5,7 +5,7 @@ import operator
 import unittest
 
 from symbolica import E, Expression, S
-from symbolica.community import spenso as sp
+from symbolica.community import tensor as sp
 
 
 class TypedSurfaceTests(unittest.TestCase):

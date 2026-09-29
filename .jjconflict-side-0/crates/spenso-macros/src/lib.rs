@@ -480,14 +480,20 @@ pub fn track_usage(recorder: TokenStream, item: TokenStream) -> TokenStream {
         syn::Item::Impl(implementation) => {
             for item in &mut implementation.items {
                 if let syn::ImplItem::Fn(method) = item
-                    && !method.attrs.iter().any(|attribute| attribute.path().is_ident("classattr"))
+                    && !method
+                        .attrs
+                        .iter()
+                        .any(|attribute| attribute.path().is_ident("classattr"))
                 {
                     method.block.stmts.insert(0, statement.clone());
                 }
             }
         }
-        _ => return syn::Error::new_spanned(item, "expected a function or impl block")
-            .to_compile_error().into(),
+        _ => {
+            return syn::Error::new_spanned(item, "expected a function or impl block")
+                .to_compile_error()
+                .into();
+        }
     }
     quote!(#item).into()
 }

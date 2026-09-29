@@ -18,8 +18,26 @@ impl SchoonschipWithSettings<'_> {
         view: AtomView<'_>,
         literal_relabellings: &mut Vec<(Atom, Atom)>,
     ) -> Atom {
+        self.run_observed::<0>(view, literal_relabellings, None)
+    }
+
+    pub(crate) fn run_observed<const N: usize>(
+        &self,
+        view: AtomView<'_>,
+        literal_relabellings: &mut Vec<(Atom, Atom)>,
+        observed: Option<&SimplificationCandidates<N>>,
+    ) -> Atom {
         let mut current = view.to_owned();
-        let mut pending_candidates = None;
+        let mut pending_candidates = observed.map(|observed| SimplificationCandidates::<0> {
+            repeated_indices: observed.repeated_indices,
+            brackets: observed.brackets,
+            dots: observed.dots,
+            symbols: [],
+            counts: [],
+            complete: observed.complete,
+            traversal_complete: observed.traversal_complete,
+            intrinsic: observed.intrinsic,
+        });
         loop {
             let mut candidates = pending_candidates
                 .take()
@@ -37,7 +55,15 @@ impl SchoonschipWithSettings<'_> {
                 current.clone()
             };
             let normalized = if candidates.dots || bracketed != current {
-                DotNormalizer::run(bracketed.as_view())
+                DotNormalizer::with_settings(
+                    bracketed.as_view(),
+                    crate::tensor::ContractSettings {
+                        metrics: self.settings.metrics,
+                        rank_one: self.settings.schoonschip_rank1_tensors,
+                        representations: self.settings.representations.as_deref(),
+                        ..Default::default()
+                    },
+                )
             } else {
                 bracketed
             };
@@ -49,14 +75,26 @@ impl SchoonschipWithSettings<'_> {
                 normalized.has_repeated_explicit_indices()
             };
             if repeated {
-                let contracted = SlotContraction::run(
+                let contracted = SlotContraction::configured(
+                    self.settings.metrics,
+                    self.settings.representations.as_deref(),
+                )
+                .run(
                     normalized.as_view(),
                     self.settings.simplify_chain_like_functions,
                     self.settings.schoonschip_rank1_tensors,
                     literal_relabellings,
                 );
                 if contracted != normalized {
-                    let dotted = DotNormalizer::normalize(contracted.as_view());
+                    let dotted = DotNormalizer::normalize_with_settings(
+                        contracted.as_view(),
+                        crate::tensor::ContractSettings {
+                            metrics: self.settings.metrics,
+                            rank_one: self.settings.schoonschip_rank1_tensors,
+                            representations: self.settings.representations.as_deref(),
+                            ..Default::default()
+                        },
+                    );
                     let next = if reusable {
                         dotted.expression
                     } else {
@@ -121,6 +159,7 @@ mod tests {
                 let settings = SchoonschipSettings {
                     schoonschip_rank1_tensors: rank_one,
                     simplify_chain_like_functions: chain_like,
+                    ..Default::default()
                 };
                 let owner = SchoonschipWithSettings {
                     settings: &settings,
@@ -182,7 +221,7 @@ mod tests {
         assert_eq!(actual, expression);
         assert_eq!(SCAN_COUNTS.with(|count| count.get()), 1);
         assert_eq!(
-            SlotContraction::run(expression.as_view(), false, true, &mut Vec::new()),
+            SlotContraction::new().run(expression.as_view(), false, true, &mut Vec::new()),
             actual
         );
     }
@@ -271,10 +310,17 @@ mod tests {
                 loop {
                     // Preserve the previous eager cleanup schedule as an oracle
                     // for scalar powers and unresolved indexed bracket scopes.
-                    let normalized =
-                        BracketNormalizer::normalize(expected.as_view()).normalize_dots();
+                    let policy = crate::tensor::ContractSettings {
+                        metrics: settings.metrics,
+                        rank_one: settings.schoonschip_rank1_tensors,
+                        ..Default::default()
+                    };
+                    let normalized = DotNormalizer::with_settings(
+                        BracketNormalizer::normalize(expected.as_view()).as_view(),
+                        policy,
+                    );
                     let contracted = if normalized.has_repeated_explicit_indices() {
-                        SlotContraction::run(
+                        SlotContraction::new().run(
                             normalized.as_view(),
                             settings.simplify_chain_like_functions,
                             settings.schoonschip_rank1_tensors,
@@ -283,7 +329,9 @@ mod tests {
                     } else {
                         normalized
                     };
-                    let next = BracketNormalizer::normalize(contracted.normalize_dots().as_view());
+                    let next = BracketNormalizer::normalize(
+                        DotNormalizer::with_settings(contracted.as_view(), policy).as_view(),
+                    );
                     if next == expected {
                         break;
                     }

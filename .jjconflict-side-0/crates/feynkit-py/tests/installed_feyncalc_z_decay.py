@@ -3,12 +3,17 @@
 Reference: https://feyncalc.github.io/FeynCalcExamples/EW/Tree/Z-FFbar
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    ColorSimplifySettings,
+)
+
 from pathlib import Path
 
 from symbolica import E, Expression, S
-from symbolica.community import hep as fk
+from symbolica.community import feynkit as fk
 from symbolica.community.tensor import (
-    CookSettings,
     GammaSimplifySettings,
     TensorExpression,
 )
@@ -39,7 +44,12 @@ for matrix in matrices:
     numeric_matrices.append([complex(value) for value in network.result_tensor()[:]])
 gamma0 = numeric_matrices[0]
 for matrix, values in zip(matrices, numeric_matrices, strict=True):
-    adjoint = matrix.dirac_adjoint().simplify_gamma().to_expression()
+    adjoint = (
+        matrix.dirac_adjoint()
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .to_expression()
+    )
     network = adjoint.to_network()
     network.execute()
     actual = [complex(value) for value in network.result_tensor()[:]]
@@ -90,7 +100,13 @@ for pdg, mass, weak_isospin, electric_charge in (
     )
     adjoint = (
         operator.dirac_adjoint()
-        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .reduce_algebra(
+            AlgebraSettings(
+                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
+                epsilon=True,
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
     )
@@ -138,11 +154,16 @@ for pdg, mass, weak_isospin, electric_charge in (
     scalar = (
         TensorExpression(
             operator.to_expression() * adjoint * spin_projector * color_projector,
-            cook_indices=CookSettings.indices(),
+            intern="flattened",
         )
-        .simplify_gamma()
-        .simplify_color()
-        .contract()
+        .reduce_algebra(
+            AlgebraSettings(
+                gamma=GammaSimplifySettings(),
+                epsilon=True,
+                color=ColorSimplifySettings(),
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_dots()
     )

@@ -28,12 +28,18 @@ fn callback_contraction(
             .into_iter()
             .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind()))),
     );
-    let source = SymbolicTensor::from_normalized_parts(
+    // Parsed operands and StructureContract already establish these encoded
+    // occurrence owners; final callback output still receives interface checks.
+    let source = SymbolicTensor::from_validated_parts(
         Atom::mul_many([&metric.expression, &tensor.expression]),
         interface,
     );
     let expression = source
-        .contract(Default::default())?
+        .contract(ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?
         .resolved()?
         .into_expression();
     let value = SymbolicTensor {

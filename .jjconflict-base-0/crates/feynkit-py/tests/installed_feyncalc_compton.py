@@ -4,12 +4,13 @@ Reference: https://feyncalc.github.io/FeynCalcExamples/QED/Tree/ElGa-ElGa
 The sewn-forward-graph conversion is a separate regression requirement.
 """
 
+from symbolica.community.tensor import AlgebraSettings, ContractSettings
+
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community import hep as fk
+from symbolica.community import feynkit as fk
 from symbolica.community.tensor import (
-    CookSettings,
     GammaSimplifySettings,
     TensorExpression,
 )
@@ -85,7 +86,13 @@ for pdg in (11, -11):
     assert len(operator.structure.slots) == 4
     adjoint = (
         operator.dirac_adjoint()
-        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .reduce_algebra(
+            AlgebraSettings(
+                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
+                epsilon=True,
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
     )
@@ -118,9 +125,12 @@ for pdg in (11, -11):
         squared = (
             TensorExpression(
                 operator.to_expression() * adjoint * density,
-                cook_indices=CookSettings.indices(),
+                intern="flattened",
             )
-            .simplify_gamma()
+            .reduce_algebra(
+                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_dots()
             .to_expression()

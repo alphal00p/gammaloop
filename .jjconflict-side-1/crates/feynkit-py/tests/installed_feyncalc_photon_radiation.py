@@ -6,12 +6,13 @@ https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/Ga-QQbar
 https://feyncalc.github.io/FeynCalcExamples/QCD/Tree/Ga-QQbarGl
 """
 
+from symbolica.community.tensor import AlgebraSettings, ContractSettings
+
 import numpy as np
 from symbolica import E, S, Symbol
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 from symbolica.community.tensor import (
     ColorSimplifySettings,
-    CookSettings,
     GammaSimplifySettings,
     TensorExpression,
 )
@@ -76,7 +77,13 @@ def calculate(outgoing, kin):
     operator = TensorExpression(sum(terms, E("0")))
     adjoint = (
         operator.dirac_adjoint()
-        .simplify_gamma(GammaSimplifySettings(gamma0=True, evaluate_traces=False))
+        .reduce_algebra(
+            AlgebraSettings(
+                gamma=GammaSimplifySettings(gamma0=True, evaluate_traces=False),
+                epsilon=True,
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
         .replace(conj(P(a, b)), P(a, b))
@@ -111,15 +118,21 @@ def calculate(outgoing, kin):
         .replace(coad(8, index), coad(dA, index))
     )
     colored = (
-        TensorExpression(generic, cook_indices=CookSettings.indices())
-        .simplify_color()
+        TensorExpression(generic, intern="flattened")
+        .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
         .replace(dA, Nc**2 - 1)
     )
     colored = (
         TensorExpression(colored)
-        .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
+        .reduce_algebra(
+            AlgebraSettings(
+                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
     )
     print("COLOR PASS", flush=True)
@@ -131,12 +144,17 @@ def calculate(outgoing, kin):
     traced = (
         TensorExpression(
             colored.to_expression() * spins.replace(S("UFO::MM"), mass),
-            cook_indices=CookSettings.indices(),
+            intern="flattened",
         )
-        .simplify_gamma()
+        .reduce_algebra(AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
     )
-    reduced = kin.apply(traced.contract().to_expression().to_dots())
+    reduced = kin.apply(
+        traced.contract(ContractSettings(collect_chains=False, collect_traces=False))
+        .to_expression()
+        .to_dots()
+    )
     results = {}
     modes = (
         [
@@ -181,9 +199,9 @@ def calculate(outgoing, kin):
         contracted = (
             TensorExpression(
                 reduced.to_expression() * photon * gluon,
-                cook_indices=CookSettings.indices(),
+                intern="flattened",
             )
-            .contract()
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_dots()
         )

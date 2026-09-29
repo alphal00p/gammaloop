@@ -424,7 +424,7 @@ fn contraction_orders_preserve_the_same_factorized_value() {
     let expected = input.expand().schoonschip().expand();
     for order in [[0, 1], [1, 0]] {
         let result = source
-            .contract(crate::tensor::ContractionSettings::default().with_order(&order))
+            .contract(crate::tensor::ContractSettings::default().with_order(&order))
             .unwrap()
             .resolved()
             .unwrap();

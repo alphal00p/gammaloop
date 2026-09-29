@@ -21,7 +21,9 @@ use crate::structure::{
     Canonicalized, HasName, NamedStructure, OrderedStructure, StructureContract, StructureError,
     TensorStructure,
     representation::{BaseRepName, LibraryRep, Minkowski},
-    slot::{AbsInd, DummyAind, ParseableAind, Slot, SlotError, SlotMatch, SlotMatcher},
+    slot::{
+        AbsInd, DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotError, SlotMatch, SlotMatcher,
+    },
 };
 use crate::{
     network::tags::{SPENSO_TAG, SpensoTags},
@@ -61,6 +63,11 @@ impl ChainNestingError {
             Ok(owner)
         }
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    static SYNTACTIC_INFERENCE_NODES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 pub trait StructureFromAtom: Sized {
@@ -290,8 +297,9 @@ impl TensorialSyntax {
             return false;
         }
 
-        // Registered projectors preserve tensor structure through arithmetic
-        // prefactors just like brackets. Ordinary function metadata remains opaque.
+        // Registered projectors preserve argument interfaces like brackets.
+        // Ordinary function metadata remains opaque; unary broadcasts are
+        // handled below with their arity requirement.
         if symbol == tags.bracket || matcher.is_projector(symbol) {
             return fun
                 .iter()
@@ -385,12 +393,63 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom
     fn structure_from_parser<Index>(
         state: &ParseState<Index, AtomView<'_>>,
     ) -> Result<Canonicalized<Self>, StructureError> {
+        let value = state.current_view();
+        let cached = state
+            .leaf_interfaces
+            .as_ref()
+            .and_then(|cache| cache.lock().unwrap().get(value.get_data()).cloned());
         let mut matcher = state.matcher.borrow_mut();
-        if state.chain_scope_validated {
-            Self::leaf_structure_from_atom(state.current_view(), &mut matcher)
-        } else {
-            Self::structure_from_atom(state.current_view(), &mut matcher)
+        if let Some((_, logical_slots)) = cached {
+            crate::network::profile::bump(
+                crate::network::profile::Counter::ParseStructureCacheHit,
+                1,
+            );
+            if logical_slots.is_empty() {
+                return Err(StructureError::EmptyStructure(SlotError::EmptyStructure));
+            }
+            let slots = logical_slots
+                .iter()
+                .map(|atom| matcher.parse::<LibraryRep, Aind>(atom.as_view()))
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok(Self::new(slots));
         }
+        let structure = {
+            let _timing = crate::network::profile::span(
+                crate::network::profile::Timer::ParseStructureUncached,
+            );
+            if state.chain_scope_validated {
+                Self::leaf_structure_from_atom(value, &mut matcher)
+            } else {
+                Self::structure_from_atom(value, &mut matcher)
+            }
+        };
+        if let Some(cache) = &state.leaf_interfaces {
+            crate::network::profile::bump(
+                crate::network::profile::Counter::ParseStructureCacheMiss,
+                1,
+            );
+            let logical_slots = match &structure {
+                Ok(structure) => Some(
+                    structure.layout().canonical_to_logical(
+                        &structure
+                            .canonical()
+                            .external_structure()
+                            .iter()
+                            .map(|slot| slot.to_atom())
+                            .collect::<Vec<_>>(),
+                    ),
+                ),
+                Err(StructureError::EmptyStructure(_)) => Some(Vec::new()),
+                Err(_) => None,
+            };
+            if let Some(slots) = logical_slots {
+                cache
+                    .lock()
+                    .unwrap()
+                    .insert(value.to_owned(), (true, slots));
+            }
+        }
+        structure
     }
 }
 
@@ -445,6 +504,9 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         value: AtomView<'_>,
         matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
+        #[cfg(test)]
+        SYNTACTIC_INFERENCE_NODES.with(|count| count.set(count.get() + 1));
+        crate::network::profile::bump(crate::network::profile::Counter::ParseStructureVisit, 1);
         match value {
             AtomView::Add(add) => {
                 let Some(first) = add.iter().next() else {
@@ -528,6 +590,38 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     ) -> Result<Canonicalized<Self>, StructureError> {
         if fun.get_symbol().is_scalar() {
             return Ok(Canonicalized::identity(OrderedStructure::empty()));
+        }
+        if fun.get_symbol().has_tag(&matcher.tags().broadcast) {
+            if fun.get_nargs() != 1 {
+                return Err(StructureError::ParsingError(format!(
+                    "broadcast requires one argument: {}",
+                    fun.as_view()
+                )));
+            }
+            return Self::syntactic_structure_from_atom(fun.iter().next().unwrap(), matcher);
+        }
+        if fun.get_symbol() == matcher.tags().bracket {
+            if fun.get_nargs() == 0 {
+                return Err(StructureError::ParsingError(
+                    "empty bracket expression".to_owned(),
+                ));
+            }
+            let mut structure = Canonicalized::identity(OrderedStructure::empty());
+            for factor in fun.iter() {
+                // Raw bracket leaves can carry direct slots as well as grouped
+                // tensor factors. Preserve their written logical order.
+                let recognized = matcher.classify(factor);
+                let interface = match recognized.parse::<LibraryRep, Aind>(factor, matcher) {
+                    Ok(slot) => OrderedStructure::new(vec![slot]),
+                    Err(error) if matches!(recognized, SlotMatch::Explicit(slot) if !slot.is_concrete_index()) =>
+                    {
+                        return Err(error.into());
+                    }
+                    Err(_) => Self::syntactic_structure_from_atom(factor, matcher)?,
+                };
+                structure = structure.merge_syntactic(&interface)?;
+            }
+            return Ok(structure);
         }
         if matcher.compact_inner_product_parts::<Aind>(fun).is_some() {
             let mut arguments = fun.iter();
@@ -897,6 +991,115 @@ mod tests {
     }
 
     #[test]
+    fn cached_boundaries_reuse_opaque_interfaces_and_preserve_logical_ports() {
+        use crate::network::parsing::LeafInterfaceCache;
+        use crate::structure::representation::Euclidean;
+        let cache = LeafInterfaceCache::default();
+        let rep = Minkowski {}.new_rep(4).cast::<LibraryRep>();
+        let euc = Euclidean {}.new_rep(3).cast::<LibraryRep>();
+        let logical = [
+            rep.slot::<AbstractIndex, _>(AbstractIndex::Open { owner: 71, axis: 2 }),
+            euc.slot::<AbstractIndex, _>(91),
+            rep.slot::<AbstractIndex, _>(17),
+        ];
+        let head = tensor_symbol!("cached_boundary_order");
+        let tensor = logical
+            .iter()
+            .fold(FunctionBuilder::new(head), |f, slot| {
+                f.add_arg(slot.to_atom())
+            })
+            .finish();
+        let scalar = symbol!("cached_boundary_coefficient"; Scalar);
+        let source =
+            Atom::mul_many(std::iter::once(tensor).chain((0..512).map(|i| function!(scalar, i))));
+        let state = ParseState::<AbstractIndex> {
+            chain_scope_validated: true,
+            leaf_interfaces: Some(cache.clone()),
+            ..Default::default()
+        }
+        .with_view(source.as_view());
+        SYNTACTIC_INFERENCE_NODES.with(|count| count.set(0));
+        let first =
+            OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_parser(&state).unwrap();
+        assert!(SYNTACTIC_INFERENCE_NODES.with(|count| count.get()) > 512);
+        assert_eq!(
+            first
+                .layout()
+                .canonical_to_logical(&first.canonical().external_structure()),
+            logical
+        );
+        // Another boundary changes without invalidating this admitted payload.
+        let replacement = function!(head, rep.slot::<AbstractIndex, _>(29).to_atom());
+        OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_parser(
+            &state.clone().with_view(replacement.as_view()),
+        )
+        .unwrap();
+        SYNTACTIC_INFERENCE_NODES.with(|count| count.set(0));
+        let second =
+            OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_parser(&state).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(SYNTACTIC_INFERENCE_NODES.with(|count| count.get()), 0);
+        assert_eq!(cache.lock().unwrap().len(), 2);
+        // Materialization/callback boundaries cannot inherit stale admission facts.
+        assert!(state.materialized().leaf_interfaces.is_none());
+    }
+
+    #[test]
+    fn cached_scalar_interfaces_retain_internal_bindings() {
+        use crate::network::parsing::LeafInterfaceCache;
+        let rep = Minkowski {}.new_rep(4);
+        let head = tensor_symbol!("cached_scalar_boundary");
+        let source = function!(head, rep.slot::<AbstractIndex, _>(33).to_atom()).pow(2);
+        let cache = LeafInterfaceCache::default();
+        let state = ParseState::<AbstractIndex> {
+            chain_scope_validated: true,
+            leaf_interfaces: Some(cache.clone()),
+            ..Default::default()
+        }
+        .with_view(source.as_view());
+        assert!(matches!(
+            OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_parser(&state),
+            Err(StructureError::EmptyStructure(_))
+        ));
+        assert_eq!(
+            cache.lock().unwrap().get(&source),
+            Some(&(true, Vec::new()))
+        );
+        SYNTACTIC_INFERENCE_NODES.with(|count| count.set(0));
+        assert!(matches!(
+            OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_parser(&state),
+            Err(StructureError::EmptyStructure(_))
+        ));
+        assert_eq!(SYNTACTIC_INFERENCE_NODES.with(|count| count.get()), 0);
+    }
+
+    #[test]
+    fn opaque_wrappers_preserve_argument_interfaces_and_reject_invalid_arities() {
+        let rep = Minkowski {}.new_rep(4);
+        let left = rep.to_symbolic([Atom::num(93401)]);
+        let right = rep.to_symbolic([Atom::num(93402)]);
+        let head = tensor_symbol!("opaque_wrapper_interface");
+        let factor = function!(head, &left, &right);
+        let broadcast = crate::broadcast_symbol!("opaque_wrapper_broadcast");
+        let expected =
+            OrderedStructure::<LibraryRep, AbstractIndex>::parse(factor.as_view()).unwrap();
+        for wrapped in [function!(broadcast, &factor), bracket!(&factor)] {
+            let actual =
+                OrderedStructure::<LibraryRep, AbstractIndex>::parse(wrapped.as_view()).unwrap();
+            assert_eq!(actual, expected);
+        }
+        for malformed in [
+            function!(broadcast),
+            function!(broadcast, &factor, &factor),
+            function!(SPENSO_TAG.bracket),
+        ] {
+            assert!(
+                OrderedStructure::<LibraryRep, AbstractIndex>::parse(malformed.as_view()).is_err()
+            );
+        }
+    }
+
+    #[test]
     fn opaque_inner_product_preserves_explicit_spectators_and_chain_boundaries() {
         let rep = Minkowski {}.new_rep(4);
         let compact = rep.to_symbolic([]);
@@ -963,6 +1166,8 @@ mod tests {
 
     #[test]
     fn lorentz_dimension_changes_only_four_dimensional_minkowski_metadata() {
+        // Register representation metadata before textual parsing creates its head.
+        LibraryRep::new_self_dual("bis").unwrap();
         let input = symbolica::parse!(
             "4*F(spenso::mink(4,mu),spenso::mink(4),spenso::mink(3,nu),spenso::bis(4,i),spenso::euc(4,j))"
         );

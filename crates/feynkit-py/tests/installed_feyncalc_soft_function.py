@@ -6,8 +6,10 @@ The reference's explicit 1/(32 pi^2) prefactor is included; this is not an
 integrated or dimensionally regulated real-emission phase-space calculation.
 """
 
+from symbolica.community.tensor import AlgebraSettings, ContractSettings
+
 from symbolica import E, S, Symbol
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 from symbolica.community.tensor import (
     ColorSimplifySettings,
     GammaChainOrdering,
@@ -56,10 +58,11 @@ def simplify(expression):
         kin.apply(
             TensorExpression(expression)
             .expand()
-            .contract()
-            .simplify_gamma(ordering)
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
+            .reduce_algebra(AlgebraSettings(gamma=ordering, epsilon=True))
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .expand()
-            .contract()
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_dots()
         )
@@ -169,7 +172,7 @@ for outgoing in (["b", "b~"], ["b", "b~", "g"]):
             kin.apply(
                 TensorExpression(denominator)
                 .expand()
-                .contract()
+                .contract(ContractSettings(collect_chains=False, collect_traces=False))
                 .to_expression()
                 .to_dots()
             )
@@ -225,13 +228,19 @@ for tensor in (color_born, color_real):
         TensorExpression(
             tensor.to_expression() * tensor.dirac_adjoint().to_expression()
         )
-        .simplify_color()
+        .reduce_algebra(AlgebraSettings(color=ColorSimplifySettings()))
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
     )
     colors.append(
         TensorExpression(norm.replace(dA, Nc**2 - 1))
-        .simplify_color(ColorSimplifySettings(substitute_cof_dimension_invariants=True))
+        .reduce_algebra(
+            AlgebraSettings(
+                color=ColorSimplifySettings(substitute_cof_dimension_invariants=True)
+            )
+        )
+        .contract(ContractSettings(collect_chains=False, collect_traces=False))
         .to_expression()
         .to_expression()
     )

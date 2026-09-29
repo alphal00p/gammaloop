@@ -15,5 +15,5 @@ pub(crate) use analysis::SimplificationCandidates;
 pub(crate) use api::Schoonschip;
 pub(crate) use normalize_dots::DotNormalizer;
 pub(crate) use settings::SchoonschipSettings;
-pub(crate) use slot_contraction::{ContractionStatus, FactorizedContraction, SlotContraction};
+pub(crate) use slot_contraction::{FactorizedContraction, ReductionStatus, SlotContraction};
 pub(crate) use with_settings::SchoonschipWithSettings;

@@ -406,9 +406,10 @@ pub(crate) fn group_diagrams(
         })?;
         let simplified = SymbolicTensor::infer(cooked)
             .and_then(|tensor| {
-                tensor.simplify_color(
-                    ColorSimplifySettings::default().with_cof_dimension_invariants(),
-                )
+                tensor.reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                    ..Default::default()
+                })
             })
             .and_then(|tensor| tensor.resolved())
             .map_err(|error| GroupingError::ColorSimplification {

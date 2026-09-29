@@ -44,7 +44,7 @@ def _(mo):
 
 @app.cell
 def _():
-    from symbolica.community.hep import Model
+    from symbolica.community.feynkit import Model
     from symbolica import S
 
     model = Model.phi3()

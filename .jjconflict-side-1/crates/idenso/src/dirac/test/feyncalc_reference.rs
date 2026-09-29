@@ -13,7 +13,7 @@ fn dirac_simplify_id1_repeated_d_dim_gamma_is_dimension() {
         gamma!(slot!(r.mink_d, mu)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"d*g(bis(d,i),bis(d,j))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"d*g(bis(d,i),bis(d,j))");
 }
 
 #[test]
@@ -29,7 +29,7 @@ fn dirac_simplify_id2_odd_interior_chain() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,nu)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,nu)))");
 }
 
 #[test]
@@ -47,7 +47,17 @@ fn dirac_simplify_id3_four_interior_chain() {
     ) / 2;
     let simplified = crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
         .unwrap()
-        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+        .reduce_algebra(&crate::tensor::AlgebraSettings {
+            gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap()
         .resolved()
         .unwrap()
@@ -63,7 +73,17 @@ fn dirac_simplify_id3_four_interior_chain() {
     );
     let simplified = crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
         .unwrap()
-        .simplify_gamma(GammaSimplifySettings::canonical())
+        .reduce_algebra(&crate::tensor::AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::canonical()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap()
         .resolved()
         .unwrap()
@@ -90,7 +110,7 @@ fn dirac_simplify_id4_slash_sandwich() {
             * chain!(slot!(r.bis4, a), slot!(r.bis4, b), gamma!(q.clone()))
             * chain!(slot!(r.bis4, b), slot!(r.bis4, j), gamma!(p.clone()));
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"-2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*g(p(mink(4)),q(mink(4)))+chain(bis(4,i),bis(4,j),gamma(in,out,q(mink(4))))*g(p(mink(4)),p(mink(4)))+g(bis(4,i),bis(4,j))*g(p(mink(4)),p(mink(4)))*m");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"-2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*g(p(mink(4)),q(mink(4)))+chain(bis(4,i),bis(4,j),gamma(in,out,q(mink(4))))*g(p(mink(4)),p(mink(4)))+g(bis(4,i),bis(4,j))*g(p(mink(4)),p(mink(4)))*m");
 }
 
 #[test]
@@ -103,7 +123,7 @@ fn dirac_simplify_id5_gamma5_anticommutes_left() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)),gamma5(in,out))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)),gamma5(in,out))");
 }
 
 #[test]
@@ -127,7 +147,17 @@ fn dirac_simplify_id23_trace_evaluation_can_stay_disabled() {
     let simplified = Atom::add_many(terms.iter().map(|term| {
         crate::tensor::SymbolicTensor::infer(term.to_owned())
             .unwrap()
-            .simplify_gamma(GammaSimplifySettings::repeated_pairs().without_trace_evaluation())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -162,7 +192,17 @@ fn dirac_simplify_id24_odd_trace_vanishes() {
     let simplified = Atom::add_many(terms.iter().map(|term| {
         crate::tensor::SymbolicTensor::infer(term.to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -200,7 +240,17 @@ fn dirac_simplify_id25_four_trace_recurses_beside_open_chain() {
     let simplified = Atom::add_many(terms.iter().map(|term| {
         crate::tensor::SymbolicTensor::infer(term.to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -227,7 +277,7 @@ fn dirac_simplify_id30_dirac_order_anticommutator() {
         * g!(slot!(r.mink4, nu), p)
         * chain!(slot!(r.bis4, i), slot!(r.bis4, j); Vec::<Atom>::new());
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_gamma(GammaSimplifySettings::canonical()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"0");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { gamma: Some(GammaSimplifySettings::canonical()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"0");
 }
 
 #[test]
@@ -242,20 +292,30 @@ fn dirac_simplify_id36_empty_trace_is_spin_dimension() {
         gamma!(slot!(r.mink_d, b))
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr_4).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"4");
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr_d).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"d");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr_4).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"4");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr_d).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"d");
     let color = crate::tensor::SymbolicTensor::infer(expr_color.clone()).unwrap();
     assert_eq!(
         color
-            .simplify_gamma(GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
             .into_expression(),
         expr_color
     );
-    assert_snapshot!(color.simplify_color(crate::color::ColorSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"Nc");
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((pair_d).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"d*g(mink(d,a),mink(d,b))");
+    assert_snapshot!(color.reduce_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"Nc");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((pair_d).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"d*g(mink(d,a),mink(d,b))");
 }
 
 #[test]
@@ -288,7 +348,17 @@ fn dirac_simplify_id40_repeated_gamma_and_two_trace() {
     let simplified = Atom::add_many(terms.iter().map(|term| {
         crate::tensor::SymbolicTensor::infer(term.to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -315,8 +385,8 @@ fn dirac_simplify_id45_slash_square_and_sandwich() {
         gamma!(p),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((slash_square).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))");
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((sandwich).as_atom_view().to_owned()).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))+2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*p(mink(4,mu))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((slash_square).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer((sandwich).as_atom_view().to_owned()).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))+2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*p(mink(4,mu))");
 }
 
 #[test]
@@ -343,7 +413,7 @@ fn dirac_simplify_id46_d_dim_repeated_gamma_slash_sum() {
         chainified.undo_chain::<AbstractIndex>().unwrap(),
         expr.undo_chain::<AbstractIndex>().unwrap()
     );
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer(chainified).unwrap().simplify_gamma(crate::dirac::GammaSimplifySettings::default()).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"-1*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*d+-1*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*d+2*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))+2*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))+d*g(bis(d,i),bis(d,j))*m");
+    assert_snapshot!(crate::tensor::SymbolicTensor::infer(chainified).unwrap().reduce_algebra(&crate::tensor::AlgebraSettings { gamma: Some(crate::dirac::GammaSimplifySettings::default()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().resolved().unwrap().into_expression().expand().to_bare_ordered_string(), @"-1*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*d+-1*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*d+2*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))+2*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))+d*g(bis(d,i),bis(d,j))*m");
 }
 
 #[test]
@@ -363,7 +433,17 @@ fn chiral_projector_traces() {
                     .to_owned()
             )
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -374,7 +454,17 @@ fn chiral_projector_traces() {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -407,7 +497,17 @@ fn chiral_projector_traces() {
         );
         let reduced = crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()
@@ -416,7 +516,17 @@ fn chiral_projector_traces() {
             (reduced.clone()
                 - (crate::tensor::SymbolicTensor::infer((ordinary).as_atom_view().to_owned())
                     .unwrap()
-                    .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                    .reduce_algebra(&crate::tensor::AlgebraSettings {
+                        gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                        epsilon: true,
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .contract(crate::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })
                     .unwrap()
                     .resolved()
                     .unwrap()
@@ -424,7 +534,17 @@ fn chiral_projector_traces() {
                     + Atom::num(sign)
                         * crate::tensor::SymbolicTensor::infer((axial).as_atom_view().to_owned())
                             .unwrap()
-                            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                                epsilon: true,
+                                ..Default::default()
+                            })
+                            .unwrap()
+                            .contract(crate::tensor::ContractSettings {
+                                collect_chains: false,
+                                collect_traces: false,
+                                ..Default::default()
+                            })
                             .unwrap()
                             .resolved()
                             .unwrap()
@@ -436,7 +556,17 @@ fn chiral_projector_traces() {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((reduced).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -446,7 +576,17 @@ fn chiral_projector_traces() {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(GammaSimplifySettings::default().without_trace_evaluation())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(GammaSimplifySettings::default().without_trace_evaluation()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -465,7 +605,17 @@ fn chiral_projector_traces() {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -476,7 +626,17 @@ fn chiral_projector_traces() {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -487,7 +647,17 @@ fn chiral_projector_traces() {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((mixed).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -498,7 +668,17 @@ fn chiral_projector_traces() {
         assert_eq!(
             crate::tensor::SymbolicTensor::infer((dimensional).as_atom_view().to_owned())
                 .unwrap()
-                .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap()
@@ -515,7 +695,17 @@ fn chiral_projector_traces() {
                 .to_owned()
         )
         .unwrap()
-        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+        .reduce_algebra(&crate::tensor::AlgebraSettings {
+            gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap()
         .resolved()
         .unwrap()
@@ -529,7 +719,17 @@ fn chiral_projector_traces() {
                 .to_owned()
         )
         .unwrap()
-        .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+        .reduce_algebra(&crate::tensor::AlgebraSettings {
+            gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(crate::tensor::ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
         .unwrap()
         .resolved()
         .unwrap()

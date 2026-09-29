@@ -4,6 +4,12 @@ Run in a current Symbolica community host; see investigation.typ for scope,
 conventions, provenance, and the missing integration stages.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 import argparse
 import importlib
 import json
@@ -120,9 +126,16 @@ for process in ("dy", "dis") if args.process == "both" else (args.process,):
                     chain *= vector(lorentz(label)).to_expression()
             scalar = (
                 TensorExpression(chain)
-                .simplify_gamma()
+                .reduce_algebra(
+                    AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+                )
+                .contract(ContractSettings(collect_chains=False, collect_traces=False))
                 .expand()
-                .simplify_metrics()
+                .contract(
+                    ContractSettings(
+                        rank_one=False, collect_chains=False, collect_traces=False
+                    )
+                )
                 .expand()
                 .to_dots()
                 .expand()

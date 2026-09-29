@@ -95,7 +95,7 @@ JSON stores exact integers and fractions as strings, such as `"-1"` and `"2/3"`.
 Integer numeric literals are accepted too; fractional floating-point literals
 are rejected because they do not specify the intended exact charge.
 
-// docs-example: syntax
+// docs-example: compile
 ```python
 from symbolica import E, S
 from symbolica.community import feynkit as fk

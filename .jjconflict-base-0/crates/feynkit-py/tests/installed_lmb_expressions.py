@@ -271,10 +271,7 @@ explicit = (
     .replace(S("gammalooprs::denom")(a, b, c, quadratic), quadratic)
 )
 momentum = edge.momentum_expression(dimension=4)
-assert (
-    explicit
-    == (dot(momentum, momentum) - edge.particle.mass**2).to_expression()
-)
+assert explicit == (dot(momentum, momentum) - edge.particle.mass**2).to_expression()
 denominator = edge.denominator_expression(in_lmb=True)
 del massive
 assert edge.denominator_expression(in_lmb=True) == denominator

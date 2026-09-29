@@ -14,6 +14,7 @@ use symbolica::{
     coefficient::CoefficientView,
 };
 
+#[cfg(test)]
 use crate::shorthands::schoonschip::{SchoonschipSettings, SchoonschipWithSettings};
 
 spenso::symbolica_init_lazy_static! {
@@ -71,16 +72,19 @@ pub fn epsilon4<'a, 'b, 'c, 'd>(
 }
 
 /// Simplifies epsilon-metric contractions and epsilon-pair contractions.
-pub trait EpsilonSimplifier {
+#[cfg(test)]
+pub(crate) trait EpsilonSimplifier {
     fn simplify_epsilon(&self) -> Atom;
 }
 
+#[cfg(test)]
 impl EpsilonSimplifier for Atom {
     fn simplify_epsilon(&self) -> Atom {
         self.as_view().simplify_epsilon()
     }
 }
 
+#[cfg(test)]
 impl EpsilonSimplifier for AtomView<'_> {
     fn simplify_epsilon(&self) -> Atom {
         EpsilonSimplifierPass::run(*self)
@@ -93,6 +97,10 @@ impl EpsilonSimplifierPass {
     /// Apply epsilon identities once. The shared tensor scheduler contracts
     /// emitted metrics after registering any changed literal alias uses.
     pub(crate) fn step(expr: AtomView<'_>) -> Atom {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::EpsilonKernel,
+        );
         let _ = *EPSILON_SYMBOL;
         expr.replace_map(|term, _context, out| {
             let rewritten = match term {
@@ -108,6 +116,7 @@ impl EpsilonSimplifierPass {
 
     /// Runs the epsilon identities to a fixed point, then lets metric
     /// simplification consume any determinants that collapsed to traces.
+    #[cfg(test)]
     fn run(expr: AtomView<'_>) -> Atom {
         // Force Symbolica to register epsilon as antisymmetric before any
         // builders below create new epsilon nodes.
@@ -139,6 +148,7 @@ impl EpsilonSimplifierPass {
         }
     }
 
+    #[cfg(test)]
     fn contains_epsilon(expr: AtomView<'_>) -> bool {
         match expr {
             AtomView::Fun(f) => {

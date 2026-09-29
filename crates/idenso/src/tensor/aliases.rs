@@ -107,15 +107,19 @@ impl SymbolicTensor<PartialStructure> {
 
     /// Reuse admitted literal associations after a typed domain operation.
     /// New or unchecked definitions still enter through ordinary admission.
-    fn attach_aliases(
+    pub(super) fn attach_aliases(
         self,
         definitions: impl IntoIterator<Item = (Self, Self)>,
         admitted: Option<&SymbolicTensor<AliasInterfaces, AliasedAtom>>,
     ) -> Result<SymbolicTensor<AliasInterfaces, AliasedAtom>> {
+        // Registry dependency admission shares the planner's one initial scan.
+        // Reattaching unchanged domains reuses these immutable observations.
+        self.reduction_observations();
         let mut expression = AliasedAtom::from(self.expression);
         let mut interfaces = HashMap::new();
         let mut definition_proofs = HashMap::new();
         for (handle, body) in definitions {
+            body.reduction_observations();
             let valid_handle = match handle.expression.as_view() {
                 AtomView::Var(variable) => {
                     variable.get_symbol().get_wildcard_level() == 0
@@ -206,6 +210,7 @@ impl SymbolicTensor<PartialStructure> {
         // completion instead describes the whole DAG and must be re-established.
         let mut proofs = self.proofs;
         proofs.contracted = false;
+        proofs.reduction = None;
         let value = SymbolicTensor {
             proofs,
             expression,
@@ -231,19 +236,11 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
         self.proofs.contracted
     }
 
-    /// A completed default contraction can share its sealed payload and registry.
-    /// Explicit scheduling and incomplete frontiers still require the graph owner.
-    pub(crate) fn completed_contraction(
-        self: &Arc<Self>,
-        order: Option<&[usize]>,
-    ) -> Option<Arc<Self>> {
-        (order.is_none() && self.contraction_complete()).then(|| Arc::clone(self))
-    }
-
     /// The unresolved root, with its established public port order.
     pub fn root(&self) -> SymbolicTensor<PartialStructure> {
         let mut proofs = self.proofs.clone();
         proofs.contracted = false;
+        proofs.reduction = None;
         SymbolicTensor {
             proofs,
             expression: self.expression.get_root().clone(),
@@ -285,6 +282,10 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
 
     /// Resolve literal aliases, retaining factorization and checking callback results.
     pub fn resolved(&self) -> Result<SymbolicTensor<PartialStructure>> {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::Materialization,
+        );
         self.dependency_order()?;
         self.root()
             .with_checked_expression(self.expression.clone().into_inner())
@@ -292,6 +293,10 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
 
     /// Explicit materialization. Contraction and alias construction never call this.
     pub fn expanded(&self) -> Result<SymbolicTensor<PartialStructure>> {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::Materialization,
+        );
         if self.expression.get_aliases().is_empty() {
             return self.root().expanded(None, false);
         }
@@ -332,17 +337,28 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
     pub(super) fn reachable_definitions(&self) -> HashSet<&Atom> {
         let definitions = self.expression.get_aliases();
         let mut reachable = HashSet::new();
-        let mut pending = vec![self.expression.get_root()];
-        while let Some(expression) = pending.pop() {
-            expression.visitor(&mut |node| {
-                if let Some((handle, body)) = definitions.get_key_value(node.get_data()) {
-                    if reachable.insert(handle) {
-                        pending.push(body);
-                    }
-                    return false;
-                }
-                true
-            });
+        let mut pending = self
+            .proofs
+            .observations
+            .get()
+            .unwrap()
+            .literals
+            .iter()
+            .collect::<Vec<_>>();
+        while let Some(literal) = pending.pop() {
+            if let Some((handle, _)) = definitions.get_key_value(literal)
+                && reachable.insert(handle)
+            {
+                pending.extend(
+                    self.structure.definition_proofs[handle]
+                        .1
+                        .observations
+                        .get()
+                        .unwrap()
+                        .literals
+                        .iter(),
+                );
+            }
         }
         reachable
     }
@@ -362,37 +378,35 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
                 "alias registry and interfaces disagree",
             ));
         }
-        let dependencies = |expression: &Atom| -> Result<HashSet<&Atom>> {
+        let dependencies = |observed: &super::simplification::observation::DomainObservations| -> Result<HashSet<&Atom>> {
             let mut found = HashSet::new();
-            let mut missing = false;
-            expression.visitor(&mut |node| {
-                if let Some((handle, _)) = definitions.get_key_value(node.get_data()) {
+            for literal in &observed.literals {
+                if let Some((handle, _)) = definitions.get_key_value(literal) {
                     found.insert(handle);
-                    return false;
-                }
-                if matches!(node, AtomView::Fun(function)
+                } else if matches!(literal.as_view(), AtomView::Fun(function)
                     if function.get_symbol() == *TENSOR_ALIAS_SYMBOL
                     || function.get_symbol() == symbolica::symbol!("idenso::scalar_alias"; Scalar))
                 {
-                    missing = true;
-                    return false;
+                    return Err(TensorInferenceError::invalid(
+                        "unregistered tensor alias use; each literal port labelling needs a definition",
+                    ));
                 }
-                true
-            });
-            if missing {
-                return Err(TensorInferenceError::invalid(
-                    "unregistered tensor alias use; each literal port labelling needs a definition",
-                ));
             }
             Ok(found)
         };
-        dependencies(self.expression.get_root())?;
+        dependencies(self.proofs.observations.get().unwrap())?;
         let mut keys = definitions.keys().collect::<Vec<_>>();
         keys.sort_unstable_by(|a, b| AtomView::cmp(&a.as_view(), &b.as_view()));
         let mut remaining = HashMap::new();
         let mut dependents: HashMap<&Atom, Vec<&Atom>> = HashMap::new();
         for &key in &keys {
-            let dependencies = dependencies(&definitions[key])?;
+            let dependencies = dependencies(
+                self.structure.definition_proofs[key]
+                    .1
+                    .observations
+                    .get()
+                    .unwrap(),
+            )?;
             remaining.insert(key, dependencies.len());
             for dependency in dependencies {
                 dependents.entry(dependency).or_default().push(key);
@@ -658,11 +672,17 @@ mod tests {
         let source = SymbolicTensor::infer((p + q) * r).unwrap();
         let value = Arc::new(source.contract(Default::default()).unwrap());
         assert!(value.proofs.contracted);
-        let repeated = value.completed_contraction(None).unwrap();
+        let repeated = value.contract(Default::default()).unwrap();
         assert!(Arc::ptr_eq(&value, &repeated));
-        assert!(value.completed_contraction(Some(&[0])).is_none());
+        let different = value
+            .contract(super::super::ContractSettings::default().without_rank_one_tensors())
+            .unwrap();
+        assert!(!Arc::ptr_eq(&value, &different));
         let mapped = Arc::new(value.map_aliases(|_, body| Ok(body)).unwrap());
-        assert!(mapped.completed_contraction(None).is_none());
+        assert_eq!(
+            mapped.reduction_status(),
+            super::super::ReductionStatus::Deferred
+        );
         assert_eq!(mapped.resolved().unwrap(), value.resolved().unwrap());
 
         let slots = (0..12)
@@ -687,7 +707,10 @@ mod tests {
         let source = SymbolicTensor::infer(tensor * Atom::mul_many(factors)).unwrap();
         let incomplete = Arc::new(source.contract(Default::default()).unwrap());
         assert!(!incomplete.proofs.contracted);
-        assert!(incomplete.completed_contraction(None).is_none());
+        assert_ne!(
+            incomplete.reduction_status(),
+            super::super::ReductionStatus::Complete
+        );
         use spenso::network::parsing::AtomStructureExt;
         assert!(
             incomplete

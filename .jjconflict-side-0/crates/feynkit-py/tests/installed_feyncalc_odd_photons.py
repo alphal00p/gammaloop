@@ -13,11 +13,17 @@ All native graph factors are retained; the tadpole's zero alone does not test
 its individual symmetry-factor normalization.
 """
 
+from symbolica.community.tensor import (
+    AlgebraSettings,
+    ContractSettings,
+    GammaSimplifySettings,
+)
+
 from pathlib import Path
 from time import monotonic
 
 from symbolica import E, S
-from symbolica.community import hep
+from symbolica.community import feynkit as hep
 from symbolica.community.tensor import TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
@@ -77,9 +83,12 @@ for count in (1, 3, 5):
         # routings inside a ten-gamma trace would needlessly multiply its terms.
         tensor = (
             TensorExpression(numerator.expand())
-            .simplify_gamma()
+            .reduce_algebra(
+                AlgebraSettings(gamma=GammaSimplifySettings(), epsilon=True)
+            )
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .expand()
-            .contract()
+            .contract(ContractSettings(collect_chains=False, collect_traces=False))
             .to_expression()
             .to_dots()
         )

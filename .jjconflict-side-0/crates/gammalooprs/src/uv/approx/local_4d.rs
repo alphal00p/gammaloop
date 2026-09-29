@@ -10,7 +10,7 @@ use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
     CookMode, CookSettings,
     dirac::AGS,
-    tensor::{ContractionSettings, SymbolicTensor},
+    tensor::{ContractSettings, SymbolicTensor},
 };
 
 #[cfg(test)]
@@ -189,7 +189,12 @@ impl CanonicalUvDenominatorClass {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let polynomial = SymbolicTensor::infer(cooking.try_cook(polynomial.as_view())?)?
-            .contract(ContractionSettings::default().without_rank_one_tensors())?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
             .resolved()?;
         let polynomial = cooking.uncook(polynomial.expression().as_view());
         let polynomial = polynomial.expand();
@@ -216,7 +221,12 @@ impl CanonicalUvDenominatorClass {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let collapsed = SymbolicTensor::infer(cooking.try_cook(collapsed.as_view())?)?
-            .contract(ContractionSettings::default().without_rank_one_tensors())?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
             .resolved()?;
         let collapsed = cooking.uncook(collapsed.expression().as_view());
         let collapsed = collapsed.expand();
@@ -1255,7 +1265,12 @@ impl FourDDenominator {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let normalized = SymbolicTensor::infer(cooking.try_cook(normalized.as_view())?)?
-            .contract(ContractionSettings::default().without_rank_one_tensors())?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
             .resolved()?;
         let normalized = cooking.uncook(normalized.expression().as_view());
         Ok(normalized.expand())
@@ -1619,7 +1634,12 @@ fn grow<S: super::ForestNodeLike>(
         .with_mode(CookMode::ReversibleEncoding)
         .with_representation_payloads(true, true);
     let integrand = SymbolicTensor::infer(cooking.try_cook(integrand.as_view())?)?
-        .contract(ContractionSettings::default().without_rank_one_tensors())?
+        .contract(ContractSettings {
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?
         .resolved()?;
     let integrand = cooking.uncook(integrand.expression().as_view());
 
@@ -1698,7 +1718,12 @@ fn t<S: super::ForestNodeLike>(
         .with_mode(CookMode::ReversibleEncoding)
         .with_representation_payloads(true, true);
     let evalutated = SymbolicTensor::infer(cooking.try_cook(evalutated.as_view())?)?
-        .contract(ContractionSettings::default().without_rank_one_tensors())?
+        .contract(ContractSettings {
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?
         .resolved()?;
     let evalutated = cooking.uncook(evalutated.expression().as_view());
     Ok((evalutated, lmb.clone()))
@@ -2458,7 +2483,16 @@ mod tests {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let simplified_pair = SymbolicTensor::infer(cooking.try_cook(pair.as_view())?)?
-            .simplify_gamma(GammaSimplifySettings::default())?
+            .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })?
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
             .resolved()?;
         assert!(!simplified_pair.expression().contains_symbol(AGS.gamma5));
         let cases = [
@@ -2782,7 +2816,11 @@ mod tests {
                 .with_mode(CookMode::ReversibleEncoding)
                 .with_representation_payloads(true, true);
             let rescaled = SymbolicTensor::infer(cooking.try_cook(rescaled.as_view())?)?
-                .contract(ContractionSettings::default())?
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .resolved()?
                 .to_dots()?;
             let rescaled = cooking.uncook(rescaled.expression().as_view());
@@ -2991,7 +3029,11 @@ mod tests {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let expanded = SymbolicTensor::infer(cooking.try_cook(expanded.as_view())?)?
-            .contract(ContractionSettings::default())?
+            .contract(ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
             .resolved()?
             .to_dots()?;
         let expanded = cooking.uncook(expanded.expression().as_view());
@@ -3213,7 +3255,11 @@ mod tests {
             .with_representation_payloads(true, true);
         let scalar_series_oracle =
             SymbolicTensor::infer(cooking.try_cook(scalar_series_oracle.as_view())?)?
-                .contract(ContractionSettings::default())?
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .resolved()?
                 .to_dots()?;
         let scalar_series_oracle = cooking.uncook(scalar_series_oracle.expression().as_view());
@@ -3428,7 +3474,11 @@ mod tests {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let independent = SymbolicTensor::infer(cooking.try_cook(independent.as_view())?)?
-            .contract(ContractionSettings::default())?
+            .contract(ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
             .resolved()?
             .to_dots()?;
         let independent = cooking.uncook(independent.expression().as_view());
@@ -3873,7 +3923,15 @@ mod tests {
             .with_representation_payloads(true, true);
         let simplify_color = |expression: &Atom| -> Result<Atom> {
             let simplified = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
-                .simplify_color(ColorSimplifySettings::default())?
+                .reduce_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })?
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .resolved()?;
             Ok(cooking.uncook(simplified.expression().as_view()))
         };
@@ -3882,7 +3940,12 @@ mod tests {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let late = SymbolicTensor::infer(cooking.try_cook(late.as_view())?)?
-            .contract(ContractionSettings::default().without_rank_one_tensors())?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
             .resolved()?;
         let late = cooking.uncook(late.expression().as_view());
         assert_eq!(nested, late);

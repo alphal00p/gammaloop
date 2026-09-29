@@ -1,0 +1,2552 @@
+[
+  {
+    "case": "color_form_one_generator_trace",
+    "sample": 0,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 327601,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 77750,
+          "outermost_ns": 77750
+        },
+        "interface_discovery": {
+          "calls": 3,
+          "inclusive_ns": 88950,
+          "outermost_ns": 61140
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 3,
+          "inclusive_ns": 23010,
+          "outermost_ns": 23010
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 214971,
+          "outermost_ns": 214971
+        },
+        "shallow_graph": {
+          "calls": 1,
+          "inclusive_ns": 20770,
+          "outermost_ns": 20770
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 1,
+          "inclusive_ns": 180141,
+          "outermost_ns": 180141
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 2,
+          "inclusive_ns": 20490,
+          "outermost_ns": 20490
+        },
+        "dummy_reservation": {
+          "calls": 1,
+          "inclusive_ns": 1610,
+          "outermost_ns": 1610
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 2030,
+          "outermost_ns": 2030
+        },
+        "output_normalization": {
+          "calls": 1,
+          "inclusive_ns": 370,
+          "outermost_ns": 370
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_form_one_generator_trace",
+    "sample": 1,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 255301,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 63701,
+          "outermost_ns": 63701
+        },
+        "interface_discovery": {
+          "calls": 3,
+          "inclusive_ns": 76971,
+          "outermost_ns": 51171
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 3,
+          "inclusive_ns": 20321,
+          "outermost_ns": 20321
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 161181,
+          "outermost_ns": 161181
+        },
+        "shallow_graph": {
+          "calls": 1,
+          "inclusive_ns": 17201,
+          "outermost_ns": 17201
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 1,
+          "inclusive_ns": 145431,
+          "outermost_ns": 145431
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 2,
+          "inclusive_ns": 2861,
+          "outermost_ns": 2861
+        },
+        "dummy_reservation": {
+          "calls": 1,
+          "inclusive_ns": 1231,
+          "outermost_ns": 1231
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 1820,
+          "outermost_ns": 1820
+        },
+        "output_normalization": {
+          "calls": 1,
+          "inclusive_ns": 291,
+          "outermost_ns": 291
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_form_one_generator_trace",
+    "sample": 2,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 256661,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 65111,
+          "outermost_ns": 65111
+        },
+        "interface_discovery": {
+          "calls": 3,
+          "inclusive_ns": 78069,
+          "outermost_ns": 52120
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 3,
+          "inclusive_ns": 21391,
+          "outermost_ns": 21391
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 159360,
+          "outermost_ns": 159360
+        },
+        "shallow_graph": {
+          "calls": 1,
+          "inclusive_ns": 18120,
+          "outermost_ns": 18120
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 1,
+          "inclusive_ns": 144480,
+          "outermost_ns": 144480
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 2,
+          "inclusive_ns": 3010,
+          "outermost_ns": 3010
+        },
+        "dummy_reservation": {
+          "calls": 1,
+          "inclusive_ns": 1160,
+          "outermost_ns": 1160
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 1950,
+          "outermost_ns": 1950
+        },
+        "output_normalization": {
+          "calls": 1,
+          "inclusive_ns": 191,
+          "outermost_ns": 191
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_form_two_generator_trace",
+    "sample": 0,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 798373,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 96580,
+          "outermost_ns": 96580
+        },
+        "interface_discovery": {
+          "calls": 7,
+          "inclusive_ns": 160800,
+          "outermost_ns": 104480
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 4,
+          "inclusive_ns": 64390,
+          "outermost_ns": 64390
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 657373,
+          "outermost_ns": 657373
+        },
+        "shallow_graph": {
+          "calls": 2,
+          "inclusive_ns": 47580,
+          "outermost_ns": 47580
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 2,
+          "inclusive_ns": 635203,
+          "outermost_ns": 635203
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 5,
+          "inclusive_ns": 24051,
+          "outermost_ns": 24051
+        },
+        "dummy_reservation": {
+          "calls": 2,
+          "inclusive_ns": 3150,
+          "outermost_ns": 3150
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 3670,
+          "outermost_ns": 3670
+        },
+        "output_normalization": {
+          "calls": 4,
+          "inclusive_ns": 1440,
+          "outermost_ns": 1190
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_form_two_generator_trace",
+    "sample": 1,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 742973,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 90750,
+          "outermost_ns": 90750
+        },
+        "interface_discovery": {
+          "calls": 7,
+          "inclusive_ns": 159560,
+          "outermost_ns": 101880
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 4,
+          "inclusive_ns": 58722,
+          "outermost_ns": 58722
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 608683,
+          "outermost_ns": 608683
+        },
+        "shallow_graph": {
+          "calls": 2,
+          "inclusive_ns": 45020,
+          "outermost_ns": 45020
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 2,
+          "inclusive_ns": 587362,
+          "outermost_ns": 587362
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 5,
+          "inclusive_ns": 22471,
+          "outermost_ns": 22471
+        },
+        "dummy_reservation": {
+          "calls": 2,
+          "inclusive_ns": 3109,
+          "outermost_ns": 3109
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 3290,
+          "outermost_ns": 3290
+        },
+        "output_normalization": {
+          "calls": 4,
+          "inclusive_ns": 1350,
+          "outermost_ns": 1100
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_form_two_generator_trace",
+    "sample": 2,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 752393,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 99510,
+          "outermost_ns": 99510
+        },
+        "interface_discovery": {
+          "calls": 7,
+          "inclusive_ns": 163980,
+          "outermost_ns": 108950
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 4,
+          "inclusive_ns": 58630,
+          "outermost_ns": 58630
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 610343,
+          "outermost_ns": 610343
+        },
+        "shallow_graph": {
+          "calls": 2,
+          "inclusive_ns": 45320,
+          "outermost_ns": 45320
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 2,
+          "inclusive_ns": 588543,
+          "outermost_ns": 588543
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 5,
+          "inclusive_ns": 23622,
+          "outermost_ns": 23622
+        },
+        "dummy_reservation": {
+          "calls": 2,
+          "inclusive_ns": 3109,
+          "outermost_ns": 3109
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 3170,
+          "outermost_ns": 3170
+        },
+        "output_normalization": {
+          "calls": 4,
+          "inclusive_ns": 1380,
+          "outermost_ns": 1110
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_form_fierz_generator_contraction",
+    "sample": 0,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 3621584,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 94550,
+          "outermost_ns": 94550
+        },
+        "interface_discovery": {
+          "calls": 22,
+          "inclusive_ns": 447531,
+          "outermost_ns": 234770
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 23,
+          "inclusive_ns": 357587,
+          "outermost_ns": 357587
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 3471793,
+          "outermost_ns": 3471793
+        },
+        "shallow_graph": {
+          "calls": 12,
+          "inclusive_ns": 428170,
+          "outermost_ns": 428170
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 3342853,
+          "outermost_ns": 3342853
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 9,
+          "inclusive_ns": 761142,
+          "outermost_ns": 761142
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 6660,
+          "outermost_ns": 6660
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 5390,
+          "outermost_ns": 5390
+        },
+        "output_normalization": {
+          "calls": 14,
+          "inclusive_ns": 8120,
+          "outermost_ns": 3709
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_form_fierz_generator_contraction",
+    "sample": 1,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 3615363,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 88050,
+          "outermost_ns": 88050
+        },
+        "interface_discovery": {
+          "calls": 22,
+          "inclusive_ns": 458270,
+          "outermost_ns": 244130
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 23,
+          "inclusive_ns": 369010,
+          "outermost_ns": 369010
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 3476123,
+          "outermost_ns": 3476123
+        },
+        "shallow_graph": {
+          "calls": 12,
+          "inclusive_ns": 406871,
+          "outermost_ns": 406871
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 3367772,
+          "outermost_ns": 3367772
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 9,
+          "inclusive_ns": 730504,
+          "outermost_ns": 730504
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 6640,
+          "outermost_ns": 6640
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 4669,
+          "outermost_ns": 4669
+        },
+        "output_normalization": {
+          "calls": 14,
+          "inclusive_ns": 7730,
+          "outermost_ns": 3440
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_form_fierz_generator_contraction",
+    "sample": 2,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 3566233,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 87960,
+          "outermost_ns": 87960
+        },
+        "interface_discovery": {
+          "calls": 22,
+          "inclusive_ns": 440209,
+          "outermost_ns": 229221
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 23,
+          "inclusive_ns": 354227,
+          "outermost_ns": 354227
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 3424633,
+          "outermost_ns": 3424633
+        },
+        "shallow_graph": {
+          "calls": 12,
+          "inclusive_ns": 404429,
+          "outermost_ns": 404429
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 3311853,
+          "outermost_ns": 3311853
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 9,
+          "inclusive_ns": 725681,
+          "outermost_ns": 725681
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 6639,
+          "outermost_ns": 6639
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 5170,
+          "outermost_ns": 5170
+        },
+        "output_normalization": {
+          "calls": 14,
+          "inclusive_ns": 7720,
+          "outermost_ns": 3560
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_open_chain_separated_casimir_id2",
+    "sample": 0,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 1999807,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 110700,
+          "outermost_ns": 110700
+        },
+        "interface_discovery": {
+          "calls": 9,
+          "inclusive_ns": 249901,
+          "outermost_ns": 145711
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 14,
+          "inclusive_ns": 222389,
+          "outermost_ns": 222389
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1835967,
+          "outermost_ns": 1835967
+        },
+        "shallow_graph": {
+          "calls": 7,
+          "inclusive_ns": 190930,
+          "outermost_ns": 190930
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 1729928,
+          "outermost_ns": 1729928
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 8,
+          "inclusive_ns": 310400,
+          "outermost_ns": 310400
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 5310,
+          "outermost_ns": 5310
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 4950,
+          "outermost_ns": 4950
+        },
+        "output_normalization": {
+          "calls": 8,
+          "inclusive_ns": 4400,
+          "outermost_ns": 2030
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_open_chain_separated_casimir_id2",
+    "sample": 1,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 1975497,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 104130,
+          "outermost_ns": 104130
+        },
+        "interface_discovery": {
+          "calls": 9,
+          "inclusive_ns": 245553,
+          "outermost_ns": 141701
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 14,
+          "inclusive_ns": 237662,
+          "outermost_ns": 237662
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1821966,
+          "outermost_ns": 1821966
+        },
+        "shallow_graph": {
+          "calls": 7,
+          "inclusive_ns": 182742,
+          "outermost_ns": 182742
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 1721696,
+          "outermost_ns": 1721696
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 8,
+          "inclusive_ns": 302522,
+          "outermost_ns": 302522
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 5140,
+          "outermost_ns": 5140
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 4829,
+          "outermost_ns": 4829
+        },
+        "output_normalization": {
+          "calls": 8,
+          "inclusive_ns": 4099,
+          "outermost_ns": 1849
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_open_chain_separated_casimir_id2",
+    "sample": 2,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 2041417,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 102270,
+          "outermost_ns": 102270
+        },
+        "interface_discovery": {
+          "calls": 9,
+          "inclusive_ns": 244850,
+          "outermost_ns": 140400
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 14,
+          "inclusive_ns": 224271,
+          "outermost_ns": 224271
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1889967,
+          "outermost_ns": 1889967
+        },
+        "shallow_graph": {
+          "calls": 7,
+          "inclusive_ns": 182551,
+          "outermost_ns": 182551
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 1786967,
+          "outermost_ns": 1786967
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 8,
+          "inclusive_ns": 320581,
+          "outermost_ns": 320581
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 5460,
+          "outermost_ns": 5460
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 4800,
+          "outermost_ns": 4800
+        },
+        "output_normalization": {
+          "calls": 8,
+          "inclusive_ns": 4268,
+          "outermost_ns": 1919
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_structure_loop_to_adjoint_delta_id3",
+    "sample": 0,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 762263,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 88660,
+          "outermost_ns": 88660
+        },
+        "interface_discovery": {
+          "calls": 4,
+          "inclusive_ns": 99610,
+          "outermost_ns": 67830
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 4,
+          "inclusive_ns": 61269,
+          "outermost_ns": 61269
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 629232,
+          "outermost_ns": 629232
+        },
+        "shallow_graph": {
+          "calls": 3,
+          "inclusive_ns": 89771,
+          "outermost_ns": 89771
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 2,
+          "inclusive_ns": 532772,
+          "outermost_ns": 532772
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 6,
+          "inclusive_ns": 106850,
+          "outermost_ns": 106850
+        },
+        "dummy_reservation": {
+          "calls": 2,
+          "inclusive_ns": 3190,
+          "outermost_ns": 3190
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 2780,
+          "outermost_ns": 2780
+        },
+        "output_normalization": {
+          "calls": 3,
+          "inclusive_ns": 1320,
+          "outermost_ns": 1030
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_structure_loop_to_adjoint_delta_id3",
+    "sample": 1,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 742533,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 71340,
+          "outermost_ns": 71340
+        },
+        "interface_discovery": {
+          "calls": 4,
+          "inclusive_ns": 81330,
+          "outermost_ns": 52450
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 4,
+          "inclusive_ns": 57680,
+          "outermost_ns": 57680
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 630163,
+          "outermost_ns": 630163
+        },
+        "shallow_graph": {
+          "calls": 3,
+          "inclusive_ns": 84980,
+          "outermost_ns": 84980
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 2,
+          "inclusive_ns": 540282,
+          "outermost_ns": 540282
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 6,
+          "inclusive_ns": 101191,
+          "outermost_ns": 101191
+        },
+        "dummy_reservation": {
+          "calls": 2,
+          "inclusive_ns": 2970,
+          "outermost_ns": 2970
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 2980,
+          "outermost_ns": 2980
+        },
+        "output_normalization": {
+          "calls": 3,
+          "inclusive_ns": 1300,
+          "outermost_ns": 990
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_structure_loop_to_adjoint_delta_id3",
+    "sample": 2,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 765593,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 71340,
+          "outermost_ns": 71340
+        },
+        "interface_discovery": {
+          "calls": 4,
+          "inclusive_ns": 81440,
+          "outermost_ns": 52330
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 4,
+          "inclusive_ns": 59840,
+          "outermost_ns": 59840
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 652723,
+          "outermost_ns": 652723
+        },
+        "shallow_graph": {
+          "calls": 3,
+          "inclusive_ns": 89750,
+          "outermost_ns": 89750
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 2,
+          "inclusive_ns": 557672,
+          "outermost_ns": 557672
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 6,
+          "inclusive_ns": 106561,
+          "outermost_ns": 106561
+        },
+        "dummy_reservation": {
+          "calls": 2,
+          "inclusive_ns": 3330,
+          "outermost_ns": 3330
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 2850,
+          "outermost_ns": 2850
+        },
+        "output_normalization": {
+          "calls": 3,
+          "inclusive_ns": 1190,
+          "outermost_ns": 920
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_structure_times_open_chain_id4",
+    "sample": 0,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 1769797,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 132231,
+          "outermost_ns": 132231
+        },
+        "interface_discovery": {
+          "calls": 10,
+          "inclusive_ns": 326362,
+          "outermost_ns": 172190
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 5,
+          "inclusive_ns": 100392,
+          "outermost_ns": 100392
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1573354,
+          "outermost_ns": 1573354
+        },
+        "shallow_graph": {
+          "calls": 5,
+          "inclusive_ns": 152381,
+          "outermost_ns": 152381
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 2,
+          "inclusive_ns": 1455376,
+          "outermost_ns": 1455376
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 6,
+          "inclusive_ns": 303890,
+          "outermost_ns": 303890
+        },
+        "dummy_reservation": {
+          "calls": 2,
+          "inclusive_ns": 4230,
+          "outermost_ns": 4230
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 3829,
+          "outermost_ns": 3829
+        },
+        "output_normalization": {
+          "calls": 7,
+          "inclusive_ns": 2832,
+          "outermost_ns": 2171
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_structure_times_open_chain_id4",
+    "sample": 1,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 1731906,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 130640,
+          "outermost_ns": 130640
+        },
+        "interface_discovery": {
+          "calls": 10,
+          "inclusive_ns": 321700,
+          "outermost_ns": 169800
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 5,
+          "inclusive_ns": 99591,
+          "outermost_ns": 99591
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1539706,
+          "outermost_ns": 1539706
+        },
+        "shallow_graph": {
+          "calls": 5,
+          "inclusive_ns": 147521,
+          "outermost_ns": 147521
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 2,
+          "inclusive_ns": 1423115,
+          "outermost_ns": 1423115
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 6,
+          "inclusive_ns": 307852,
+          "outermost_ns": 307852
+        },
+        "dummy_reservation": {
+          "calls": 2,
+          "inclusive_ns": 4390,
+          "outermost_ns": 4390
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 3380,
+          "outermost_ns": 3380
+        },
+        "output_normalization": {
+          "calls": 7,
+          "inclusive_ns": 2860,
+          "outermost_ns": 2240
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_structure_times_open_chain_id4",
+    "sample": 2,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 1668527,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 128231,
+          "outermost_ns": 128231
+        },
+        "interface_discovery": {
+          "calls": 10,
+          "inclusive_ns": 306390,
+          "outermost_ns": 164081
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 5,
+          "inclusive_ns": 109500,
+          "outermost_ns": 109500
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1478886,
+          "outermost_ns": 1478886
+        },
+        "shallow_graph": {
+          "calls": 5,
+          "inclusive_ns": 139462,
+          "outermost_ns": 139462
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 2,
+          "inclusive_ns": 1366166,
+          "outermost_ns": 1366166
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 6,
+          "inclusive_ns": 285540,
+          "outermost_ns": 285540
+        },
+        "dummy_reservation": {
+          "calls": 2,
+          "inclusive_ns": 4051,
+          "outermost_ns": 4051
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 3920,
+          "outermost_ns": 3920
+        },
+        "output_normalization": {
+          "calls": 7,
+          "inclusive_ns": 2880,
+          "outermost_ns": 2190
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_delta_closes_doubled_two_generator_chain_id18",
+    "sample": 0,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 1601996,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 148261,
+          "outermost_ns": 148261
+        },
+        "interface_discovery": {
+          "calls": 10,
+          "inclusive_ns": 267731,
+          "outermost_ns": 150871
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 6,
+          "inclusive_ns": 117563,
+          "outermost_ns": 117563
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1382155,
+          "outermost_ns": 1382155
+        },
+        "shallow_graph": {
+          "calls": 6,
+          "inclusive_ns": 210442,
+          "outermost_ns": 210442
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 2,
+          "inclusive_ns": 914104,
+          "outermost_ns": 914104
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 8,
+          "inclusive_ns": 696003,
+          "outermost_ns": 473522
+        },
+        "dummy_reservation": {
+          "calls": 2,
+          "inclusive_ns": 3349,
+          "outermost_ns": 3349
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 3220,
+          "outermost_ns": 3220
+        },
+        "output_normalization": {
+          "calls": 9,
+          "inclusive_ns": 5928,
+          "outermost_ns": 5199
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_delta_closes_doubled_two_generator_chain_id18",
+    "sample": 1,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 1588946,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 146701,
+          "outermost_ns": 146701
+        },
+        "interface_discovery": {
+          "calls": 10,
+          "inclusive_ns": 266002,
+          "outermost_ns": 148442
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 6,
+          "inclusive_ns": 118990,
+          "outermost_ns": 118990
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1372065,
+          "outermost_ns": 1372065
+        },
+        "shallow_graph": {
+          "calls": 6,
+          "inclusive_ns": 206671,
+          "outermost_ns": 206671
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 2,
+          "inclusive_ns": 894563,
+          "outermost_ns": 894563
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 8,
+          "inclusive_ns": 709114,
+          "outermost_ns": 484173
+        },
+        "dummy_reservation": {
+          "calls": 2,
+          "inclusive_ns": 3310,
+          "outermost_ns": 3310
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 3100,
+          "outermost_ns": 3100
+        },
+        "output_normalization": {
+          "calls": 9,
+          "inclusive_ns": 5841,
+          "outermost_ns": 5021
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_delta_closes_doubled_two_generator_chain_id18",
+    "sample": 2,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 1457156,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 132901,
+          "outermost_ns": 132901
+        },
+        "interface_discovery": {
+          "calls": 10,
+          "inclusive_ns": 248011,
+          "outermost_ns": 138941
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 6,
+          "inclusive_ns": 106841,
+          "outermost_ns": 106841
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1259505,
+          "outermost_ns": 1259505
+        },
+        "shallow_graph": {
+          "calls": 6,
+          "inclusive_ns": 183600,
+          "outermost_ns": 183600
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 2,
+          "inclusive_ns": 829114,
+          "outermost_ns": 829114
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 8,
+          "inclusive_ns": 648994,
+          "outermost_ns": 436093
+        },
+        "dummy_reservation": {
+          "calls": 2,
+          "inclusive_ns": 2860,
+          "outermost_ns": 2860
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 2940,
+          "outermost_ns": 2940
+        },
+        "output_normalization": {
+          "calls": 9,
+          "inclusive_ns": 5520,
+          "outermost_ns": 4810
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_three_generator_trace_terminal_id30",
+    "sample": 0,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 2218598,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 105580,
+          "outermost_ns": 105580
+        },
+        "interface_discovery": {
+          "calls": 37,
+          "inclusive_ns": 952162,
+          "outermost_ns": 434172
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 7,
+          "inclusive_ns": 126100,
+          "outermost_ns": 126100
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1866517,
+          "outermost_ns": 1866517
+        },
+        "shallow_graph": {
+          "calls": 4,
+          "inclusive_ns": 116380,
+          "outermost_ns": 116380
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 1811917,
+          "outermost_ns": 1811917
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 7,
+          "inclusive_ns": 208281,
+          "outermost_ns": 208281
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 12730,
+          "outermost_ns": 12730
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 189561,
+          "outermost_ns": 189561
+        },
+        "output_normalization": {
+          "calls": 13,
+          "inclusive_ns": 6620,
+          "outermost_ns": 3620
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_three_generator_trace_terminal_id30",
+    "sample": 1,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 2343039,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 103571,
+          "outermost_ns": 103571
+        },
+        "interface_discovery": {
+          "calls": 37,
+          "inclusive_ns": 980534,
+          "outermost_ns": 446963
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 7,
+          "inclusive_ns": 128099,
+          "outermost_ns": 128099
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1984157,
+          "outermost_ns": 1984157
+        },
+        "shallow_graph": {
+          "calls": 4,
+          "inclusive_ns": 127650,
+          "outermost_ns": 127650
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 1927147,
+          "outermost_ns": 1927147
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 7,
+          "inclusive_ns": 224670,
+          "outermost_ns": 224670
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 11970,
+          "outermost_ns": 11970
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 199241,
+          "outermost_ns": 199241
+        },
+        "output_normalization": {
+          "calls": 13,
+          "inclusive_ns": 7039,
+          "outermost_ns": 3840
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_three_generator_trace_terminal_id30",
+    "sample": 2,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 2363119,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 108460,
+          "outermost_ns": 108460
+        },
+        "interface_discovery": {
+          "calls": 37,
+          "inclusive_ns": 994731,
+          "outermost_ns": 456042
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 7,
+          "inclusive_ns": 129329,
+          "outermost_ns": 129329
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1992267,
+          "outermost_ns": 1992267
+        },
+        "shallow_graph": {
+          "calls": 4,
+          "inclusive_ns": 129320,
+          "outermost_ns": 129320
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 1935687,
+          "outermost_ns": 1935687
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 7,
+          "inclusive_ns": 223030,
+          "outermost_ns": 223030
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 12431,
+          "outermost_ns": 12431
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 201791,
+          "outermost_ns": 201791
+        },
+        "output_normalization": {
+          "calls": 13,
+          "inclusive_ns": 6418,
+          "outermost_ns": 3501
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_repeated_trace_pair_id52",
+    "sample": 0,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 1875077,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 124651,
+          "outermost_ns": 124651
+        },
+        "interface_discovery": {
+          "calls": 13,
+          "inclusive_ns": 338042,
+          "outermost_ns": 184931
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 20,
+          "inclusive_ns": 233889,
+          "outermost_ns": 233889
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1689526,
+          "outermost_ns": 1689526
+        },
+        "shallow_graph": {
+          "calls": 9,
+          "inclusive_ns": 168542,
+          "outermost_ns": 168542
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 1434747,
+          "outermost_ns": 1434747
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 10,
+          "inclusive_ns": 326812,
+          "outermost_ns": 326812
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 2439,
+          "outermost_ns": 2439
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 3610,
+          "outermost_ns": 3610
+        },
+        "output_normalization": {
+          "calls": 16,
+          "inclusive_ns": 7221,
+          "outermost_ns": 4051
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_repeated_trace_pair_id52",
+    "sample": 1,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 1909257,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 120631,
+          "outermost_ns": 120631
+        },
+        "interface_discovery": {
+          "calls": 13,
+          "inclusive_ns": 330601,
+          "outermost_ns": 181041
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 20,
+          "inclusive_ns": 235639,
+          "outermost_ns": 235639
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1732036,
+          "outermost_ns": 1732036
+        },
+        "shallow_graph": {
+          "calls": 9,
+          "inclusive_ns": 168841,
+          "outermost_ns": 168841
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 1475395,
+          "outermost_ns": 1475395
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 10,
+          "inclusive_ns": 338161,
+          "outermost_ns": 338161
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 2481,
+          "outermost_ns": 2481
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 3470,
+          "outermost_ns": 3470
+        },
+        "output_normalization": {
+          "calls": 16,
+          "inclusive_ns": 7040,
+          "outermost_ns": 3990
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_feyncalc_repeated_trace_pair_id52",
+    "sample": 2,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 1877187,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 123271,
+          "outermost_ns": 123271
+        },
+        "interface_discovery": {
+          "calls": 13,
+          "inclusive_ns": 338751,
+          "outermost_ns": 184411
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 20,
+          "inclusive_ns": 235901,
+          "outermost_ns": 235901
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 1697395,
+          "outermost_ns": 1697395
+        },
+        "shallow_graph": {
+          "calls": 9,
+          "inclusive_ns": 173780,
+          "outermost_ns": 173780
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 1466405,
+          "outermost_ns": 1466405
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 10,
+          "inclusive_ns": 300222,
+          "outermost_ns": 300222
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 2350,
+          "outermost_ns": 2350
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 3889,
+          "outermost_ns": 3889
+        },
+        "output_normalization": {
+          "calls": 16,
+          "inclusive_ns": 7360,
+          "outermost_ns": 4220
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_form_four_generator_trace_terminal",
+    "sample": 0,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 8348241,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 141370,
+          "outermost_ns": 141370
+        },
+        "interface_discovery": {
+          "calls": 114,
+          "inclusive_ns": 3233121,
+          "outermost_ns": 1211374
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 29,
+          "inclusive_ns": 482862,
+          "outermost_ns": 482862
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 7557317,
+          "outermost_ns": 7557317
+        },
+        "shallow_graph": {
+          "calls": 16,
+          "inclusive_ns": 499779,
+          "outermost_ns": 499779
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 6972646,
+          "outermost_ns": 6972646
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 10,
+          "inclusive_ns": 1341573,
+          "outermost_ns": 1341573
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 15440,
+          "outermost_ns": 15440
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 581652,
+          "outermost_ns": 581652
+        },
+        "output_normalization": {
+          "calls": 41,
+          "inclusive_ns": 18680,
+          "outermost_ns": 9240
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_form_four_generator_trace_terminal",
+    "sample": 1,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 8882613,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 148341,
+          "outermost_ns": 148341
+        },
+        "interface_discovery": {
+          "calls": 114,
+          "inclusive_ns": 3298699,
+          "outermost_ns": 1234314
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 29,
+          "inclusive_ns": 507541,
+          "outermost_ns": 507541
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 8075640,
+          "outermost_ns": 8075640
+        },
+        "shallow_graph": {
+          "calls": 16,
+          "inclusive_ns": 570393,
+          "outermost_ns": 570393
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 7393958,
+          "outermost_ns": 7393958
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 10,
+          "inclusive_ns": 1521514,
+          "outermost_ns": 1521514
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 16160,
+          "outermost_ns": 16160
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 594602,
+          "outermost_ns": 594602
+        },
+        "output_normalization": {
+          "calls": 41,
+          "inclusive_ns": 17830,
+          "outermost_ns": 8850
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  },
+  {
+    "case": "color_form_four_generator_trace_terminal",
+    "sample": 2,
+    "diagnostic": {
+      "clock": "same_thread_wall_nested_inclusive",
+      "elapsed_ns": 8259111,
+      "phases": {
+        "admission": {
+          "calls": 1,
+          "inclusive_ns": 145390,
+          "outermost_ns": 145390
+        },
+        "interface_discovery": {
+          "calls": 114,
+          "inclusive_ns": 3159801,
+          "outermost_ns": 1194054
+        },
+        "validation": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "candidate_scan": {
+          "calls": 29,
+          "inclusive_ns": 477471,
+          "outermost_ns": 477471
+        },
+        "planning": {
+          "calls": 2,
+          "inclusive_ns": 7472158,
+          "outermost_ns": 7472158
+        },
+        "shallow_graph": {
+          "calls": 16,
+          "inclusive_ns": 491864,
+          "outermost_ns": 491864
+        },
+        "gamma_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "color_kernel": {
+          "calls": 3,
+          "inclusive_ns": 6903076,
+          "outermost_ns": 6903076
+        },
+        "epsilon_kernel": {
+          "calls": 0,
+          "inclusive_ns": 0,
+          "outermost_ns": 0
+        },
+        "contraction": {
+          "calls": 10,
+          "inclusive_ns": 1327276,
+          "outermost_ns": 1327276
+        },
+        "dummy_reservation": {
+          "calls": 3,
+          "inclusive_ns": 15270,
+          "outermost_ns": 15270
+        },
+        "materialization": {
+          "calls": 1,
+          "inclusive_ns": 571112,
+          "outermost_ns": 571112
+        },
+        "output_normalization": {
+          "calls": 41,
+          "inclusive_ns": 16680,
+          "outermost_ns": 8280
+        }
+      },
+      "outcomes": [
+        {
+          "operation": "reduce_algebra",
+          "status": "Complete"
+        },
+        {
+          "operation": "contract",
+          "status": "Complete"
+        }
+      ]
+    }
+  }
+]

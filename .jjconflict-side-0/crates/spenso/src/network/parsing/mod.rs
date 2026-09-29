@@ -16,10 +16,11 @@ use crate::tensors::parametric::ParamTensor;
 
 use std::{
     cell::{Cell, RefCell},
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt::Display,
     marker::PhantomData,
     rc::Rc,
+    sync::{Arc, Mutex},
 };
 
 use store::TensorScalarStore;
@@ -269,10 +270,18 @@ impl ParseSettings {
     }
 }
 
+/// Exact opaque-boundary observations shared across admitted graph versions.
+/// Each entry records tensorial syntax and logical slot atoms; an empty slot
+/// list can still describe a tensor leaf with internal contractions. Reuse a
+/// cache only while admission facts and the parsing policy remain valid,
+/// including `strict_tensor_filter` and `parse_composite_scalars_as_tensors`.
+pub type LeafInterfaceCache = Arc<Mutex<HashMap<Atom, (bool, Vec<Atom>)>>>;
+
 #[derive(Clone)]
 pub struct ParseState<Aind = AbstractIndex, View = ()> {
     view: View,
     chain_scope_validated: bool,
+    leaf_interfaces: Option<LeafInterfaceCache>,
     depth: usize,
     matcher: Rc<RefCell<SlotMatcher>>,
     metric: Symbol,
@@ -298,6 +307,7 @@ impl<Aind> Default for ParseState<Aind> {
         Self {
             view: (),
             chain_scope_validated: false,
+            leaf_interfaces: None,
             depth: 0,
             matcher: Rc::new(RefCell::new(SlotMatcher::default())),
             metric: crate::network::library::symbolic::ETS.metric,
@@ -315,6 +325,7 @@ impl<Aind, View> ParseState<Aind, View> {
         ParseState {
             view,
             chain_scope_validated: self.chain_scope_validated,
+            leaf_interfaces: self.leaf_interfaces,
             depth: self.depth,
             matcher: self.matcher,
             metric: self.metric,
@@ -329,6 +340,7 @@ impl<Aind, View> ParseState<Aind, View> {
     fn materialized(self) -> ParseState<Aind> {
         let mut state = self.with_view(());
         state.chain_scope_validated = false;
+        state.leaf_interfaces = None;
         state
     }
 }
@@ -420,6 +432,52 @@ where
             &ErroringLibrary::<Symbol>::new(),
             settings,
         )
+    }
+
+    /// Build a depth-one opaque graph from already admitted tensor syntax.
+    ///
+    /// The caller must have established well-formed tensor syntax, compatible
+    /// sums, index scopes, and chain nesting. This entry reuses exact boundary
+    /// interfaces and skips the admission and dummy-reservation walks. It accepts
+    /// only opaque depth-one parsing, which does not allocate shorthand dummies.
+    /// Reuse requires unchanged `strict_tensor_filter` and
+    /// `parse_composite_scalars_as_tensors`. Discard the cache after callbacks or
+    /// rewrites that invalidate those admission or classification facts.
+    #[allow(clippy::result_large_err)]
+    pub fn try_from_admitted_view<S, Lib: TensorLibraryFor<S, T, Key = K>>(
+        value: AtomView<'src>,
+        library: &Lib,
+        settings: &ParseSettings,
+        leaf_interfaces: LeafInterfaceCache,
+    ) -> Result<Self, TensorNetworkError<K, Symbol>>
+    where
+        S: TensorStructure + ScalarStructure + Clone + StructureFromAtom,
+        S::Slot: IsAbstractSlot<Aind = Aind>,
+        T::Slot: IsAbstractSlot<Aind = Aind>,
+        T: TensorFromExpression<'src, S, Sc, K, Symbol, Aind, Lib, ErroringLibrary<Symbol>>,
+    {
+        if settings.shorthand_parsing != ShorthandParsing::Opaque || settings.depth_limit != Some(1)
+        {
+            return Err(TensorNetworkError::Other(eyre::eyre!(
+                "admitted parsing requires opaque shorthand and depth_limit=Some(1)"
+            )));
+        }
+        let mut construction = Construction::new();
+        let state = ParseState::<Aind> {
+            chain_scope_validated: true,
+            leaf_interfaces: Some(leaf_interfaces),
+            ..Default::default()
+        };
+        let root = Self::try_from_view_impl(
+            &mut construction,
+            value,
+            state,
+            library,
+            &ErroringLibrary::<Symbol>::new(),
+            settings,
+            AtomOrView::View,
+        )?;
+        Ok(construction.finish(root))
     }
 
     /// Return the exposed ports using the same parser and materialization policy,
@@ -612,13 +670,33 @@ where
     {
         let scalar_composite = settings.parse_composite_scalars_as_tensors
             && matches!(value, AtomView::Add(_) | AtomView::Mul(_));
+        let cached_tensorial = state.leaf_interfaces.as_ref().and_then(|cache| {
+            cache
+                .lock()
+                .unwrap()
+                .get(value.get_data())
+                .map(|entry| entry.0)
+        });
         if !scalar_composite
-            && !structure_inference::TensorialSyntax::is_tensorial(
-                value,
-                settings.strict_tensor_filter,
-                &state.matcher.borrow(),
-            )
+            && !cached_tensorial.unwrap_or_else(|| {
+                structure_inference::TensorialSyntax::is_tensorial(
+                    value,
+                    settings.strict_tensor_filter,
+                    &state.matcher.borrow(),
+                )
+            })
         {
+            if let Some(cache) = &state.leaf_interfaces {
+                if cached_tensorial.is_some() {
+                    profile::bump(Counter::ParseStructureCacheHit, 1);
+                } else {
+                    profile::bump(Counter::ParseStructureCacheMiss, 1);
+                    cache
+                        .lock()
+                        .unwrap()
+                        .insert(value.to_owned(), (false, Vec::new()));
+                }
+            }
             return Ok(construction.scalar(Self::scalar_from_expression(retain(value))?));
         }
 
@@ -875,11 +953,31 @@ where
             );
         }
 
-        if !structure_inference::TensorialSyntax::is_tensorial(
-            value.as_view(),
-            settings.strict_tensor_filter,
-            &state.matcher.borrow(),
-        ) {
+        let cached_tensorial = state.leaf_interfaces.as_ref().and_then(|cache| {
+            cache
+                .lock()
+                .unwrap()
+                .get(value.as_view().get_data())
+                .map(|entry| entry.0)
+        });
+        if !cached_tensorial.unwrap_or_else(|| {
+            structure_inference::TensorialSyntax::is_tensorial(
+                value.as_view(),
+                settings.strict_tensor_filter,
+                &state.matcher.borrow(),
+            )
+        }) {
+            if let Some(cache) = &state.leaf_interfaces {
+                if cached_tensorial.is_some() {
+                    profile::bump(Counter::ParseStructureCacheHit, 1);
+                } else {
+                    profile::bump(Counter::ParseStructureCacheMiss, 1);
+                    cache
+                        .lock()
+                        .unwrap()
+                        .insert(value.as_view().to_owned(), (false, Vec::new()));
+                }
+            }
             return Self::parse_scalar_function(
                 construction,
                 value,
@@ -967,6 +1065,7 @@ where
         let mut state = state;
         if symbol.is_scalar() {
             state.chain_scope_validated = false;
+            state.leaf_interfaces = None;
         }
         let inner = value.iter().next().unwrap();
         let inner_tensor = Self::try_from_view_impl(
@@ -1051,6 +1150,7 @@ where
     fn parse_regular_function_leaf<'node, S, Lib, FunLib>(
         construction: &mut Construction<Str, K, Aind>,
         value: FunView<'node>,
+        state: &ParseState<Aind, AtomView<'node>>,
         library: &Lib,
         retain: fn(AtomView<'node>) -> AtomOrView<'src>,
     ) -> Result<NodeIndex, TensorNetworkError<K, Symbol>>
@@ -1065,7 +1165,7 @@ where
         profile::bump(Counter::ParseStructureAttempt, 1);
         let structure = {
             let _span = profile::span(Timer::ParseStructure);
-            S::parse(value.as_view())
+            S::structure_from_parser(state)
         };
 
         let structure = match structure {
@@ -1560,7 +1660,7 @@ impl NetworkParse for AtomView<'_> {
 }
 
 #[cfg(test)]
-mod scalar_batch_tests {
+pub(crate) mod scalar_batch_tests {
     use super::*;
     use crate::{network::library::symbolic::ETS, structure::representation};
     use std::sync::{Arc, Mutex};
@@ -1656,17 +1756,23 @@ mod scalar_batch_tests {
         );
     }
 
-    #[test]
-    fn scalar_batch_result_keys_cannot_reuse_user_callbacks() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        static CALLS: AtomicUsize = AtomicUsize::new(0);
+    static OCCUPIED_RESULT_CALLS: std::sync::atomic::AtomicUsize =
+        std::sync::atomic::AtomicUsize::new(0);
+
+    // Occupy the first proposed key before parallel tests can allocate batches.
+    // This preserves the collision fixture independently of test execution order.
+    pub(crate) fn initialize_occupied_result_head() {
         let _occupied = symbolica::symbol!(
             "spenso::internal_component_result_0_0",
             norm = |_value, output| {
-                CALLS.fetch_add(1, Ordering::Relaxed);
+                OCCUPIED_RESULT_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 **output = Atom::Zero;
             }
         );
+    }
+
+    #[test]
+    fn scalar_batch_result_keys_cannot_reuse_user_callbacks() {
         let first = Atom::num(3);
         let second = Atom::num(5);
         let actual = ParamNet::<AbstractIndex>::evaluate_scalar_batch(
@@ -1678,7 +1784,10 @@ mod scalar_batch_tests {
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
         assert_eq!(actual, vec![first, second]);
-        assert_eq!(CALLS.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            OCCUPIED_RESULT_CALLS.load(std::sync::atomic::Ordering::Relaxed),
+            0
+        );
     }
 
     #[test]

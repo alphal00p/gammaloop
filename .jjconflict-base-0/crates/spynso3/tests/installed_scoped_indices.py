@@ -1,5 +1,7 @@
 """Scoped tensor copies preserve interfaces, contractions, and alphabet display."""
 
+from symbolica.community.tensor import ContractSettings
+
 import unicodedata
 import unittest
 import xml.etree.ElementTree as ET
@@ -21,7 +23,7 @@ class ScopedIndicesTests(unittest.TestCase):
         self.assertEqual(scoped.wrap_indices(lhs, dummies_only=True), scoped)
         result = (
             (scoped * right.wrap_indices(rhs, dummies_only=True))
-            .contract(rank_one=False)
+            .contract(ContractSettings(rank_one=False))
             .to_expression()
         )
         self.assertEqual(result, p(rep("b")) * q(rep("c")))
@@ -50,8 +52,8 @@ class ScopedIndicesTests(unittest.TestCase):
         self.assertEqual((wrapped * q(index).wrap_indices(bra)).rank, 0)
         self.assertEqual((wrapped * q(index).wrap_indices(other)).rank, 2)
         self.assertEqual(
-            (wrapped * q(index).wrap_indices(bra)).to_dots(),
-            (p(index) * q(index)).to_dots(),
+            (wrapped * q(index).wrap_indices(bra)).contract().to_expression(),
+            (p(index) * q(index)).contract().to_expression(),
         )
         nested = wrapped.wrap_indices(other)
         self.assertEqual(

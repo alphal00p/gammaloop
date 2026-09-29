@@ -674,7 +674,7 @@ fn parse_schoonschipped_metric_with_open_slot() {
 fn parse_schoonschipped_higher_rank_tensor_keeps_open_slots() {
     let rep = mink4();
     let expr = tensor!(
-        F,
+        schoonschip_higher_rank_fixture,
         slot!(rep, i).to_atom(),
         vector!(compact_p, rep.to_symbolic([])),
         slot!(rep, j).to_atom()
@@ -693,7 +693,7 @@ fn parse_schoonschipped_higher_rank_tensor_keeps_open_slots() {
 fn schoonschip_only_expands_compact_vectors() {
     let rep = mink4();
     let expr = tensor!(
-        F,
+        schoonschip_higher_rank_fixture,
         slot!(rep, i).to_atom(),
         vector!(compact_p, rep.to_symbolic([])),
         slot!(rep, j).to_atom()

@@ -1,5 +1,5 @@
 use crate::{
-    shorthands::schoonschip::{ContractionStatus, Schoonschip},
+    shorthands::schoonschip::{ReductionStatus, Schoonschip},
     tensor::SymbolicTensor,
 };
 use spenso::{
@@ -408,7 +408,7 @@ fn powered_open_metric_path_keeps_internal_and_external_pairs_distinct() {
         .contract_factorized(source.as_view(), None, true)
         .expect("open power must be admitted directly, before fallback rewriting");
     assert!(
-        direct.status == ContractionStatus::Complete,
+        direct.status == ReductionStatus::Complete,
         "direct graph contraction must complete"
     );
     let mut direct_expression = symbolica::atom::AliasedAtom::from(direct.root);
@@ -445,7 +445,7 @@ fn powered_open_vector_base_preserves_internal_scalar_pair() {
     let direct = crate::shorthands::schoonschip::SlotContraction::new()
         .contract_factorized(source.as_view(), None, true)
         .expect("open internal pair must use the graph owner");
-    assert!(direct.status == ContractionStatus::Complete);
+    assert!(direct.status == ReductionStatus::Complete);
     let mut direct_expression = symbolica::atom::AliasedAtom::from(direct.root);
     for (handle, body) in direct.aliases {
         direct_expression.register_alias(handle, body);

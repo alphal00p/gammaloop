@@ -1,0 +1,4835 @@
+{
+  "stage": "Intermediate candidate correctness only; final stable-source measurements and complete validation gate pending",
+  "core": {
+    "python": "3.14.7 (main, Aug 14 2026, 15:35:28) [Clang 22.1.3 ]",
+    "executable": "/tmp/unified-tensor-baseline/candidate-venv/bin/python",
+    "platform": "Linux-6.18.45-x86_64-with-glibc2.42",
+    "symbolica_version": "3.0.1",
+    "core": "/tmp/unified-tensor-baseline/candidate-venv/lib/python3.14/site-packages/symbolica/core.abi3.so",
+    "core_sha256": "1c6718e47accd83e2419c542b765efe61f1a1884faee1e42c0f2fc6d8df4879d"
+  },
+  "build": {
+    "source_stable_during_build": false,
+    "exit_code": 0,
+    "wall_seconds": 150.41446220176294,
+    "log_sha256": "0cdb4a8dce840b343f453a1b15abbe8ab683f62a2d24a115201344c14aa855f2"
+  },
+  "cohorts": [
+    {
+      "completed": true,
+      "cases": [
+        "mixed-colour-trace4",
+        "colour-fierz",
+        "fermion-3-trace4",
+        "fermion-3-tracen",
+        "fermion-4-trace4",
+        "fermion-4-tracen",
+        "gluon-4-trace4",
+        "gluon-4-tracen",
+        "historical-original",
+        "historical-early",
+        "free4-trace4",
+        "free4-tracen",
+        "free12-trace4",
+        "free12-tracen",
+        "free14-trace4",
+        "free14-tracen",
+        "axial12-trace4",
+        "production-aa-aa"
+      ],
+      "sources": {
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/fermion_ladder.py": "9a5d5291889704846c1ef566fa2c69701bf4cfcfcd37a6ff47cbd1dad410afd4",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/tensor_benchmark_production.py": "96e96947d41dcaaf8665ac8b0e8b61c1e5672632c4bdd3ebd934013b99690d6b",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/tensor_benchmark_factorized.py": "014bee330003387566d75714ee9128694ffc1cfc9df496abf411d657a44dec6b",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/tensor_benchmark_diagnostics.py": "8f1d2e3205f12cbaec77142d4fa560857c4d0fcf62bd647d44993e64529fa7ca",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/tensor_benchmark_cases.py": "23d0b13eec37037da9c26bb9050e059f1e5f4e701395cadc2e7857f1a875da39",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/tensor_benchmark_production_fixtures.py": "2c4b81f16cd6b97906415ff9578079568f1705fcc7386f5d081745b9c3fc2b6e",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/gluon_ladder.py": "d71c3218972118ceee31eb7fe7dfc42c4c0e7701115099d8314ed090832d775c",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/fermion_ladder_validation.py": "621636b6feb9077459435162f9b7acb27c90ef203e1b3adf2ec0f0badeefcebc",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/gluon_ladder_validation.py": "e76466517daf3dbb4fe730211bcd6817bf9eb2d4f53facf4a8886122e9443b31",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/fermion_propagator_ladder.frm": "65504488cad22f555a93a215737bd8024f099a4941696e3cb3ba87c18ce0bc1a",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/gluon_propagator_ladder.frm": "d97bdd5bac979b1c35702687579b5b2256a5e3a456e6a3b49047b176d34f8b23",
+        "/tmp/unified-tensor-baseline/candidate-check-source/crates/idenso/tests/fixtures/aa_aa_2l_gl16_integrated_uv_start_after_simplify_metrics.sym": "1466fa00bf69c90b3261e16f58bd62fa78b2ac2c653b9437835d4300e93fd5f3",
+        "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form": "2b3de22e575b20328ed1d848d1821129b550f885ac32785aa73728a7fec408fd",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/tensor_benchmark_provenance.json": "0434661857702d5e405e4a09eff23a71100f6f8684cbdbdeb0bb5156b2782b11"
+      },
+      "saved_frontends": {},
+      "ladder_routes": {},
+      "core_identities": {
+        "candidate": "1c6718e47accd83e2419c542b765efe61f1a1884faee1e42c0f2fc6d8df4879d"
+      },
+      "report_path": "/tmp/unified-tensor-baseline/candidate-check18.json",
+      "report_sha256": "583a755a6331b2004d88d4be34051ad80f904cd0b88dadb37d498bceaa2c172b",
+      "checks": [
+        {
+          "label": "candidate",
+          "case": "mixed-colour-trace4",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 337,
+              "sha256": "1d203abdffbced81157ff3797f9a00a1471862edb9c2ed9696346b1ee7864798",
+              "rank": 4
+            },
+            "result": {
+              "terms": 3,
+              "atom_bytes": 250,
+              "sha256": "a6484f9de87599b4850e3c53ea07faa717ad301948dddf075110a683dd95bad7",
+              "rank": null
+            },
+            "form_exact": true,
+            "components": {
+              "scope": "All 256 exact HEP components of the original SU(3) and four-dimensional Clifford tensors and reduced outputs",
+              "external_slots": [
+                "spenso::mink(4,r3trace::i0)",
+                "spenso::mink(4,r3trace::i1)",
+                "spenso::mink(4,r3trace::i2)",
+                "spenso::mink(4,r3trace::i3)"
+              ],
+              "results": {
+                "source": [
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3"
+                ],
+                "result": [
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "8/3",
+                  "0",
+                  "8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "-8/3"
+                ]
+              },
+              "passed": true
+            },
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "combined_algebra_cpu_ns": 5301116,
+              "contraction_cpu_ns": 245220,
+              "materialization_and_normalization_cpu_ns": 110740
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "colour-fierz",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 220,
+              "sha256": "9c6878ca61d32d4831368c70d6181ca16ac7b5d8a6c7ccb5bf72554f81a2e15f",
+              "rank": 0
+            },
+            "result": {
+              "terms": 1,
+              "atom_bytes": 4,
+              "sha256": "527a7f0844472f3cc7360c10db36011507264f496f7e8f147317b11256624805",
+              "rank": null
+            },
+            "form_exact": true,
+            "components": {
+              "scope": "Complete finite SU(3) HEP generator-component contraction",
+              "result": "-2/3",
+              "passed": true
+            },
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "completed_rerun": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "color_reduction_cpu_ns": 4451774,
+              "completed_color_rerun_cpu_ns": 12290,
+              "contraction_cpu_ns": 15620,
+              "materialization_and_normalization_cpu_ns": 32200
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "fermion-3-trace4",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 324,
+              "sha256": "c08da437a34c805c2ea3aff2534f4b53fec11a6353eb074578d7c83747b356ab",
+              "rank": 0
+            },
+            "result": {
+              "terms": 95,
+              "atom_bytes": 1556,
+              "sha256": "ffeac6dc4c930cb861dba38bd30ffac59280b2055bf8470ae57dfe1f53888c57",
+              "rank": null
+            },
+            "form_exact": true,
+            "components": [
+              {
+                "sample": 1,
+                "independent_vectors": {
+                  "k1": [
+                    "2",
+                    "1",
+                    "-1",
+                    "3"
+                  ],
+                  "k2": [
+                    "1",
+                    "-2",
+                    "3",
+                    "1"
+                  ],
+                  "k3": [
+                    "3",
+                    "2",
+                    "1",
+                    "-1"
+                  ],
+                  "q": [
+                    "1",
+                    "1",
+                    "2",
+                    "2"
+                  ]
+                },
+                "spanning_vectors": [
+                  "k1",
+                  "k2",
+                  "k3",
+                  "q"
+                ],
+                "spanning_determinant": "-96",
+                "matrix_oracle": "-20864",
+                "observed": {
+                  "result": "-20864",
+                  "input": "-20864"
+                },
+                "exact": true
+              },
+              {
+                "sample": 2,
+                "independent_vectors": {
+                  "k1": [
+                    "1/2",
+                    "-2/3",
+                    "3/5",
+                    "1/3"
+                  ],
+                  "k2": [
+                    "-3/2",
+                    "1/5",
+                    "2/3",
+                    "4/5"
+                  ],
+                  "k3": [
+                    "2/5",
+                    "3/2",
+                    "-1/3",
+                    "2/3"
+                  ],
+                  "q": [
+                    "4/3",
+                    "-1/2",
+                    "3/5",
+                    "-2/5"
+                  ]
+                },
+                "spanning_vectors": [
+                  "k1",
+                  "k2",
+                  "k3",
+                  "q"
+                ],
+                "spanning_determinant": "168529/101250",
+                "matrix_oracle": "45732424/455625",
+                "observed": {
+                  "result": "45732424/455625",
+                  "input": "45732424/455625"
+                },
+                "exact": true
+              },
+              {
+                "sample": 3,
+                "independent_vectors": {
+                  "k1": [
+                    "-2/3",
+                    "5/4",
+                    "1/2",
+                    "-3/2"
+                  ],
+                  "k2": [
+                    "3/4",
+                    "-1/3",
+                    "-5/2",
+                    "2/3"
+                  ],
+                  "k3": [
+                    "5/3",
+                    "1/4",
+                    "-2/3",
+                    "1/2"
+                  ],
+                  "q": [
+                    "-1/2",
+                    "2/3",
+                    "3/4",
+                    "5/4"
+                  ]
+                },
+                "spanning_vectors": [
+                  "k1",
+                  "k2",
+                  "k3",
+                  "q"
+                ],
+                "spanning_determinant": "-104825/10368",
+                "matrix_oracle": "-6014335/648",
+                "observed": {
+                  "result": "-6014335/648",
+                  "input": "-6014335/648"
+                },
+                "exact": true
+              }
+            ],
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "trace_cpu_ns": 1109901,
+              "gamma_reduction_cpu_ns": 894511,
+              "trace_materialization_cpu_ns": 215390,
+              "routing_cpu_ns": 65290,
+              "expansion_cpu_ns": 329510,
+              "expanded_trace_terms": 15,
+              "final_terms": 95
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "fermion-3-tracen",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 324,
+              "sha256": "a639e27a72559b1f93a9c07b796785c77dfdcfafdb726e566d3af86bdc3bf44a",
+              "rank": 0
+            },
+            "result": {
+              "terms": 358,
+              "atom_bytes": 7271,
+              "sha256": "3a1b930784f1ee9fb625dfce398db7cf753f8fc785ea0debeec24ec9674faf3c",
+              "rank": null
+            },
+            "form_exact": true,
+            "D_to_four_exact": true,
+            "components": [
+              {
+                "sample": 1,
+                "independent_vectors": {
+                  "k1": [
+                    "2",
+                    "1",
+                    "-1",
+                    "3"
+                  ],
+                  "k2": [
+                    "1",
+                    "-2",
+                    "3",
+                    "1"
+                  ],
+                  "k3": [
+                    "3",
+                    "2",
+                    "1",
+                    "-1"
+                  ],
+                  "q": [
+                    "1",
+                    "1",
+                    "2",
+                    "2"
+                  ]
+                },
+                "spanning_vectors": [
+                  "k1",
+                  "k2",
+                  "k3",
+                  "q"
+                ],
+                "spanning_determinant": "-96",
+                "matrix_oracle": "-20864",
+                "observed": {
+                  "result": "-20864",
+                  "input": "-20864"
+                },
+                "exact": true
+              },
+              {
+                "sample": 2,
+                "independent_vectors": {
+                  "k1": [
+                    "1/2",
+                    "-2/3",
+                    "3/5",
+                    "1/3"
+                  ],
+                  "k2": [
+                    "-3/2",
+                    "1/5",
+                    "2/3",
+                    "4/5"
+                  ],
+                  "k3": [
+                    "2/5",
+                    "3/2",
+                    "-1/3",
+                    "2/3"
+                  ],
+                  "q": [
+                    "4/3",
+                    "-1/2",
+                    "3/5",
+                    "-2/5"
+                  ]
+                },
+                "spanning_vectors": [
+                  "k1",
+                  "k2",
+                  "k3",
+                  "q"
+                ],
+                "spanning_determinant": "168529/101250",
+                "matrix_oracle": "45732424/455625",
+                "observed": {
+                  "result": "45732424/455625",
+                  "input": "45732424/455625"
+                },
+                "exact": true
+              },
+              {
+                "sample": 3,
+                "independent_vectors": {
+                  "k1": [
+                    "-2/3",
+                    "5/4",
+                    "1/2",
+                    "-3/2"
+                  ],
+                  "k2": [
+                    "3/4",
+                    "-1/3",
+                    "-5/2",
+                    "2/3"
+                  ],
+                  "k3": [
+                    "5/3",
+                    "1/4",
+                    "-2/3",
+                    "1/2"
+                  ],
+                  "q": [
+                    "-1/2",
+                    "2/3",
+                    "3/4",
+                    "5/4"
+                  ]
+                },
+                "spanning_vectors": [
+                  "k1",
+                  "k2",
+                  "k3",
+                  "q"
+                ],
+                "spanning_determinant": "-104825/10368",
+                "matrix_oracle": "-6014335/648",
+                "observed": {
+                  "result": "-6014335/648",
+                  "input": "-6014335/648"
+                },
+                "exact": true
+              }
+            ],
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "trace_cpu_ns": 11224010,
+              "gamma_reduction_cpu_ns": 10035589,
+              "trace_materialization_cpu_ns": 1188421,
+              "polynomial_conversion_cpu_ns": 197311,
+              "polynomial_routing_cpu_ns": 1187230,
+              "scalar_emission_cpu_ns": 251221,
+              "expanded_trace_terms": 60,
+              "final_terms": 358
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "fermion-4-trace4",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 422,
+              "sha256": "47ecb4e72671fbb955a119aa8b9708912f82ed0b7f3f1b1a62e0fbfe1e39440e",
+              "rank": 0
+            },
+            "result": {
+              "terms": 1026,
+              "atom_bytes": 20695,
+              "sha256": "1bea04b9a220b5c65cbd528e407a993c40978613eec4d256db6d9168501dd3f3",
+              "rank": null
+            },
+            "form_exact": true,
+            "components": [
+              {
+                "sample": 1,
+                "independent_vectors": {
+                  "k1": [
+                    "2",
+                    "1",
+                    "-1",
+                    "3"
+                  ],
+                  "k2": [
+                    "1",
+                    "-2",
+                    "3",
+                    "1"
+                  ],
+                  "k3": [
+                    "3",
+                    "2",
+                    "1",
+                    "-1"
+                  ],
+                  "k4": [
+                    "2",
+                    "-1",
+                    "2",
+                    "3"
+                  ],
+                  "q": [
+                    "1",
+                    "1",
+                    "2",
+                    "2"
+                  ]
+                },
+                "spanning_vectors": [
+                  "k1",
+                  "k2",
+                  "k3",
+                  "k4"
+                ],
+                "spanning_determinant": "-12",
+                "matrix_oracle": "1318912",
+                "observed": {
+                  "result": "1318912",
+                  "input": "1318912"
+                },
+                "exact": true
+              },
+              {
+                "sample": 2,
+                "independent_vectors": {
+                  "k1": [
+                    "1/2",
+                    "-2/3",
+                    "3/5",
+                    "1/3"
+                  ],
+                  "k2": [
+                    "-3/2",
+                    "1/5",
+                    "2/3",
+                    "4/5"
+                  ],
+                  "k3": [
+                    "2/5",
+                    "3/2",
+                    "-1/3",
+                    "2/3"
+                  ],
+                  "k4": [
+                    "-1/5",
+                    "4/3",
+                    "-3/2",
+                    "1/2"
+                  ],
+                  "q": [
+                    "4/3",
+                    "-1/2",
+                    "3/5",
+                    "-2/5"
+                  ]
+                },
+                "spanning_vectors": [
+                  "k1",
+                  "k2",
+                  "k3",
+                  "k4"
+                ],
+                "spanning_determinant": "-3479/1350",
+                "matrix_oracle": "-349751755024/284765625",
+                "observed": {
+                  "result": "-349751755024/284765625",
+                  "input": "-349751755024/284765625"
+                },
+                "exact": true
+              },
+              {
+                "sample": 3,
+                "independent_vectors": {
+                  "k1": [
+                    "-2/3",
+                    "5/4",
+                    "1/2",
+                    "-3/2"
+                  ],
+                  "k2": [
+                    "3/4",
+                    "-1/3",
+                    "-5/2",
+                    "2/3"
+                  ],
+                  "k3": [
+                    "5/3",
+                    "1/4",
+                    "-2/3",
+                    "1/2"
+                  ],
+                  "k4": [
+                    "3/2",
+                    "-5/4",
+                    "1/3",
+                    "-2/3"
+                  ],
+                  "q": [
+                    "-1/2",
+                    "2/3",
+                    "3/4",
+                    "5/4"
+                  ]
+                },
+                "spanning_vectors": [
+                  "k1",
+                  "k2",
+                  "k3",
+                  "k4"
+                ],
+                "spanning_determinant": "62651/5184",
+                "matrix_oracle": "-481237049/34992",
+                "observed": {
+                  "result": "-481237049/34992",
+                  "input": "-481237049/34992"
+                },
+                "exact": true
+              }
+            ],
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "trace_cpu_ns": 14722233,
+              "gamma_reduction_cpu_ns": 13171552,
+              "trace_materialization_cpu_ns": 1550681,
+              "polynomial_conversion_cpu_ns": 144180,
+              "polynomial_routing_cpu_ns": 3807442,
+              "scalar_emission_cpu_ns": 758001,
+              "expanded_trace_terms": 33,
+              "final_terms": 1026
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "fermion-4-tracen",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 422,
+              "sha256": "8f1a1dc59ee8172917bbe9499127b5894cd34b9c74b65165c8c9515f9377a247",
+              "rank": 0
+            },
+            "result": {
+              "terms": 5204,
+              "atom_bytes": 127204,
+              "sha256": "193c34d3f8f74131e2392bdeceedcbcc00aaf8ff592bef488099006a0b12f94a",
+              "rank": null
+            },
+            "form_exact": true,
+            "D_to_four_exact": true,
+            "components": [
+              {
+                "sample": 1,
+                "independent_vectors": {
+                  "k1": [
+                    "2",
+                    "1",
+                    "-1",
+                    "3"
+                  ],
+                  "k2": [
+                    "1",
+                    "-2",
+                    "3",
+                    "1"
+                  ],
+                  "k3": [
+                    "3",
+                    "2",
+                    "1",
+                    "-1"
+                  ],
+                  "k4": [
+                    "2",
+                    "-1",
+                    "2",
+                    "3"
+                  ],
+                  "q": [
+                    "1",
+                    "1",
+                    "2",
+                    "2"
+                  ]
+                },
+                "spanning_vectors": [
+                  "k1",
+                  "k2",
+                  "k3",
+                  "k4"
+                ],
+                "spanning_determinant": "-12",
+                "matrix_oracle": "1318912",
+                "observed": {
+                  "result": "1318912",
+                  "input": "1318912"
+                },
+                "exact": true
+              },
+              {
+                "sample": 2,
+                "independent_vectors": {
+                  "k1": [
+                    "1/2",
+                    "-2/3",
+                    "3/5",
+                    "1/3"
+                  ],
+                  "k2": [
+                    "-3/2",
+                    "1/5",
+                    "2/3",
+                    "4/5"
+                  ],
+                  "k3": [
+                    "2/5",
+                    "3/2",
+                    "-1/3",
+                    "2/3"
+                  ],
+                  "k4": [
+                    "-1/5",
+                    "4/3",
+                    "-3/2",
+                    "1/2"
+                  ],
+                  "q": [
+                    "4/3",
+                    "-1/2",
+                    "3/5",
+                    "-2/5"
+                  ]
+                },
+                "spanning_vectors": [
+                  "k1",
+                  "k2",
+                  "k3",
+                  "k4"
+                ],
+                "spanning_determinant": "-3479/1350",
+                "matrix_oracle": "-349751755024/284765625",
+                "observed": {
+                  "result": "-349751755024/284765625",
+                  "input": "-349751755024/284765625"
+                },
+                "exact": true
+              },
+              {
+                "sample": 3,
+                "independent_vectors": {
+                  "k1": [
+                    "-2/3",
+                    "5/4",
+                    "1/2",
+                    "-3/2"
+                  ],
+                  "k2": [
+                    "3/4",
+                    "-1/3",
+                    "-5/2",
+                    "2/3"
+                  ],
+                  "k3": [
+                    "5/3",
+                    "1/4",
+                    "-2/3",
+                    "1/2"
+                  ],
+                  "k4": [
+                    "3/2",
+                    "-5/4",
+                    "1/3",
+                    "-2/3"
+                  ],
+                  "q": [
+                    "-1/2",
+                    "2/3",
+                    "3/4",
+                    "5/4"
+                  ]
+                },
+                "spanning_vectors": [
+                  "k1",
+                  "k2",
+                  "k3",
+                  "k4"
+                ],
+                "spanning_determinant": "62651/5184",
+                "matrix_oracle": "-481237049/34992",
+                "observed": {
+                  "result": "-481237049/34992",
+                  "input": "-481237049/34992"
+                },
+                "exact": true
+              }
+            ],
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "trace_cpu_ns": 578466341,
+              "gamma_reduction_cpu_ns": 557739174,
+              "trace_materialization_cpu_ns": 20727167,
+              "polynomial_conversion_cpu_ns": 6831746,
+              "polynomial_routing_cpu_ns": 19876539,
+              "scalar_emission_cpu_ns": 4204125,
+              "expanded_trace_terms": 525,
+              "final_terms": 5204
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "gluon-4-trace4",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 1465,
+              "sha256": "9be31c0f8bc65fb56465794e5f17052edb11f79cf3f87017000c508f75a85f30",
+              "rank": 0
+            },
+            "result": {
+              "terms": 2425,
+              "atom_bytes": 57284,
+              "sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+              "rank": null
+            },
+            "form_exact": true,
+            "components": [
+              {
+                "sample": 1,
+                "independent_vectors": {
+                  "k1": [
+                    "2",
+                    "1",
+                    "-1",
+                    "3"
+                  ],
+                  "k2": [
+                    "1",
+                    "-2",
+                    "3",
+                    "1"
+                  ],
+                  "k3": [
+                    "3",
+                    "2",
+                    "1",
+                    "-1"
+                  ],
+                  "k4": [
+                    "2",
+                    "-1",
+                    "2",
+                    "3"
+                  ],
+                  "q": [
+                    "1",
+                    "1",
+                    "2",
+                    "2"
+                  ]
+                },
+                "hep_vertex_oracle": "856746",
+                "observed": {
+                  "input": "856746",
+                  "result": "856746"
+                },
+                "exact": true
+              },
+              {
+                "sample": 2,
+                "independent_vectors": {
+                  "k1": [
+                    "1/2",
+                    "-2/3",
+                    "3/5",
+                    "1/3"
+                  ],
+                  "k2": [
+                    "-3/2",
+                    "1/5",
+                    "2/3",
+                    "4/5"
+                  ],
+                  "k3": [
+                    "2/5",
+                    "3/2",
+                    "-1/3",
+                    "2/3"
+                  ],
+                  "k4": [
+                    "-1/5",
+                    "4/3",
+                    "-3/2",
+                    "1/2"
+                  ],
+                  "q": [
+                    "4/3",
+                    "-1/2",
+                    "3/5",
+                    "-2/5"
+                  ]
+                },
+                "hep_vertex_oracle": "4065042721454941/82012500000",
+                "observed": {
+                  "input": "4065042721454941/82012500000",
+                  "result": "4065042721454941/82012500000"
+                },
+                "exact": true
+              },
+              {
+                "sample": 3,
+                "independent_vectors": {
+                  "k1": [
+                    "-2/3",
+                    "5/4",
+                    "1/2",
+                    "-3/2"
+                  ],
+                  "k2": [
+                    "3/4",
+                    "-1/3",
+                    "-5/2",
+                    "2/3"
+                  ],
+                  "k3": [
+                    "5/3",
+                    "1/4",
+                    "-2/3",
+                    "1/2"
+                  ],
+                  "k4": [
+                    "3/2",
+                    "-5/4",
+                    "1/3",
+                    "-2/3"
+                  ],
+                  "q": [
+                    "-1/2",
+                    "2/3",
+                    "3/4",
+                    "5/4"
+                  ]
+                },
+                "hep_vertex_oracle": "361949054846425/214990848",
+                "observed": {
+                  "input": "361949054846425/214990848",
+                  "result": "361949054846425/214990848"
+                },
+                "exact": true
+              }
+            ],
+            "phases": {
+              "stages": [
+                {
+                  "vertex": 1,
+                  "replacement_cpu_ns": 436190,
+                  "contraction_cpu_ns": 3830612,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 2,
+                  "replacement_cpu_ns": 2465473,
+                  "contraction_cpu_ns": 13027631,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 8,
+                  "replacement_cpu_ns": 10184778,
+                  "contraction_cpu_ns": 27022102,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 3,
+                  "replacement_cpu_ns": 12694939,
+                  "contraction_cpu_ns": 75269956,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 7,
+                  "replacement_cpu_ns": 47998426,
+                  "contraction_cpu_ns": 145532002,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 4,
+                  "replacement_cpu_ns": 53856187,
+                  "contraction_cpu_ns": 256012836,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 6,
+                  "replacement_cpu_ns": 124123385,
+                  "contraction_cpu_ns": 412453395,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 5,
+                  "replacement_cpu_ns": 100053536,
+                  "contraction_cpu_ns": 209897496,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                }
+              ],
+              "final_scalar_cpu_ns": 180207726,
+              "final_terms": 2425
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "gluon-4-tracen",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 1465,
+              "sha256": "4f2152caf3b9e20d61715f234e1c322577b276ff29aca1c30bf5e1d75750d470",
+              "rank": 0
+            },
+            "result": {
+              "terms": 7102,
+              "atom_bytes": 187631,
+              "sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+              "rank": null
+            },
+            "form_exact": true,
+            "D_to_four_exact": true,
+            "components": [
+              {
+                "sample": 1,
+                "independent_vectors": {
+                  "k1": [
+                    "2",
+                    "1",
+                    "-1",
+                    "3"
+                  ],
+                  "k2": [
+                    "1",
+                    "-2",
+                    "3",
+                    "1"
+                  ],
+                  "k3": [
+                    "3",
+                    "2",
+                    "1",
+                    "-1"
+                  ],
+                  "k4": [
+                    "2",
+                    "-1",
+                    "2",
+                    "3"
+                  ],
+                  "q": [
+                    "1",
+                    "1",
+                    "2",
+                    "2"
+                  ]
+                },
+                "hep_vertex_oracle": "856746",
+                "observed": {
+                  "input": "856746",
+                  "result": "856746"
+                },
+                "exact": true
+              },
+              {
+                "sample": 2,
+                "independent_vectors": {
+                  "k1": [
+                    "1/2",
+                    "-2/3",
+                    "3/5",
+                    "1/3"
+                  ],
+                  "k2": [
+                    "-3/2",
+                    "1/5",
+                    "2/3",
+                    "4/5"
+                  ],
+                  "k3": [
+                    "2/5",
+                    "3/2",
+                    "-1/3",
+                    "2/3"
+                  ],
+                  "k4": [
+                    "-1/5",
+                    "4/3",
+                    "-3/2",
+                    "1/2"
+                  ],
+                  "q": [
+                    "4/3",
+                    "-1/2",
+                    "3/5",
+                    "-2/5"
+                  ]
+                },
+                "hep_vertex_oracle": "4065042721454941/82012500000",
+                "observed": {
+                  "input": "4065042721454941/82012500000",
+                  "result": "4065042721454941/82012500000"
+                },
+                "exact": true
+              },
+              {
+                "sample": 3,
+                "independent_vectors": {
+                  "k1": [
+                    "-2/3",
+                    "5/4",
+                    "1/2",
+                    "-3/2"
+                  ],
+                  "k2": [
+                    "3/4",
+                    "-1/3",
+                    "-5/2",
+                    "2/3"
+                  ],
+                  "k3": [
+                    "5/3",
+                    "1/4",
+                    "-2/3",
+                    "1/2"
+                  ],
+                  "k4": [
+                    "3/2",
+                    "-5/4",
+                    "1/3",
+                    "-2/3"
+                  ],
+                  "q": [
+                    "-1/2",
+                    "2/3",
+                    "3/4",
+                    "5/4"
+                  ]
+                },
+                "hep_vertex_oracle": "361949054846425/214990848",
+                "observed": {
+                  "input": "361949054846425/214990848",
+                  "result": "361949054846425/214990848"
+                },
+                "exact": true
+              }
+            ],
+            "phases": {
+              "stages": [
+                {
+                  "vertex": 1,
+                  "replacement_cpu_ns": 575560,
+                  "contraction_cpu_ns": 5132545,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 2,
+                  "replacement_cpu_ns": 3259081,
+                  "contraction_cpu_ns": 15714643,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 8,
+                  "replacement_cpu_ns": 12828193,
+                  "contraction_cpu_ns": 30654846,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 3,
+                  "replacement_cpu_ns": 13000090,
+                  "contraction_cpu_ns": 85243115,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 7,
+                  "replacement_cpu_ns": 61113694,
+                  "contraction_cpu_ns": 176566991,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 4,
+                  "replacement_cpu_ns": 53127625,
+                  "contraction_cpu_ns": 229081988,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 6,
+                  "replacement_cpu_ns": 121625107,
+                  "contraction_cpu_ns": 450736132,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                },
+                {
+                  "vertex": 5,
+                  "replacement_cpu_ns": 115494577,
+                  "contraction_cpu_ns": 220836779,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  }
+                }
+              ],
+              "final_scalar_cpu_ns": 311314338,
+              "final_terms": 7102
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "historical-original",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 1170,
+              "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+              "rank": 0
+            },
+            "result": {
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": null
+            },
+            "form_exact": true,
+            "phases": {
+              "stages": [
+                {
+                  "vertex": 1,
+                  "replacement_cpu_ns": 472140,
+                  "contraction_cpu_ns": 3013553,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 5,
+                  "atom_bytes": 5300,
+                  "sha256": "76d9ec4d717436c74e4c647c160a8ca2ff0b0ce463a23f6f18530cec807952ff",
+                  "rank": 0
+                },
+                {
+                  "vertex": 2,
+                  "replacement_cpu_ns": 1878902,
+                  "contraction_cpu_ns": 9163158,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 24,
+                  "atom_bytes": 22849,
+                  "sha256": "abe17b72a62a725ecc1f81ee628f59f69e3db13ef7ce02a434199960f90d7639",
+                  "rank": 0
+                },
+                {
+                  "vertex": 3,
+                  "replacement_cpu_ns": 5691295,
+                  "contraction_cpu_ns": 33611879,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 108,
+                  "atom_bytes": 91568,
+                  "sha256": "248a9eac54387628c113867c2b377cf3559dec22b74d8073c9919c683e0377b2",
+                  "rank": 0
+                },
+                {
+                  "vertex": 4,
+                  "replacement_cpu_ns": 18648967,
+                  "contraction_cpu_ns": 126996673,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 490,
+                  "atom_bytes": 368303,
+                  "sha256": "a87e3ec28b91d17a78da7ddf7355e0bbb977a5e6cfb9c8847d548429f7ce3e4d",
+                  "rank": 0
+                },
+                {
+                  "vertex": 5,
+                  "replacement_cpu_ns": 71685809,
+                  "contraction_cpu_ns": 364997880,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 1381,
+                  "atom_bytes": 1098977,
+                  "sha256": "472512e8eef8ee1bf90b90dcf9763fcbd2737f79d4480d9d171133b390ef5038",
+                  "rank": 0
+                },
+                {
+                  "vertex": 6,
+                  "replacement_cpu_ns": 212329119,
+                  "contraction_cpu_ns": 736506590,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 1064,
+                  "atom_bytes": 2779816,
+                  "sha256": "51ce1795a133a08cfbf29d37048b4df9225bcd7ef33e9811f6d6ea22c77e624f",
+                  "rank": 0
+                },
+                {
+                  "vertex": 7,
+                  "replacement_cpu_ns": 156842535,
+                  "contraction_cpu_ns": 487459927,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 313,
+                  "atom_bytes": 16748528,
+                  "sha256": "d4a576fb34130dd309f309453f9c9d20bbbac5aca3e5a049fd6bfa3f0980ac1c",
+                  "rank": 0
+                },
+                {
+                  "vertex": 8,
+                  "replacement_cpu_ns": 85749121,
+                  "contraction_cpu_ns": 128907366,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 1548,
+                  "atom_bytes": 88799011,
+                  "sha256": "859a86b6626c1c4851a0de5eee7dddb0bc52a079014c30148e7703686b5fd751",
+                  "rank": 0
+                },
+                {
+                  "phase": "materialization",
+                  "cpu_ns": 171871142,
+                  "terms": 9652,
+                  "atom_bytes": 1880422,
+                  "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+                  "rank": 0
+                }
+              ],
+              "internal_edges": 11
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "historical-original",
+          "route": "scalar",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 1170,
+              "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+              "rank": 0
+            },
+            "result": {
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": null
+            },
+            "form_exact": true,
+            "phases": {
+              "stages": [
+                {
+                  "vertex": 1,
+                  "replacement_cpu_ns": 454601,
+                  "contraction_cpu_ns": 3116572,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 5,
+                  "atom_bytes": 5300,
+                  "sha256": "76d9ec4d717436c74e4c647c160a8ca2ff0b0ce463a23f6f18530cec807952ff",
+                  "rank": 0
+                },
+                {
+                  "vertex": 2,
+                  "replacement_cpu_ns": 1975302,
+                  "contraction_cpu_ns": 9099058,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 24,
+                  "atom_bytes": 22849,
+                  "sha256": "abe17b72a62a725ecc1f81ee628f59f69e3db13ef7ce02a434199960f90d7639",
+                  "rank": 0
+                },
+                {
+                  "vertex": 3,
+                  "replacement_cpu_ns": 5661736,
+                  "contraction_cpu_ns": 34054350,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 108,
+                  "atom_bytes": 91568,
+                  "sha256": "248a9eac54387628c113867c2b377cf3559dec22b74d8073c9919c683e0377b2",
+                  "rank": 0
+                },
+                {
+                  "vertex": 4,
+                  "replacement_cpu_ns": 18821488,
+                  "contraction_cpu_ns": 129026472,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 490,
+                  "atom_bytes": 368303,
+                  "sha256": "a87e3ec28b91d17a78da7ddf7355e0bbb977a5e6cfb9c8847d548429f7ce3e4d",
+                  "rank": 0
+                },
+                {
+                  "vertex": 5,
+                  "replacement_cpu_ns": 73091424,
+                  "contraction_cpu_ns": 366525623,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 1381,
+                  "atom_bytes": 1098977,
+                  "sha256": "472512e8eef8ee1bf90b90dcf9763fcbd2737f79d4480d9d171133b390ef5038",
+                  "rank": 0
+                },
+                {
+                  "vertex": 6,
+                  "replacement_cpu_ns": 214825280,
+                  "contraction_cpu_ns": 826756754,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 1064,
+                  "atom_bytes": 2779816,
+                  "sha256": "51ce1795a133a08cfbf29d37048b4df9225bcd7ef33e9811f6d6ea22c77e624f",
+                  "rank": 0
+                },
+                {
+                  "vertex": 7,
+                  "replacement_cpu_ns": 160533233,
+                  "contraction_cpu_ns": 508456653,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 313,
+                  "atom_bytes": 16748528,
+                  "sha256": "d4a576fb34130dd309f309453f9c9d20bbbac5aca3e5a049fd6bfa3f0980ac1c",
+                  "rank": 0
+                },
+                {
+                  "vertex": 8,
+                  "replacement_cpu_ns": 87586238,
+                  "contraction_cpu_ns": 131582692,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 1548,
+                  "atom_bytes": 88799011,
+                  "sha256": "859a86b6626c1c4851a0de5eee7dddb0bc52a079014c30148e7703686b5fd751",
+                  "rank": 0
+                },
+                {
+                  "phase": "materialization",
+                  "cpu_ns": 164108692,
+                  "terms": 9652,
+                  "atom_bytes": 1880422,
+                  "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+                  "rank": 0
+                }
+              ],
+              "internal_edges": 11
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "historical-early",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 1170,
+              "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+              "rank": 0
+            },
+            "result": {
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": null
+            },
+            "form_exact": true,
+            "phases": {
+              "stages": [
+                {
+                  "vertex": 5,
+                  "replacement_cpu_ns": 435451,
+                  "contraction_cpu_ns": 3160654,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 5,
+                  "atom_bytes": 5316,
+                  "sha256": "b9490d808bc7fd77756cf642a293aa73a73d9cdc1e4b671c9f36706c78e26635",
+                  "rank": 0
+                },
+                {
+                  "vertex": 4,
+                  "replacement_cpu_ns": 1942662,
+                  "contraction_cpu_ns": 9138355,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 24,
+                  "atom_bytes": 22849,
+                  "sha256": "6db64ec2a929436c6990c07cff4b944199a279c3e2711edeeade00979208970a",
+                  "rank": 0
+                },
+                {
+                  "vertex": 6,
+                  "replacement_cpu_ns": 8660049,
+                  "contraction_cpu_ns": 20123489,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 32,
+                  "atom_bytes": 31881,
+                  "sha256": "a28d7f946b28f12df57b0aea8c9560a91262552d74228ba933fc34a3ab97d021",
+                  "rank": 0
+                },
+                {
+                  "vertex": 3,
+                  "replacement_cpu_ns": 6686995,
+                  "contraction_cpu_ns": 27270987,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 70,
+                  "atom_bytes": 93427,
+                  "sha256": "fd88f753cfe4fa9ae648ebeaaa8798829b383aa0759c003e8d7afe29141e2dae",
+                  "rank": 0
+                },
+                {
+                  "vertex": 7,
+                  "replacement_cpu_ns": 19200648,
+                  "contraction_cpu_ns": 44602440,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 48,
+                  "atom_bytes": 380293,
+                  "sha256": "34dbf90eff99e7117d94319ca75173e3f6a1bfac2fe23856a0c5ccdf8680805a",
+                  "rank": 0
+                },
+                {
+                  "vertex": 2,
+                  "replacement_cpu_ns": 9212920,
+                  "contraction_cpu_ns": 30474893,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 110,
+                  "atom_bytes": 2108366,
+                  "sha256": "563377f60c65a10958093d9ca996d8bf6c6fd2e977a4fa51cfbb2fdca403c1fb",
+                  "rank": 0
+                },
+                {
+                  "vertex": 8,
+                  "replacement_cpu_ns": 24040520,
+                  "contraction_cpu_ns": 56895131,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 66,
+                  "atom_bytes": 14474122,
+                  "sha256": "74e8889f9e3d8474bc008af5bc62f1c94e6af3bcd10f49da9dac0c0f923129b2",
+                  "rank": 0
+                },
+                {
+                  "vertex": 1,
+                  "replacement_cpu_ns": 20770287,
+                  "contraction_cpu_ns": 20620750,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 259,
+                  "atom_bytes": 56607209,
+                  "sha256": "310123df5429d27a2f946c9ec7298ddd0e134e4a7ab2a5b5ab06e83bcd1c1edd",
+                  "rank": 0
+                },
+                {
+                  "phase": "materialization",
+                  "cpu_ns": 52233743,
+                  "terms": 9652,
+                  "atom_bytes": 1880422,
+                  "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+                  "rank": 0
+                }
+              ],
+              "internal_edges": 11
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "historical-early",
+          "route": "scalar",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 1170,
+              "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+              "rank": 0
+            },
+            "result": {
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": null
+            },
+            "form_exact": true,
+            "phases": {
+              "stages": [
+                {
+                  "vertex": 5,
+                  "replacement_cpu_ns": 446120,
+                  "contraction_cpu_ns": 5261015,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 5,
+                  "atom_bytes": 5316,
+                  "sha256": "b9490d808bc7fd77756cf642a293aa73a73d9cdc1e4b671c9f36706c78e26635",
+                  "rank": 0
+                },
+                {
+                  "vertex": 4,
+                  "replacement_cpu_ns": 1895661,
+                  "contraction_cpu_ns": 8965816,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 24,
+                  "atom_bytes": 22849,
+                  "sha256": "6db64ec2a929436c6990c07cff4b944199a279c3e2711edeeade00979208970a",
+                  "rank": 0
+                },
+                {
+                  "vertex": 6,
+                  "replacement_cpu_ns": 8473425,
+                  "contraction_cpu_ns": 21145160,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 32,
+                  "atom_bytes": 31881,
+                  "sha256": "a28d7f946b28f12df57b0aea8c9560a91262552d74228ba933fc34a3ab97d021",
+                  "rank": 0
+                },
+                {
+                  "vertex": 3,
+                  "replacement_cpu_ns": 6664896,
+                  "contraction_cpu_ns": 26503073,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 70,
+                  "atom_bytes": 93427,
+                  "sha256": "fd88f753cfe4fa9ae648ebeaaa8798829b383aa0759c003e8d7afe29141e2dae",
+                  "rank": 0
+                },
+                {
+                  "vertex": 7,
+                  "replacement_cpu_ns": 18619853,
+                  "contraction_cpu_ns": 47263994,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 48,
+                  "atom_bytes": 380293,
+                  "sha256": "34dbf90eff99e7117d94319ca75173e3f6a1bfac2fe23856a0c5ccdf8680805a",
+                  "rank": 0
+                },
+                {
+                  "vertex": 2,
+                  "replacement_cpu_ns": 9066698,
+                  "contraction_cpu_ns": 30428622,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 110,
+                  "atom_bytes": 2108366,
+                  "sha256": "563377f60c65a10958093d9ca996d8bf6c6fd2e977a4fa51cfbb2fdca403c1fb",
+                  "rank": 0
+                },
+                {
+                  "vertex": 8,
+                  "replacement_cpu_ns": 24324223,
+                  "contraction_cpu_ns": 57130862,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 66,
+                  "atom_bytes": 14474122,
+                  "sha256": "74e8889f9e3d8474bc008af5bc62f1c94e6af3bcd10f49da9dac0c0f923129b2",
+                  "rank": 0
+                },
+                {
+                  "vertex": 1,
+                  "replacement_cpu_ns": 14558712,
+                  "contraction_cpu_ns": 22037340,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 259,
+                  "atom_bytes": 56607209,
+                  "sha256": "310123df5429d27a2f946c9ec7298ddd0e134e4a7ab2a5b5ab06e83bcd1c1edd",
+                  "rank": 0
+                },
+                {
+                  "phase": "materialization",
+                  "cpu_ns": 60494564,
+                  "terms": 9652,
+                  "atom_bytes": 1880422,
+                  "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+                  "rank": 0
+                }
+              ],
+              "internal_edges": 11
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "free4-trace4",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 116,
+              "sha256": "43defb8451cdf854888bd1c4f8d1b4b71ce6ce7abf61fca24a588d98d13007b3",
+              "rank": 4
+            },
+            "result": {
+              "terms": 3,
+              "atom_bytes": 247,
+              "sha256": "be6732d8df316b75726c7e528d415a847a1ee8995925c6abf1f513f9f4d121ae",
+              "rank": null
+            },
+            "form_exact": true,
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "gamma_reduction_cpu_ns": 265050,
+              "trace_materialization_cpu_ns": 47500,
+              "atom_extraction_cpu_ns": 1850,
+              "final_terms": 3,
+              "free_ports": 4
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "free4-tracen",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 116,
+              "sha256": "84410e4791cfe7692cdd27b479690e1b336414f06da18f5fdd6f6a3bde0f2d34",
+              "rank": 4
+            },
+            "result": {
+              "terms": 3,
+              "atom_bytes": 247,
+              "sha256": "a458b38cd60c40d3b24b3bef8988db3131cb723f48dad1282082777cb6fb756d",
+              "rank": null
+            },
+            "form_exact": true,
+            "D_to_four_exact": true,
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "gamma_reduction_cpu_ns": 257370,
+              "trace_materialization_cpu_ns": 45680,
+              "atom_extraction_cpu_ns": 1860,
+              "final_terms": 3,
+              "free_ports": 4
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "free12-trace4",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 310,
+              "sha256": "12c5897b6b6fc9d07b5673c07eebe4ceeb52de02ff7841a8d4c8424d52e0d4d1",
+              "rank": 12
+            },
+            "result": {
+              "terms": 4383,
+              "atom_bytes": 1003715,
+              "sha256": "166cf03fc29a41efda87b6d7d5854a1488d3ad9e24f7806c787b99e98f4c2f89",
+              "rank": null
+            },
+            "form_exact": false,
+            "form_component_checks": {
+              "scope": "Three finite exact HEP points: original source network and cached metric/epsilon leaf networks for outputs; no general polynomial identity claim",
+              "dimension": 4,
+              "rows": [
+                {
+                  "seed": 47,
+                  "assignments": [
+                    [
+                      -1,
+                      -3,
+                      0,
+                      1
+                    ],
+                    [
+                      0,
+                      1,
+                      -1,
+                      -1
+                    ],
+                    [
+                      1,
+                      0,
+                      0,
+                      1
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      2
+                    ],
+                    [
+                      -3,
+                      -3,
+                      -3,
+                      -1
+                    ],
+                    [
+                      3,
+                      0,
+                      2,
+                      1
+                    ],
+                    [
+                      -3,
+                      3,
+                      -1,
+                      1
+                    ],
+                    [
+                      0,
+                      -2,
+                      -2,
+                      1
+                    ],
+                    [
+                      1,
+                      -1,
+                      0,
+                      -2
+                    ],
+                    [
+                      -3,
+                      1,
+                      -1,
+                      2
+                    ],
+                    [
+                      2,
+                      -1,
+                      1,
+                      -1
+                    ],
+                    [
+                      1,
+                      1,
+                      3,
+                      -2
+                    ]
+                  ],
+                  "spanning_minor": 21,
+                  "results": {
+                    "source": "-36928",
+                    "Idenso": "-36928",
+                    "reference": "-36928"
+                  },
+                  "exact_at_point": true
+                },
+                {
+                  "seed": 98,
+                  "assignments": [
+                    [
+                      -1,
+                      1,
+                      3,
+                      -3
+                    ],
+                    [
+                      -1,
+                      0,
+                      -3,
+                      0
+                    ],
+                    [
+                      -1,
+                      2,
+                      3,
+                      2
+                    ],
+                    [
+                      1,
+                      -3,
+                      3,
+                      0
+                    ],
+                    [
+                      -2,
+                      0,
+                      -3,
+                      2
+                    ],
+                    [
+                      3,
+                      2,
+                      3,
+                      -1
+                    ],
+                    [
+                      -3,
+                      3,
+                      3,
+                      3
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      3
+                    ],
+                    [
+                      -1,
+                      -1,
+                      -3,
+                      2
+                    ],
+                    [
+                      2,
+                      2,
+                      3,
+                      0
+                    ],
+                    [
+                      -2,
+                      3,
+                      3,
+                      1
+                    ],
+                    [
+                      -2,
+                      0,
+                      -2,
+                      1
+                    ]
+                  ],
+                  "spanning_minor": -90,
+                  "results": {
+                    "source": "14586192",
+                    "Idenso": "14586192",
+                    "reference": "14586192"
+                  },
+                  "exact_at_point": true
+                },
+                {
+                  "seed": 173,
+                  "assignments": [
+                    [
+                      -1,
+                      0,
+                      2,
+                      3
+                    ],
+                    [
+                      3,
+                      3,
+                      2,
+                      3
+                    ],
+                    [
+                      1,
+                      1,
+                      -1,
+                      3
+                    ],
+                    [
+                      -2,
+                      0,
+                      2,
+                      2
+                    ],
+                    [
+                      -3,
+                      -1,
+                      2,
+                      -3
+                    ],
+                    [
+                      -2,
+                      2,
+                      0,
+                      -2
+                    ],
+                    [
+                      0,
+                      3,
+                      2,
+                      2
+                    ],
+                    [
+                      -2,
+                      2,
+                      -2,
+                      -3
+                    ],
+                    [
+                      1,
+                      1,
+                      2,
+                      -3
+                    ],
+                    [
+                      0,
+                      -2,
+                      -1,
+                      0
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      -2
+                    ],
+                    [
+                      -1,
+                      -3,
+                      -1,
+                      0
+                    ]
+                  ],
+                  "spanning_minor": -32,
+                  "results": {
+                    "source": "20247216",
+                    "Idenso": "20247216",
+                    "reference": "20247216"
+                  },
+                  "exact_at_point": true
+                }
+              ]
+            },
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "gamma_reduction_cpu_ns": 366252195,
+              "trace_materialization_cpu_ns": 19891269,
+              "atom_extraction_cpu_ns": 85331,
+              "final_terms": 4383,
+              "free_ports": 12
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "free12-tracen",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 310,
+              "sha256": "b624363adba647a36093b6355f9d32beda057cb3fe1acb2417ab12ccc7a0cad0",
+              "rank": 12
+            },
+            "result": {
+              "terms": 10395,
+              "atom_bytes": 2380463,
+              "sha256": "de54cd7cbded03642e0dc14aae0981a7768d927ba1b4da6555e77f0d5d3d508b",
+              "rank": null
+            },
+            "form_exact": true,
+            "D_to_four_exact": false,
+            "D_to_four_component_checks": {
+              "scope": "Three finite exact HEP points: original source network and cached metric/epsilon leaf networks for outputs; no general polynomial identity claim",
+              "dimension": 4,
+              "rows": [
+                {
+                  "seed": 47,
+                  "assignments": [
+                    [
+                      -1,
+                      -3,
+                      0,
+                      1
+                    ],
+                    [
+                      0,
+                      1,
+                      -1,
+                      -1
+                    ],
+                    [
+                      1,
+                      0,
+                      0,
+                      1
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      2
+                    ],
+                    [
+                      -3,
+                      -3,
+                      -3,
+                      -1
+                    ],
+                    [
+                      3,
+                      0,
+                      2,
+                      1
+                    ],
+                    [
+                      -3,
+                      3,
+                      -1,
+                      1
+                    ],
+                    [
+                      0,
+                      -2,
+                      -2,
+                      1
+                    ],
+                    [
+                      1,
+                      -1,
+                      0,
+                      -2
+                    ],
+                    [
+                      -3,
+                      1,
+                      -1,
+                      2
+                    ],
+                    [
+                      2,
+                      -1,
+                      1,
+                      -1
+                    ],
+                    [
+                      1,
+                      1,
+                      3,
+                      -2
+                    ]
+                  ],
+                  "spanning_minor": 21,
+                  "results": {
+                    "source": "-36928",
+                    "Idenso": "-36928",
+                    "reference": "-36928"
+                  },
+                  "exact_at_point": true
+                },
+                {
+                  "seed": 98,
+                  "assignments": [
+                    [
+                      -1,
+                      1,
+                      3,
+                      -3
+                    ],
+                    [
+                      -1,
+                      0,
+                      -3,
+                      0
+                    ],
+                    [
+                      -1,
+                      2,
+                      3,
+                      2
+                    ],
+                    [
+                      1,
+                      -3,
+                      3,
+                      0
+                    ],
+                    [
+                      -2,
+                      0,
+                      -3,
+                      2
+                    ],
+                    [
+                      3,
+                      2,
+                      3,
+                      -1
+                    ],
+                    [
+                      -3,
+                      3,
+                      3,
+                      3
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      3
+                    ],
+                    [
+                      -1,
+                      -1,
+                      -3,
+                      2
+                    ],
+                    [
+                      2,
+                      2,
+                      3,
+                      0
+                    ],
+                    [
+                      -2,
+                      3,
+                      3,
+                      1
+                    ],
+                    [
+                      -2,
+                      0,
+                      -2,
+                      1
+                    ]
+                  ],
+                  "spanning_minor": -90,
+                  "results": {
+                    "source": "14586192",
+                    "Idenso": "14586192",
+                    "reference": "14586192"
+                  },
+                  "exact_at_point": true
+                },
+                {
+                  "seed": 173,
+                  "assignments": [
+                    [
+                      -1,
+                      0,
+                      2,
+                      3
+                    ],
+                    [
+                      3,
+                      3,
+                      2,
+                      3
+                    ],
+                    [
+                      1,
+                      1,
+                      -1,
+                      3
+                    ],
+                    [
+                      -2,
+                      0,
+                      2,
+                      2
+                    ],
+                    [
+                      -3,
+                      -1,
+                      2,
+                      -3
+                    ],
+                    [
+                      -2,
+                      2,
+                      0,
+                      -2
+                    ],
+                    [
+                      0,
+                      3,
+                      2,
+                      2
+                    ],
+                    [
+                      -2,
+                      2,
+                      -2,
+                      -3
+                    ],
+                    [
+                      1,
+                      1,
+                      2,
+                      -3
+                    ],
+                    [
+                      0,
+                      -2,
+                      -1,
+                      0
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      -2
+                    ],
+                    [
+                      -1,
+                      -3,
+                      -1,
+                      0
+                    ]
+                  ],
+                  "spanning_minor": -32,
+                  "results": {
+                    "source": "20247216",
+                    "Idenso": "20247216",
+                    "reference": "20247216"
+                  },
+                  "exact_at_point": true
+                }
+              ]
+            },
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "gamma_reduction_cpu_ns": 85494451,
+              "trace_materialization_cpu_ns": 28977832,
+              "atom_extraction_cpu_ns": 128551,
+              "final_terms": 10395,
+              "free_ports": 12
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "free14-trace4",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 358,
+              "sha256": "0cdfb4f7c12503b421414a7e3050be05b0a51150b4e110676a632cbbf8282765",
+              "rank": 14
+            },
+            "result": {
+              "terms": 26931,
+              "atom_bytes": 7190585,
+              "sha256": "3fd1bf2b0e4d69422a8badfc0f9ecc4cb46c333b1b38fd65a198a42057041e9c",
+              "rank": null
+            },
+            "form_exact": false,
+            "form_component_checks": {
+              "scope": "Three finite exact HEP points: original source network and cached metric/epsilon leaf networks for outputs; no general polynomial identity claim",
+              "dimension": 4,
+              "rows": [
+                {
+                  "seed": 47,
+                  "assignments": [
+                    [
+                      -1,
+                      -3,
+                      0,
+                      1
+                    ],
+                    [
+                      0,
+                      1,
+                      -1,
+                      -1
+                    ],
+                    [
+                      1,
+                      0,
+                      0,
+                      1
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      2
+                    ],
+                    [
+                      -3,
+                      -3,
+                      -3,
+                      -1
+                    ],
+                    [
+                      3,
+                      0,
+                      2,
+                      1
+                    ],
+                    [
+                      -3,
+                      3,
+                      -1,
+                      1
+                    ],
+                    [
+                      0,
+                      -2,
+                      -2,
+                      1
+                    ],
+                    [
+                      1,
+                      -1,
+                      0,
+                      -2
+                    ],
+                    [
+                      -3,
+                      1,
+                      -1,
+                      2
+                    ],
+                    [
+                      2,
+                      -1,
+                      1,
+                      -1
+                    ],
+                    [
+                      1,
+                      1,
+                      3,
+                      -2
+                    ],
+                    [
+                      -2,
+                      3,
+                      3,
+                      2
+                    ],
+                    [
+                      -3,
+                      -2,
+                      -1,
+                      -3
+                    ]
+                  ],
+                  "spanning_minor": 21,
+                  "results": {
+                    "source": "-1320240",
+                    "Idenso": "-1320240",
+                    "reference": "-1320240"
+                  },
+                  "exact_at_point": true
+                },
+                {
+                  "seed": 98,
+                  "assignments": [
+                    [
+                      -1,
+                      1,
+                      3,
+                      -3
+                    ],
+                    [
+                      -1,
+                      0,
+                      -3,
+                      0
+                    ],
+                    [
+                      -1,
+                      2,
+                      3,
+                      2
+                    ],
+                    [
+                      1,
+                      -3,
+                      3,
+                      0
+                    ],
+                    [
+                      -2,
+                      0,
+                      -3,
+                      2
+                    ],
+                    [
+                      3,
+                      2,
+                      3,
+                      -1
+                    ],
+                    [
+                      -3,
+                      3,
+                      3,
+                      3
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      3
+                    ],
+                    [
+                      -1,
+                      -1,
+                      -3,
+                      2
+                    ],
+                    [
+                      2,
+                      2,
+                      3,
+                      0
+                    ],
+                    [
+                      -2,
+                      3,
+                      3,
+                      1
+                    ],
+                    [
+                      -2,
+                      0,
+                      -2,
+                      1
+                    ],
+                    [
+                      1,
+                      3,
+                      -2,
+                      -1
+                    ],
+                    [
+                      1,
+                      1,
+                      -2,
+                      -2
+                    ]
+                  ],
+                  "spanning_minor": -90,
+                  "results": {
+                    "source": "201578400",
+                    "Idenso": "201578400",
+                    "reference": "201578400"
+                  },
+                  "exact_at_point": true
+                },
+                {
+                  "seed": 173,
+                  "assignments": [
+                    [
+                      -1,
+                      0,
+                      2,
+                      3
+                    ],
+                    [
+                      3,
+                      3,
+                      2,
+                      3
+                    ],
+                    [
+                      1,
+                      1,
+                      -1,
+                      3
+                    ],
+                    [
+                      -2,
+                      0,
+                      2,
+                      2
+                    ],
+                    [
+                      -3,
+                      -1,
+                      2,
+                      -3
+                    ],
+                    [
+                      -2,
+                      2,
+                      0,
+                      -2
+                    ],
+                    [
+                      0,
+                      3,
+                      2,
+                      2
+                    ],
+                    [
+                      -2,
+                      2,
+                      -2,
+                      -3
+                    ],
+                    [
+                      1,
+                      1,
+                      2,
+                      -3
+                    ],
+                    [
+                      0,
+                      -2,
+                      -1,
+                      0
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      -2
+                    ],
+                    [
+                      -1,
+                      -3,
+                      -1,
+                      0
+                    ],
+                    [
+                      0,
+                      1,
+                      -3,
+                      1
+                    ],
+                    [
+                      1,
+                      -2,
+                      0,
+                      0
+                    ]
+                  ],
+                  "spanning_minor": -32,
+                  "results": {
+                    "source": "280684080",
+                    "Idenso": "280684080",
+                    "reference": "280684080"
+                  },
+                  "exact_at_point": true
+                }
+              ]
+            },
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "gamma_reduction_cpu_ns": 9215096312,
+              "trace_materialization_cpu_ns": 110631447,
+              "atom_extraction_cpu_ns": 727311,
+              "final_terms": 26931,
+              "free_ports": 14
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "free14-tracen",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 358,
+              "sha256": "3e4e26a8c6ab692c4a5917a33caa21de887f7b38ff8a019676ea487da785fb7f",
+              "rank": 14
+            },
+            "result": {
+              "terms": 135135,
+              "atom_bytes": 36081055,
+              "sha256": "30e4b1cd5d6040ed9f63d742c14e77db02f9984774cb70c1dade6e06c6d34778",
+              "rank": null
+            },
+            "form_exact": true,
+            "D_to_four_exact": false,
+            "D_to_four_component_checks": {
+              "scope": "Three finite exact HEP points: original source network and cached metric/epsilon leaf networks for outputs; no general polynomial identity claim",
+              "dimension": 4,
+              "rows": [
+                {
+                  "seed": 47,
+                  "assignments": [
+                    [
+                      -1,
+                      -3,
+                      0,
+                      1
+                    ],
+                    [
+                      0,
+                      1,
+                      -1,
+                      -1
+                    ],
+                    [
+                      1,
+                      0,
+                      0,
+                      1
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      2
+                    ],
+                    [
+                      -3,
+                      -3,
+                      -3,
+                      -1
+                    ],
+                    [
+                      3,
+                      0,
+                      2,
+                      1
+                    ],
+                    [
+                      -3,
+                      3,
+                      -1,
+                      1
+                    ],
+                    [
+                      0,
+                      -2,
+                      -2,
+                      1
+                    ],
+                    [
+                      1,
+                      -1,
+                      0,
+                      -2
+                    ],
+                    [
+                      -3,
+                      1,
+                      -1,
+                      2
+                    ],
+                    [
+                      2,
+                      -1,
+                      1,
+                      -1
+                    ],
+                    [
+                      1,
+                      1,
+                      3,
+                      -2
+                    ],
+                    [
+                      -2,
+                      3,
+                      3,
+                      2
+                    ],
+                    [
+                      -3,
+                      -2,
+                      -1,
+                      -3
+                    ]
+                  ],
+                  "spanning_minor": 21,
+                  "results": {
+                    "source": "-1320240",
+                    "Idenso": "-1320240",
+                    "reference": "-1320240"
+                  },
+                  "exact_at_point": true
+                },
+                {
+                  "seed": 98,
+                  "assignments": [
+                    [
+                      -1,
+                      1,
+                      3,
+                      -3
+                    ],
+                    [
+                      -1,
+                      0,
+                      -3,
+                      0
+                    ],
+                    [
+                      -1,
+                      2,
+                      3,
+                      2
+                    ],
+                    [
+                      1,
+                      -3,
+                      3,
+                      0
+                    ],
+                    [
+                      -2,
+                      0,
+                      -3,
+                      2
+                    ],
+                    [
+                      3,
+                      2,
+                      3,
+                      -1
+                    ],
+                    [
+                      -3,
+                      3,
+                      3,
+                      3
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      3
+                    ],
+                    [
+                      -1,
+                      -1,
+                      -3,
+                      2
+                    ],
+                    [
+                      2,
+                      2,
+                      3,
+                      0
+                    ],
+                    [
+                      -2,
+                      3,
+                      3,
+                      1
+                    ],
+                    [
+                      -2,
+                      0,
+                      -2,
+                      1
+                    ],
+                    [
+                      1,
+                      3,
+                      -2,
+                      -1
+                    ],
+                    [
+                      1,
+                      1,
+                      -2,
+                      -2
+                    ]
+                  ],
+                  "spanning_minor": -90,
+                  "results": {
+                    "source": "201578400",
+                    "Idenso": "201578400",
+                    "reference": "201578400"
+                  },
+                  "exact_at_point": true
+                },
+                {
+                  "seed": 173,
+                  "assignments": [
+                    [
+                      -1,
+                      0,
+                      2,
+                      3
+                    ],
+                    [
+                      3,
+                      3,
+                      2,
+                      3
+                    ],
+                    [
+                      1,
+                      1,
+                      -1,
+                      3
+                    ],
+                    [
+                      -2,
+                      0,
+                      2,
+                      2
+                    ],
+                    [
+                      -3,
+                      -1,
+                      2,
+                      -3
+                    ],
+                    [
+                      -2,
+                      2,
+                      0,
+                      -2
+                    ],
+                    [
+                      0,
+                      3,
+                      2,
+                      2
+                    ],
+                    [
+                      -2,
+                      2,
+                      -2,
+                      -3
+                    ],
+                    [
+                      1,
+                      1,
+                      2,
+                      -3
+                    ],
+                    [
+                      0,
+                      -2,
+                      -1,
+                      0
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      -2
+                    ],
+                    [
+                      -1,
+                      -3,
+                      -1,
+                      0
+                    ],
+                    [
+                      0,
+                      1,
+                      -3,
+                      1
+                    ],
+                    [
+                      1,
+                      -2,
+                      0,
+                      0
+                    ]
+                  ],
+                  "spanning_minor": -32,
+                  "results": {
+                    "source": "280684080",
+                    "Idenso": "280684080",
+                    "reference": "280684080"
+                  },
+                  "exact_at_point": true
+                }
+              ]
+            },
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "gamma_reduction_cpu_ns": 577526183,
+              "trace_materialization_cpu_ns": 521975680,
+              "atom_extraction_cpu_ns": 19376767,
+              "final_terms": 135135,
+              "free_ports": 14
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "axial12-trace4",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 341,
+              "sha256": "80661a3677a4be1fa542c809bae24283070c84e23be2bd23369624182374d825",
+              "rank": 12
+            },
+            "result": {
+              "terms": 1,
+              "atom_bytes": 215090,
+              "sha256": "b9d4952d0a3383afccaeacc1d9d341be185c539b70744b02a00f3332f57079e9",
+              "rank": null
+            },
+            "form_exact": false,
+            "form_component_checks": {
+              "scope": "Three finite exact HEP points: original source network and cached metric/epsilon leaf networks for outputs; no general polynomial identity claim",
+              "dimension": 4,
+              "rows": [
+                {
+                  "seed": 47,
+                  "assignments": [
+                    [
+                      -1,
+                      -3,
+                      0,
+                      1
+                    ],
+                    [
+                      0,
+                      1,
+                      -1,
+                      -1
+                    ],
+                    [
+                      1,
+                      0,
+                      0,
+                      1
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      2
+                    ],
+                    [
+                      -3,
+                      -3,
+                      -3,
+                      -1
+                    ],
+                    [
+                      3,
+                      0,
+                      2,
+                      1
+                    ],
+                    [
+                      -3,
+                      3,
+                      -1,
+                      1
+                    ],
+                    [
+                      0,
+                      -2,
+                      -2,
+                      1
+                    ],
+                    [
+                      1,
+                      -1,
+                      0,
+                      -2
+                    ],
+                    [
+                      -3,
+                      1,
+                      -1,
+                      2
+                    ],
+                    [
+                      2,
+                      -1,
+                      1,
+                      -1
+                    ],
+                    [
+                      1,
+                      1,
+                      3,
+                      -2
+                    ]
+                  ],
+                  "spanning_minor": 21,
+                  "results": {
+                    "source": "-202032\ud835\udc56",
+                    "Idenso": "-202032\ud835\udc56",
+                    "reference": "-202032\ud835\udc56"
+                  },
+                  "exact_at_point": true
+                },
+                {
+                  "seed": 98,
+                  "assignments": [
+                    [
+                      -1,
+                      1,
+                      3,
+                      -3
+                    ],
+                    [
+                      -1,
+                      0,
+                      -3,
+                      0
+                    ],
+                    [
+                      -1,
+                      2,
+                      3,
+                      2
+                    ],
+                    [
+                      1,
+                      -3,
+                      3,
+                      0
+                    ],
+                    [
+                      -2,
+                      0,
+                      -3,
+                      2
+                    ],
+                    [
+                      3,
+                      2,
+                      3,
+                      -1
+                    ],
+                    [
+                      -3,
+                      3,
+                      3,
+                      3
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      3
+                    ],
+                    [
+                      -1,
+                      -1,
+                      -3,
+                      2
+                    ],
+                    [
+                      2,
+                      2,
+                      3,
+                      0
+                    ],
+                    [
+                      -2,
+                      3,
+                      3,
+                      1
+                    ],
+                    [
+                      -2,
+                      0,
+                      -2,
+                      1
+                    ]
+                  ],
+                  "spanning_minor": -90,
+                  "results": {
+                    "source": "-36412416\ud835\udc56",
+                    "Idenso": "-36412416\ud835\udc56",
+                    "reference": "-36412416\ud835\udc56"
+                  },
+                  "exact_at_point": true
+                },
+                {
+                  "seed": 173,
+                  "assignments": [
+                    [
+                      -1,
+                      0,
+                      2,
+                      3
+                    ],
+                    [
+                      3,
+                      3,
+                      2,
+                      3
+                    ],
+                    [
+                      1,
+                      1,
+                      -1,
+                      3
+                    ],
+                    [
+                      -2,
+                      0,
+                      2,
+                      2
+                    ],
+                    [
+                      -3,
+                      -1,
+                      2,
+                      -3
+                    ],
+                    [
+                      -2,
+                      2,
+                      0,
+                      -2
+                    ],
+                    [
+                      0,
+                      3,
+                      2,
+                      2
+                    ],
+                    [
+                      -2,
+                      2,
+                      -2,
+                      -3
+                    ],
+                    [
+                      1,
+                      1,
+                      2,
+                      -3
+                    ],
+                    [
+                      0,
+                      -2,
+                      -1,
+                      0
+                    ],
+                    [
+                      -3,
+                      3,
+                      0,
+                      -2
+                    ],
+                    [
+                      -1,
+                      -3,
+                      -1,
+                      0
+                    ]
+                  ],
+                  "spanning_minor": -32,
+                  "results": {
+                    "source": "13792848\ud835\udc56",
+                    "Idenso": "13792848\ud835\udc56",
+                    "reference": "13792848\ud835\udc56"
+                  },
+                  "exact_at_point": true
+                }
+              ]
+            },
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "gamma_reduction_cpu_ns": 230500642,
+              "spectator_interface_cpu_ns": 1549481,
+              "trace_materialization_cpu_ns": 5906135,
+              "atom_extraction_and_spectator_cpu_ns": 218820,
+              "final_terms": 1,
+              "free_ports": 12
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "production-aa-aa",
+          "route": "typed",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 64,
+              "atom_bytes": 37158,
+              "sha256": "089b2313bde4865073677666a46eaae4690c9724d9fbbf803a6f65c1f542b6c7",
+              "rank": 4
+            },
+            "result": {
+              "terms": 1,
+              "atom_bytes": 926743,
+              "sha256": "803218ab06a3191c91ca5128dd1881cc5785107d6c94e4488e5315fd3a977a55",
+              "rank": null
+            },
+            "phases": {
+              "completion": {
+                "reduce_algebra": "ReductionStatus.Complete",
+                "contract": "ReductionStatus.Complete"
+              },
+              "stages": [
+                {
+                  "phase": "combined_algebra",
+                  "cpu_ns": 2944758323,
+                  "terms": 1,
+                  "atom_bytes": 926743,
+                  "sha256": "803218ab06a3191c91ca5128dd1881cc5785107d6c94e4488e5315fd3a977a55",
+                  "rank": 4
+                },
+                {
+                  "phase": "contract",
+                  "cpu_ns": 35210421,
+                  "terms": 1,
+                  "atom_bytes": 926743,
+                  "sha256": "803218ab06a3191c91ca5128dd1881cc5785107d6c94e4488e5315fd3a977a55",
+                  "rank": 4
+                },
+                {
+                  "phase": "materialization",
+                  "cpu_ns": 375690951,
+                  "terms": 1,
+                  "atom_bytes": 926743,
+                  "sha256": "803218ab06a3191c91ca5128dd1881cc5785107d6c94e4488e5315fd3a977a55",
+                  "rank": null
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "completed": true,
+      "cases": [
+        "historical-original",
+        "historical-early",
+        "gluon-4-trace4",
+        "gluon-4-tracen"
+      ],
+      "sources": {
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/fermion_ladder.py": "9a5d5291889704846c1ef566fa2c69701bf4cfcfcd37a6ff47cbd1dad410afd4",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/tensor_benchmark_production.py": "96e96947d41dcaaf8665ac8b0e8b61c1e5672632c4bdd3ebd934013b99690d6b",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/tensor_benchmark_factorized.py": "014bee330003387566d75714ee9128694ffc1cfc9df496abf411d657a44dec6b",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/tensor_benchmark_diagnostics.py": "8f1d2e3205f12cbaec77142d4fa560857c4d0fcf62bd647d44993e64529fa7ca",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/tensor_benchmark_cases.py": "23d0b13eec37037da9c26bb9050e059f1e5f4e701395cadc2e7857f1a875da39",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/tensor_benchmark_production_fixtures.py": "2c4b81f16cd6b97906415ff9578079568f1705fcc7386f5d081745b9c3fc2b6e",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/gluon_ladder.py": "d71c3218972118ceee31eb7fe7dfc42c4c0e7701115099d8314ed090832d775c",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/fermion_ladder_validation.py": "621636b6feb9077459435162f9b7acb27c90ef203e1b3adf2ec0f0badeefcebc",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/gluon_ladder_validation.py": "e76466517daf3dbb4fe730211bcd6817bf9eb2d4f53facf4a8886122e9443b31",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/fermion_propagator_ladder.frm": "65504488cad22f555a93a215737bd8024f099a4941696e3cb3ba87c18ce0bc1a",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/gluon_propagator_ladder.frm": "d97bdd5bac979b1c35702687579b5b2256a5e3a456e6a3b49047b176d34f8b23",
+        "/tmp/unified-tensor-baseline/candidate-check-source/crates/idenso/tests/fixtures/aa_aa_2l_gl16_integrated_uv_start_after_simplify_metrics.sym": "1466fa00bf69c90b3261e16f58bd62fa78b2ac2c653b9437835d4300e93fd5f3",
+        "/nix/store/c2x9lj2l3x99xrdx1ba1a63lxyxq6ji0-form-5.0.0/bin/form": "2b3de22e575b20328ed1d848d1821129b550f885ac32785aa73728a7fec408fd",
+        "/tmp/unified-tensor-baseline/candidate-check-source/examples/notebooks/tensor_benchmark_provenance.json": "0434661857702d5e405e4a09eff23a71100f6f8684cbdbdeb0bb5156b2782b11"
+      },
+      "saved_frontends": {},
+      "ladder_routes": {
+        "candidate": "factorized"
+      },
+      "core_identities": {
+        "candidate": "1c6718e47accd83e2419c542b765efe61f1a1884faee1e42c0f2fc6d8df4879d"
+      },
+      "report_path": "/tmp/unified-tensor-baseline/candidate-check-aliases.json",
+      "report_sha256": "b33ac0116a9a8460110bcf23da4eab6954914a6eb3164011bc23790f461808b3",
+      "checks": [
+        {
+          "label": "candidate",
+          "case": "historical-original",
+          "route": "factorized",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 1170,
+              "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+              "rank": 0
+            },
+            "result": {
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": null
+            },
+            "form_exact": true,
+            "phases": {
+              "completion": {
+                "contract": "ReductionStatus.Complete"
+              },
+              "stages": [
+                {
+                  "phase": "rule_application_and_admission",
+                  "cpu_ns": 5350994
+                },
+                {
+                  "phase": "contraction",
+                  "cpu_ns": 34520261
+                },
+                {
+                  "phase": "explicit_materialization",
+                  "cpu_ns": 49271034
+                }
+              ],
+              "order_policy": "graph",
+              "vertex_order": null,
+              "normalized_factor_order": null,
+              "aliased_bytes": 86689,
+              "definitions": 163,
+              "alias_levels": [
+                {
+                  "depth": 1,
+                  "definitions": 5,
+                  "stored_weight_terms": 17
+                },
+                {
+                  "depth": 2,
+                  "definitions": 9,
+                  "stored_weight_terms": 29
+                },
+                {
+                  "depth": 3,
+                  "definitions": 17,
+                  "stored_weight_terms": 68
+                },
+                {
+                  "depth": 4,
+                  "definitions": 29,
+                  "stored_weight_terms": 148
+                },
+                {
+                  "depth": 5,
+                  "definitions": 30,
+                  "stored_weight_terms": 346
+                },
+                {
+                  "depth": 6,
+                  "definitions": 43,
+                  "stored_weight_terms": 219
+                },
+                {
+                  "depth": 7,
+                  "definitions": 29,
+                  "stored_weight_terms": 556
+                },
+                {
+                  "depth": 8,
+                  "definitions": 1,
+                  "stored_weight_terms": 184
+                }
+              ],
+              "final_terms": 9652
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "historical-original",
+          "route": "scalar",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 1170,
+              "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+              "rank": 0
+            },
+            "result": {
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": null
+            },
+            "form_exact": true,
+            "phases": {
+              "stages": [
+                {
+                  "vertex": 1,
+                  "replacement_cpu_ns": 603160,
+                  "contraction_cpu_ns": 4169384,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 5,
+                  "atom_bytes": 5300,
+                  "sha256": "76d9ec4d717436c74e4c647c160a8ca2ff0b0ce463a23f6f18530cec807952ff",
+                  "rank": 0
+                },
+                {
+                  "vertex": 2,
+                  "replacement_cpu_ns": 1926042,
+                  "contraction_cpu_ns": 9008497,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 24,
+                  "atom_bytes": 22849,
+                  "sha256": "abe17b72a62a725ecc1f81ee628f59f69e3db13ef7ce02a434199960f90d7639",
+                  "rank": 0
+                },
+                {
+                  "vertex": 3,
+                  "replacement_cpu_ns": 5546796,
+                  "contraction_cpu_ns": 37104123,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 108,
+                  "atom_bytes": 91568,
+                  "sha256": "248a9eac54387628c113867c2b377cf3559dec22b74d8073c9919c683e0377b2",
+                  "rank": 0
+                },
+                {
+                  "vertex": 4,
+                  "replacement_cpu_ns": 20634650,
+                  "contraction_cpu_ns": 139331286,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 490,
+                  "atom_bytes": 368303,
+                  "sha256": "a87e3ec28b91d17a78da7ddf7355e0bbb977a5e6cfb9c8847d548429f7ce3e4d",
+                  "rank": 0
+                },
+                {
+                  "vertex": 5,
+                  "replacement_cpu_ns": 81096930,
+                  "contraction_cpu_ns": 404029682,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 1381,
+                  "atom_bytes": 1098977,
+                  "sha256": "472512e8eef8ee1bf90b90dcf9763fcbd2737f79d4480d9d171133b390ef5038",
+                  "rank": 0
+                },
+                {
+                  "vertex": 6,
+                  "replacement_cpu_ns": 213811423,
+                  "contraction_cpu_ns": 902161839,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 1064,
+                  "atom_bytes": 2779816,
+                  "sha256": "51ce1795a133a08cfbf29d37048b4df9225bcd7ef33e9811f6d6ea22c77e624f",
+                  "rank": 0
+                },
+                {
+                  "vertex": 7,
+                  "replacement_cpu_ns": 162775456,
+                  "contraction_cpu_ns": 478984201,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 313,
+                  "atom_bytes": 16748528,
+                  "sha256": "d4a576fb34130dd309f309453f9c9d20bbbac5aca3e5a049fd6bfa3f0980ac1c",
+                  "rank": 0
+                },
+                {
+                  "vertex": 8,
+                  "replacement_cpu_ns": 83649319,
+                  "contraction_cpu_ns": 124276205,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 1548,
+                  "atom_bytes": 88799011,
+                  "sha256": "859a86b6626c1c4851a0de5eee7dddb0bc52a079014c30148e7703686b5fd751",
+                  "rank": 0
+                },
+                {
+                  "phase": "materialization",
+                  "cpu_ns": 162086111,
+                  "terms": 9652,
+                  "atom_bytes": 1880422,
+                  "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+                  "rank": 0
+                }
+              ],
+              "internal_edges": 11
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "historical-early",
+          "route": "factorized",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 1170,
+              "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+              "rank": 0
+            },
+            "result": {
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": null
+            },
+            "form_exact": true,
+            "phases": {
+              "completion": {
+                "contract": "ReductionStatus.Complete"
+              },
+              "stages": [
+                {
+                  "phase": "rule_application_and_admission",
+                  "cpu_ns": 4077153
+                },
+                {
+                  "phase": "contraction",
+                  "cpu_ns": 33459738
+                },
+                {
+                  "phase": "explicit_materialization",
+                  "cpu_ns": 40532066
+                }
+              ],
+              "order_policy": "graph",
+              "vertex_order": null,
+              "normalized_factor_order": null,
+              "aliased_bytes": 86689,
+              "definitions": 163,
+              "alias_levels": [
+                {
+                  "depth": 1,
+                  "definitions": 5,
+                  "stored_weight_terms": 17
+                },
+                {
+                  "depth": 2,
+                  "definitions": 9,
+                  "stored_weight_terms": 29
+                },
+                {
+                  "depth": 3,
+                  "definitions": 17,
+                  "stored_weight_terms": 68
+                },
+                {
+                  "depth": 4,
+                  "definitions": 29,
+                  "stored_weight_terms": 148
+                },
+                {
+                  "depth": 5,
+                  "definitions": 30,
+                  "stored_weight_terms": 346
+                },
+                {
+                  "depth": 6,
+                  "definitions": 43,
+                  "stored_weight_terms": 219
+                },
+                {
+                  "depth": 7,
+                  "definitions": 29,
+                  "stored_weight_terms": 556
+                },
+                {
+                  "depth": 8,
+                  "definitions": 1,
+                  "stored_weight_terms": 184
+                }
+              ],
+              "final_terms": 9652
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "historical-early",
+          "route": "scalar",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 1170,
+              "sha256": "76f63944fd007358b5c082f21dbe810a273da0907ef3fd52d0a6107cc787f9d2",
+              "rank": 0
+            },
+            "result": {
+              "terms": 9652,
+              "atom_bytes": 1880422,
+              "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+              "rank": null
+            },
+            "form_exact": true,
+            "phases": {
+              "stages": [
+                {
+                  "vertex": 5,
+                  "replacement_cpu_ns": 453360,
+                  "contraction_cpu_ns": 3107153,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 5,
+                  "atom_bytes": 5316,
+                  "sha256": "b9490d808bc7fd77756cf642a293aa73a73d9cdc1e4b671c9f36706c78e26635",
+                  "rank": 0
+                },
+                {
+                  "vertex": 4,
+                  "replacement_cpu_ns": 2386002,
+                  "contraction_cpu_ns": 11717751,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 24,
+                  "atom_bytes": 22849,
+                  "sha256": "6db64ec2a929436c6990c07cff4b944199a279c3e2711edeeade00979208970a",
+                  "rank": 0
+                },
+                {
+                  "vertex": 6,
+                  "replacement_cpu_ns": 10690421,
+                  "contraction_cpu_ns": 24050401,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 32,
+                  "atom_bytes": 31881,
+                  "sha256": "a28d7f946b28f12df57b0aea8c9560a91262552d74228ba933fc34a3ab97d021",
+                  "rank": 0
+                },
+                {
+                  "vertex": 3,
+                  "replacement_cpu_ns": 8942977,
+                  "contraction_cpu_ns": 30524368,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 70,
+                  "atom_bytes": 93427,
+                  "sha256": "fd88f753cfe4fa9ae648ebeaaa8798829b383aa0759c003e8d7afe29141e2dae",
+                  "rank": 0
+                },
+                {
+                  "vertex": 7,
+                  "replacement_cpu_ns": 23320752,
+                  "contraction_cpu_ns": 52182158,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 48,
+                  "atom_bytes": 380293,
+                  "sha256": "34dbf90eff99e7117d94319ca75173e3f6a1bfac2fe23856a0c5ccdf8680805a",
+                  "rank": 0
+                },
+                {
+                  "vertex": 2,
+                  "replacement_cpu_ns": 10178998,
+                  "contraction_cpu_ns": 30144160,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 110,
+                  "atom_bytes": 2108366,
+                  "sha256": "563377f60c65a10958093d9ca996d8bf6c6fd2e977a4fa51cfbb2fdca403c1fb",
+                  "rank": 0
+                },
+                {
+                  "vertex": 8,
+                  "replacement_cpu_ns": 24113862,
+                  "contraction_cpu_ns": 55655670,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 66,
+                  "atom_bytes": 14474122,
+                  "sha256": "74e8889f9e3d8474bc008af5bc62f1c94e6af3bcd10f49da9dac0c0f923129b2",
+                  "rank": 0
+                },
+                {
+                  "vertex": 1,
+                  "replacement_cpu_ns": 14414712,
+                  "contraction_cpu_ns": 21522922,
+                  "completion": {
+                    "contract": "ReductionStatus.Complete"
+                  },
+                  "terms": 259,
+                  "atom_bytes": 56607209,
+                  "sha256": "310123df5429d27a2f946c9ec7298ddd0e134e4a7ab2a5b5ab06e83bcd1c1edd",
+                  "rank": 0
+                },
+                {
+                  "phase": "materialization",
+                  "cpu_ns": 50790736,
+                  "terms": 9652,
+                  "atom_bytes": 1880422,
+                  "sha256": "0d473f6515cb873b4d810f41d07c465431edb3cb58fb97425425f6f7e8a0662b",
+                  "rank": 0
+                }
+              ],
+              "internal_edges": 11
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "gluon-4-trace4",
+          "route": "factorized",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 1465,
+              "sha256": "9be31c0f8bc65fb56465794e5f17052edb11f79cf3f87017000c508f75a85f30",
+              "rank": 0
+            },
+            "result": {
+              "terms": 2425,
+              "atom_bytes": 57284,
+              "sha256": "8460889069083570f895a43f08f5fec9521e4cb4e2db5fc516edc0f270cd17a3",
+              "rank": null
+            },
+            "form_exact": true,
+            "components": [
+              {
+                "sample": 1,
+                "independent_vectors": {
+                  "k1": [
+                    "2",
+                    "1",
+                    "-1",
+                    "3"
+                  ],
+                  "k2": [
+                    "1",
+                    "-2",
+                    "3",
+                    "1"
+                  ],
+                  "k3": [
+                    "3",
+                    "2",
+                    "1",
+                    "-1"
+                  ],
+                  "k4": [
+                    "2",
+                    "-1",
+                    "2",
+                    "3"
+                  ],
+                  "q": [
+                    "1",
+                    "1",
+                    "2",
+                    "2"
+                  ]
+                },
+                "hep_vertex_oracle": "856746",
+                "observed": {
+                  "input": "856746",
+                  "result": "856746"
+                },
+                "exact": true
+              },
+              {
+                "sample": 2,
+                "independent_vectors": {
+                  "k1": [
+                    "1/2",
+                    "-2/3",
+                    "3/5",
+                    "1/3"
+                  ],
+                  "k2": [
+                    "-3/2",
+                    "1/5",
+                    "2/3",
+                    "4/5"
+                  ],
+                  "k3": [
+                    "2/5",
+                    "3/2",
+                    "-1/3",
+                    "2/3"
+                  ],
+                  "k4": [
+                    "-1/5",
+                    "4/3",
+                    "-3/2",
+                    "1/2"
+                  ],
+                  "q": [
+                    "4/3",
+                    "-1/2",
+                    "3/5",
+                    "-2/5"
+                  ]
+                },
+                "hep_vertex_oracle": "4065042721454941/82012500000",
+                "observed": {
+                  "input": "4065042721454941/82012500000",
+                  "result": "4065042721454941/82012500000"
+                },
+                "exact": true
+              },
+              {
+                "sample": 3,
+                "independent_vectors": {
+                  "k1": [
+                    "-2/3",
+                    "5/4",
+                    "1/2",
+                    "-3/2"
+                  ],
+                  "k2": [
+                    "3/4",
+                    "-1/3",
+                    "-5/2",
+                    "2/3"
+                  ],
+                  "k3": [
+                    "5/3",
+                    "1/4",
+                    "-2/3",
+                    "1/2"
+                  ],
+                  "k4": [
+                    "3/2",
+                    "-5/4",
+                    "1/3",
+                    "-2/3"
+                  ],
+                  "q": [
+                    "-1/2",
+                    "2/3",
+                    "3/4",
+                    "5/4"
+                  ]
+                },
+                "hep_vertex_oracle": "361949054846425/214990848",
+                "observed": {
+                  "input": "361949054846425/214990848",
+                  "result": "361949054846425/214990848"
+                },
+                "exact": true
+              }
+            ],
+            "phases": {
+              "completion": {
+                "contract": "ReductionStatus.Complete"
+              },
+              "stages": [
+                {
+                  "phase": "rule_application_and_admission",
+                  "cpu_ns": 5050373
+                },
+                {
+                  "phase": "contraction",
+                  "cpu_ns": 156490008
+                },
+                {
+                  "phase": "explicit_materialization",
+                  "cpu_ns": 65175024
+                }
+              ],
+              "order_policy": "graph",
+              "vertex_order": null,
+              "normalized_factor_order": null,
+              "aliased_bytes": 277347,
+              "definitions": 488,
+              "alias_levels": [
+                {
+                  "depth": 1,
+                  "definitions": 19,
+                  "stored_weight_terms": 217
+                },
+                {
+                  "depth": 2,
+                  "definitions": 47,
+                  "stored_weight_terms": 484
+                },
+                {
+                  "depth": 3,
+                  "definitions": 28,
+                  "stored_weight_terms": 373
+                },
+                {
+                  "depth": 4,
+                  "definitions": 79,
+                  "stored_weight_terms": 1145
+                },
+                {
+                  "depth": 5,
+                  "definitions": 182,
+                  "stored_weight_terms": 488
+                },
+                {
+                  "depth": 6,
+                  "definitions": 132,
+                  "stored_weight_terms": 1889
+                },
+                {
+                  "depth": 7,
+                  "definitions": 1,
+                  "stored_weight_terms": 745
+                }
+              ],
+              "final_terms": 2425
+            }
+          }
+        },
+        {
+          "label": "candidate",
+          "case": "gluon-4-tracen",
+          "route": "factorized",
+          "exit_code": 0,
+          "observations": {
+            "input": {
+              "terms": 1,
+              "atom_bytes": 1465,
+              "sha256": "4f2152caf3b9e20d61715f234e1c322577b276ff29aca1c30bf5e1d75750d470",
+              "rank": 0
+            },
+            "result": {
+              "terms": 7102,
+              "atom_bytes": 187631,
+              "sha256": "454ceebe76e4ea064a4e1ef1f1a0bd06342a845bc44523a10db755466f508515",
+              "rank": null
+            },
+            "form_exact": true,
+            "D_to_four_exact": true,
+            "components": [
+              {
+                "sample": 1,
+                "independent_vectors": {
+                  "k1": [
+                    "2",
+                    "1",
+                    "-1",
+                    "3"
+                  ],
+                  "k2": [
+                    "1",
+                    "-2",
+                    "3",
+                    "1"
+                  ],
+                  "k3": [
+                    "3",
+                    "2",
+                    "1",
+                    "-1"
+                  ],
+                  "k4": [
+                    "2",
+                    "-1",
+                    "2",
+                    "3"
+                  ],
+                  "q": [
+                    "1",
+                    "1",
+                    "2",
+                    "2"
+                  ]
+                },
+                "hep_vertex_oracle": "856746",
+                "observed": {
+                  "input": "856746",
+                  "result": "856746"
+                },
+                "exact": true
+              },
+              {
+                "sample": 2,
+                "independent_vectors": {
+                  "k1": [
+                    "1/2",
+                    "-2/3",
+                    "3/5",
+                    "1/3"
+                  ],
+                  "k2": [
+                    "-3/2",
+                    "1/5",
+                    "2/3",
+                    "4/5"
+                  ],
+                  "k3": [
+                    "2/5",
+                    "3/2",
+                    "-1/3",
+                    "2/3"
+                  ],
+                  "k4": [
+                    "-1/5",
+                    "4/3",
+                    "-3/2",
+                    "1/2"
+                  ],
+                  "q": [
+                    "4/3",
+                    "-1/2",
+                    "3/5",
+                    "-2/5"
+                  ]
+                },
+                "hep_vertex_oracle": "4065042721454941/82012500000",
+                "observed": {
+                  "input": "4065042721454941/82012500000",
+                  "result": "4065042721454941/82012500000"
+                },
+                "exact": true
+              },
+              {
+                "sample": 3,
+                "independent_vectors": {
+                  "k1": [
+                    "-2/3",
+                    "5/4",
+                    "1/2",
+                    "-3/2"
+                  ],
+                  "k2": [
+                    "3/4",
+                    "-1/3",
+                    "-5/2",
+                    "2/3"
+                  ],
+                  "k3": [
+                    "5/3",
+                    "1/4",
+                    "-2/3",
+                    "1/2"
+                  ],
+                  "k4": [
+                    "3/2",
+                    "-5/4",
+                    "1/3",
+                    "-2/3"
+                  ],
+                  "q": [
+                    "-1/2",
+                    "2/3",
+                    "3/4",
+                    "5/4"
+                  ]
+                },
+                "hep_vertex_oracle": "361949054846425/214990848",
+                "observed": {
+                  "input": "361949054846425/214990848",
+                  "result": "361949054846425/214990848"
+                },
+                "exact": true
+              }
+            ],
+            "phases": {
+              "completion": {
+                "contract": "ReductionStatus.Complete"
+              },
+              "stages": [
+                {
+                  "phase": "rule_application_and_admission",
+                  "cpu_ns": 4648743
+                },
+                {
+                  "phase": "contraction",
+                  "cpu_ns": 160581115
+                },
+                {
+                  "phase": "explicit_materialization",
+                  "cpu_ns": 129004401
+                }
+              ],
+              "order_policy": "graph",
+              "vertex_order": null,
+              "normalized_factor_order": null,
+              "aliased_bytes": 309124,
+              "definitions": 520,
+              "alias_levels": [
+                {
+                  "depth": 1,
+                  "definitions": 49,
+                  "stored_weight_terms": 263
+                },
+                {
+                  "depth": 2,
+                  "definitions": 43,
+                  "stored_weight_terms": 489
+                },
+                {
+                  "depth": 3,
+                  "definitions": 32,
+                  "stored_weight_terms": 396
+                },
+                {
+                  "depth": 4,
+                  "definitions": 81,
+                  "stored_weight_terms": 1601
+                },
+                {
+                  "depth": 5,
+                  "definitions": 182,
+                  "stored_weight_terms": 488
+                },
+                {
+                  "depth": 6,
+                  "definitions": 132,
+                  "stored_weight_terms": 1945
+                },
+                {
+                  "depth": 7,
+                  "definitions": 1,
+                  "stored_weight_terms": 790
+                }
+              ],
+              "final_terms": 7102
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

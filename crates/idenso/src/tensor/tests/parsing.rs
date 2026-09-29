@@ -280,12 +280,14 @@ fn inverse_bracket_preserves_a_sum_that_collapses_to_a_product() {
 #[test]
 fn parse_scalar_tensor() {
     test_initialize();
-    let expr = parse!("(
+    let expr = parse!(
+        "(
             (
-                  -1*gammalooprs::{}::mUV^2+gammalooprs::{}::Q(6,spenso::mink(4,gammalooprs::{}::uv_mink_1337))
-                    *gammalooprs::{}::Q(7,spenso::mink(4,gammalooprs::{}::uv_mink_1337))
+                  -1*gammalooprs::mUV^2+gammalooprs::Q(6,spenso::mink(4,gammalooprs::uv_mink_1337))
+                    *gammalooprs::Q(7,spenso::mink(4,gammalooprs::uv_mink_1337))
                  )
-            )*2");
+            )*2"
+    );
     let net = expr
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();

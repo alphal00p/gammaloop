@@ -76,7 +76,10 @@ class LibraryDisplayTests(unittest.TestCase):
         html = library.to_html()
         self.assertIn("data-spenso-library", html)
         self.assertIn("No stored tensors", html)
-        self.assertIn("9 dimension-dependent factories", html)
+        # Registered custom representations add identity factories process-wide.
+        factories = re.search(r"([0-9]+) dimension-dependent factories", html)
+        self.assertIsNotNone(factories)
+        self.assertGreaterEqual(int(factories.group(1)), 9)
         self.assertEqual(Catalogue(html).entries, [])
         self.assertEqual(len(library), 0)
 

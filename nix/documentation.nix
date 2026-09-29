@@ -128,6 +128,9 @@ let
         (workspaceRoot + "/crates/linnet-py/linnet.pyi")
         (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/feynkit/__init__.pyi")
         (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/feynkit/__init__.py")
+        (
+          workspaceRoot + "/examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi"
+        )
         (workspaceRoot + "/crates/feynkit-py/examples/ufo_generation.py")
         (workspaceRoot + "/crates/linnet-py/examples/physics_render_settings.py")
         (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")

@@ -17,11 +17,13 @@ std::thread_local! {
 /// the contraction candidate: they remove indices rather than introduce them.
 /// A compound opaque payload leaves head observations incomplete; consumers
 /// must then defer to the individual simplifiers.
+#[derive(Clone, Debug)]
 pub(crate) struct SimplificationCandidates<const N: usize> {
     pub(crate) repeated_indices: bool,
     pub(crate) brackets: bool,
     pub(crate) dots: bool,
     pub(crate) symbols: [bool; N],
+    pub(crate) counts: [usize; N],
     pub(crate) complete: bool,
     // Separate from opaque metadata: an early observer may leave normal syntax
     // unvisited after proving only the repeated-index predicate.
@@ -35,6 +37,21 @@ impl<const N: usize> SimplificationCandidates<N> {
         symbols: [Symbol; N],
         on_first_repeat: impl FnOnce() -> bool,
     ) -> Self {
+        Self::scan_observing(expression, symbols, on_first_repeat, |_, _| {})
+    }
+
+    /// Extend the same traversal with regional or dependency observations.
+    /// Consumers must not start a second walk to recover these facts.
+    pub(crate) fn scan_observing(
+        expression: AtomView<'_>,
+        symbols: [Symbol; N],
+        on_first_repeat: impl FnOnce() -> bool,
+        mut observe: impl for<'a> FnMut(AtomView<'a>, &SlotMatch<'a>),
+    ) -> Self {
+        #[cfg(feature = "reference-cases")]
+        let _phase = crate::reference_cases::timing::scope(
+            crate::reference_cases::timing::Phase::CandidateScan,
+        );
         #[cfg(test)]
         SCAN_COUNTS.with(|count| count.set(count.get() + 1));
         let symbols = symbols.map(|symbol| symbol.get_id());
@@ -47,6 +64,7 @@ impl<const N: usize> SimplificationCandidates<N> {
             brackets: false,
             dots: false,
             symbols: [false; N],
+            counts: [0; N],
             complete: true,
             traversal_complete: false,
             intrinsic: true,
@@ -54,6 +72,7 @@ impl<const N: usize> SimplificationCandidates<N> {
         let mut traversal_complete = true;
         candidates.repeated_indices = expression.has_repeated_explicit_indices_with_observer(
             |node, slot| {
+                observe(node, slot);
                 match node {
                     AtomView::Fun(function) => {
                         let id = function.get_symbol_id();
@@ -149,8 +168,13 @@ impl<const N: usize> SimplificationCandidates<N> {
             self.brackets = true;
         }
         if symbols.contains(&id) {
-            for (seen, &symbol) in self.symbols.iter_mut().zip(symbols) {
-                *seen |= id == symbol;
+            for ((seen, count), &symbol) in
+                self.symbols.iter_mut().zip(&mut self.counts).zip(symbols)
+            {
+                if id == symbol {
+                    *seen = true;
+                    *count += 1;
+                }
             }
         }
     }

@@ -707,9 +707,18 @@ impl IndexTooling for AtomView<'_> {
         let tensor = tensor::SymbolicTensor::infer(cooked.chainify(Bispinor {}.into()))?;
         let resolved = if preserve_indices {
             tensor
-                .simplify_gamma(dirac::GammaSimplifySettings {
-                    gamma0: true,
-                    evaluate_traces: false,
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(dirac::GammaSimplifySettings {
+                        gamma0: true,
+                        evaluate_traces: false,
+                        ..Default::default()
+                    }),
+                    epsilon: true,
+                    ..Default::default()
+                })?
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
                     ..Default::default()
                 })?
                 .resolved()?
@@ -791,7 +800,17 @@ pub mod test {
                 .unwrap();
             let result = crate::tensor::SymbolicTensor::infer(adjoint)
                 .unwrap()
-                .simplify_gamma(Default::default())
+                .reduce_algebra(&crate::tensor::AlgebraSettings {
+                    gamma: Some(Default::default()),
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(crate::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .unwrap()
                 .resolved()
                 .unwrap();

@@ -1180,7 +1180,6 @@
             "Generator.generate",
             "TensorExpression.dirac_adjoint",
             "TensorExpression.wrap_indices",
-            "CookSettings.indices",
             "Particle.spin_sum",
             "TensorExpression.simplify_gamma",
             "Kinematics.mandelstam"

@@ -575,7 +575,7 @@ mod tests {
     };
     use idenso::{
         CookMode, CookSettings,
-        tensor::{ContractionSettings, SymbolicTensor},
+        tensor::{ContractSettings, SymbolicTensor},
     };
     use linnet::half_edge::subgraph::subset::SubSet;
     use spenso::{
@@ -1457,7 +1457,11 @@ mod tests {
                     .expect("test-only index admission must succeed"),
             )
             .expect("test-only tensor admission must succeed")
-            .contract(ContractionSettings::default())
+            .contract(ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .expect("test-only contraction must succeed")
             .resolved()
             .expect("test-only aliases must resolve")
@@ -1750,7 +1754,11 @@ mod tests {
                         .expect("test-only index admission must succeed"),
                 )
                 .expect("test-only tensor admission must succeed")
-                .contract(ContractionSettings::default())
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
                 .expect("test-only contraction must succeed")
                 .resolved()
                 .expect("test-only aliases must resolve")
@@ -2050,7 +2058,11 @@ mod tests {
                     .with_representation_payloads(true, true);
                 let explicit_taylor_sum =
                     SymbolicTensor::infer(cooking.try_cook(explicit_taylor_sum.as_view())?)?
-                        .contract(ContractionSettings::default())?
+                        .contract(ContractSettings {
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })?
                         .resolved()?
                         .to_dots()?;
                 let explicit_taylor_sum =
@@ -2141,7 +2153,11 @@ mod tests {
                     .with_mode(CookMode::ReversibleEncoding)
                     .with_representation_payloads(true, true);
                 let value = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
-                    .contract(ContractionSettings::default())?
+                    .contract(ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?
                     .resolved()?
                     .expand_dots()?;
                 expression = cooking.uncook(value.as_view());
@@ -2388,7 +2404,11 @@ mod tests {
                     .with_mode(CookMode::ReversibleEncoding)
                     .with_representation_payloads(true, true);
                 let value = SymbolicTensor::infer(cooking.try_cook(expression.as_view())?)?
-                    .contract(ContractionSettings::default())?
+                    .contract(ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?
                     .resolved()?
                     .expand_dots()?;
                 expression = cooking.uncook(value.as_view());

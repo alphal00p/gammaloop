@@ -1458,7 +1458,17 @@ pub(super) mod tests {
         reduced = reduced.normalize_dots();
         let result = crate::tensor::SymbolicTensor::infer((reduced).as_atom_view().to_owned())
             .unwrap()
-            .simplify_gamma(crate::dirac::GammaSimplifySettings::default())
+            .reduce_algebra(&crate::tensor::AlgebraSettings {
+                gamma: Some(crate::dirac::GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap()

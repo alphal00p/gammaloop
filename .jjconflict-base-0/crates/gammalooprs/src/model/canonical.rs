@@ -1072,7 +1072,7 @@ impl PropagatorGammaLoopExt for Propagator {
 mod tests {
     use super::*;
     use feynkit_amplitude::ColorSum;
-    use idenso::tensor::{ContractionSettings, SymbolicTensor};
+    use idenso::tensor::{ContractSettings, SymbolicTensor};
     use spenso::{network::library::symbolic::ETS, structure::TensorStructure};
 
     #[test]
@@ -1117,7 +1117,12 @@ mod tests {
                     .with(left.to_pattern()),
             )
             .unwrap()
-            .contract(ContractionSettings::default().without_rank_one_tensors())
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
             .unwrap()
             .resolved()
             .unwrap();

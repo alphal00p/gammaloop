@@ -232,7 +232,7 @@ impl SymbolicTensor<AliasInterfaces, AliasedAtom> {
             Err(error) => return Err(TensorInferenceError::invalid(error.to_string())),
         };
         for (old, new) in &literal_uses {
-            Self::register_literal_use(old, new, definitions)?;
+            Self::register_literal_use(old, new, &|_| None, definitions)?;
         }
         for (old, new) in &literal_uses {
             observe(old, new);

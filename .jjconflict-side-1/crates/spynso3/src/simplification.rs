@@ -7,7 +7,7 @@ mod algebra;
 mod pipeline;
 mod tooling;
 
-pub(crate) use pipeline::PySimplifySettings;
+pub(crate) use pipeline::{PyAlgebraSettings, PyContractSettings, PyReductionStatus};
 
 pub(crate) use algebra::{PyColorSimplifySettings, PyGammaSimplifySettings};
 pub(crate) use tooling::{
@@ -15,7 +15,9 @@ pub(crate) use tooling::{
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<PySimplifySettings>()?;
+    module.add_class::<PyAlgebraSettings>()?;
+    module.add_class::<PyContractSettings>()?;
+    module.add_class::<PyReductionStatus>()?;
     algebra::register(module)?;
     tooling::register(module)
 }
@@ -49,17 +51,17 @@ mod tests {
         "GammaChainOrdering",
         "GammaSimplifySettings",
         "NetworkToolingError",
-        "SimplifySettings",
+        "AlgebraSettings",
+        "ContractSettings",
+        "ReductionStatus",
         "canonize",
-        "chainify",
         "dirac_adjoint",
         "list_dangling",
-        "simplify_color",
-        "simplify",
-        "simplify_epsilon",
-        "simplify_gamma",
+        "reduce_algebra",
         "to_dots",
         "undo_dots",
+        "undo_chain",
+        "undo_trace",
         "wrap_indices",
     ];
 
@@ -88,9 +90,12 @@ mod tests {
             let tensor_expression = py.get_type::<TensorExpression>();
             for name in [
                 "alias_subtensors",
+                "simplify",
+                "simplify_gamma",
+                "simplify_color",
+                "simplify_epsilon",
                 "undo_all",
-                "undo_chain",
-                "undo_trace",
+                "chainify",
                 "undo_schoonschip",
                 "undo_single_length",
                 "normalize_chains",
@@ -138,6 +143,48 @@ mod tests {
             assert!(module.getattr("initialize").is_err());
             assert!(module.getattr("initialize_module").is_err());
         });
+    }
+
+    #[test]
+    fn independent_reduction_settings_and_explicit_notation_runtime() {
+        idenso::representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let module = PyModule::new(py, "spenso")?;
+            crate::initialize_spenso(&module)?;
+            let globals = pyo3::types::PyDict::new(py);
+            globals.set_item("sp", module)?;
+            py.run(
+                c"
+spin = sp.Representation.bis(4)
+lorentz = sp.Representation.mink(4)
+gamma = sp.TensorExpression.gamma(4)
+source = gamma(spin('i'), spin('j'), lorentz('mu')) * gamma(spin('j'), spin('i'), lorentz('nu'))
+assert source.contract(sp.ContractSettings(representations=[])).to_expression() == source
+assert source.reduce_algebra().to_expression() == source
+assert sp.ContractSettings(representations=[lorentz]).representations == [lorentz.name]
+collected = source.contract().to_expression()
+assert 'trace' in collected.to_expression().format_plain()
+unfolded = collected.undo_trace()
+assert 'trace' not in unfolded.to_expression().format_plain()
+assert 'chain' in unfolded.to_expression().format_plain()
+explicit = unfolded.undo_chain()
+assert 'chain' not in explicit.to_expression().format_plain()
+assert explicit.components() == collected.components()
+reduced = source.reduce_algebra(sp.AlgebraSettings(gamma=sp.GammaSimplifySettings()))
+assert reduced.reduction_status == sp.ReductionStatus.Complete, (reduced.reduction_status, str(reduced.to_expression().to_expression()))
+assert reduced.expand().components() == collected.components()
+capped = source.reduce_algebra(sp.AlgebraSettings(gamma=sp.GammaSimplifySettings(), max_passes=0))
+assert capped.reduction_status == sp.ReductionStatus.Capped
+assert capped.to_expression() == source
+assert not hasattr(sp.Tensor, 'contract')
+assert hasattr(sp.Tensor, 'contract_ports')
+",
+                Some(&globals),
+                None,
+            )
+        })
+        .unwrap();
     }
 
     #[test]
@@ -227,17 +274,17 @@ mod tests {
                 .getattr("signature")
                 .unwrap();
 
-            for (name, expected) in [
+            for (class, expected) in [
                 (
-                    "GammaSimplifySettings",
+                    module.getattr("GammaSimplifySettings").unwrap(),
                     "(*, output='reduced', chain_ordering=None, evaluate_traces=True, gamma0=False, conjugate=False, expand_three_gamma_epsilon=False)",
                 ),
                 (
-                    "CookSettings",
-                    "(*, mode=None, source=None, output_tags=None, preserve_tags=False)",
+                    py.get_type::<TensorExpression>().into_any(),
+                    "(expression, *, structure=None, cook_indices=None)",
                 ),
             ] {
-                let class = module.getattr(name).unwrap();
+                let name = class.getattr("__name__").unwrap();
                 let signature = class
                     .getattr("__text_signature__")
                     .unwrap()
@@ -259,8 +306,7 @@ mod tests {
             for name in [
                 "dirac_adjoint",
                 "list_dangling",
-                "simplify_color",
-                "simplify_gamma",
+                "reduce_algebra",
                 "to_dots",
                 "wrap_indices",
             ] {
